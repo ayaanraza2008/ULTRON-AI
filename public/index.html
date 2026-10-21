@@ -14,15 +14,19 @@
   <div id="login-screen" class="login-screen hidden">
     <div class="login-card">
       <div class="brand-mark large-mark"><span>U</span></div>
-      <p class="eyebrow">SECURE ACCESS GATE</p>
+      <p class="eyebrow">SECURE OPERATOR ACCESS</p>
       <h1>Welcome back.</h1>
-      <p class="muted">Unlock your ULTRON command interface.</p>
+      <p class="muted">Sign in to your ULTRON account. Saved conversations are private to your account.</p>
       <form id="login-form">
-        <label for="access-password">Access password</label>
-        <input id="access-password" type="password" autocomplete="current-password" required placeholder="Enter access password">
-        <button class="primary-button full-button" type="submit">Unlock interface <span aria-hidden="true">↗</span></button>
+        <label for="account-email">Email</label>
+        <input id="account-email" type="email" autocomplete="username" required maxlength="320" placeholder="you@example.com">
+        <label for="account-password">Password</label>
+        <input id="account-password" type="password" autocomplete="current-password" required minlength="8" maxlength="256" placeholder="At least 8 characters">
+        <button class="primary-button full-button" type="submit">Sign in <span aria-hidden="true">↗</span></button>
+        <button id="signup-button" class="secondary-button full-button" type="button">Create account</button>
         <p id="login-error" class="error-text" role="alert"></p>
       </form>
+      <p class="muted small">Use your ULTRON account. Never reuse a password from another service.</p>
     </div>
   </div>
   <div id="setup-screen" class="login-screen hidden">
@@ -30,7 +34,7 @@
       <div class="brand-mark large-mark"><span>U</span></div>
       <p class="eyebrow">INITIAL CONFIGURATION REQUIRED</p>
       <h1>Almost online.</h1>
-      <p class="muted">The server owner must configure <code>APP_ACCESS_PASSWORD</code> and a random <code>SESSION_SECRET</code> (32+ characters) before this interface can be unlocked.</p>
+      <p class="muted">The server owner must configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> before account sign-in and private conversation storage can be used.</p>
       <p class="muted small">No API secrets belong in this page or in browser storage.</p>
     </div>
   </div>
