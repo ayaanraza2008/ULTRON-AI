@@ -363,9 +363,10 @@ test("chat forwards validated image input as multimodal content to the selected 
       })
     });
     assert.equal(response.status, 200);
-    assert.equal(forwarded.messages[0].content[0].text, "Describe this.");
-    assert.equal(forwarded.messages[0].content[1].type, "image_url");
-    assert.equal(forwarded.messages[0].content[1].image_url.url, "data:image/png;base64,aGVsbG8=");
+    const forwardedUser = forwarded.messages.find(message => message.role === "user");
+    assert.equal(forwardedUser.content[0].text, "Describe this.");
+    assert.equal(forwardedUser.content[1].type, "image_url");
+    assert.equal(forwardedUser.content[1].image_url.url, "data:image/png;base64,aGVsbG8=");
   });
 });
 
