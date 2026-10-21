@@ -251,3 +251,73 @@ test("memory API refuses requests without a Supabase account", async () => {
     assert.equal(calls, 0);
   });
 });
+
+test("chat uses an explicitly selected allowlisted model", async () => {
+  let forwarded;
+  const app = createApp({
+    env: { ...env, ULTRON_AVAILABLE_MODELS: "poolside/laguna-s-2.1:free,minimax/minimax-m3.1-flash:free" },
+    fetchImpl: async (_url, options) => {
+      forwarded = JSON.parse(options.body);
+      return new Response(JSON.stringify({ model: forwarded.model, choices: [{ message: { content: "Selected model response" } }] }), { status: 200 });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "What is in this picture?" }], model: "minimax/minimax-m3.1-flash:free", stream: false })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.model, "minimax/minimax-m3.1-flash:free");
+  });
+});
+
+test("chat forwards validated image input as multimodal content to the selected model", async () => {
+  let forwarded;
+  const app = createApp({
+    env: { ...env, ULTRON_AVAILABLE_MODELS: "minimax/minimax-m3.1-flash:free" },
+    fetchImpl: async (_url, options) => {
+      forwarded = JSON.parse(options.body);
+      return new Response(JSON.stringify({ model: forwarded.model, choices: [{ message: { content: "A test image." } }] }), { status: 200 });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "Describe this." }],
+        model: "minimax/minimax-m3.1-flash:free",
+        attachments: [{ name: "sample.png", dataUrl: "data:image/png;base64,aGVsbG8=" }],
+        stream: false
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.messages[0].content[0].text, "Describe this.");
+    assert.equal(forwarded.messages[0].content[1].type, "image_url");
+    assert.equal(forwarded.messages[0].content[1].image_url.url, "data:image/png;base64,aGVsbG8=");
+  });
+});
+
+test("chat rejects image inputs with unsupported data URLs", async () => {
+  let calls = 0;
+  const app = createApp({
+    env,
+    fetchImpl: async () => { calls++; throw new Error("must not call provider"); },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Check this." }], attachments: [{ dataUrl: "data:text/html;base64,PHNjcmlwdD4=" }], stream: false })
+    });
+    assert.equal(response.status, 400);
+    assert.equal(calls, 0);
+  });
+});
