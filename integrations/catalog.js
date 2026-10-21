@@ -1,0 +1,84 @@
+const safeBaseUrl = (value) => {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Returns configuration readiness only. It does not claim that an external
+ * service is reachable or that model weights are installed.
+ */
+export function buildIntegrationCatalog(env = process.env) {
+  const hasComfy = safeBaseUrl(env.COMFYUI_BASE_URL);
+  const hasHeyGem = safeBaseUrl(env.HEYGEM_API_BASE_URL) && Boolean(env.HEYGEM_API_KEY);
+  const hasOmniVoice = safeBaseUrl(env.OMNIVOICE_API_BASE_URL) && Boolean(env.OMNIVOICE_API_KEY);
+  const hasHandyBridge = safeBaseUrl(env.ULTRON_HANDY_BRIDGE_URL) && Boolean(env.ULTRON_HANDY_BRIDGE_TOKEN);
+  const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
+
+  return [
+    {
+      id: "heygem",
+      name: "HeyGem Avatar",
+      capability: "Talking-head avatar and lip-sync media jobs",
+      state: hasHeyGem ? "configured_unverified" : "blocked",
+      configured: hasHeyGem,
+      mode: "separate_service",
+      requiredEnv: ["HEYGEM_API_BASE_URL", "HEYGEM_API_KEY"],
+      note: hasHeyGem
+        ? "Credentials are present; reachability, license terms, and GPU capacity are not yet verified."
+        : "Requires a separately hosted HeyGem-compatible API, credentials, and a review of its community license/model terms."
+    },
+    {
+      id: "comfyui",
+      name: "ComfyUI Studio",
+      capability: "Node-based image, video, audio, and 3D generation workflows",
+      state: hasComfy ? "configured_unverified" : "blocked",
+      configured: hasComfy,
+      mode: "separate_service",
+      requiredEnv: ["COMFYUI_BASE_URL"],
+      note: hasComfy
+        ? "Endpoint is configured; API connectivity, authentication, workflows, and model availability still need verification."
+        : "Requires a separately hosted ComfyUI API and approved workflows/models. Keep it separate from the chat process."
+    },
+    {
+      id: "omnivoice",
+      name: "OmniVoice Speech",
+      capability: "Multilingual neural speech generation and optional voice cloning",
+      state: hasOmniVoice ? "configured_unverified" : "blocked",
+      configured: hasOmniVoice,
+      mode: "separate_service",
+      requiredEnv: ["OMNIVOICE_API_BASE_URL", "OMNIVOICE_API_KEY"],
+      note: hasOmniVoice
+        ? "Credentials are present; model loading, language quality, latency, and consent controls are not yet verified."
+        : "The repository is a model/runtime, not a ready-made hosted API. A separate inference service is required."
+    },
+    {
+      id: "handy",
+      name: "Handy Local Transcription",
+      capability: "Offline desktop speech-to-text through a local companion bridge",
+      state: hasHandyBridge ? "configured_unverified" : "desktop_companion_required",
+      configured: hasHandyBridge,
+      mode: "desktop_companion",
+      requiredEnv: ["ULTRON_HANDY_BRIDGE_URL", "ULTRON_HANDY_BRIDGE_TOKEN"],
+      note: hasHandyBridge
+        ? "Bridge settings are present; local IPC, authentication, and transcription have not yet been verified."
+        : "Handy is a local desktop app. The public Render service cannot access a user's microphone or local Handy process directly."
+    },
+    {
+      id: "ai-employees",
+      name: "AI Employee Routines",
+      capability: "Role-based task templates, checklists, and scheduled routines",
+      state: employeesEnabled ? "enabled_guarded_templates" : "disabled",
+      configured: employeesEnabled,
+      mode: "native_guarded_workflows",
+      requiredEnv: ["ULTRON_EMPLOYEES_ENABLED=true"],
+      note: employeesEnabled
+        ? "Routine templates are enabled in guarded mode; external accounts, schedules, and consequential actions still require explicit setup and confirmation."
+        : "Routine orchestration is disabled by default. Enable only after task storage, audit logging, and approval gates are verified."
+    }
+  ];
+}
