@@ -141,29 +141,29 @@ function safeMarkdown(value) {
   const tick = String.fromCharCode(96);
   let text = escapeHtml(value);
   const blocks = [];
-  const fencePattern = new RegExp(tick + tick + tick + "([a-zA-Z0-9_-]*)\\n([\\s\\S]*?)" + tick + tick + tick, "g");
+  const fencePattern = new RegExp(tick + tick + tick + "([a-zA-Z0-9_-]*)\n([\s\S]*?)" + tick + tick + tick, "g");
   text = text.replace(fencePattern, (_match, lang, code) => {
     const token = "ULTRONCODETOKEN" + blocks.length + "END";
-    blocks.push("<pre><code>" + code.replace(/\\n$/, "") + "</code></pre>");
+    blocks.push("<pre><code>" + code.replace(/\n$/, "") + "</code></pre>");
     return token;
   });
-  const inlinePattern = new RegExp(tick + "([^" + tick + "\\n]+)" + tick, "g");
+  const inlinePattern = new RegExp(tick + "([^" + tick + "\n]+)" + tick, "g");
   text = text.replace(inlinePattern, "<code>$1</code>");
-  text = text.replace(/\\*\\*([^*\\n]+)\\*\\*/g, "<strong>$1</strong>");
-  text = text.replace(/\\*([^*\\n]+)\\*/g, "<em>$1</em>");
-  text = text.replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g, (_match, label, url) => {
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  text = text.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, url) => {
     const decoded = url.replace(/&amp;/g, "&");
-    if (!/^https?:\\/\\//i.test(decoded)) return label;
+    if (!/^https?:\/\//i.test(decoded)) return label;
     return '<a href="' + decoded + '" target="_blank" rel="noopener noreferrer">' + label + "</a>";
   });
   text = text.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
-  text = text.replace(/^(?:- |\\* )(.*)$/gm, "<li>$1</li>");
-  text = text.replace(/(<li>.*<\\/li>\\n?)+/gs, match => "<ul>" + match + "</ul>");
-  text = text.split(/\\n{2,}/).map(part => {
-    if (/^<(pre|ul|blockquote)/.test(part) || /^ULTRONCODETOKEN\\d+END$/.test(part)) return part;
-    return part.replace(/\\n/g, "<br>");
-  }).join("\\n");
-  return text.replace(/ULTRONCODETOKEN(\\d+)END/g, (_match, index) => blocks[Number(index)] || "");
+  text = text.replace(/^(?:- |\* )(.*)$/gm, "<li>$1</li>");
+  text = text.replace(/(<li>.*<\/li>\n?)+/gs, match => "<ul>" + match + "</ul>");
+  text = text.split(/\n{2,}/).map(part => {
+    if (/^<(pre|ul|blockquote)/.test(part) || /^ULTRONCODETOKEN\d+END$/.test(part)) return part;
+    return part.replace(/\n/g, "<br>");
+  }).join("\n");
+  return text.replace(/ULTRONCODETOKEN(\d+)END/g, (_match, index) => blocks[Number(index)] || "");
 }
 function addMessage(role, text, typing = false) {
   $("welcome-view").classList.add("hidden");
@@ -214,18 +214,18 @@ async function sendMessage(text) {
       const item = await reader.read();
       if (item.done) break;
       buffer += decoder.decode(item.value, { stream: true });
-      const events = buffer.split(/\\n\\n/);
+      const events = buffer.split(/\n\n/);
       buffer = events.pop() || "";
       for (const eventText of events) {
         let eventType = "message";
         const dataLines = [];
-        for (const line of eventText.split(/\\r?\\n/)) {
+        for (const line of eventText.split(/\r?\n/)) {
           if (line.startsWith("event:")) eventType = line.slice(6).trim();
           if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
         }
         if (!dataLines.length) continue;
         let payload;
-        try { payload = JSON.parse(dataLines.join("\\n")); } catch { continue; }
+        try { payload = JSON.parse(dataLines.join("\n")); } catch { continue; }
         if (eventType === "provider_error") throw new Error(payload && payload.error ? payload.error.message : "The provider interrupted the response.");
         if (payload.delta) {
           responseText += payload.delta;
@@ -330,7 +330,7 @@ function speakAndResume(text) {
   $("voice-status").textContent = "Speaking · stop voice mode to interrupt";
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text.slice(0, 8000));
-  utterance.lang = /[\\u0900-\\u097F]/.test(text) ? "hi-IN" : "en-IN";
+  utterance.lang = /[\u0900-\u097F]/.test(text) ? "hi-IN" : "en-IN";
   utterance.rate = 1;
   utterance.onend = utterance.onerror = () => {
     state.speaking = false;
