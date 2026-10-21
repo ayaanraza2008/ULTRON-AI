@@ -196,16 +196,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
       if (!upstream.ok) {
         const status = upstream.status;
-        let providerMessage = "The AI provider returned an error.";
-        try {
-          const body = await upstream.json();
-          const candidate = body?.error?.message || body?.message;
-          if (typeof candidate === "string" && candidate.length < 500) providerMessage = candidate;
-        } catch { /* avoid reflecting arbitrary upstream bodies */ }
+        try { await upstream.arrayBuffer(); } catch { /* ignore provider error body */ }
         logger.warn?.("NaraRouter request failed", { status, code: status === 401 ? "PROVIDER_AUTH" : status === 402 ? "PROVIDER_CREDITS" : status === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" });
         const code = status === 401 ? "PROVIDER_AUTH" : status === 402 ? "PROVIDER_CREDITS" : status === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR";
         return res.status(status === 401 ? 502 : status === 429 ? 429 : status === 402 ? 402 : 502).json({
-          error: { code, message: status === 401 ? "NaraRouter rejected the API key." : status === 402 ? "NaraRouter reports insufficient credits or entitlement." : status === 429 ? "NaraRouter rate limit reached. Please retry later." : "NaraRouter could not complete the request.", providerMessage }
+          error: { code, message: status === 401 ? "NaraRouter rejected the API key." : status === 402 ? "NaraRouter reports insufficient credits or entitlement." : status === 429 ? "NaraRouter rate limit reached. Please retry later." : "NaraRouter could not complete the request." }
         });
       }
 
