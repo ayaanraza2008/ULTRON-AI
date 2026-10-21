@@ -101,17 +101,34 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   function cookieOptions(maxAge) {
     return `HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${env.NODE_ENV === "production" ? "; Secure" : ""}`;
   }
-  async function getSupabaseUser(req) {
+  async function getSupabaseUser(req, res) {
     const config = supabaseConfig();
-    const token = parseCookies(req.headers.cookie)[ "ultron_sb_access" ];
-    if (!config || !token) return null;
+    const cookies = parseCookies(req.headers.cookie);
+    let token = cookies["ultron_sb_access"];
+    const refreshToken = cookies["ultron_sb_refresh"];
+    if (!config) return null;
     try {
-      const response = await fetchImpl(config.url + "/auth/v1/user", {
-        headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" }
+      if (token) {
+        const response = await fetchImpl(config.url + "/auth/v1/user", {
+          headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" }
+        });
+        if (response.ok) {
+          const user = await response.json();
+          if (user && typeof user.id === "string") return user;
+        } else if (response.status !== 401 || !refreshToken) {
+          return null;
+        }
+      }
+      if (!refreshToken || !res) return null;
+      const refreshed = await fetchImpl(config.url + "/auth/v1/token?grant_type=refresh_token", {
+        method: "POST",
+        headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken })
       });
-      if (!response.ok) return null;
-      const user = await response.json();
-      return user && typeof user.id === "string" ? user : null;
+      if (!refreshed.ok) return null;
+      const payload = await refreshed.json();
+      if (!setSupabaseCookies(res, payload)) return null;
+      return payload.user && typeof payload.user.id === "string" ? payload.user : null;
     } catch { return null; }
   }
   async function supabaseAuthRequest(path, body) {
@@ -144,7 +161,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     return true;
   }
   async function requireSupabaseUser(req, res, next) {
-    const user = await getSupabaseUser(req);
+    const user = await getSupabaseUser(req, res);
     if (!user) return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Sign in to your ULTRON account to use saved data." } });
     req.supabaseUser = user;
     next();
@@ -182,7 +199,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   }
   async function requireSession(req, res, next) {
     if (hasValidSession(req)) return next();
-    if (await getSupabaseUser(req)) return next();
+    if (await getSupabaseUser(req, res)) return next();
     if (!env.APP_ACCESS_PASSWORD && !supabaseConfig()) {
       return res.status(503).json({ error: { code: "ACCESS_NOT_CONFIGURED", message: "Configure Supabase URL and publishable key, or set APP_ACCESS_PASSWORD and SESSION_SECRET." } });
     }
@@ -234,7 +251,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const configured = Boolean(env.APP_ACCESS_PASSWORD || supabaseConfig());
     if (!configured) return res.status(503).json({ authenticated: false, configured: false });
     if (hasValidSession(req)) return res.json({ authenticated: true, configured: true, authType: "access_gate" });
-    const user = await getSupabaseUser(req);
+    const user = await getSupabaseUser(req, res);
     res.json({ authenticated: Boolean(user), configured: true, authType: user ? "supabase" : null, email: user?.email || null });
   });
 
