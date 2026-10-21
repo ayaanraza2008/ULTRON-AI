@@ -568,7 +568,7 @@ async function loadPreferences() {
     const response = await api("/api/preferences");
     const data = await response.json();
     const locale = data.preferences && data.preferences.voice_input_locale;
-    if (["en-IN", "hi-IN", "hinglish"].includes(locale)) $("voice-language").value = locale;
+    if (["auto", "en-IN", "hi-IN", "hinglish"].includes(locale)) $("voice-language").value = locale;
   } catch (error) {
     toast("Voice preferences could not be loaded: " + error.message);
   }
@@ -651,7 +651,10 @@ function speakAndResume(text) {
   $("voice-status").textContent = "Speaking · stop voice mode to interrupt";
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text.slice(0, 8000));
-  utterance.lang = $("voice-language").value === "hi-IN" ? "hi-IN" : "en-IN";
+  const chosenLanguage = $("voice-language").value;
+  const detectedHindi = /[\u0900-\u097F]/.test(text);
+  const detectedHinglish = /\b(bhai|yaar|kya|kaise|hai|hain|nahi|haan|kar|mujhe|tum|aap|mera|meri|kyun|acha|accha|theek|batao|chahiye|matlab)\b/i.test(text);
+  utterance.lang = chosenLanguage === "hi-IN" ? "hi-IN" : chosenLanguage === "en-IN" ? "en-IN" : detectedHindi || detectedHinglish ? "hi-IN" : "en-IN";
   utterance.rate = 1;
   utterance.onend = utterance.onerror = () => {
     state.speaking = false;
