@@ -431,7 +431,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const knownModels = ["openrouter/free"];
     const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean);
     const allowedModels = [...new Set([...knownModels, ...configuredModels, env.OPENROUTER_DEFAULT_MODEL].filter(Boolean))];
-    if (requestedModel !== undefined && (typeof requestedModel !== "string" || !allowedModels.includes(requestedModel))) {
+    if (requestedModel !== undefined && (typeof requestedModel !== "string" || (!allowedModels.includes(requestedModel) && requestedModel !== "openrouter/free" && !/^[a-zA-Z0-9._/-]+:free$/.test(requestedModel)))) {
       return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
     }
     let selectedModel = requestedModel || env.OPENROUTER_DEFAULT_MODEL;
