@@ -63,3 +63,27 @@
  #chat-panel:has(#welcome-view:not(.hidden)) .persona-button small{font-size:7px}
 }
 @media(prefers-reduced-motion:reduce){.core-disc,.core-eye span,.core-orbit,.energy-field:before,.energy-field:after{animation:none!important}}
+
+
+/* Full-viewport core by default; navigation is an on-demand drawer. */
+#app-shell:not(.sidebar-open) .sidebar{display:none!important}
+#app-shell.sidebar-open .sidebar{display:flex!important;position:fixed;inset:0 auto 0 0;height:100dvh;width:min(300px,88vw);z-index:100;transform:translateX(0);box-shadow:24px 0 90px rgba(0,0,0,.6);border-right:1px solid rgba(181,132,255,.28)}
+#app-shell.sidebar-open:after{content:"";position:fixed;inset:0;background:rgba(3,4,12,.62);backdrop-filter:blur(4px);z-index:90}
+#app-shell.sidebar-open .sidebar{z-index:100}
+#app-shell.sidebar-open .main-area{position:relative;z-index:1}
+#open-sidebar{display:grid!important;flex:0 0 34px;width:34px;height:34px;border:1px solid rgba(177,139,239,.28);background:rgba(118,75,177,.1);color:#e7d5ff}
+#open-sidebar:hover{background:rgba(143,89,211,.22);border-color:rgba(204,160,255,.65)}
+#close-sidebar{display:grid!important;margin-left:auto}
+#chat-panel:has(#welcome-view:not(.hidden)){position:relative;min-height:0}
+#chat-panel:has(#welcome-view:not(.hidden)) .welcome-view{height:calc(100dvh - 90px);min-height:0;padding-top:clamp(8px,2.5vh,26px);padding-bottom:160px;justify-content:flex-start}
+#chat-panel:has(#welcome-view:not(.hidden)) .core-wrap{height:clamp(280px,42vh,470px);width:min(620px,96vw)}
+#chat-panel:has(#welcome-view:not(.hidden)) .composer-wrap{bottom:10px}
+@media(min-width:651px){
+ .topbar{height:52px;padding:0 22px}
+ #chat-panel:has(#welcome-view:not(.hidden)) .welcome-view{height:calc(100dvh - 52px);padding-bottom:155px}
+}
+@media(max-width:650px){
+ #chat-panel:has(#welcome-view:not(.hidden)) .welcome-view{height:calc(100dvh - 52px);min-height:0;padding:4px 10px 145px}
+ #chat-panel:has(#welcome-view:not(.hidden)) .core-wrap{height:clamp(245px,36vh,330px)}
+ #app-shell.sidebar-open .sidebar{width:min(300px,88vw)}
+}
