@@ -923,3 +923,11 @@ function updateDashboardClock() {
 updateDashboardClock();
 window.setInterval(updateDashboardClock, 1000);
 window.addEventListener("load", runDashboardDiagnostics);
+
+$("new-chat").addEventListener("click", () => {
+  $("dashboard-view").classList.add("hidden");
+  $("welcome-view").classList.remove("hidden");
+});
+$("clear-chat").addEventListener("click", () => {
+  $("dashboard-view").classList.add("hidden");
+});
