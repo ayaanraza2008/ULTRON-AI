@@ -19,6 +19,10 @@ services:
         sync: false
       - key: NARA_ROUTER_DEFAULT_MODEL
         sync: false
+      - key: SUPABASE_URL
+        value: https://opdjfhwepmcprbqojpat.supabase.co
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
       - key: APP_ACCESS_PASSWORD
         sync: false
       - key: SESSION_SECRET
