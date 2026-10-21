@@ -94,6 +94,7 @@ function switchPanel(name) {
   } else $("page-title").textContent = "Command center";
   document.querySelectorAll(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.panel === name));
   $("clear-chat").classList.toggle("hidden", !isChat);
+  $("model-tools").classList.toggle("hidden", name !== "integrations");
   $("sidebar").classList.remove("open");
 }
 document.querySelectorAll(".nav-item").forEach(button => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
@@ -371,4 +372,43 @@ $("voice-language").addEventListener("change", () => {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   state.speaking = false;
   setTimeout(beginListening, 200);
+});
+
+$("load-models").addEventListener("click", async () => {
+  const button = $("load-models");
+  const list = $("model-list");
+  button.disabled = true;
+  button.textContent = "Loading available models…";
+  list.replaceChildren();
+  try {
+    const response = await api("/api/models");
+    const data = await response.json();
+    data.models.forEach(modelId => {
+      const row = document.createElement("div");
+      row.className = "model-row";
+      const name = document.createElement("code");
+      name.textContent = modelId;
+      const copy = document.createElement("button");
+      copy.className = "message-action";
+      copy.textContent = "Copy ID";
+      copy.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(modelId); toast("Model ID copied. Set it as NARA_ROUTER_DEFAULT_MODEL in Render."); }
+        catch { toast("Select and copy the model ID manually."); }
+      });
+      row.append(name, copy);
+      list.append(row);
+    });
+    if (data.defaultModel) {
+      const current = document.createElement("p");
+      current.className = "model-note";
+      current.textContent = "Configured default model: " + data.defaultModel;
+      list.prepend(current);
+    }
+    if (!data.models.length) list.textContent = "No models were returned for this key.";
+  } catch (error) {
+    list.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Refresh available models";
+  }
 });
