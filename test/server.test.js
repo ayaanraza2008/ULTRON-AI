@@ -115,6 +115,27 @@ test("provider authentication failures do not return secret values", async () =>
   });
 });
 
+test("model discovery returns only model identifiers from the configured provider", async () => {
+  const app = createApp({
+    env,
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "https://router.bynara.id/v1/models");
+      assert.equal(options.headers.Authorization, "Bearer test-key");
+      return new Response(JSON.stringify({ data: [{ id: "model-a" }, { id: "model-b", owned_by: "provider" }, { name: "bad-entry" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { models: ["model-a", "model-b"], defaultModel: "test-model" });
+  });
+});
+
 test("missing access password fails closed", async () => {
   const app = createApp({ env: { ...env, APP_ACCESS_PASSWORD: "" }, logger: { warn() {}, error() {} } });
   await withServer(app, async base => {
