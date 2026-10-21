@@ -805,3 +805,129 @@ $("load-models").addEventListener("click", async () => {
     button.textContent = "Refresh available models";
   }
 });
+
+
+// Dashboard controls: local visual controls are interactive; backend-dependent capabilities remain honestly marked.
+const moduleCopy = {
+  neural: ["Neural Synthesis", "This station visualizes a neural-network concept. Real inference is performed by the configured chat model, not by the decorative network graphic.", "Chat model configured through server settings"],
+  quantum: ["Quantum Field Mapper", "The sliders control the on-screen field animation only. This is a visualization, not a scientific quantum measurement device.", "Local visual controls active"],
+  cyber: ["Cybernetic Diagnostics", "Checks the real ULTRON health endpoint and browser speech capabilities. A reachable server does not guarantee every optional integration is configured.", "Run diagnostics to refresh current checks"],
+  stream: ["Cosmic Data Stream", "The flowing lines are an animated visualizer. No external data stream is claimed until a provider is connected.", "No transport provider connected"],
+  listening: ["Advanced Listening Protocol", "Starts the existing browser voice mode. Your browser may ask for microphone permission; you can stop listening at any time.", "Browser voice capability"]
+};
+function openDashboardModule(key) {
+  const data = moduleCopy[key] || moduleCopy.neural;
+  $("inspector-title").textContent = data[0];
+  $("inspector-copy").textContent = data[1];
+  $("inspector-status").textContent = data[2];
+  $("module-inspector").classList.remove("hidden");
+}
+function showDashboard() {
+  stopVoice();
+  $("messages").classList.add("hidden");
+  $("dashboard-view").classList.remove("hidden");
+  $("welcome-view").classList.add("hidden");
+}
+$("dashboard-chat").addEventListener("click", () => {
+  $("dashboard-view").classList.add("hidden");
+  $("welcome-view").classList.remove("hidden");
+  $("messages").classList.add("hidden");
+  $("message-input").focus();
+});
+document.querySelectorAll(".module-open").forEach(button => button.addEventListener("click", () => openDashboardModule(button.dataset.module)));
+document.querySelectorAll("[data-inspector-close]").forEach(button => button.addEventListener("click", () => $("module-inspector").classList.add("hidden")));
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") $("module-inspector")?.classList.add("hidden");
+});
+$("field-modulation").addEventListener("input", event => {
+  $("field-value").textContent = event.target.value + "%";
+  document.querySelectorAll(".q-wave").forEach((wave, index) => {
+    wave.style.opacity = String(.35 + Number(event.target.value) / 150);
+    wave.style.filter = "hue-rotate(" + (Number(event.target.value) * .7 + index * 24) + "deg)";
+  });
+});
+$("resonance-scan").addEventListener("input", event => {
+  $("resonance-value").textContent = event.target.value + "%";
+  document.querySelector(".q-core").style.transform = "scale(" + (.78 + Number(event.target.value) / 220) + ")";
+});
+$("scan-field").addEventListener("click", () => {
+  const button = $("scan-field");
+  button.disabled = true;
+  button.textContent = "Scanning visual field…";
+  $("field-result").textContent = "Running local animation scan — not a physical measurement";
+  document.querySelectorAll(".q-wave").forEach((wave, index) => {
+    wave.animate([{opacity:.3,filter:"brightness(.8)"},{opacity:1,filter:"brightness(1.8)"},{opacity:.65,filter:"brightness(1)"}],{duration:900+index*180,iterations:2});
+  });
+  window.setTimeout(() => {
+    $("field-result").textContent = "Visual scan complete · animation parameters updated";
+    button.disabled = false;
+    button.textContent = "Run resonance scan ↗";
+  }, 2100);
+});
+$("toggle-stream").addEventListener("click", () => {
+  const active = $("toggle-stream").getAttribute("aria-pressed") !== "true";
+  $("toggle-stream").setAttribute("aria-pressed", String(active));
+  $("toggle-stream").textContent = active ? "Pause stream Ⅱ" : "Animate stream ▶";
+  $("stream-state").textContent = active ? "Visual animation running" : "Idle visualization";
+  document.querySelector(".stream-visual").classList.toggle("stream-paused", !active);
+  document.querySelector(".stream-visual").style.setProperty("--stream-play", active ? "running" : "paused");
+  document.querySelector(".stream-visual").querySelectorAll("*").forEach(node => { node.style.animationPlayState = active ? "running" : "paused"; });
+});
+async function runDashboardDiagnostics() {
+  $("run-diagnostics").disabled = true;
+  $("run-diagnostics").textContent = "Checking…";
+  $("diag-api").textContent = "Checking…";
+  try {
+    const response = await fetch("/api/health", {cache:"no-store"});
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    $("diag-api").textContent = data.providerConfigured ? "Reachable · provider set" : "Reachable · setup needed";
+    $("diag-api").style.color = data.providerConfigured ? "#88e5da" : "#f0bf8f";
+  } catch {
+    $("diag-api").textContent = "Unreachable";
+    $("diag-api").style.color = "#ff8eaa";
+  }
+  const speechIn = ("SpeechRecognition" in window) || ("webkitSpeechRecognition" in window);
+  const speechOut = "speechSynthesis" in window;
+  $("diag-voice").textContent = speechIn && speechOut ? "Supported" : speechIn ? "Input only" : speechOut ? "Output only" : "Unavailable";
+  $("diag-voice").style.color = speechIn && speechOut ? "#88e5da" : "#f0bf8f";
+  $("run-diagnostics").disabled = false;
+  $("run-diagnostics").textContent = "Run diagnostics ↻";
+}
+$("run-diagnostics").addEventListener("click", runDashboardDiagnostics);
+$("refresh-health").addEventListener("click", () => setTimeout(runDashboardDiagnostics, 0));
+$("start-listening").addEventListener("click", () => {
+  $("dashboard-view").classList.add("hidden");
+  $("welcome-view").classList.remove("hidden");
+  startVoice();
+});
+$("stop-listening").addEventListener("click", () => {
+  stopVoice();
+  $("listen-state").textContent = "Voice interface stopped";
+  toast("Voice mode stopped.");
+});
+$("voice-toggle").addEventListener("click", () => {
+  window.setTimeout(() => {
+    $("listen-state").textContent = state.voiceActive ? "Listening · microphone active" : "Voice interface ready";
+    document.querySelector(".waveform").classList.toggle("is-listening", state.voiceActive);
+  }, 100);
+});
+$("stop-voice").addEventListener("click", () => {
+  $("listen-state").textContent = "Voice interface stopped";
+  document.querySelector(".waveform").classList.remove("is-listening");
+});
+function updateDashboardClock() {
+  const clock = $("ops-clock");
+  if (clock) clock.textContent = new Intl.DateTimeFormat(undefined, {hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(new Date());
+}
+updateDashboardClock();
+window.setInterval(updateDashboardClock, 1000);
+window.addEventListener("load", runDashboardDiagnostics);
+
+$("new-chat").addEventListener("click", () => {
+  $("dashboard-view").classList.add("hidden");
+  $("welcome-view").classList.remove("hidden");
+});
+$("clear-chat").addEventListener("click", () => {
+  $("dashboard-view").classList.add("hidden");
+});
