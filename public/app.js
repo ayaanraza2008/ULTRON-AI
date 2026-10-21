@@ -398,11 +398,10 @@ async function sendMessage(text, attachments = []) {
   const assistant = addMessage("assistant", "", true);
   await persistMessage("user", (clean || "Please analyze the attached image.") + (attachments.length ? "\n[Image attached; image data is not saved in chat history]" : ""));
   let responseText = "";
-  const selectedModel = $("model-select").value;
-  const requestModel = attachments.length && selectedModel !== "minimax-m3.1-flash:free" ? "minimax-m3.1-flash:free" : selectedModel;
-  if (requestModel !== selectedModel) toast("Images need a vision model. Using MiniMax M3.1 Flash for this request.");
   try {
-    const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, model: requestModel, attachments: attachments.map(item => ({ name: item.name, dataUrl: item.dataUrl })), stream: true }) });
+    const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, attachments: attachments.map(item => ({ name: item.name, dataUrl: item.dataUrl })), stream: true }) });
+    if (attachments.length) toast("Image detected. ULTRON is selecting a vision model automatically.");
+    else if (response.headers.get("X-ULTRON-Fallback") === "true") toast("Primary model limit reached. ULTRON switched to a backup model.");
     if (!response.body) throw new Error("Streaming is not supported by this connection.");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
