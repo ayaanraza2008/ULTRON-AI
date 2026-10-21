@@ -432,7 +432,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || !allowedModels.includes(requestedModel))) {
       return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
     }
-    const selectedModel = requestedModel || env.NARA_ROUTER_DEFAULT_MODEL;
+    let selectedModel = requestedModel || env.NARA_ROUTER_DEFAULT_MODEL;
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
       return res.status(400).json({ error: { code: "INVALID_MESSAGES", message: "Send between 1 and 40 messages." } });
     }
@@ -485,31 +485,58 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.on("close", () => { if (!res.writableEnded) abortUpstream(); });
 
     try {
-      const upstream = await fetchImpl(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${env.NARA_ROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "Accept": stream ? "text/event-stream, application/json" : "application/json"
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: cleanMessages,
-          stream: Boolean(stream),
-          temperature: 0.7
-        }),
-        signal: controller.signal
-      });
+      const configuredOrder = [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
+      const modelCandidates = imageParts.length
+        ? configuredOrder.filter(id => /minimax.*m3[.-]?1.*flash|vision/i.test(id))
+        : configuredOrder;
+      if (!modelCandidates.length) {
+        return res.status(503).json({ error: { code: "VISION_MODEL_NOT_CONFIGURED", message: "No configured vision model is available. Add the exact MiniMax vision model ID to ULTRON_AVAILABLE_MODELS." } });
+      }
 
-      if (!upstream.ok) {
-        const status = upstream.status;
-        try { await upstream.arrayBuffer(); } catch { /* ignore provider error body */ }
+      let upstream;
+      let lastStatus = 0;
+      let usedFallback = false;
+      for (let index = 0; index < modelCandidates.length; index++) {
+        const candidate = modelCandidates[index];
+        const attempt = await fetchImpl(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${env.NARA_ROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+            "Accept": stream ? "text/event-stream, application/json" : "application/json"
+          },
+          body: JSON.stringify({
+            model: candidate,
+            messages: cleanMessages,
+            stream: Boolean(stream),
+            temperature: 0.7
+          }),
+          signal: controller.signal
+        });
+        upstream = attempt;
+        selectedModel = candidate;
+        if (attempt.ok) {
+          usedFallback = index > 0;
+          break;
+        }
+        lastStatus = attempt.status;
+        // A model-specific limit or temporary overload can safely fall back before any stream starts.
+        if (![429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
+        try { await attempt.arrayBuffer(); } catch { /* ignore provider error body */ }
+        logger.warn?.("NaraRouter model fallback", { status: attempt.status, modelIndex: index });
+      }
+
+      if (!upstream?.ok) {
+        const status = lastStatus || upstream?.status || 502;
+        try { await upstream?.arrayBuffer(); } catch { /* ignore provider error body */ }
         logger.warn?.("NaraRouter request failed", { status, code: status === 401 ? "PROVIDER_AUTH" : status === 402 ? "PROVIDER_CREDITS" : status === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" });
-        const code = status === 401 ? "PROVIDER_AUTH" : status === 402 ? "PROVIDER_CREDITS" : status === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR";
+        const code = status === 401 ? "PROVIDER_AUTH" : status === 402 ? "PROVIDER_CREDITS" : status === 429 ? "PROVIDER_RATE_LIMIT" : status === 503 ? "PROVIDER_OVERLOADED" : "PROVIDER_ERROR";
         return res.status(status === 401 ? 502 : status === 429 ? 429 : status === 402 ? 402 : 502).json({
-          error: { code, message: status === 401 ? "NaraRouter rejected the API key." : status === 402 ? "NaraRouter reports insufficient credits or entitlement." : status === 429 ? "NaraRouter rate limit reached. Please retry later." : "NaraRouter could not complete the request." }
+          error: { code, message: status === 401 ? "NaraRouter rejected the API key." : status === 402 ? "NaraRouter reports insufficient credits or entitlement." : status === 429 ? "All configured models are rate-limited right now." : status === 503 ? "All eligible models are temporarily overloaded." : "NaraRouter could not complete the request." }
         });
       }
+      res.setHeader("X-ULTRON-Model", selectedModel);
+      if (usedFallback) res.setHeader("X-ULTRON-Fallback", "true");
 
       if (!stream) {
         const data = await upstream.json();
