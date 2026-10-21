@@ -94,12 +94,7 @@
           <div id="voice-banner" class="voice-banner hidden"><span class="voice-pulse"></span><span id="voice-status">Listening for your voice…</span><select id="voice-language" class="voice-language" aria-label="Voice language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option><option value="hinglish">Hinglish</option></select><button id="stop-voice" class="text-button">Stop voice mode</button></div>
           <form id="chat-form" class="composer">
             <div class="composer-ai-tools">
-              <label for="model-select">AI model</label>
-              <select id="model-select" aria-label="Choose AI model">
-                <option value="laguna-s-2.1">Laguna S 2.1 · Text / coding</option>
-                <option value="minimax-m3.1-flash:free">MiniMax M3.1 Flash · Text / vision</option>
-                <option value="nemotron-3.5-lightning-free">Nemotron 3.5 Lightning · Text / reasoning</option>
-              </select>
+              <span class="model-auto-label" aria-live="polite">AUTO MODEL ROUTING</span>
               <button type="button" id="attach-image" class="tool-button" title="Attach an image">＋ Image</button>
               <input id="image-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
             </div>
