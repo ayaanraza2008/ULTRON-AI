@@ -224,7 +224,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
     catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL is invalid." } }); }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models?output_modalities=text,image", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
+      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
       if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load free models from OpenRouter." } });
       const payload = await upstream.json();
       const models = Array.isArray(payload?.data)
