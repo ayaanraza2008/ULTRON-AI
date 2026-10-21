@@ -282,11 +282,11 @@ function beginListening() {
   try {
     const recognition = new Recognition();
     state.recognition = recognition;
-    recognition.lang = "en-IN";
+    recognition.lang = $("voice-language").value === "hi-IN" ? "hi-IN" : "en-IN";
     recognition.continuous = false;
     recognition.interimResults = true;
     let finalTranscript = "";
-    $("voice-status").textContent = "Listening · Hindi, English or Hinglish";
+    $("voice-status").textContent = "Listening · " + $("voice-language").options[$("voice-language").selectedIndex].text;
     recognition.onresult = event => {
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -295,7 +295,7 @@ function beginListening() {
         else interim += transcript;
       }
       const heard = (finalTranscript + " " + interim).trim();
-      $("voice-status").textContent = heard ? "Heard: " + heard.slice(0, 100) : "Listening · Hindi, English or Hinglish";
+      $("voice-status").textContent = heard ? "Heard: " + heard.slice(0, 100) : "Listening · " + $("voice-language").options[$("voice-language").selectedIndex].text;
     };
     recognition.onerror = event => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
@@ -330,7 +330,7 @@ function speakAndResume(text) {
   $("voice-status").textContent = "Speaking · stop voice mode to interrupt";
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text.slice(0, 8000));
-  utterance.lang = /[\u0900-\u097F]/.test(text) ? "hi-IN" : "en-IN";
+  utterance.lang = $("voice-language").value === "hi-IN" ? "hi-IN" : "en-IN";
   utterance.rate = 1;
   utterance.onend = utterance.onerror = () => {
     state.speaking = false;
@@ -360,3 +360,15 @@ document.addEventListener("keydown", event => {
 });
 window.addEventListener("beforeunload", stopVoice);
 init();
+
+$("voice-language").addEventListener("change", () => {
+  if (!state.voiceActive) return;
+  if (state.recognition) {
+    const current = state.recognition;
+    state.recognition = null;
+    try { current.onend = null; current.stop(); } catch {}
+  }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  state.speaking = false;
+  setTimeout(beginListening, 200);
+});
