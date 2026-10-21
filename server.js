@@ -114,7 +114,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         });
         if (response.ok) {
           const user = await response.json();
-          if (user && typeof user.id === "string") return user;
+          if (user && typeof user.id === "string") { req.supabaseAccessToken = token; return user; }
         } else if (response.status !== 401 || !refreshToken) {
           return null;
         }
@@ -128,6 +128,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (!refreshed.ok) return null;
       const payload = await refreshed.json();
       if (!setSupabaseCookies(res, payload)) return null;
+      req.supabaseAccessToken = payload.access_token;
       return payload.user && typeof payload.user.id === "string" ? payload.user : null;
     } catch { return null; }
   }
@@ -168,7 +169,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   }
   async function supabaseRest(req, table, method, query = "", body) {
     const config = supabaseConfig();
-    const token = parseCookies(req.headers.cookie)["ultron_sb_access"];
+    const token = req.supabaseAccessToken || parseCookies(req.headers.cookie)["ultron_sb_access"];
     const url = config.url + "/rest/v1/" + table + query;
     const response = await fetchImpl(url, {
       method,
