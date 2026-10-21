@@ -6,7 +6,7 @@ ULTRON AI is a modular, security-conscious personal AI ecosystem with a web clie
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
 - **Hosted web service:** https://ultron-ai-zvd7.onrender.com. The health endpoint and initial deployment were previously verified; real chat remains dependent on server-side provider and access secrets.
-- **AI provider:** NaraRouter is documented as an OpenAI-compatible gateway. A valid key and an entitled model are required for real inference.
+- **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration applied and verified. It creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events. All six tables have Row Level Security enabled. The application has not yet been wired to use Supabase.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
@@ -18,20 +18,20 @@ Copy `.env.example` to `.env` for local development and populate secrets locally
 
 ## Hosting configuration
 
-The Render service is configured with the dedicated Supabase URL and publishable key for account sign-in and per-user chat persistence. Real AI responses still require `NARA_ROUTER_API_KEY` and an entitled `NARA_ROUTER_DEFAULT_MODEL` as server-side environment variables. `APP_ACCESS_PASSWORD` is an optional legacy owner-only gate; it is not required for Supabase account login.
+The Render service is configured with the dedicated Supabase URL and publishable key for account sign-in and per-user chat persistence. Real AI responses require `OPENROUTER_API_KEY`; `OPENROUTER_DEFAULT_MODEL=openrouter/free` automatically selects an available free model. `APP_ACCESS_PASSWORD` is an optional legacy owner-only gate; it is not required for Supabase account login.
 
 ## Multi-model text and vision
 
 The chat composer includes a model picker and image attachment support. The server validates selected model IDs and accepts up to two JPEG, PNG, WebP, or GIF images of up to 4 MB each. Image data is sent to the provider for that request and is not stored as image data in Supabase chat history.
 
-Recommended OpenRouter configuration:
+OpenRouter configuration:
 
-- `NARA_ROUTER_BASE_URL=https://router.bynara.id/v1`
-- `NARA_ROUTER_API_KEY`: create a secret at https://openrouter.ai/keys and store it only in Render/local environment variables.
-- `NARA_ROUTER_DEFAULT_MODEL=laguna-s-2.1`
-- `ULTRON_AVAILABLE_MODELS=laguna-s-2.1,minimax-m3.1-flash:free,nemotron-3.5-lightning-free`
+- `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`
+- `OPENROUTER_API_KEY`: create a secret at https://openrouter.ai/keys and store it only in Render/local environment variables.
+- `OPENROUTER_DEFAULT_MODEL=openrouter/free`
+- `ULTRON_AVAILABLE_MODELS=openrouter/free`
 
-Laguna S 2.1 and Nemotron 3.5 Lightning are text-only in the selected catalog; use MiniMax M3.1 Flash for image requests. ULTRON automatically routes image requests to MiniMax. Free model routes can change or be retired; verify current provider pricing before relying on them. Check each provider’s data-use terms before sending sensitive content to free endpoints.
+The `openrouter/free` router automatically selects a currently available free model and filters for capabilities needed by the request, including image input where supported. ULTRON's model discovery endpoint lists free model IDs available from OpenRouter; you can also select a specific model ending in `:free`. Free models have usage/rate limits and availability may change. Check provider terms before sending sensitive content to free endpoints.
 
 ## Verification policy
 
