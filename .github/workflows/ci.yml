@@ -17,3 +17,15 @@ jobs:
       - run: npm install --ignore-scripts
       - run: npm run check
       - run: npm test
+      - name: Smoke test deployed health endpoint
+        run: |
+          for i in $(seq 1 18); do
+            if curl --fail --silent https://ultron-ai-zvd7.onrender.com/api/health -o /tmp/ultron-health.json; then
+              cat /tmp/ultron-health.json
+              node -e "const d=require('/tmp/ultron-health.json'); if(d.status!=='ok') process.exit(1)"
+              exit 0
+            fi
+            sleep 8
+          done
+          echo 'Deployed health endpoint did not become ready in time.'
+          exit 1
