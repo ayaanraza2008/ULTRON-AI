@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const state = { messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false };
 const features = {
-  memory: ["Memory & knowledge", "The private database and user-isolation policies are ready. User-controlled long-term memory controls are still being built; ULTRON does not silently save profile memories."],
+  memory: ["Memory & knowledge", "Manage only the facts and preferences you explicitly choose to save. You can deactivate or delete each memory at any time."],
   research: ["Research", "Web research and citations are not connected yet. ULTRON will not pretend to search the web or invent sources."],
   media: ["Vision & media", "Image, document, avatar, and video tools require separately verified services. No generation jobs run from this screen yet."],
   tasks: ["Agents & tasks", "Task orchestration and desktop automation are not connected yet. No local computer actions are being simulated."],
@@ -220,6 +220,11 @@ function switchPanel(name) {
   document.querySelectorAll(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.panel === name));
   $("clear-chat").classList.toggle("hidden", !isChat);
   $("model-tools").classList.toggle("hidden", name !== "integrations");
+  $("memory-tools").classList.toggle("hidden", name !== "memory" || state.authType !== "supabase");
+  if (name === "memory") {
+    if (state.authType !== "supabase") $("placeholder-description").textContent = "Sign in with your ULTRON account to manage private memories.";
+    else loadMemoryItems();
+  }
   $("sidebar").classList.remove("open");
 }
 document.querySelectorAll(".nav-item").forEach(button => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
@@ -397,6 +402,90 @@ function addCopyButton(wrapper, text) {
   actions.append(copy);
   wrapper.querySelector(".message-content").append(actions);
 }
+async function loadMemoryItems() {
+  const list = $("memory-list");
+  if (state.authType !== "supabase") {
+    list.textContent = "Sign in with your ULTRON account to manage private memories.";
+    return;
+  }
+  list.textContent = "Loading your saved memories…";
+  try {
+    const response = await api("/api/memory");
+    const data = await response.json();
+    list.replaceChildren();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      const empty = document.createElement("p");
+      empty.className = "history-empty";
+      empty.textContent = "No saved memories yet. Add one above when you want ULTRON to remember it.";
+      list.append(empty);
+      return;
+    }
+    items.forEach(item => {
+      const card = document.createElement("article");
+      card.className = "memory-card" + (item.is_active ? "" : " inactive");
+      const meta = document.createElement("div");
+      meta.className = "memory-meta";
+      meta.textContent = item.kind.replace(/_/g, " ") + (item.is_active ? " · active" : " · inactive");
+      const title = document.createElement("h3");
+      title.textContent = item.title;
+      const body = document.createElement("p");
+      body.textContent = item.content;
+      const actions = document.createElement("div");
+      actions.className = "memory-actions";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.textContent = item.is_active ? "Deactivate" : "Reactivate";
+      toggle.addEventListener("click", async () => {
+        toggle.disabled = true;
+        try {
+          await api("/api/memory/" + encodeURIComponent(item.id), { method: "PATCH", body: JSON.stringify({ is_active: !item.is_active }) });
+          await loadMemoryItems();
+          toast(item.is_active ? "Memory deactivated." : "Memory reactivated.");
+        } catch (error) { toast("Memory update failed: " + error.message); toggle.disabled = false; }
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        if (!window.confirm("Permanently delete this saved memory?")) return;
+        remove.disabled = true;
+        try {
+          await api("/api/memory/" + encodeURIComponent(item.id), { method: "DELETE" });
+          await loadMemoryItems();
+          toast("Memory deleted.");
+        } catch (error) { toast("Memory deletion failed: " + error.message); remove.disabled = false; }
+      });
+      actions.append(toggle, remove);
+      card.append(meta, title, body, actions);
+      list.append(card);
+    });
+  } catch (error) {
+    list.textContent = "Could not load saved memories: " + error.message;
+  }
+}
+$("memory-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = $("memory-form").querySelector('button[type="submit"]');
+  const errorNode = $("memory-error");
+  errorNode.textContent = "";
+  button.disabled = true;
+  try {
+    await api("/api/memory", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: $("memory-kind").value,
+        title: $("memory-title").value,
+        content: $("memory-content").value
+      })
+    });
+    $("memory-form").reset();
+    await loadMemoryItems();
+    toast("Memory saved to your private ULTRON account.");
+  } catch (error) {
+    errorNode.textContent = error.message;
+  } finally { button.disabled = false; }
+});
 async function loadPreferences() {
   try {
     const response = await api("/api/preferences");
