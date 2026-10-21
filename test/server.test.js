@@ -115,6 +115,37 @@ test("provider authentication failures do not return secret values", async () =>
   });
 });
 
+test("chat falls back when NaraRouter denies access to the default model", async () => {
+  const attemptedModels = [];
+  const app = createApp({
+    env,
+    fetchImpl: async (_url, options) => {
+      const model = JSON.parse(options.body).model;
+      attemptedModels.push(model);
+      if (model === "test-model") {
+        return new Response(JSON.stringify({ error: { code: "model_not_entitled", message: "private provider details" } }), { status: 403 });
+      }
+      return new Response(JSON.stringify({ model, choices: [{ message: { content: "Fallback worked" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Hello" }], stream: false })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Fallback worked");
+    assert.deepEqual(attemptedModels, ["test-model", "auto/bynara"]);
+    assert.equal(response.headers.get("x-ultron-fallback"), "true");
+  });
+});
+
 test("model discovery returns only model identifiers from the configured provider", async () => {
   const app = createApp({
     env,
