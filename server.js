@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_BASE_URL = "https://router.bynara.id/v1";
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
 
 function safeEqual(a, b) {
@@ -46,7 +46,7 @@ function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
   if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-    throw new Error("NARA_ROUTER_BASE_URL must use HTTPS outside localhost.");
+    throw new Error("OPENROUTER_BASE_URL must use HTTPS outside localhost.");
   }
   return raw.replace(/\/+$/, "");
 }
@@ -211,7 +211,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.json({
       status: "ok",
       app: "ULTRON AI",
-      providerConfigured: Boolean(env.NARA_ROUTER_API_KEY && env.NARA_ROUTER_DEFAULT_MODEL),
+      providerConfigured: Boolean(env.OPENROUTER_API_KEY && env.OPENROUTER_DEFAULT_MODEL),
       accessConfigured: Boolean(env.APP_ACCESS_PASSWORD || supabaseConfig()),
       supabaseConfigured: Boolean(supabaseConfig()),
       timestamp: new Date().toISOString()
@@ -219,19 +219,19 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
   app.get("/api/models", requireSession, async (_req, res) => {
-    if (!env.NARA_ROUTER_API_KEY) return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "NaraRouter API key is not configured." } });
+    if (!env.OPENROUTER_API_KEY) return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "OpenRouter API key is not configured." } });
     let baseUrl;
-    try { baseUrl = normalizeBaseUrl(env.NARA_ROUTER_BASE_URL); }
-    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "NaraRouter base URL is invalid." } }); }
+    try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
+    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL is invalid." } }); }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.NARA_ROUTER_API_KEY } });
-      if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load models from NaraRouter." } });
+      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
+      if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load models from OpenRouter." } });
       const payload = await upstream.json();
       const models = Array.isArray(payload?.data) ? payload.data.map(item => item?.id).filter(id => typeof id === "string") : [];
-      if (!models.length) return res.status(502).json({ error: { code: "MODEL_LIST_INVALID", message: "NaraRouter returned no model IDs." } });
-      return res.json({ models, defaultModel: env.NARA_ROUTER_DEFAULT_MODEL || null });
+      if (!models.length) return res.status(502).json({ error: { code: "MODEL_LIST_INVALID", message: "OpenRouter returned no model IDs." } });
+      return res.json({ models, defaultModel: env.OPENROUTER_DEFAULT_MODEL || null });
     } catch {
-      return res.status(502).json({ error: { code: "MODEL_DISCOVERY_UNAVAILABLE", message: "Could not connect to NaraRouter." } });
+      return res.status(502).json({ error: { code: "MODEL_DISCOVERY_UNAVAILABLE", message: "Could not connect to OpenRouter." } });
     }
   });
 
@@ -426,13 +426,13 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.post("/api/chat", requireSession, async (req, res) => {
     const maxChars = Math.max(1000, Number(env.MAX_MESSAGE_CHARS) || 12_000);
     const { messages, stream = true, model: requestedModel, attachments = [] } = req.body || {};
-    const knownModels = ["auto/bynara", "poolside/laguna-s-2.1:free", "minimax/minimax-m3.1-flash:free", "nvidia/nemotron-3.5-lightning:free"];
-    const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "").split(",").map(value => value.trim()).filter(Boolean);
-    const allowedModels = [...new Set([...knownModels, ...configuredModels, env.NARA_ROUTER_DEFAULT_MODEL].filter(Boolean))];
+    const knownModels = ["openrouter/free"];
+    const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean);
+    const allowedModels = [...new Set([...knownModels, ...configuredModels, env.OPENROUTER_DEFAULT_MODEL].filter(Boolean))];
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || !allowedModels.includes(requestedModel))) {
       return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
     }
-    let selectedModel = requestedModel || env.NARA_ROUTER_DEFAULT_MODEL;
+    let selectedModel = requestedModel || env.OPENROUTER_DEFAULT_MODEL;
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
       return res.status(400).json({ error: { code: "INVALID_MESSAGES", message: "Send between 1 and 40 messages." } });
     }
@@ -466,18 +466,18 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (!last || last.role !== "user") return res.status(400).json({ error: { code: "IMAGE_REQUIRES_USER_MESSAGE", message: "Images must be attached to a user message." } });
       last.content = [{ type: "text", text: last.content || "Please describe and analyze the attached image." }, ...imageParts];
     }
-    if (!env.NARA_ROUTER_API_KEY) {
-      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "NaraRouter API key is not configured on the server." } });
+    if (!env.OPENROUTER_API_KEY) {
+      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "OpenRouter API key is not configured on the server." } });
     }
     if (!selectedModel) {
-      return res.status(503).json({ error: { code: "MODEL_NOT_CONFIGURED", message: "Set NARA_ROUTER_DEFAULT_MODEL to a model available to your API key." } });
+      return res.status(503).json({ error: { code: "MODEL_NOT_CONFIGURED", message: "Set OPENROUTER_DEFAULT_MODEL to a model available to your API key." } });
     }
 
     let baseUrl;
-    try { baseUrl = normalizeBaseUrl(env.NARA_ROUTER_BASE_URL); }
-    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "NaraRouter base URL configuration is invalid." } }); }
+    try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
+    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL configuration is invalid." } }); }
 
-    const timeoutSeconds = Math.min(120, Math.max(5, Number(env.NARA_ROUTER_TIMEOUT_SECONDS) || 60));
+    const timeoutSeconds = Math.min(120, Math.max(5, Number(env.OPENROUTER_TIMEOUT_SECONDS) || 60));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error("Provider timeout")), timeoutSeconds * 1000);
     const abortUpstream = () => controller.abort(new Error("Client disconnected"));
@@ -486,9 +486,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
     try {
       const configuredOrder = [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
-      const modelCandidates = imageParts.length
-        ? configuredOrder.filter(id => /minimax.*m3[.-]?1.*flash|vision/i.test(id))
-        : configuredOrder;
+      const modelCandidates = configuredOrder;
       if (!modelCandidates.length) {
         return res.status(503).json({ error: { code: "VISION_MODEL_NOT_CONFIGURED", message: "No configured vision model is available. Add the exact MiniMax vision model ID to ULTRON_AVAILABLE_MODELS." } });
       }
@@ -502,7 +500,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         const attempt = await fetchImpl(`${baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${env.NARA_ROUTER_API_KEY}`,
+            "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
             "Accept": stream ? "text/event-stream, application/json" : "application/json"
           },
@@ -529,7 +527,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         // 403/404 can mean this key cannot use the selected model. Try other configured candidates.
         if (![403, 404, 429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
         try { await attempt.arrayBuffer(); } catch { /* ignore provider error body */ }
-        logger.warn?.("NaraRouter model fallback", { status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
+        logger.warn?.("OpenRouter model fallback", { status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
       }
 
       if (!upstream?.ok) {
@@ -542,14 +540,14 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           : status === 429 ? "PROVIDER_RATE_LIMIT"
           : status === 503 ? "PROVIDER_OVERLOADED"
           : "PROVIDER_ERROR";
-        logger.warn?.("NaraRouter request failed", { status, code, providerCode: lastProviderCode || undefined });
-        const message = status === 401 ? "NaraRouter rejected the API key."
-          : status === 402 ? "NaraRouter reports insufficient credits."
-          : status === 403 ? "NaraRouter denied access to every configured model. Check your plan, model access, or account status."
-          : status === 404 ? "None of the configured model IDs are available to this NaraRouter key. Refresh the model list and select an available ID."
+        logger.warn?.("OpenRouter request failed", { status, code, providerCode: lastProviderCode || undefined });
+        const message = status === 401 ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
+          : status === 402 ? "OpenRouter reports insufficient credits."
+          : status === 403 ? "OpenRouter denied access to every configured model. Check your plan, model access, or account status."
+          : status === 404 ? "None of the configured model IDs are available to this OpenRouter key. Refresh the model list and select an available ID."
           : status === 429 ? "All configured models are rate-limited right now."
           : status === 503 ? "All eligible models are temporarily unavailable."
-          : "NaraRouter could not complete the request.";
+          : "OpenRouter could not complete the request.";
         return res.status(status === 429 ? 429 : status === 402 ? 402 : 502).json({ error: { code, message } });
       }
       res.setHeader("X-ULTRON-Model", selectedModel);
@@ -596,7 +594,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
                 res.write(`event: provider_error\ndata: ${JSON.stringify({ error: { code: "PROVIDER_STREAM_ERROR", message: "The AI provider interrupted the response." } })}\n\n`);
               }
             } catch {
-              logger.warn?.("Skipped malformed NaraRouter stream event");
+              logger.warn?.("Skipped malformed OpenRouter stream event");
             }
           }
           if (res.writableNeedDrain) await new Promise(resolve => res.once("drain", resolve));
@@ -611,12 +609,12 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         if (!res.destroyed) res.end();
       } else if (!res.headersSent) {
         const timedOut = error?.name === "AbortError" || /timeout/i.test(String(error?.message));
-        res.status(timedOut ? 504 : 502).json({ error: { code: timedOut ? "PROVIDER_TIMEOUT" : "PROVIDER_UNAVAILABLE", message: timedOut ? "The AI provider timed out. Please retry." : "Could not connect to NaraRouter. Check the server configuration and network." } });
+        res.status(timedOut ? 504 : 502).json({ error: { code: timedOut ? "PROVIDER_TIMEOUT" : "PROVIDER_UNAVAILABLE", message: timedOut ? "The AI provider timed out. Please retry." : "Could not connect to OpenRouter. Check the server configuration and network." } });
       } else if (!res.destroyed) {
         res.write(`event: provider_error\ndata: ${JSON.stringify({ error: { code: "PROVIDER_STREAM_INTERRUPTED", message: "The response stream was interrupted." } })}\n\n`);
         res.end();
       }
-      logger.warn?.("NaraRouter request exception", { name: error?.name || "Error" });
+      logger.warn?.("OpenRouter request exception", { name: error?.name || "Error" });
     } finally {
       clearTimeout(timeout);
       req.off("aborted", abortUpstream);
