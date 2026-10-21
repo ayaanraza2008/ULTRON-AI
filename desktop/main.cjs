@@ -50,10 +50,11 @@ function createWindow() {
   mainWindow.loadURL(startUrl);
 }
 app.whenReady().then(() => {
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const requestingUrl = webContents.getURL();
-    const allowed = isTrustedUrl(requestingUrl) && permission === "media";
-    callback(Boolean(allowed));
+    const mediaTypes = Array.isArray(details && details.mediaTypes) ? details.mediaTypes : [];
+    const audioOnly = permission === "media" && mediaTypes.includes("audio") && !mediaTypes.includes("video");
+    callback(Boolean(isTrustedUrl(requestingUrl) && audioOnly));
   });
   const menu = Menu.buildFromTemplate([
     { label: "ULTRON", submenu: [
