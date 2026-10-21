@@ -148,3 +148,55 @@ test("missing access password fails closed", async () => {
     assert.equal((await response.json()).error.code, "ACCESS_NOT_CONFIGURED");
   });
 });
+
+test("Supabase conversation APIs require an authenticated user and respect the caller JWT", async () => {
+  let restRequest;
+  const supabaseEnv = {
+    ...env,
+    SUPABASE_URL: "https://ultron-test.supabase.co",
+    SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test"
+  };
+  const app = createApp({
+    env: supabaseEnv,
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/user") {
+        assert.equal(options.headers.Authorization, "Bearer test-user-token");
+        return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200 });
+      }
+      if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
+        restRequest = { url, options };
+        return new Response(JSON.stringify([{ id: "123e4567-e89b-12d3-a456-426614174001", title: "Hello", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z" }]), { status: 200 });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const denied = await fetch(base + "/api/conversations");
+    assert.equal(denied.status, 401);
+    const response = await fetch(base + "/api/conversations", { headers: { Cookie: "ultron_sb_access=test-user-token" } });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).conversations[0].title, "Hello");
+    assert.equal(restRequest.options.headers.apikey, "sb_publishable_test");
+    assert.equal(restRequest.options.headers.Authorization, "Bearer test-user-token");
+  });
+});
+
+test("Supabase signup validates credentials before making an upstream request", async () => {
+  let calls = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async () => { calls++; throw new Error("unexpected upstream call"); },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "not-an-email", password: "short" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_CREDENTIALS");
+    assert.equal(calls, 0);
+  });
+});
