@@ -462,7 +462,7 @@ async function sendMessage(text, attachments = []) {
     // Persistence is best-effort and must never prevent the actual model request.
     await persistMessage("user", (clean || "Please analyze the attached image.") + (attachments.length ? "\n[Image attached; image data is not saved in chat history]" : ""));
     console.info("[ULTRON] Sending chat request", { messageCount: state.messages.length, hasAttachments: attachments.length > 0 });
-    const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, attachments: attachments.map(item => ({ name: item.name, dataUrl: item.dataUrl })), stream: true }) });
+    const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ persona: state.persona, messages: state.messages, attachments: attachments.map(item => ({ name: item.name, dataUrl: item.dataUrl })), stream: true }) });
     if (attachments.length) toast("Image detected. ULTRON is selecting a vision model automatically.");
     else if (response.headers.get("X-ULTRON-Fallback") === "true") toast("Primary model limit reached. ULTRON switched to a backup model.");
     if (!response.body) throw new Error("Streaming is not supported by this connection.");
