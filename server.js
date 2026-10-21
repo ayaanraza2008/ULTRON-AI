@@ -315,6 +315,61 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     } catch (error) { res.status(error.status || 502).json({ error: { code: "DATABASE_READ_FAILED", message: error.message } }); }
   });
 
+  app.get("/api/memory", requireSupabaseUser, async (req, res) => {
+    try {
+      const rows = await supabaseRest(req, "memory_items", "GET", "?select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at&order=updated_at.desc&limit=100");
+      res.json({ items: Array.isArray(rows) ? rows : [] });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_READ_FAILED", message: error.message } }); }
+  });
+
+  app.post("/api/memory", requireSupabaseUser, async (req, res) => {
+    const allowedKinds = ["preference", "project_fact", "profile_note", "document_reference"];
+    const kind = req.body?.kind;
+    const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+    const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+    if (!allowedKinds.includes(kind) || !title || title.length > 240 || !content || content.length > 20000) {
+      return res.status(400).json({ error: { code: "INVALID_MEMORY_ITEM", message: "Choose a valid memory type, enter a title up to 240 characters, and content up to 20,000 characters." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "memory_items", "POST", "?select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at", {
+        user_id: req.supabaseUser.id, kind, title, content, source: "user_approved", is_active: true
+      });
+      if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "MEMORY_WRITE_FAILED", message: "Supabase did not return the saved memory item." } });
+      res.status(201).json({ item: rows[0] });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_WRITE_FAILED", message: error.message } }); }
+  });
+
+  app.patch("/api/memory/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_MEMORY_ID", message: "Memory item ID is invalid." } });
+    const patch = {};
+    if (typeof req.body?.is_active === "boolean") patch.is_active = req.body.is_active;
+    if (typeof req.body?.title === "string") {
+      const title = req.body.title.trim();
+      if (!title || title.length > 240) return res.status(400).json({ error: { code: "INVALID_MEMORY_ITEM", message: "Title must contain 1 to 240 characters." } });
+      patch.title = title;
+    }
+    if (typeof req.body?.content === "string") {
+      const content = req.body.content.trim();
+      if (!content || content.length > 20000) return res.status(400).json({ error: { code: "INVALID_MEMORY_ITEM", message: "Content must contain 1 to 20,000 characters." } });
+      patch.content = content;
+    }
+    if (!Object.keys(patch).length) return res.status(400).json({ error: { code: "EMPTY_MEMORY_UPDATE", message: "Provide a title, content, or active-state change." } });
+    try {
+      const query = "?id=eq." + encodeURIComponent(req.params.id) + "&select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at";
+      const rows = await supabaseRest(req, "memory_items", "PATCH", query, patch);
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "MEMORY_NOT_FOUND", message: "Memory item was not found or is not accessible." } });
+      res.json({ item: rows[0] });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_UPDATE_FAILED", message: error.message } }); }
+  });
+
+  app.delete("/api/memory/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_MEMORY_ID", message: "Memory item ID is invalid." } });
+    try {
+      await supabaseRest(req, "memory_items", "DELETE", "?id=eq." + encodeURIComponent(req.params.id));
+      res.json({ ok: true });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_DELETE_FAILED", message: error.message } }); }
+  });
+
   app.get("/api/preferences", requireSupabaseUser, async (req, res) => {
     try {
       const query = "?select=language,voice_enabled,voice_input_locale,memory_enabled,history_retention_days,preferences&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1";
