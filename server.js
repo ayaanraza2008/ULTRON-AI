@@ -167,7 +167,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     req.supabaseUser = user;
     next();
   }
-  async function supabaseRest(req, table, method, query = "", body) {
+  async function supabaseRest(req, table, method, query = "", body, prefer = "return=representation") {
     const config = supabaseConfig();
     const token = req.supabaseAccessToken || parseCookies(req.headers.cookie)["ultron_sb_access"];
     const url = config.url + "/rest/v1/" + table + query;
@@ -177,7 +177,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         apikey: config.key,
         Authorization: "Bearer " + token,
         Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: "return=representation" })
+        ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: prefer })
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
@@ -313,6 +313,34 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       const rows = await supabaseRest(req, "messages", "GET", query);
       res.json({ messages: Array.isArray(rows) ? rows : [] });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "DATABASE_READ_FAILED", message: error.message } }); }
+  });
+
+  app.get("/api/preferences", requireSupabaseUser, async (req, res) => {
+    try {
+      const query = "?select=language,voice_enabled,voice_input_locale,memory_enabled,history_retention_days,preferences&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1";
+      const rows = await supabaseRest(req, "user_preferences", "GET", query);
+      res.json({ preferences: Array.isArray(rows) && rows[0] ? rows[0] : { language: "en", voice_enabled: true, voice_input_locale: "en-IN", memory_enabled: true, history_retention_days: null, preferences: {} } });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "PREFERENCES_READ_FAILED", message: error.message } }); }
+  });
+
+  app.put("/api/preferences", requireSupabaseUser, async (req, res) => {
+    const allowedLocales = ["en-IN", "hi-IN", "hinglish"];
+    const locale = req.body?.voice_input_locale;
+    if (!allowedLocales.includes(locale)) return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Choose English, Hindi, or Hinglish for voice input." } });
+    const language = locale === "hi-IN" ? "hi" : locale === "hinglish" ? "hinglish" : "en";
+    const voiceEnabled = typeof req.body?.voice_enabled === "boolean" ? req.body.voice_enabled : true;
+    const memoryEnabled = typeof req.body?.memory_enabled === "boolean" ? req.body.memory_enabled : true;
+    try {
+      const rows = await supabaseRest(req, "user_preferences", "POST", "?on_conflict=user_id&select=language,voice_enabled,voice_input_locale,memory_enabled,history_retention_days,preferences", {
+        user_id: req.supabaseUser.id,
+        language,
+        voice_enabled: voiceEnabled,
+        voice_input_locale: locale,
+        memory_enabled: memoryEnabled
+      }, "resolution=merge-duplicates,return=representation");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(502).json({ error: { code: "PREFERENCES_WRITE_FAILED", message: "Supabase did not return the saved preferences." } });
+      res.json({ preferences: rows[0] });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "PREFERENCES_WRITE_FAILED", message: error.message } }); }
   });
 
   app.post("/api/conversations/:id/messages", requireSupabaseUser, async (req, res) => {
