@@ -219,17 +219,19 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
   app.get("/api/models", requireSession, async (_req, res) => {
-    if (!env.OPENROUTER_API_KEY) return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "OpenRouter API key is not configured." } });
+    if (!env.OPENROUTER_API_KEY) return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "Add your OpenRouter API key in Render as OPENROUTER_API_KEY." } });
     let baseUrl;
     try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
     catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL is invalid." } }); }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
-      if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load models from OpenRouter." } });
+      const upstream = await fetchImpl(baseUrl + "/models?output_modalities=text,image", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
+      if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load free models from OpenRouter." } });
       const payload = await upstream.json();
-      const models = Array.isArray(payload?.data) ? payload.data.map(item => item?.id).filter(id => typeof id === "string") : [];
-      if (!models.length) return res.status(502).json({ error: { code: "MODEL_LIST_INVALID", message: "OpenRouter returned no model IDs." } });
-      return res.json({ models, defaultModel: env.OPENROUTER_DEFAULT_MODEL || null });
+      const models = Array.isArray(payload?.data)
+        ? payload.data.filter(item => item?.id && (String(item.id).endsWith(":free") || (Number(item?.pricing?.prompt) === 0 && Number(item?.pricing?.completion) === 0))).map(item => item.id)
+        : [];
+      if (!models.includes("openrouter/free")) models.unshift("openrouter/free");
+      return res.json({ models: [...new Set(models)], defaultModel: env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" });
     } catch {
       return res.status(502).json({ error: { code: "MODEL_DISCOVERY_UNAVAILABLE", message: "Could not connect to OpenRouter." } });
     }
