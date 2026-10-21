@@ -21,7 +21,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Verified read access to all five requested source repositories. Initial license finding: Handy and ai-employees are MIT; HeyGem uses a custom Silicon Intelligence Community License requiring attribution and other conditions. Remaining source-specific details require review before reuse.
 - At initial audit, no Render service was linked to `ayaanraza2008/ULTRON-AI`. A new free service named `ultron-ai` was subsequently created for this repository; no other service was repointed.
 - Created a dedicated `ULTRON-AI` Supabase project in Mumbai (`ap-south-1`) after the organization-scoped cost quote returned $0/month. Existing `nox-ai` was left untouched. Initial schema applied and verified.
-- Added Supabase Auth signup/sign-in/signout endpoints with HttpOnly access/refresh cookies and per-user conversation/message REST APIs that forward the authenticated user's JWT to Supabase. Added account UI and chat save/restore flow.
+- Added Supabase Auth signup/sign-in/signout endpoints with HttpOnly access/refresh cookies and server-side token renewal; added per-user conversation/message REST APIs that forward the authenticated user's JWT to Supabase. Added account UI and chat save/restore flow.
 - Added Supabase URL and publishable-key configuration to `.env.example` and `render.yaml`; configured these two values on the ULTRON Render service. New mocked auth/database tests were committed; the current deployment and CI run still need to be checked.
 
 ## Tests and verification
@@ -45,4 +45,4 @@ Ask the user to configure `APP_ACCESS_PASSWORD` and `NARA_ROUTER_API_KEY` as Ren
 
 
 ## Current follow-up work (2026-10-22)
-- Remaining before declaring persistence production-ready: verify deployed account creation and login, verify message insert/read under RLS, implement access-token refresh and password recovery, and ensure recent conversations are ordered by last activity.
+- Remaining before declaring persistence production-ready: verify deployed account creation and login, verify message insert/read under RLS, implement password recovery, and test session expiry. Access-token refresh and conversation last-activity ordering have now been implemented.
