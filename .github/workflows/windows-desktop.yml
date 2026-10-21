@@ -17,7 +17,7 @@ jobs:
           node-version: 20
       - name: Install desktop dependencies
         working-directory: desktop
-        run: npm install --ignore-scripts
+        run: npm install
       - name: Package Windows installer
         working-directory: desktop
         run: npm run dist
