@@ -194,7 +194,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       status: "ok",
       app: "ULTRON AI",
       providerConfigured: Boolean(env.NARA_ROUTER_API_KEY && env.NARA_ROUTER_DEFAULT_MODEL),
-      accessConfigured: Boolean(env.APP_ACCESS_PASSWORD),
+      accessConfigured: Boolean(env.APP_ACCESS_PASSWORD || supabaseConfig()),
+      supabaseConfigured: Boolean(supabaseConfig()),
       timestamp: new Date().toISOString()
     });
   });
