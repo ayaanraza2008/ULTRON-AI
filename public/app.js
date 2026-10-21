@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false };
+const state = { messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false, attachments: [] };
 const features = {
   memory: ["Memory & knowledge", "Manage only the facts and preferences you explicitly choose to save. You can deactivate or delete each memory at any time."],
   research: ["Research", "Web research and citations are not connected yet. ULTRON will not pretend to search the web or invent sources."],
@@ -257,6 +257,64 @@ document.querySelectorAll(".suggestion-card").forEach(button => button.addEventL
   resizeTextarea();
   $("message-input").focus();
 }));
+const imageInput = $("image-input");
+function renderImagePreviews() {
+  const container = $("image-previews");
+  container.replaceChildren();
+  container.classList.toggle("hidden", state.attachments.length === 0);
+  state.attachments.forEach(item => {
+    const card = document.createElement("div");
+    card.className = "image-preview";
+    const img = document.createElement("img");
+    img.src = item.dataUrl;
+    img.alt = item.name;
+    const label = document.createElement("span");
+    label.textContent = item.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", "Remove " + item.name);
+    remove.addEventListener("click", () => {
+      state.attachments = state.attachments.filter(current => current.id !== item.id);
+      renderImagePreviews();
+    });
+    card.append(img, label, remove);
+    container.append(card);
+  });
+}
+$("attach-image").addEventListener("click", () => imageInput.click());
+imageInput.addEventListener("change", async () => {
+  const files = Array.from(imageInput.files || []);
+  imageInput.value = "";
+  if (state.attachments.length + files.length > 2) {
+    toast("Attach up to two images per message.");
+    return;
+  }
+  for (const file of files) {
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+      toast("Choose a JPEG, PNG, WebP, or GIF image.");
+      continue;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      toast(file.name + " is larger than 4 MB.");
+      continue;
+    }
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Could not read image file."));
+        reader.readAsDataURL(file);
+      });
+      state.attachments.push({ id: crypto.randomUUID(), name: file.name, dataUrl });
+    } catch (error) { toast(error.message); }
+  }
+  renderImagePreviews();
+});
+$("chat-form").addEventListener("submit", event => {
+  event.preventDefault();
+  sendMessage(input.value, state.attachments.slice());
+});
 const input = $("message-input");
 function resizeTextarea() {
   input.style.height = "auto";
@@ -328,20 +386,20 @@ function setBusy(busy) {
   $("send-button").disabled = busy;
   $("send-button").querySelector("span:first-child").textContent = busy ? "Thinking" : "Send";
 }
-async function sendMessage(text) {
+async function sendMessage(text, attachments = []) {
   const clean = text.trim();
-  if (!clean || state.busy) return;
+  if ((!clean && !attachments.length) || state.busy) return;
   if (clean.length > 12000) { toast("Message is too long. Please shorten it."); return; }
-  state.messages.push({ role: "user", content: clean });
-  addMessage("user", clean);
+  state.messages.push({ role: "user", content: clean || "Please analyze the attached image." });
+  addMessage("user", (clean || "Please analyze the attached image.") + (attachments.length ? "\n\n[Image attached for this request]" : ""));
   input.value = "";
   resizeTextarea();
   setBusy(true);
   const assistant = addMessage("assistant", "", true);
-  await persistMessage("user", clean);
+  await persistMessage("user", (clean || "Please analyze the attached image.") + (attachments.length ? "\n[Image attached; image data is not saved in chat history]" : ""));
   let responseText = "";
   try {
-    const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, stream: true }) });
+    const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, model: $("model-select").value, attachments: attachments.map(item => ({ name: item.name, dataUrl: item.dataUrl })), stream: true }) });
     if (!response.body) throw new Error("Streaming is not supported by this connection.");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -375,6 +433,10 @@ async function sendMessage(text) {
     state.messages.push({ role: "assistant", content: responseText });
     await persistMessage("assistant", responseText);
     addCopyButton(assistant.wrapper, responseText);
+    if (attachments.length) {
+      state.attachments = state.attachments.filter(item => !attachments.some(sent => sent.id === item.id));
+      renderImagePreviews();
+    }
     if (state.voiceActive) speakAndResume(responseText);
   } catch (error) {
     assistant.body.textContent = error.message;
