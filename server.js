@@ -219,54 +219,19 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
   app.get("/api/models", requireSession, async (_req, res) => {
-    if (!selectedModel || !allowedModels.includes(selectedModel)) {
-      return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
-    }
-    if (!Array.isArray(attachments) || attachments.length > 2) {
-      return res.status(400).json({ error: { code: "INVALID_ATTACHMENTS", message: "Attach no more than two images per message." } });
-    }
-    let imageParts = [];
-    for (const attachment of attachments) {
-      if (!attachment || typeof attachment.dataUrl !== "string" || attachment.dataUrl.length > 5_600_000) {
-        return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
-      }
-      if (!/^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(attachment.dataUrl)) {
-        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only valid JPEG, PNG, WebP, or GIF image data is supported." } });
-      }
-      imageParts.push({ type: "image_url", image_url: { url: attachment.dataUrl } });
-    }
-    if (imageParts.length) {
-      const last = cleanMessages[cleanMessages.length - 1];
-      if (!last || last.role !== "user") return res.status(400).json({ error: { code: "IMAGE_REQUIRES_USER_MESSAGE", message: "Images must be attached to a user message." } });
-      const textPart = last.content.trim() || "Please describe and analyze the attached image.";
-      last.content = [{ type: "text", text: textPart }, ...imageParts];
-    }
-    if (!env.NARA_ROUTER_API_KEY) {
-      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "AI provider API key is not configured on the server." } });
-    }
+    if (!env.NARA_ROUTER_API_KEY) return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "NaraRouter API key is not configured." } });
     let baseUrl;
     try { baseUrl = normalizeBaseUrl(env.NARA_ROUTER_BASE_URL); }
-    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "NaraRouter base URL configuration is invalid." } }); }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "NaraRouter base URL is invalid." } }); }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models", {
-        headers: { "Authorization": "Bearer " + env.NARA_ROUTER_API_KEY, "Accept": "application/json" },
-        signal: controller.signal
-      });
-      if (!upstream.ok) {
-        logger.warn?.("NaraRouter model discovery failed", { status: upstream.status });
-        return res.status(upstream.status === 429 ? 429 : 502).json({ error: { code: upstream.status === 401 ? "PROVIDER_AUTH" : "MODEL_DISCOVERY_FAILED", message: upstream.status === 401 ? "NaraRouter rejected the API key." : "Could not load the models available to this API key." } });
-      }
+      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.NARA_ROUTER_API_KEY } });
+      if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load models from NaraRouter." } });
       const payload = await upstream.json();
-      const models = Array.isArray(payload?.data) ? payload.data.map(item => item?.id).filter(id => typeof id === "string" && id.length > 0 && id.length <= 200) : [];
-      if (!models.length) return res.status(502).json({ error: { code: "MODEL_LIST_INVALID", message: "NaraRouter returned an unexpected model list." } });
-      res.json({ models, defaultModel: env.NARA_ROUTER_DEFAULT_MODEL || null });
-    } catch (error) {
-      const timedOut = error?.name === "AbortError";
-      res.status(timedOut ? 504 : 502).json({ error: { code: timedOut ? "MODEL_DISCOVERY_TIMEOUT" : "MODEL_DISCOVERY_UNAVAILABLE", message: timedOut ? "Model discovery timed out." : "Could not connect to NaraRouter." } });
-    } finally {
-      clearTimeout(timeout);
+      const models = Array.isArray(payload?.data) ? payload.data.map(item => item?.id).filter(id => typeof id === "string") : [];
+      if (!models.length) return res.status(502).json({ error: { code: "MODEL_LIST_INVALID", message: "NaraRouter returned no model IDs." } });
+      return res.json({ models, defaultModel: env.NARA_ROUTER_DEFAULT_MODEL || null });
+    } catch {
+      return res.status(502).json({ error: { code: "MODEL_DISCOVERY_UNAVAILABLE", message: "Could not connect to NaraRouter." } });
     }
   });
 
