@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null };
+const state = { messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false };
 const features = {
   memory: ["Memory & knowledge", "Long-term memory will be enabled after a dedicated database and user-isolation policy are configured. No memory is being silently saved."],
   research: ["Research", "Web research and citations are not connected yet. ULTRON will not pretend to search the web or invent sources."],
@@ -31,38 +31,64 @@ async function api(url, options = {}) {
 function showScreen(screen) {
   ["login-screen", "setup-screen", "app-shell"].forEach(id => $(id).classList.toggle("hidden", id !== screen));
 }
+async function enterApplication(session) {
+  state.authType = session.authType || null;
+  showScreen("app-shell");
+  await refreshHealth();
+  if (state.authType === "supabase") await loadLatestConversation();
+}
 async function init() {
   try {
     const response = await fetch("/api/session", { credentials: "same-origin" });
     if (response.status === 503) { showScreen("setup-screen"); return; }
     const session = await response.json();
-    if (session.authenticated) {
-      showScreen("app-shell");
-      await refreshHealth();
-    } else showScreen("login-screen");
+    if (session.authenticated) await enterApplication(session);
+    else showScreen("login-screen");
   } catch {
     showScreen("setup-screen");
     $("setup-screen").querySelector("h1").textContent = "Core unreachable.";
     $("setup-screen").querySelector(".muted").textContent = "Could not connect to the server. Check your connection and refresh.";
   }
 }
-$("login-form").addEventListener("submit", async event => {
-  event.preventDefault();
+async function submitAccountAuth(path) {
   $("login-error").textContent = "";
-  const button = event.submitter;
-  if (button) button.disabled = true;
+  const button = $("login-form").querySelector('button[type="submit"]');
+  const signup = $("signup-button");
+  button.disabled = true;
+  signup.disabled = true;
   try {
-    await api("/api/session", { method: "POST", body: JSON.stringify({ password: $("access-password").value }) });
-    $("access-password").value = "";
-    showScreen("app-shell");
-    await refreshHealth();
+    const response = await api(path, { method: "POST", body: JSON.stringify({
+      email: $("account-email").value.trim(),
+      password: $("account-password").value
+    }) });
+    const result = await response.json();
+    if (result.confirmationRequired) {
+      $("login-error").textContent = result.message || "Check your email to confirm your account, then sign in.";
+      return;
+    }
+    $("account-password").value = "";
+    await enterApplication({ authenticated: true, authType: "supabase", email: result.email });
   } catch (error) {
     $("login-error").textContent = error.message;
-  } finally { if (button) button.disabled = false; }
+  } finally {
+    button.disabled = false;
+    signup.disabled = false;
+  }
+}
+$("login-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  await submitAccountAuth("/api/auth/signin");
+});
+$("signup-button").addEventListener("click", async () => {
+  await submitAccountAuth("/api/auth/signup");
 });
 $("logout-button").addEventListener("click", async () => {
   stopVoice();
+  try { await api("/api/auth/signout", { method: "POST", body: "{}" }); } catch {}
   try { await api("/api/logout", { method: "POST", body: "{}" }); } catch {}
+  state.authType = null;
+  state.conversationId = null;
+  state.messages = [];
   showScreen("login-screen");
 });
 async function refreshHealth() {
@@ -82,6 +108,51 @@ async function refreshHealth() {
   }
 }
 $("refresh-health").addEventListener("click", refreshHealth);
+async function loadLatestConversation() {
+  try {
+    const response = await api("/api/conversations");
+    const data = await response.json();
+    const latest = data.conversations && data.conversations[0];
+    if (!latest) return;
+    const messageResponse = await api("/api/conversations/" + encodeURIComponent(latest.id) + "/messages");
+    const messageData = await messageResponse.json();
+    state.conversationId = latest.id;
+    state.messages = (messageData.messages || []).filter(item => ["user", "assistant"].includes(item.role)).map(item => ({ role: item.role, content: item.content }));
+    if (!state.messages.length) return;
+    $("welcome-view").classList.add("hidden");
+    $("messages").classList.remove("hidden");
+    $("messages").replaceChildren();
+    state.messages.forEach(item => addMessage(item.role, item.content));
+    toast("Latest conversation restored.");
+  } catch (error) {
+    toast("Saved history could not be loaded: " + error.message);
+  }
+}
+async function ensureConversation(firstMessage) {
+  if (state.authType !== "supabase") return null;
+  if (state.conversationId) return state.conversationId;
+  if (state.persistenceBusy) return null;
+  state.persistenceBusy = true;
+  try {
+    const response = await api("/api/conversations", { method: "POST", body: JSON.stringify({ title: firstMessage.slice(0, 70) || "New conversation" }) });
+    const data = await response.json();
+    state.conversationId = data.conversation.id;
+    return state.conversationId;
+  } catch (error) {
+    toast("Chat is available, but saving history failed: " + error.message);
+    return null;
+  } finally { state.persistenceBusy = false; }
+}
+async function persistMessage(role, content) {
+  if (state.authType !== "supabase") return;
+  const id = await ensureConversation(role === "user" ? content : "New conversation");
+  if (!id) return;
+  try {
+    await api("/api/conversations/" + encodeURIComponent(id) + "/messages", { method: "POST", body: JSON.stringify({ role, content }) });
+  } catch (error) {
+    toast("This message could not be saved: " + error.message);
+  }
+}
 function switchPanel(name) {
   const isChat = name === "chat";
   $("chat-panel").classList.toggle("hidden", !isChat);
@@ -104,6 +175,7 @@ $("close-sidebar").addEventListener("click", () => $("sidebar").classList.remove
 $("new-chat").addEventListener("click", () => {
   stopVoice();
   state.messages = [];
+  state.conversationId = null;
   $("messages").replaceChildren();
   $("messages").classList.add("hidden");
   $("welcome-view").classList.remove("hidden");
@@ -113,10 +185,11 @@ $("new-chat").addEventListener("click", () => {
 $("clear-chat").addEventListener("click", () => {
   if (!state.messages.length) return;
   state.messages = [];
+  state.conversationId = null;
   $("messages").replaceChildren();
   $("messages").classList.add("hidden");
   $("welcome-view").classList.remove("hidden");
-  toast("Current conversation cleared.");
+  toast("Current conversation cleared. The saved conversation remains in history.");
 });
 document.querySelectorAll(".suggestion-card").forEach(button => button.addEventListener("click", () => {
   $("message-input").value = button.dataset.prompt || "";
@@ -200,6 +273,7 @@ async function sendMessage(text) {
   if (clean.length > 12000) { toast("Message is too long. Please shorten it."); return; }
   state.messages.push({ role: "user", content: clean });
   addMessage("user", clean);
+  await persistMessage("user", clean);
   input.value = "";
   resizeTextarea();
   setBusy(true);
@@ -238,6 +312,7 @@ async function sendMessage(text) {
     if (!responseText) responseText = "The provider returned an empty response. Please try again.";
     assistant.body.innerHTML = safeMarkdown(responseText);
     state.messages.push({ role: "assistant", content: responseText });
+    await persistMessage("assistant", responseText);
     addCopyButton(assistant.wrapper, responseText);
     if (state.voiceActive) speakAndResume(responseText);
   } catch (error) {
