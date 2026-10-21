@@ -34,14 +34,14 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Deployment: initial Render deployment and public health endpoint are verified. Real chat and authenticated UI remain blocked until access/provider secrets are configured.
 
 ## Blockers
-1. `APP_ACCESS_PASSWORD` is not yet set on Render, so the live UI deliberately remains behind the setup screen until the owner configures it.
+1. Supabase account login is now the primary access flow. Verify account signup/sign-in and email-confirmation behavior on the deployed service; password recovery UX remains to be implemented.
 2. `NARA_ROUTER_API_KEY` and a valid model alias are required for real model connectivity tests. Configure the key directly in Render secrets; do not paste it into source control or frontend code.
-3. The SQL schema is drafted but not applied. Need a dedicated ULTRON database decision before connecting the differently named existing Supabase project.
+3. The dedicated ULTRON database schema is applied. Verify authenticated conversation/message reads and writes under RLS before enabling long-term memory.
 4. The service-level health-check setting is not configurable through the available connected action; CI currently verifies the public health endpoint instead.
 5. External model weights/services and voice/search providers must be reviewed individually for license, resource, language, and cost.
 
 ## Next concrete action
-Ask the user to configure `APP_ACCESS_PASSWORD` and `NARA_ROUTER_API_KEY` as Render secrets. Use Integrations → Load available models to select a model alias, then set `NARA_ROUTER_DEFAULT_MODEL`. Run a real authorized chat request after configuration. Check the Windows installer workflow. Then decide on a dedicated ULTRON database and implement persistence/authentication before memory and multi-device sync.
+Configure `NARA_ROUTER_API_KEY` and `NARA_ROUTER_DEFAULT_MODEL` as Render secrets, then verify a real authorized chat. Verify Supabase signup, chat persistence, and cross-user isolation; implement password recovery and user-controlled memory. Rebuild and manually test the Windows companion after the web flow stabilizes.
 
 
 ## Current follow-up work (2026-10-22)
