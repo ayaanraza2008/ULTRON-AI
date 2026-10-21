@@ -1,28 +1,24 @@
 # ULTRON AI
 
-ULTRON AI is being built as a modular, security-conscious personal AI ecosystem with a web client and a lightweight Windows companion.
+ULTRON AI is a modular, security-conscious personal AI ecosystem with a web client and a lightweight Windows companion.
 
-## Project status
+## Current status
 
-The repository was confirmed empty during the initial audit (no files, branches, or commits were present). This initial commit establishes the requirements and verification records before application implementation.
-
-- **Current phase:** Phase 1 — Audit and Baseline
-- **AI provider:** NaraRouter documented as an OpenAI-compatible gateway; a valid key and chosen model are still required for real inference tests.
-- **Hosting:** No Render service is currently linked to this repository. Do not reuse or repoint another project's service without an explicit decision.
-- **Database:** A Supabase project is accessible, but it is named for a different application. It will not be connected to ULTRON until the intended data ownership and isolation are confirmed.
-- **External integrations:** All five source repositories require separate compatibility, hardware, and license review before integration.
-
-## Windows companion
-
-The Electron companion source is in `desktop/`. The GitHub Actions workflow builds an unsigned Windows NSIS installer and publishes it as a workflow artifact. The desktop shell opens the hosted web client; it does not yet provide local desktop automation.
+- **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
+- **Hosted web service:** https://ultron-ai-zvd7.onrender.com. The health endpoint and initial deployment were previously verified; real chat remains dependent on server-side provider and access secrets.
+- **AI provider:** NaraRouter is documented as an OpenAI-compatible gateway. A valid key and an entitled model are required for real inference.
+- **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
+- **Database schema:** Initial migration applied and verified. It creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events. All six tables have Row Level Security enabled. The application has not yet been wired to use Supabase.
+- **Isolation:** The existing `nox-ai` Supabase project was not modified.
+- **Windows companion:** Electron shell and unsigned Windows NSIS workflow exist. The shell opens the hosted web client; it does not yet provide local desktop automation.
 
 ## Configuration
 
-Copy `.env.example` to `.env` for local development and populate secrets locally. Never commit `.env` or expose API keys to browser code.
+Copy `.env.example` to `.env` for local development and populate secrets locally. Never commit `.env`, provider keys, session secrets, or service-role keys. A Supabase publishable key may be used by a client only with appropriate authentication and RLS; privileged keys must remain server-side.
 
-## Hosted preview
+## Hosting configuration
 
-Render service: https://ultron-ai-zvd7.onrender.com. The app requires server-side `APP_ACCESS_PASSWORD`, `SESSION_SECRET`, `NARA_ROUTER_API_KEY`, and a model alias available to the key before it can be used for chat. Do not paste secrets into source files or commit them.
+The Render service needs server-side `APP_ACCESS_PASSWORD`, `SESSION_SECRET`, `NARA_ROUTER_API_KEY`, and an entitled `NARA_ROUTER_DEFAULT_MODEL` before protected chat can be verified end-to-end. Supabase persistence still needs application-level integration and authenticated user identity.
 
 ## Verification policy
 
