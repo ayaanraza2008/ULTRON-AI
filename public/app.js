@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false, attachments: [] };
+const state = { persona: "ultron", messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false, attachments: [] };
 const features = {
   memory: ["Memory & knowledge", "Manage only the facts and preferences you explicitly choose to save. You can deactivate or delete each memory at any time."],
   research: ["Research", "Web research and citations are not connected yet. ULTRON will not pretend to search the web or invent sources."],
@@ -8,6 +8,22 @@ const features = {
   integrations: ["Integrations", "OpenRouter provides the AI models gateway. ULTRON has a dedicated Supabase project for account authentication and private chat history. Research and media integrations still need separate implementation and verification."],
   settings: ["Settings", "Account sign-in and private conversation history use Supabase. Voice uses browser speech capabilities when available; password recovery and user-controlled memory settings remain to be implemented."]
 };
+function setPersona(persona) {
+  if (persona !== "ultron" && persona !== "naya") return;
+  state.persona = persona;
+  const panel = $("chat-panel");
+  panel.dataset.persona = persona;
+  document.querySelectorAll(".persona-button").forEach(button => {
+    const active = button.dataset.persona === persona;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  $("persona-status").textContent = persona === "naya" ? "NAYA ONLINE · BLUE CORE" : "ULTRON ONLINE · CORE ACTIVE";
+  $("welcome-heading").innerHTML = persona === "naya" ? 'A different perspective.<br><span>A brighter connection.</span>' : 'Your intelligence.<br><span>Without limits.</span>';
+  $("welcome-subtitle").textContent = persona === "naya" ? "Meet NAYA — your second AI personality." : "Think clearly. Build boldly. Move with intent.";
+  $("message-input").placeholder = persona === "naya" ? "Message NAYA…" : "Message ULTRON…";
+}
+document.querySelectorAll(".persona-button").forEach(button => button.addEventListener("click", () => setPersona(button.dataset.persona)));
 function toast(message) {
   const node = $("toast");
   node.textContent = message;

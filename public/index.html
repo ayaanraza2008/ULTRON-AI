@@ -78,10 +78,15 @@
             <div class="core-orbit orbit-a"></div><div class="core-orbit orbit-b"></div><div class="core-orbit orbit-c"></div>
             <div class="core-glow"></div><div class="core-disc"><div class="core-eye"><span></span></div><div class="core-ring"></div></div>
             <span class="orbit-node node-one"></span><span class="orbit-node node-two"></span><span class="orbit-node node-three"></span>
+            <div class="energy-field" aria-hidden="true"></div>
           </div>
-          <p class="eyebrow welcome-eyebrow"><span class="eyebrow-line"></span> SYSTEM ONLINE <span class="eyebrow-line"></span></p>
-          <h1>Your intelligence.<br><span>Without limits.</span></h1>
-          <p class="welcome-subtitle">Think clearly. Build boldly. Move with intent.</p>
+          <div class="persona-switch" role="group" aria-label="Choose AI personality">
+            <button type="button" class="persona-button active" data-persona="ultron" aria-pressed="true"><span class="persona-orb ultron-orb"></span><span><strong>ULTRON</strong><small>CORE INTELLIGENCE</small></span><span class="persona-check">●</span></button>
+            <button type="button" class="persona-button" data-persona="naya" aria-pressed="false"><span class="persona-orb naya-orb"></span><span><strong>NAYA</strong><small>SECOND INTELLIGENCE</small></span><span class="persona-check">●</span></button>
+          </div>
+          <p class="eyebrow welcome-eyebrow"><span class="eyebrow-line"></span> <span id="persona-status">ULTRON ONLINE</span> <span class="eyebrow-line"></span></p>
+          <h1 id="welcome-heading">Your intelligence.<br><span>Without limits.</span></h1>
+          <p class="welcome-subtitle" id="welcome-subtitle">Think clearly. Build boldly. Move with intent.</p>
           <div class="suggestion-grid">
             <button class="suggestion-card" data-prompt="Help me plan a project from idea to a tested release."><span class="suggestion-icon">⌘</span><span><strong>Build something</strong><small>Plan, code, and solve</small></span><span class="suggestion-arrow">↗</span></button>
             <button class="suggestion-card" data-prompt="Explain a complex topic clearly, with examples and caveats."><span class="suggestion-icon">◈</span><span><strong>Explore an idea</strong><small>Understand what matters</small></span><span class="suggestion-arrow">↗</span></button>
