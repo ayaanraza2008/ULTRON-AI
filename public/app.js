@@ -37,7 +37,10 @@ async function enterApplication(session) {
   $("conversation-history").classList.toggle("hidden", state.authType !== "supabase");
   document.querySelector(".history-label").classList.toggle("hidden", state.authType !== "supabase");
   await refreshHealth();
-  if (state.authType === "supabase") await loadLatestConversation();
+  if (state.authType === "supabase") {
+    await loadLatestConversation();
+    await loadPreferences();
+  }
 }
 async function init() {
   try {
@@ -394,6 +397,29 @@ function addCopyButton(wrapper, text) {
   actions.append(copy);
   wrapper.querySelector(".message-content").append(actions);
 }
+async function loadPreferences() {
+  try {
+    const response = await api("/api/preferences");
+    const data = await response.json();
+    const locale = data.preferences && data.preferences.voice_input_locale;
+    if (["en-IN", "hi-IN", "hinglish"].includes(locale)) $("voice-language").value = locale;
+  } catch (error) {
+    toast("Voice preferences could not be loaded: " + error.message);
+  }
+}
+async function saveVoicePreferences() {
+  if (state.authType !== "supabase") return;
+  const locale = $("voice-language").value;
+  try {
+    await api("/api/preferences", {
+      method: "PUT",
+      body: JSON.stringify({ voice_input_locale: locale })
+    });
+    toast("Voice language preference saved.");
+  } catch (error) {
+    toast("Voice preference could not be saved: " + error.message);
+  }
+}
 function voiceSupported() { return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition); }
 function startVoice() {
   if (!voiceSupported()) { toast("Speech recognition is not supported in this browser. Try a current version of Chrome or Edge."); return; }
@@ -491,6 +517,7 @@ window.addEventListener("beforeunload", stopVoice);
 init();
 
 $("voice-language").addEventListener("change", () => {
+  saveVoicePreferences();
   if (!state.voiceActive) return;
   if (state.recognition) {
     const current = state.recognition;
