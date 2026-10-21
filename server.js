@@ -485,7 +485,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.on("close", () => { if (!res.writableEnded) abortUpstream(); });
 
     try {
-      const configuredOrder = [...new Set([selectedModel, ...configuredModels, ...(configuredModels.length ? [] : knownModels)].filter(Boolean))];
+      const configuredOrder = [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelCandidates = imageParts.length
         ? configuredOrder.filter(id => /minimax.*m3[.-]?1.*flash|vision/i.test(id))
         : configuredOrder;
