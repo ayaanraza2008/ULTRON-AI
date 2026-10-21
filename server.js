@@ -448,6 +448,24 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       }
       cleanMessages.push({ role: item.role, content: item.content });
     }
+    if (!Array.isArray(attachments) || attachments.length > 2) {
+      return res.status(400).json({ error: { code: "INVALID_ATTACHMENTS", message: "Attach no more than two images per message." } });
+    }
+    const imageParts = [];
+    for (const attachment of attachments) {
+      if (!attachment || typeof attachment.dataUrl !== "string" || attachment.dataUrl.length > 5600000) {
+        return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
+      }
+      if (!attachment.dataUrl.startsWith("data:image/") || !/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(attachment.dataUrl)) {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only JPEG, PNG, WebP, or GIF image data is supported." } });
+      }
+      imageParts.push({ type: "image_url", image_url: { url: attachment.dataUrl } });
+    }
+    if (imageParts.length) {
+      const last = cleanMessages[cleanMessages.length - 1];
+      if (!last || last.role !== "user") return res.status(400).json({ error: { code: "IMAGE_REQUIRES_USER_MESSAGE", message: "Images must be attached to a user message." } });
+      last.content = [{ type: "text", text: last.content || "Please describe and analyze the attached image." }, ...imageParts];
+    }
     if (!env.NARA_ROUTER_API_KEY) {
       return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "NaraRouter API key is not configured on the server." } });
     }
