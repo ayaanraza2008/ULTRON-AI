@@ -114,6 +114,36 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     });
   });
 
+  app.get("/api/models", requireSession, async (_req, res) => {
+    if (!env.NARA_ROUTER_API_KEY) {
+      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "NaraRouter API key is not configured on the server." } });
+    }
+    let baseUrl;
+    try { baseUrl = normalizeBaseUrl(env.NARA_ROUTER_BASE_URL); }
+    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "NaraRouter base URL configuration is invalid." } }); }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const upstream = await fetchImpl(baseUrl + "/models", {
+        headers: { "Authorization": "Bearer " + env.NARA_ROUTER_API_KEY, "Accept": "application/json" },
+        signal: controller.signal
+      });
+      if (!upstream.ok) {
+        logger.warn?.("NaraRouter model discovery failed", { status: upstream.status });
+        return res.status(upstream.status === 429 ? 429 : 502).json({ error: { code: upstream.status === 401 ? "PROVIDER_AUTH" : "MODEL_DISCOVERY_FAILED", message: upstream.status === 401 ? "NaraRouter rejected the API key." : "Could not load the models available to this API key." } });
+      }
+      const payload = await upstream.json();
+      const models = Array.isArray(payload?.data) ? payload.data.map(item => item?.id).filter(id => typeof id === "string" && id.length > 0 && id.length <= 200) : [];
+      if (!models.length) return res.status(502).json({ error: { code: "MODEL_LIST_INVALID", message: "NaraRouter returned an unexpected model list." } });
+      res.json({ models, defaultModel: env.NARA_ROUTER_DEFAULT_MODEL || null });
+    } catch (error) {
+      const timedOut = error?.name === "AbortError";
+      res.status(timedOut ? 504 : 502).json({ error: { code: timedOut ? "MODEL_DISCOVERY_TIMEOUT" : "MODEL_DISCOVERY_UNAVAILABLE", message: timedOut ? "Model discovery timed out." : "Could not connect to NaraRouter." } });
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+
   app.get("/api/session", (req, res) => {
     if (!env.APP_ACCESS_PASSWORD) return res.status(503).json({ authenticated: false, configured: false });
     res.json({ authenticated: hasValidSession(req), configured: true });
