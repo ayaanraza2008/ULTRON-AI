@@ -20,7 +20,9 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Reviewed the official NaraRouter developer documentation. Documented base URL is `https://router.bynara.id/v1`; chat endpoint is `/chat/completions`; Bearer key auth; OpenAI-compatible chat-completions format; streaming uses SSE when supported. A key and selected entitled model are still needed for real integration tests.
 - Verified read access to all five requested source repositories. Initial license finding: Handy and ai-employees are MIT; HeyGem uses a custom Silicon Intelligence Community License requiring attribution and other conditions. Remaining source-specific details require review before reuse.
 - At initial audit, no Render service was linked to `ayaanraza2008/ULTRON-AI`. A new free service named `ultron-ai` was subsequently created for this repository; no other service was repointed.
-- Created a dedicated `ULTRON-AI` Supabase project in Mumbai (`ap-south-1`) after the organization-scoped cost quote returned $0/month. Existing `nox-ai` was left untouched. Initial schema applied and verified; application is not yet connected to Supabase.
+- Created a dedicated `ULTRON-AI` Supabase project in Mumbai (`ap-south-1`) after the organization-scoped cost quote returned $0/month. Existing `nox-ai` was left untouched. Initial schema applied and verified.
+- Added Supabase Auth signup/sign-in/signout endpoints with HttpOnly access/refresh cookies and per-user conversation/message REST APIs that forward the authenticated user's JWT to Supabase. Added account UI and chat save/restore flow.
+- Added Supabase URL and publishable-key configuration to `.env.example` and `render.yaml`; configured these two values on the ULTRON Render service. New mocked auth/database tests were committed; the current deployment and CI run still need to be checked.
 
 ## Tests and verification
 - Render reports deploy `dep-dbcg3g6i0phs73a9p5ag` as `live`; server startup log confirms it bound to port 10000. GitHub Actions smoke run `39651873155` successfully fetched and validated `/api/health` from the deployed service.
@@ -40,3 +42,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 
 ## Next concrete action
 Ask the user to configure `APP_ACCESS_PASSWORD` and `NARA_ROUTER_API_KEY` as Render secrets. Use Integrations → Load available models to select a model alias, then set `NARA_ROUTER_DEFAULT_MODEL`. Run a real authorized chat request after configuration. Check the Windows installer workflow. Then decide on a dedicated ULTRON database and implement persistence/authentication before memory and multi-device sync.
+
+
+## Current follow-up work (2026-10-22)
+- Remaining before declaring persistence production-ready: verify deployed account creation and login, verify message insert/read under RLS, implement access-token refresh and password recovery, and ensure recent conversations are ordered by last activity.
