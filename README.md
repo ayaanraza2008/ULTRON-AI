@@ -26,10 +26,10 @@ The chat composer includes a model picker and image attachment support. The serv
 
 Recommended OpenRouter configuration:
 
-- `NARA_ROUTER_BASE_URL=https://openrouter.ai/api/v1`
+- `NARA_ROUTER_BASE_URL=https://router.bynara.id/v1`
 - `NARA_ROUTER_API_KEY`: create a secret at https://openrouter.ai/keys and store it only in Render/local environment variables.
-- `NARA_ROUTER_DEFAULT_MODEL=poolside/laguna-s-2.1:free`
-- `ULTRON_AVAILABLE_MODELS=poolside/laguna-s-2.1:free,minimax/minimax-m3.1-flash:free,nvidia/nemotron-3.5-lightning:free`
+- `NARA_ROUTER_DEFAULT_MODEL=laguna-s-2.1`
+- `ULTRON_AVAILABLE_MODELS=laguna-s-2.1,minimax-m3.1-flash:free,nemotron-3.5-lightning-free`
 
 Laguna S 2.1 and Nemotron 3.5 Lightning are text-only in the selected catalog; use MiniMax M3.1 Flash for image requests. ULTRON automatically routes image requests to MiniMax. Free model routes can change or be retired; verify current provider pricing before relying on them. Check each provider’s data-use terms before sending sensitive content to free endpoints.
 
