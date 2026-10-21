@@ -8,7 +8,9 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Added environment template, `.gitignore`, Render Blueprint, and six initial API security/provider-contract tests.
 - Added GitHub Actions workflow; latest observed run `39651294713` completed successfully (`npm run check`, `npm test`).
 - Created Render free web service `ultron-ai` (`srv-dbcg3fui0phs73a9p37g`) linked to this repository in Singapore. First deploy status is `live`; build succeeded, server log confirms `ULTRON AI listening on port 10000`, and Render reports the service URL `https://ultron-ai-zvd7.onrender.com`.
-- Added a CI smoke test that probes the deployed `/api/health` endpoint after source checks; the run triggered by that workflow change is pending/being checked.
+- Added a CI smoke test that probes the deployed `/api/health` endpoint after source checks; GitHub Actions run `39651873155` passed, including the deployed health smoke check.
+- Added a protected `/api/models` endpoint and Integrations UI to list model IDs available to the configured NaraRouter key and copy an ID for Render configuration.
+- Added a voice language selector for English (India), Hindi, and Hinglish mode; Hinglish uses the browser's en-IN recognition locale and may vary by browser.
 - Added a lightweight Electron Windows companion shell with origin restrictions, context isolation, no Node integration, and a Windows installer workflow. The Windows build has not yet completed and the installer has not been tested on a physical Windows machine.
 - Confirmed repository identity, default branch (`main`), visibility (public), and permissions.
 - Confirmed the repository had no existing source code to preserve, so any implementation must be a new initial application foundation in this repository rather than an unrelated replacement.
@@ -19,7 +21,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Confirmed one Supabase project is accessible, but it has a different application name; no schema/data changes were made and it is not connected to ULTRON.
 
 ## Tests and verification
-- Render reports deploy `dep-dbcg3g6i0phs73a9p5ag` as `live`; server startup log confirms it bound to port 10000. A direct health endpoint probe is pending automated smoke verification.
+- Render reports deploy `dep-dbcg3g6i0phs73a9p5ag` as `live`; server startup log confirms it bound to port 10000. GitHub Actions smoke run `39651873155` successfully fetched and validated `/api/health` from the deployed service.
 - GitHub Actions run `39651294713`: completed successfully; Node syntax checks and automated tests passed.
 - Render build log: `npm install --ignore-scripts` succeeded and reported 0 npm audit vulnerabilities at build time; deployment startup is not yet confirmed.
 - Repository metadata/empty state: verified via GitHub API.
@@ -28,10 +30,11 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Deployment: not verified; no ULTRON Render service exists.
 
 ## Blockers
-1. `NARA_ROUTER_API_KEY` and a valid model alias are required for real model connectivity tests. Configure the key directly in Render/local secret environment; do not paste it into source control or frontend code.
-2. Need a dedicated ULTRON database decision before connecting the differently named existing Supabase project.
-3. Need to choose/authorize a Render service for this repository before production deployment. No existing service will be repointed silently.
+1. `APP_ACCESS_PASSWORD` is not yet set on Render, so the live UI deliberately remains behind the setup screen until the owner configures it.
+2. `NARA_ROUTER_API_KEY` and a valid model alias are required for real model connectivity tests. Configure the key directly in Render secrets; do not paste it into source control or frontend code.
+3. Need a dedicated ULTRON database decision before connecting the differently named existing Supabase project.
+4. The Render service is live, but its service-level health check path is not configurable through the available connected action; CI currently verifies the public health endpoint instead.
 4. External model weights/services and voice/search providers must be reviewed individually for license, resource, language, and cost.
 
 ## Next concrete action
-Confirm the live health smoke test and Windows packaging workflow. Ask the user to configure `APP_ACCESS_PASSWORD` and `NARA_ROUTER_API_KEY` as Render secrets and choose a model alias available to that key. Run a real authorized chat request after configuration. Then decide on a dedicated ULTRON database and implement persistence/authentication before memory and multi-device sync.
+Ask the user to configure `APP_ACCESS_PASSWORD` and `NARA_ROUTER_API_KEY` as Render secrets. Use Integrations → Load available models to select a model alias, then set `NARA_ROUTER_DEFAULT_MODEL`. Run a real authorized chat request after configuration. Check the Windows installer workflow. Then decide on a dedicated ULTRON database and implement persistence/authentication before memory and multi-device sync.
