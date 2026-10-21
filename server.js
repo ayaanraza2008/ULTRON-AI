@@ -55,7 +55,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
-  app.use(express.json({ limit: "64kb", strict: true }));
+  app.use(express.json({ limit: "12mb", strict: true }));
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -219,8 +219,30 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
   app.get("/api/models", requireSession, async (_req, res) => {
+    if (!selectedModel || !allowedModels.includes(selectedModel)) {
+      return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
+    }
+    if (!Array.isArray(attachments) || attachments.length > 2) {
+      return res.status(400).json({ error: { code: "INVALID_ATTACHMENTS", message: "Attach no more than two images per message." } });
+    }
+    let imageParts = [];
+    for (const attachment of attachments) {
+      if (!attachment || typeof attachment.dataUrl !== "string" || attachment.dataUrl.length > 5_600_000) {
+        return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
+      }
+      if (!/^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(attachment.dataUrl)) {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only valid JPEG, PNG, WebP, or GIF image data is supported." } });
+      }
+      imageParts.push({ type: "image_url", image_url: { url: attachment.dataUrl } });
+    }
+    if (imageParts.length) {
+      const last = cleanMessages[cleanMessages.length - 1];
+      if (!last || last.role !== "user") return res.status(400).json({ error: { code: "IMAGE_REQUIRES_USER_MESSAGE", message: "Images must be attached to a user message." } });
+      const textPart = last.content.trim() || "Please describe and analyze the attached image.";
+      last.content = [{ type: "text", text: textPart }, ...imageParts];
+    }
     if (!env.NARA_ROUTER_API_KEY) {
-      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "NaraRouter API key is not configured on the server." } });
+      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "AI provider API key is not configured on the server." } });
     }
     let baseUrl;
     try { baseUrl = normalizeBaseUrl(env.NARA_ROUTER_BASE_URL); }
@@ -438,7 +460,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.post("/api/chat", requireSession, async (req, res) => {
     const maxChars = Math.max(1000, Number(env.MAX_MESSAGE_CHARS) || 12_000);
-    const { messages, stream = true } = req.body || {};
+    const { messages, stream = true, model: requestedModel, attachments = [] } = req.body || {};
+    const knownModels = ["poolside/laguna-s-2.1:free", "minimax/minimax-m3.1-flash:free"];
+    const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "").split(",").map(value => value.trim()).filter(Boolean);
+    const allowedModels = [...new Set([...knownModels, ...configuredModels, env.NARA_ROUTER_DEFAULT_MODEL].filter(Boolean))];
+    const selectedModel = typeof requestedModel === "string" && allowedModels.includes(requestedModel) ? requestedModel : env.NARA_ROUTER_DEFAULT_MODEL;
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
       return res.status(400).json({ error: { code: "INVALID_MESSAGES", message: "Send between 1 and 40 messages." } });
     }
@@ -457,7 +483,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     if (!env.NARA_ROUTER_API_KEY) {
       return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "NaraRouter API key is not configured on the server." } });
     }
-    if (!env.NARA_ROUTER_DEFAULT_MODEL) {
+    if (!selectedModel) {
       return res.status(503).json({ error: { code: "MODEL_NOT_CONFIGURED", message: "Set NARA_ROUTER_DEFAULT_MODEL to a model available to your API key." } });
     }
 
@@ -481,7 +507,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           "Accept": stream ? "text/event-stream, application/json" : "application/json"
         },
         body: JSON.stringify({
-          model: env.NARA_ROUTER_DEFAULT_MODEL,
+          model: selectedModel,
           messages: cleanMessages,
           stream: Boolean(stream),
           temperature: 0.7
@@ -503,7 +529,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         const data = await upstream.json();
         const content = data?.choices?.[0]?.message?.content;
         if (typeof content !== "string") return res.status(502).json({ error: { code: "INVALID_PROVIDER_RESPONSE", message: "The provider returned an unexpected response format." } });
-        return res.json({ content, model: data.model || env.NARA_ROUTER_DEFAULT_MODEL });
+        return res.json({ content, model: data.model || selectedModel });
       }
 
       if (!upstream.body) return res.status(502).json({ error: { code: "EMPTY_PROVIDER_STREAM", message: "The provider returned no response stream." } });
