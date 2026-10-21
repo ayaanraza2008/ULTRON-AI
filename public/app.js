@@ -1,12 +1,12 @@
 const $ = (id) => document.getElementById(id);
 const state = { messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false };
 const features = {
-  memory: ["Memory & knowledge", "Long-term memory will be enabled after a dedicated database and user-isolation policy are configured. No memory is being silently saved."],
+  memory: ["Memory & knowledge", "The private database and user-isolation policies are ready. User-controlled long-term memory controls are still being built; ULTRON does not silently save profile memories."],
   research: ["Research", "Web research and citations are not connected yet. ULTRON will not pretend to search the web or invent sources."],
   media: ["Vision & media", "Image, document, avatar, and video tools require separately verified services. No generation jobs run from this screen yet."],
   tasks: ["Agents & tasks", "Task orchestration and desktop automation are not connected yet. No local computer actions are being simulated."],
-  integrations: ["Integrations", "NaraRouter is the configured AI gateway. Voice, research, storage, and media integrations will appear here only after they are implemented and verified."],
-  settings: ["Settings", "Voice uses browser speech capabilities when available. Persistent history, account management, and memory controls will be added with the authenticated database layer."]
+  integrations: ["Integrations", "NaraRouter is the AI gateway. ULTRON has a dedicated Supabase project for account authentication and private chat history. Research and media integrations still need separate implementation and verification."],
+  settings: ["Settings", "Account sign-in and private conversation history use Supabase. Voice uses browser speech capabilities when available; password recovery and user-controlled memory settings remain to be implemented."]
 };
 function toast(message) {
   const node = $("toast");
