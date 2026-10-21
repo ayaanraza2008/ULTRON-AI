@@ -150,7 +150,7 @@ test("model discovery returns only model identifiers from the configured provide
   const app = createApp({
     env,
     fetchImpl: async (url, options) => {
-      assert.equal(url, "https://openrouter.ai/api/v1/models?output_modalities=text,image");
+      assert.equal(url, "https://openrouter.ai/api/v1/models");
       assert.equal(options.headers.Authorization, "Bearer test-key");
       return new Response(JSON.stringify({ data: [{ id: "model-a:free" }, { id: "model-b", pricing: { prompt: "0", completion: "0" }, owned_by: "provider" }, { name: "bad-entry" }] }), {
         status: 200,
