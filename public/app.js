@@ -230,6 +230,7 @@ $("new-chat").addEventListener("click", () => {
   $("messages").replaceChildren();
   $("messages").classList.add("hidden");
   $("welcome-view").classList.remove("hidden");
+  refreshConversationHistory();
   $("message-input").focus();
   switchPanel("chat");
 });
@@ -240,6 +241,7 @@ $("clear-chat").addEventListener("click", () => {
   $("messages").replaceChildren();
   $("messages").classList.add("hidden");
   $("welcome-view").classList.remove("hidden");
+  refreshConversationHistory();
   toast("Current conversation cleared. The saved conversation remains in history.");
 });
 document.querySelectorAll(".suggestion-card").forEach(button => button.addEventListener("click", () => {
