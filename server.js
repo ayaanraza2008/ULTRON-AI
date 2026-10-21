@@ -461,7 +461,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.post("/api/chat", requireSession, async (req, res) => {
     const maxChars = Math.max(1000, Number(env.MAX_MESSAGE_CHARS) || 12_000);
     const { messages, stream = true, model: requestedModel, attachments = [] } = req.body || {};
-    const knownModels = ["poolside/laguna-s-2.1:free", "minimax/minimax-m3.1-flash:free"];
+    const knownModels = ["poolside/laguna-s-2.1:free", "minimax/minimax-m3.1-flash:free", "nvidia/nemotron-3.5-lightning:free"];
     const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "").split(",").map(value => value.trim()).filter(Boolean);
     const allowedModels = [...new Set([...knownModels, ...configuredModels, env.NARA_ROUTER_DEFAULT_MODEL].filter(Boolean))];
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || !allowedModels.includes(requestedModel))) {
