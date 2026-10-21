@@ -11,13 +11,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NARA_ROUTER_BASE_URL
-        value: https://router.bynara.id/v1
-      - key: NARA_ROUTER_TIMEOUT_SECONDS
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENROUTER_TIMEOUT_SECONDS
         value: "60"
-      - key: NARA_ROUTER_API_KEY
+      - key: OPENROUTER_API_KEY
         sync: false
-      - key: NARA_ROUTER_DEFAULT_MODEL
+      - key: OPENROUTER_DEFAULT_MODEL
         sync: false
       - key: SUPABASE_URL
         value: https://opdjfhwepmcprbqojpat.supabase.co
@@ -27,3 +27,19 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      - key: COMFYUI_BASE_URL
+        sync: false
+      - key: HEYGEM_API_BASE_URL
+        sync: false
+      - key: HEYGEM_API_KEY
+        sync: false
+      - key: OMNIVOICE_API_BASE_URL
+        sync: false
+      - key: OMNIVOICE_API_KEY
+        sync: false
+      - key: ULTRON_HANDY_BRIDGE_URL
+        sync: false
+      - key: ULTRON_HANDY_BRIDGE_TOKEN
+        sync: false
+      - key: ULTRON_EMPLOYEES_ENABLED
+        value: "false"
