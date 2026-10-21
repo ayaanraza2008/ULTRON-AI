@@ -29,6 +29,41 @@ async function login(base) {
   return response.headers.get("set-cookie").split(";")[0];
 }
 
+test("integration catalog requires an authenticated session", async () => {
+  await withServer(createApp({ env, logger: { warn() {}, error() {} } }), async base => {
+    const response = await fetch(base + "/api/integrations");
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, "AUTH_REQUIRED");
+  });
+});
+
+test("integration catalog reports readiness without exposing secret values", async () => {
+  const configuredEnv = {
+    ...env,
+    COMFYUI_BASE_URL: "https://comfy.example.test",
+    HEYGEM_API_BASE_URL: "https://avatar.example.test",
+    HEYGEM_API_KEY: "private-heygem-secret",
+    OMNIVOICE_API_BASE_URL: "https://voice.example.test",
+    OMNIVOICE_API_KEY: "private-voice-secret",
+    ULTRON_EMPLOYEES_ENABLED: "true"
+  };
+  await withServer(createApp({ env: configuredEnv, logger: { warn() {}, error() {} } }), async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.integrations.length, 5);
+    assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
+    assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
+    assert.equal(payload.integrations.find(item => item.id === "omnivoice").configured, true);
+    assert.equal(payload.integrations.find(item => item.id === "handy").state, "desktop_companion_required");
+    assert.equal(payload.integrations.find(item => item.id === "ai-employees").configured, true);
+    const serialized = JSON.stringify(payload);
+    assert.equal(serialized.includes("private-heygem-secret"), false);
+    assert.equal(serialized.includes("private-voice-secret"), false);
+  });
+});
+
 test("health reports configuration without exposing secrets", async () => {
   await withServer(createApp({ env, logger: { warn() {}, error() {} } }), async base => {
     const response = await fetch(base + "/api/health");
