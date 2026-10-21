@@ -20,6 +20,19 @@ Copy `.env.example` to `.env` for local development and populate secrets locally
 
 The Render service is configured with the dedicated Supabase URL and publishable key for account sign-in and per-user chat persistence. Real AI responses still require `NARA_ROUTER_API_KEY` and an entitled `NARA_ROUTER_DEFAULT_MODEL` as server-side environment variables. `APP_ACCESS_PASSWORD` is an optional legacy owner-only gate; it is not required for Supabase account login.
 
+## Multi-model text and vision
+
+The chat composer includes a model picker and image attachment support. The server validates selected model IDs and accepts up to two JPEG, PNG, WebP, or GIF images of up to 4 MB each. Image data is sent to the provider for that request and is not stored as image data in Supabase chat history.
+
+Recommended OpenRouter configuration:
+
+- `NARA_ROUTER_BASE_URL=https://openrouter.ai/api/v1`
+- `NARA_ROUTER_API_KEY`: create a secret at https://openrouter.ai/keys and store it only in Render/local environment variables.
+- `NARA_ROUTER_DEFAULT_MODEL=poolside/laguna-s-2.1:free`
+- `ULTRON_AVAILABLE_MODELS=poolside/laguna-s-2.1:free,minimax/minimax-m3.1-flash:free`
+
+The standard Laguna S 2.1 endpoint is text-only; use a vision-capable model such as MiniMax M3.1 Flash for image requests. Free model routes can change or be retired; verify current provider pricing before relying on them. Nemotron Lightning is intentionally not enabled until its exact provider catalog ID and image-input support are confirmed.
+
 ## Verification policy
 
 Features are not described as working until the relevant tests have actually passed. Mock tests are not proof of real provider connectivity, and a successful build is not proof of production deployment.
