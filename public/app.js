@@ -311,9 +311,20 @@ imageInput.addEventListener("change", async () => {
   }
   renderImagePreviews();
 });
+// Capture submit before any other handler so the browser never navigates away and clears the chat.
+document.addEventListener("submit", event => {
+  if (event.target && event.target.id === "chat-form") event.preventDefault();
+}, true);
 $("chat-form").addEventListener("submit", event => {
   event.preventDefault();
-  sendMessage(input.value, state.attachments.slice());
+  const submittedText = input.value;
+  const submittedAttachments = state.attachments.slice();
+  if (!submittedText.trim() && !submittedAttachments.length) return;
+  if (state.busy) return;
+  void sendMessage(submittedText, submittedAttachments).catch(error => {
+    console.error("[ULTRON] Chat submit failed unexpectedly:", error);
+    toast("Chat failed before a response: " + (error && error.message ? error.message : "Unexpected frontend error"));
+  });
 });
 const input = $("message-input");
 function resizeTextarea() {
@@ -396,9 +407,11 @@ async function sendMessage(text, attachments = []) {
   resizeTextarea();
   setBusy(true);
   const assistant = addMessage("assistant", "", true);
-  await persistMessage("user", (clean || "Please analyze the attached image.") + (attachments.length ? "\n[Image attached; image data is not saved in chat history]" : ""));
   let responseText = "";
   try {
+    // Persistence is best-effort and must never prevent the actual model request.
+    await persistMessage("user", (clean || "Please analyze the attached image.") + (attachments.length ? "\n[Image attached; image data is not saved in chat history]" : ""));
+    console.info("[ULTRON] Sending chat request", { messageCount: state.messages.length, hasAttachments: attachments.length > 0 });
     const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, attachments: attachments.map(item => ({ name: item.name, dataUrl: item.dataUrl })), stream: true }) });
     if (attachments.length) toast("Image detected. ULTRON is selecting a vision model automatically.");
     else if (response.headers.get("X-ULTRON-Fallback") === "true") toast("Primary model limit reached. ULTRON switched to a backup model.");
@@ -667,6 +680,12 @@ document.addEventListener("keydown", event => {
   if (event.key === "Escape") $("sidebar").classList.remove("open");
 });
 window.addEventListener("beforeunload", stopVoice);
+window.addEventListener("error", event => {
+  console.error("[ULTRON] Unhandled frontend error:", event.error || event.message);
+});
+window.addEventListener("unhandledrejection", event => {
+  console.error("[ULTRON] Unhandled async error:", event.reason);
+});
 init();
 
 $("voice-language").addEventListener("change", () => {
