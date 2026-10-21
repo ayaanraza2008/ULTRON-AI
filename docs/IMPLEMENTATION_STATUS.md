@@ -11,7 +11,8 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Added a CI smoke test that probes the deployed `/api/health` endpoint after source checks; GitHub Actions run `39651873155` passed, including the deployed health smoke check.
 - Added a protected `/api/models` endpoint and Integrations UI to list model IDs available to the configured NaraRouter key and copy an ID for Render configuration.
 - Added a voice language selector for English (India), Hindi, and Hinglish mode; Hinglish uses the browser's en-IN recognition locale and may vary by browser.
-- Added a lightweight Electron Windows companion shell with origin restrictions, context isolation, no Node integration, and a Windows installer workflow. The Windows build has not yet completed and the installer has not been tested on a physical Windows machine.
+- Added a lightweight Electron Windows companion shell with origin restrictions, context isolation, no Node integration, and a Windows installer workflow. GitHub Actions run `39651789470` successfully built and uploaded a 93 MB installer artifact (expires 2026-11-04); it has not yet been manually tested on a physical Windows machine.
+- Windows installer workflow result: [run 39651789470](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/39651789470).
 - Confirmed repository identity, default branch (`main`), visibility (public), and permissions.
 - Confirmed the repository had no existing source code to preserve, so any implementation must be a new initial application foundation in this repository rather than an unrelated replacement.
 - Added initial `README.md` commit: `0c4b50000cda003824cfc1f42b8cd4927fb0304b`.
