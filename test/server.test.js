@@ -236,3 +236,18 @@ test("expired Supabase access tokens refresh before database requests", async ()
     assert.match(response.headers.get("set-cookie") || "", /ultron_sb_access=fresh-access/);
   });
 });
+
+test("memory API refuses requests without a Supabase account", async () => {
+  let calls = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async () => { calls++; throw new Error("unauthenticated request must not reach Supabase"); },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/memory");
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
+    assert.equal(calls, 0);
+  });
+});
