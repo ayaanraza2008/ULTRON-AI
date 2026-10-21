@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b12">
+  <meta name="description" content="ULTRON AI — your private, permission-based AI command interface.">
+  <title>ULTRON AI — Command Interface</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <div id="login-screen" class="login-screen hidden">
+    <div class="login-card">
+      <div class="brand-mark large-mark"><span>U</span></div>
+      <p class="eyebrow">SECURE ACCESS GATE</p>
+      <h1>Welcome back.</h1>
+      <p class="muted">Unlock your ULTRON command interface.</p>
+      <form id="login-form">
+        <label for="access-password">Access password</label>
+        <input id="access-password" type="password" autocomplete="current-password" required placeholder="Enter access password">
+        <button class="primary-button full-button" type="submit">Unlock interface <span aria-hidden="true">↗</span></button>
+        <p id="login-error" class="error-text" role="alert"></p>
+      </form>
+    </div>
+  </div>
+  <div id="setup-screen" class="login-screen hidden">
+    <div class="login-card">
+      <div class="brand-mark large-mark"><span>U</span></div>
+      <p class="eyebrow">INITIAL CONFIGURATION REQUIRED</p>
+      <h1>Almost online.</h1>
+      <p class="muted">The server owner must configure <code>APP_ACCESS_PASSWORD</code> and a random <code>SESSION_SECRET</code> (32+ characters) before this interface can be unlocked.</p>
+      <p class="muted small">No API secrets belong in this page or in browser storage.</p>
+    </div>
+  </div>
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark"><span>U</span></div>
+        <div class="brand-copy"><strong>ULTRON<span class="brand-dot">.</span></strong><small>PERSONAL INTELLIGENCE</small></div>
+        <button id="close-sidebar" class="icon-button mobile-only" aria-label="Close navigation">×</button>
+      </div>
+      <button id="new-chat" class="new-chat"><span class="plus-icon">＋</span> New conversation <kbd>⌘ K</kbd></button>
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Workspace">
+        <button class="nav-item active" data-panel="chat"><span class="nav-icon">◈</span> Command center</button>
+        <button class="nav-item" data-panel="memory"><span class="nav-icon">◉</span> Memory & knowledge <span class="soon-dot"></span></button>
+        <button class="nav-item" data-panel="research"><span class="nav-icon">⌕</span> Research <span class="soon-dot"></span></button>
+        <button class="nav-item" data-panel="media"><span class="nav-icon">▧</span> Vision & media <span class="soon-dot"></span></button>
+        <button class="nav-item" data-panel="tasks"><span class="nav-icon">⌘</span> Agents & tasks <span class="soon-dot"></span></button>
+      </nav>
+      <div class="nav-label tools-label">SYSTEM</div>
+      <nav class="side-nav" aria-label="System">
+        <button class="nav-item" data-panel="integrations"><span class="nav-icon">⌬</span> Integrations</button>
+        <button class="nav-item" data-panel="settings"><span class="nav-icon">⚙</span> Settings</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="status-card"><span class="status-light" id="status-light"></span><div><strong id="status-title">Checking systems</strong><small id="status-subtitle">Connecting to core</small></div><button id="refresh-health" class="icon-button" aria-label="Refresh system status">↻</button></div>
+        <div class="profile-row"><div class="avatar-mini">U</div><div class="profile-copy"><strong>Operator</strong><small>Private workspace</small></div><button id="logout-button" class="icon-button" aria-label="Lock session" title="Lock session">↪</button></div>
+      </div>
+    </aside>
+    <main class="main-area">
+      <header class="topbar">
+        <button id="open-sidebar" class="icon-button mobile-only" aria-label="Open navigation">☰</button>
+        <div class="breadcrumbs"><span>ULTRON</span><span class="crumb-separator">/</span><strong id="page-title">Command center</strong></div>
+        <div class="topbar-right"><span class="connection-pill"><span class="status-light"></span><span id="top-status">CORE READY</span></span><button id="clear-chat" class="icon-button" title="Clear current conversation" aria-label="Clear conversation">⌫</button></div>
+      </header>
+      <section id="chat-panel" class="panel active-panel">
+        <div id="welcome-view" class="welcome-view">
+          <div class="core-wrap">
+            <div class="core-orbit orbit-a"></div><div class="core-orbit orbit-b"></div><div class="core-orbit orbit-c"></div>
+            <div class="core-glow"></div><div class="core-disc"><div class="core-eye"><span></span></div><div class="core-ring"></div></div>
+            <span class="orbit-node node-one"></span><span class="orbit-node node-two"></span><span class="orbit-node node-three"></span>
+          </div>
+          <p class="eyebrow welcome-eyebrow"><span class="eyebrow-line"></span> SYSTEM ONLINE <span class="eyebrow-line"></span></p>
+          <h1>Your intelligence.<br><span>Without limits.</span></h1>
+          <p class="welcome-subtitle">Think clearly. Build boldly. Move with intent.</p>
+          <div class="suggestion-grid">
+            <button class="suggestion-card" data-prompt="Help me plan a project from idea to a tested release."><span class="suggestion-icon">⌘</span><span><strong>Build something</strong><small>Plan, code, and solve</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Explain a complex topic clearly, with examples and caveats."><span class="suggestion-icon">◈</span><span><strong>Explore an idea</strong><small>Understand what matters</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Help me research a question and separate verified facts from assumptions."><span class="suggestion-icon">⌕</span><span><strong>Research deeply</strong><small>Find signal in the noise</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Help me turn my next goal into a practical step-by-step plan."><span class="suggestion-icon">↗</span><span><strong>Make a plan</strong><small>From intent to action</small></span><span class="suggestion-arrow">↗</span></button>
+          </div>
+        </div>
+        <div id="messages" class="messages hidden" aria-live="polite"></div>
+        <div class="composer-wrap">
+          <div id="voice-banner" class="voice-banner hidden"><span class="voice-pulse"></span><span id="voice-status">Listening for your voice…</span><button id="stop-voice" class="text-button">Stop voice mode</button></div>
+          <form id="chat-form" class="composer">
+            <textarea id="message-input" rows="1" maxlength="12000" placeholder="Message ULTRON…" aria-label="Message ULTRON"></textarea>
+            <div class="composer-bottom"><div class="composer-tools"><button type="button" id="voice-toggle" class="tool-button" title="Start voice conversation"><span>◖</span><span>Voice mode</span></button><span class="composer-hint">Enter to send · Shift + Enter for new line</span></div><button id="send-button" type="submit" class="send-button" aria-label="Send message"><span>Send</span><span>↑</span></button></div>
+          </form>
+          <p class="disclaimer">ULTRON can make mistakes. Verify important information before acting.</p>
+        </div>
+      </section>
+      <section id="placeholder-panel" class="panel placeholder-panel hidden">
+        <div class="placeholder-symbol">◈</div><p class="eyebrow">CAPABILITY MODULE</p><h2 id="placeholder-title">Coming online</h2><p id="placeholder-description" class="muted">This module is not connected yet.</p><div class="module-status"><span class="status-light"></span> Not yet implemented <span class="status-divider">·</span> No simulated actions</div><button id="return-chat" class="secondary-button">Return to command center</button>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast hidden" role="status"></div>
+</body>
+</html>
