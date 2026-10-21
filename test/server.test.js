@@ -14,10 +14,10 @@ const env = {
   NODE_ENV: "test",
   APP_ACCESS_PASSWORD: "test-password",
   SESSION_SECRET: "a".repeat(48),
-  NARA_ROUTER_BASE_URL: "https://router.bynara.id/v1",
-  NARA_ROUTER_API_KEY: "test-key",
-  NARA_ROUTER_DEFAULT_MODEL: "test-model",
-  NARA_ROUTER_TIMEOUT_SECONDS: "10"
+  OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+  OPENROUTER_API_KEY: "test-key",
+  OPENROUTER_DEFAULT_MODEL: "test-model",
+  OPENROUTER_TIMEOUT_SECONDS: "10"
 };
 async function login(base) {
   const response = await fetch(base + "/api/session", {
@@ -67,7 +67,7 @@ test("chat rejects malformed messages before provider call", async () => {
   });
 });
 
-test("chat calls NaraRouter with a server-side key and returns the mocked response", async () => {
+test("chat calls OpenRouter with a server-side key and returns the mocked response", async () => {
   let seen;
   const app = createApp({
     env,
@@ -89,7 +89,7 @@ test("chat calls NaraRouter with a server-side key and returns the mocked respon
     });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).content, "Hello from mocked model");
-    assert.equal(seen.url, "https://router.bynara.id/v1/chat/completions");
+    assert.equal(seen.url, "https://openrouter.ai/api/v1/chat/completions");
     assert.equal(seen.options.headers.Authorization, "Bearer test-key");
     assert.equal(JSON.parse(seen.options.body).model, "test-model");
   });
@@ -115,7 +115,7 @@ test("provider authentication failures do not return secret values", async () =>
   });
 });
 
-test("chat falls back when NaraRouter denies access to the default model", async () => {
+test("chat falls back when OpenRouter denies access to the default model", async () => {
   const attemptedModels = [];
   const app = createApp({
     env,
@@ -141,7 +141,7 @@ test("chat falls back when NaraRouter denies access to the default model", async
     });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).content, "Fallback worked");
-    assert.deepEqual(attemptedModels, ["test-model", "auto/bynara"]);
+    assert.deepEqual(attemptedModels, ["test-model", "openrouter/free"]);
     assert.equal(response.headers.get("x-ultron-fallback"), "true");
   });
 });
@@ -150,9 +150,9 @@ test("model discovery returns only model identifiers from the configured provide
   const app = createApp({
     env,
     fetchImpl: async (url, options) => {
-      assert.equal(url, "https://router.bynara.id/v1/models");
+      assert.equal(url, "https://openrouter.ai/api/v1/models?output_modalities=text,image");
       assert.equal(options.headers.Authorization, "Bearer test-key");
-      return new Response(JSON.stringify({ data: [{ id: "model-a" }, { id: "model-b", owned_by: "provider" }, { name: "bad-entry" }] }), {
+      return new Response(JSON.stringify({ data: [{ id: "model-a:free" }, { id: "model-b", pricing: { prompt: "0", completion: "0" }, owned_by: "provider" }, { name: "bad-entry" }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
       });
@@ -163,7 +163,7 @@ test("model discovery returns only model identifiers from the configured provide
     const cookie = await login(base);
     const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { models: ["model-a", "model-b"], defaultModel: "test-model" });
+    assert.deepEqual(await response.json(), { models: ["openrouter/free", "model-a:free", "model-b"], defaultModel: "test-model" });
   });
 });
 
