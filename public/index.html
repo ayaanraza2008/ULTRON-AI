@@ -100,7 +100,21 @@
         </div>
       </section>
       <section id="placeholder-panel" class="panel placeholder-panel hidden">
-        <div class="placeholder-symbol">◈</div><p class="eyebrow">CAPABILITY MODULE</p><h2 id="placeholder-title">Coming online</h2><p id="placeholder-description" class="muted">This module is not connected yet.</p><div id="model-tools" class="model-tools hidden"><button id="load-models" class="secondary-button">Load models available to my key</button><p class="model-note">Model discovery uses the server-side NaraRouter key. Copy a model ID, then set NARA_ROUTER_DEFAULT_MODEL in Render.</p><div id="model-list" class="model-list"></div></div><div class="module-status"><span class="status-light"></span> Not yet implemented <span class="status-divider">·</span> No simulated actions</div><button id="return-chat" class="secondary-button">Return to command center</button>
+        <div class="placeholder-symbol">◈</div><p class="eyebrow">CAPABILITY MODULE</p><h2 id="placeholder-title">Coming online</h2><p id="placeholder-description" class="muted">This module is not connected yet.</p><div id="model-tools" class="model-tools hidden"><button id="load-models" class="secondary-button">Load models available to my key</button><p class="model-note">Model discovery uses the server-side NaraRouter key. Copy a model ID, then set NARA_ROUTER_DEFAULT_MODEL in Render.</p><div id="model-list" class="model-list"></div></div><div id="memory-tools" class="memory-tools hidden">
+          <p class="model-note">Only memories you explicitly add are saved. Do not store passwords, API keys, or other secrets here.</p>
+          <form id="memory-form" class="memory-form">
+            <label for="memory-kind">Memory type</label>
+            <select id="memory-kind" required><option value="preference">Preference</option><option value="project_fact">Project fact</option><option value="profile_note">Personal note</option><option value="document_reference">Document reference</option></select>
+            <label for="memory-title">Title</label>
+            <input id="memory-title" type="text" maxlength="240" required placeholder="A short name for this memory">
+            <label for="memory-content">Memory content</label>
+            <textarea id="memory-content" rows="4" maxlength="20000" required placeholder="Write only information you want ULTRON to remember."></textarea>
+            <button class="secondary-button" type="submit">Save memory</button>
+            <p id="memory-error" class="error-text" role="alert"></p>
+          </form>
+          <div id="memory-list" class="memory-list"></div>
+        </div>
+        <div class="module-status"><span class="status-light"></span> Not yet implemented <span class="status-divider">·</span> No simulated actions</div><button id="return-chat" class="secondary-button">Return to command center</button>
       </section>
     </main>
   </div>
