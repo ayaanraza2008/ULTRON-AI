@@ -426,7 +426,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.post("/api/chat", requireSession, async (req, res) => {
     const maxChars = Math.max(1000, Number(env.MAX_MESSAGE_CHARS) || 12_000);
     const { messages, stream = true, model: requestedModel, attachments = [] } = req.body || {};
-    const knownModels = ["poolside/laguna-s-2.1:free", "minimax/minimax-m3.1-flash:free", "nvidia/nemotron-3.5-lightning:free"];
+    const knownModels = ["auto/bynara", "poolside/laguna-s-2.1:free", "minimax/minimax-m3.1-flash:free", "nvidia/nemotron-3.5-lightning:free"];
     const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "").split(",").map(value => value.trim()).filter(Boolean);
     const allowedModels = [...new Set([...knownModels, ...configuredModels, env.NARA_ROUTER_DEFAULT_MODEL].filter(Boolean))];
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || !allowedModels.includes(requestedModel))) {
@@ -495,6 +495,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
       let upstream;
       let lastStatus = 0;
+      let lastProviderCode = "";
       let usedFallback = false;
       for (let index = 0; index < modelCandidates.length; index++) {
         const candidate = modelCandidates[index];
@@ -520,20 +521,36 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           break;
         }
         lastStatus = attempt.status;
-        // A model-specific limit or temporary overload can safely fall back before any stream starts.
-        if (![429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
+        // Log only structured provider codes; never log response bodies or secrets.
+        try {
+          const providerPayload = await attempt.clone().json();
+          lastProviderCode = String(providerPayload?.error?.code || providerPayload?.error?.type || "").slice(0, 100);
+        } catch { lastProviderCode = ""; }
+        // 403/404 can mean this key cannot use the selected model. Try other configured candidates.
+        if (![403, 404, 429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
         try { await attempt.arrayBuffer(); } catch { /* ignore provider error body */ }
-        logger.warn?.("NaraRouter model fallback", { status: attempt.status, modelIndex: index });
+        logger.warn?.("NaraRouter model fallback", { status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
       }
 
       if (!upstream?.ok) {
         const status = lastStatus || upstream?.status || 502;
         try { await upstream?.arrayBuffer(); } catch { /* ignore provider error body */ }
-        logger.warn?.("NaraRouter request failed", { status, code: status === 401 ? "PROVIDER_AUTH" : status === 402 ? "PROVIDER_CREDITS" : status === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" });
-        const code = status === 401 ? "PROVIDER_AUTH" : status === 402 ? "PROVIDER_CREDITS" : status === 429 ? "PROVIDER_RATE_LIMIT" : status === 503 ? "PROVIDER_OVERLOADED" : "PROVIDER_ERROR";
-        return res.status(status === 401 ? 502 : status === 429 ? 429 : status === 402 ? 402 : 502).json({
-          error: { code, message: status === 401 ? "NaraRouter rejected the API key." : status === 402 ? "NaraRouter reports insufficient credits or entitlement." : status === 429 ? "All configured models are rate-limited right now." : status === 503 ? "All eligible models are temporarily overloaded." : "NaraRouter could not complete the request." }
-        });
+        const code = status === 401 ? "PROVIDER_AUTH"
+          : status === 402 ? "PROVIDER_CREDITS"
+          : status === 403 ? "PROVIDER_FORBIDDEN"
+          : status === 404 ? "MODEL_UNAVAILABLE"
+          : status === 429 ? "PROVIDER_RATE_LIMIT"
+          : status === 503 ? "PROVIDER_OVERLOADED"
+          : "PROVIDER_ERROR";
+        logger.warn?.("NaraRouter request failed", { status, code, providerCode: lastProviderCode || undefined });
+        const message = status === 401 ? "NaraRouter rejected the API key."
+          : status === 402 ? "NaraRouter reports insufficient credits."
+          : status === 403 ? "NaraRouter denied access to every configured model. Check your plan, model access, or account status."
+          : status === 404 ? "None of the configured model IDs are available to this NaraRouter key. Refresh the model list and select an available ID."
+          : status === 429 ? "All configured models are rate-limited right now."
+          : status === 503 ? "All eligible models are temporarily unavailable."
+          : "NaraRouter could not complete the request.";
+        return res.status(status === 429 ? 429 : status === 402 ? 402 : 502).json({ error: { code, message } });
       }
       res.setHeader("X-ULTRON-Model", selectedModel);
       if (usedFallback) res.setHeader("X-ULTRON-Fallback", "true");
