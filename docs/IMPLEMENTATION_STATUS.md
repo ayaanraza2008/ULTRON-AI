@@ -7,7 +7,9 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Added server-side Node/Express foundation, secure session gate, validated chat route, SSE forwarding, static web UI, responsive styling, and browser-native voice loop.
 - Added environment template, `.gitignore`, Render Blueprint, and six initial API security/provider-contract tests.
 - Added GitHub Actions workflow; latest observed run `39651294713` completed successfully (`npm run check`, `npm test`).
-- Created Render free web service `ultron-ai` (`srv-dbcg3fui0phs73a9p37g`) linked to this repository in Singapore; first build succeeded. Deploy startup and public health probe are still pending.
+- Created Render free web service `ultron-ai` (`srv-dbcg3fui0phs73a9p37g`) linked to this repository in Singapore. First deploy status is `live`; build succeeded, server log confirms `ULTRON AI listening on port 10000`, and Render reports the service URL `https://ultron-ai-zvd7.onrender.com`.
+- Added a CI smoke test that probes the deployed `/api/health` endpoint after source checks; the run triggered by that workflow change is pending/being checked.
+- Added a lightweight Electron Windows companion shell with origin restrictions, context isolation, no Node integration, and a Windows installer workflow. The Windows build has not yet completed and the installer has not been tested on a physical Windows machine.
 - Confirmed repository identity, default branch (`main`), visibility (public), and permissions.
 - Confirmed the repository had no existing source code to preserve, so any implementation must be a new initial application foundation in this repository rather than an unrelated replacement.
 - Added initial `README.md` commit: `0c4b50000cda003824cfc1f42b8cd4927fb0304b`.
@@ -17,6 +19,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Confirmed one Supabase project is accessible, but it has a different application name; no schema/data changes were made and it is not connected to ULTRON.
 
 ## Tests and verification
+- Render reports deploy `dep-dbcg3g6i0phs73a9p5ag` as `live`; server startup log confirms it bound to port 10000. A direct health endpoint probe is pending automated smoke verification.
 - GitHub Actions run `39651294713`: completed successfully; Node syntax checks and automated tests passed.
 - Render build log: `npm install --ignore-scripts` succeeded and reported 0 npm audit vulnerabilities at build time; deployment startup is not yet confirmed.
 - Repository metadata/empty state: verified via GitHub API.
@@ -31,4 +34,4 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 4. External model weights/services and voice/search providers must be reviewed individually for license, resource, language, and cost.
 
 ## Next concrete action
-Confirm Render service startup and `/api/health`; then request the user to configure `APP_ACCESS_PASSWORD` and `NARA_ROUTER_API_KEY` as Render secrets and choose a model alias available to that key. Run a real authorized chat request after configuration. Then decide on a dedicated ULTRON database and implement persistence/authentication before memory and multi-device sync.
+Confirm the live health smoke test and Windows packaging workflow. Ask the user to configure `APP_ACCESS_PASSWORD` and `NARA_ROUTER_API_KEY` as Render secrets and choose a model alias available to that key. Run a real authorized chat request after configuration. Then decide on a dedicated ULTRON database and implement persistence/authentication before memory and multi-device sync.
