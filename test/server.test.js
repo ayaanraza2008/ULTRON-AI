@@ -200,3 +200,39 @@ test("Supabase signup validates credentials before making an upstream request", 
     assert.equal(calls, 0);
   });
 });
+
+test("expired Supabase access tokens refresh before database requests", async () => {
+  const supabaseEnv = { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
+  let restAuthorization = "";
+  const app = createApp({
+    env: supabaseEnv,
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/user") {
+        return new Response(JSON.stringify({ message: "expired" }), { status: 401 });
+      }
+      if (url === "https://ultron-test.supabase.co/auth/v1/token?grant_type=refresh_token") {
+        assert.equal(JSON.parse(options.body).refresh_token, "old-refresh");
+        return new Response(JSON.stringify({
+          access_token: "fresh-access",
+          refresh_token: "fresh-refresh",
+          expires_in: 3600,
+          user: { id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }
+        }), { status: 200 });
+      }
+      if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
+        restAuthorization = options.headers.Authorization;
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/conversations", {
+      headers: { Cookie: "ultron_sb_access=old-access; ultron_sb_refresh=old-refresh" }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(restAuthorization, "Bearer fresh-access");
+    assert.match(response.headers.get("set-cookie") || "", /ultron_sb_access=fresh-access/);
+  });
+});
