@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: ultron-ai
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install --ignore-scripts
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NARA_ROUTER_BASE_URL
+        value: https://router.bynara.id/v1
+      - key: NARA_ROUTER_TIMEOUT_SECONDS
+        value: "60"
+      - key: NARA_ROUTER_API_KEY
+        sync: false
+      - key: NARA_ROUTER_DEFAULT_MODEL
+        sync: false
+      - key: APP_ACCESS_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
