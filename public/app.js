@@ -34,6 +34,8 @@ function showScreen(screen) {
 async function enterApplication(session) {
   state.authType = session.authType || null;
   showScreen("app-shell");
+  $("conversation-history").classList.toggle("hidden", state.authType !== "supabase");
+  document.querySelector(".history-label").classList.toggle("hidden", state.authType !== "supabase");
   await refreshHealth();
   if (state.authType === "supabase") await loadLatestConversation();
 }
@@ -108,22 +110,68 @@ async function refreshHealth() {
   }
 }
 $("refresh-health").addEventListener("click", refreshHealth);
+function renderConversationHistory(conversations) {
+  const container = $("conversation-history");
+  container.replaceChildren();
+  const items = Array.isArray(conversations) ? conversations : [];
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "Your saved chats will appear here.";
+    container.append(empty);
+    return;
+  }
+  items.forEach(item => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-item" + (item.id === state.conversationId ? " active" : "");
+    button.dataset.conversationId = item.id;
+    button.textContent = item.title || "New conversation";
+    button.title = item.title || "New conversation";
+    button.setAttribute("aria-current", item.id === state.conversationId ? "page" : "false");
+    button.addEventListener("click", () => openConversation(item.id));
+    container.append(button);
+  });
+}
+async function refreshConversationHistory() {
+  if (state.authType !== "supabase") return;
+  try {
+    const response = await api("/api/conversations");
+    const data = await response.json();
+    renderConversationHistory(data.conversations);
+  } catch (error) {
+    toast("Could not refresh saved chats: " + error.message);
+  }
+}
+async function openConversation(id, announce = true) {
+  try {
+    const response = await api("/api/conversations/" + encodeURIComponent(id) + "/messages");
+    const data = await response.json();
+    state.conversationId = id;
+    state.messages = (data.messages || []).filter(item => ["user", "assistant"].includes(item.role)).map(item => ({ role: item.role, content: item.content }));
+    $("messages").replaceChildren();
+    if (state.messages.length) {
+      $("welcome-view").classList.add("hidden");
+      $("messages").classList.remove("hidden");
+      state.messages.forEach(item => addMessage(item.role, item.content));
+    } else {
+      $("messages").classList.add("hidden");
+      $("welcome-view").classList.remove("hidden");
+    }
+    switchPanel("chat");
+    renderConversationHistory(Array.from($("conversation-history").querySelectorAll(".history-item")).map(button => ({ id: button.dataset.conversationId, title: button.textContent })).filter(item => item.id));
+    if (announce) toast("Conversation opened.");
+  } catch (error) {
+    toast("Could not open saved conversation: " + error.message);
+  }
+}
 async function loadLatestConversation() {
   try {
     const response = await api("/api/conversations");
     const data = await response.json();
+    renderConversationHistory(data.conversations);
     const latest = data.conversations && data.conversations[0];
-    if (!latest) return;
-    const messageResponse = await api("/api/conversations/" + encodeURIComponent(latest.id) + "/messages");
-    const messageData = await messageResponse.json();
-    state.conversationId = latest.id;
-    state.messages = (messageData.messages || []).filter(item => ["user", "assistant"].includes(item.role)).map(item => ({ role: item.role, content: item.content }));
-    if (!state.messages.length) return;
-    $("welcome-view").classList.add("hidden");
-    $("messages").classList.remove("hidden");
-    $("messages").replaceChildren();
-    state.messages.forEach(item => addMessage(item.role, item.content));
-    toast("Latest conversation restored.");
+    if (latest) await openConversation(latest.id, false);
   } catch (error) {
     toast("Saved history could not be loaded: " + error.message);
   }
@@ -137,6 +185,7 @@ async function ensureConversation(firstMessage) {
     const response = await api("/api/conversations", { method: "POST", body: JSON.stringify({ title: firstMessage.slice(0, 70) || "New conversation" }) });
     const data = await response.json();
     state.conversationId = data.conversation.id;
+    await refreshConversationHistory();
     return state.conversationId;
   } catch (error) {
     toast("Chat is available, but saving history failed: " + error.message);
@@ -150,6 +199,7 @@ async function persistMessage(role, content) {
   if (!id) return;
   try {
     await api("/api/conversations/" + encodeURIComponent(id) + "/messages", { method: "POST", body: JSON.stringify({ role, content }) });
+    if (role === "assistant") await refreshConversationHistory();
   } catch (error) {
     toast("This message could not be saved: " + error.message);
   }
