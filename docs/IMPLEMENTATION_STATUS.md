@@ -10,6 +10,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Created Render free web service `ultron-ai` (`srv-dbcg3fui0phs73a9p37g`) linked to this repository in Singapore. First deploy status is `live`; build succeeded, server log confirms `ULTRON AI listening on port 10000`, and Render reports the service URL `https://ultron-ai-zvd7.onrender.com`.
 - Added a CI smoke test that probes the deployed `/api/health` endpoint after source checks; GitHub Actions run `39651873155` passed, including the deployed health smoke check.
 - Added a protected `/api/models` endpoint and Integrations UI to list model IDs available to the configured NaraRouter key and copy an ID for Render configuration.
+- Added `supabase/migrations/202610210001_initial_schema.sql` for conversations, messages, preferences, memory, tasks, audit events, indexes, triggers, and per-user RLS. It has not been applied to any database.
 - Added a voice language selector for English (India), Hindi, and Hinglish mode; Hinglish uses the browser's en-IN recognition locale and may vary by browser.
 - Added a lightweight Electron Windows companion shell with origin restrictions, context isolation, no Node integration, and a Windows installer workflow. GitHub Actions run `39651789470` successfully built and uploaded a 93 MB installer artifact (expires 2026-11-04); it has not yet been manually tested on a physical Windows machine.
 - Windows installer workflow result: [run 39651789470](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/39651789470).
@@ -33,7 +34,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 ## Blockers
 1. `APP_ACCESS_PASSWORD` is not yet set on Render, so the live UI deliberately remains behind the setup screen until the owner configures it.
 2. `NARA_ROUTER_API_KEY` and a valid model alias are required for real model connectivity tests. Configure the key directly in Render secrets; do not paste it into source control or frontend code.
-3. Need a dedicated ULTRON database decision before connecting the differently named existing Supabase project.
+3. The SQL schema is drafted but not applied. Need a dedicated ULTRON database decision before connecting the differently named existing Supabase project.
 4. The service-level health-check setting is not configurable through the available connected action; CI currently verifies the public health endpoint instead.
 5. External model weights/services and voice/search providers must be reviewed individually for license, resource, language, and cost.
 
