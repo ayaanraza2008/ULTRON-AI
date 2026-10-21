@@ -464,7 +464,10 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const knownModels = ["poolside/laguna-s-2.1:free", "minimax/minimax-m3.1-flash:free"];
     const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "").split(",").map(value => value.trim()).filter(Boolean);
     const allowedModels = [...new Set([...knownModels, ...configuredModels, env.NARA_ROUTER_DEFAULT_MODEL].filter(Boolean))];
-    const selectedModel = typeof requestedModel === "string" && allowedModels.includes(requestedModel) ? requestedModel : env.NARA_ROUTER_DEFAULT_MODEL;
+    if (requestedModel !== undefined && (typeof requestedModel !== "string" || !allowedModels.includes(requestedModel))) {
+      return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
+    }
+    const selectedModel = requestedModel || env.NARA_ROUTER_DEFAULT_MODEL;
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
       return res.status(400).json({ error: { code: "INVALID_MESSAGES", message: "Send between 1 and 40 messages." } });
     }
