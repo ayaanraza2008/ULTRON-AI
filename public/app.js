@@ -399,7 +399,7 @@ async function sendMessage(text, attachments = []) {
   await persistMessage("user", (clean || "Please analyze the attached image.") + (attachments.length ? "\n[Image attached; image data is not saved in chat history]" : ""));
   let responseText = "";
   const selectedModel = $("model-select").value;
-  const requestModel = attachments.length && selectedModel !== "minimax/minimax-m3.1-flash:free" ? "minimax/minimax-m3.1-flash:free" : selectedModel;
+  const requestModel = attachments.length && selectedModel !== "minimax-m3.1-flash:free" ? "minimax-m3.1-flash:free" : selectedModel;
   if (requestModel !== selectedModel) toast("Images need a vision model. Using MiniMax M3.1 Flash for this request.");
   try {
     const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, model: requestModel, attachments: attachments.map(item => ({ name: item.name, dataUrl: item.dataUrl })), stream: true }) });
