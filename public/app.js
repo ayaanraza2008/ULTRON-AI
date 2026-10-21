@@ -5,7 +5,7 @@ const features = {
   research: ["Research", "Web research and citations are not connected yet. ULTRON will not pretend to search the web or invent sources."],
   media: ["Vision & media", "Image, document, avatar, and video tools require separately verified services. No generation jobs run from this screen yet."],
   tasks: ["Agents & tasks", "Task orchestration and desktop automation are not connected yet. No local computer actions are being simulated."],
-  integrations: ["Integrations", "OpenRouter provides the AI models gateway. ULTRON has a dedicated Supabase project for account authentication and private chat history. Research and media integrations still need separate implementation and verification."],
+  integrations: ["Integrations", "Review readiness for avatar generation, visual workflows, neural speech, local transcription, and guarded AI employee routines. External modules are separate services and are not claimed live until tested."],
   settings: ["Settings", "Account sign-in and private conversation history use Supabase. Voice uses browser speech capabilities when available; password recovery and user-controlled memory settings remain to be implemented."]
 };
 function setPersona(persona) {
@@ -237,12 +237,46 @@ function switchPanel(name) {
   $("clear-chat").classList.toggle("hidden", !isChat);
   $("model-tools").classList.toggle("hidden", name !== "integrations");
   $("memory-tools").classList.toggle("hidden", name !== "memory" || state.authType !== "supabase");
+  $("integration-tools").classList.toggle("hidden", name !== "integrations");
+  if (name === "integrations") loadIntegrations();
   if (name === "memory") {
     if (state.authType !== "supabase") $("placeholder-description").textContent = "Sign in with your ULTRON account to manage private memories.";
     else loadMemoryItems();
   }
   $("sidebar").classList.remove("open");
 }
+async function loadIntegrations() {
+  const list = $("integration-list");
+  if (!list) return;
+  list.textContent = "Checking configured integration settings…";
+  try {
+    const payload = await api("/api/integrations");
+    list.replaceChildren();
+    for (const item of payload.integrations || []) {
+      const card = document.createElement("article");
+      card.className = "model-item";
+      const title = document.createElement("strong");
+      title.textContent = item.name;
+      const status = document.createElement("span");
+      status.className = "model-note";
+      status.textContent = "Status: " + item.state.replaceAll("_", " ");
+      const capability = document.createElement("p");
+      capability.className = "model-note";
+      capability.textContent = item.capability;
+      const note = document.createElement("p");
+      note.className = "model-note";
+      note.textContent = item.note;
+      const vars = document.createElement("p");
+      vars.className = "model-note";
+      vars.textContent = "Environment: " + item.requiredEnv.join(", ");
+      card.append(title, status, capability, note, vars);
+      list.append(card);
+    }
+  } catch (error) {
+    list.textContent = error.message || "Could not load integration status. Sign in and try again.";
+  }
+}
+$("refresh-integrations").addEventListener("click", loadIntegrations);
 document.querySelectorAll(".nav-item").forEach(button => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
 $("return-chat").addEventListener("click", () => switchPanel("chat"));
 $("open-sidebar").addEventListener("click", () => $("sidebar").classList.add("open"));
