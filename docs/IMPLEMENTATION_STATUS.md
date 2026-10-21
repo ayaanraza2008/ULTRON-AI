@@ -10,7 +10,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Created Render free web service `ultron-ai` (`srv-dbcg3fui0phs73a9p37g`) linked to this repository in Singapore. First deploy status is `live`; build succeeded, server log confirms `ULTRON AI listening on port 10000`, and Render reports the service URL `https://ultron-ai-zvd7.onrender.com`.
 - Added a CI smoke test that probes the deployed `/api/health` endpoint after source checks; GitHub Actions run `39651873155` passed, including the deployed health smoke check.
 - Added a protected `/api/models` endpoint and Integrations UI to list model IDs available to the configured NaraRouter key and copy an ID for Render configuration.
-- Added `supabase/migrations/202610210001_initial_schema.sql` for conversations, messages, preferences, memory, tasks, audit events, indexes, triggers, and per-user RLS. It has not been applied to any database.
+- Added and applied `supabase/migrations/202610210001_initial_schema.sql` to dedicated ULTRON-AI Supabase project `opdjfhwepmcprbqojpat` in `ap-south-1`; verified six public tables with RLS enabled. Applied `supabase/migrations/202610220001_secure_function_search_path.sql` to harden the updated-at trigger function. Application-level Supabase persistence and auth mapping remain unfinished.
 - Added a voice language selector for English (India), Hindi, and Hinglish mode; Hinglish uses the browser's en-IN recognition locale and may vary by browser.
 - Added a lightweight Electron Windows companion shell with origin restrictions, context isolation, no Node integration, and a Windows installer workflow. GitHub Actions run `39651789470` successfully built and uploaded a 93 MB installer artifact (expires 2026-11-04); it has not yet been manually tested on a physical Windows machine.
 - Windows installer workflow result: [run 39651789470](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/39651789470).
@@ -20,7 +20,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Reviewed the official NaraRouter developer documentation. Documented base URL is `https://router.bynara.id/v1`; chat endpoint is `/chat/completions`; Bearer key auth; OpenAI-compatible chat-completions format; streaming uses SSE when supported. A key and selected entitled model are still needed for real integration tests.
 - Verified read access to all five requested source repositories. Initial license finding: Handy and ai-employees are MIT; HeyGem uses a custom Silicon Intelligence Community License requiring attribution and other conditions. Remaining source-specific details require review before reuse.
 - At initial audit, no Render service was linked to `ayaanraza2008/ULTRON-AI`. A new free service named `ultron-ai` was subsequently created for this repository; no other service was repointed.
-- Confirmed one Supabase project is accessible, but it has a different application name; no schema/data changes were made and it is not connected to ULTRON.
+- Created a dedicated `ULTRON-AI` Supabase project in Mumbai (`ap-south-1`) after the organization-scoped cost quote returned $0/month. Existing `nox-ai` was left untouched. Initial schema applied and verified; application is not yet connected to Supabase.
 
 ## Tests and verification
 - Render reports deploy `dep-dbcg3g6i0phs73a9p5ag` as `live`; server startup log confirms it bound to port 10000. GitHub Actions smoke run `39651873155` successfully fetched and validated `/api/health` from the deployed service.
