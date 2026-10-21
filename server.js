@@ -2,6 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildIntegrationCatalog } from "./integrations/catalog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -625,6 +626,14 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       clearTimeout(timeout);
       req.off("aborted", abortUpstream);
     }
+  });
+
+  app.get("/api/integrations", requireSession, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      integrations: buildIntegrationCatalog(env),
+      note: "Configuration readiness only; configured services still require live connectivity and feature tests."
+    });
   });
 
   app.use(express.static(path.join(__dirname, "public"), { index: "index.html", maxAge: env.NODE_ENV === "production" ? "1h" : 0 }));
