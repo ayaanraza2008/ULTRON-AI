@@ -273,11 +273,11 @@ async function sendMessage(text) {
   if (clean.length > 12000) { toast("Message is too long. Please shorten it."); return; }
   state.messages.push({ role: "user", content: clean });
   addMessage("user", clean);
-  await persistMessage("user", clean);
   input.value = "";
   resizeTextarea();
   setBusy(true);
   const assistant = addMessage("assistant", "", true);
+  await persistMessage("user", clean);
   let responseText = "";
   try {
     const response = await api("/api/chat", { method: "POST", body: JSON.stringify({ messages: state.messages, stream: true }) });
