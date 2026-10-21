@@ -18,7 +18,7 @@ Copy `.env.example` to `.env` for local development and populate secrets locally
 
 ## Hosting configuration
 
-The Render service needs server-side `APP_ACCESS_PASSWORD`, `SESSION_SECRET`, `NARA_ROUTER_API_KEY`, and an entitled `NARA_ROUTER_DEFAULT_MODEL` before protected chat can be verified end-to-end. Supabase persistence still needs application-level integration and authenticated user identity.
+The Render service is configured with the dedicated Supabase URL and publishable key for account sign-in and per-user chat persistence. Real AI responses still require `NARA_ROUTER_API_KEY` and an entitled `NARA_ROUTER_DEFAULT_MODEL` as server-side environment variables. `APP_ACCESS_PASSWORD` is an optional legacy owner-only gate; it is not required for Supabase account login.
 
 ## Verification policy
 
