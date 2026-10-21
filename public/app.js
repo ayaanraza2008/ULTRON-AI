@@ -244,6 +244,7 @@ function switchPanel(name) {
     else loadMemoryItems();
   }
   $("sidebar").classList.remove("open");
+  $("app-shell").classList.remove("sidebar-open");
 }
 async function loadIntegrations() {
   const list = $("integration-list");
@@ -279,8 +280,20 @@ async function loadIntegrations() {
 $("refresh-integrations").addEventListener("click", loadIntegrations);
 document.querySelectorAll(".nav-item").forEach(button => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
 $("return-chat").addEventListener("click", () => switchPanel("chat"));
-$("open-sidebar").addEventListener("click", () => $("sidebar").classList.add("open"));
-$("close-sidebar").addEventListener("click", () => $("sidebar").classList.remove("open"));
+$("open-sidebar").addEventListener("click", () => {
+  $("app-shell").classList.add("sidebar-open");
+  $("sidebar").classList.add("open");
+});
+$("close-sidebar").addEventListener("click", () => {
+  $("sidebar").classList.remove("open");
+  $("app-shell").classList.remove("sidebar-open");
+});
+document.addEventListener("click", event => {
+  if (!$("app-shell").classList.contains("sidebar-open")) return;
+  if (event.target.closest("#sidebar") || event.target.closest("#open-sidebar")) return;
+  $("sidebar").classList.remove("open");
+  $("app-shell").classList.remove("sidebar-open");
+});
 $("new-chat").addEventListener("click", () => {
   stopVoice();
   state.messages = [];
@@ -730,7 +743,7 @@ $("voice-toggle").addEventListener("click", () => state.voiceActive ? stopVoice(
 $("stop-voice").addEventListener("click", stopVoice);
 document.addEventListener("keydown", event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); $("new-chat").click(); }
-  if (event.key === "Escape") $("sidebar").classList.remove("open");
+  if (event.key === "Escape") { $("sidebar").classList.remove("open"); $("app-shell").classList.remove("sidebar-open"); }
 });
 window.addEventListener("beforeunload", stopVoice);
 window.addEventListener("error", event => {
