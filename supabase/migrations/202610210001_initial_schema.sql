@@ -1,4 +1,4 @@
--- ULTRON AI initial schema (migration only; not yet applied to any Supabase project).
+-- ULTRON AI initial schema. Applied to the dedicated ULTRON-AI Supabase project; retain this file for reproducible setup.
 -- All user-owned tables use RLS. Do not place provider secrets in these tables.
 
 create table if not exists public.conversations (
