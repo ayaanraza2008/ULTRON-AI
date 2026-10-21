@@ -145,6 +145,7 @@ async function ensureConversation(firstMessage) {
 }
 async function persistMessage(role, content) {
   if (state.authType !== "supabase") return;
+  if (role === "assistant" && !state.conversationId) return;
   const id = await ensureConversation(role === "user" ? content : "New conversation");
   if (!id) return;
   try {
