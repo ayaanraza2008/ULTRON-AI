@@ -478,7 +478,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     res.json({
       mode: "autonomous_multi_tool_with_safe_intent_fallback",
       tools: [
-        { name: "agentmemory", available: agentMemoryReadiness(env).configured, execution: "automatic_recall_for_relevant_tasks_and_opt-in_durable_capture" },
+        { name: "agentmemory", available: agentMemoryReadiness(env).configured, execution: "automatic_recall_for_relevant_tasks_and_bounded_durable_capture" },
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
         { name: "plan_employee", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_when_requested_no_second_confirmation" },
