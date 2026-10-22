@@ -407,8 +407,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const title = boundedString(req.body?.title, 240);
     const description = boundedString(req.body?.description, 12000);
     if (!title || !description) return res.status(400).json({ error: { code: "INVALID_TASK", message: "Provide a task title and description." } });
-    const risk = req.body?.risk === "high" ? "high" : req.body?.risk === "medium" ? "medium" : "low";
-    const taskType = boundedString(req.body?.taskType, 40).toLowerCase() || "manual";
+    // Automatically route obvious low-risk research requests. Unknown tasks remain manual;
+    // the worker's allowlist, not model intent, determines what can actually execute.
+    const taskText = (title + " " + description + " " + boundedString(req.body?.query, 400)).toLowerCase();
+    const inferredRisk = /\\b(delete|erase|drop|wipe|shutdown|restart|install|uninstall|purchase|buy|pay|transfer|send|publish|post|deploy|merge|commit|modify production|change permissions|credential|password|secret|private key|shell|terminal|execute code|run command|control pc|remote control)\\b/.test(taskText) ? "high"
+      : /\\b(account|email|message|upload|download|edit|write file|change setting|automation|browser|login|personal data|location)\\b/.test(taskText) ? "medium" : "low";
+    const risk = ["high", "medium", "low"].includes(req.body?.risk) ? req.body.risk : inferredRisk;
+    const inferredTaskType = /\\b(research|look up|search the web|find sources|investigate|latest developments|compare options|fact check|gather sources)\\b/.test(taskText) ? "research" : "manual";
+    const taskType = boundedString(req.body?.taskType, 40).toLowerCase() || inferredTaskType;
     if (!["research", "manual"].includes(taskType)) return res.status(400).json({ error: { code: "TASK_TYPE_NOT_ALLOWED", message: "Supported task types are research and manual." } });
     const query = boundedString(req.body?.query, 400);
     if (taskType === "research" && !query && !description) return res.status(400).json({ error: { code: "INVALID_RESEARCH_QUERY", message: "Provide a research query." } });
