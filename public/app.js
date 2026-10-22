@@ -931,3 +931,25 @@ $("new-chat").addEventListener("click", () => {
 $("clear-chat").addEventListener("click", () => {
   $("dashboard-view").classList.add("hidden");
 });
+
+/* HUD navigation and quick actions: dashboard stays visible unless chat is explicitly opened. */
+(function initUltronHud(){
+ const side=$("sidebar"), open=$("open-sidebar"), close=$("close-sidebar");
+ const setDrawer=(on)=>{if(!side)return;side.classList.toggle("open",on);side.classList.toggle("is-open",on);side.setAttribute("aria-hidden",String(!on));if(open)open.setAttribute("aria-expanded",String(on));};
+ if(side){side.classList.remove("open","is-open");side.setAttribute("aria-hidden","true");}
+ open?.addEventListener("click",()=>setDrawer(!side?.classList.contains("open")));
+ close?.addEventListener("click",()=>setDrawer(false));
+ document.addEventListener("keydown",e=>{if(e.key==="Escape")setDrawer(false)});
+ document.addEventListener("click",e=>{if(side?.classList.contains("open")&&!side.contains(e.target)&&!open?.contains(e.target))setDrawer(false)});
+ const dock=document.createElement("nav");dock.className="ultron-bottom-dock";dock.setAttribute("aria-label","Quick controls");
+ dock.innerHTML='<span class="dock-label">ULTRON / COMMAND</span><button type="button" aria-label="Open navigation" title="Navigation">☰</button><button type="button" aria-label="Open AI chat" title="Chat">⌘</button><button type="button" aria-label="Switch AI persona" title="Switch ULTRON / NAYA">◉</button><button type="button" aria-label="Toggle sound effects" aria-pressed="false" title="Optional interface sounds">♫</button>';
+ document.body.appendChild(dock);
+ const [menu,chat,persona,sound]=dock.querySelectorAll("button");
+ menu.addEventListener("click",()=>setDrawer(!side?.classList.contains("open")));
+ chat.addEventListener("click",()=>{ $("dashboard-view")?.classList.add("hidden");$("welcome-view")?.classList.remove("hidden");$("messages")?.classList.add("hidden");$("message-input")?.focus();});
+ persona.addEventListener("click",()=>{const next=state.persona==="ultron"?"naya":"ultron";const toggle=document.querySelector('[data-persona="'+next+'"]')||document.querySelector('[data-persona-toggle="'+next+'"]');if(toggle)toggle.click();else{const candidates=[...document.querySelectorAll("button")].filter(b=>/ULTRON|NAYA/i.test(b.textContent)&&/persona|switch|transform/i.test((b.textContent+" "+b.className+" "+b.id)));if(candidates[0])candidates[0].click();else toast("Use the existing persona selector in the chat view.");}});
+ let audioCtx=null;
+ sound.addEventListener("click",()=>{const enabled=sound.getAttribute("aria-pressed")!=="true";sound.setAttribute("aria-pressed",String(enabled));sound.style.color=enabled?"#f5c66d":"#e7d4ff";sound.title=enabled?"Interface sounds enabled":"Interface sounds disabled";if(enabled){try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type="sine";o.frequency.value=660;g.gain.value=.018;o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+.045);}catch{}}});
+ document.querySelectorAll(".ops-card").forEach((card,i)=>{card.style.setProperty("--hud-index",i);card.classList.add("hud-reveal");});
+ // Do not auto-start microphone: the existing Start Listening button remains the only activation path.
+})();
