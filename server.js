@@ -511,12 +511,12 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       try {
         const parsed = new URL(String(env.OPENVIKING_URL || "").trim());
         const safeProtocol = parsed.protocol === "https:" || (parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname));
-        return safeProtocol && !parsed.username && !parsed.password ? parsed.toString().replace(/\\/+$/, "") : "";
+        return safeProtocol && !parsed.username && !parsed.password ? parsed.toString().replace(/\/+$/, "") : "";
       } catch { return ""; }
     })();
     if (needsOpenViking && openVikingUserId && openVikingBaseUrl) {
       try {
-        const rawOpenVikingUrl = String(env.OPENVIKING_URL).trim().replace(/\/+$/, "");
+        const rawOpenVikingUrl = openVikingBaseUrl;
         const openVikingUrl = new URL(rawOpenVikingUrl);
         const safeProtocol = openVikingUrl.protocol === "https:" || (openVikingUrl.protocol === "http:" && ["localhost", "127.0.0.1"].includes(openVikingUrl.hostname));
         if (safeProtocol && !openVikingUrl.username && !openVikingUrl.password) {
@@ -571,7 +571,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     let openVikingSessionReady = false;
     if (openVikingSessionId && openVikingMemoryEnabled && openVikingBaseUrl) {
       try {
-        const base = String(env.OPENVIKING_URL).trim().replace(/\/+$/, "");
+        const base = openVikingBaseUrl;
         const authHeaders = env.OPENVIKING_API_KEY
           ? { "X-API-Key": env.OPENVIKING_API_KEY, Authorization: "Bearer " + env.OPENVIKING_API_KEY }
           : {};
@@ -610,7 +610,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const persistOpenVikingTurn = async assistantText => {
       if (!openVikingSessionReady || !openVikingSessionId || !latestUserText || !assistantText) return;
       try {
-        const base = String(env.OPENVIKING_URL).trim().replace(/\/+$/, "");
+        const base = openVikingBaseUrl;
         const authHeaders = env.OPENVIKING_API_KEY
           ? { "X-API-Key": env.OPENVIKING_API_KEY, Authorization: "Bearer " + env.OPENVIKING_API_KEY }
           : {};
