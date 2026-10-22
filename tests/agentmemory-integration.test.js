@@ -48,13 +48,14 @@ test("AgentMemory capture is opt-in and only stores durable context", async () =
   assert.equal(disabled.state, "disabled");
   const captured = await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", {
     env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret", ULTRON_AGENTMEMORY_CAPTURE: "true", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
-    sessionId: "user-123",
+    userId: "user-123",
     fetchImpl: async (url, options) => {
       call = { url, options };
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
   });
   assert.equal(captured.state, "captured");
-  assert.equal(call.url, "https://memory.example/agentmemory/observe");
-  assert.equal(JSON.parse(call.options.body).project, "ultron-ai");
+  assert.equal(call.url, "https://memory.example/agentmemory/remember");
+  assert.equal(JSON.parse(call.options.body).project, "ultron-ai-user-user-123");
+  assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
