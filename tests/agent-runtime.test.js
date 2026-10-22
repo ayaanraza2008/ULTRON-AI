@@ -374,7 +374,7 @@ test("agent performs one bounded follow-up tool round and reports both results",
 test("agent autonomously runs multiple safe tools when model function calling is unavailable", async () => {
   const modelCalls = [];
   const fetchImpl = async (url, options = {}) => {
-    if (String(url).startsWith("https://api.openrouter.ai/api/v1/chat/completions")) {
+    if (String(url).startsWith("https://openrouter.ai/api/v1/chat/completions")) {
       modelCalls.push(JSON.parse(options.body));
       throw new Error("free model endpoint unavailable");
     }
