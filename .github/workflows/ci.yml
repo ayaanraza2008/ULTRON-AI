@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - feat/kaligpt-capability-integration
+      - feat/ultron-capability-integration
   pull_request:
     branches:
       - main
