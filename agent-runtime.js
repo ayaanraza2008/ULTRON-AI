@@ -43,6 +43,7 @@ function parseSearch(html) {
 }
 function extractIntent(text) {
   const s = text.toLowerCase();
+  if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud)\b/.test(s)) return "synthesize_speech";
@@ -65,6 +66,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "synthesize_speech", description: "Generate speech through the configured OmniVoice service when the user asks to speak or synthesize provided text. Requires a configured compatible inference API.", parameters: { type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 12000 }, language: { type: "string", maxLength: 40 }, voice: { type: "string", maxLength: 120 } }, required: ["text"], additionalProperties: false } } },
     { type: "function", function: { name: "create_talking_avatar", description: "Create a talking-head/lip-sync job through configured HeyGem. Requires user-provided image and audio media; never invent media.", parameters: { type: "object", properties: { prompt: { type: "string", maxLength: 1000 } }, additionalProperties: false } } },
@@ -88,6 +90,39 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
   }
 
   async function executeTool(name, args, requestBody = {}) {
+    if (name === "world_intelligence_command") {
+      const command = bounded(args.command, 1000);
+      const s = command.toLowerCase();
+      const result = (name, args = {}) => ({ action: { type: "invoke_globe_tool", name, args }, workspaceUrl: "/world-intelligence/", execution: "validated_for_globe_client", notice: "This action is validated but not executed by the server. The authenticated browser client must dispatch it to the open God’s Eye iframe." });
+      if (!command) throw Object.assign(new Error("Describe the God’s Eye action."), { code: "WORLD_COMMAND_REQUIRED", status: 400 });
+      if (/\b(open|launch|show|start)\b/.test(s) && /\b(globe|world intelligence|god'?s eye view|map workspace)\b/.test(s)) return { action: { type: "open_workspace", url: "/world-intelligence/" }, workspaceUrl: "/world-intelligence/", execution: "open_workspace_only" };
+      if (/\b(stop tracking|stop following)\b/.test(s)) return result("stop_tracking");
+      if (/\b(current view|view state|what am i looking at)\b/.test(s)) return result("get_current_view_state");
+      if (/\b(zoom in|zoom closer)\b/.test(s)) return result("adjust_camera_zoom", { direction: "in", amount: "medium" });
+      if (/\b(zoom out|zoom away)\b/.test(s)) return result("adjust_camera_zoom", { direction: "out", amount: "medium" });
+      const fly = s.match(/\bfly to\s+(.{1,160})$/i);
+      if (fly) return result("fly_to_location", { query: bounded(command.slice(fly.index + 7), 160) });
+      const style = s.match(/\b(normal|retro|surveillance|thermal|anime|noir|snow)\s+(?:style|mode)?\b/);
+      if (style && /\b(style|mode|look)\b/.test(s)) return result("set_visual_style", { style: style[1] });
+      const layers = [
+        ["satellites", /\bsatellites?\b/], ["earthquakes", /\bearthquakes?\b/], ["flights", /\bflights?\b/],
+        ["ais-live-vessels", /\b(ships?|vessels?)\b/], ["military", /\bmilitary\b/], ["rocket-launches", /\b(rocket launches?|launches)\b/],
+        ["weather-radar", /\bweather radar\b/], ["weather-satellite", /\bweather satellite\b/], ["weather-lightning", /\blightning\b/],
+        ["weather-cyclones", /\b(cyclones?|hurricanes?)\b/], ["wind", /\bwind\b/], ["air-quality", /\bair quality\b/],
+        ["traffic", /\btraffic\b/], ["transit", /\btransit\b/], ["bikeshare", /\bbike ?share\b/], ["cctv", /\bcctv\b/]
+      ];
+      const layer = layers.find(([, pattern]) => pattern.test(s));
+      if (layer && /\b(show|turn on|enable|activate|hide|turn off|disable|deactivate)\b/.test(s)) {
+        const enabled = !/\b(hide|turn off|disable|deactivate)\b/.test(s);
+        return result("set_layer_visibility", { layerId: layer[0], enabled });
+      }
+      const track = command.match(/\btrack\s+(satellite|flight|ship|vessel)\s+(.{1,120})$/i);
+      if (track) {
+        const layerId = /satellite/i.test(track[1]) ? "satellites" : /flight/i.test(track[1]) ? "flights" : "ais-live-vessels";
+        return result("track_entity", { layerId, query: bounded(track[2], 120) });
+      }
+      throw Object.assign(new Error("Unsupported God’s Eye action. Try: show satellites, turn on earthquakes, zoom in, fly to London, set thermal style, or stop tracking."), { code: "WORLD_TOOL_NOT_SUPPORTED", status: 400 });
+    }
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
     if (name === "research_web") {
       const query = bounded(args.query, 500);
@@ -204,6 +239,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
+        { name: "world_intelligence_command", available: true, execution: "returns_validated_action_for_browser_dispatch_not_server_executed" },
         { name: "synthesize_speech", available: Boolean(safeBase(env.OMNIVOICE_API_BASE_URL) && env.OMNIVOICE_API_KEY && env.OMNIVOICE_SYNTHESIS_PATH), execution: "provider_job_when_configured" },
         { name: "create_talking_avatar", available: Boolean(safeBase(env.HEYGEM_API_BASE_URL) && env.HEYGEM_API_KEY && env.HEYGEM_JOB_PATH), execution: "requires_user_portrait_and_audio" },
         { name: "transcribe_audio", available: Boolean(safeBase(env.ULTRON_HANDY_BRIDGE_URL) && env.ULTRON_HANDY_BRIDGE_TOKEN && env.ULTRON_HANDY_TRANSCRIBE_PATH), execution: "requires_audio_and_desktop_bridge" },
@@ -240,6 +276,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             : intent === "coding_assist" ? { task: userText, mode: "plan" }
             : intent === "synthesize_speech" ? { text: userText }
             : intent === "run_comfyui_workflow" ? { reason: "User requested a ComfyUI workflow run." }
+            : intent === "world_intelligence_command" ? { command: userText }
             : {};
           calls = [{ id: "fallback_" + name, type: "function", function: { name, arguments: JSON.stringify(args) } }];
         }
