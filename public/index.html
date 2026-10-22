@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090810">
+  <meta name="description" content="ULTRON AI command center with World Intelligence workspace.">
+  <title>ULTRON AI — Command Center</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="storm" aria-hidden="true"></div><div class="scanlines" aria-hidden="true"></div>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="brand-mark">✳</div><div><strong>ULTRON<span> AI</span></strong><small>PERSONAL INTELLIGENCE</small></div><button class="close-mobile" id="close-sidebar" aria-label="Close menu">×</button></div>
+      <nav aria-label="Main navigation">
+        <button class="nav active" data-view="chat"><span>⌘</span>Command Center</button>
+        <button class="nav" data-view="world"><span>◎</span>World Intelligence</button>
+        <button class="nav" data-view="memory"><span>◈</span>Memory & Knowledge</button>
+        <button class="nav" data-view="research"><span>⌕</span>Research</button>
+        <button class="nav" data-view="tasks"><span>◇</span>Agents & Tasks</button>
+        <button class="nav" data-view="integrations"><span>⟷</span>Integrations</button>
+        <button class="nav" data-view="settings"><span>⚙</span>Settings</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="mini-status"><i id="health-dot"></i><div><b id="side-status">CHECKING CORE</b><small id="side-substatus">Connecting to server…</small></div></div>
+        <div class="side-foot">ULTRON SYSTEMS <span>v0.1</span><br><small>PUBLIC-DATA TOOLS · GUARDED ACTIONS</small></div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><button class="menu-btn" id="open-sidebar" aria-label="Open menu">☰</button><div class="crumb">ULTRON <span>/</span> <b id="page-crumb">COMMAND CENTER</b></div><div class="top-actions"><div class="status-pill"><i id="health-label-dot"></i><span id="health-label">CHECKING CORE</span></div><button class="icon-btn" id="refresh-health" title="Refresh status" aria-label="Refresh status">↻</button><div class="avatar">U</div></div></header>
+      <section class="workspace" id="chat-view">
+        <div class="hero-row"><div><div class="eyebrow"><i class="live-dot"></i> PERSONAL AI SYSTEM <span class="eyebrow-line"></span><span id="clock">--:--:--</span></div><h1>Command <em>Center.</em></h1><p class="hero-sub">Ask, explore, research, and work through complex tasks with ULTRON.</p></div><div class="core-status"><div class="core-ring"><div class="core-inner"><span class="core-glyph">✳</span></div></div><span>CORE STATUS</span><b id="core-state">STANDBY</b></div></div>
+        <div class="persona-row"><div class="persona-switch"><button class="persona active" data-persona="ultron" aria-pressed="true">ULTRON <span>PRIMARY</span></button><button class="persona" data-persona="naya" aria-pressed="false">NAYA <span>SECONDARY</span></button></div><div class="microcopy"><i class="gold-dot"></i><b>VOICE + TEXT</b> READY</div></div>
+        <div class="chat-stage"><div class="welcome" id="welcome"><div class="welcome-icon">✳</div><h2 id="welcome-title">What are we building today?</h2><p id="welcome-copy">Ask a question, explore an idea, or turn a complex goal into a clear plan.</p><div class="suggestions"><button class="suggestion" data-prompt="Open World Intelligence"><span>◎</span><b>Open the globe</b><small>Explore the public-data world view</small></button><button class="suggestion" data-prompt="Help me research a topic"><span>⌕</span><b>Research a topic</b><small>Plan a source-backed investigation</small></button><button class="suggestion" data-prompt="Help me plan a coding task"><span>⌘</span><b>Build something</b><small>Break a technical goal into steps</small></button></div></div><div class="messages hidden" id="messages"></div><div class="thinking hidden" id="thinking"><span></span><span></span><span></span><small>ULTRON IS THINKING</small></div></div>
+        <div class="composer-wrap"><form class="composer" id="chat-form"><textarea id="message-input" rows="1" maxlength="12000" placeholder="Message ULTRON…" aria-label="Message ULTRON"></textarea><div class="composer-tools"><div class="composer-hint">ENTER TO SEND <span>·</span> SHIFT + ENTER FOR NEW LINE</div><div class="composer-actions"><button class="tool-btn" id="voice-btn" type="button" title="Voice input" aria-label="Voice input">⌁</button><button class="send-btn" id="send-btn" type="submit" aria-label="Send message">↑</button></div></div></form><div class="privacy-note"><span>◈</span> Use connected integrations only; sensitive actions require explicit authorization.</div></div>
+      </section>
+      <section class="module-view hidden" id="module-view"><div class="eyebrow"><i class="live-dot"></i> SYSTEM MODULE</div><h1 id="module-title">Capability status</h1><p id="module-desc">Only verified server capabilities are reported.</p><div class="module-card"><div class="module-icon">◈</div><div><b id="module-card-title">Capability status</b><p id="module-card-desc">Capabilities depend on server configuration and verification.</p></div><span class="module-tag">STATUS</span></div><div class="module-extra" id="module-extra"></div><button class="back-chat" id="return-chat">← Back to command center</button></section>
+      <section class="world-view hidden" id="world-view"><div class="world-toolbar"><div><div class="eyebrow"><i class="live-dot"></i> WORLD INTELLIGENCE</div><h1>Global <em>View.</em></h1><p>God’s Eye View workspace · public data exploration</p></div><div class="world-actions"><a href="/world-intelligence/" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a><button id="world-reload" type="button">Reload globe ↻</button></div></div><div class="world-frame-wrap"><iframe id="world-frame" title="God's Eye View World Intelligence" src="about:blank" loading="lazy" referrerpolicy="no-referrer" allow="microphone; geolocation"></iframe></div><p class="world-note">ULTRON can open this workspace. Direct AI control of globe layers, tracking, and camera commands is not connected yet; use the globe’s own controls and voice tools for now.</p><button class="back-chat" id="return-chat-world">← Back to command center</button></section>
+      <footer class="footer"><span>ULTRON AI <i>●</i> CONTROLLED CAPABILITIES</span><span>WORLD INTELLIGENCE <b>PUBLIC SIGNALS ONLY</b></span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
