@@ -277,7 +277,12 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.get("/api/auth/google", (req, res) => {
     const config = supabaseConfig();
     if (!config) return res.status(503).send("Supabase authentication is not configured.");
-    const redirectTo = new URL("/", req.protocol + "://" + req.get("host")).toString();
+    let redirectTo;
+    try {
+      const publicAppUrl = new URL(String(env.PUBLIC_APP_URL || "https://ultron-ai-zvd7.onrender.com").trim());
+      if (publicAppUrl.protocol !== "https:" && publicAppUrl.hostname !== "localhost" && publicAppUrl.hostname !== "127.0.0.1") throw new Error("Invalid public URL");
+      redirectTo = new URL("/", publicAppUrl).toString();
+    } catch { return res.status(500).send("PUBLIC_APP_URL must be a valid HTTPS URL."); }
     const authorize = new URL(config.url + "/auth/v1/authorize");
     authorize.searchParams.set("provider", "google");
     authorize.searchParams.set("redirect_to", redirectTo);
