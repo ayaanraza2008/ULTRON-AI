@@ -204,27 +204,32 @@ test("agent keeps large speech payloads out of model context but returns them to
 });
 
 
-test("background employee task requires explicit confirmation before database writes", async () => {
-  let providerCalls = 0;
-  let databaseCalls = 0;
-  const supabaseRest = async () => { databaseCalls += 1; return []; };
-  await withServer({ OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" }, async (_url, options) => {
-    providerCalls += 1;
-    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "employee-call", type: "function", function: { name: "enqueue_employee_task", arguments: JSON.stringify({ role: "web-dev", goal: "Review dependency risks", mode: "review" }) } }] } }] }), { status: 200 });
-    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "This task needs confirmation before queueing." } }] }), { status: 200 });
+test("background employee task is blocked when worker configuration is missing", async () => {
+  let databaseWrites = 0;
+  const supabaseRest = async (_req, table, method) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") return [];
+    if (method !== "GET") databaseWrites += 1;
+    return [];
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    const request = JSON.parse(options.body);
+    if (request.tools) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "employee-call", type: "function", function: { name: "enqueue_employee_task", arguments: JSON.stringify({ role: "web-dev", goal: "Review dependency risks", mode: "review" }) } }] } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Background worker configuration is missing." } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Queue a web-dev review in the background" }) });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.toolResults[0].result.state, "needs_confirmation");
-    assert.equal(databaseCalls, 0);
+    assert.equal(body.toolResults[0].result.state, "blocked");
+    assert.equal(databaseWrites, 0);
   }, { supabaseRest });
 });
-
 test("confirmed background employee task is stored as a guarded worker task", async () => {
   let providerCalls = 0;
   const databaseCalls = [];
   const supabaseRest = async (_req, table, method, query, body) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") return [];
     databaseCalls.push({ table, method, query, body });
     if (table === "agent_tasks") return [{ id: "00000000-0000-4000-8000-000000000123", title: body.title, input: body.input, status: body.status, created_at: new Date().toISOString() }];
     return [];
@@ -288,4 +293,46 @@ test("ComfyUI asks for the exact workflow before asking the user to confirm comp
     assert.deepEqual(body.toolResults[0].result.requiredInputs, ["workflow"]);
     assert.equal(comfyCalls, 0);
   });
+});
+
+
+test("agent automatically uses active user memories when memory is enabled", async () => {
+  let capturedMessages = [];
+  const supabaseCalls = [];
+  const supabaseRest = async (_req, table, method, query) => {
+    supabaseCalls.push({ table, method, query });
+    if (table === "user_preferences") return [{ memory_enabled: true }];
+    if (table === "memory_items") return [{ kind: "preference", title: "Answer style", content: "Prefer concise Hinglish answers." }];
+    throw new Error("unexpected table");
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    capturedMessages = JSON.parse(options.body).messages;
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Samajh gaya." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Explain this briefly" }) });
+    assert.equal(response.status, 200);
+    const memoryMessage = capturedMessages.find(m => m.role === "system" && String(m.content).includes("User-approved memory context"));
+    assert.ok(memoryMessage);
+    assert.match(memoryMessage.content, /Prefer concise Hinglish answers/);
+    assert.deepEqual(supabaseCalls.map(x => x.table), ["user_preferences", "memory_items"]);
+  }, { supabaseRest });
+});
+
+test("agent respects the user's memory-disabled preference", async () => {
+  let memoryItemsRead = false;
+  let capturedMessages = [];
+  const supabaseRest = async (_req, table) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") { memoryItemsRead = true; return [{ kind: "preference", title: "Private", content: "Do not inject me." }]; }
+    return [];
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    capturedMessages = JSON.parse(options.body).messages;
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Okay." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Hi" }) });
+    assert.equal(response.status, 200);
+    assert.equal(memoryItemsRead, false);
+    assert.equal(capturedMessages.some(m => String(m.content).includes("Do not inject me.")), false);
+  }, { supabaseRest });
 });
