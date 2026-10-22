@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("ultronDesktop", Object.freeze({
   platform: process.platform,
   companionVersion: "0.2.0",
   getSystemInfo: () => ipcRenderer.invoke("ultron:local-action", { action: "getSystemInfo" }),
+  runDiagnostic: (diagnostic) => ipcRenderer.invoke("ultron:local-action", { action: "runDiagnostic", diagnostic: String(diagnostic ?? "") }),
   readTextFile: () => ipcRenderer.invoke("ultron:local-action", { action: "readTextFile" }),
   saveTextFile: (content) => ipcRenderer.invoke("ultron:local-action", { action: "saveTextFile", content: String(content ?? "") }),
   openExternalUrl: (url) => ipcRenderer.invoke("ultron:local-action", { action: "openExternalUrl", url: String(url ?? "") })
