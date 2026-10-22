@@ -508,6 +508,60 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     });
   });
 
+  router.get("/kaligpt/tools", requireSession, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      tools: [
+        { id: "web-research", name: "Web research", state: "available", execution: "server-search-provider", approval: "per-request" },
+        { id: "provider-chat", name: "Multi-provider security assistant", state: "available", execution: "model-guidance-only", approval: "per-request" },
+        { id: "http-header-review", name: "HTTP security header review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
+        { id: "dns-evidence-review", name: "DNS and email-security evidence review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
+        { id: "desktop-readonly-diagnostics", name: "Desktop read-only diagnostics", state: "available", execution: "desktop-only-fixed-allowlist", approval: "native-confirmation-each-run" },
+        { id: "local-ollama", name: "Ollama local model", state: safeBaseUrl(env.OLLAMA_BASE_URL) ? "configured_unverified" : "blocked", execution: "configured-endpoint", approval: "per-request" },
+        { id: "network-scanning", name: "Network scanning", state: "not-implemented", execution: "none", approval: "not-applicable" },
+        { id: "arbitrary-shell", name: "Arbitrary shell commands", state: "blocked_by_design", execution: "none", approval: "not-applicable" }
+      ],
+      notice: "Availability describes implemented pathways or configuration only; it does not guarantee an external service is reachable. Evidence-analysis tools do not contact targets."
+    });
+  });
+
+  // Passive analysis only: the client submits DNS records already collected with authorization.
+  router.post("/kaligpt/security/dns-evidence/analyze", requireSession, (req, res) => {
+    const domain = boundedString(req.body?.domain, 253).toLowerCase().replace(/\\.$/, "");
+    const records = req.body?.records;
+    if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(domain)) {
+      return res.status(400).json({ error: { code: "INVALID_DNS_DOMAIN", message: "Provide a valid DNS domain name." } });
+    }
+    if (!Array.isArray(records) || records.length > 100) {
+      return res.status(400).json({ error: { code: "INVALID_DNS_RECORDS", message: "Provide up to 100 DNS records as an array." } });
+    }
+    const clean = [];
+    for (const record of records) {
+      const type = boundedString(record?.type, 12).toUpperCase();
+      const name = boundedString(record?.name, 253).toLowerCase().replace(/\\.$/, "");
+      const value = boundedString(record?.value, 2000);
+      if (!["A", "AAAA", "CNAME", "MX", "NS", "TXT", "CAA", "SOA", "SRV"].includes(type) || !name || !value) {
+        return res.status(400).json({ error: { code: "INVALID_DNS_RECORD", message: "Each record needs a supported type, name, and value." } });
+      }
+      clean.push({ type, name, value });
+    }
+    const txt = clean.filter(record => record.type === "TXT").map(record => ({ name: record.name, value: record.value }));
+    const rootSpf = txt.some(record => record.name === domain && /(?:^|\\s)v=spf1(?:\\s|$)/i.test(record.value));
+    const dmarc = txt.some(record => record.name === "_dmarc." + domain && /(?:^|\\s)v=DMARC1(?:;|\\s|$)/i.test(record.value));
+    const findings = [];
+    if (!rootSpf) findings.push({ id: "spf-not-observed", severity: "medium", title: "SPF record not present in submitted evidence", detail: "No root-domain TXT record beginning with v=spf1 was found in the records supplied. Confirm the evidence is complete before concluding it is missing." });
+    else findings.push({ id: "spf-observed", severity: "info", title: "SPF record observed", detail: "An SPF-like TXT record was present. Review its mechanisms, lookup count, and ending policy separately." });
+    if (!dmarc) findings.push({ id: "dmarc-not-observed", severity: "medium", title: "DMARC record not present in submitted evidence", detail: "No _dmarc TXT record beginning with v=DMARC1 was found in the records supplied. Confirm the evidence is complete." });
+    else {
+      const dmarcValue = txt.find(record => record.name === "_dmarc." + domain && /(?:^|\\s)v=DMARC1(?:;|\\s|$)/i.test(record.value))?.value || "";
+      const policy = /(?:^|;)\\s*p=([^;\\s]+)/i.exec(dmarcValue)?.[1]?.toLowerCase();
+      findings.push({ id: "dmarc-observed", severity: policy === "reject" ? "info" : policy === "quarantine" ? "low" : "medium", title: "DMARC record observed", detail: policy ? "Observed DMARC policy: " + policy + ". Validate alignment and reporting configuration." : "DMARC record observed, but policy could not be parsed." });
+    }
+    const cnameAtRoot = clean.some(record => record.type === "CNAME" && record.name === domain);
+    if (cnameAtRoot) findings.push({ id: "root-cname-observed", severity: "info", title: "Root-domain CNAME observed", detail: "Review this alongside the authoritative DNS provider's rules and the full record set." });
+    res.json({ domain, recordsAnalyzed: clean.length, findings, notice: "This is a passive review of user-submitted evidence only. ULTRON performed no DNS lookup, network scan, or target contact; incomplete evidence can cause false findings." });
+  });
+
   router.post("/kaligpt/security/assist", requireSession, async (req, res) => {
     const task = boundedString(req.body?.task, 5000);
     const target = boundedString(req.body?.target, 500);
