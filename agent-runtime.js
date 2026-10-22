@@ -47,6 +47,9 @@ function extractIntent(text) {
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud)\b/.test(s)) return "synthesize_speech";
+  // Infer image-generation intent even when the user doesn't know the provider name.
+  // The tool will request a workflow and explicit compute confirmation before queueing.
+  if (/\b(generate|create|make|render|design)\b/.test(s) && /\b(image|picture|artwork|illustration|visual)\b/.test(s)) return "run_comfyui_workflow";
   if (/\b(run|queue|submit)\b/.test(s) && /\b(comfyui|workflow)\b/.test(s)) return "run_comfyui_workflow";
   if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "check_comfyui";
   if (/\b(integration|integrations|connected services|provider status|what tools|capabilities)\b/.test(s) && /\b(check|status|available|configured|show|list|what)\b/.test(s)) return "integration_status";
