@@ -2,6 +2,14 @@
 
 ULTRON AI is currently in a backend-only implementation phase. Frontend and Windows desktop UI work are deferred until the backend capabilities and integrations are complete and verified.
 
+
+
+## Automatic cybersecurity skills
+
+ULTRON automatically selects relevant defensive cybersecurity skill references when a request concerns secure coding, threat hunting, cloud/identity security, digital forensics, malware triage, compliance, attack-surface inventory, or AI-agent prompt-injection defense. Matching skill procedures are fetched on demand from [mukul975/Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills), limited to three references and 10,000 characters per skill, then treated as untrusted reference data. Unrelated requests do not load security skills. The authenticated `GET /api/agent/security-skills?task=...` endpoint exposes the local selector's decision.
+
+This is a selective runtime integration, not a vendored copy of the full upstream library. ULTRON does not automatically execute skill scripts, perform unscoped scans, exploit systems, collect credentials, or bypass approval boundaries. See [docs/CYBERSECURITY_SKILLS.md](docs/CYBERSECURITY_SKILLS.md).
+
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
