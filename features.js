@@ -66,6 +66,38 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     }
   });
 
+  router.get("/world-intelligence/status", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      workspace: "God's Eye View",
+      path: "/world-intelligence/",
+      integration: "embedded_workspace",
+      buildPresent: false,
+      autonomousControl: "not_connected",
+      availableUserActions: ["open_globe", "use_native_globe_controls", "use_native_voice_controls"],
+      notice: "This endpoint reports integration wiring, not live data-source health. AI-driven layer and camera control requires the separate tool bridge."
+    });
+  });
+
+  router.post("/world-intelligence/command", requireSession, (req, res) => {
+    const command = boundedString(req.body?.command, 1000);
+    if (!command) return res.status(400).json({ error: { code: "WORLD_COMMAND_REQUIRED", message: "Describe what you want to do in World Intelligence." } });
+    const normalized = command.toLowerCase();
+    const openIntent = /\b(open|launch|show|start)\b/.test(normalized) && /\b(globe|world intelligence|god'?s eye view|map workspace)\b/.test(normalized);
+    if (!openIntent) {
+      return res.status(501).json({
+        error: { code: "WORLD_TOOL_BRIDGE_NOT_CONNECTED", message: "The globe workspace is being packaged, but ULTRON's autonomous map-control tool bridge is not connected yet. Open World Intelligence and use its native controls for now." },
+        workspaceUrl: "/world-intelligence/"
+      });
+    }
+    res.json({
+      action: { type: "open_workspace", url: "/world-intelligence/" },
+      workspaceUrl: "/world-intelligence/",
+      execution: "open_workspace_only",
+      notice: "Opening the globe workspace does not execute a layer, tracking, or camera command."
+    });
+  });
+
   router.get("/capabilities", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
