@@ -61,7 +61,7 @@ See `docs/FEATURE_REGISTRY.md`, `docs/IMPLEMENTATION_STATUS.md`, `docs/ARCHITECT
 
 A native role/routine planning layer inspired by [markfulton/ai-employees](https://github.com/markfulton/ai-employees) now includes persistent per-user schedule management and an allowlisted worker path. See [docs/AI_EMPLOYEES_INTEGRATION.md](docs/AI_EMPLOYEES_INTEGRATION.md).
 
-- `GET /api/employees/roles`: eight role definitions and routine-slot metadata.
+- `GET /api/employees/roles`: eight role definitions and all 60 routine definitions from the upstream schedules.
 - `GET /api/employees/routines?role=web-dev`: routine templates filtered by role.
 - `POST /api/employees/plan`: authenticated model-backed plans/drafts/reviews/reports for a chosen role.
 - `GET /api/employees/status`: reports whether scheduling and required credentials are configured without exposing secrets.
