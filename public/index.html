@@ -15,15 +15,17 @@
     <div class="login-card">
       <div class="brand-mark large-mark"><svg class="ultron-logo" viewBox="0 0 64 64" role="img" aria-label="ULTRON insignia"><defs><linearGradient id="ultronLogoGold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0bd"/><stop offset=".45" stop-color="#f5c66d"/><stop offset="1" stop-color="#a96cff"/></linearGradient></defs><path d="M32 3 56 16v30L32 61 8 46V16Z" fill="#120b20" stroke="url(#ultronLogoGold)" stroke-width="2"/><path d="M19 17v19c0 9 5 14 13 14s13-5 13-14V17H35v20c0 3-1 5-3 5s-3-2-3-5V17Z" fill="url(#ultronLogoGold)"/><path d="M13 25h7M44 25h7M13 39h7M44 39h7" stroke="#c4a0ff" stroke-width="2"/></svg></div>
       <p class="eyebrow">SECURE OPERATOR ACCESS</p>
-      <h1>Welcome back.</h1>
-      <p class="muted">Sign in to your ULTRON account. Saved conversations are private to your account.</p>
+      <h1 id="auth-heading">Welcome back.</h1>
+      <p id="auth-description" class="muted">Sign in to your ULTRON account. Saved conversations are private to your account.</p>
       <form id="login-form">
         <label for="account-email">Email</label>
         <input id="account-email" type="email" autocomplete="username" required maxlength="320" placeholder="you@example.com">
         <label for="account-password">Password</label>
         <input id="account-password" type="password" autocomplete="current-password" required minlength="8" maxlength="256" placeholder="At least 8 characters">
+        <label id="confirm-password-label" for="confirm-password" class="hidden">Confirm password</label>
+        <input id="confirm-password" class="hidden" type="password" autocomplete="new-password" minlength="8" maxlength="256" placeholder="Re-enter your password" disabled>
         <button class="primary-button full-button" type="submit">Sign in <span aria-hidden="true">↗</span></button>
-        <button id="signup-button" class="secondary-button full-button" type="button">Create account</button>
+        <button id="signup-button" class="secondary-button full-button" type="button">New here? Create account</button>
         <p id="login-error" class="error-text" role="alert"></p>
       </form>
       <p class="muted small">Use your ULTRON account. Never reuse a password from another service.</p>
