@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createAgentRouter } from "../agent-runtime.js";
 
-async function withServer(env, fetchImpl, run) {
+async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
   const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
-  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, logger: { warn() {} } }));
+  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, logger: { warn() {} } }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
@@ -201,4 +201,72 @@ test("agent keeps large speech payloads out of model context but returns them to
     const body = await response.json();
     assert.equal(body.toolResults[0].result.result.audioBase64, audioBase64);
   });
+});
+
+
+test("background employee task requires explicit confirmation before database writes", async () => {
+  let providerCalls = 0;
+  let databaseCalls = 0;
+  const supabaseRest = async () => { databaseCalls += 1; return []; };
+  await withServer({ OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" }, async (_url, options) => {
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "employee-call", type: "function", function: { name: "enqueue_employee_task", arguments: JSON.stringify({ role: "web-dev", goal: "Review dependency risks", mode: "review" }) } }] } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "This task needs confirmation before queueing." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Queue a web-dev review in the background" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "needs_confirmation");
+    assert.equal(databaseCalls, 0);
+  }, { supabaseRest });
+});
+
+test("confirmed background employee task is stored as a guarded worker task", async () => {
+  let providerCalls = 0;
+  const databaseCalls = [];
+  const supabaseRest = async (_req, table, method, query, body) => {
+    databaseCalls.push({ table, method, query, body });
+    if (table === "agent_tasks") return [{ id: "00000000-0000-4000-8000-000000000123", title: body.title, input: body.input, status: body.status, created_at: new Date().toISOString() }];
+    return [];
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" }, async (_url, options) => {
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "employee-call", type: "function", function: { name: "enqueue_employee_task", arguments: JSON.stringify({ role: "web-dev", goal: "Review dependency risks", mode: "review" }) } }] } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The review task is queued for background processing." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Queue a web-dev review in the background", confirmBackgroundTask: true }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "queued");
+    assert.equal(body.toolResults[0].result.execution, "background_draft_only");
+    assert.equal(databaseCalls.length, 2);
+    assert.equal(databaseCalls[0].table, "agent_tasks");
+    assert.equal(databaseCalls[0].body.status, "QUEUED");
+    assert.equal(databaseCalls[0].body.input.approved, true);
+    assert.equal(databaseCalls[0].body.input.requiresApproval, false);
+    assert.equal(databaseCalls[1].table, "audit_events");
+  }, { supabaseRest });
+});
+
+
+test("background task intent fallback works when the free model does not support tools", async () => {
+  let providerCalls = 0;
+  const supabaseRest = async (_req, table, _method, _query, body) => {
+    if (table === "agent_tasks") return [{ id: "00000000-0000-4000-8000-000000000456", title: body.title, input: body.input, status: body.status, created_at: new Date().toISOString() }];
+    return [];
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" }, async (_url, options) => {
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    if (request.tools) return new Response(JSON.stringify({ error: { message: "tools unsupported" } }), { status: 400 });
+    if (providerCalls === 2) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I cannot call tools in this model." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Queued the confirmed review task." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Queue a web-dev review in the background", confirmBackgroundTask: true }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].name, "enqueue_employee_task");
+    assert.equal(body.toolResults[0].result.state, "queued");
+    assert.equal(providerCalls, 3);
+  }, { supabaseRest });
 });

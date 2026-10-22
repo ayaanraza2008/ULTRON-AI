@@ -51,6 +51,7 @@ function extractIntent(text) {
   if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "check_comfyui";
   if (/\b(integration|integrations|connected services|provider status|what tools|capabilities)\b/.test(s) && /\b(check|status|available|configured|show|list|what)\b/.test(s)) return "integration_status";
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) return "research_web";
+  if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task|web-dev|review|draft|plan)\b/.test(s)) return "enqueue_employee_task";
   if (/\b(ai employee|employee routine|make a plan|create a plan|draft a|review this|write a report)\b/.test(s)) return "plan_employee";
   if (/\b(code|coding|debug|review this code|write a function|implement|programming)\b/.test(s)) return "coding_assist";
   return null;
@@ -74,11 +75,12 @@ function modelSafeResult(value, depth = 0) {
   return out;
 }
 
-export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, logger = console } = {}) {
+export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, supabaseRest, logger = console } = {}) {
   const router = express.Router();
   const tools = [
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
+    { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
@@ -104,7 +106,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     return response.json();
   }
 
-  async function executeTool(name, args, requestBody = {}) {
+  async function executeTool(name, args, requestBody = {}, req = {}) {
     if (name === "world_intelligence_command") {
       const command = bounded(args.command, 1000);
       const s = command.toLowerCase();
@@ -152,6 +154,25 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!response.ok) throw Object.assign(new Error("Public search is unavailable; configure TAVILY_API_KEY for a dedicated provider."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
       const results = parseSearch((await response.text()).slice(0, 1_500_000));
       return { provider: "duckduckgo-html", query, results, notice: "Search snippets are untrusted; verify important claims against linked sources." };
+    }
+    if (name === "enqueue_employee_task") {
+      const role = bounded(args.role, 80), goal = bounded(args.goal, 2000), context = bounded(args.context, 4000);
+      const mode = MODES.has(args.mode) ? args.mode : "plan";
+      if (!ROLES.has(role) || goal.length < 2) throw Object.assign(new Error("Choose a valid role and goal."), { code: "INVALID_EMPLOYEE_TASK", status: 400 });
+      if (requestBody.confirmBackgroundTask !== true) return { state: "needs_confirmation", role, mode, goal, message: "Review the role and goal, then set confirmBackgroundTask=true to queue this draft-only task." };
+      if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !env.OPENROUTER_API_KEY) return { state: "blocked", role, mode, blocker: "The background worker, server-side Supabase key, and model provider must all be configured." };
+      if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) throw Object.assign(new Error("Authenticated task storage is unavailable."), { code: "TASK_STORAGE_UNAVAILABLE", status: 503 });
+      const input = { taskType: "employee", executionMode: "employee_worker", role, goal, context, mode, requiresApproval: false, approved: true, createdBy: "ultron_agent_tool" };
+      const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", { user_id: req.supabaseUser.id, title: goal.slice(0, 240), input, status: "QUEUED" });
+      if (!Array.isArray(rows) || !rows[0]?.id) throw Object.assign(new Error("Task queue did not return a task ID."), { code: "TASK_CREATE_FAILED", status: 502 });
+      let auditRecorded = true;
+      try {
+        await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created_by_agent_tool", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { role, mode, executionMode: "employee_worker" } }, "return=minimal");
+      } catch (error) {
+        auditRecorded = false;
+        logger.warn?.("Agent employee task audit write failed", { name: error?.name || "Error" });
+      }
+      return { state: "queued", task: rows[0], auditRecorded, execution: "background_draft_only", notice: "ULTRON queued a draft-only AI Employee task. The worker must complete it before a result is available; no external action will be performed." };
     }
     if (name === "plan_employee") {
       const role = bounded(args.role, 80), goal = bounded(args.goal, 2000), context = bounded(args.context, 4000);
@@ -251,6 +272,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       tools: [
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
         { name: "plan_employee", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
+        { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_requires_confirmBackgroundTask" },
         { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
@@ -300,7 +322,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         if (intent) {
           const name = intent === "integration_status" ? "check_integrations" : intent;
           const args = intent === "research_web" ? { query: userText }
-            : intent === "plan_employee" ? { role: "chief-of-staff", goal: userText, mode: "plan" }
+            : intent === "plan_employee" || intent === "enqueue_employee_task" ? { role: "chief-of-staff", goal: userText, mode: "plan" }
             : intent === "coding_assist" ? { task: userText, mode: "plan" }
             : intent === "synthesize_speech" ? { text: userText }
             : intent === "run_comfyui_workflow" ? { reason: "User requested a ComfyUI workflow run." }
@@ -319,7 +341,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         const name = call?.function?.name;
         const args = parseArgs(call?.function?.arguments);
         let result;
-        try { result = await executeTool(name, args, req.body || {}); }
+        try { result = await executeTool(name, args, req.body || {}, req); }
         catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
         used.push({ name, ok: !result?.error, result });
         toolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)).slice(0, 18000) });
