@@ -467,7 +467,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     const readiness = agentMemoryReadiness(env);
     let recall = { state: "not_configured", memories: [] };
     if (task && readiness.configured) {
-      try { recall = await recallAgentMemory(task, { env, fetchImpl }); }
+      try { recall = await recallAgentMemory(task, { env, fetchImpl, userId: req.supabaseUser?.id }); }
       catch (error) { logger.warn?.("AgentMemory readiness recall failed", { code: error.code || "AGENTMEMORY_FAILED" }); recall = { state: "unavailable", memories: [] }; }
     }
     res.json({ ...readiness, taskRelevant: Boolean(task), recallState: recall.state, memoriesReturned: recall.memories?.length || 0 });
@@ -620,7 +620,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     const agentMemory = agentMemoryReadiness(env);
     if (agentMemory.configured) {
       try {
-        const recalled = await recallAgentMemory(userText, { env, fetchImpl });
+        const recalled = await recallAgentMemory(userText, { env, fetchImpl, userId: req.supabaseUser?.id });
         if (recalled.memories?.length) {
           messages.unshift({
             role: "system",
@@ -713,7 +713,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!content) content = used.map(item => "**" + item.name + "**\n" + JSON.stringify(item.result, null, 2)).join("\n\n");
       if (agentMemory.configured && agentMemory.automaticCapture) {
         try {
-          await captureAgentMemory(userText, { env, fetchImpl, sessionId: req.supabaseUser?.id });
+          await captureAgentMemory(userText, { env, fetchImpl, userId: req.supabaseUser?.id });
         } catch (memoryError) {
           logger.warn?.("Optional AgentMemory capture failed", { code: memoryError.code || "AGENTMEMORY_CAPTURE_FAILED" });
         }
