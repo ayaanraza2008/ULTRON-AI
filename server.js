@@ -511,7 +511,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       try {
         const rawOpenVikingUrl = String(env.OPENVIKING_URL).trim().replace(/\/+$/, "");
         const openVikingUrl = new URL(rawOpenVikingUrl);
-        const safeProtocol = openVikingUrl.protocol === "https:" || openVikingUrl.hostname === "localhost" || openVikingUrl.hostname === "127.0.0.1";
+        const safeProtocol = openVikingUrl.protocol === "https:" || (openVikingUrl.protocol === "http:" && ["localhost", "127.0.0.1"].includes(openVikingUrl.hostname));
         if (safeProtocol && !openVikingUrl.username && !openVikingUrl.password) {
           const userRoot = "viking://user/" + openVikingUserId;
           const targetUris = [userRoot + "/resources", userRoot + "/skills", "viking://resources", "viking://agent/skills"];
