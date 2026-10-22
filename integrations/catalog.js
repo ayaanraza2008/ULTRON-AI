@@ -69,6 +69,19 @@ export function buildIntegrationCatalog(env = process.env) {
         : "Handy is a local desktop app. The public Render service cannot access a user's microphone or local Handy process directly."
     },
     {
+      id: "openviking-context",
+      name: "OpenViking Context Memory",
+      capability: "Per-user session capture and read-only relevant-context recall",
+      state: safeBaseUrl(env.OPENVIKING_URL) ? "configured_unverified" : "blocked",
+      configured: Boolean(safeBaseUrl(env.OPENVIKING_URL)),
+      mode: "server_side_http",
+      execution: "automatic-read-only-recall",
+      requiredEnv: ["OPENVIKING_URL", "OPENVIKING_API_KEY"],
+      note: safeBaseUrl(env.OPENVIKING_URL)
+        ? "Endpoint is configured; live connectivity and session persistence still require verification. API credentials remain server-side."
+        : "Requires a running OpenViking server. Memory recall/capture remains disabled until its URL is configured."
+    },
+    {
       id: "ai-employees",
       name: "AI Employee Routines",
       capability: "Role-based task templates, checklists, and scheduled routines",
