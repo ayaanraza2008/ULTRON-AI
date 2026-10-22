@@ -82,20 +82,31 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
   router.post("/world-intelligence/command", requireSession, (req, res) => {
     const command = boundedString(req.body?.command, 1000);
     if (!command) return res.status(400).json({ error: { code: "WORLD_COMMAND_REQUIRED", message: "Describe what you want to do in World Intelligence." } });
+    const action = req.body?.action;
+    if (action !== undefined) {
+      const name = boundedString(action?.name, 80);
+      const args = action?.args;
+      if (!args || typeof args !== "object" || Array.isArray(args)) return res.status(400).json({ error: { code: "INVALID_WORLD_ACTION", message: "Action arguments must be an object." } });
+      const layers = new Set(["flights","military","ais-live-vessels","satellites","rocket-launches","earthquakes","local-firms","fire-perimeters","weather-cyclones","weather-radar","weather-satellite","weather-lightning","wind","air-quality","traffic","transit","bikeshare","cctv","alpr-cameras","radio","street-level","recent-imagery","directions","military-installations","local-datacenters","local-dams","telegeography-submarine-cables","gnss-integrity"]);
+      const styles = new Set(["normal","retro","surveillance","thermal","anime","noir","snow"]);
+      let valid = false;
+      if (name === "set_layer_visibility") valid = layers.has(args.layerId) && typeof args.enabled === "boolean";
+      else if (name === "set_visual_style") valid = styles.has(args.style);
+      else if (name === "adjust_camera_zoom") valid = ["in","out"].includes(args.direction) && ["little","medium","lot"].includes(args.amount);
+      else if (name === "fly_to_location") valid = typeof args.query === "string" && args.query.trim().length > 0 && args.query.length <= 160;
+      else if (name === "set_context_mode") valid = ["off","contacts","flights","space-missions","missions"].includes(args.mode);
+      else if (name === "track_entity") valid = ["flights","military","ais-live-vessels","satellites"].includes(args.layerId) && typeof args.query === "string" && args.query.trim().length > 0 && args.query.length <= 120;
+      else if (["zoom_to_globe","stop_tracking","get_current_view_state"].includes(name)) valid = Object.keys(args).length === 0;
+      if (!valid) return res.status(400).json({ error: { code: "WORLD_ACTION_NOT_ALLOWED", message: "This World Intelligence action or its arguments are not allowlisted." } });
+      return res.json({ action: { type: "invoke_globe_tool", name, args }, workspaceUrl: "/world-intelligence/", execution: "validated_for_globe_client", notice: "The action will run only if the embedded globe is ready and accepts the request." });
+    }
     const normalized = command.toLowerCase();
     const openIntent = /\b(open|launch|show|start)\b/.test(normalized) && /\b(globe|world intelligence|god'?s eye view|map workspace)\b/.test(normalized);
-    if (!openIntent) {
-      return res.status(501).json({
-        error: { code: "WORLD_TOOL_BRIDGE_NOT_CONNECTED", message: "The globe workspace is being packaged, but ULTRON's autonomous map-control tool bridge is not connected yet. Open World Intelligence and use its native controls for now." },
-        workspaceUrl: "/world-intelligence/"
-      });
-    }
-    res.json({
-      action: { type: "open_workspace", url: "/world-intelligence/" },
-      workspaceUrl: "/world-intelligence/",
-      execution: "open_workspace_only",
-      notice: "Opening the globe workspace does not execute a layer, tracking, or camera command."
+    if (!openIntent) return res.status(501).json({
+      error: { code: "WORLD_TOOL_BRIDGE_ACTION_REQUIRED", message: "I could not map that request to a supported globe action. Try: show satellites, turn on earthquakes, zoom in, fly to London, or set thermal style." },
+      workspaceUrl: "/world-intelligence/"
     });
+    res.json({ action: { type: "open_workspace", url: "/world-intelligence/" }, workspaceUrl: "/world-intelligence/", execution: "open_workspace_only", notice: "Opening the workspace only." });
   });
 
   router.get("/capabilities", (_req, res) => {
