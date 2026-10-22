@@ -682,7 +682,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   const worldIntelligenceUrl = (() => {
     try {
       const url = new URL(String(env.WORLD_INTELLIGENCE_URL || "https://ultron-world-intelligence.onrender.com"));
-      return url.protocol === "https:" ? url.toString().replace(/\\/$/, "") : null;
+      return url.protocol === "https:" ? url.toString().replace(/\/$/, "") : null;
     } catch { return null; }
   })();
   app.get(["/world-intelligence", "/world-intelligence/"], (_req, res) => {
