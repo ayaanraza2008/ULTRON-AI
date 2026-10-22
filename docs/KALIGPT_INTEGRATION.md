@@ -11,6 +11,7 @@ This integration implements a native ULTRON security-assistance layer inspired b
 - `POST /api/kaligpt/tools/diagnostics/record` stores a user-submitted, bounded diagnostic result as a `WAITING_FOR_PERMISSION` manual task and writes an audit event. It never runs a command; the result remains a review-only record.
 - `GET /api/kaligpt/tools` returns a machine-readable tool catalog with explicit states for implemented, configuration-dependent, unimplemented, and blocked-by-design tools.
 - `POST /api/kaligpt/security/dns-evidence/analyze` reviews up to 100 user-supplied DNS records for observed SPF and DMARC records and related basic signals. It performs no DNS lookup or target contact; findings explicitly warn that missing submitted evidence is not proof that a record is absent.
+- `POST /api/kaligpt/security/http-evidence/analyze` reviews user-submitted HTTP status, headers, and bounded `Set-Cookie` values for HSTS/CSP signals, server banners, and cookie attributes. It performs no target request and returns bounded, contextual findings rather than asserting exploitability.
 
 ## Safety and execution boundary
 
