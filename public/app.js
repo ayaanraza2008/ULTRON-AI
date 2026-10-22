@@ -107,6 +107,7 @@ $("phone-verify-form").addEventListener("submit", async event => {
   } catch (error) { message.textContent = error.message; }
 });
 async function init() {
+  if (await processOAuthCallback()) return;
   try {
     const response = await fetch("/api/session", { credentials: "same-origin" });
     if (response.status === 503) { showScreen("setup-screen"); return; }
