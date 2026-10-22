@@ -15,6 +15,48 @@ async function withServer(env, fetchImpl, run, extras = {}) {
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
 
+test("agent automatically injects relevant AgentMemory results for continuation tasks", async () => {
+  let memoryCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
+    if (url === "https://memory.example/agentmemory/smart-search") {
+      memoryCalls += 1;
+      assert.equal(JSON.parse(options.body).project, "ultron-ai-user-00000000-0000-4000-8000-000000000001");
+      assert.equal(options.headers.Authorization, "Bearer memory-test-secret");
+      return new Response(JSON.stringify({ results: [{ title: "Prior architecture", content: "The worker is isolated from the API process." }] }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    const body = JSON.parse(options.body);
+    assert.ok(body.messages.some(message => message.role === "system" && String(message.content).includes("The worker is isolated from the API process.")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Continuing with the prior architecture." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Continue the previous repository implementation" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /prior architecture/);
+    assert.equal(memoryCalls, 1);
+  });
+});
+
+test("AgentMemory readiness is authenticated and does not return memory contents", async () => {
+  await withServer({ AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
+    assert.equal(url, "https://memory.example/agentmemory/smart-search");
+    assert.equal(options.headers.Authorization, "Bearer memory-test-secret");
+    return new Response(JSON.stringify({ results: [{ content: "private memory text" }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/agentmemory?task=Continue%20the%20previous%20repository");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.configured, true);
+    assert.equal(body.memoriesReturned, 1);
+    assert.equal(JSON.stringify(body).includes("private memory text"), false);
+    assert.equal(JSON.stringify(body).includes("memory-test-secret"), false);
+  });
+});
+
 test("agent route rejects an empty prompt without calling a provider", async () => {
   let called = false;
   await withServer({}, async () => { called = true; throw new Error("unexpected provider call"); }, async base => {
