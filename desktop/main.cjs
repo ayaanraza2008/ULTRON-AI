@@ -1,4 +1,5 @@
-const { app, BrowserWindow, shell, session, Menu } = require("electron");
+const { app, BrowserWindow, shell, session, Menu, ipcMain, dialog } = require("electron");
+const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const PRODUCTION_URL = "https://ultron-ai-zvd7.onrender.com";
@@ -16,6 +17,75 @@ function getStartUrl() {
 function isTrustedUrl(value) {
   try { return new URL(value).origin === allowedOrigin; } catch { return false; }
 }
+const MAX_LOCAL_TEXT_BYTES = 1_000_000;
+const LOCAL_ACTIONS = new Set(["readTextFile", "saveTextFile", "openExternalUrl", "getSystemInfo"]);
+
+function isTrustedIpcSender(event) {
+  try {
+    return Boolean(mainWindow && event.sender === mainWindow.webContents && isTrustedUrl(event.senderFrame?.url || event.sender.getURL()));
+  } catch { return false; }
+}
+
+async function confirmLocalAction(action, detail) {
+  const copy = {
+    readTextFile: { title: "Allow ULTRON to read a file?", message: "ULTRON will read the text file you select. If you then submit its contents to the AI, that text may be sent to your configured AI provider.", detail },
+    saveTextFile: { title: "Allow ULTRON to save a file?", message: "ULTRON will save text to a location you choose.", detail },
+    openExternalUrl: { title: "Open this link?", message: "ULTRON wants to open this HTTPS link in your default browser.", detail },
+    getSystemInfo: { title: "Share basic PC information?", message: "ULTRON will receive only the OS platform and architecture, not your username or file paths.", detail }
+  }[action];
+  const answer = await dialog.showMessageBox(mainWindow, {
+    type: "warning", buttons: ["Cancel", "Allow once"], defaultId: 0, cancelId: 0,
+    title: copy.title, message: copy.message, detail: String(detail || "").slice(0, 500), noLink: true
+  });
+  return answer.response === 1;
+}
+
+ipcMain.handle("ultron:local-action", async (event, request) => {
+  if (!isTrustedIpcSender(event)) throw new Error("Untrusted ULTRON window.");
+  const action = typeof request?.action === "string" ? request.action : "";
+  if (!LOCAL_ACTIONS.has(action)) throw new Error("This local action is not allowlisted.");
+  if (action === "getSystemInfo") {
+    if (!await confirmLocalAction(action, "Share basic system information with the current ULTRON window?")) return { cancelled: true };
+    return { platform: process.platform, architecture: process.arch, companionVersion: "0.2.0" };
+  }
+  if (action === "readTextFile") {
+    if (!await confirmLocalAction(action, "Choose a text, Markdown, CSV, JSON, or log file. Maximum 1 MB.")) return { cancelled: true };
+    const picked = await dialog.showOpenDialog(mainWindow, {
+      title: "Choose a text file for ULTRON",
+      properties: ["openFile"],
+      filters: [{ name: "Text files", extensions: ["txt", "md", "csv", "json", "log"] }]
+    });
+    if (picked.canceled || !picked.filePaths[0]) return { cancelled: true };
+    const stat = await fs.stat(picked.filePaths[0]);
+    if (!stat.isFile() || stat.size > MAX_LOCAL_TEXT_BYTES) throw new Error("Selected file must be a regular file under 1 MB.");
+    const content = await fs.readFile(picked.filePaths[0], "utf8");
+    return { name: path.basename(picked.filePaths[0]), content, warning: "Untrusted file text. Review it before sending to an AI provider." };
+  }
+  if (action === "saveTextFile") {
+    const content = typeof request?.content === "string" ? request.content : "";
+    if (content.length > MAX_LOCAL_TEXT_BYTES) throw new Error("Text to save must be under 1 MB.");
+    if (!await confirmLocalAction(action, "Save " + content.length + " characters to a file you choose?")) return { cancelled: true };
+    const picked = await dialog.showSaveDialog(mainWindow, { title: "Save text from ULTRON", defaultPath: "ultron-notes.txt" });
+    if (picked.canceled || !picked.filePath) return { cancelled: true };
+    await fs.writeFile(picked.filePath, content, { encoding: "utf8", flag: "wx" }).catch(async error => {
+      if (error.code !== "EEXIST") throw error;
+      const overwrite = await dialog.showMessageBox(mainWindow, { type: "warning", buttons: ["Cancel", "Overwrite"], defaultId: 0, cancelId: 0, message: "This file already exists. Overwrite it?" });
+      if (overwrite.response !== 1) throw new Error("Save cancelled.");
+      await fs.writeFile(picked.filePath, content, { encoding: "utf8" });
+    });
+    return { saved: true, name: path.basename(picked.filePath) };
+  }
+  if (action === "openExternalUrl") {
+    let target;
+    try { target = new URL(String(request?.url || "")); } catch { throw new Error("A valid HTTPS URL is required."); }
+    if (target.protocol !== "https:") throw new Error("Only HTTPS links may be opened.");
+    if (!await confirmLocalAction(action, target.toString())) return { cancelled: true };
+    await shell.openExternal(target.toString());
+    return { opened: true, host: target.host };
+  }
+  throw new Error("Unsupported local action.");
+});
+
 function createWindow() {
   const startUrl = getStartUrl();
   mainWindow = new BrowserWindow({
