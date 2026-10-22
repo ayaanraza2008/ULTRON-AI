@@ -27,7 +27,10 @@ const DIAGNOSTICS = Object.freeze({
   systemSummary: { label: "System summary", description: "Read basic OS and memory information. No files or network data are read." },
   nodeVersion: { label: "Node.js version", description: "Run the fixed command node --version (no shell and no user-supplied arguments)." },
   gitVersion: { label: "Git version", description: "Run the fixed command git --version (no shell and no user-supplied arguments)." },
-  pythonVersion: { label: "Python version", description: "Run the fixed command python --version (no shell and no user-supplied arguments)." }
+  pythonVersion: { label: "Python version", description: "Run the fixed command python --version (no shell and no user-supplied arguments)." },
+  diskUsage: { label: "Disk usage", description: "Run the fixed read-only df -h command. Output may reveal mounted volumes." },
+  memoryUsage: { label: "Memory usage", description: "Run the fixed read-only free -h command." },
+  kernelVersion: { label: "Kernel version", description: "Run the fixed read-only uname -r command." }
 });
 
 function isTrustedIpcSender(event) {
@@ -71,10 +74,17 @@ ipcMain.handle("ultron:local-action", async (event, request) => {
         execution: "local-read-only"
       };
     }
+    const unixOnly = new Set(["diskUsage", "memoryUsage", "kernelVersion"]);
+    if (unixOnly.has(diagnostic) && process.platform === "win32") {
+      return { diagnostic, label: spec.label, error: "This read-only Linux utility is available only on Linux/macOS.", execution: "local-read-only" };
+    }
     const commands = {
       nodeVersion: { command: process.execPath, args: ["--version"] },
       gitVersion: { command: process.platform === "win32" ? "git.exe" : "git", args: ["--version"] },
-      pythonVersion: { command: process.platform === "win32" ? "python.exe" : "python3", args: ["--version"] }
+      pythonVersion: { command: process.platform === "win32" ? "python.exe" : "python3", args: ["--version"] },
+      diskUsage: { command: "df", args: ["-h"] },
+      memoryUsage: { command: "free", args: ["-h"] },
+      kernelVersion: { command: "uname", args: ["-r"] }
     };
     try {
       const result = await execFileAsync(commands[diagnostic].command, commands[diagnostic].args, {
