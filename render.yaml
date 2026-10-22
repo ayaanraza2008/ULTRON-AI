@@ -84,3 +84,5 @@ services:
         value: production
       - key: PUPPETEER_SKIP_DOWNLOAD
         value: "1"
+      - key: GEV_EMBED_FRAME_ANCESTORS
+        value: https://ultron-ai-zvd7.onrender.com
