@@ -501,7 +501,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         { id: "linux-command-guide", state: "available", execution: "suggestions-only" },
         { id: "desktop-readonly-diagnostics", state: "available", execution: "local-explicit-approval-allowlist" },
         { id: "diagnostic-task-recording", state: "available", execution: "user-submitted-review-only" },
-        { id: "vulnerability-explainer", state: "available", execution: "analysis-only" }
+        { id: "vulnerability-explainer", state: "available", execution: "analysis-only" },
+        { id: "vision-analysis", state: "available_when_vision_provider_configured", execution: "user-supplied-image-only" }
       ],
       blockedByDesign: ["arbitrary-shell-execution", "credential-theft", "stealth", "persistence", "unauthorized-scanning"],
       notice: "Provider readiness reflects environment configuration only; it does not prove credentials work or that local services are reachable."
@@ -532,6 +533,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       tools: [
         { id: "web-research", name: "Web research", state: "available", execution: "server-search-provider", approval: "per-request" },
         { id: "provider-chat", name: "Multi-provider security assistant", state: "available", execution: "model-guidance-only", approval: "per-request" },
+        { id: "vision-analysis", name: "Vision model routing", state: "available_when_vision_provider_configured", execution: "user-supplied-image-only", approval: "per-request" },
         { id: "http-header-review", name: "HTTP security header review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
         { id: "http-response-evidence", name: "HTTP response and cookie review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
         { id: "dns-evidence-review", name: "DNS and email-security evidence review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
