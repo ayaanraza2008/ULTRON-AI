@@ -10,5 +10,5 @@ await copyFile(source, target);
 const html = await readFile(htmlPath, 'utf8');
 if (!html.includes('</body>')) throw new Error('God’s Eye View built HTML has no body close tag.');
 const tag = '<script src="/ultron-bridge.js" defer></script>';
-if (!html.includes(tag)) await writeFile(htmlPath, html.replace('</body>', tag + '\\n</body>'));
+if (!html.includes(tag)) await writeFile(htmlPath, html.replace('</body>', tag + '\n</body>'));
 console.log('Injected ULTRON World Intelligence action bridge into pinned globe build.');
