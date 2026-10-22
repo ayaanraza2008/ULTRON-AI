@@ -97,3 +97,23 @@ services:
         value: "1"
       - key: GEV_EMBED_FRAME_ANCESTORS
         value: https://ultron-ai-zvd7.onrender.com
+
+  - type: pserv
+    name: ultron-browser-use
+    runtime: python
+    plan: starter
+    region: singapore
+    rootDir: browser-use-bridge
+    buildCommand: pip install -r requirements.txt && playwright install chromium && playwright install-deps chromium
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: ULTRON_BROWSER_USE_TOKEN
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENROUTER_DEFAULT_MODEL
+        sync: false
