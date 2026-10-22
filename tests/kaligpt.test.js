@@ -60,3 +60,28 @@ test("security assistant returns guidance and explicitly marks commands unexecut
     assert.equal(JSON.stringify(body).includes("secret-test-key"), false);
   });
 });
+
+
+test("security assistant routes to the explicitly selected Gemini provider", async () => {
+  let requestedUrl = "";
+  let requestBody;
+  const fetchImpl = async (url, options) => {
+    requestedUrl = String(url);
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Check CSP and HSTS." }] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  await withServer({ GEMINI_API_KEY: "gemini-test-secret", GEMINI_DEFAULT_MODEL: "gemini-2.5-flash" }, fetchImpl, async base => {
+    const response = await fetch(base + "/api/kaligpt/security/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Review headers", provider: "gemini", mode: "defensive-review" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "gemini");
+    assert.equal(body.answer, "Check CSP and HSTS.");
+    assert.match(requestedUrl, /generativelanguage\.googleapis\.com/);
+    assert.equal(requestBody.contents[0].role, "user");
+    assert.equal(body.execution, "not_executed");
+    assert.equal(JSON.stringify(body).includes("gemini-test-secret"), false);
+  });
+});
