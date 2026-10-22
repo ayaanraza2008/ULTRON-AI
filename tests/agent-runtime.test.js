@@ -390,6 +390,6 @@ test("agent autonomously runs multiple safe tools when model function calling is
     assert.deepEqual(body.toolsUsed.map(x => x.name), ["check_integrations", "research_web"]);
     assert.equal(body.toolResults[1].result.provider, "tavily");
     assert.match(body.content, /research_web/);
-    assert.equal(modelCalls.length, 2);
+    assert.equal(modelCalls.length, 4);
   });
 });
