@@ -75,3 +75,27 @@ test("task creation records a queued plan and audit event, without claiming exec
     assert.equal(writes.some(w => w.table === "audit_events"), true);
   }, { supabaseRest: fakeSupabaseRest });
 });
+
+test("document extraction parses JSON and marks extracted text as untrusted", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/documents/extract", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: "notes.json", format: "json", content: "{\"goal\":\"test\"}" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.extractedText, /"goal": "test"/);
+    assert.match(body.notice, /untrusted input/i);
+  });
+});
+
+test("document extraction refuses unsupported binary formats", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/documents/extract", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: "report.pdf", format: "pdf", content: "not a pdf" })
+    });
+    assert.equal(response.status, 415);
+    assert.equal((await response.json()).error.code, "UNSUPPORTED_DOCUMENT_FORMAT");
+  });
+});
