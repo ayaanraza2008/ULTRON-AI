@@ -59,10 +59,12 @@ See `docs/FEATURE_REGISTRY.md`, `docs/IMPLEMENTATION_STATUS.md`, `docs/ARCHITECT
 
 ## AI Employees-inspired role layer
 
-A native role/routine planning layer inspired by [markfulton/ai-employees](https://github.com/markfulton/ai-employees) is being integrated. See [docs/AI_EMPLOYEES_INTEGRATION.md](docs/AI_EMPLOYEES_INTEGRATION.md).
+A native role/routine planning layer inspired by [markfulton/ai-employees](https://github.com/markfulton/ai-employees) now includes persistent per-user schedule management and an allowlisted worker path. See [docs/AI_EMPLOYEES_INTEGRATION.md](docs/AI_EMPLOYEES_INTEGRATION.md).
 
 - `GET /api/employees/roles`: eight role definitions and routine-slot metadata.
 - `GET /api/employees/routines?role=web-dev`: routine templates filtered by role.
 - `POST /api/employees/plan`: authenticated model-backed plans/drafts/reviews/reports for a chosen role.
+- `GET /api/employees/status`: reports whether scheduling and required credentials are configured without exposing secrets.
+- `GET/POST /api/employees/schedules`, `PATCH/DELETE /api/employees/schedules/:id`: manage per-user recurring routines (60 minutes to 7 days). Runs are recorded in the existing `agent_tasks` table and can be inspected with `GET /api/tasks`.
 
-**Important:** this layer generates plans and drafts only. It does not install the upstream kit files, register schedules, run background routines, execute PC commands, send messages, publish posts, submit forms, or spend money. The API reports `scheduler: not_configured`; persistent scheduled execution is not yet implemented.
+**Important:** the runtime supports recurring plans/drafts/reviews/reports, not arbitrary external actions. It does not execute PC commands, send messages, publish posts, submit forms, or spend money. Apply `supabase/migrations/20261022160000_ai_employee_scheduler.sql` and configure the server-only `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, and `ULTRON_EMPLOYEES_ENABLED=true` in Render to enable the worker. Without these, schedule records can be managed but scheduled execution will not run.
