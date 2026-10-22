@@ -346,11 +346,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
   router.get("/agent/tools", requireSupabaseUser, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
-      mode: "model_selected_with_safe_intent_fallback",
+      mode: "autonomous_multi_tool_with_safe_intent_fallback",
       tools: [
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
         { name: "plan_employee", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
-        { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_on_explicit_user_request" },
+        { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
