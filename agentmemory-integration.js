@@ -30,7 +30,7 @@ export function agentMemoryReadiness(env = process.env) {
     urlConfigured: Boolean(url),
     secretConfigured: Boolean(token),
     automaticRecall: Boolean(url && token),
-    automaticCapture: Boolean(url && token && env.ULTRON_AGENTMEMORY_CAPTURE === "true"),
+    automaticCapture: Boolean(url && token && env.ULTRON_AGENTMEMORY_CAPTURE !== "false"),
     upstream: "rohitg00/agentmemory",
     note: "Configuration readiness only; live connectivity is not implied."
   };
@@ -92,8 +92,8 @@ export async function captureAgentMemory(task, options = {}) {
   const text = bounded(task, MAX_MEMORY_TEXT);
   if (!text || !shouldCaptureAgentMemory(text)) return { state: "skipped" };
   const env = options.env || process.env;
-  if (env.ULTRON_AGENTMEMORY_CAPTURE !== "true") return { state: "disabled" };
-  const project = bounded(env.ULTRON_AGENTMEMORY_PROJECT || "ultron-ai", 100);
+  if (env.ULTRON_AGENTMEMORY_CAPTURE === "false") return { state: "disabled" };
+  const project = scopedProject(env, options.userId);
   await requestMemory("/agentmemory/remember", {
     content: text,
     type: "decision",
