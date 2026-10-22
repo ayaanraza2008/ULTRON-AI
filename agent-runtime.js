@@ -98,7 +98,7 @@ function buildFallbackCalls(text) {
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) add("transcribe_audio", { language: /\bhindi|hinglish\b/.test(s) ? "Hindi" : "auto" });
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) add("create_talking_avatar", { prompt: bounded(text, 1000) });
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) {
-    const spoken = text.match(/(?:say|read|speak)(?: this)?(?: aloud)?[: ]+["“]?([\s\\S]{1,12000})["”]?$/i);
+    const spoken = text.match(/(?:say|read|speak)(?: this)?(?: aloud)?[: ]+["“]?([\s\S]{1,12000})["”]?$/i);
     add("synthesize_speech", { text: bounded(spoken?.[1] || text, 12000), language: /\bhinglish\b/i.test(text) ? "Hinglish" : /\bhindi\b/i.test(text) ? "Hindi" : "auto" });
   }
   if (/\b(generate|create|make|render|design)\b/.test(s) && /\b(image|picture|artwork|illustration|visual)\b/.test(s)) {
