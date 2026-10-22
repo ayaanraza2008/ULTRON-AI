@@ -552,19 +552,18 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const server = normalized.server || "";
     const powered = normalized["x-powered-by"] || "";
     if (statusCode >= 500) findings.push({ id: "server-error", severity: "info", title: "Server error response", detail: "The supplied response status is 5xx; confirm error pages do not disclose stack traces or internal details." });
-    if (hsts && !/max-age\\s*=\\s*\\d+/i.test(hsts)) findings.push({ id: "hsts-max-age", severity: "medium", title: "HSTS max-age not observed", detail: "The supplied Strict-Transport-Security value does not show a numeric max-age directive." });
-    if (csp && /(?:^|;)\\s*(?:default-src|script-src)\\s+[^;]*\\*|unsafe-inline|unsafe-eval/i.test(csp)) findings.push({ id: "csp-permissive", severity: "medium", title: "Potentially permissive CSP directive", detail: "The supplied CSP contains a wildcard or unsafe script directive; evaluate in application context." });
-    if (cors === "*" && /\\bcookie\\b/i.test(normalized["access-control-allow-credentials"] || "")) findings.push({ id: "cors-review", severity: "high", title: "Review CORS credential configuration", detail: "Wildcard origin with credential-related evidence warrants manual review; browsers reject the wildcard-plus-credentials combination for credentialed requests." });
+    if (hsts && !/max-age\s*=\s*\d+/i.test(hsts)) findings.push({ id: "hsts-max-age", severity: "medium", title: "HSTS max-age not observed", detail: "The supplied Strict-Transport-Security value does not show a numeric max-age directive." });
+    if (csp && /(?:^|;)\s*(?:default-src|script-src)\s+[^;]*\*|unsafe-inline|unsafe-eval/i.test(csp)) findings.push({ id: "csp-permissive", severity: "medium", title: "Potentially permissive CSP directive", detail: "The supplied CSP contains a wildcard or unsafe script directive; evaluate in application context." });
+    if (cors === "*" && /\bcookie\b/i.test(normalized["access-control-allow-credentials"] || "")) findings.push({ id: "cors-review", severity: "high", title: "Review CORS credential configuration", detail: "Wildcard origin with credential-related evidence warrants manual review; browsers reject the wildcard-plus-credentials combination for credentialed requests." });
     if (server) findings.push({ id: "server-banner", severity: "low", title: "Server banner disclosed", detail: "A Server header is present. Check whether it unnecessarily discloses product or version details.", evidence: server.slice(0, 300) });
     if (powered) findings.push({ id: "powered-by-banner", severity: "low", title: "Technology banner disclosed", detail: "An X-Powered-By header is present; consider removing it if not operationally needed.", evidence: powered.slice(0, 300) });
     const cookieFindings = (cookies || []).slice(0, 50).map((raw, index) => {
       const value = boundedString(raw, 3000);
       const name = (value.split(";", 1)[0].split("=", 1)[0] || "unknown").trim().slice(0, 100);
-      const flags = value.toLowerCase();
       const missing = [];
-      if (!/;\\s*secure(?:;|$)/i.test(value)) missing.push("Secure");
-      if (!/;\\s*httponly(?:;|$)/i.test(value)) missing.push("HttpOnly");
-      if (!/;\\s*samesite\\s*=/i.test(value)) missing.push("SameSite");
+      if (!/;\s*secure(?:;|$)/i.test(value)) missing.push("Secure");
+      if (!/;\s*httponly(?:;|$)/i.test(value)) missing.push("HttpOnly");
+      if (!/;\s*samesite\s*=/i.test(value)) missing.push("SameSite");
       return { id: "cookie-" + index, name, missingFlags: missing, severity: missing.length >= 2 ? "medium" : missing.length ? "low" : "info", status: missing.length ? "review" : "flags-observed", detail: missing.length ? "Supplied Set-Cookie evidence does not show: " + missing.join(", ") + "." : "Secure, HttpOnly, and SameSite attributes appear in the supplied value." };
     });
     res.setHeader("Cache-Control", "no-store");
