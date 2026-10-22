@@ -25,6 +25,10 @@ services:
         value: https://opdjfhwepmcprbqojpat.supabase.co
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ULTRON_WORKER_POLL_MS
+        value: "5000"
       - key: APP_ACCESS_PASSWORD
         sync: false
       - key: SESSION_SECRET
