@@ -55,6 +55,10 @@ services:
         value: "90"
       - key: TAVILY_API_KEY
         sync: false
+      - key: OPENVIKING_URL
+        sync: false
+      - key: OPENVIKING_API_KEY
+        sync: false
       - key: TTS_API_BASE_URL
         sync: false
       - key: TTS_API_KEY
