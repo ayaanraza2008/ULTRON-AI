@@ -88,6 +88,39 @@ function buildFallbackCalls(text) {
     const mode = /\breview\b/.test(s) ? "review" : /\breport|summari[sz]e\b/.test(s) ? "report" : /\bdraft\b/.test(s) ? "draft" : "plan";
     add("plan_employee", { role: "chief-of-staff", goal: bounded(text, 2000), context: "User asked to combine research with a " + mode + ". Use research results from this same request where available.", mode });
   }
+  // Deterministic multi-intent routing keeps safe capabilities usable even when
+  // a free model omits function calls or the provider is temporarily unavailable.
+  // Only add tools when the user's wording clearly expresses that capability.
+  if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) {
+    add("research_web", { query: bounded(text, 500) });
+  }
+  if (/\b(check|show|list|what are)\b/.test(s) && /\b(integrations|connected services|available tools|capabilities|provider status)\b/.test(s)) {
+    add("check_integrations");
+    if (/\b(comfyui|gpu queue|generation queue)\b/.test(s)) add("check_comfyui");
+  }
+  if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s)
+      && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) {
+    add("world_intelligence_command", { command: bounded(text, 1000) });
+  }
+  if (/\b(transcribe|transcription|speech to text)\b/.test(s)) add("transcribe_audio", { language: /\bhindi|hinglish\b/.test(s) ? "Hindi" : "auto" });
+  if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) add("create_talking_avatar", { prompt: bounded(text, 1000) });
+  if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) {
+    const spoken = text.match(/(?:say|read|speak)(?: this)?(?: aloud)?[: ]+["“]?([\s\S]{1,12000})["”]?$/i);
+    add("synthesize_speech", { text: bounded(spoken?.[1] || text, 12000), language: /\bhinglish\b/i.test(text) ? "Hinglish" : /\bhindi\b/i.test(text) ? "Hindi" : "auto" });
+  }
+  if (/\b(generate|create|make|render|design)\b/.test(s) && /\b(image|picture|artwork|illustration|visual)\b/.test(s)) {
+    add("run_comfyui_workflow", { reason: "User requested image generation; workflow and compute checks still apply." });
+  }
+  if (/\b(create|build|develop|write|make|implement|debug|review)\b/.test(s) && /\b(website|web app|application|script|api|function|program|automation|bot|code)\b/.test(s)) {
+    add("coding_assist", { task: bounded(text, 4000), mode: /\breview|debug\b/.test(s) ? "review" : /\b(build|create|write|implement|develop|make)\b/.test(s) ? "generate" : "plan" });
+  }
+  if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task|web-dev|review|draft|plan)\b/.test(s)) {
+    add("enqueue_employee_task", {
+      role: /\b(web-dev|website|code|coding|developer)\b/.test(s) ? "web-dev" : "chief-of-staff",
+      goal: bounded(text, 2000),
+      mode: /\breview|debug\b/.test(s) ? "review" : /\breport|summari[sz]e\b/.test(s) ? "report" : /\bdraft\b/.test(s) ? "draft" : "plan"
+    });
+  }
   if (!calls.length && intent) {
     const name = intent === "integration_status" ? "check_integrations" : intent;
     const args = intent === "research_web" ? { query: bounded(text, 500) }
@@ -313,11 +346,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
   router.get("/agent/tools", requireSupabaseUser, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
-      mode: "model_selected_with_safe_intent_fallback",
+      mode: "autonomous_multi_tool_with_safe_intent_fallback",
       tools: [
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
         { name: "plan_employee", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
-        { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_on_explicit_user_request" },
+        { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
