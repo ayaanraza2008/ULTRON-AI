@@ -504,7 +504,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         openai: Boolean(env.OPENAI_API_KEY)
       },
       tools: [
-        { id: "openviking-context", name: "OpenViking memory, knowledge and skill recall", state: env.OPENVIKING_URL ? "configured_unverified" : "not_configured", execution: "automatic-read-only-recall-during-background-research", approval: "not-required-for-read-only-recall" },
+        { id: "openviking-context", name: "OpenViking memory, knowledge and skill recall", state: env.OPENVIKING_URL ? "configured_unverified" : "not_configured", execution: "automatic-read-only-recall-for-context-dependent-chat-and-research", approval: "not-required-for-read-only-recall" },
         { id: "web-research", state: "available", execution: "search-only" },
         { id: "http-security-review", state: "available", execution: "user-supplied-evidence-only" },
         { id: "dns-recon", state: "planned", execution: "manual-evidence-only" },
