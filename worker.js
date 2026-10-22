@@ -16,6 +16,10 @@ function validOpenVikingUrl(value) {
   } catch { return false; }
 }
 
+function needsOpenVikingContext(query) {
+  return /(^|[^a-z])(my|mine|our|ours|previous|earlier|last time|remember|memory|memories|preference|preferences|personalize|project|repo|repository|codebase|continue|same task|prior work|what did we|how did we|skill|workflow)(?=$|[^a-z])/.test(String(query || "").toLowerCase());
+}
+
 async function recallOpenViking(query) {
   if (!validOpenVikingUrl(openVikingUrl)) return [];
   try {
@@ -37,7 +41,7 @@ async function recallOpenViking(query) {
     const result = payload?.result || payload;
     return ["memories", "resources", "skills"].flatMap(kind =>
       (Array.isArray(result?.[kind]) ? result[kind] : []).slice(0, 5).map(item => ({
-        type: bounded(item.context_type || kind.replace(/s$/, ""), 40),
+        type: bounded(item.context_type || ({ memories: "memory", resources: "resource", skills: "skill" }[kind]), 40),
         uri: bounded(item.uri, 500),
         score: Number.isFinite(Number(item.score)) ? Number(item.score) : null,
         abstract: bounded(item.abstract, 1200),
@@ -114,7 +118,7 @@ async function runResearch(task) {
   });
   if (!response.ok) throw Object.assign(new Error("Research provider returned HTTP " + response.status), { code: "RESEARCH_PROVIDER_FAILED" });
   const data = await response.json();
-  const context = await recallOpenViking(query);
+  const contextChecked = needsOpenVikingContext(query);\n  const context = contextChecked ? await recallOpenViking(query) : [];
   return {
     type: "research",
     query,
