@@ -491,3 +491,20 @@ test("autonomous fallback combines research, image generation readiness, and cod
     assert.equal(tavilyCalls, 1);
   });
 });
+
+
+test("harness engineering guidance is applied and discoverable automatically", async () => {
+  await withServer({}, async () => {
+    throw new Error("harness discovery must not call a model provider");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/harness?task=debug%20repository%20tests%20and%20deploy");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.mode, "automatic_task_aware_harness");
+    assert.equal(body.source, "ai-boost/awesome-harness-engineering");
+    assert.ok(body.categories.includes("software_change"));
+    assert.ok(body.categories.includes("multi_step"));
+    assert.ok(body.categories.includes("consequential_action"));
+    assert.ok(body.rules.some(rule => rule.includes("check syntax, tests, and CI results")));
+  });
+});
