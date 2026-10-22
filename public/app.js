@@ -11,7 +11,71 @@ function resize(){const el=$('message-input');el.style.height='auto';el.style.he
 function parseWorldCommand(text){const s=text.trim();const low=s.toLowerCase();if(/\b(open|launch|start)\b/.test(low)&&/\b(globe|world intelligence|god'?s eye view|map workspace)\b/.test(low))return null;const layers=[['weather radar','weather-radar'],['weather satellite','weather-satellite'],['military flights','military'],['military bases','military-installations'],['satellites?','satellites'],['aircraft|planes|flights','flights'],['ships|vessels|boats','ais-live-vessels'],['earthquakes?|quakes','earthquakes'],['wildfires?|active fires','local-firms'],['fire perimeters','fire-perimeters'],['cyclones?|hurricanes','weather-cyclones'],['lightning','weather-lightning'],['clouds','weather-satellite'],['wind','wind'],['traffic','traffic'],['transit|buses|trains','transit'],['cameras|cctv','cctv'],['datacenters|data centers','local-datacenters'],['dams','local-dams'],['radio','radio']];for(const [alias,layerId] of layers){const re=new RegExp('\\b(?:turn on|enable|show|activate)\\s+(?:the\\s+)?(?:'+alias+')\\b','i');if(re.test(s))return{name:'set_layer_visibility',args:{layerId,enabled:true}};const off=new RegExp('\\b(?:turn off|disable|hide|deactivate)\\s+(?:the\\s+)?(?:'+alias+')\\b','i');if(off.test(s))return{name:'set_layer_visibility',args:{layerId,enabled:false}}}if(/\b(?:reset|zoom to)\b.*\bglobe\b/i.test(s))return{name:'zoom_to_globe',args:{}};if(/\bzoom in\b/i.test(s))return{name:'adjust_camera_zoom',args:{direction:'in',amount:'medium'}};if(/\bzoom out\b/i.test(s))return{name:'adjust_camera_zoom',args:{direction:'out',amount:'medium'}};const style=s.match(/\b(?:set|switch to|use)\s+(?:the\s+)?(normal|retro|surveillance|thermal|anime|noir|snow)(?:\s+style)?\b/i);if(style)return{name:'set_visual_style',args:{style:style[1].toLowerCase()}};const fly=s.match(/\bfly to\s+(.+)$/i);if(fly&&fly[1].trim().length<=160)return{name:'fly_to_location',args:{query:fly[1].trim()}};const track=s.match(/\btrack\s+(aircraft|plane|flight|ship|vessel|satellite)\s+(.+)$/i);if(track&&track[2].trim().length<=120){const layer=/ship|vessel/i.test(track[1])?'ais-live-vessels':/satellite/i.test(track[1])?'satellites':'flights';return{name:'track_entity',args:{layerId:layer,query:track[2].trim()}}}return null}
 function sendWorldAction(action){const frame=$('world-frame');if(!frame?.contentWindow||!state.worldReady){state.worldPendingAction=action;return}frame.contentWindow.postMessage({type:'ultron:world-action',requestId:action.requestId,name:action.name,args:action.args},WORLD_ORIGIN)}
 window.addEventListener('message',event=>{const frame=$('world-frame');if(event.origin!==WORLD_ORIGIN||event.source!==frame?.contentWindow)return;if(event.data?.type==='ultron:world-ready'){state.worldReady=true;if(state.worldPendingAction){const pending=state.worldPendingAction;state.worldPendingAction=null;sendWorldAction(pending)}}if(event.data?.type==='ultron:world-action-result'){const d=event.data;addMessage('assistant',d.ok?'World Intelligence action completed. '+(typeof d.result==='string'?d.result:JSON.stringify(d.result||{})):'World Intelligence could not complete the action: '+(d.error||'unknown error'),!d.ok)}});
-async function send(text){text=(text??$('message-input').value).trim();if(!text||state.busy)return;const worldAction=parseWorldCommand(text);const worldOpen=/\\b(open|launch|show|start)\\b/i.test(text)&&/\\b(globe|world intelligence|god'?s eye view|map workspace)\\b/i.test(text);if(worldOpen||worldAction){state.messages.push({role:'user',content:text});addMessage('user',text);try{const r=await api('/api/world-intelligence/command',{method:'POST',body:JSON.stringify({command:text,...(worldAction?{action:worldAction}:{})})});const d=await r.json();if(!r.ok)throw new Error(d?.error?.message||'World Intelligence command failed.');switchView('world');if(d.action?.type==='invoke_globe_tool'){const pending={...d.action,requestId:String(Date.now())};addMessage('assistant','Sending a supported command to World Intelligence…');sendWorldAction(pending)}else addMessage('assistant','Opening World Intelligence. You can also ask ULTRON to show supported public-data layers, change the visual style, zoom, or fly to a location.');return}catch(e){addMessage('assistant',e.message,true);toast(e.message);return}}state.busy=true;$('message-input').value='';resize();$('send-btn').disabled=true;state.messages.push({role:'user',content:text});addMessage('user',text);$('thinking').classList.remove('hidden');$('core-state').textContent='THINKING';try{const r=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:[...state.messages],persona:state.persona,stream:false})});const data=await r.json();const answer=data.reply||data.message||data.content||data.choices?.[0]?.message?.content;if(typeof answer!=='string'||!answer.trim())throw new Error('The AI provider returned no text response.');state.messages.push({role:'assistant',content:answer});addMessage('assistant',answer);if(data.conversationId)state.conversationId=data.conversationId}catch(e){addMessage('assistant',e.message,true);toast(e.message)}finally{$('thinking').classList.add('hidden');$('core-state').textContent='STANDBY';state.busy=false;$('send-btn').disabled=false;$('message-input').focus()}}
+async function send(text) {
+  text = (text ?? $('message-input').value).trim();
+  if (!text || state.busy) return;
+  const worldAction = parseWorldCommand(text);
+  const worldOpen = /\b(open|launch|show|start)\b/i.test(text) && /\b(globe|world intelligence|god'?s eye view|map workspace)\b/i.test(text);
+  if (worldOpen || worldAction) {
+    state.busy = true;
+    $('message-input').value = '';
+    resize();
+    $('send-btn').disabled = true;
+    state.messages.push({ role: 'user', content: text });
+    addMessage('user', text);
+    try {
+      const response = await api('/api/world-intelligence/command', {
+        method: 'POST',
+        body: JSON.stringify({ command: text, ...(worldAction ? { action: worldAction } : {}) })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error?.message || 'World Intelligence command failed.');
+      switchView('world');
+      if (data.action?.type === 'invoke_globe_tool') {
+        const pending = { ...data.action, requestId: String(Date.now()) };
+        addMessage('assistant', 'Sending a supported command to World Intelligence…');
+        sendWorldAction(pending);
+      } else {
+        addMessage('assistant', 'Opening World Intelligence. Try commands such as “show satellites”, “turn on earthquakes”, “zoom in”, “fly to London”, or “set thermal style”.');
+      }
+      return;
+    } catch (error) {
+      addMessage('assistant', error.message, true);
+      toast(error.message);
+      return;
+    } finally {
+      state.busy = false;
+      $('send-btn').disabled = false;
+      $('message-input').focus();
+    }
+  }
+  state.busy = true;
+  $('message-input').value = '';
+  resize();
+  $('send-btn').disabled = true;
+  state.messages.push({ role: 'user', content: text });
+  addMessage('user', text);
+  $('thinking').classList.remove('hidden');
+  $('core-state').textContent = 'THINKING';
+  try {
+    const response = await api('/api/chat', { method: 'POST', body: JSON.stringify({ messages: [...state.messages], persona: state.persona, stream: false }) });
+    const data = await response.json();
+    const answer = data.reply || data.message || data.content || data.choices?.[0]?.message?.content;
+    if (typeof answer !== 'string' || !answer.trim()) throw new Error('The AI provider returned no text response.');
+    state.messages.push({ role: 'assistant', content: answer });
+    addMessage('assistant', answer);
+    if (data.conversationId) state.conversationId = data.conversationId;
+  } catch (error) {
+    addMessage('assistant', error.message, true);
+    toast(error.message);
+  } finally {
+    $('thinking').classList.add('hidden');
+    $('core-state').textContent = 'STANDBY';
+    state.busy = false;
+    $('send-btn').disabled = false;
+    $('message-input').focus();
+  }
+}
 $('chat-form').addEventListener('submit',e=>{e.preventDefault();send()});$('message-input').addEventListener('input',resize);$('message-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('chat-form').requestSubmit()}});document.querySelectorAll('.persona').forEach(b=>b.addEventListener('click',()=>setPersona(b.dataset.persona)));document.querySelectorAll('.suggestion').forEach(b=>b.addEventListener('click',()=>{ $('message-input').value=b.dataset.prompt||'';resize();$('message-input').focus()}));document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));$('return-chat').addEventListener('click',()=>switchView('chat'));$('return-chat-world').addEventListener('click',()=>switchView('chat'));$('world-reload').addEventListener('click',()=>{const f=$('world-frame');f.src='about:blank';requestAnimationFrame(()=>{f.src='/world-intelligence/'})});$('refresh-health').addEventListener('click',health);$('open-sidebar').addEventListener('click',()=>$('sidebar').classList.add('open'));$('close-sidebar').addEventListener('click',()=>$('sidebar').classList.remove('open'));document.addEventListener('click',e=>{if(!$('sidebar').classList.contains('open'))return;if(e.target.closest('#sidebar')||e.target.closest('#open-sidebar'))return;$('sidebar').classList.remove('open')});
 $('voice-btn').addEventListener('click',()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){toast('Speech recognition is not supported by this browser. You can type your message instead.');return}if(state.recognition){state.recognition.stop();state.recognition=null;$('voice-btn').classList.remove('listening');return}const rec=new SR();state.recognition=rec;rec.lang='en-IN';rec.interimResults=true;rec.continuous=false;rec.onstart=()=>{$('voice-btn').classList.add('listening');$('core-state').textContent='LISTENING'};rec.onresult=e=>{let final='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)final+=e.results[i][0].transcript;else $('message-input').placeholder=e.results[i][0].transcript}if(final){$('message-input').value=($('message-input').value+' '+final).trim();resize()}};rec.onerror=e=>toast('Voice input: '+e.error);rec.onend=()=>{state.recognition=null;$('voice-btn').classList.remove('listening');$('core-state').textContent='STANDBY';$('message-input').placeholder='Message '+(state.persona==='naya'?'NAYA':'ULTRON')+'…'};try{rec.start()}catch(e){toast('Could not start microphone input. Check browser permissions.')}});
 setInterval(()=>{const d=new Date();$('clock').textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':')},1000);$('clock').textContent=new Date().toLocaleTimeString('en-GB');health();fetch('/api/session',{credentials:'same-origin'}).then(r=>r.json()).then(s=>{if(s.authenticated)state.authType=s.authType||null;else if(s.configured===false)toast('Access is not configured on the server yet.')}).catch(()=>{});})();
