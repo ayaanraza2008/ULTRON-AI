@@ -2,6 +2,14 @@
 
 ULTRON AI is currently in a backend-only implementation phase. Frontend and Windows desktop UI work are deferred until the backend capabilities and integrations are complete and verified.
 
+
+
+## Automatic cybersecurity skills
+
+ULTRON automatically selects relevant defensive cybersecurity skill references when a request concerns secure coding, threat hunting, cloud/identity security, digital forensics, malware triage, compliance, attack-surface inventory, or AI-agent prompt-injection defense. Matching skill procedures are fetched on demand from [mukul975/Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills), limited to three references and 10,000 characters per skill, then treated as untrusted reference data. Unrelated requests do not load security skills. The authenticated `GET /api/agent/security-skills?task=...` endpoint exposes the local selector's decision.
+
+This is a selective runtime integration, not a vendored copy of the full upstream library. ULTRON does not automatically execute skill scripts, perform unscoped scans, exploit systems, collect credentials, or bypass approval boundaries. See [docs/CYBERSECURITY_SKILLS.md](docs/CYBERSECURITY_SKILLS.md).
+
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
@@ -71,6 +79,10 @@ A native role/routine planning layer inspired by [markfulton/ai-employees](https
 
 **Important:** the runtime supports recurring plans/drafts/reviews/reports, not arbitrary external actions. It does not execute PC commands, send messages, publish posts, submit forms, or spend money. Apply `supabase/migrations/20261022160000_ai_employee_scheduler.sql` and configure the server-only `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, and `ULTRON_EMPLOYEES_ENABLED=true` in Render to enable the worker. Without these, schedule records can be managed but scheduled execution will not run.
 
+
+## Harness engineering runtime
+
+ULTRON now applies task-aware harness-engineering guidance automatically in its backend agent loop, based on patterns from [ai-boost/awesome-harness-engineering](https://github.com/ai-boost/awesome-harness-engineering). It classifies software-change, research, multi-step, memory/context, and consequential-action tasks, and applies verification, checkpoint, source-quality, and safety guidance without requiring the user to select tools. See [docs/HARNESS_ENGINEERING.md](docs/HARNESS_ENGINEERING.md). The source repository is a curated resource list, not a ready-to-install runtime dependency; this integration implements selected principles and does not copy the whole list.
 
 ## Automatic tool routing
 
