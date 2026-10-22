@@ -22,9 +22,9 @@ Implemented in this branch:
 - Regression tests for secret redaction, missing provider configuration, and the no-execution boundary.
 
 Not claimed as complete:
-- Live connectivity/credential verification for Gemini/OpenAI/LiteLLM/Ollama. Adapters are implemented for this endpoint, but have not been verified against live provider accounts. `auto` selects the first configured provider in the documented priority order; it does not yet retry a second provider after quota or provider failure.
+- Live connectivity/credential verification for Gemini/OpenAI/LiteLLM/Ollama. Adapters are implemented for this endpoint, but have not been verified against live provider accounts. `auto` selects providers in priority order and now retries the next configured provider after HTTP errors, timeouts, network failures, or empty responses. The fallback test is mocked; live provider behavior is still unverified.
 - Actual Kali Linux command execution, Nmap/Nikto integration, browser automation, or desktop control.
-- Live provider tests, UI controls, and production deployment verification.
+- Live provider tests, UI controls, desktop execution bridge, and production deployment verification.
 
 ## Verification
 
