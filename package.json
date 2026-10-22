@@ -11,7 +11,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check features.js && node --check public/app.js && node --check public/world-intelligence-bridge.js && node --check scripts/inject-world-intelligence-bridge.mjs && node --check scripts/patch-world-intelligence-source.mjs && node --check tests/features.test.js && node --check tests/vision-routing.test.js && node --check desktop/main.cjs && node --check desktop/preload.cjs && node --check worker.js",
+    "check": "node --check server.js && node --check features.js && node --check public/app.js && node --check public/world-intelligence-bridge.js && node --check scripts/inject-world-intelligence-bridge.mjs && node --check scripts/patch-world-intelligence-source.mjs && node --check tests/features.test.js && node --check tests/vision-routing.test.js && node --check tests/openviking-memory.test.js && node --check desktop/main.cjs && node --check desktop/preload.cjs && node --check worker.js",
     "worker": "node worker.js"
   },
   "dependencies": {
