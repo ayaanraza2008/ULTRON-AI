@@ -331,6 +331,16 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASKS_READ_FAILED", message: error.message } }); }
   });
 
+  router.get("/tasks/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_TASK_ID", message: "Task ID is invalid." } });
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "GET",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id,title,input,status,result,error_code,started_at,finished_at,created_at,updated_at&limit=1");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "TASK_NOT_FOUND", message: "Task was not found." } });
+      res.json({ task: rows[0] });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_READ_FAILED", message: error.message } }); }
+  });
+
   router.post("/tasks", requireSupabaseUser, async (req, res) => {
     const title = boundedString(req.body?.title, 240);
     const description = boundedString(req.body?.description, 12000);
