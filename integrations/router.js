@@ -1,4 +1,5 @@
 import express from "express";
+import { buildIntegrationCatalog } from "./catalog.js";
 
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024;
 
@@ -62,6 +63,18 @@ function providerHeaders(apiKey) {
 
 export function createIntegrationRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser }) {
   const router = express.Router();
+
+  // Authenticated, machine-readable readiness for the future UI and agent tools.
+  // This reports configuration state only; it never claims an upstream is reachable.
+  router.get("/integrations/catalog", requireSupabaseUser, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      generatedAt: new Date().toISOString(),
+      verification: "configuration_only",
+      integrations: buildIntegrationCatalog(env)
+    });
+  });
+
 
   // ComfyUI has a documented queue/history API. The workflow remains server-side
   // validated JSON and never accepts a caller-supplied upstream URL.
