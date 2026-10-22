@@ -36,3 +36,11 @@ Not claimed as complete:
 ## Verification
 
 Run `npm test` and `npm run check` in the repository. These tests use mocked provider responses and do not prove live external API connectivity.
+
+
+## Vision model routing
+
+- `POST /api/kaligpt/vision/analyze` accepts a user-supplied base64 image, its MIME type (`image/jpeg`, `image/png`, or `image/webp`), an optional prompt, and an optional provider selection.
+- In `auto` mode, it tries configured OpenRouter, OpenAI, Gemini, LiteLLM, and Ollama providers in order and falls back when a provider errors, times out, or returns an empty response.
+- The image is sent to the chosen provider for analysis; this is not local-only processing. Remote image URLs are not fetched. Images are limited to 5 MB, and the route does not execute actions based on image content.
+- A provider must use a vision-capable model; configuration alone does not guarantee that its selected model supports images. The endpoint reports provider failures rather than claiming vision support is live.
