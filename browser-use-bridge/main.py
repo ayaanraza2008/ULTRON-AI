@@ -62,6 +62,5 @@ async def run_task(payload: BrowserTask, x_ultron_browser_token: str | None = He
     except HTTPException:
         raise
     except Exception as exc:
-        app.logger if hasattr(app, "logger") else None
         raise HTTPException(status_code=502, detail="Browser task failed: " + type(exc).__name__)
 
