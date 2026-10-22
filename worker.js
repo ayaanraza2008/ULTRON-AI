@@ -4,6 +4,52 @@ const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const pollMs = Math.max(1500, Math.min(30000, Number(process.env.ULTRON_WORKER_POLL_MS) || 5000));
 const tavilyKey = process.env.TAVILY_API_KEY || "";
+const openVikingUrl = String(process.env.OPENVIKING_URL || "").trim().replace(/\\/+$/, "");
+const openVikingKey = process.env.OPENVIKING_API_KEY || "";
+
+function validOpenVikingUrl(value) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1")
+      && !url.username && !url.password;
+  } catch { return false; }
+}
+
+async function recallOpenViking(query) {
+  if (!validOpenVikingUrl(openVikingUrl)) return [];
+  try {
+    const response = await fetch(openVikingUrl + "/api/v1/search/find", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(openVikingKey ? { "X-API-Key": openVikingKey, Authorization: "Bearer " + openVikingKey } : {})
+      },
+      body: JSON.stringify({ query: bounded(query, 400), context_type: ["memory", "resource", "skill"], limit: 5, read_content: true }),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!response.ok) {
+      console.warn("OpenViking recall unavailable; continuing without saved context (HTTP " + response.status + ").");
+      return [];
+    }
+    const payload = await response.json();
+    const result = payload?.result || payload;
+    return ["memories", "resources", "skills"].flatMap(kind =>
+      (Array.isArray(result?.[kind]) ? result[kind] : []).slice(0, 5).map(item => ({
+        type: bounded(item.context_type || kind.replace(/s$/, ""), 40),
+        uri: bounded(item.uri, 500),
+        score: Number.isFinite(Number(item.score)) ? Number(item.score) : null,
+        abstract: bounded(item.abstract, 1200),
+        overview: bounded(item.overview, 1600),
+        content: bounded(item.content, 2400)
+      }))
+    ).slice(0, 8);
+  } catch (error) {
+    console.warn("OpenViking recall failed; continuing without saved context (" + bounded(error.message, 120) + ").");
+    return [];
+  }
+}
 const maxTaskAgeMs = 24 * 60 * 60 * 1000;
 
 if (!supabaseUrl || !serviceKey) {
@@ -68,10 +114,13 @@ async function runResearch(task) {
   });
   if (!response.ok) throw Object.assign(new Error("Research provider returned HTTP " + response.status), { code: "RESEARCH_PROVIDER_FAILED" });
   const data = await response.json();
+  const context = await recallOpenViking(query);
   return {
     type: "research",
     query,
     answer: bounded(data.answer, 6000),
+    context,
+    contextUsed: context.length > 0,
     sources: Array.isArray(data.results) ? data.results.slice(0, 5).map(item => ({
       title: bounded(item.title, 300),
       url: bounded(item.url, 1000),
