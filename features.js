@@ -412,7 +412,10 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const taskText = (title + " " + description + " " + boundedString(req.body?.query, 400)).toLowerCase();
     const inferredRisk = /(^|[^a-z])(delete|erase|drop|wipe|shutdown|restart|install|uninstall|purchase|buy|pay|transfer|send|publish|post|deploy|merge|commit|modify production|change permissions|credential|password|secret|private key|shell|terminal|execute code|run command|control pc|remote control)(?=$|[^a-z])/.test(taskText) ? "high"
       : /(^|[^a-z])(account|email|message|upload|download|edit|write file|change setting|automation|browser|login|personal data|location)(?=$|[^a-z])/.test(taskText) ? "medium" : "low";
-    const risk = ["high", "medium", "low"].includes(req.body?.risk) ? req.body.risk : inferredRisk;
+    const riskRank = { low: 0, medium: 1, high: 2 };
+    const requestedRisk = ["high", "medium", "low"].includes(req.body?.risk) ? req.body.risk : inferredRisk;
+    // A caller may raise the risk level, but cannot downgrade an automatically detected hazard.
+    const risk = riskRank[requestedRisk] >= riskRank[inferredRisk] ? requestedRisk : inferredRisk;
     const inferredTaskType = /(^|[^a-z])(research|look up|search the web|find sources|investigate|latest developments|compare options|fact check|gather sources)(?=$|[^a-z])/.test(taskText) ? "research" : "manual";
     const taskType = boundedString(req.body?.taskType, 40).toLowerCase() || inferredTaskType;
     if (!["research", "manual"].includes(taskType)) return res.status(400).json({ error: { code: "TASK_TYPE_NOT_ALLOWED", message: "Supported task types are research and manual." } });
