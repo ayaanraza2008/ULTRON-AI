@@ -85,3 +85,28 @@ test("security assistant routes to the explicitly selected Gemini provider", asy
     assert.equal(JSON.stringify(body).includes("gemini-test-secret"), false);
   });
 });
+
+
+test("auto mode falls back to Gemini when OpenRouter returns an error", async () => {
+  const seen = [];
+  const fetchImpl = async (url, options) => {
+    seen.push(String(url));
+    if (String(url).includes("openrouter.ai")) {
+      return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Fallback answer." }] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  await withServer({ OPENROUTER_API_KEY: "or-test-secret", GEMINI_API_KEY: "gemini-test-secret" }, fetchImpl, async base => {
+    const response = await fetch(base + "/api/kaligpt/security/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Explain HSTS", provider: "auto" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "gemini");
+    assert.equal(body.fallbackUsed, true);
+    assert.equal(seen.length, 2);
+    assert.equal(body.execution, "not_executed");
+    assert.equal(JSON.stringify(body).includes("test-secret"), false);
+  });
+});
