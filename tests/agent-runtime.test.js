@@ -447,3 +447,47 @@ test("agent routes plain-language website-building requests to the coding tool",
     assert.match(body.toolResults[0].result.answer, /Express app/);
   });
 });
+
+
+test("autonomous fallback dispatches multiple explicitly requested safe tools without model availability", async () => {
+  await withServer({}, async () => { throw new Error("provider should not be called without credentials"); }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Show satellites in God's Eye and read aloud: hello world" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.toolsUsed.map(item => item.name), ["world_intelligence_command", "synthesize_speech"]);
+    assert.equal(body.toolResults[0].result.action.name, "set_layer_visibility");
+    assert.deepEqual(body.toolResults[0].result.action.args, { layerId: "satellites", enabled: true });
+    assert.equal(body.toolResults[0].ok, true);
+    assert.equal(body.toolResults[1].ok, true);
+    assert.equal(body.toolResults[1].result.state, "blocked");
+    assert.match(body.toolResults[1].result.blocker, /OMNIVOICE_API_BASE_URL/);
+  });
+});
+
+test("autonomous fallback combines research, image generation readiness, and code drafts", async () => {
+  let tavilyCalls = 0;
+  await withServer({ TAVILY_API_KEY: "tavily-test" }, async (url) => {
+    if (url === "https://api.tavily.com/search") {
+      tavilyCalls += 1;
+      return new Response(JSON.stringify({ answer: "Research summary", results: [{ title: "Source", url: "https://example.com", content: "Snippet" }] }), { status: 200 });
+    }
+    throw new Error("unexpected network call: " + url);
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research AI agents, create an image of a futuristic city, and build a small website about it" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.toolsUsed.map(item => item.name), ["research_web", "run_comfyui_workflow", "coding_assist"]);
+    assert.equal(body.toolResults[0].result.provider, "tavily");
+    assert.equal(body.toolResults[1].result.state, "needs_input");
+    assert.equal(body.toolResults[2].ok, false, "code generation honestly reports missing model configuration");
+    assert.equal(tavilyCalls, 1);
+  });
+});
