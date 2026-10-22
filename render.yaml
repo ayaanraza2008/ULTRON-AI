@@ -39,6 +39,14 @@ services:
         generateValue: true
       - key: COMFYUI_BASE_URL
         sync: false
+      - key: COMFYUI_API_KEY
+        sync: false
+      - key: HEYGEM_JOB_PATH
+        sync: false
+      - key: OMNIVOICE_SYNTHESIS_PATH
+        sync: false
+      - key: ULTRON_HANDY_TRANSCRIBE_PATH
+        sync: false
       - key: HEYGEM_API_BASE_URL
         sync: false
       - key: HEYGEM_API_KEY
