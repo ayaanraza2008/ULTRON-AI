@@ -10,7 +10,7 @@ function bounded(value, max = 4000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-export function startWorker({ env = process.env, logger = console } = {}) {
+export function startWorker({ env = process.env, logger = console, fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
   const supabaseUrl = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
@@ -25,7 +25,7 @@ export function startWorker({ env = process.env, logger = console } = {}) {
 
   let stopping = false;
   async function rest(endpoint, options = {}) {
-    const response = await fetch(supabaseUrl + "/rest/v1/" + endpoint, {
+    const response = await fetchImpl(supabaseUrl + "/rest/v1/" + endpoint, {
       ...options,
       headers: {
         apikey: serviceKey,
@@ -56,7 +56,7 @@ export function startWorker({ env = process.env, logger = console } = {}) {
     if (!tavilyKey) throw Object.assign(new Error("Research provider is not configured."), { code: "RESEARCH_NOT_CONFIGURED" });
     const query = bounded(task.input?.query || task.input?.description, 400);
     if (!query) throw Object.assign(new Error("Research task needs a query."), { code: "INVALID_RESEARCH_QUERY" });
-    const response = await fetch("https://api.tavily.com/search", {
+    const response = await fetchImpl("https://api.tavily.com/search", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ api_key: tavilyKey, query, max_results: 5, search_depth: "basic", include_answer: true }),
       signal: AbortSignal.timeout(20000)
@@ -89,7 +89,7 @@ export function startWorker({ env = process.env, logger = console } = {}) {
       "Clearly label assumptions, missing information, risks, and human approval gates.",
       "Return Markdown with summary, deliverable, next steps, blockers, and verification criteria."
     ].join(" ");
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: "Bearer " + env.OPENROUTER_API_KEY,
@@ -142,8 +142,13 @@ export function startWorker({ env = process.env, logger = console } = {}) {
         method: "PATCH",
         body: JSON.stringify({ status: "COMPLETED", result, finished_at: new Date().toISOString() })
       });
-      await audit(task, "task.completed", "allowed", { taskType: task.input?.taskType || "unknown", role: task.input?.role || null, sourceCount: result.sources?.length || 0 });
       status.tasksCompleted += 1;
+      try {
+        await audit(task, "task.completed", "allowed", { taskType: task.input?.taskType || "unknown", role: task.input?.role || null, sourceCount: result.sources?.length || 0 });
+      } catch (auditError) {
+        // A failed audit write must not reclassify an already-completed task as failed.
+        logger.error?.("Task completion audit failed:", task.id, bounded(auditError?.message, 200));
+      }
     } catch (error) {
       const code = bounded(error.code, 80) || "TASK_EXECUTION_FAILED";
       status.tasksFailed += 1;
@@ -159,7 +164,11 @@ export function startWorker({ env = process.env, logger = console } = {}) {
           ...(shouldRetry ? { started_at: null, finished_at: null } : { finished_at: new Date().toISOString() })
         })
       });
-      await audit(task, shouldRetry ? "task.retry_scheduled" : "task.failed", shouldRetry ? "retry" : "failed", { code, attempt: Number(task.attempts || 1) });
+      try {
+        await audit(task, shouldRetry ? "task.retry_scheduled" : "task.failed", shouldRetry ? "retry" : "failed", { code, attempt: Number(task.attempts || 1) });
+      } catch (auditError) {
+        logger.error?.("Task failure audit failed:", task.id, bounded(auditError?.message, 200));
+      }
       logger.error?.("Task outcome:", task.id, shouldRetry ? "retry scheduled" : code);
     }
     return true;
@@ -182,12 +191,12 @@ export function startWorker({ env = process.env, logger = console } = {}) {
         status.lastCycleAt = new Date().toISOString();
         const didWork = await tick();
         status.lastCycleSuccessAt = new Date().toISOString();
-        if (!didWork) await sleep(pollMs);
+        if (!didWork) await sleepImpl(pollMs);
       } catch (error) {
         status.lastErrorAt = new Date().toISOString();
         status.lastErrorCode = bounded(error?.code, 80) || "WORKER_CYCLE_FAILED";
         logger.error?.("Worker cycle failed:", status.lastErrorCode, error.message);
-        await sleep(pollMs);
+        await sleepImpl(pollMs);
       }
     }
     status.state = "stopped";
