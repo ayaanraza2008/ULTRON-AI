@@ -59,6 +59,14 @@ services:
         sync: false
       - key: OPENVIKING_API_KEY
         sync: false
+      - key: OPENVIKING_SINGLE_USER_MODE
+        value: "false"
+      - key: OPENVIKING_SINGLE_USER_ID
+        sync: false
+      - key: OPENVIKING_AUTO_COMMIT
+        value: "false"
+      - key: OPENVIKING_AUTO_COMMIT_MESSAGES
+        value: "20"
       - key: TTS_API_BASE_URL
         sync: false
       - key: TTS_API_KEY
