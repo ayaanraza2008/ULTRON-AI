@@ -110,3 +110,31 @@ test("auto mode falls back to Gemini when OpenRouter returns an error", async ()
     assert.equal(JSON.stringify(body).includes("test-secret"), false);
   });
 });
+
+
+test("passive HTTP header analyzer reports missing headers without contacting target", async () => {
+  let fetchCalls = 0;
+  await withServer({}, async () => { fetchCalls++; throw new Error("network must not be called"); }, async base => {
+    const response = await fetch(base + "/api/kaligpt/tools/headers/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ headers: { "content-type": "text/html", "x-content-type-options": "nosniff" } })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.tool, "http-security-headers");
+    assert.equal(body.execution, "local-analysis-only");
+    assert.equal(body.findings.find(item => item.id === "x-content-type-options").status, "present-review-value");
+    assert.equal(body.findings.find(item => item.id === "content-security-policy").status, "missing");
+    assert.equal(fetchCalls, 0);
+  });
+});
+
+test("passive HTTP header analyzer rejects missing header input", async () => {
+  await withServer({}, globalThis.fetch, async base => {
+    const response = await fetch(base + "/api/kaligpt/tools/headers/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({})
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "HTTP_HEADERS_REQUIRED");
+  });
+});
