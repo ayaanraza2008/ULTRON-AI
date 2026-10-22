@@ -118,7 +118,8 @@ async function runResearch(task) {
   });
   if (!response.ok) throw Object.assign(new Error("Research provider returned HTTP " + response.status), { code: "RESEARCH_PROVIDER_FAILED" });
   const data = await response.json();
-  const contextChecked = needsOpenVikingContext(query);\n  const context = contextChecked ? await recallOpenViking(query) : [];
+  const contextChecked = needsOpenVikingContext(query);
+  const context = contextChecked ? await recallOpenViking(query) : [];
   return {
     type: "research",
     query,
