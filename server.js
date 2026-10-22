@@ -436,11 +436,16 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const { messages, stream = true, model: requestedModel, attachments = [] } = req.body || {};
     const knownModels = ["openrouter/free"];
     const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean);
-    const allowedModels = [...new Set([...knownModels, ...configuredModels, env.OPENROUTER_DEFAULT_MODEL].filter(Boolean))];
+    const visionModels = [...new Set(String(env.ULTRON_VISION_MODELS || env.OPENROUTER_VISION_MODEL || "").split(",").map(value => value.trim()).filter(value => /^[a-zA-Z0-9._/-]{1,160}$/.test(value)))];
+    const allowedModels = [...new Set([...knownModels, ...configuredModels, visionModels, env.OPENROUTER_DEFAULT_MODEL].flat().filter(Boolean))];
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || (!allowedModels.includes(requestedModel) && requestedModel !== "openrouter/free" && !/^[a-zA-Z0-9._/-]+:free$/.test(requestedModel)))) {
       return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
     }
-    let selectedModel = requestedModel || env.OPENROUTER_DEFAULT_MODEL;
+    const hasImageAttachments = Array.isArray(attachments) && attachments.length > 0;
+    // Image messages prefer explicitly configured vision models rather than the normal text model.
+    let selectedModel = hasImageAttachments && visionModels.length
+      ? (requestedModel && visionModels.includes(requestedModel) ? requestedModel : visionModels[0])
+      : (requestedModel || env.OPENROUTER_DEFAULT_MODEL);
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
       return res.status(400).json({ error: { code: "INVALID_MESSAGES", message: "Send between 1 and 40 messages." } });
     }
@@ -531,7 +536,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.on("close", () => { if (!res.writableEnded) abortUpstream(); });
 
     try {
-      const configuredOrder = [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
+      const configuredOrder = [...new Set([...(hasImageAttachments ? visionModels : []), selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelCandidates = configuredOrder;
       if (!modelCandidates.length) {
         return res.status(503).json({ error: { code: "VISION_MODEL_NOT_CONFIGURED", message: "No configured vision model is available. Add the exact MiniMax vision model ID to ULTRON_AVAILABLE_MODELS." } });
