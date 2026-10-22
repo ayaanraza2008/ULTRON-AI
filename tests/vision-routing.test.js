@@ -38,8 +38,8 @@ const baseEnv = {
   SESSION_SECRET: "test-session-secret-that-is-at-least-32-chars",
   OPENROUTER_API_KEY: "test-provider-key",
   OPENROUTER_DEFAULT_MODEL: "vendor/text-model",
-  ULTRON_AVAILABLE_MODELS: "vendor/text-model,vendor/vision-a,vendor/vision-b",
-  ULTRON_VISION_MODELS: "vendor/vision-a,vendor/vision-b"
+  ULTRON_AVAILABLE_MODELS: "vendor/text-model,vendor/vision-a:free,vendor/vision-b:free",
+  ULTRON_VISION_MODELS: "vendor/vision-a:free,vendor/vision-b:free"
 };
 
 test("chat with image attachments prefers explicitly configured vision models", async () => {
@@ -56,7 +56,7 @@ test("chat with image attachments prefers explicitly configured vision models", 
     });
     assert.equal(response.status, 200);
     assert.equal(seen.length, 1);
-    assert.equal(seen[0].model, "vendor/vision-a");
+    assert.equal(seen[0].model, "vendor/vision-a:free");
     assert.equal(seen[0].messages.at(-1).content[1].image_url.url, "data:image/png;base64,aGVsbG8=");
   });
 });
@@ -96,6 +96,6 @@ test("image chat does not silently fall back to text-only model IDs", async () =
       })
     });
     assert.equal(response.status, 502);
-    assert.deepEqual(seen.map(item => item.model), ["vendor/vision-a", "vendor/vision-b"]);
+    assert.deepEqual(seen.map(item => item.model), ["vendor/vision-a:free", "vendor/vision-b:free"]);
   });
 });
