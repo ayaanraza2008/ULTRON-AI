@@ -55,3 +55,14 @@ The `openrouter/free` router automatically selects a currently available free mo
 Features are not described as working until the relevant tests have actually passed. Mock tests are not proof of real provider connectivity, and a successful build is not proof of production deployment.
 
 See `docs/FEATURE_REGISTRY.md`, `docs/IMPLEMENTATION_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/TECHNICAL_DECISIONS.md`, and `docs/BLOCKERS.md` for the current record.
+
+
+## AI Employees-inspired role layer
+
+A native role/routine planning layer inspired by [markfulton/ai-employees](https://github.com/markfulton/ai-employees) is being integrated. See [docs/AI_EMPLOYEES_INTEGRATION.md](docs/AI_EMPLOYEES_INTEGRATION.md).
+
+- `GET /api/employees/roles`: eight role definitions and routine-slot metadata.
+- `GET /api/employees/routines?role=web-dev`: routine templates filtered by role.
+- `POST /api/employees/plan`: authenticated model-backed plans/drafts/reviews/reports for a chosen role.
+
+**Important:** this layer generates plans and drafts only. It does not install the upstream kit files, register schedules, run background routines, execute PC commands, send messages, publish posts, submit forms, or spend money. The API reports `scheduler: not_configured`; persistent scheduled execution is not yet implemented.
