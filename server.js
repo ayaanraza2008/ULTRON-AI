@@ -698,7 +698,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
-  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, logger }));
+  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, logger }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
