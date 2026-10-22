@@ -1,9 +1,13 @@
 name: ULTRON CI
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat/kaligpt-capability-integration
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - feat/ultron-capability-integration
   workflow_dispatch:
 
 jobs:
