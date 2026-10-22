@@ -71,6 +71,86 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     res.json({ routines: employeeRoutineCatalog.filter(item => !roleId || item.roles.includes(roleId)), scheduler: "not_configured" });
   });
 
+  router.get("/employees/status", requireSupabaseUser, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      roles: employeeRoles.length,
+      routineTemplates: employeeRoutineCatalog.length,
+      schedulerEnabled: env.ULTRON_EMPLOYEES_ENABLED === "true",
+      workerCredentialsConfigured: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
+      modelProviderConfigured: Boolean(env.OPENROUTER_API_KEY),
+      scheduleCadenceMinutes: { min: 60, max: 10080 },
+      execution: "drafts_and_reports_only",
+      notice: "Scheduled routines create AI-generated plans and drafts only. They do not send, publish, spend, run commands, or control devices."
+    });
+  });
+
+  router.get("/employees/schedules", requireSupabaseUser, async (req, res) => {
+    try {
+      const rows = await supabaseRest(req, "employee_schedules", "GET",
+        "?select=id,role_id,routine_id,goal,context,interval_minutes,enabled,next_run_at,last_run_at,created_at,updated_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&order=next_run_at.asc&limit=100");
+      res.json({ schedules: Array.isArray(rows) ? rows : [] });
+    } catch (error) {
+      res.status(error.status || 502).json({ error: { code: "EMPLOYEE_SCHEDULES_READ_FAILED", message: "Could not load AI Employee schedules. Apply the scheduler database migration first." } });
+    }
+  });
+
+  router.post("/employees/schedules", requireSupabaseUser, async (req, res) => {
+    const roleId = boundedString(req.body?.role, 80);
+    const routineId = boundedString(req.body?.routineId, 80);
+    const goal = boundedString(req.body?.goal, 2000);
+    const context = boundedString(req.body?.context, 4000);
+    const intervalMinutes = Number(req.body?.intervalMinutes ?? 1440);
+    const role = employeeRoles.find(item => item.id === roleId);
+    const routine = employeeRoutineCatalog.find(item => item.id === routineId && item.roles.includes(roleId));
+    if (!role) return res.status(400).json({ error: { code: "UNKNOWN_EMPLOYEE_ROLE", message: "Choose a role from /api/employees/roles." } });
+    if (!routine) return res.status(400).json({ error: { code: "ROUTINE_NOT_ALLOWED_FOR_ROLE", message: "Choose a routine listed for this role in /api/employees/routines." } });
+    if (!goal) return res.status(400).json({ error: { code: "EMPLOYEE_GOAL_REQUIRED", message: "Describe the outcome this routine should prepare." } });
+    if (!Number.isInteger(intervalMinutes) || intervalMinutes < 60 || intervalMinutes > 10080) {
+      return res.status(400).json({ error: { code: "INVALID_SCHEDULE_INTERVAL", message: "intervalMinutes must be an integer from 60 to 10080." } });
+    }
+    try {
+      const nextRun = new Date(Date.now() + intervalMinutes * 60000).toISOString();
+      const rows = await supabaseRest(req, "employee_schedules", "POST", "?select=id,role_id,routine_id,goal,context,interval_minutes,enabled,next_run_at,last_run_at,created_at,updated_at", {
+        user_id: req.supabaseUser.id, role_id: roleId, routine_id: routineId, goal, context: context || null,
+        interval_minutes: intervalMinutes, enabled: true, next_run_at: nextRun
+      });
+      if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "EMPLOYEE_SCHEDULE_CREATE_FAILED", message: "The schedule could not be saved." } });
+      await supabaseRest(req, "audit_events", "POST", "", {
+        user_id: req.supabaseUser.id, action: "employee.schedule_created", target_type: "employee_schedule",
+        target_id: rows[0].id, outcome: "recorded", metadata: { roleId, routineId, intervalMinutes }
+      }, "return=minimal");
+      res.status(201).json({ schedule: rows[0], notice: "Schedule saved. It will run only when ULTRON's employee scheduler is enabled and the worker credentials are configured." });
+    } catch (error) {
+      res.status(error.status || 502).json({ error: { code: "EMPLOYEE_SCHEDULE_CREATE_FAILED", message: "Could not save schedule. Confirm the scheduler database migration has been applied." } });
+    }
+  });
+
+  router.patch("/employees/schedules/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_SCHEDULE_ID", message: "Schedule ID is invalid." } });
+    if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: { code: "SCHEDULE_ENABLED_REQUIRED", message: "Set enabled to true or false." } });
+    try {
+      const rows = await supabaseRest(req, "employee_schedules", "PATCH",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id,enabled,next_run_at",
+        { enabled: req.body.enabled });
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "SCHEDULE_NOT_FOUND", message: "Schedule not found." } });
+      res.json({ schedule: rows[0] });
+    } catch (error) {
+      res.status(error.status || 502).json({ error: { code: "EMPLOYEE_SCHEDULE_UPDATE_FAILED", message: "Could not update schedule." } });
+    }
+  });
+
+  router.delete("/employees/schedules/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_SCHEDULE_ID", message: "Schedule ID is invalid." } });
+    try {
+      await supabaseRest(req, "employee_schedules", "DELETE",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id), undefined, "return=minimal");
+      res.status(204).end();
+    } catch (error) {
+      res.status(error.status || 502).json({ error: { code: "EMPLOYEE_SCHEDULE_DELETE_FAILED", message: "Could not delete schedule." } });
+    }
+  });
+
   router.post("/employees/plan", requireSession, async (req, res) => {
     const roleId = boundedString(req.body?.role, 80);
     const goal = boundedString(req.body?.goal, 3000);
