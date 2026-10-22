@@ -6,6 +6,7 @@ import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
 import { startWorker } from "./worker.js";
+import { createAgentRouter } from "./agent-runtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -697,6 +698,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
+  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, logger }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
