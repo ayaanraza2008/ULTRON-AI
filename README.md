@@ -8,9 +8,22 @@ ULTRON AI is a modular, security-conscious personal AI ecosystem with a web clie
 - **Hosted web service:** https://ultron-ai-zvd7.onrender.com. The health endpoint and initial deployment were previously verified; real chat remains dependent on server-side provider and access secrets.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
-- **Database schema:** Initial migration applied and verified. It creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events. All six tables have Row Level Security enabled. The application has not yet been wired to use Supabase.
+- **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Windows companion:** Electron shell and unsigned Windows NSIS workflow exist. The shell opens the hosted web client; it does not yet provide local desktop automation.
+- **Windows companion:** Electron shell and unsigned Windows NSIS workflow exist. The shell opens the hosted web client; a secure local automation agent is not yet implemented.
+
+## Capability integration phase
+
+Backend additions on the feature branch:
+
+- `GET /api/capabilities`: reports configuration readiness without returning secret values.
+- `GET /api/local/models` and `POST /api/local/chat`: optional Ollama-compatible local inference adapter. A cloud-hosted server cannot reach a user's PC-local `localhost`; use a future authenticated desktop bridge for that case.
+- `POST /api/research`: uses Tavily when configured, otherwise a best-effort public DuckDuckGo HTML fallback. Public HTML search can break or be rate-limited; results are untrusted and need source verification.
+- `GET /api/tasks`, `POST /api/tasks`, and `POST /api/tasks/:id/cancel`: per-user task records and audit events using Supabase RLS. Creating a record does **not** execute arbitrary tasks; worker orchestration and scoped tools must be added and verified separately.
+- Cloud chat now attempts opt-in retrieval of a small set of active, user-owned memory items when account preferences permit it. Memory text is treated as untrusted context.
+- `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
+
+These endpoints are backend building blocks, not a claim that all 20 requested capabilities are production-complete. Document parsing, a real background worker, coding sandbox, premium speech provider adapters, and Windows PC-control agent still require separate implementation and tests. The frontend is intentionally deferred to the final phase.
 
 ## Configuration
 
