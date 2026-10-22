@@ -15,9 +15,12 @@ export function startWorker({ env = process.env, logger = console } = {}) {
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksFailed: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
+    status.state = "disabled";
+    status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
     logger.warn?.("ULTRON employee/task scheduler disabled: configure HTTPS SUPABASE_URL and server-only SUPABASE_SERVICE_ROLE_KEY.");
-    return { stop() {}, done: Promise.resolve() };
+    return { stop() {}, done: Promise.resolve(), getStatus: () => ({ ...status }) };
   }
 
   let stopping = false;
@@ -140,8 +143,12 @@ export function startWorker({ env = process.env, logger = console } = {}) {
         body: JSON.stringify({ status: "COMPLETED", result, finished_at: new Date().toISOString() })
       });
       await audit(task, "task.completed", "allowed", { taskType: task.input?.taskType || "unknown", role: task.input?.role || null, sourceCount: result.sources?.length || 0 });
+      status.tasksCompleted += 1;
     } catch (error) {
       const code = bounded(error.code, 80) || "TASK_EXECUTION_FAILED";
+      status.tasksFailed += 1;
+      status.lastErrorAt = new Date().toISOString();
+      status.lastErrorCode = code;
       const retryable = ["RESEARCH_PROVIDER_FAILED", "EMPLOYEE_PROVIDER_FAILED", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
       const shouldRetry = retryable && Number(task.attempts || 1) < 3;
       await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
@@ -167,9 +174,12 @@ export function startWorker({ env = process.env, logger = console } = {}) {
   }
 
   const done = (async () => {
+    status.state = "running";
+    status.startedAt = new Date().toISOString();
     logger.info?.("ULTRON task worker started; allowlist: research plus AI Employee plans/drafts/reviews/reports.");
     while (!stopping) {
       try {
+        status.lastCycleAt = new Date().toISOString();
         const didWork = await tick();
         if (!didWork) await sleep(pollMs);
       } catch (error) {
@@ -177,9 +187,10 @@ export function startWorker({ env = process.env, logger = console } = {}) {
         await sleep(pollMs);
       }
     }
+    status.state = "stopped";
     logger.info?.("ULTRON task worker stopped.");
   })();
-  return { stop() { stopping = true; }, done };
+  return { stop() { stopping = true; status.state = "stopping"; }, done, getStatus: () => ({ ...status }) };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
