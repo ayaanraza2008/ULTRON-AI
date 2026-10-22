@@ -43,4 +43,4 @@ export function buildHarnessGuidance(task) {
   };
 }
 
-export const HARNESS_SYSTEM_GUIDANCE = RULES.join("\\n");
+export const HARNESS_SYSTEM_GUIDANCE = RULES.join("\n");
