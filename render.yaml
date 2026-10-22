@@ -41,5 +41,23 @@ services:
         sync: false
       - key: ULTRON_HANDY_BRIDGE_TOKEN
         sync: false
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: LOCAL_MODEL_TIMEOUT_SECONDS
+        value: "90"
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: TTS_API_BASE_URL
+        sync: false
+      - key: TTS_API_KEY
+        sync: false
+      - key: STT_API_BASE_URL
+        sync: false
+      - key: STT_API_KEY
+        sync: false
+      - key: ULTRON_DESKTOP_AGENT_URL
+        sync: false
+      - key: ULTRON_DESKTOP_AGENT_TOKEN
+        sync: false
       - key: ULTRON_EMPLOYEES_ENABLED
         value: "false"
