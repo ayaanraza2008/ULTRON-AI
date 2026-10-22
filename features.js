@@ -49,6 +49,108 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     });
   });
 
+  router.get("/preferences", requireSupabaseUser, async (req, res) => {
+    try {
+      const rows = await supabaseRest(req, "user_preferences", "GET",
+        "?select=language,voice_enabled,voice_input_locale,memory_enabled,preferences&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      res.json({ preferences: Array.isArray(rows) && rows[0] ? rows[0] : {
+        language: "en", voice_enabled: true, voice_input_locale: "en-IN", memory_enabled: true, preferences: {}
+      } });
+    } catch (error) {
+      res.status(error.status || 502).json({ error: { code: "PREFERENCES_READ_FAILED", message: error.message } });
+    }
+  });
+
+  router.put("/preferences", requireSupabaseUser, async (req, res) => {
+    const body = req.body || {};
+    const patch = { user_id: req.supabaseUser.id };
+    if (body.language !== undefined) {
+      if (!["en", "hi", "hinglish"].includes(body.language)) return res.status(400).json({ error: { code: "INVALID_LANGUAGE", message: "language must be en, hi, or hinglish." } });
+      patch.language = body.language;
+    }
+    if (body.voice_enabled !== undefined) {
+      if (typeof body.voice_enabled !== "boolean") return res.status(400).json({ error: { code: "INVALID_VOICE_SETTING", message: "voice_enabled must be a boolean." } });
+      patch.voice_enabled = body.voice_enabled;
+    }
+    if (body.voice_input_locale !== undefined) {
+      if (!["en-IN", "hi-IN", "en-US", "en-GB"].includes(body.voice_input_locale)) return res.status(400).json({ error: { code: "INVALID_VOICE_LOCALE", message: "Unsupported voice input locale." } });
+      patch.voice_input_locale = body.voice_input_locale;
+    }
+    if (body.memory_enabled !== undefined) {
+      if (typeof body.memory_enabled !== "boolean") return res.status(400).json({ error: { code: "INVALID_MEMORY_SETTING", message: "memory_enabled must be a boolean." } });
+      patch.memory_enabled = body.memory_enabled;
+    }
+    if (body.preferences !== undefined) {
+      if (!body.preferences || typeof body.preferences !== "object" || Array.isArray(body.preferences) || JSON.stringify(body.preferences).length > 8000) return res.status(400).json({ error: { code: "INVALID_PREFERENCES", message: "preferences must be a JSON object under 8 KB." } });
+      const allowed = ["personality", "modelProvider", "model", "voiceProvider", "voiceName", "voiceRate"];
+      patch.preferences = Object.fromEntries(Object.entries(body.preferences).filter(([key]) => allowed.includes(key)));
+    }
+    if (Object.keys(patch).length === 1) return res.status(400).json({ error: { code: "EMPTY_PREFERENCE_UPDATE", message: "Provide at least one supported preference." } });
+    try {
+      const rows = await supabaseRest(req, "user_preferences", "POST", "?on_conflict=user_id&select=user_id,language,voice_enabled,voice_input_locale,memory_enabled,preferences", patch, "resolution=merge-duplicates,return=representation");
+      const result = Array.isArray(rows) ? rows[0] : null;
+      if (!result) return res.status(502).json({ error: { code: "PREFERENCES_SAVE_FAILED", message: "Could not save preferences." } });
+      res.json({ preferences: result });
+    } catch (error) {
+      res.status(error.status || 502).json({ error: { code: "PREFERENCES_SAVE_FAILED", message: error.message } });
+    }
+  });
+
+  router.post("/speech/synthesize", requireSession, async (req, res) => {
+    const text = boundedString(req.body?.text, 4000);
+    if (!text) return res.status(400).json({ error: { code: "INVALID_SPEECH_TEXT", message: "Provide text to synthesize." } });
+    if (!env.TTS_API_BASE_URL || !env.TTS_API_KEY) return res.status(503).json({ error: { code: "TTS_NOT_CONFIGURED", message: "Premium speech is not configured. Use browser-native speech as the free fallback." } });
+    const base = safeBaseUrl(env.TTS_API_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "TTS_ENDPOINT_INVALID", message: "TTS_API_BASE_URL must be a valid HTTPS endpoint." } });
+    const voice = boundedString(req.body?.voice, 120);
+    const timeout = withTimeout(30000);
+    try {
+      const response = await fetchImpl(base + "/audio/speech", {
+        method: "POST", signal: timeout.signal,
+        headers: { Authorization: "Bearer " + env.TTS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" })
+      });
+      if (!response.ok) return res.status(502).json({ error: { code: "TTS_PROVIDER_FAILED", message: "The configured OpenAI-compatible speech provider failed." } });
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!bytes.length || bytes.length > 12_000_000) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty or oversized audio." } });
+      res.setHeader("Content-Type", response.headers.get("content-type")?.startsWith("audio/") ? response.headers.get("content-type") : "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Length", String(bytes.length));
+      res.send(bytes);
+    } catch (error) {
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "TTS_TIMEOUT" : "TTS_UNAVAILABLE", message: "Speech synthesis failed or timed out." } });
+    } finally { timeout.close(); }
+  });
+
+  router.post("/speech/transcribe", requireSession, async (req, res) => {
+    const audio = typeof req.body?.audioBase64 === "string" ? req.body.audioBase64 : "";
+    const mimeType = boundedString(req.body?.mimeType, 100);
+    if (!audio || !/^audio\/(mpeg|mp3|wav|webm|ogg|mp4|m4a|x-wav)(;.*)?$/i.test(mimeType)) return res.status(400).json({ error: { code: "INVALID_AUDIO_INPUT", message: "Provide base64 audio and a supported audio MIME type." } });
+    if (audio.length > 10_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(audio)) return res.status(413).json({ error: { code: "AUDIO_TOO_LARGE_OR_INVALID", message: "Audio must be valid base64 and under the upload limit." } });
+    if (!env.STT_API_BASE_URL || !env.STT_API_KEY) return res.status(503).json({ error: { code: "STT_NOT_CONFIGURED", message: "Premium transcription is not configured. Use browser-native speech recognition as the free fallback." } });
+    const base = safeBaseUrl(env.STT_API_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "STT_ENDPOINT_INVALID", message: "STT_API_BASE_URL must be a valid HTTPS endpoint." } });
+    const timeout = withTimeout(30000);
+    try {
+      const bytes = Buffer.from(audio, "base64");
+      if (!bytes.length || bytes.length > 7_000_000) return res.status(413).json({ error: { code: "AUDIO_TOO_LARGE", message: "Decoded audio exceeds the 7 MB limit." } });
+      const form = new FormData();
+      form.append("file", new Blob([bytes], { type: mimeType }), "recording");
+      form.append("model", boundedString(env.STT_MODEL, 120) || "whisper-1");
+      const response = await fetchImpl(base + "/audio/transcriptions", {
+        method: "POST", signal: timeout.signal,
+        headers: { Authorization: "Bearer " + env.STT_API_KEY },
+        body: form
+      });
+      if (!response.ok) return res.status(502).json({ error: { code: "STT_PROVIDER_FAILED", message: "The configured OpenAI-compatible transcription provider failed." } });
+      const payload = await response.json();
+      if (typeof payload.text !== "string") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
+      res.json({ text: payload.text.slice(0, 12000), language: payload.language || null });
+    } catch {
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "STT_TIMEOUT" : "STT_UNAVAILABLE", message: "Transcription failed or timed out." } });
+    } finally { timeout.close(); }
+  });
+
   router.get("/local/models", requireSession, async (_req, res) => {
     const base = safeBaseUrl(env.OLLAMA_BASE_URL);
     if (!base) return res.status(503).json({ error: { code: "LOCAL_MODEL_NOT_CONFIGURED", message: "Set OLLAMA_BASE_URL to an Ollama instance reachable by this server. For a PC-local Ollama, use the Windows companion instead of localhost on Render." } });
@@ -180,6 +282,19 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created", target_type: "agent_task", target_id: rows[0].id, outcome: requiresApproval ? "recorded" : "allowed", metadata: { risk, requiresApproval } }, "return=minimal");
       res.status(201).json({ task: rows[0], notice: "Task saved to the queue. Automated execution is not enabled by this endpoint; connect an approved worker before enabling actions." });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_CREATE_FAILED", message: error.message } }); }
+  });
+
+  router.post("/tasks/:id/approve", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_TASK_ID", message: "Task ID is invalid." } });
+    if (req.body?.confirm !== true) return res.status(400).json({ error: { code: "EXPLICIT_CONFIRMATION_REQUIRED", message: "Send confirm: true only after reviewing the task and its requested permissions." } });
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "PATCH",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status",
+        { status: "QUEUED", input: { approved: true, approvedAt: new Date().toISOString(), approvalScope: "task_record_only" } });
+      if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task was not found or is not awaiting approval." } });
+      await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.approved", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { scope: "task_record_only" } }, "return=minimal");
+      res.json({ task: rows[0], notice: "Approval recorded. This does not execute PC commands; an approved task worker is still required." });
+    } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_APPROVAL_FAILED", message: error.message } }); }
   });
 
   router.post("/tasks/:id/cancel", requireSupabaseUser, async (req, res) => {
