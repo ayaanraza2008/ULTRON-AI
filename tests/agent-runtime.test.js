@@ -95,3 +95,38 @@ test("agent executes a model-selected research tool and passes results back for 
     assert.equal(providerCalls, 2);
   });
 });
+
+
+test("agent tool discovery reports readiness without exposing credentials", async () => {
+  await withServer({ OPENROUTER_API_KEY: "secret-provider-value", COMFYUI_BASE_URL: "https://comfy.example", COMFYUI_API_KEY: "secret-comfy-value" }, async () => {
+    throw new Error("tool discovery should not make provider calls");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/tools");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.tools.find(x => x.name === "check_comfyui").available, true);
+    assert.equal(JSON.stringify(body).includes("secret-provider-value"), false);
+    assert.equal(JSON.stringify(body).includes("secret-comfy-value"), false);
+  });
+});
+
+test("ComfyUI workflow is not queued until explicit confirmation is supplied", async () => {
+  let providerCalls = 0;
+  let queueCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
+    if (url === "https://comfy.example/prompt") {
+      queueCalls += 1;
+      return new Response(JSON.stringify({ prompt_id: "prompt-abc" }), { status: 200 });
+    }
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "comfy-call", type: "function", function: { name: "run_comfyui_workflow", arguments: JSON.stringify({ reason: "Generate the requested image" }) } }] } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The workflow needs explicit confirmation." } }] }), { status: 200 });
+  }, async base => {
+    const workflow = { "1": { class_type: "CheckpointLoaderSimple", inputs: {} } };
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Run this ComfyUI workflow", workflow }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "needs_confirmation");
+    assert.equal(queueCalls, 0);
+  });
+});
