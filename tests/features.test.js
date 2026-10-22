@@ -202,3 +202,24 @@ test("coding assistance uses configured provider and never claims code execution
     return new Response(JSON.stringify({ model: "openrouter/free", choices: [{ message: { content: "Use strict validation." } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
   } });
 });
+
+test("task list and cancellation explicitly scope database operations to the signed-in user", async () => {
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const calls = [];
+  const fakeSupabaseRest = async (_req, table, method, query, body) => {
+    calls.push({ table, method, query, body });
+    if (table === "agent_tasks" && method === "GET") return [];
+    if (table === "agent_tasks" && method === "PATCH") return [{ id: "00000000-0000-4000-8000-000000000002", status: body.status }];
+    return [];
+  };
+  await withServer({}, async base => {
+    const listed = await fetch(base + "/api/tasks");
+    assert.equal(listed.status, 200);
+    const cancelled = await fetch(base + "/api/tasks/00000000-0000-4000-8000-000000000002/cancel", { method: "POST" });
+    assert.equal(cancelled.status, 200);
+    const readQuery = calls.find(call => call.table === "agent_tasks" && call.method === "GET").query;
+    const patchQuery = calls.find(call => call.table === "agent_tasks" && call.method === "PATCH").query;
+    assert.match(readQuery, new RegExp("user_id=eq\\\\." + userId));
+    assert.match(patchQuery, new RegExp("user_id=eq\\\\." + userId));
+  }, { supabaseRest: fakeSupabaseRest });
+});
