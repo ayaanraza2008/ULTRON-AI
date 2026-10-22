@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { employeeRoutineCatalog } from "./employee-catalog.js";
 
 const maxTaskAgeMs = 24 * 60 * 60 * 1000;
 const roleIds = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
@@ -75,6 +76,7 @@ export function startWorker({ env = process.env, logger = console } = {}) {
     const context = bounded(input.context, 4000);
     const mode = ["plan", "draft", "review", "report"].includes(input.mode) ? input.mode : "plan";
     if (!roleIds.has(role) || !goal) throw Object.assign(new Error("AI Employee role or goal is invalid."), { code: "INVALID_EMPLOYEE_TASK" });
+    const routine = employeeRoutineCatalog.find(item => item.id === input.routineId && item.roles.includes(role));
     const model = bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free";
     const system = [
       "You are ULTRON's scheduled AI Employee. Generate plans, editable drafts, reviews, or reports only.",
@@ -96,7 +98,7 @@ export function startWorker({ env = process.env, logger = console } = {}) {
         model,
         messages: [
           { role: "system", content: system },
-          { role: "user", content: JSON.stringify({ role, mode, goal, context: context || undefined, routineId: bounded(input.routineId, 80) || undefined }) }
+          { role: "user", content: JSON.stringify({ role, mode, goal, context: context || undefined, routine: routine ? { id: routine.id, name: routine.name, cadence: routine.cadence, description: routine.description } : { id: bounded(input.routineId, 80) || undefined } }) }
         ],
         temperature: 0.2, max_tokens: 2200
       }),

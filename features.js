@@ -1,6 +1,7 @@
 import express from "express";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
+import { employeeRoutineCatalog } from "./employee-catalog.js";
 
 function safeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -37,15 +38,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     { id: "customer-satisfaction", name: "Customer Satisfaction Employee", routines: 8, owns: "Support triage, reply drafts, escalation flags and evidence-backed churn-risk summaries", capabilities: ["support-triage", "reply-drafts", "escalation-review", "reporting"] },
     { id: "chief-of-staff", name: "Chief of Staff", routines: 7, owns: "Cross-role status summaries, stalled-work detection, risk register and top-three priorities", capabilities: ["run-summary", "risk-review", "priority-planning", "reporting"] }
   ];
-  const employeeRoutineCatalog = [
-    { id: "research-sweep", name: "Research sweep", description: "Collect and summarize relevant evidence with source links.", roles: ["gtm-engineer", "seo-aeo", "sales"] },
-    { id: "draft-work", name: "Prepare draft", description: "Prepare editable content or a change proposal; never publish or send it.", roles: ["gtm-engineer", "seo-aeo", "social-media", "ad-manager", "sales", "customer-satisfaction"] },
-    { id: "health-review", name: "Health and issue review", description: "Review supplied or authorized read-only evidence and produce prioritized findings.", roles: ["web-dev", "ad-manager", "customer-satisfaction"] },
-    { id: "approval-queue", name: "Approval queue", description: "List proposed external actions awaiting explicit human approval.", roles: ["gtm-engineer", "social-media", "ad-manager", "sales", "customer-satisfaction"] },
-    { id: "weekly-scorecard", name: "Scorecard and report", description: "Summarize verified outputs, blockers, evidence and next actions.", roles: ["gtm-engineer", "seo-aeo", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"] },
-    { id: "dependency-review", name: "Dependency and test review", description: "Review dependency/test evidence and propose low-risk follow-up work.", roles: ["web-dev"] },
-    { id: "stalled-work-review", name: "Stalled-work review", description: "Identify work with missing inputs, blocked dependencies or no verified deliverable.", roles: ["chief-of-staff"] }
-  ];
+
 
   router.get("/employees/roles", requireSession, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");

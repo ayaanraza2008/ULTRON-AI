@@ -14,7 +14,7 @@ Available role IDs: `gtm-engineer`, `seo-aeo`, `web-dev`, `social-media`, `ad-ma
 
 - These endpoints only return a role catalog or AI-generated text. They do not register schedules, create background jobs, control the PC, execute shell commands, contact prospects, send messages, publish posts, submit forms, or spend money.
 - The planner labels generated content as unexecuted and requires human approval for consequential external actions.
-- The role routine counts mirror the upstream README's eight-role summary (8, 8, 8, 7, 7, 7, 8, 7 = 60); the compact native routine templates here are not a claim that all 60 upstream routines have been installed.
+- The API catalog contains all 60 upstream routine IDs, display names, cadences, and summaries from each role's `SCHEDULE.md`. This is metadata and safe plan-generation integration, not a byte-for-byte installation of every upstream `SKILL.md`, script, browser recipe, local file workflow, or agent harness.
 - Real scheduled execution would need a persistent scheduler/worker, per-role durable run logs, task claiming/idempotency, a permissions model, and approval UI. Do not claim scheduled AI employees are running until those pieces are built and verified.
 - Provider configuration presence is not proof of live model connectivity. The planner requires `OPENROUTER_API_KEY`; it uses `OPENROUTER_DEFAULT_MODEL` or `openrouter/free`.
 
@@ -25,7 +25,7 @@ Run `npm run check` and `npm test`. The tests mock the model provider and verify
 
 ## Recurring routines (runtime extension)
 
-The runtime extension adds authenticated per-user schedule management:
+The runtime extension imports all 60 routine definitions and adds authenticated per-user schedule management:
 
 - `GET /api/employees/status` — non-secret readiness flags.
 - `GET /api/employees/schedules` and `POST /api/employees/schedules` — list/create schedules.
