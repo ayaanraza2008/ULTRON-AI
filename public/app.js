@@ -58,6 +58,54 @@ async function enterApplication(session) {
     await loadPreferences();
   }
 }
+async function processOAuthCallback() {
+  if (!location.hash || !location.hash.includes("access_token=")) return false;
+  const params = new URLSearchParams(location.hash.slice(1));
+  const access = params.get("access_token");
+  const refresh = params.get("refresh_token");
+  history.replaceState(null, "", location.pathname + location.search);
+  if (!access || !refresh) {
+    $("login-error").textContent = "Google sign-in did not return a complete session. Please try again.";
+    return false;
+  }
+  try {
+    const response = await api("/api/auth/session", { method: "POST", body: JSON.stringify({ access_token: access, refresh_token: refresh }) });
+    const result = await response.json();
+    await enterApplication({ authenticated: true, authType: "supabase", email: result.email });
+    return true;
+  } catch (error) {
+    $("login-error").textContent = error.message;
+    return false;
+  }
+}
+let phoneOtpRequested = false;
+$("phone-request-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const phone = $("phone-number").value.trim();
+  const message = $("phone-auth-message");
+  message.textContent = "";
+  try {
+    const response = await api("/api/auth/phone/request", { method: "POST", body: JSON.stringify({ phone }) });
+    const result = await response.json();
+    phoneOtpRequested = true;
+    $("phone-verify-form").classList.remove("hidden");
+    message.textContent = result.message || "Check your SMS for the verification code.";
+  } catch (error) { message.textContent = error.message; }
+});
+$("phone-verify-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const phone = $("phone-number").value.trim();
+  const token = $("phone-code").value.trim();
+  const message = $("phone-auth-message");
+  message.textContent = "";
+  if (!phoneOtpRequested) { message.textContent = "Send a verification code first."; return; }
+  try {
+    const response = await api("/api/auth/phone/verify", { method: "POST", body: JSON.stringify({ phone, token }) });
+    const result = await response.json();
+    $("phone-code").value = "";
+    await enterApplication({ authenticated: true, authType: "supabase", phone: result.phone });
+  } catch (error) { message.textContent = error.message; }
+});
 async function init() {
   try {
     const response = await fetch("/api/session", { credentials: "same-origin" });
