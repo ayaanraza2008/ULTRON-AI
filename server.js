@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
+import { createIntegrationRouter } from "./integrations/router.js";
 import { startWorker } from "./worker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -684,6 +685,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
+  app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
