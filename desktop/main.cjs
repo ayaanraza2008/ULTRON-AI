@@ -1,6 +1,10 @@
 const { app, BrowserWindow, shell, session, Menu, ipcMain, dialog } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const os = require("node:os");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+const execFileAsync = promisify(execFile);
 
 const PRODUCTION_URL = "https://ultron-ai-zvd7.onrender.com";
 let mainWindow;
@@ -18,7 +22,16 @@ function isTrustedUrl(value) {
   try { return new URL(value).origin === allowedOrigin; } catch { return false; }
 }
 const MAX_LOCAL_TEXT_BYTES = 1_000_000;
-const LOCAL_ACTIONS = new Set(["readTextFile", "saveTextFile", "openExternalUrl", "getSystemInfo"]);
+const LOCAL_ACTIONS = new Set(["readTextFile", "saveTextFile", "openExternalUrl", "getSystemInfo", "runDiagnostic"]);
+const DIAGNOSTICS = Object.freeze({
+  systemSummary: { label: "System summary", description: "Read basic OS and memory information. No files or network data are read." },
+  nodeVersion: { label: "Node.js version", description: "Run the fixed command node --version (no shell and no user-supplied arguments)." },
+  gitVersion: { label: "Git version", description: "Run the fixed command git --version (no shell and no user-supplied arguments)." },
+  pythonVersion: { label: "Python version", description: "Run the fixed command python --version (no shell and no user-supplied arguments)." },
+  diskUsage: { label: "Disk usage", description: "Run the fixed read-only df -h command. Output may reveal mounted volumes." },
+  memoryUsage: { label: "Memory usage", description: "Run the fixed read-only free -h command." },
+  kernelVersion: { label: "Kernel version", description: "Run the fixed read-only uname -r command." }
+});
 
 function isTrustedIpcSender(event) {
   try {
@@ -31,7 +44,8 @@ async function confirmLocalAction(action, detail) {
     readTextFile: { title: "Allow ULTRON to read a file?", message: "ULTRON will read the text file you select. If you then submit its contents to the AI, that text may be sent to your configured AI provider.", detail },
     saveTextFile: { title: "Allow ULTRON to save a file?", message: "ULTRON will save text to a location you choose.", detail },
     openExternalUrl: { title: "Open this link?", message: "ULTRON wants to open this HTTPS link in your default browser.", detail },
-    getSystemInfo: { title: "Share basic PC information?", message: "ULTRON will receive only the OS platform and architecture, not your username or file paths.", detail }
+    getSystemInfo: { title: "Share basic PC information?", message: "ULTRON will receive only the OS platform and architecture, not your username or file paths.", detail },
+    runDiagnostic: { title: "Run an allowlisted local diagnostic?", message: "ULTRON will run only a predefined read-only diagnostic. No arbitrary commands or shell scripts are accepted.", detail }
   }[action];
   const answer = await dialog.showMessageBox(mainWindow, {
     type: "warning", buttons: ["Cancel", "Allow once"], defaultId: 0, cancelId: 0,
@@ -47,6 +61,40 @@ ipcMain.handle("ultron:local-action", async (event, request) => {
   if (action === "getSystemInfo") {
     if (!await confirmLocalAction(action, "Share basic system information with the current ULTRON window?")) return { cancelled: true };
     return { platform: process.platform, architecture: process.arch, companionVersion: "0.2.0" };
+  }
+  if (action === "runDiagnostic") {
+    const diagnostic = typeof request?.diagnostic === "string" ? request.diagnostic : "";
+    const spec = DIAGNOSTICS[diagnostic];
+    if (!spec) throw new Error("This diagnostic is not allowlisted.");
+    if (!await confirmLocalAction(action, spec.label + ": " + spec.description)) return { cancelled: true };
+    if (diagnostic === "systemSummary") {
+      return {
+        diagnostic, label: spec.label,
+        result: { platform: process.platform, architecture: process.arch, release: os.release(), totalMemoryBytes: os.totalmem(), freeMemoryBytes: os.freemem(), cpuCount: os.cpus().length },
+        execution: "local-read-only"
+      };
+    }
+    const unixOnly = new Set(["diskUsage", "memoryUsage", "kernelVersion"]);
+    if (unixOnly.has(diagnostic) && process.platform === "win32") {
+      return { diagnostic, label: spec.label, error: "This read-only Linux utility is available only on Linux/macOS.", execution: "local-read-only" };
+    }
+    const commands = {
+      nodeVersion: { command: process.execPath, args: ["--version"] },
+      gitVersion: { command: process.platform === "win32" ? "git.exe" : "git", args: ["--version"] },
+      pythonVersion: { command: process.platform === "win32" ? "python.exe" : "python3", args: ["--version"] },
+      diskUsage: { command: "df", args: ["-h"] },
+      memoryUsage: { command: "free", args: ["-h"] },
+      kernelVersion: { command: "uname", args: ["-r"] }
+    };
+    try {
+      const result = await execFileAsync(commands[diagnostic].command, commands[diagnostic].args, {
+        timeout: 5000, windowsHide: true, shell: false, maxBuffer: 16 * 1024
+      });
+      return { diagnostic, label: spec.label, result: String(result.stdout || result.stderr || "").trim().slice(0, 2000), execution: "local-read-only" };
+    } catch (error) {
+      const missing = error.code === "ENOENT";
+      return { diagnostic, label: spec.label, error: missing ? "Tool is not installed or not on PATH." : "Diagnostic failed or timed out.", execution: "local-read-only" };
+    }
   }
   if (action === "readTextFile") {
     if (!await confirmLocalAction(action, "Choose a text, Markdown, CSV, JSON, or log file. Maximum 1 MB.")) return { cancelled: true };
