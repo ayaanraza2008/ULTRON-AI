@@ -43,8 +43,10 @@ test("integration catalog reports readiness without exposing secret values", asy
     COMFYUI_BASE_URL: "https://comfy.example.test",
     HEYGEM_API_BASE_URL: "https://avatar.example.test",
     HEYGEM_API_KEY: "private-heygem-secret",
+    HEYGEM_JOB_PATH: "/api/generate",
     OMNIVOICE_API_BASE_URL: "https://voice.example.test",
     OMNIVOICE_API_KEY: "private-voice-secret",
+    OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
     ULTRON_EMPLOYEES_ENABLED: "true"
   };
   await withServer(createApp({ env: configuredEnv, logger: { warn() {}, error() {} } }), async base => {
