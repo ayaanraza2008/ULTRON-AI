@@ -247,3 +247,26 @@ test("confirmed background employee task is stored as a guarded worker task", as
     assert.equal(databaseCalls[1].table, "audit_events");
   }, { supabaseRest });
 });
+
+
+test("background task intent fallback works when the free model does not support tools", async () => {
+  let providerCalls = 0;
+  const supabaseRest = async (_req, table, _method, _query, body) => {
+    if (table === "agent_tasks") return [{ id: "00000000-0000-4000-8000-000000000456", title: body.title, input: body.input, status: body.status, created_at: new Date().toISOString() }];
+    return [];
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" }, async (_url, options) => {
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    if (request.tools) return new Response(JSON.stringify({ error: { message: "tools unsupported" } }), { status: 400 });
+    if (providerCalls === 2) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I cannot call tools in this model." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Queued the confirmed review task." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Queue a web-dev review in the background", confirmBackgroundTask: true }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].name, "enqueue_employee_task");
+    assert.equal(body.toolResults[0].result.state, "queued");
+    assert.equal(providerCalls, 3);
+  }, { supabaseRest });
+});
