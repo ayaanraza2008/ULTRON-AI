@@ -95,8 +95,8 @@ test("document extraction rejects malformed PDF payloads", async () => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: "report.pdf", format: "pdf", fileBase64: Buffer.from("not a pdf").toString("base64") })
     });
-    assert.equal(response.status, 415);
-    assert.equal((await response.json()).error.code, "UNSUPPORTED_DOCUMENT_FORMAT");
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_PDF");
   });
 });
 
