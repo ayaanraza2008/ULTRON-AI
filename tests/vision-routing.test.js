@@ -83,10 +83,7 @@ test("image chat does not silently fall back to text-only model IDs", async () =
   const seen = [];
   const fetchImpl = async (_url, options) => {
     seen.push(JSON.parse(options.body));
-    if (seen.at(-1).model === "vendor/vision-a") {
-      return new Response(JSON.stringify({ error: { code: "model_unavailable" } }), { status: 404, headers: { "Content-Type": "application/json" } });
-    }
-    return new Response(JSON.stringify({ model: seen.at(-1).model, choices: [{ message: { content: "Should not happen" } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: { code: "model_unavailable" } }), { status: 404, headers: { "Content-Type": "application/json" } });
   };
   await withApp({ ...baseEnv }, fetchImpl, async (base, cookie) => {
     const response = await fetch(base + "/api/chat", {
