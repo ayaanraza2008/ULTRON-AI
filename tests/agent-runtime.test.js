@@ -180,3 +180,25 @@ test("agent retries plain chat when the model rejects function-calling schemas",
     assert.equal(calls, 3);
   });
 });
+
+
+test("agent keeps large speech payloads out of model context but returns them to the client", async () => {
+  let providerCalls = 0;
+  const audioBase64 = "A".repeat(3000);
+  await withServer({ OPENROUTER_API_KEY: "test-only", OMNIVOICE_API_BASE_URL: "https://voice.example", OMNIVOICE_API_KEY: "voice-test", OMNIVOICE_SYNTHESIS_PATH: "/synthesize" }, async (url, options) => {
+    if (url === "https://voice.example/synthesize") return new Response(JSON.stringify({ audioBase64, format: "wav" }), { status: 200 });
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "voice-call", type: "function", function: { name: "synthesize_speech", arguments: JSON.stringify({ text: "Hello world" }) } }] } }] }), { status: 200 });
+    const body = JSON.parse(options.body);
+    const toolMessage = body.messages.find(m => m.role === "tool" && m.tool_call_id === "voice-call");
+    assert.ok(toolMessage);
+    assert.equal(toolMessage.content.includes(audioBase64), false);
+    assert.match(toolMessage.content, /binary payload omitted/);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Speech generated." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Generate speech saying hello world" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.result.audioBase64, audioBase64);
+  });
+});

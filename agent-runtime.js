@@ -59,6 +59,21 @@ function parseArgs(raw) {
   try { const value = JSON.parse(raw || "{}"); return value && typeof value === "object" && !Array.isArray(value) ? value : {}; } catch { return {}; }
 }
 
+function modelSafeResult(value, depth = 0) {
+  if (depth > 6) return "[nested result omitted]";
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => modelSafeResult(item, depth + 1));
+  if (!value || typeof value !== "object") return value;
+  const out = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === "string" && /(base64|audio|video|image|binary|blob)/i.test(key) && item.length > 1000) {
+      out[key] = "[binary payload omitted from model context; available in toolResults]";
+    } else {
+      out[key] = modelSafeResult(item, depth + 1);
+    }
+  }
+  return out;
+}
+
 export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, logger = console } = {}) {
   const router = express.Router();
   const tools = [
@@ -307,7 +322,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         try { result = await executeTool(name, args, req.body || {}); }
         catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
         used.push({ name, ok: !result?.error, result });
-        toolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 18000) });
+        toolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)).slice(0, 18000) });
       }
       const finalMessages = [
         ...messages,
