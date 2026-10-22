@@ -41,6 +41,8 @@ jobs:
         run: |
           git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view
           git -C .build-gods-eye-view checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad
+      - name: Expose the existing voice action runner
+        run: node scripts/patch-world-intelligence-source.mjs
       - name: Install and build the globe workspace
         working-directory: .build-gods-eye-view
         env:
