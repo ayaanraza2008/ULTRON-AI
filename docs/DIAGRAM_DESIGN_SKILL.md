@@ -24,4 +24,4 @@ The response reports whether diagram intent was detected, the selected type, ref
 - Output specification: https://github.com/cathrynlavery/diagram-design/blob/main/skills/diagram-design/references/output-spec.md
 - License: MIT
 
-This is a selective on-demand runtime integration, not a local mirror of the entire upstream repository. Only fixed, known upstream reference paths are requested; retrieved files are capped and never executed.
+This is a selective on-demand runtime integration, not a local mirror of the entire upstream repository. The diagram integration is included alongside ULTRON's task-aware harness and cybersecurity integrations in the parent feature set. Only fixed, known upstream reference paths are requested; retrieved files are capped and never executed.
