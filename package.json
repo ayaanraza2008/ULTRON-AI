@@ -14,6 +14,8 @@
     "check": "node --check server.js && node --check features.js && node --check tests/features.test.js"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "mammoth": "^1.9.1",
+    "pdf-parse": "^1.1.1"
   }
 }
