@@ -305,7 +305,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.post("/api/auth/phone/request", async (req, res) => {
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
-    if (!/^\\+[1-9]\\d{7,14}$/.test(phone)) return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter a valid phone number with country code, for example +919876543210." } });
+    if (!/^\+[1-9]\d{7,14}$/.test(phone)) return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter a valid phone number with country code, for example +919876543210." } });
     try {
       await supabaseAuthRequest("/auth/v1/otp", { phone, channel: "sms", create_user: true });
       return res.json({ sent: true, message: "If SMS sign-in is enabled, a verification code has been sent." });
@@ -315,7 +315,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.post("/api/auth/phone/verify", async (req, res) => {
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
-    if (!/^\\+[1-9]\\d{7,14}$/.test(phone) || !/^\\d{4,10}$/.test(token)) return res.status(400).json({ error: { code: "INVALID_OTP", message: "Enter your phone number and the SMS verification code." } });
+    if (!/^\+[1-9]\d{7,14}$/.test(phone) || !/^\d{4,10}$/.test(token)) return res.status(400).json({ error: { code: "INVALID_OTP", message: "Enter your phone number and the SMS verification code." } });
     try {
       const payload = await supabaseAuthRequest("/auth/v1/verify", { phone, token, type: "sms" });
       if (!setSupabaseCookies(res, payload)) return res.status(401).json({ error: { code: "PHONE_VERIFY_FAILED", message: "The code was not accepted. Request a new code and try again." } });
