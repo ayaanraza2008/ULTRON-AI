@@ -250,7 +250,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           try { text = JSON.stringify(JSON.parse(content), null, 2); }
           catch { return res.status(400).json({ error: { code: "INVALID_JSON_DOCUMENT", message: "The JSON document could not be parsed." } }); }
         } else if (format === "html") {
-          text = decodeHtml(content.replace(/<script\b[^>]*>[\s\\S]*?<\/script>/gi, " ").replace(/<style\b[^>]*>[\s\\S]*?<\/style>/gi, " "));
+          text = decodeHtml(content.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " "));
         }
       } else if (["pdf", "docx"].includes(format)) {
         if (!fileBase64 || fileBase64.length > 7_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64)) {
