@@ -51,7 +51,7 @@ function extractIntent(text) {
   if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "check_comfyui";
   if (/\b(integration|integrations|connected services|provider status|what tools|capabilities)\b/.test(s) && /\b(check|status|available|configured|show|list|what)\b/.test(s)) return "integration_status";
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) return "research_web";
-  if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task)\b/.test(s)) return "enqueue_employee_task";
+  if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task|web-dev|review|draft|plan)\b/.test(s)) return "enqueue_employee_task";
   if (/\b(ai employee|employee routine|make a plan|create a plan|draft a|review this|write a report)\b/.test(s)) return "plan_employee";
   if (/\b(code|coding|debug|review this code|write a function|implement|programming)\b/.test(s)) return "coding_assist";
   return null;
