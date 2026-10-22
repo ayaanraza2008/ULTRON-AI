@@ -174,3 +174,53 @@ test("desktop diagnostic record rejects arbitrary diagnostic IDs", async () => {
     assert.equal((await response.json()).error.code, "DIAGNOSTIC_NOT_ALLOWED");
   });
 });
+
+
+test("tool registry distinguishes implemented tools from blocked and unimplemented tools", async () => {
+  await withServer({}, globalThis.fetch, async base => {
+    const response = await fetch(base + "/api/kaligpt/tools");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.tools.find(tool => tool.id === "dns-evidence-review").state, "available");
+    assert.equal(body.tools.find(tool => tool.id === "network-scanning").state, "not-implemented");
+    assert.equal(body.tools.find(tool => tool.id === "arbitrary-shell").state, "blocked_by_design");
+  });
+});
+
+test("DNS evidence review identifies submitted SPF and DMARC records without network calls", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; throw new Error("DNS evidence review must not make network calls"); };
+  await withServer({}, fetchImpl, async base => {
+    const response = await fetch(base + "/api/kaligpt/security/dns-evidence/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: "example.com", records: [
+        { type: "TXT", name: "example.com", value: "v=spf1 -all" },
+        { type: "TXT", name: "_dmarc.example.com", value: "v=DMARC1; p=reject; rua=mailto:dmarc@example.com" }
+      ] })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.recordsAnalyzed, 2);
+    assert.ok(body.findings.some(item => item.id === "spf-observed"));
+    assert.ok(body.findings.some(item => item.id === "dmarc-observed" && item.severity === "info"));
+    assert.match(body.notice, /no DNS lookup/);
+    assert.equal(calls, 0);
+  });
+});
+
+test("DNS evidence review rejects malformed domains and oversized record sets", async () => {
+  await withServer({}, globalThis.fetch, async base => {
+    const badDomain = await fetch(base + "/api/kaligpt/security/dns-evidence/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: "https://example.com", records: [] })
+    });
+    assert.equal(badDomain.status, 400);
+    assert.equal((await badDomain.json()).error.code, "INVALID_DNS_DOMAIN");
+    const tooMany = await fetch(base + "/api/kaligpt/security/dns-evidence/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: "example.com", records: Array(101).fill({ type: "TXT", name: "example.com", value: "x" }) })
+    });
+    assert.equal(tooMany.status, 400);
+    assert.equal((await tooMany.json()).error.code, "INVALID_DNS_RECORDS");
+  });
+});
