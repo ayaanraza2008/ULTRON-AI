@@ -4,7 +4,7 @@
   const ACTIONS = new Set([
     'set_layer_visibility', 'zoom_to_globe', 'adjust_camera_zoom',
     'fly_to_location', 'set_visual_style', 'stop_tracking',
-    'set_context_mode', 'get_current_view_state'
+    'set_context_mode', 'get_current_view_state', 'track_entity'
   ]);
   const LAYERS = new Set([
     'flights','military','ais-live-vessels','satellites','rocket-launches',
@@ -25,6 +25,7 @@
       return Number.isFinite(args.latitude) && args.latitude >= -90 && args.latitude <= 90 && Number.isFinite(args.longitude) && args.longitude >= -180 && args.longitude <= 180;
     }
     if (name === 'set_context_mode') return ['off','contacts','flights','space-missions','missions'].includes(args.mode);
+    if (name === 'track_entity') return ['flights','military','ais-live-vessels','satellites'].includes(args.layerId) && typeof args.query === 'string' && args.query.trim().length > 0 && args.query.length <= 120;
     return name === 'zoom_to_globe' || name === 'stop_tracking' || name === 'get_current_view_state';
   }
   window.addEventListener('message', async event => {
