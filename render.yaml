@@ -79,3 +79,21 @@ services:
         sync: false
       - key: ULTRON_EMPLOYEES_ENABLED
         value: "true"
+
+  - type: web
+    name: ultron-world-intelligence
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: rm -rf .build-gods-eye-view && git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci --include=dev && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
+    startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.0
+      - key: NODE_ENV
+        value: production
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "1"
+      - key: GEV_EMBED_FRAME_ANCESTORS
+        value: https://ultron-ai-zvd7.onrender.com
