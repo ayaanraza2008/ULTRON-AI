@@ -629,7 +629,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             const infoPayload = await infoResponse.json();
             const info = infoPayload?.result || infoPayload;
             const threshold = Math.max(8, Math.min(100, Number(env.OPENVIKING_AUTO_COMMIT_MESSAGES) || 20));
-            if (Number(info?.message_count) >= threshold) {
+            const totalMessages = Number(info?.total_message_count ?? info?.message_count);
+            if (totalMessages >= threshold && totalMessages % threshold < 2) {
               const commitResponse = await fetchImpl(base + "/api/v1/sessions/" + encodeURIComponent(openVikingSessionId) + "/commit", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeaders },
