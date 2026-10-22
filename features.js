@@ -515,6 +515,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         { id: "web-research", name: "Web research", state: "available", execution: "server-search-provider", approval: "per-request" },
         { id: "provider-chat", name: "Multi-provider security assistant", state: "available", execution: "model-guidance-only", approval: "per-request" },
         { id: "http-header-review", name: "HTTP security header review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
+        { id: "http-response-evidence", name: "HTTP response and cookie review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
         { id: "dns-evidence-review", name: "DNS and email-security evidence review", state: "available", execution: "user-supplied-evidence-only", approval: "not-applicable" },
         { id: "desktop-readonly-diagnostics", name: "Desktop read-only diagnostics", state: "available", execution: "desktop-only-fixed-allowlist", approval: "native-confirmation-each-run" },
         { id: "local-ollama", name: "Ollama local model", state: safeBaseUrl(env.OLLAMA_BASE_URL) ? "configured_unverified" : "blocked", execution: "configured-endpoint", approval: "per-request" },
@@ -523,6 +524,51 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       ],
       notice: "Availability describes implemented pathways or configuration only; it does not guarantee an external service is reachable. Evidence-analysis tools do not contact targets."
     });
+  });
+
+  // Analyze user-supplied HTTP response evidence. No outbound request is made.
+  router.post("/kaligpt/security/http-evidence/analyze", requireSession, (req, res) => {
+    const statusCode = Number(req.body?.statusCode);
+    const headers = req.body?.headers;
+    const cookies = req.body?.setCookie;
+    if (!Number.isInteger(statusCode) || statusCode < 100 || statusCode > 599) {
+      return res.status(400).json({ error: { code: "INVALID_HTTP_STATUS", message: "Provide an HTTP status code from 100 to 599." } });
+    }
+    if (!headers || typeof headers !== "object" || Array.isArray(headers) || Object.keys(headers).length > 100) {
+      return res.status(400).json({ error: { code: "INVALID_HTTP_EVIDENCE", message: "Provide up to 100 response headers as an object." } });
+    }
+    if (cookies !== undefined && (!Array.isArray(cookies) || cookies.length > 50)) {
+      return res.status(400).json({ error: { code: "INVALID_COOKIE_EVIDENCE", message: "setCookie must be an array containing at most 50 header values." } });
+    }
+    const normalized = {};
+    for (const [key, value] of Object.entries(headers)) {
+      const name = boundedString(key, 120).toLowerCase();
+      if (/^[a-z0-9!#$%&'*+.^_`|~-]+$/.test(name)) normalized[name] = boundedString(Array.isArray(value) ? value.join(", ") : String(value ?? ""), 2000);
+    }
+    const findings = [];
+    const csp = normalized["content-security-policy"] || "";
+    const hsts = normalized["strict-transport-security"] || "";
+    const cors = normalized["access-control-allow-origin"] || "";
+    const server = normalized.server || "";
+    const powered = normalized["x-powered-by"] || "";
+    if (statusCode >= 500) findings.push({ id: "server-error", severity: "info", title: "Server error response", detail: "The supplied response status is 5xx; confirm error pages do not disclose stack traces or internal details." });
+    if (hsts && !/max-age\\s*=\\s*\\d+/i.test(hsts)) findings.push({ id: "hsts-max-age", severity: "medium", title: "HSTS max-age not observed", detail: "The supplied Strict-Transport-Security value does not show a numeric max-age directive." });
+    if (csp && /(?:^|;)\\s*(?:default-src|script-src)\\s+[^;]*\\*|unsafe-inline|unsafe-eval/i.test(csp)) findings.push({ id: "csp-permissive", severity: "medium", title: "Potentially permissive CSP directive", detail: "The supplied CSP contains a wildcard or unsafe script directive; evaluate in application context." });
+    if (cors === "*" && /\\bcookie\\b/i.test(normalized["access-control-allow-credentials"] || "")) findings.push({ id: "cors-review", severity: "high", title: "Review CORS credential configuration", detail: "Wildcard origin with credential-related evidence warrants manual review; browsers reject the wildcard-plus-credentials combination for credentialed requests." });
+    if (server) findings.push({ id: "server-banner", severity: "low", title: "Server banner disclosed", detail: "A Server header is present. Check whether it unnecessarily discloses product or version details.", evidence: server.slice(0, 300) });
+    if (powered) findings.push({ id: "powered-by-banner", severity: "low", title: "Technology banner disclosed", detail: "An X-Powered-By header is present; consider removing it if not operationally needed.", evidence: powered.slice(0, 300) });
+    const cookieFindings = (cookies || []).slice(0, 50).map((raw, index) => {
+      const value = boundedString(raw, 3000);
+      const name = (value.split(";", 1)[0].split("=", 1)[0] || "unknown").trim().slice(0, 100);
+      const flags = value.toLowerCase();
+      const missing = [];
+      if (!/;\\s*secure(?:;|$)/i.test(value)) missing.push("Secure");
+      if (!/;\\s*httponly(?:;|$)/i.test(value)) missing.push("HttpOnly");
+      if (!/;\\s*samesite\\s*=/i.test(value)) missing.push("SameSite");
+      return { id: "cookie-" + index, name, missingFlags: missing, severity: missing.length >= 2 ? "medium" : missing.length ? "low" : "info", status: missing.length ? "review" : "flags-observed", detail: missing.length ? "Supplied Set-Cookie evidence does not show: " + missing.join(", ") + "." : "Secure, HttpOnly, and SameSite attributes appear in the supplied value." };
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ tool: "http-response-evidence", statusCode, headerCount: Object.keys(normalized).length, findings, cookieFindings, execution: "local-analysis-only", notice: "This analyzer uses only the response evidence you submitted. It did not fetch the URL or contact a target; proxy behavior and application context may affect interpretation." });
   });
 
   // Passive analysis only: the client submits DNS records already collected with authorization.
