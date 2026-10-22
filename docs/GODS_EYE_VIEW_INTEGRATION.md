@@ -33,8 +33,8 @@ ULTRON should present this as a first-class **World Intelligence** workspace, no
 
 ## Implementation status
 
-- The ULTRON server now has a `/world-intelligence/` static mount and a no-store status endpoint.
-- Render's build command is configured to clone the pinned upstream commit `7be5937fc3e3b10cdfa8d3f833536167268768ad`, build it with `/world-intelligence/` as its asset base, and copy its browser bundle into ULTRON's public assets.
-- A path-specific CSP policy is configured for the globe workspace; the existing ULTRON page retains its stricter policy.
-- This is the **workspace packaging step**, not the complete autonomous integration. The ULTRON AI tool bridge that translates chat requests into safe globe actions is still not connected. Render has not been deployed or verified by this change, and the build/status endpoint must be checked in CI before calling the globe live.
+- ULTRON now has a first-class World Intelligence view and redirects `/world-intelligence/` to a separate Render web service running the pinned upstream application. This is necessary because God's Eye View's data providers and proxies need its own runtime, not just a copied static bundle.
+- Render's blueprint defines a second free web service, `ultron-world-intelligence`, pinned to upstream commit `7be5937fc3e3b10cdfa8d3f833536167268768ad`, using Node 24.14.0 and Vite preview with its provider routes.
+- ULTRON's Content Security Policy permits the configured World Intelligence iframe origin, while the ULTRON main page retains its stricter script/connect policy.
+- This is the **workspace/service integration step**, not the complete autonomous integration. The ULTRON AI tool bridge that translates chat requests into safe globe actions is still not connected. Render has not been deployed or verified by this change.
 - The upstream project is MIT-licensed, but its own data-source documentation states that third-party data and visual assets have separate terms. Each bundled dataset/model and live provider must be reviewed before redistribution. Its security notes characterize it as an exploratory client, not a hardened production service.
