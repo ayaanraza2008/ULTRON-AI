@@ -166,3 +166,29 @@ test("ComfyUI cancellation rejects unsafe prompt ids", async () => {
     assert.equal(called, false);
   });
 });
+
+
+test("integration catalog reports readiness without exposing credentials or claiming connectivity", async () => {
+  await withServer({
+    ULTRON_EMPLOYEES_ENABLED: "true",
+    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_API_KEY: "secret-comfy-test",
+    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_KEY: "secret-voice-test",
+    OMNIVOICE_SYNTHESIS_PATH: "/synthesize"
+  }, async () => { throw new Error("catalog must not call upstream services"); }, async base => {
+    const response = await fetch(base + "/api/integrations/catalog");
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const body = await response.json();
+    assert.equal(body.verification, "configuration_only");
+    const comfy = body.integrations.find(item => item.id === "comfyui");
+    const voice = body.integrations.find(item => item.id === "omnivoice");
+    const employees = body.integrations.find(item => item.id === "ai-employees");
+    assert.equal(comfy.state, "configured_unverified");
+    assert.equal(voice.configured, true);
+    assert.equal(employees.state, "enabled_guarded_templates");
+    assert.equal(JSON.stringify(body).includes("secret-comfy-test"), false);
+    assert.equal(JSON.stringify(body).includes("secret-voice-test"), false);
+  });
+});
