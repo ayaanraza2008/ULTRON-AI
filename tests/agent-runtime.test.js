@@ -497,7 +497,7 @@ test("harness engineering guidance is applied and discoverable automatically", a
   await withServer({}, async () => {
     throw new Error("harness discovery must not call a model provider");
   }, async base => {
-    const response = await fetch(base + "/api/agent/harness?task=debug%20repository%20tests%20and%20deploy");
+    const response = await fetch(base + "/api/agent/harness?task=debug%20repository%20tests%20and%20deploy%20to%20production");
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.mode, "automatic_task_aware_harness");
