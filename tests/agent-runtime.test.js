@@ -65,3 +65,33 @@ test("agent tool execution fails closed for invalid employee roles", async () =>
     assert.equal(body.toolResults[0].result.error.code, "INVALID_EMPLOYEE_TASK");
   });
 });
+
+
+test("agent executes a model-selected research tool and passes results back for synthesis", async () => {
+  let providerCalls = 0;
+  let researchCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      researchCalls += 1;
+      assert.equal(JSON.parse(options.body).query, "latest space launch");
+      return new Response(JSON.stringify({ answer: "A recent launch was reported.", results: [{ title: "Launch report", url: "https://example.com/launch", content: "Source snippet." }] }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ model: "mock-model", choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "research-call", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "latest space launch" }) } }] } }] }), { status: 200 });
+    }
+    const body = JSON.parse(options.body);
+    assert.ok(body.messages.some(m => m.role === "tool" && m.tool_call_id === "research-call"));
+    return new Response(JSON.stringify({ model: "mock-model", choices: [{ message: { role: "assistant", content: "Here is the sourced summary." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Research latest space launch" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.content, "Here is the sourced summary.");
+    assert.deepEqual(body.toolsUsed, [{ name: "research_web", ok: true }]);
+    assert.equal(body.toolResults[0].result.results[0].url, "https://example.com/launch");
+    assert.equal(researchCalls, 1);
+    assert.equal(providerCalls, 2);
+  });
+});
