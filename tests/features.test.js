@@ -258,7 +258,7 @@ test("World Intelligence command only opens the workspace for explicit open inte
       body: JSON.stringify({ command: "Track the nearest satellite" })
     });
     assert.equal(unsupported.status, 501);
-    assert.equal((await unsupported.json()).error.code, "WORLD_TOOL_BRIDGE_NOT_CONNECTED");
+    assert.equal((await unsupported.json()).error.code, "WORLD_TOOL_BRIDGE_ACTION_REQUIRED");
   });
 });
 
