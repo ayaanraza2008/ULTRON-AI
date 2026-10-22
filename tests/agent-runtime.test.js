@@ -41,6 +41,36 @@ test("agent automatically injects relevant AgentMemory results for continuation 
   });
 });
 
+test("automatically stores high-signal decisions in the existing durable Supabase memory when AgentMemory is not configured", async () => {
+  const writes = [];
+  const supabaseRest = async (_req, table, method, query, body) => {
+    if (table === "user_preferences") return [{ memory_enabled: true }];
+    if (table === "memory_items" && method === "GET") return [];
+    if (table === "memory_items" && method === "POST") {
+      writes.push({ query, body });
+      return [{ id: "memory-row-1", ...body }];
+    }
+    throw new Error("unexpected database operation");
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    const request = JSON.parse(options.body);
+    assert.equal(request.tools?.length > 0, true);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Decision noted for future project work." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "We decided: keep the worker isolated from the API process." })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].body.user_id, "00000000-0000-4000-8000-000000000001");
+    assert.equal(writes[0].body.kind, "project_fact");
+    assert.equal(writes[0].body.source, "conversation_summary");
+    assert.match(writes[0].body.content, /worker isolated/);
+  }, { supabaseRest });
+});
+
 test("AgentMemory readiness is authenticated and does not return memory contents", async () => {
   await withServer({ AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
     assert.equal(url, "https://memory.example/agentmemory/smart-search");
