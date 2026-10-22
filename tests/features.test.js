@@ -314,3 +314,16 @@ test("task creation cannot downgrade inferred high risk to low", async () => {
     assert.equal(savedInput.executionMode, "planned_only");
   }, { supabaseRest: fakeSupabaseRest });
 });
+
+
+test("tool catalog reports OpenViking as optional and never exposes its key", async () => {
+  await withServer({ OPENVIKING_URL: "https://openviking.example", OPENVIKING_API_KEY: "never-return-this" }, async base => {
+    const response = await fetch(base + "/api/kaligpt/tools");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const tool = body.tools.find(item => item.id === "openviking-context");
+    assert.equal(tool.state, "configured_unverified");
+    assert.match(tool.execution, /automatic-read-only-recall/);
+    assert.equal(JSON.stringify(body).includes("never-return-this"), false);
+  });
+});
