@@ -28,7 +28,23 @@
         <button id="signup-button" class="secondary-button full-button" type="button">New here? Create account</button>
         <p id="login-error" class="error-text" role="alert"></p>
       </form>
-      <p class="muted small">Use your ULTRON account. Never reuse a password from another service.</p>
+      <div class="auth-divider"><span>OR CONTINUE WITH</span></div>
+      <a class="secondary-button full-button auth-provider-button" href="/api/auth/google" id="google-signin">Continue with Google</a>
+      <section class="phone-auth" aria-labelledby="phone-auth-heading">
+        <h2 id="phone-auth-heading">Sign in with mobile</h2>
+        <form id="phone-request-form">
+          <label for="phone-number">Mobile number with country code</label>
+          <input id="phone-number" type="tel" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="+919876543210" pattern="\\+[1-9][0-9]{7,14}">
+          <button class="secondary-button full-button" type="submit">Send SMS code</button>
+        </form>
+        <form id="phone-verify-form" class="hidden">
+          <label for="phone-code">SMS verification code</label>
+          <input id="phone-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]{4,10}" placeholder="Enter code">
+          <button class="primary-button full-button" type="submit">Verify and sign in</button>
+        </form>
+        <p id="phone-auth-message" class="error-text" role="status"></p>
+      </section>
+      <p class="muted small">Never reuse a password from another service.</p>
     </div>
   </div>
   <div id="setup-screen" class="login-screen hidden">
