@@ -413,3 +413,37 @@ test("agent infers generic image-generation requests without requiring the user 
     assert.equal(comfyCalls, 0);
   });
 });
+
+
+test("agent recognizes ordinary read-aloud requests and reports missing voice configuration", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I can read that aloud." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Voice generation is not configured yet." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Read this aloud: Hello world" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].name, "synthesize_speech");
+    assert.equal(body.toolResults[0].result.state, "blocked");
+    assert.match(body.toolResults[0].result.blocker, /OMNIVOICE_API_BASE_URL/);
+  });
+});
+
+test("agent routes plain-language website-building requests to the coding tool", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I'll prepare a website implementation draft." } }] }), { status: 200 });
+    if (providerCalls === 2) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Use a small Express app with routes and tests." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I prepared a coding draft, not a deployed website." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Build a website for my portfolio" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].name, "coding_assist");
+    assert.equal(body.toolResults[0].result.execution, "draft_only");
+    assert.match(body.toolResults[0].result.answer, /Express app/);
+  });
+});
