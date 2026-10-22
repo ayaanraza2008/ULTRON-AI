@@ -25,6 +25,8 @@ test("AI Employee registry exposes eight roles and transparent scheduler status"
     const body = await response.json();
     assert.equal(body.roles.length, 8);
     assert.equal(body.totalRoleRoutineSlots, 60);
+    assert.equal(body.routineTemplates.length, 60);
+    assert.equal(new Set(body.routineTemplates.map(item => item.id)).size, 60);
     assert.equal(body.scheduler, "not_configured");
     assert.equal(body.execution, "planning_and_drafting_only");
     assert.match(body.source, /markfulton\/ai-employees/);
