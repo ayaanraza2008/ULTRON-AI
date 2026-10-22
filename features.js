@@ -484,11 +484,26 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const mode = ["learn", "defensive-review", "authorized-test-plan", "linux-admin"].includes(req.body?.mode)
       ? req.body.mode : "learn";
     const evidence = boundedString(req.body?.evidence, 8000);
+    const requestedProvider = ["auto", "openrouter", "openai", "gemini", "litellm", "ollama"].includes(req.body?.provider)
+      ? req.body.provider : "auto";
     if (!task) return res.status(400).json({ error: { code: "SECURITY_TASK_REQUIRED", message: "Describe the security task first." } });
     if (target && !/^https?:\/\//i.test(target) && !/^[a-zA-Z0-9.-]{1,253}$/.test(target)) {
       return res.status(400).json({ error: { code: "INVALID_TARGET", message: "Target must be a hostname or HTTP(S) URL." } });
     }
-    if (!env.OPENROUTER_API_KEY) return res.status(503).json({ error: { code: "SECURITY_PROVIDER_NOT_CONFIGURED", message: "Configure OPENROUTER_API_KEY to enable the security assistant." } });
+    const providerConfigs = {
+      openrouter: { ready: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, label: "openrouter" },
+      openai: { ready: Boolean(env.OPENAI_API_KEY), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (safeBaseUrl(env.OPENAI_BASE_URL) || "https://api.openai.com/v1") + "/chat/completions", key: env.OPENAI_API_KEY, label: "openai" },
+      gemini: { ready: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash") + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY || ""), key: null, label: "gemini" },
+      litellm: { ready: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", url: (safeBaseUrl(env.LITELLM_BASE_URL) || "") + "/chat/completions", key: env.LITELLM_API_KEY, label: "litellm" },
+      ollama: { ready: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120) || "", url: (safeBaseUrl(env.OLLAMA_BASE_URL) || "") + "/api/chat", key: null, label: "ollama" }
+    };
+    const order = requestedProvider === "auto"
+      ? ["openrouter", "openai", "gemini", "litellm", "ollama"]
+      : [requestedProvider];
+    const provider = order.find(name => providerConfigs[name].ready);
+    if (!provider) return res.status(503).json({ error: { code: "SECURITY_PROVIDER_NOT_CONFIGURED", message: requestedProvider === "auto" ? "Configure at least one supported provider: OpenRouter, OpenAI, Gemini, LiteLLM, or Ollama." : "The selected provider is not configured on this server." } });
+    const config = providerConfigs[provider];
+    if (provider === "ollama" && !config.model) return res.status(503).json({ error: { code: "OLLAMA_MODEL_REQUIRED", message: "Set OLLAMA_DEFAULT_MODEL or choose a model in the local model settings." } });
     const system = [
       "You are ULTRON's defensive cybersecurity and Linux administration assistant inspired by KaliGPT.",
       "Help with security learning, defensive review, Linux administration, and scoped authorized assessment planning.",
@@ -502,27 +517,37 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const prompt = JSON.stringify({ mode, task, target: target || undefined, evidence: evidence || undefined });
     const timeout = withTimeout(45000, req.signal);
     try {
-      const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Security Assistant" },
-        body: JSON.stringify({ model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", messages: [{ role: "system", content: system }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 2800 }),
-        signal: timeout.signal
+      const messages = [{ role: "system", content: system }, { role: "user", content: prompt }];
+      const headers = { "Content-Type": "application/json" };
+      let body;
+      if (config.key) headers.Authorization = "Bearer " + config.key;
+      if (provider === "gemini") {
+        body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 2800 } };
+      } else if (provider === "ollama") {
+        body = { model: config.model, messages, stream: false, options: { temperature: 0.2, num_predict: 2800 } };
+      } else {
+        body = { model: config.model, messages, temperature: 0.2, max_tokens: 2800 };
+      }
+      const response = await fetchImpl(config.url, {
+        method: "POST", headers, body: JSON.stringify(body), signal: timeout.signal
       });
       if (!response.ok) {
-        logger.warn?.("Security assistant provider failed", { status: response.status });
-        return res.status(502).json({ error: { code: "SECURITY_PROVIDER_FAILED", message: "The security provider could not complete this request." } });
+        logger.warn?.("Security assistant provider failed", { provider, status: response.status });
+        return res.status(502).json({ error: { code: "SECURITY_PROVIDER_FAILED", message: "The selected security provider could not complete this request." } });
       }
       const payload = await response.json();
-      const answer = payload?.choices?.[0]?.message?.content;
+      const answer = provider === "gemini"
+        ? payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n")
+        : provider === "ollama" ? payload?.message?.content : payload?.choices?.[0]?.message?.content;
       if (typeof answer !== "string" || !answer.trim()) return res.status(502).json({ error: { code: "SECURITY_EMPTY_RESPONSE", message: "The provider returned no answer." } });
       res.json({
-        mode, model: boundedString(payload?.model, 120) || boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free",
+        mode, provider, model: boundedString(payload?.model, 120) || config.model,
         answer: answer.slice(0, 22000), execution: "not_executed",
         approvalRequiredForExecution: true,
         notice: "ULTRON only generated guidance. No commands were run and no target was contacted."
       });
     } catch (error) {
-      logger.warn?.("Security assistant request failed", { name: error?.name || "Error" });
+      logger.warn?.("Security assistant request failed", { provider, name: error?.name || "Error" });
       res.status(502).json({ error: { code: "SECURITY_REQUEST_FAILED", message: "Security assistance failed or timed out. Please retry." } });
     } finally {
       timeout.close();
