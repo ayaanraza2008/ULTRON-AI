@@ -57,6 +57,12 @@ function normalizeBaseUrl(value) {
 
 export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
   const app = express();
+  app.locals.workerRuntime = () => ({
+    state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "configured_not_started" : "disabled_by_config",
+    serviceRoleConfigured: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
+    modelProviderConfigured: Boolean(env.OPENROUTER_API_KEY),
+    researchProviderConfigured: Boolean(env.TAVILY_API_KEY)
+  });
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
   app.use(express.json({ limit: "12mb", strict: true }));
@@ -214,6 +220,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
     return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Please sign in to ULTRON first." } });
   }
+
+  app.get("/api/worker/status", requireSupabaseUser, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ worker: app.locals.workerRuntime() });
+  });
 
   app.get("/api/health", (_req, res) => {
     res.json({
@@ -718,5 +729,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   const port = Number(process.env.PORT) || 10000;
   const app = createApp();
   app.listen(port, "0.0.0.0", () => console.log(`ULTRON AI listening on port ${port}`));
-  if (process.env.ULTRON_EMPLOYEES_ENABLED === "true") startWorker();
+  if (process.env.ULTRON_EMPLOYEES_ENABLED === "true") {
+    const worker = startWorker();
+    app.locals.workerRuntime = worker.getStatus;
+    const stopWorker = () => worker.stop();
+    process.once("SIGTERM", stopWorker);
+    process.once("SIGINT", stopWorker);
+  }
 }
