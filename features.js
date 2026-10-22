@@ -288,10 +288,13 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_TASK_ID", message: "Task ID is invalid." } });
     if (req.body?.confirm !== true) return res.status(400).json({ error: { code: "EXPLICIT_CONFIRMATION_REQUIRED", message: "Send confirm: true only after reviewing the task and its requested permissions." } });
     try {
+      const existing = await supabaseRest(req, "agent_tasks", "GET",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status&limit=1");
+      if (!Array.isArray(existing) || !existing[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task was not found or is not awaiting approval." } });
       const rows = await supabaseRest(req, "agent_tasks", "PATCH",
         "?id=eq." + encodeURIComponent(req.params.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status",
-        { status: "QUEUED", input: { approved: true, approvedAt: new Date().toISOString(), approvalScope: "task_record_only" } });
-      if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task was not found or is not awaiting approval." } });
+        { status: "QUEUED", input: { ...(existing[0].input || {}), approved: true, approvedAt: new Date().toISOString(), approvalScope: "task_record_only" } });
+      if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task changed state before approval could be recorded." } });
       await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.approved", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { scope: "task_record_only" } }, "return=minimal");
       res.json({ task: rows[0], notice: "Approval recorded. This does not execute PC commands; an approved task worker is still required." });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_APPROVAL_FAILED", message: error.message } }); }
