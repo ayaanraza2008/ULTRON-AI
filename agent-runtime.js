@@ -239,6 +239,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
+        { name: "world_intelligence_command", available: true, execution: "returns_validated_action_for_browser_dispatch_not_server_executed" },
         { name: "synthesize_speech", available: Boolean(safeBase(env.OMNIVOICE_API_BASE_URL) && env.OMNIVOICE_API_KEY && env.OMNIVOICE_SYNTHESIS_PATH), execution: "provider_job_when_configured" },
         { name: "create_talking_avatar", available: Boolean(safeBase(env.HEYGEM_API_BASE_URL) && env.HEYGEM_API_KEY && env.HEYGEM_JOB_PATH), execution: "requires_user_portrait_and_audio" },
         { name: "transcribe_audio", available: Boolean(safeBase(env.ULTRON_HANDY_BRIDGE_URL) && env.ULTRON_HANDY_BRIDGE_TOKEN && env.ULTRON_HANDY_TRANSCRIBE_PATH), execution: "requires_audio_and_desktop_bridge" },
