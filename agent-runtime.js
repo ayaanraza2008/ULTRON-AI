@@ -654,6 +654,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!calls.length) calls = buildFallbackCalls(userText);
       if (!calls.length) {
         const content = typeof assistantMessage?.content === "string" ? assistantMessage.content : "I couldn't produce a response. Please try again.";
+        if (agentMemory.configured && agentMemory.automaticCapture) {
+          try {
+            await captureAgentMemory(userText, { env, fetchImpl, userId: req.supabaseUser?.id });
+          } catch (memoryError) {
+            logger.warn?.("Optional AgentMemory capture failed", { code: memoryError.code || "AGENTMEMORY_CAPTURE_FAILED" });
+          }
+        }
         return res.json({ content, toolsUsed: [], model: first?.model || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" });
       }
       const toolMessages = [];
