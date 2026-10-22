@@ -470,7 +470,7 @@ test("autonomous fallback dispatches multiple explicitly requested safe tools wi
 
 test("autonomous fallback combines research, image generation readiness, and code drafts", async () => {
   let tavilyCalls = 0;
-  await withServer({ TAVILY_API_KEY: "tavily-test" }, async (url) => {
+  await withServer({ TAVILY_API_KEY: "tavily-test", COMFYUI_BASE_URL: "https://comfy.example" }, async (url) => {
     if (url === "https://api.tavily.com/search") {
       tavilyCalls += 1;
       return new Response(JSON.stringify({ answer: "Research summary", results: [{ title: "Source", url: "https://example.com", content: "Snippet" }] }), { status: 200 });
