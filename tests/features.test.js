@@ -271,3 +271,23 @@ test("World Intelligence command rejects empty input", async () => {
     assert.equal((await response.json()).error.code, "WORLD_COMMAND_REQUIRED");
   });
 });
+
+test("World Intelligence tool bridge validates layer actions and rejects unsafe targets", async () => {
+  await withServer({}, async base => {
+    const valid = await fetch(base + "/api/world-intelligence/command", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: "show satellites", action: { name: "set_layer_visibility", args: { layerId: "satellites", enabled: true } } })
+    });
+    assert.equal(valid.status, 200);
+    const payload = await valid.json();
+    assert.equal(payload.action.type, "invoke_globe_tool");
+    assert.equal(payload.action.name, "set_layer_visibility");
+
+    const unsafe = await fetch(base + "/api/world-intelligence/command", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: "run shell", action: { name: "exec", args: { command: "whoami" } } })
+    });
+    assert.equal(unsafe.status, 400);
+    assert.equal((await unsafe.json()).error.code, "WORLD_ACTION_NOT_ALLOWED");
+  });
+});
