@@ -7,7 +7,8 @@ This integration implements a native ULTRON security-assistance layer inspired b
 - `GET /api/kaligpt/capabilities` — authenticated readiness manifest for OpenRouter, Ollama-compatible local inference, LiteLLM-compatible gateways, Gemini, and OpenAI. It reports only booleans and never returns secret values.
 - `POST /api/kaligpt/security/assist` — authenticated model-backed helper for security learning, defensive reviews, authorized assessment planning, and Linux administration. It accepts a task, optional hostname/URL, mode, and evidence.
 - Existing ULTRON endpoints remain the integration layer for web research, local-model chat, coding assistance, model selection, and task records.
-- Desktop local diagnostics are exposed through the Electron preload bridge as `ultronDesktop.runDiagnostic(id)`. The main process validates the trusted window, accepts only four fixed IDs (`systemSummary`, `nodeVersion`, `gitVersion`, `pythonVersion`), asks for native approval each time, uses fixed argument arrays with `shell: false`, applies a five-second timeout, and bounds returned output. No arbitrary command string, arguments, scripts, or shell access are exposed.
+- Desktop local diagnostics are exposed through the Electron preload bridge as `ultronDesktop.runDiagnostic(id)`. The main process validates the trusted window, accepts only fixed IDs (`systemSummary`, `nodeVersion`, `gitVersion`, `pythonVersion`, `diskUsage`, `memoryUsage`, `kernelVersion`), asks for native approval each time, uses fixed argument arrays with `shell: false`, applies a five-second timeout, and bounds returned output. Linux utility commands are read-only and unavailable on Windows. No arbitrary command string, arguments, scripts, or shell access are exposed.
+- `POST /api/kaligpt/tools/diagnostics/record` stores a user-submitted, bounded diagnostic result as a `WAITING_FOR_PERMISSION` manual task and writes an audit event. It never runs a command; the result remains a review-only record.
 
 ## Safety and execution boundary
 
@@ -21,7 +22,7 @@ Implemented in this branch:
 - KaliGPT-inspired capability/readiness manifest.
 - Model-backed cybersecurity learning and defensive planning endpoint with explicit provider selection (`openrouter`, `openai`, `gemini`, `litellm`, `ollama`) or `auto` selection with provider fallback.
 - `POST /api/kaligpt/tools/headers/analyze` — deterministic review of HTTP response headers supplied by the user, with findings for HSTS, CSP, nosniff, referrer policy, permissions policy, and frame protection; makes no outbound request.
-- Regression tests for secret redaction, missing provider configuration, and the no-execution boundary.
+- Regression tests for secret redaction, missing provider configuration, provider fallback, passive header analysis, and review-only diagnostic task recording.
 
 Not claimed as complete:
 - Live connectivity/credential verification for Gemini/OpenAI/LiteLLM/Ollama. Adapters are implemented for this endpoint, but have not been verified against live provider accounts. `auto` selects providers in priority order and now retries the next configured provider after HTTP errors, timeouts, network failures, or empty responses. The fallback test is mocked; live provider behavior is still unverified.
