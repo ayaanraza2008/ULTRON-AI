@@ -18,11 +18,11 @@ The endpoint rejects malformed targets, bounds input sizes, uses server-side pro
 
 Implemented in this branch:
 - KaliGPT-inspired capability/readiness manifest.
-- Model-backed cybersecurity learning and defensive planning endpoint.
+- Model-backed cybersecurity learning and defensive planning endpoint with explicit provider selection (`openrouter`, `openai`, `gemini`, `litellm`, `ollama`) or `auto` selection based on configured credentials.
 - Regression tests for secret redaction, missing provider configuration, and the no-execution boundary.
 
 Not claimed as complete:
-- Live Gemini/OpenAI/LiteLLM adapter routing. The manifest reports their configuration, but this new assistant endpoint currently calls the configured OpenRouter gateway.
+- Live connectivity/credential verification for Gemini/OpenAI/LiteLLM/Ollama. Adapters are implemented for this endpoint, but have not been verified against live provider accounts. `auto` selects the first configured provider in the documented priority order; it does not yet retry a second provider after quota or provider failure.
 - Actual Kali Linux command execution, Nmap/Nikto integration, browser automation, or desktop control.
 - Live provider tests, UI controls, and production deployment verification.
 
