@@ -592,9 +592,9 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 
   // Passive analysis only: the client submits DNS records already collected with authorization.
   router.post("/kaligpt/security/dns-evidence/analyze", requireSession, (req, res) => {
-    const domain = boundedString(req.body?.domain, 253).toLowerCase().replace(/\\.$/, "");
+    const domain = boundedString(req.body?.domain, 253).toLowerCase().replace(/\.$/, "");
     const records = req.body?.records;
-    if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(domain)) {
+    if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(domain)) {
       return res.status(400).json({ error: { code: "INVALID_DNS_DOMAIN", message: "Provide a valid DNS domain name." } });
     }
     if (!Array.isArray(records) || records.length > 100) {
@@ -603,7 +603,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const clean = [];
     for (const record of records) {
       const type = boundedString(record?.type, 12).toUpperCase();
-      const name = boundedString(record?.name, 253).toLowerCase().replace(/\\.$/, "");
+      const name = boundedString(record?.name, 253).toLowerCase().replace(/\.$/, "");
       const value = boundedString(record?.value, 2000);
       if (!["A", "AAAA", "CNAME", "MX", "NS", "TXT", "CAA", "SOA", "SRV"].includes(type) || !name || !value) {
         return res.status(400).json({ error: { code: "INVALID_DNS_RECORD", message: "Each record needs a supported type, name, and value." } });
@@ -611,15 +611,15 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       clean.push({ type, name, value });
     }
     const txt = clean.filter(record => record.type === "TXT").map(record => ({ name: record.name, value: record.value }));
-    const rootSpf = txt.some(record => record.name === domain && /(?:^|\\s)v=spf1(?:\\s|$)/i.test(record.value));
-    const dmarc = txt.some(record => record.name === "_dmarc." + domain && /(?:^|\\s)v=DMARC1(?:;|\\s|$)/i.test(record.value));
+    const rootSpf = txt.some(record => record.name === domain && /(?:^|\s)v=spf1(?:\s|$)/i.test(record.value));
+    const dmarc = txt.some(record => record.name === "_dmarc." + domain && /(?:^|\s)v=DMARC1(?:;|\s|$)/i.test(record.value));
     const findings = [];
     if (!rootSpf) findings.push({ id: "spf-not-observed", severity: "medium", title: "SPF record not present in submitted evidence", detail: "No root-domain TXT record beginning with v=spf1 was found in the records supplied. Confirm the evidence is complete before concluding it is missing." });
     else findings.push({ id: "spf-observed", severity: "info", title: "SPF record observed", detail: "An SPF-like TXT record was present. Review its mechanisms, lookup count, and ending policy separately." });
     if (!dmarc) findings.push({ id: "dmarc-not-observed", severity: "medium", title: "DMARC record not present in submitted evidence", detail: "No _dmarc TXT record beginning with v=DMARC1 was found in the records supplied. Confirm the evidence is complete." });
     else {
-      const dmarcValue = txt.find(record => record.name === "_dmarc." + domain && /(?:^|\\s)v=DMARC1(?:;|\\s|$)/i.test(record.value))?.value || "";
-      const policy = /(?:^|;)\\s*p=([^;\\s]+)/i.exec(dmarcValue)?.[1]?.toLowerCase();
+      const dmarcValue = txt.find(record => record.name === "_dmarc." + domain && /(?:^|\s)v=DMARC1(?:;|\s|$)/i.test(record.value))?.value || "";
+      const policy = /(?:^|;)\s*p=([^;\s]+)/i.exec(dmarcValue)?.[1]?.toLowerCase();
       findings.push({ id: "dmarc-observed", severity: policy === "reject" ? "info" : policy === "quarantine" ? "low" : "medium", title: "DMARC record observed", detail: policy ? "Observed DMARC policy: " + policy + ". Validate alignment and reporting configuration." : "DMARC record observed, but policy could not be parsed." });
     }
     const cnameAtRoot = clean.some(record => record.type === "CNAME" && record.name === domain);
