@@ -263,7 +263,20 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       ...(prompt ? [{ role: "user", content: prompt }] : [])
     ];
     try {
-      const first = await requestModel(messages, { useTools: true });
+      let first;
+      try {
+        first = await requestModel(messages, { useTools: true });
+      } catch (toolModeError) {
+        // Some free-model routes reject tool schemas. Retry plain chat first; if that
+        // also fails, deterministic safe intents can still execute non-model tools.
+        try {
+          first = await requestModel(messages);
+        } catch (plainModeError) {
+          if (!extractIntent(userText)) throw plainModeError;
+          first = { choices: [{ message: { role: "assistant", content: "" } }] };
+          logger.warn?.("Agent model unavailable; using safe intent fallback", { code: plainModeError.code || toolModeError.code || "MODEL_UNAVAILABLE" });
+        }
+      }
       let assistantMessage = first?.choices?.[0]?.message;
       let calls = Array.isArray(assistantMessage?.tool_calls) ? assistantMessage.tool_calls.slice(0, 3) : [];
       // Some free models do not implement function calling. Use a conservative intent fallback.
