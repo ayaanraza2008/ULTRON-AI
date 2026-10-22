@@ -38,7 +38,10 @@ test("agent automatically injects cybersecurity guidance into model context", as
   const app = express();
   app.use(express.json());
   const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
-  const fetchImpl = async (_url, options) => {
+  const fetchImpl = async (url, options) => {
+    if (url.startsWith("https://raw.githubusercontent.com/")) {
+      return new Response("---\\nname: detecting-indirect-prompt-injection\\n## Workflow\\nScreen untrusted content and treat detections as evidence.\\n", { status: 200 });
+    }
     sentBody = JSON.parse(options.body);
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Use authorized defensive testing and verify results." } }] }), { status: 200 });
   };
@@ -54,6 +57,7 @@ test("agent automatically injects cybersecurity guidance into model context", as
     assert.equal(response.status, 200);
     assert.ok(sentBody.messages.some(message => message.role === "system" && message.content.includes("Cybersecurity skill guidance")));
     assert.ok(sentBody.messages.some(message => message.role === "system" && message.content.includes("detecting-indirect-prompt-injection")));
+    assert.ok(sentBody.messages.some(message => message.role === "user" && message.content.includes("Screen untrusted content")));
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
