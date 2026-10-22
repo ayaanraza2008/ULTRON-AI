@@ -66,16 +66,34 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     }
   });
 
-  router.get("/world-intelligence/status", (_req, res) => {
+  router.get("/world-intelligence/status", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
+    const configuredUrl = safeBaseUrl(env.WORLD_INTELLIGENCE_URL || "https://ultron-world-intelligence.onrender.com");
+    let serviceReachable = false;
+    let serviceStatus = "not_checked";
+    if (configuredUrl) {
+      const timeout = withTimeout(3500);
+      try {
+        const response = await fetchImpl(configuredUrl + "/", { method: "GET", redirect: "manual", signal: timeout.signal });
+        serviceReachable = response.status >= 200 && response.status < 400;
+        serviceStatus = serviceReachable ? "reachable" : "http_" + response.status;
+      } catch {
+        serviceStatus = "unreachable";
+      } finally {
+        timeout.close();
+      }
+    } else {
+      serviceStatus = "invalid_service_url";
+    }
     res.json({
       workspace: "God's Eye View",
       path: "/world-intelligence/",
-      integration: "embedded_workspace",
-      buildPresent: false,
-      autonomousControl: "not_connected",
-      availableUserActions: ["open_globe", "use_native_globe_controls", "use_native_voice_controls"],
-      notice: "This endpoint reports integration wiring, not live data-source health. AI-driven layer and camera control requires the separate tool bridge."
+      integration: "separate_service_with_allowlisted_bridge",
+      buildPresent: serviceReachable,
+      serviceStatus,
+      autonomousControl: "allowlisted_globe_actions",
+      availableUserActions: ["open_globe", "set_layer_visibility", "zoom_to_globe", "adjust_camera_zoom", "fly_to_location", "set_visual_style", "stop_tracking", "set_context_mode", "get_current_view_state", "track_entity"],
+      notice: "Reachability checks only the service homepage; it does not prove live data-provider or browser action health."
     });
   });
 
