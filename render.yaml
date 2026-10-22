@@ -11,6 +11,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: WORLD_INTELLIGENCE_URL
+        value: https://ultron-world-intelligence.onrender.com
+      - key: NODE_VERSION
+        value: 24.14.0
       - key: OPENROUTER_BASE_URL
         value: https://openrouter.ai/api/v1
       - key: OPENROUTER_TIMEOUT_SECONDS
@@ -19,10 +23,14 @@ services:
         sync: false
       - key: OPENROUTER_DEFAULT_MODEL
         sync: false
+      - key: ULTRON_AVAILABLE_MODELS
+        value: "openrouter/free"
       - key: SUPABASE_URL
         value: https://opdjfhwepmcprbqojpat.supabase.co
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
+      - key: ULTRON_WORKER_POLL_MS
+        value: "5000"
       - key: APP_ACCESS_PASSWORD
         sync: false
       - key: SESSION_SECRET
@@ -41,5 +49,40 @@ services:
         sync: false
       - key: ULTRON_HANDY_BRIDGE_TOKEN
         sync: false
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: LOCAL_MODEL_TIMEOUT_SECONDS
+        value: "90"
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: TTS_API_BASE_URL
+        sync: false
+      - key: TTS_API_KEY
+        sync: false
+      - key: STT_API_BASE_URL
+        sync: false
+      - key: STT_API_KEY
+        sync: false
+      - key: ULTRON_DESKTOP_AGENT_URL
+        sync: false
+      - key: ULTRON_DESKTOP_AGENT_TOKEN
+        sync: false
       - key: ULTRON_EMPLOYEES_ENABLED
         value: "false"
+
+  - type: web
+    name: ultron-world-intelligence
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
+    startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.0
+      - key: NODE_ENV
+        value: production
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "1"
+      - key: GEV_EMBED_FRAME_ANCESTORS
+        value: https://ultron-ai-zvd7.onrender.com

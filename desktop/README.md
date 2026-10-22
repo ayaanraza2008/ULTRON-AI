@@ -1,6 +1,6 @@
 # ULTRON AI Windows Companion
 
-This is a lightweight Electron shell around the hosted ULTRON web client. It shares the same backend and does not run local AI models or perform desktop automation by itself.
+This is a lightweight Electron shell around the hosted ULTRON web client. It now exposes a small allowlisted local-action bridge: native-confirmed text-file reading, text-file saving, HTTPS link opening, and basic OS metadata. It does not run local AI models or provide arbitrary shell execution.
 
 ## Build on Windows
 
@@ -18,4 +18,4 @@ Set `ULTRON_URL` to a trusted HTTPS test deployment. For local development only,
 
 ## Boundaries
 
-This shell does not provide native file access, shell execution, background startup, hidden monitoring, or Windows automation. Those capabilities require a separate, permission-scoped local agent and must be added and tested independently.
+The bridge never exposes arbitrary shell execution, raw filesystem paths, background startup, or hidden monitoring. Every local action requires a native confirmation and a user-selected file/path. File content may be sent to an AI provider only if the user subsequently submits it. Full PC automation, app control, background task execution, and local-model serving still require a separate permission-scoped agent and explicit allowlisted actions.

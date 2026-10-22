@@ -29,3 +29,28 @@ jobs:
           done
           echo 'Deployed health endpoint did not become ready in time.'
           exit 1
+
+  world-intelligence-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+      - name: Checkout pinned God's Eye View source
+        run: |
+          git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view
+          git -C .build-gods-eye-view checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad
+      - name: Expose the existing voice action runner
+        run: node scripts/patch-world-intelligence-source.mjs
+      - name: Install and build the globe workspace
+        working-directory: .build-gods-eye-view
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+        run: |
+          npm ci
+          npm run build
+      - name: Inject ULTRON's guarded action bridge
+        run: node scripts/inject-world-intelligence-bridge.mjs
+      - name: Verify the browser bundle exists
+        run: test -s .build-gods-eye-view/dist/index.html
