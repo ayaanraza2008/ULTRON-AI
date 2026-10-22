@@ -326,7 +326,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 
   router.get("/tasks", requireSupabaseUser, async (req, res) => {
     try {
-      const rows = await supabaseRest(req, "agent_tasks", "GET", "?select=id,title,input,status,result,error_code,started_at,finished_at,created_at,updated_at&order=created_at.desc&limit=50");
+      const rows = await supabaseRest(req, "agent_tasks", "GET", "?select=id,title,input,status,result,error_code,started_at,finished_at,created_at,updated_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&order=created_at.desc&limit=50");
       res.json({ tasks: Array.isArray(rows) ? rows : [] });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASKS_READ_FAILED", message: error.message } }); }
   });
@@ -359,10 +359,10 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     if (req.body?.confirm !== true) return res.status(400).json({ error: { code: "EXPLICIT_CONFIRMATION_REQUIRED", message: "Send confirm: true only after reviewing the task and its requested permissions." } });
     try {
       const existing = await supabaseRest(req, "agent_tasks", "GET",
-        "?id=eq." + encodeURIComponent(req.params.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status&limit=1");
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status&limit=1");
       if (!Array.isArray(existing) || !existing[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task was not found or is not awaiting approval." } });
       const rows = await supabaseRest(req, "agent_tasks", "PATCH",
-        "?id=eq." + encodeURIComponent(req.params.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status",
         { status: "QUEUED", input: { ...(existing[0].input || {}), approved: true, approvedAt: new Date().toISOString(), approvalScope: "task_record_only" } });
       if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task changed state before approval could be recorded." } });
       await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.approved", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { scope: "task_record_only" } }, "return=minimal");
@@ -373,7 +373,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
   router.post("/tasks/:id/cancel", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_TASK_ID", message: "Task ID is invalid." } });
     try {
-      const rows = await supabaseRest(req, "agent_tasks", "PATCH", "?id=eq." + encodeURIComponent(req.params.id) + "&status=in.(QUEUED,WAITING_FOR_PERMISSION)&select=id,status", { status: "CANCELLED", finished_at: new Date().toISOString() });
+      const rows = await supabaseRest(req, "agent_tasks", "PATCH", "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=in.(QUEUED,WAITING_FOR_PERMISSION)&select=id,status", { status: "CANCELLED", finished_at: new Date().toISOString() });
       if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_CANCELLABLE", message: "Task was not found or is already running/finished." } });
       await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.cancelled", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: {} }, "return=minimal");
       res.json({ task: rows[0] });
