@@ -436,7 +436,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const { messages, stream = true, model: requestedModel, attachments = [] } = req.body || {};
     const knownModels = ["openrouter/free"];
     const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean);
-    const visionModels = [...new Set(String(env.ULTRON_VISION_MODELS || env.OPENROUTER_VISION_MODEL || "").split(",").map(value => value.trim()).filter(value => /^[a-zA-Z0-9._/-]{1,160}$/.test(value)))];
+    const visionModels = [...new Set(String(env.ULTRON_VISION_MODELS || env.OPENROUTER_VISION_MODEL || "").split(",").map(value => value.trim()).filter(value => /^[a-zA-Z0-9._/-]{1,154}(?::free)?$/.test(value)))];
     const allowedModels = [...new Set([...knownModels, ...configuredModels, visionModels, env.OPENROUTER_DEFAULT_MODEL].flat().filter(Boolean))];
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || (!allowedModels.includes(requestedModel) && requestedModel !== "openrouter/free" && !/^[a-zA-Z0-9._/-]+:free$/.test(requestedModel)))) {
       return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
