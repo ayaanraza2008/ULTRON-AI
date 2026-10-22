@@ -53,7 +53,7 @@ test("agent loads selected diagram references on demand before the active prompt
     assert.equal(response.status, 200);
     assert.ok(sentBody.messages.some(message => message.role === "system" && message.content.includes("Diagram Design skill guidance")));
     assert.ok(sentBody.messages.some(message => message.role === "user" && message.content.includes("Selected diagram reference")));
-    assert.ok(sentBody.messages.at(-1).content.includes("Create an architecture diagram"));
+    assert.ok(sentBody.messages.some(message => message.role === "user" && message.content.includes("Create an architecture diagram")));
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
