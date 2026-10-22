@@ -107,17 +107,19 @@ async function processOne() {
     await audit(task, "task.completed", "allowed", { taskType: task.input?.taskType || "unknown", sourceCount: result.sources?.length || 0 });
   } catch (error) {
     const code = bounded(error.code, 80) || "TASK_EXECUTION_FAILED";
+    const retryable = ["RESEARCH_PROVIDER_FAILED", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
+    const shouldRetry = retryable && Number(task.attempts || 1) < 3;
     await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
       method: "PATCH",
       body: JSON.stringify({
-        status: code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED" ? "BLOCKED" : "FAILED",
+        status: code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED" ? "BLOCKED" : shouldRetry ? "QUEUED" : "FAILED",
         error_code: code,
-        result: { message: bounded(error.message, 500) },
-        finished_at: new Date().toISOString()
+        result: { message: bounded(error.message, 500), retry: shouldRetry },
+        ...(shouldRetry ? { started_at: null, finished_at: null } : { finished_at: new Date().toISOString() })
       })
     });
-    await audit(task, "task.failed", "failed", { code });
-    console.error("Task failed:", task.id, code);
+    await audit(task, shouldRetry ? "task.retry_scheduled" : "task.failed", shouldRetry ? "retry" : "failed", { code, attempt: Number(task.attempts || 1) });
+    console.error("Task outcome:", task.id, shouldRetry ? "retry scheduled" : code);
   }
   return true;
 }
