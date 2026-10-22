@@ -242,8 +242,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const base = safeBase(env.COMFYUI_BASE_URL);
       const workflow = requestBody.workflow;
       if (!base) return { provider: "comfyui", state: "blocked", blocker: "Configure COMFYUI_BASE_URL first." };
-      if (requestBody.confirmExternalAction !== true) return { provider: "comfyui", state: "needs_confirmation", message: "Confirm this generation job by setting confirmExternalAction=true after reviewing the exact workflow and expected compute use." };
-      if (!workflow || typeof workflow !== "object" || Array.isArray(workflow) || !Object.keys(workflow).length || JSON.stringify(workflow).length > 1500000) throw Object.assign(new Error("Attach a valid ComfyUI workflow under 1.5 MB."), { code: "INVALID_COMFYUI_WORKFLOW", status: 400 });
+      if (!workflow || typeof workflow !== "object" || Array.isArray(workflow) || !Object.keys(workflow).length || JSON.stringify(workflow).length > 1500000) {
+        return { provider: "comfyui", state: "needs_input", requiredInputs: ["workflow"], message: "Attach a valid ComfyUI API workflow JSON (under 1.5 MB). ULTRON will inspect the workflow before requesting confirmation." };
+      }
+      if (requestBody.confirmExternalAction !== true) return { provider: "comfyui", state: "needs_confirmation", message: "Review the exact workflow and expected compute use, then set confirmExternalAction=true to queue this generation job." }
       const response = await fetchImpl(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), signal: AbortSignal.timeout(30000) });
       if (!response.ok) throw Object.assign(new Error("ComfyUI returned HTTP " + response.status), { code: "COMFYUI_QUEUE_FAILED", status: 502 });
       const result = await response.json();
