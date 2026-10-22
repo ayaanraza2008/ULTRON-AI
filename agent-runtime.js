@@ -46,7 +46,7 @@ function extractIntent(text) {
   if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
-  if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud)\b/.test(s)) return "synthesize_speech";
+  if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) return "synthesize_speech";
   // Infer image-generation intent even when the user doesn't know the provider name.
   // The tool will request a workflow and explicit compute confirmation before queueing.
   if (/\b(generate|create|make|render|design)\b/.test(s) && /\b(image|picture|artwork|illustration|visual)\b/.test(s)) return "run_comfyui_workflow";
@@ -56,6 +56,7 @@ function extractIntent(text) {
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) return "research_web";
   if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task|web-dev|review|draft|plan)\b/.test(s)) return "enqueue_employee_task";
   if (/\b(ai employee|employee routine|make a plan|create a plan|draft a|review this|write a report)\b/.test(s)) return "plan_employee";
+  if (/\b(create|build|develop|write|make)\b/.test(s) && /\b(website|web app|application|script|api|function|program|automation|bot)\b/.test(s)) return "coding_assist";
   if (/\b(code|coding|debug|review this code|write a function|implement|programming)\b/.test(s)) return "coding_assist";
   return null;
 }
