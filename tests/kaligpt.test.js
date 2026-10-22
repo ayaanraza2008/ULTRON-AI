@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createFeatureRouter } from "../features.js";
 
-async function withServer(env, fetchImpl, run) {
+async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
   app.use(express.json());
   const requireSession = (_req, _res, next) => next();
   const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
-  app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest: async () => [], logger: { warn() {} } }));
+  app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest: extras.supabaseRest || (async () => []), logger: { warn() {} } }));
   const server = await new Promise(resolve => { const instance = app.listen(0, "127.0.0.1", () => resolve(instance)); });
   try { await run("http://127.0.0.1:" + server.address().port); }
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
@@ -136,5 +136,41 @@ test("passive HTTP header analyzer rejects missing header input", async () => {
     });
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, "HTTP_HEADERS_REQUIRED");
+  });
+});
+
+
+test("desktop diagnostic record is saved as a review-only task", async () => {
+  const calls = [];
+  const supabaseRest = async (_req, table, method, query, body) => {
+    calls.push({ table, method, query, body });
+    if (table === "agent_tasks" && method === "POST") return [{ id: "00000000-0000-4000-8000-000000000099", title: body.title, input: body.input, status: body.status, created_at: "2026-10-22T00:00:00.000Z" }];
+    return [];
+  };
+  await withServer({}, globalThis.fetch, async base => {
+    const response = await fetch(base + "/api/kaligpt/tools/diagnostics/record", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ diagnostic: "kernelVersion", result: "6.12.1" })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.task.status, "WAITING_FOR_PERMISSION");
+    assert.equal(body.task.input.executionMode, "record_only");
+    assert.equal(body.task.input.result, "6.12.1");
+    assert.match(body.notice, /did not run any local command/);
+    assert.equal(calls[0].table, "agent_tasks");
+    assert.equal(calls[0].body.input.approved, false);
+    assert.equal(calls[1].table, "audit_events");
+  }, { supabaseRest });
+});
+
+test("desktop diagnostic record rejects arbitrary diagnostic IDs", async () => {
+  await withServer({}, globalThis.fetch, async base => {
+    const response = await fetch(base + "/api/kaligpt/tools/diagnostics/record", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ diagnostic: "runShell", result: "rm -rf /" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "DIAGNOSTIC_NOT_ALLOWED");
   });
 });
