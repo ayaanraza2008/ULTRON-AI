@@ -46,7 +46,7 @@ test("chat automatically recalls and captures a user-scoped OpenViking session",
       sessionPath = "/api/v1/sessions/" + body.session_id;
       return jsonResponse({ status: "ok", result: { session_id: body.session_id } }, 201);
     }
-    if (url.hostname === "openviking.test" && /^\\/api\\/v1\\/sessions\\/[^/]+$/.test(url.pathname) && (options.method || "GET") === "GET") {
+    if (url.hostname === "openviking.test" && url.pathname.startsWith("/api/v1/sessions/") && url.pathname.split("/").length === 5 && (options.method || "GET") === "GET") {
       sessionPath = url.pathname;
       return jsonResponse({ status: "not_found", error: "session not found" }, 404);
     }
