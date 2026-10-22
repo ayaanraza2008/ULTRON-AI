@@ -261,6 +261,19 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
+  app.post("/api/auth/recover", async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
+    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+      return res.status(400).json({ error: { code: "INVALID_EMAIL", message: "Enter the email address for your ULTRON account." } });
+    }
+    try {
+      const redirectTo = String(env.PUBLIC_APP_URL || "https://ultron-ai-zvd7.onrender.com").trim().replace(/\\/+$/, "");
+      await supabaseAuthRequest("/auth/v1/recover", { email, redirect_to: redirectTo });
+      return res.json({ ok: true, message: "If an account exists for that email, Supabase will send password recovery instructions. Check your inbox and spam folder." });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "RECOVERY_FAILED", message: error.message } });
+    }
+  });
   app.post("/api/auth/signin", async (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
