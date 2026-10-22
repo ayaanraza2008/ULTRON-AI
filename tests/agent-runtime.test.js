@@ -130,3 +130,23 @@ test("ComfyUI workflow is not queued until explicit confirmation is supplied", a
     assert.equal(queueCalls, 0);
   });
 });
+
+
+test("agent turns a God’s Eye request into an allowlisted browser action without claiming execution", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I can prepare the globe action." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The satellite layer action is ready for the God’s Eye browser." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Show satellites in God’s Eye" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const action = body.toolResults[0].result;
+    assert.equal(body.toolResults[0].name, "world_intelligence_command");
+    assert.equal(action.action.name, "set_layer_visibility");
+    assert.deepEqual(action.action.args, { layerId: "satellites", enabled: true });
+    assert.equal(action.execution, "validated_for_globe_client");
+    assert.match(action.notice, /not executed by the server/);
+  });
+});
