@@ -18,11 +18,11 @@ const RULES = [
 export function classifyHarnessTask(value) {
   const text = String(value || "").toLowerCase();
   const categories = [];
-  if (/\\b(code|coding|debug|implement|refactor|repository|repo|pull request|commit|build|test suite|dependency)\\b/.test(text)) categories.push("software_change");
-  if (/\\b(research|search|latest|current|sources|compare|investigate|look up)\\b/.test(text)) categories.push("research");
-  if (/\\b(plan|multi.step|workflow|automate|background|schedule|agent|integrate|deploy|migration)\\b/.test(text)) categories.push("multi_step");
-  if (/\\b(memory|remember|previous|history|context|preferences)\\b/.test(text)) categories.push("memory_context");
-  if (/\\b(delete|publish|send|purchase|spend|deploy to production|control my pc|run command)\\b/.test(text)) categories.push("consequential_action");
+  if (/\b(code|coding|debug|implement|refactor|repository|repo|pull request|commit|build|test suite|dependency)\b/.test(text)) categories.push("software_change");
+  if (/\b(research|search|latest|current|sources|compare|investigate|look up)\b/.test(text)) categories.push("research");
+  if (/\b(plan|multi.step|workflow|automate|background|schedule|agent|integrate|deploy|migration)\b/.test(text)) categories.push("multi_step");
+  if (/\b(memory|remember|previous|history|context|preferences)\b/.test(text)) categories.push("memory_context");
+  if (/\b(delete|publish|send|purchase|spend|deploy to production|control my pc|run command)\b/.test(text)) categories.push("consequential_action");
   if (!categories.length) categories.push("general");
   return [...new Set(categories)];
 }
