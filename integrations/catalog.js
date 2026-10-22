@@ -42,7 +42,7 @@ export function buildIntegrationCatalog(env = process.env) {
       mode: "separate_service",
       requiredEnv: ["COMFYUI_BASE_URL"],
       optionalEnv: ["COMFYUI_API_KEY"],
-      apiRoutes: ["/api/integrations/comfyui/queue", "/api/integrations/comfyui/jobs/:promptId"],
+      apiRoutes: ["/api/integrations/comfyui/status", "/api/integrations/comfyui/queue", "/api/integrations/comfyui/queue (POST prompt)", "/api/integrations/comfyui/jobs/:promptId (GET history, DELETE queued job)"],
       note: hasComfy
         ? "Endpoint is configured; API connectivity, authentication, workflows, and model availability still need verification."
         : "Requires a separately hosted ComfyUI API and approved workflows/models. Keep it separate from the chat process."
