@@ -21,3 +21,16 @@ Available role IDs: `gtm-engineer`, `seo-aeo`, `web-dev`, `social-media`, `ad-ma
 ## Verify
 
 Run `npm run check` and `npm test`. The tests mock the model provider and verify the API's guardrails; they do not prove live provider connectivity or scheduled execution.
+
+
+## Recurring routines (runtime extension)
+
+The runtime extension adds authenticated per-user schedule management:
+
+- `GET /api/employees/status` — non-secret readiness flags.
+- `GET /api/employees/schedules` and `POST /api/employees/schedules` — list/create schedules.
+- `PATCH /api/employees/schedules/:id` — enable or pause a schedule.
+- `DELETE /api/employees/schedules/:id` — delete a schedule.
+- Cadence is bounded to 60 minutes through 7 days. The worker atomically claims due schedules and queues a task in `agent_tasks`; task results are visible through `GET /api/tasks`.
+- Apply migration `20261022160000_ai_employee_scheduler.sql`. Configure the server-only Supabase service-role key, OpenRouter key, and `ULTRON_EMPLOYEES_ENABLED=true` in the deployed service. The key must never be placed in the browser or committed to Git.
+- The worker's only new execution mode is generation of AI Employee plans/drafts/reviews/reports. It never takes external actions. This is not a byte-for-byte installation of every upstream prompt/kit, and PC/browser automation remains separate.
