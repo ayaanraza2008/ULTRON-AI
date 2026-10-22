@@ -107,6 +107,10 @@ The endpoint requires a signed-in Supabase user. Model-selected tool calls are v
 ULTRON classifies scientific requests and selectively loads relevant procedures from [K-Dense Scientific Agent Skills](https://github.com/K-Dense-AI/scientific-agent-skills), such as literature lookup, scientific writing, statistics, experimental design, data analysis, visualization, and selected domain workflows. Only up to three relevant `SKILL.md` files are loaded on demand. Retrieved text is treated as untrusted reference material and does not install packages or make an unavailable scientific database operational. See [docs/SCIENTIFIC_AGENT_SKILLS.md](docs/SCIENTIFIC_AGENT_SKILLS.md). Authenticated discovery endpoint: `GET /api/agent/scientific-skills?task=...`.
 
 
+## Automatic AgentMemory
+
+ULTRON can automatically retrieve relevant prior project decisions and coding context from the optional [rohitg00/agentmemory](https://github.com/rohitg00/agentmemory) service. It queries memory only for relevant continuation, repository, coding, decision, and context tasks, then injects a small bounded set of results as untrusted context. Durable-context capture is opt-in through `ULTRON_AGENTMEMORY_CAPTURE=true`; ordinary conversations are not blindly persisted. Existing per-user Supabase memory remains in place. Configure `AGENTMEMORY_URL` and `AGENTMEMORY_SECRET` on the backend, then see [docs/AGENTMEMORY_INTEGRATION.md](docs/AGENTMEMORY_INTEGRATION.md). The adapter is not live until the separate AgentMemory service is deployed and reachable.
+
 ## Automatic Browser Use
 
 ULTRON routes interactive web UI tasks to the optional [Browser Use](https://github.com/browser-use/browser-use) Python bridge when configured. It is reserved for browser interactions such as clicking, typing, JavaScript-rendered pages, screenshots, and website testing; plain public information uses the lighter research tool. Read-only navigation is the default, and consequential external actions require explicit confirmation. Setup and security limits: [docs/BROWSER_USE.md](docs/BROWSER_USE.md).
