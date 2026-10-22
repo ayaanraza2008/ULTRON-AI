@@ -12,7 +12,7 @@ test("worker disables itself safely when server-side Supabase credentials are mi
   const status = worker.getStatus();
   assert.equal(status.state, "disabled");
   assert.equal(status.lastErrorCode, "WORKER_CONFIGURATION_MISSING");
-  assert.equal(typeof status.lastCycleSuccessAt, "undefined");
+  assert.equal(status.lastCycleSuccessAt, null);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /server-only SUPABASE_SERVICE_ROLE_KEY/);
 });
