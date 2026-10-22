@@ -150,3 +150,33 @@ test("agent turns a God’s Eye request into an allowlisted browser action witho
     assert.match(action.notice, /not executed by the server/);
   });
 });
+
+
+test("safe integration checks still run when the model provider is unavailable", async () => {
+  await withServer({}, async () => { throw new Error("no model or external provider call should be needed"); }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Check integration status and available tools" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolsUsed[0].name, "check_integrations");
+    assert.equal(body.toolsUsed[0].ok, true);
+    assert.equal(body.toolResults[0].result.integrations.length >= 4, true);
+  });
+});
+
+test("agent retries plain chat when the model rejects function-calling schemas", async () => {
+  let calls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    calls += 1;
+    const request = JSON.parse(options.body);
+    if (request.tools) return new Response(JSON.stringify({ error: { message: "tools not supported" } }), { status: 400 });
+    if (calls === 2) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I will check the integrations." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Integration status checked." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Check integration status and available tools" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolsUsed[0].name, "check_integrations");
+    assert.equal(body.content, "Integration status checked.");
+    assert.equal(calls, 3);
+  });
+});
