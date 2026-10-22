@@ -507,7 +507,14 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     // retrieval to the authenticated Supabase user and respect the existing memory opt-out.
     const latestUserText = [...cleanMessages].reverse().find(item => item.role === "user")?.content || "";
     const needsOpenViking = /(^|[^a-z])(my|mine|our|ours|previous|earlier|last time|remember|memory|memories|preference|preferences|personalize|project|repo|repository|codebase|continue|same task|prior work|what did we|how did we|skill|workflow|yaad|pichle|pehle|meri|mera|hamare)(?=$|[^a-z])/i.test(latestUserText);
-    if (needsOpenViking && openVikingUserId && env.OPENVIKING_URL) {
+    const openVikingBaseUrl = (() => {
+      try {
+        const parsed = new URL(String(env.OPENVIKING_URL || "").trim());
+        const safeProtocol = parsed.protocol === "https:" || (parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname));
+        return safeProtocol && !parsed.username && !parsed.password ? parsed.toString().replace(/\\/+$/, "") : "";
+      } catch { return ""; }
+    })();
+    if (needsOpenViking && openVikingUserId && openVikingBaseUrl) {
       try {
         const rawOpenVikingUrl = String(env.OPENVIKING_URL).trim().replace(/\/+$/, "");
         const openVikingUrl = new URL(rawOpenVikingUrl);
@@ -562,7 +569,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       ? "ultron_" + crypto.createHash("sha256").update(openVikingUserId).digest("hex").slice(0, 32)
       : "";
     let openVikingSessionReady = false;
-    if (openVikingSessionId && openVikingMemoryEnabled && env.OPENVIKING_URL) {
+    if (openVikingSessionId && openVikingMemoryEnabled && openVikingBaseUrl) {
       try {
         const base = String(env.OPENVIKING_URL).trim().replace(/\/+$/, "");
         const authHeaders = env.OPENVIKING_API_KEY
