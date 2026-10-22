@@ -143,7 +143,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         chat: "available_when_provider_configured",
         codingAgent: "text-only plan/generate/review; code execution disabled",
         multimodel: "cloud_model_ids_configured_by_environment",
-        memory: "authenticated_crud_available; retrieval_integration_pending",
+        memory: "authenticated_crud_available; per-user OpenViking recall and session capture when configured",
         research: "search_endpoint_available",
         tasks: "authenticated task queue plus optional allowlisted research worker",
         documents: "upload_parser_pipeline_pending",
