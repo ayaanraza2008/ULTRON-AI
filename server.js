@@ -274,6 +274,55 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
+  app.get("/api/auth/google", (req, res) => {
+    const config = supabaseConfig();
+    if (!config) return res.status(503).send("Supabase authentication is not configured.");
+    const redirectTo = new URL("/", req.protocol + "://" + req.get("host")).toString();
+    const authorize = new URL(config.url + "/auth/v1/authorize");
+    authorize.searchParams.set("provider", "google");
+    authorize.searchParams.set("redirect_to", redirectTo);
+    res.redirect(302, authorize.toString());
+  });
+
+  app.post("/api/auth/session", async (req, res) => {
+    const access = typeof req.body?.access_token === "string" ? req.body.access_token : "";
+    const refresh = typeof req.body?.refresh_token === "string" ? req.body.refresh_token : "";
+    if (!access || !refresh || access.length > 10000 || refresh.length > 10000) {
+      return res.status(400).json({ error: { code: "INVALID_OAUTH_SESSION", message: "Google sign-in did not return a valid session. Please try again." } });
+    }
+    const config = supabaseConfig();
+    if (!config) return res.status(503).json({ error: { code: "AUTH_NOT_CONFIGURED", message: "Supabase authentication is not configured." } });
+    try {
+      const response = await fetchImpl(config.url + "/auth/v1/user", { headers: { apikey: config.key, Authorization: "Bearer " + access, Accept: "application/json" } });
+      const user = response.ok ? await response.json() : null;
+      if (!user || typeof user.id !== "string") return res.status(401).json({ error: { code: "OAUTH_SESSION_INVALID", message: "Google sign-in session could not be verified." } });
+      const accessSeconds = 3600;
+      res.append("Set-Cookie", `ultron_sb_access=${encodeURIComponent(access)}; ${cookieOptions(accessSeconds)}`);
+      res.append("Set-Cookie", `ultron_sb_refresh=${encodeURIComponent(refresh)}; ${cookieOptions(60 * 60 * 24 * 30)}`);
+      return res.json({ authenticated: true, email: user.email || null });
+    } catch { return res.status(502).json({ error: { code: "OAUTH_SESSION_FAILED", message: "Could not verify the Google sign-in session." } }); }
+  });
+
+  app.post("/api/auth/phone/request", async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    if (!/^\\+[1-9]\\d{7,14}$/.test(phone)) return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter a valid phone number with country code, for example +919876543210." } });
+    try {
+      await supabaseAuthRequest("/auth/v1/otp", { phone, channel: "sms", create_user: true });
+      return res.json({ sent: true, message: "If SMS sign-in is enabled, a verification code has been sent." });
+    } catch (error) { return res.status(error.status || 502).json({ error: { code: "PHONE_OTP_SEND_FAILED", message: error.message } }); }
+  });
+
+  app.post("/api/auth/phone/verify", async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!/^\\+[1-9]\\d{7,14}$/.test(phone) || !/^\\d{4,10}$/.test(token)) return res.status(400).json({ error: { code: "INVALID_OTP", message: "Enter your phone number and the SMS verification code." } });
+    try {
+      const payload = await supabaseAuthRequest("/auth/v1/verify", { phone, token, type: "sms" });
+      if (!setSupabaseCookies(res, payload)) return res.status(401).json({ error: { code: "PHONE_VERIFY_FAILED", message: "The code was not accepted. Request a new code and try again." } });
+      return res.json({ authenticated: true, phone: payload.user?.phone || phone });
+    } catch (error) { return res.status(error.status || 502).json({ error: { code: "PHONE_VERIFY_FAILED", message: error.message } }); }
+  });
+
   app.post("/api/auth/signout", (_req, res) => {
     res.append("Set-Cookie", `ultron_sb_access=; ${cookieOptions(0)}`);
     res.append("Set-Cookie", `ultron_sb_refresh=; ${cookieOptions(0)}`);
