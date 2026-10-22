@@ -14,9 +14,9 @@ const safeBaseUrl = (value) => {
  */
 export function buildIntegrationCatalog(env = process.env) {
   const hasComfy = safeBaseUrl(env.COMFYUI_BASE_URL);
-  const hasHeyGem = safeBaseUrl(env.HEYGEM_API_BASE_URL) && Boolean(env.HEYGEM_API_KEY);
-  const hasOmniVoice = safeBaseUrl(env.OMNIVOICE_API_BASE_URL) && Boolean(env.OMNIVOICE_API_KEY);
-  const hasHandyBridge = safeBaseUrl(env.ULTRON_HANDY_BRIDGE_URL) && Boolean(env.ULTRON_HANDY_BRIDGE_TOKEN);
+  const hasHeyGem = safeBaseUrl(env.HEYGEM_API_BASE_URL) && Boolean(env.HEYGEM_API_KEY) && typeof env.HEYGEM_JOB_PATH === "string" && env.HEYGEM_JOB_PATH.startsWith("/");
+  const hasOmniVoice = safeBaseUrl(env.OMNIVOICE_API_BASE_URL) && Boolean(env.OMNIVOICE_API_KEY) && typeof env.OMNIVOICE_SYNTHESIS_PATH === "string" && env.OMNIVOICE_SYNTHESIS_PATH.startsWith("/");
+  const hasHandyBridge = safeBaseUrl(env.ULTRON_HANDY_BRIDGE_URL) && Boolean(env.ULTRON_HANDY_BRIDGE_TOKEN) && typeof env.ULTRON_HANDY_TRANSCRIBE_PATH === "string" && env.ULTRON_HANDY_TRANSCRIBE_PATH.startsWith("/");
   const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
 
   return [
@@ -27,10 +27,11 @@ export function buildIntegrationCatalog(env = process.env) {
       state: hasHeyGem ? "configured_unverified" : "blocked",
       configured: hasHeyGem,
       mode: "separate_service",
-      requiredEnv: ["HEYGEM_API_BASE_URL", "HEYGEM_API_KEY"],
+      requiredEnv: ["HEYGEM_API_BASE_URL", "HEYGEM_API_KEY", "HEYGEM_JOB_PATH"],
+      apiRoutes: ["/api/integrations/heygem/jobs"],
       note: hasHeyGem
         ? "Credentials are present; reachability, license terms, and GPU capacity are not yet verified."
-        : "Requires a separately hosted HeyGem-compatible API, credentials, and a review of its community license/model terms."
+        : "Requires a separately hosted HeyGem-compatible API, credentials, an explicit HEYGEM_JOB_PATH, and a review of its community license/model terms."
     },
     {
       id: "comfyui",
@@ -40,6 +41,8 @@ export function buildIntegrationCatalog(env = process.env) {
       configured: hasComfy,
       mode: "separate_service",
       requiredEnv: ["COMFYUI_BASE_URL"],
+      optionalEnv: ["COMFYUI_API_KEY"],
+      apiRoutes: ["/api/integrations/comfyui/queue", "/api/integrations/comfyui/jobs/:promptId"],
       note: hasComfy
         ? "Endpoint is configured; API connectivity, authentication, workflows, and model availability still need verification."
         : "Requires a separately hosted ComfyUI API and approved workflows/models. Keep it separate from the chat process."
@@ -51,10 +54,11 @@ export function buildIntegrationCatalog(env = process.env) {
       state: hasOmniVoice ? "configured_unverified" : "blocked",
       configured: hasOmniVoice,
       mode: "separate_service",
-      requiredEnv: ["OMNIVOICE_API_BASE_URL", "OMNIVOICE_API_KEY"],
+      requiredEnv: ["OMNIVOICE_API_BASE_URL", "OMNIVOICE_API_KEY", "OMNIVOICE_SYNTHESIS_PATH"],
+      apiRoutes: ["/api/integrations/omnivoice/synthesize"],
       note: hasOmniVoice
         ? "Credentials are present; model loading, language quality, latency, and consent controls are not yet verified."
-        : "The repository is a model/runtime, not a ready-made hosted API. A separate inference service is required."
+        : "The repository is a model/runtime, not a ready-made hosted API. A separate inference service and explicit OMNIVOICE_SYNTHESIS_PATH are required."
     },
     {
       id: "handy",
@@ -63,7 +67,8 @@ export function buildIntegrationCatalog(env = process.env) {
       state: hasHandyBridge ? "configured_unverified" : "desktop_companion_required",
       configured: hasHandyBridge,
       mode: "desktop_companion",
-      requiredEnv: ["ULTRON_HANDY_BRIDGE_URL", "ULTRON_HANDY_BRIDGE_TOKEN"],
+      requiredEnv: ["ULTRON_HANDY_BRIDGE_URL", "ULTRON_HANDY_BRIDGE_TOKEN", "ULTRON_HANDY_TRANSCRIBE_PATH"],
+      apiRoutes: ["/api/integrations/handy/transcribe"],
       note: hasHandyBridge
         ? "Bridge settings are present; local IPC, authentication, and transcription have not yet been verified."
         : "Handy is a local desktop app. The public Render service cannot access a user's microphone or local Handy process directly."
