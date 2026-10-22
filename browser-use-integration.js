@@ -1,6 +1,6 @@
 const SOURCE = "browser-use/browser-use";
 const REPO = "https://github.com/" + SOURCE;
-const BROWSER_TASK = /\b(click|type into|fill in|fill out|interact with|navigate the website|navigate this site|open the website|use the browser|browser automation|web automation|javascript-rendered|rendered page|scrape this site|extract from this page|download a public file|take a screenshot of|test this website|test the web app|sign in to|log in to)\b/i;
+const BROWSER_TASK = /\b(click|type into|fill in|fill out|interact with|navigate the website|navigate this site|open the website|open the site|use the browser|browser automation|web automation|javascript-rendered|rendered page|scrape this site|extract from this page|download a public file|take a screenshot of|test this website|test the web app|sign in to|log in to)\b/i;
 const READ_ONLY = /\b(read|inspect|view|find|compare|extract|summarize|check|test|navigate|open|search|look at|screenshot|download)\b/i;
 const SIDE_EFFECT = /\b(send|submit|purchase|buy|checkout|pay|transfer|delete|remove account|publish|post|comment|message|email|invite|change password|change billing|place order|book|reserve|cancel subscription|upload|share publicly|accept terms|sign contract)\b/i;
 const BASE_RULES = [
