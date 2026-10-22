@@ -47,5 +47,7 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Inject ULTRON's guarded action bridge
+        run: node scripts/inject-world-intelligence-bridge.mjs
       - name: Verify the browser bundle exists
         run: test -s /tmp/gods-eye-view/dist/index.html
