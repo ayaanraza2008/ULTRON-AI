@@ -536,7 +536,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.on("close", () => { if (!res.writableEnded) abortUpstream(); });
 
     try {
-      const configuredOrder = [...new Set([...(hasImageAttachments ? visionModels : []), selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
+      const configuredOrder = hasImageAttachments && visionModels.length
+        ? [...new Set(visionModels)]
+        : [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelCandidates = configuredOrder;
       if (!modelCandidates.length) {
         return res.status(503).json({ error: { code: "VISION_MODEL_NOT_CONFIGURED", message: "No configured vision model is available. Add the exact MiniMax vision model ID to ULTRON_AVAILABLE_MODELS." } });
