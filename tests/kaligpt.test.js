@@ -271,3 +271,28 @@ test("HTTP response evidence analyzer validates status, header shape and cookie 
     assert.equal((await invalidCookies.json()).error.code, "INVALID_COOKIE_EVIDENCE");
   });
 });
+
+
+test("provider status exposes configured models and fallback order without secrets", async () => {
+  await withServer({
+    OPENROUTER_API_KEY: "test-openrouter-secret",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/test-model",
+    GEMINI_API_KEY: "test-gemini-secret",
+    GEMINI_DEFAULT_MODEL: "gemini-test",
+    OLLAMA_BASE_URL: "http://127.0.0.1:11434",
+    OLLAMA_DEFAULT_MODEL: "local-test"
+  }, globalThis.fetch, async base => {
+    const response = await fetch(base + "/api/kaligpt/providers");
+    assert.equal(response.status, 200);
+    const raw = await response.text();
+    const body = JSON.parse(raw);
+    assert.deepEqual(body.fallbackOrder, ["openrouter", "openai", "gemini", "litellm", "ollama"]);
+    assert.equal(body.providers.openrouter.model, "openrouter/test-model");
+    assert.equal(body.providers.gemini.configured, true);
+    assert.equal(body.providers.ollama.configured, true);
+    assert.equal(body.configuredCount, 3);
+    assert.equal(raw.includes("test-openrouter-secret"), false);
+    assert.equal(raw.includes("test-gemini-secret"), false);
+    assert.match(body.notice, /never API keys/);
+  });
+});
