@@ -19,11 +19,14 @@ Backend additions on the feature branch:
 - `GET /api/capabilities`: reports configuration readiness without returning secret values.
 - `GET /api/local/models` and `POST /api/local/chat`: optional Ollama-compatible local inference adapter. A cloud-hosted server cannot reach a user's PC-local `localhost`; use a future authenticated desktop bridge for that case.
 - `POST /api/research`: uses Tavily when configured, otherwise a best-effort public DuckDuckGo HTML fallback. Public HTML search can break or be rate-limited; results are untrusted and need source verification.
-- `GET /api/tasks`, `POST /api/tasks`, and `POST /api/tasks/:id/cancel`: per-user task records and audit events using Supabase RLS. Creating a record does **not** execute arbitrary tasks; worker orchestration and scoped tools must be added and verified separately.
+- `GET /api/tasks`, `POST /api/tasks`, `POST /api/tasks/:id/approve`, and `POST /api/tasks/:id/cancel`: per-user task records, explicit confirmation gates, and audit events using Supabase RLS. Approval only records permission; it does **not** execute PC commands. A durable worker and scoped tools are still required.
 - Cloud chat now attempts opt-in retrieval of a small set of active, user-owned memory items when account preferences permit it. Memory text is treated as untrusted context.
+- `GET /api/preferences` and `PUT /api/preferences`: persist supported language, voice, memory, personality, model-provider, and voice-selection preferences per account.
+- `POST /api/speech/synthesize` and `POST /api/speech/transcribe`: optional OpenAI-compatible TTS/STT adapters using server-only keys; browser-native speech remains the free fallback. Premium routes require a compatible provider and are not enabled until configured.
+- `POST /api/documents/extract`: bounded text extraction for TXT, Markdown, CSV, JSON, and HTML. PDF/DOCX parsers and persistent uploads are not yet available.
 - `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
 
-These endpoints are backend building blocks, not a claim that all 20 requested capabilities are production-complete. Document parsing, a real background worker, coding sandbox, premium speech provider adapters, and Windows PC-control agent still require separate implementation and tests. The frontend is intentionally deferred to the final phase.
+These endpoints are backend building blocks, not a claim that all 20 requested capabilities are production-complete. PDF/DOCX parsing, a real background worker, coding sandbox, a Windows PC-control agent, live external-account integrations, and real provider/database end-to-end tests still require separate implementation. Premium speech endpoints need a compatible provider configuration. The frontend is intentionally deferred to the final phase.
 
 ## Configuration
 
