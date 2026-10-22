@@ -74,6 +74,10 @@ function buildFallbackCalls(text) {
     add("check_integrations");
     if (/\b(comfyui|generation queue|gpu queue|all tools|all services)\b/.test(s)) add("check_comfyui");
   }
+  if (/\b(all integrations|all tools|all services|integration status|check integrations)\b/.test(s)
+      && /\b(research|search the web|search online|look up|latest news|find sources)\b/.test(s)) {
+    add("research_web", { query: bounded(text, 500) });
+  }
   if (/\b(research|search the web|search online|look up|latest news|find sources)\b/.test(s)
       && /\b(report|summari[sz]e|plan|draft|review)\b/.test(s)) {
     add("research_web", { query: bounded(text, 500) });
