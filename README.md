@@ -59,13 +59,13 @@ See `docs/FEATURE_REGISTRY.md`, `docs/IMPLEMENTATION_STATUS.md`, `docs/ARCHITECT
 
 ## OpenViking context integration
 
-ULTRON's background research worker can optionally use [OpenViking](https://github.com/volcengine/OpenViking) as a context database for read-only retrieval of relevant memories, resources, and skills. This is an HTTP integration with an OpenViking server, not a copy of the entire OpenViking source tree into the Node.js app.
+ULTRON can optionally use [OpenViking](https://github.com/volcengine/OpenViking) as a context database for read-only retrieval of relevant memories, resources, and skills. The chat route scopes personal retrieval to the authenticated Supabase user and respects the existing memory opt-out; the background research worker can also recall context when relevant. This is an HTTP integration with an OpenViking server, not a copy of the entire OpenViking source tree into the Node.js app.
 
 Set these **server-side worker environment variables**:
 
 - `OPENVIKING_URL`: the base URL of a running OpenViking server (for example, `http://127.0.0.1:1933` for a worker running on the same machine, or an HTTPS URL for a remote service).
 - `OPENVIKING_API_KEY`: optional when the server runs without authentication; otherwise use a least-privilege OpenViking user key. Never put it in browser code or commit it.
 
-For allowlisted background research, the worker automatically detects context-dependent requests (for example, references to prior work, preferences, a project/repository, remembered details, or reusable skills) and only then attempts one bounded OpenViking search (up to 8 seconds, at most 8 returned context items) across memories, resources, and skills. Matches are attached to the task result. If OpenViking is not configured or unavailable, the research task continues without recalled context. The tool catalog reports configuration only; a configured URL does not prove the server is reachable.
+For chat, ULTRON detects context-dependent messages (for example, references to prior work, preferences, a project/repository, remembered details, or reusable skills) and attempts one bounded search (5-second timeout, up to 6 injected results). Personal paths are scoped to the authenticated user; shared resources and agent skills may also be searched. If the user's memory preference is off, memory results are excluded. For allowlisted background research, the worker applies a similar relevance check and attaches up to 8 recalled items to the task result. If OpenViking is not configured or unavailable, chat/research continues without recalled context. The tool catalog reports configuration only; a configured URL does not prove the server is reachable.
 
 This integration is **read-only recall only**. It does not automatically ingest/commit conversation memories, install skills, delete context, run VikingBot, or enable PC control. Those need separate workflows and a running OpenViking service with appropriate model/storage configuration. OpenViking's main project is AGPL-3.0; review its license and deployment requirements before self-hosting or distributing modified copies.
