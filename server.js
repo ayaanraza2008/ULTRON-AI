@@ -582,7 +582,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             if (contextResponse.ok) {
               const contextPayload = await contextResponse.json();
               const sessionContext = contextPayload?.result || contextPayload;
-              const contextText = String(sessionContext?.context || sessionContext?.content || sessionContext?.overview || JSON.stringify(sessionContext)).slice(0, 10000);
+              const rawContext = sessionContext?.context ?? sessionContext?.content ?? sessionContext?.overview ?? sessionContext;
+              const contextText = (typeof rawContext === "string" ? rawContext : JSON.stringify(rawContext)).slice(0, 10000);
               if (contextText && contextText !== "{}" && contextText !== "null") {
                 cleanMessages.unshift({
                   role: "system",
