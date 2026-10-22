@@ -569,6 +569,41 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     });
   });
 
+  // Deterministic passive analyzer: only evaluates headers supplied by the authenticated user.
+  // It does not make network requests or contact the target.
+  router.post("/kaligpt/tools/headers/analyze", requireSession, (req, res) => {
+    const raw = req.body?.headers;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return res.status(400).json({ error: { code: "HTTP_HEADERS_REQUIRED", message: "Provide an object of HTTP response headers to analyze." } });
+    }
+    const normalized = {};
+    for (const [key, value] of Object.entries(raw).slice(0, 100)) {
+      const name = boundedString(key, 120).toLowerCase();
+      if (!/^[a-z0-9!#$%&'*+.^_`|~-]+$/.test(name)) continue;
+      normalized[name] = boundedString(Array.isArray(value) ? value.join(", ") : String(value ?? ""), 2000);
+    }
+    const checks = [
+      { id: "strict-transport-security", header: "strict-transport-security", severity: "high", title: "HTTP Strict Transport Security", recommendation: "For HTTPS sites, configure a suitable max-age; consider includeSubDomains only when all subdomains support HTTPS." },
+      { id: "content-security-policy", header: "content-security-policy", severity: "high", title: "Content Security Policy", recommendation: "Define a restrictive CSP; avoid unsafe-inline and unsafe-eval where possible." },
+      { id: "x-content-type-options", header: "x-content-type-options", severity: "medium", title: "X-Content-Type-Options", recommendation: "Set X-Content-Type-Options: nosniff." },
+      { id: "referrer-policy", header: "referrer-policy", severity: "low", title: "Referrer Policy", recommendation: "Set a deliberate policy such as strict-origin-when-cross-origin." },
+      { id: "permissions-policy", header: "permissions-policy", severity: "low", title: "Permissions Policy", recommendation: "Restrict browser features that the application does not need." },
+      { id: "frame-protection", header: "x-frame-options", severity: "medium", title: "Clickjacking protection", recommendation: "Use frame-ancestors in CSP; X-Frame-Options can be retained for older browsers." }
+    ];
+    const findings = checks.map(check => {
+      const present = Boolean(normalized[check.header]) || (check.id === "frame-protection" && /(?:^|;)\\s*frame-ancestors\\b/i.test(normalized["content-security-policy"] || ""));
+      return { ...check, status: present ? "present-review-value" : "missing", evidence: normalized[check.header] || (check.id === "frame-protection" ? (normalized["content-security-policy"] || "") : "") };
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      tool: "http-security-headers",
+      findings,
+      analyzedHeaderCount: Object.keys(normalized).length,
+      execution: "local-analysis-only",
+      notice: "Analysis used only the headers you supplied. ULTRON did not contact the target; a present header is not proof that its value is secure."
+    });
+  });
+
   return router;
 }
 
