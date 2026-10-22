@@ -4,12 +4,16 @@
   "private": true,
   "description": "ULTRON AI secure web foundation",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check public/app.js"
+    "check": "node --check server.js && node --check features.js"
   },
-  "dependencies": { "express": "^4.21.2" }
+  "dependencies": {
+    "express": "^4.21.2"
+  }
 }
