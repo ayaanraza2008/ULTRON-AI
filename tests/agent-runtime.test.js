@@ -270,3 +270,22 @@ test("background task intent fallback works when the free model does not support
     assert.equal(providerCalls, 3);
   }, { supabaseRest });
 });
+
+
+test("ComfyUI asks for the exact workflow before asking the user to confirm compute use", async () => {
+  let providerCalls = 0;
+  let comfyCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
+    if (url.startsWith("https://comfy.example/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "comfy-call", type: "function", function: { name: "run_comfyui_workflow", arguments: JSON.stringify({ reason: "Generate an image" }) } }] } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Attach the workflow JSON first." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Run a ComfyUI workflow" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "needs_input");
+    assert.deepEqual(body.toolResults[0].result.requiredInputs, ["workflow"]);
+    assert.equal(comfyCalls, 0);
+  });
+});
