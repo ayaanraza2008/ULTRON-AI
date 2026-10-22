@@ -4,13 +4,15 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm install --ignore-scripts
+    buildCommand: npm install --ignore-scripts && git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && npm ci --ignore-scripts && npm run build -- --base=/world-intelligence/ && cd .. && mkdir -p public/world-intelligence && cp -R .build-gods-eye-view/dist/. public/world-intelligence/
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 24.14.0
       - key: OPENROUTER_BASE_URL
         value: https://openrouter.ai/api/v1
       - key: OPENROUTER_TIMEOUT_SECONDS
