@@ -89,11 +89,11 @@ test("document extraction parses JSON and marks extracted text as untrusted", as
   });
 });
 
-test("document extraction refuses unsupported binary formats", async () => {
+test("document extraction rejects malformed PDF payloads", async () => {
   await withServer({}, async base => {
     const response = await fetch(base + "/api/documents/extract", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename: "report.pdf", format: "pdf", content: "not a pdf" })
+      body: JSON.stringify({ filename: "report.pdf", format: "pdf", fileBase64: Buffer.from("not a pdf").toString("base64") })
     });
     assert.equal(response.status, 415);
     assert.equal((await response.json()).error.code, "UNSUPPORTED_DOCUMENT_FORMAT");
@@ -157,5 +157,16 @@ test("premium speech endpoints fail clearly when no provider is configured", asy
     });
     assert.equal(response.status, 503);
     assert.equal((await response.json()).error.code, "TTS_NOT_CONFIGURED");
+  });
+});
+
+test("document extraction rejects malformed DOCX payloads", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/documents/extract", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: "report.docx", format: "docx", fileBase64: Buffer.from("not a docx").toString("base64") })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_DOCX");
   });
 });
