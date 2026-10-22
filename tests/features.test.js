@@ -291,3 +291,26 @@ test("World Intelligence tool bridge validates layer actions and rejects unsafe 
     assert.equal((await unsafe.json()).error.code, "WORLD_ACTION_NOT_ALLOWED");
   });
 });
+
+
+test("task creation cannot downgrade inferred high risk to low", async () => {
+  let savedInput;
+  const fakeSupabaseRest = async (_req, table, _method, _query, body) => {
+    if (table === "agent_tasks") {
+      savedInput = body.input;
+      return [{ id: "00000000-0000-4000-8000-000000000003", title: body.title, input: body.input, status: body.status, created_at: new Date().toISOString() }];
+    }
+    return [];
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Deploy production", description: "Deploy the production service", risk: "low" })
+    });
+    assert.equal(response.status, 201);
+    assert.equal(savedInput.risk, "high");
+    assert.equal(savedInput.requiresApproval, true);
+    assert.equal(savedInput.executionMode, "planned_only");
+  }, { supabaseRest: fakeSupabaseRest });
+});
