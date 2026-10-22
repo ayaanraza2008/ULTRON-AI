@@ -621,7 +621,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         }
         // OpenViking commits can extract into the authenticated OV profile. Only permit that
         // when an operator explicitly asserts this is a single-user deployment.
-        if (env.OPENVIKING_AUTO_COMMIT === "true" && env.OPENVIKING_SINGLE_USER_MODE === "true") {
+        if (env.OPENVIKING_AUTO_COMMIT === "true" && env.OPENVIKING_SINGLE_USER_MODE === "true" && openVikingUserId === String(env.OPENVIKING_SINGLE_USER_ID || "")) {
           const infoResponse = await fetchImpl(base + "/api/v1/sessions/" + encodeURIComponent(openVikingSessionId), {
             headers: { Accept: "application/json", ...authHeaders }, signal: AbortSignal.timeout(4000)
           });
