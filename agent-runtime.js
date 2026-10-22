@@ -1,6 +1,6 @@
 import express from "express";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
-import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory } from "./agentmemory-integration.js";
+import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
@@ -153,6 +153,29 @@ function modelSafeResult(value, depth = 0) {
 
 export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, supabaseRest, logger = console } = {}) {
   const router = express.Router();
+
+  // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
+  // table when the optional AgentMemory daemon is not configured. RLS and the
+  // authenticated request token keep writes scoped to the signed-in account.
+  async function captureSupabaseMemory(task, req) {
+    if (typeof supabaseRest !== "function" || !req?.supabaseUser?.id) return { state: "unavailable" };
+    if (!shouldCaptureAgentMemory(task)) return { state: "skipped" };
+    const content = bounded(task, 2400);
+    if (!content) return { state: "skipped" };
+    const query = "?select=id&content=eq." + encodeURIComponent(content) + "&is_active=eq.true&limit=1";
+    const existing = await supabaseRest(req, "memory_items", "GET", query);
+    if (Array.isArray(existing) && existing.length) return { state: "already_saved" };
+    const rows = await supabaseRest(req, "memory_items", "POST", "?select=id,kind,title,content", {
+      user_id: req.supabaseUser.id,
+      kind: "project_fact",
+      title: "Durable project context",
+      content,
+      source: "conversation_summary",
+      is_active: true,
+      metadata: { capture: "automatic_high_signal" }
+    });
+    return Array.isArray(rows) && rows[0]?.id ? { state: "captured" } : { state: "not_saved" };
+  }
   const tools = [
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
@@ -461,6 +484,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!calls.length) calls = buildFallbackCalls(userText);
       if (!calls.length) {
         const content = typeof assistantMessage?.content === "string" ? assistantMessage.content : "I couldn't produce a response. Please try again.";
+        if (userMemoryEnabled) {
+          try { await captureSupabaseMemory(userText, req); }
+          catch (memoryError) { logger.warn?.("Optional Supabase memory capture failed", { code: memoryError.code || "SUPABASE_MEMORY_CAPTURE_FAILED" }); }
+        }
         if (userMemoryEnabled && agentMemory.configured && agentMemory.automaticCapture) {
           try { await captureAgentMemory(userText, { env, fetchImpl, userId: req.supabaseUser?.id }); }
           catch (memoryError) { logger.warn?.("Optional AgentMemory capture failed", { code: memoryError.code || "AGENTMEMORY_CAPTURE_FAILED" }); }
@@ -522,6 +549,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         logger.warn?.("Agent synthesis failed", { code: error.code || "AGENT_SYNTHESIS_FAILED" });
       }
       if (!content) content = used.map(item => "**" + item.name + "**\n" + JSON.stringify(item.result, null, 2)).join("\n\n");
+      if (userMemoryEnabled) {
+        try { await captureSupabaseMemory(userText, req); }
+        catch (memoryError) { logger.warn?.("Optional Supabase memory capture failed", { code: memoryError.code || "SUPABASE_MEMORY_CAPTURE_FAILED" }); }
+      }
       if (userMemoryEnabled && agentMemory.configured && agentMemory.automaticCapture) {
         try { await captureAgentMemory(userText, { env, fetchImpl, userId: req.supabaseUser?.id }); }
         catch (memoryError) { logger.warn?.("Optional AgentMemory capture failed", { code: memoryError.code || "AGENTMEMORY_CAPTURE_FAILED" }); }
