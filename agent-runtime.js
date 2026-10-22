@@ -194,6 +194,25 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     throw Object.assign(new Error("Tool is not allowlisted."), { code: "TOOL_NOT_ALLOWED", status: 400 });
   }
 
+  router.get("/agent/tools", requireSupabaseUser, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      mode: "model_selected_with_safe_intent_fallback",
+      tools: [
+        { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
+        { name: "plan_employee", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
+        { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
+        { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
+        { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
+        { name: "synthesize_speech", available: Boolean(safeBase(env.OMNIVOICE_API_BASE_URL) && env.OMNIVOICE_API_KEY && env.OMNIVOICE_SYNTHESIS_PATH), execution: "provider_job_when_configured" },
+        { name: "create_talking_avatar", available: Boolean(safeBase(env.HEYGEM_API_BASE_URL) && env.HEYGEM_API_KEY && env.HEYGEM_JOB_PATH), execution: "requires_user_portrait_and_audio" },
+        { name: "transcribe_audio", available: Boolean(safeBase(env.ULTRON_HANDY_BRIDGE_URL) && env.ULTRON_HANDY_BRIDGE_TOKEN && env.ULTRON_HANDY_TRANSCRIBE_PATH), execution: "requires_audio_and_desktop_bridge" },
+        { name: "run_comfyui_workflow", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "requires_attached_workflow_and_explicit_confirmation" }
+      ],
+      notice: "Configured does not mean live-verified. PC automation, external publishing, spending, account changes, and destructive actions are not exposed as automatic tools."
+    });
+  });
+
   router.post("/agent/run", requireSupabaseUser, async (req, res) => {
     const prompt = bounded(req.body?.prompt, 6000);
     const history = Array.isArray(req.body?.messages) ? req.body.messages.slice(-12) : [];
