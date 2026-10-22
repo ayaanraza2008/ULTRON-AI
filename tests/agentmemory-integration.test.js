@@ -42,7 +42,7 @@ test("relevant tasks automatically retrieve scoped AgentMemory context", async (
 test("AgentMemory capture is opt-in and only stores durable context", async () => {
   let call;
   const disabled = await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", {
-    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret" },
+    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret", ULTRON_AGENTMEMORY_CAPTURE: "false" },
     fetchImpl: async () => { throw new Error("must not call when capture disabled"); }
   });
   assert.equal(disabled.state, "disabled");
