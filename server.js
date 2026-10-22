@@ -249,7 +249,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.post("/api/auth/signup", async (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
-    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || password.length < 8 || password.length > 256) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 256) {
       return res.status(400).json({ error: { code: "INVALID_CREDENTIALS", message: "Enter a valid email and a password between 8 and 256 characters." } });
     }
     try {

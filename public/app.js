@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { persona: "ultron", messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false, attachments: [] };
+const state = { persona: "ultron", messages: [], busy: false, voiceActive: false, recognition: null, speaking: false, voiceRestartTimer: null, toastTimer: null, authType: null, conversationId: null, persistenceBusy: false, attachments: [], authMode: "signin" };
 const features = {
   memory: ["Memory & knowledge", "Manage only the facts and preferences you explicitly choose to save. You can deactivate or delete each memory at any time."],
   research: ["Research", "Web research and citations are not connected yet. ULTRON will not pretend to search the web or invent sources."],
@@ -71,10 +71,34 @@ async function init() {
     $("setup-screen").querySelector(".muted").textContent = "Could not connect to the server. Check your connection and refresh.";
   }
 }
+function setAuthMode(mode) {
+  state.authMode = mode === "signup" ? "signup" : "signin";
+  const signupMode = state.authMode === "signup";
+  $("auth-heading").textContent = signupMode ? "Create your account." : "Welcome back.";
+  $("auth-description").textContent = signupMode
+    ? "Create a private ULTRON account to keep your conversations synced."
+    : "Sign in to your ULTRON account. Saved conversations are private to your account.";
+  $("login-form").querySelector('button[type="submit"]').innerHTML = signupMode ? 'Create account <span aria-hidden="true">↗</span>' : 'Sign in <span aria-hidden="true">↗</span>';
+  $("signup-button").textContent = signupMode ? "Already have an account? Sign in" : "New here? Create account";
+  $("confirm-password-label").classList.toggle("hidden", !signupMode);
+  $("confirm-password").classList.toggle("hidden", !signupMode);
+  $("confirm-password").disabled = !signupMode;
+  $("confirm-password").required = signupMode;
+  $("account-password").autocomplete = signupMode ? "new-password" : "current-password";
+  $("account-password").placeholder = signupMode ? "At least 8 characters" : "Your password";
+  $("login-error").textContent = "";
+}
 async function submitAccountAuth(path) {
   $("login-error").textContent = "";
   const button = $("login-form").querySelector('button[type="submit"]');
   const signup = $("signup-button");
+  const form = $("login-form");
+  if (!form.reportValidity()) return;
+  if (state.authMode === "signup" && $("account-password").value !== $("confirm-password").value) {
+    $("login-error").textContent = "Passwords do not match. Please check both fields.";
+    $("confirm-password").focus();
+    return;
+  }
   button.disabled = true;
   signup.disabled = true;
   try {
@@ -88,6 +112,7 @@ async function submitAccountAuth(path) {
       return;
     }
     $("account-password").value = "";
+    $("confirm-password").value = "";
     await enterApplication({ authenticated: true, authType: "supabase", email: result.email });
   } catch (error) {
     $("login-error").textContent = error.message;
@@ -98,10 +123,10 @@ async function submitAccountAuth(path) {
 }
 $("login-form").addEventListener("submit", async event => {
   event.preventDefault();
-  await submitAccountAuth("/api/auth/signin");
+  await submitAccountAuth(state.authMode === "signup" ? "/api/auth/signup" : "/api/auth/signin");
 });
-$("signup-button").addEventListener("click", async () => {
-  await submitAccountAuth("/api/auth/signup");
+$("signup-button").addEventListener("click", () => {
+  setAuthMode(state.authMode === "signup" ? "signin" : "signup");
 });
 $("logout-button").addEventListener("click", async () => {
   stopVoice();
