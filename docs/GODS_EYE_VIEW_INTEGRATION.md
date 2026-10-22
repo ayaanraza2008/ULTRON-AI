@@ -31,8 +31,10 @@ ULTRON should present this as a first-class **World Intelligence** workspace, no
 4. **Voice and autonomy**: route a user's explicit request to the same allowlisted tool bridge. Read-only queries can run without a second prompt; state-changing actions (annotations, scene import/share, persistent settings) require a clear confirmation. Show a visible activity log and stop/cancel control.
 5. **Production verification**: tests for invalid tool arguments, prompt-injection in feed text, stale data labels, provider outages, attribution, auth boundaries, mobile WebGL behavior and Windows desktop packaging. Only then mark capabilities as deployed/verified.
 
-## Important status
+## Implementation status
 
-This document is an integration specification, **not a claim that these features are already running inside ULTRON**. The upstream project is MIT-licensed, but its own data-source documentation states that third-party data and visual assets have separate terms. Each bundled dataset/model and live provider must be reviewed before redistribution. The upstream project's security notes also characterize it as an exploratory client, not a hardened production service.
-
-No upstream code has been copied into ULTRON by this document alone. The actual app bundle, tool bridge, frontend entry point, data-source integration, and deployment tests remain to be implemented and verified.
+- The ULTRON server now has a `/world-intelligence/` static mount and a no-store status endpoint.
+- Render's build command is configured to clone the pinned upstream commit `7be5937fc3e3b10cdfa8d3f833536167268768ad`, build it with `/world-intelligence/` as its asset base, and copy its browser bundle into ULTRON's public assets.
+- A path-specific CSP policy is configured for the globe workspace; the existing ULTRON page retains its stricter policy.
+- This is the **workspace packaging step**, not the complete autonomous integration. The ULTRON AI tool bridge that translates chat requests into safe globe actions is still not connected. Render has not been deployed or verified by this change, and the build/status endpoint must be checked in CI before calling the globe live.
+- The upstream project is MIT-licensed, but its own data-source documentation states that third-party data and visual assets have separate terms. Each bundled dataset/model and live provider must be reviewed before redistribution. Its security notes characterize it as an exploratory client, not a hardened production service.
