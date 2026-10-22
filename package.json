@@ -11,7 +11,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check features.js"
+    "check": "node --check server.js && node --check features.js && node --check tests/features.test.js"
   },
   "dependencies": {
     "express": "^4.21.2"
