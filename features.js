@@ -78,7 +78,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         desktop: { localAgentConfigured: Boolean(env.ULTRON_DESKTOP_AGENT_URL && env.ULTRON_DESKTOP_AGENT_TOKEN), requiresLocalCompanion: true }
       },
       modules: {
-        chat: "available_when_provider_configured",\n        codingAgent: "text-only plan/generate/review; code execution disabled",
+        chat: "available_when_provider_configured",
+        codingAgent: "text-only plan/generate/review; code execution disabled",
         multimodel: "cloud_model_ids_configured_by_environment",
         memory: "authenticated_crud_available; retrieval_integration_pending",
         research: "search_endpoint_available",
