@@ -43,7 +43,11 @@ function parseSearch(html) {
 }
 function extractIntent(text) {
   const s = text.toLowerCase();
-  if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "comfyui_status";
+  if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
+  if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
+  if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud)\b/.test(s)) return "synthesize_speech";
+  if (/\b(run|queue|submit)\b/.test(s) && /\b(comfyui|workflow)\b/.test(s)) return "run_comfyui_workflow";
+  if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "check_comfyui";
   if (/\b(integration|integrations|connected services|provider status|what tools|capabilities)\b/.test(s) && /\b(check|status|available|configured|show|list|what)\b/.test(s)) return "integration_status";
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) return "research_web";
   if (/\b(ai employee|employee routine|make a plan|create a plan|draft a|review this|write a report)\b/.test(s)) return "plan_employee";
@@ -61,7 +65,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
-    { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } }
+    { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
+    { type: "function", function: { name: "synthesize_speech", description: "Generate speech through the configured OmniVoice service when the user asks to speak or synthesize provided text. Requires a configured compatible inference API.", parameters: { type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 12000 }, language: { type: "string", maxLength: 40 }, voice: { type: "string", maxLength: 120 } }, required: ["text"], additionalProperties: false } } },
+    { type: "function", function: { name: "create_talking_avatar", description: "Create a talking-head/lip-sync job through configured HeyGem. Requires user-provided image and audio media; never invent media.", parameters: { type: "object", properties: { prompt: { type: "string", maxLength: 1000 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "transcribe_audio", description: "Transcribe user-provided audio using the configured Handy desktop companion. Audio must be supplied with this agent request.", parameters: { type: "object", properties: { language: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
 
   async function requestModel(messages, { useTools = false } = {}) {
@@ -79,7 +87,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     return response.json();
   }
 
-  async function executeTool(name, args) {
+  async function executeTool(name, args, requestBody = {}) {
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
     if (name === "research_web") {
       const query = bounded(args.query, 500);
@@ -114,6 +122,62 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const answer = data?.choices?.[0]?.message?.content;
       if (typeof answer !== "string" || !answer.trim()) throw Object.assign(new Error("Coding assistant returned no content."), { code: "CODING_EMPTY_RESPONSE", status: 502 });
       return { mode, language, answer: answer.slice(0, 12000), execution: "draft_only" };
+    }
+    if (name === "synthesize_speech") {
+      const base = safeBase(env.OMNIVOICE_API_BASE_URL);
+      const path = bounded(env.OMNIVOICE_SYNTHESIS_PATH, 200);
+      const token = bounded(env.OMNIVOICE_API_KEY, 500);
+      const text = bounded(args.text, 12000);
+      if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "omnivoice", state: "blocked", blocker: "Configure a reachable OMNIVOICE_API_BASE_URL, OMNIVOICE_API_KEY, and explicit OMNIVOICE_SYNTHESIS_PATH." };
+      if (!text) throw Object.assign(new Error("Speech text is required."), { code: "SPEECH_TEXT_REQUIRED", status: 400 });
+      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), signal: AbortSignal.timeout(90000) });
+      const raw = await response.text();
+      if (raw.length > 2000000) throw Object.assign(new Error("Speech provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
+      if (!response.ok) throw Object.assign(new Error("Speech provider returned HTTP " + response.status), { code: "SPEECH_PROVIDER_FAILED", status: 502 });
+      let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
+      return { provider: "omnivoice", state: "completed", result };
+    }
+    if (name === "create_talking_avatar") {
+      const base = safeBase(env.HEYGEM_API_BASE_URL);
+      const path = bounded(env.HEYGEM_JOB_PATH, 200);
+      const token = bounded(env.HEYGEM_API_KEY, 500);
+      const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};
+      const imageBase64 = bounded(media.imageBase64, 6500000);
+      const audioBase64 = bounded(media.audioBase64, 6500000);
+      if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "heygem", state: "blocked", blocker: "Configure a reachable HEYGEM_API_BASE_URL, HEYGEM_API_KEY, and explicit HEYGEM_JOB_PATH." };
+      if (!imageBase64 || !audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64) || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "heygem", state: "needs_input", requiredInputs: ["media.imageBase64", "media.audioBase64"], message: "Attach the user's source portrait and audio before creating a talking-avatar job." };
+      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ imageBase64, audioBase64, prompt: bounded(args.prompt, 1000) || undefined }), signal: AbortSignal.timeout(45000) });
+      const raw = await response.text();
+      if (raw.length > 2000000) throw Object.assign(new Error("Avatar provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
+      if (!response.ok) throw Object.assign(new Error("Avatar provider returned HTTP " + response.status), { code: "HEYGEM_PROVIDER_FAILED", status: 502 });
+      let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
+      return { provider: "heygem", state: "submitted", result };
+    }
+    if (name === "transcribe_audio") {
+      const base = safeBase(env.ULTRON_HANDY_BRIDGE_URL);
+      const path = bounded(env.ULTRON_HANDY_TRANSCRIBE_PATH, 200);
+      const token = bounded(env.ULTRON_HANDY_BRIDGE_TOKEN, 500);
+      const audioBase64 = bounded(requestBody.audioBase64, 10000000);
+      if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "handy", state: "blocked", blocker: "Configure a reachable authenticated Windows Handy bridge and explicit transcription path." };
+      if (!audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "handy", state: "needs_input", requiredInputs: ["audioBase64"], message: "Provide recorded audio to transcribe." };
+      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ audioBase64, language: bounded(args.language, 40) || undefined }), signal: AbortSignal.timeout(90000) });
+      const raw = await response.text();
+      if (raw.length > 2000000) throw Object.assign(new Error("Transcription response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
+      if (!response.ok) throw Object.assign(new Error("Transcription bridge returned HTTP " + response.status), { code: "HANDY_PROVIDER_FAILED", status: 502 });
+      let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
+      return { provider: "handy", state: "completed", result };
+    }
+    if (name === "run_comfyui_workflow") {
+      const base = safeBase(env.COMFYUI_BASE_URL);
+      const workflow = requestBody.workflow;
+      if (!base) return { provider: "comfyui", state: "blocked", blocker: "Configure COMFYUI_BASE_URL first." };
+      if (requestBody.confirmExternalAction !== true) return { provider: "comfyui", state: "needs_confirmation", message: "Confirm this generation job by setting confirmExternalAction=true after reviewing the exact workflow and expected compute use." };
+      if (!workflow || typeof workflow !== "object" || Array.isArray(workflow) || !Object.keys(workflow).length || JSON.stringify(workflow).length > 1500000) throw Object.assign(new Error("Attach a valid ComfyUI workflow under 1.5 MB."), { code: "INVALID_COMFYUI_WORKFLOW", status: 400 });
+      const response = await fetchImpl(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), signal: AbortSignal.timeout(30000) });
+      if (!response.ok) throw Object.assign(new Error("ComfyUI returned HTTP " + response.status), { code: "COMFYUI_QUEUE_FAILED", status: 502 });
+      const result = await response.json();
+      if (typeof result.prompt_id !== "string" || !result.prompt_id) throw Object.assign(new Error("ComfyUI returned no prompt ID."), { code: "COMFYUI_INVALID_RESPONSE", status: 502 });
+      return { provider: "comfyui", state: "queued", promptId: result.prompt_id, nodeErrors: result.node_errors || {} };
     }
     if (name === "check_comfyui") {
       const base = safeBase(env.COMFYUI_BASE_URL);
@@ -162,7 +226,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         const name = call?.function?.name;
         const args = parseArgs(call?.function?.arguments);
         let result;
-        try { result = await executeTool(name, args); }
+        try { result = await executeTool(name, args, req.body || {}); }
         catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
         used.push({ name, ok: !result?.error, result });
         toolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 18000) });
