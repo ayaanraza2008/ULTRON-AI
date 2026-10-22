@@ -71,7 +71,7 @@ test("task creation records a queued plan and audit event, without claiming exec
     assert.equal(response.status, 201);
     const body = await response.json();
     assert.equal(body.task.status, "WAITING_FOR_PERMISSION");
-    assert.match(body.notice, /execution is not enabled/i);
+    assert.match(body.notice, /will not execute unless its type is supported/i);
     assert.equal(writes.some(w => w.table === "audit_events"), true);
   }, { supabaseRest: fakeSupabaseRest });
 });
