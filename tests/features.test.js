@@ -223,3 +223,20 @@ test("task list and cancellation explicitly scope database operations to the sig
     assert.ok(patchQuery.includes("user_id=eq." + userId));
   }, { supabaseRest: fakeSupabaseRest });
 });
+
+test("task detail is owner-scoped and validates task IDs", async () => {
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const calls = [];
+  const fakeSupabaseRest = async (_req, table, method, query) => {
+    calls.push({ table, method, query });
+    return [{ id: "00000000-0000-4000-8000-000000000002", title: "Owned task", status: "COMPLETED" }];
+  };
+  await withServer({}, async base => {
+    const invalid = await fetch(base + "/api/tasks/not-a-uuid");
+    assert.equal(invalid.status, 400);
+    const response = await fetch(base + "/api/tasks/00000000-0000-4000-8000-000000000002");
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).task.title, "Owned task");
+    assert.ok(calls[0].query.includes("user_id=eq." + userId));
+  }, { supabaseRest: fakeSupabaseRest });
+});
