@@ -7,6 +7,7 @@ This integration implements a native ULTRON security-assistance layer inspired b
 - `GET /api/kaligpt/capabilities` — authenticated readiness manifest for OpenRouter, Ollama-compatible local inference, LiteLLM-compatible gateways, Gemini, and OpenAI. It reports only booleans and never returns secret values.
 - `POST /api/kaligpt/security/assist` — authenticated model-backed helper for security learning, defensive reviews, authorized assessment planning, and Linux administration. It accepts a task, optional hostname/URL, mode, and evidence.
 - Existing ULTRON endpoints remain the integration layer for web research, local-model chat, coding assistance, model selection, and task records.
+- Desktop local diagnostics are exposed through the Electron preload bridge as `ultronDesktop.runDiagnostic(id)`. The main process validates the trusted window, accepts only four fixed IDs (`systemSummary`, `nodeVersion`, `gitVersion`, `pythonVersion`), asks for native approval each time, uses fixed argument arrays with `shell: false`, applies a five-second timeout, and bounds returned output. No arbitrary command string, arguments, scripts, or shell access are exposed.
 
 ## Safety and execution boundary
 
