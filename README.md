@@ -100,3 +100,8 @@ Example request body:
 ```
 
 The endpoint requires a signed-in Supabase user. Model-selected tool calls are validated server-side; web results are treated as untrusted input. Plans and code remain drafts. Explicitly requested background AI Employee tasks are automatically queued when the worker and storage are configured; they are limited to draft-only plans, reviews, and reports. ComfyUI generation requires the exact workflow to be attached and `confirmExternalAction: true`. HeyGem requires `media.imageBase64` and `media.audioBase64`; Handy requires `audioBase64` and a reachable authenticated desktop bridge. OmniVoice, HeyGem, and Handy require explicit compatible endpoint paths and working external services. Readiness does not imply those services are deployed or live-verified. This API is a backend capability; a user-facing frontend is still deferred.
+
+
+## Automatic scientific research skills
+
+ULTRON classifies scientific requests and selectively loads relevant procedures from [K-Dense Scientific Agent Skills](https://github.com/K-Dense-AI/scientific-agent-skills), such as literature lookup, scientific writing, statistics, experimental design, data analysis, visualization, and selected domain workflows. Only up to three relevant `SKILL.md` files are loaded on demand. Retrieved text is treated as untrusted reference material and does not install packages or make an unavailable scientific database operational. See [docs/SCIENTIFIC_AGENT_SKILLS.md](docs/SCIENTIFIC_AGENT_SKILLS.md). Authenticated discovery endpoint: `GET /api/agent/scientific-skills?task=...`.
