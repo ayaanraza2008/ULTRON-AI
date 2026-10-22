@@ -100,6 +100,67 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { safeError(res, error, "ComfyUI job lookup"); }
   });
 
+  router.get("/integrations/comfyui/status", requireSupabaseUser, async (_req, res) => {
+    const base = configuredUrl(env.COMFYUI_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL first." } });
+    try {
+      const [system, queue] = await Promise.all([
+        requestJson(fetchImpl, base + "/system_stats", { headers: providerHeaders(env.COMFYUI_API_KEY), timeoutMs: 12000 }),
+        requestJson(fetchImpl, base + "/queue", { headers: providerHeaders(env.COMFYUI_API_KEY), timeoutMs: 12000 })
+      ]);
+      const running = Array.isArray(queue?.queue_running) ? queue.queue_running : [];
+      const pending = Array.isArray(queue?.queue_pending) ? queue.queue_pending : [];
+      res.json({
+        provider: "comfyui",
+        reachable: true,
+        system: {
+          devices: Array.isArray(system?.devices) ? system.devices.map(device => ({
+            name: bounded(device?.name, 160),
+            type: bounded(device?.type, 80),
+            vramTotal: Number.isFinite(device?.vram_total) ? device.vram_total : undefined,
+            vramFree: Number.isFinite(device?.vram_free) ? device.vram_free : undefined
+          })) : []
+        },
+        queue: { running: running.length, pending: pending.length }
+      });
+    } catch (error) { safeError(res, error, "ComfyUI status check"); }
+  });
+
+  router.get("/integrations/comfyui/queue", requireSupabaseUser, async (_req, res) => {
+    const base = configuredUrl(env.COMFYUI_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL first." } });
+    try {
+      const queue = await requestJson(fetchImpl, base + "/queue", { headers: providerHeaders(env.COMFYUI_API_KEY), timeoutMs: 15000 });
+      const summarize = items => (Array.isArray(items) ? items : []).slice(0, 100).map(item => ({
+        queueNumber: Number.isFinite(item?.[0]) ? item[0] : undefined,
+        promptId: typeof item?.[1] === "string" ? item[1] : undefined,
+        workflowName: bounded(item?.[3]?.extra_pnginfo?.workflow?.name, 120) || undefined
+      }));
+      res.json({
+        provider: "comfyui",
+        running: summarize(queue?.queue_running),
+        pending: summarize(queue?.queue_pending),
+        truncated: (queue?.queue_running?.length || 0) + (queue?.queue_pending?.length || 0) > 100
+      });
+    } catch (error) { safeError(res, error, "ComfyUI queue lookup"); }
+  });
+
+  router.delete("/integrations/comfyui/jobs/:promptId", requireSupabaseUser, async (req, res) => {
+    const base = configuredUrl(env.COMFYUI_BASE_URL);
+    const promptId = bounded(req.params.promptId, 160);
+    if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL first." } });
+    if (!/^[a-zA-Z0-9_-]+$/.test(promptId)) return res.status(400).json({ error: { code: "INVALID_PROMPT_ID", message: "ComfyUI prompt ID is invalid." } });
+    try {
+      await requestJson(fetchImpl, base + "/queue", {
+        method: "POST",
+        headers: providerHeaders(env.COMFYUI_API_KEY),
+        body: { delete: [promptId] },
+        timeoutMs: 15000
+      });
+      res.json({ provider: "comfyui", promptId, requested: "cancel_queued_job" });
+    } catch (error) { safeError(res, error, "ComfyUI job cancellation"); }
+  });
+
   // HeyGem, OmniVoice and Handy implementations differ by deployment. These
   // adapters require explicit paths, rather than guessing undocumented APIs.
   const genericAdapters = [
