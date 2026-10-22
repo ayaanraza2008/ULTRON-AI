@@ -296,3 +296,38 @@ test("provider status exposes configured models and fallback order without secre
     assert.match(body.notice, /never API keys/);
   });
 });
+
+
+test("vision analysis sends supplied image to the selected provider", async () => {
+  let requestBody;
+  const fetchImpl = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({ model: "vision-test-model", choices: [{ message: { content: "The image contains a test object." } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  await withServer({ OPENROUTER_API_KEY: "vision-secret", OPENROUTER_DEFAULT_MODEL: "vision-test-model" }, fetchImpl, async base => {
+    const response = await fetch(base + "/api/kaligpt/vision/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Describe this", mimeType: "image/png", imageBase64: "aGVsbG8=", provider: "openrouter" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "openrouter");
+    assert.equal(body.answer, "The image contains a test object.");
+    assert.equal(body.execution, "image_analysis_only");
+    assert.equal(requestBody.messages[1].content[1].image_url.url, "data:image/png;base64,aGVsbG8=");
+    assert.equal(JSON.stringify(body).includes("vision-secret"), false);
+  });
+});
+
+test("vision analysis rejects unsupported MIME types before calling a provider", async () => {
+  let called = false;
+  await withServer({ OPENROUTER_API_KEY: "vision-secret" }, async () => { called = true; throw new Error("provider must not be called"); }, async base => {
+    const response = await fetch(base + "/api/kaligpt/vision/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mimeType: "text/html", imageBase64: "aGVsbG8=" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_IMAGE_MIME");
+    assert.equal(called, false);
+  });
+});
