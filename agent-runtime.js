@@ -233,7 +233,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       // Some free models do not implement function calling. Use a conservative intent fallback.
       if (!calls.length) {
         const intent = extractIntent(userText);
-        if (intent) calls = [{ id: "fallback_" + intent, type: "function", function: { name: intent, arguments: JSON.stringify(intent === "research_web" ? { query: userText } : intent === "plan_employee" ? { role: "chief-of-staff", goal: userText, mode: "plan" } : intent === "coding_assist" ? { task: userText, mode: "plan" } : {}) } }];
+        if (intent) {
+          const name = intent === "integration_status" ? "check_integrations" : intent;
+          const args = intent === "research_web" ? { query: userText }
+            : intent === "plan_employee" ? { role: "chief-of-staff", goal: userText, mode: "plan" }
+            : intent === "coding_assist" ? { task: userText, mode: "plan" }
+            : intent === "synthesize_speech" ? { text: userText }
+            : intent === "run_comfyui_workflow" ? { reason: "User requested a ComfyUI workflow run." }
+            : {};
+          calls = [{ id: "fallback_" + name, type: "function", function: { name, arguments: JSON.stringify(args) } }];
+        }
       }
       if (!calls.length) {
         const content = typeof assistantMessage?.content === "string" ? assistantMessage.content : "I couldn't produce a response. Please try again.";
