@@ -46,6 +46,6 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: "1"
         run: |
           npm ci
-          npm run build -- --base=/world-intelligence/
+          npm run build
       - name: Verify the browser bundle exists
         run: test -s /tmp/gods-eye-view/dist/index.html
