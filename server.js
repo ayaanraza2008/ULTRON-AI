@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
+import { createFeatureRouter } from "./features.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -639,6 +640,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       note: "Configuration readiness only; configured services still require live connectivity and feature tests."
     });
   });
+
+  app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
 
   app.use(express.static(path.join(__dirname, "public"), { index: "index.html", maxAge: env.NODE_ENV === "production" ? "1h" : 0 }));
   app.use((err, _req, res, _next) => {
