@@ -289,3 +289,45 @@ test("ComfyUI asks for the exact workflow before asking the user to confirm comp
     assert.equal(comfyCalls, 0);
   });
 });
+
+
+test("agent automatically uses active user memories when memory is enabled", async () => {
+  let capturedMessages = [];
+  const supabaseCalls = [];
+  const supabaseRest = async (_req, table, method, query) => {
+    supabaseCalls.push({ table, method, query });
+    if (table === "user_preferences") return [{ memory_enabled: true }];
+    if (table === "memory_items") return [{ kind: "preference", title: "Answer style", content: "Prefer concise Hinglish answers." }];
+    throw new Error("unexpected table");
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    capturedMessages = JSON.parse(options.body).messages;
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Samajh gaya." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Explain this briefly" }) });
+    assert.equal(response.status, 200);
+    const memoryMessage = capturedMessages.find(m => m.role === "system" && String(m.content).includes("User-approved memory context"));
+    assert.ok(memoryMessage);
+    assert.match(memoryMessage.content, /Prefer concise Hinglish answers/);
+    assert.deepEqual(supabaseCalls.map(x => x.table), ["user_preferences", "memory_items"]);
+  }, { supabaseRest });
+});
+
+test("agent respects the user's memory-disabled preference", async () => {
+  let memoryItemsRead = false;
+  let capturedMessages = [];
+  const supabaseRest = async (_req, table) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") { memoryItemsRead = true; return [{ kind: "preference", title: "Private", content: "Do not inject me." }]; }
+    return [];
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    capturedMessages = JSON.parse(options.body).messages;
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Okay." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Hi" }) });
+    assert.equal(response.status, 200);
+    assert.equal(memoryItemsRead, false);
+    assert.equal(capturedMessages.some(m => String(m.content).includes("Do not inject me.")), false);
+  }, { supabaseRest });
+});
