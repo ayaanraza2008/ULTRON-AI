@@ -219,7 +219,7 @@ test("task list and cancellation explicitly scope database operations to the sig
     assert.equal(cancelled.status, 200);
     const readQuery = calls.find(call => call.table === "agent_tasks" && call.method === "GET").query;
     const patchQuery = calls.find(call => call.table === "agent_tasks" && call.method === "PATCH").query;
-    assert.match(readQuery, new RegExp("user_id=eq\\\\." + userId));
-    assert.match(patchQuery, new RegExp("user_id=eq\\\\." + userId));
+    assert.ok(readQuery.includes("user_id=eq." + userId));
+    assert.ok(patchQuery.includes("user_id=eq." + userId));
   }, { supabaseRest: fakeSupabaseRest });
 });
