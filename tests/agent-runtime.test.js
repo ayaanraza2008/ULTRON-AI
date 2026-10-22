@@ -336,3 +336,36 @@ test("agent respects the user's memory-disabled preference", async () => {
     assert.equal(capturedMessages.some(m => String(m.content).includes("Do not inject me.")), false);
   }, { supabaseRest });
 });
+
+
+test("agent performs one bounded follow-up tool round and reports both results", async () => {
+  let modelCalls = 0;
+  const fetchImpl = async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      return new Response(JSON.stringify({ answer: "A recent public source was found.", results: [{ title: "AI agent release notes", url: "https://example.com/agents", content: "Public release notes." }] }), { status: 200 });
+    }
+    modelCalls += 1;
+    const request = JSON.parse(options.body);
+    if (modelCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "first-tool", type: "function", function: { name: "check_integrations", arguments: "{}" } }] } }] }), { status: 200 });
+    }
+    if (modelCalls === 2) {
+      assert.ok(request.tools, "follow-up model call should have tools enabled");
+      assert.ok(request.messages.some(m => m.role === "tool" && m.tool_call_id === "first-tool"));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "second-tool", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "recent AI agent releases" }) } }] } }] }), { status: 200 });
+    }
+    assert.ok(request.messages.some(m => m.role === "tool" && m.tool_call_id === "second-tool"));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I checked the configured integrations and researched a public source." } }] }), { status: 200 });
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, fetchImpl, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Check integrations and research recent AI agent releases" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolsUsed.length, 2);
+    assert.equal(body.toolsUsed[0].name, "check_integrations");
+    assert.equal(body.toolsUsed[1].name, "research_web");
+    assert.equal(body.toolsUsed[1].ok, true);
+    assert.match(body.content, /researched a public source/i);
+    assert.equal(modelCalls, 3);
+  });
+});
