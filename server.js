@@ -1,5 +1,6 @@
 import express from "express";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
@@ -63,7 +64,10 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self)");
-    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+    const worldIntelligence = req.path === "/world-intelligence" || req.path.startsWith("/world-intelligence/");
+    res.setHeader("Content-Security-Policy", worldIntelligence
+      ? "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' blob: https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https: wss: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
+      : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     next();
   });
 
@@ -673,6 +677,15 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
 
+  // God's Eye View is built as a pinned, separately audited static workspace.
+  // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
+  const worldIntelligenceDir = path.join(__dirname, "public", "world-intelligence");
+  app.use("/world-intelligence", express.static(worldIntelligenceDir, { index: "index.html", maxAge: env.NODE_ENV === "production" ? "1h" : 0 }));
+  app.get("/world-intelligence", (_req, res) => res.redirect(308, "/world-intelligence/"));
+  app.get("/api/world-intelligence/status", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ workspace: "world-intelligence", mounted: true, buildPresent: fs.existsSync(path.join(worldIntelligenceDir, "index.html")), upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "not_yet_connected" });
+  });
   app.use(express.static(path.join(__dirname, "public"), { index: "index.html", maxAge: env.NODE_ENV === "production" ? "1h" : 0 }));
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();
