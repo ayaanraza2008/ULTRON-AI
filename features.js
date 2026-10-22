@@ -57,7 +57,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       routineTemplates: employeeRoutineCatalog,
       totalRoleRoutineSlots: employeeRoles.reduce((sum, role) => sum + role.routines, 0),
       execution: "planning_and_drafting_only",
-      scheduler: "not_configured",
+      scheduler: env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY ? "enabled" : "not_configured",
       notice: "This is a native ULTRON role/routine layer inspired by the MIT-licensed upstream project; it does not claim the upstream kit files or scheduler are installed."
     });
   });
@@ -68,7 +68,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       return res.status(400).json({ error: { code: "UNKNOWN_EMPLOYEE_ROLE", message: "Choose a role from /api/employees/roles." } });
     }
     res.setHeader("Cache-Control", "no-store");
-    res.json({ routines: employeeRoutineCatalog.filter(item => !roleId || item.roles.includes(roleId)), scheduler: "not_configured" });
+    res.json({ routines: employeeRoutineCatalog.filter(item => !roleId || item.roles.includes(roleId)), scheduler: env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY ? "enabled" : "not_configured" });
   });
 
   router.get("/employees/status", requireSupabaseUser, (_req, res) => {
@@ -76,7 +76,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     res.json({
       roles: employeeRoles.length,
       routineTemplates: employeeRoutineCatalog.length,
-      schedulerEnabled: env.ULTRON_EMPLOYEES_ENABLED === "true",
+      schedulerEnabled: env.ULTRON_EMPLOYEES_ENABLED === "true" && Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
       workerCredentialsConfigured: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
       modelProviderConfigured: Boolean(env.OPENROUTER_API_KEY),
       scheduleCadenceMinutes: { min: 60, max: 10080 },
