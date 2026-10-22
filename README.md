@@ -109,7 +109,7 @@ ULTRON classifies scientific requests and selectively loads relevant procedures 
 
 ## Automatic AgentMemory
 
-ULTRON can automatically retrieve relevant prior project decisions and coding context from the optional [rohitg00/agentmemory](https://github.com/rohitg00/agentmemory) service. It queries memory only for relevant continuation, repository, coding, decision, and context tasks, then injects a small bounded set of results as untrusted context. Durable-context capture is opt-in through `ULTRON_AGENTMEMORY_CAPTURE=true`; ordinary conversations are not blindly persisted. Existing per-user Supabase memory remains in place. Configure `AGENTMEMORY_URL` and `AGENTMEMORY_SECRET` on the backend, then see [docs/AGENTMEMORY_INTEGRATION.md](docs/AGENTMEMORY_INTEGRATION.md). The adapter is not live until the separate AgentMemory service is deployed and reachable.
+ULTRON can automatically retrieve relevant prior project decisions and coding context from the optional [rohitg00/agentmemory](https://github.com/rohitg00/agentmemory) service. It queries memory only for relevant continuation, repository, coding, decision, and context tasks, then injects a small bounded set of results as untrusted context. Durable-context capture runs automatically for explicit, high-signal decisions/preferences when configured; ordinary conversations are not blindly persisted. Set `ULTRON_AGENTMEMORY_CAPTURE=false` to disable it. Existing per-user Supabase memory remains in place. Configure `AGENTMEMORY_URL` and `AGENTMEMORY_SECRET` on the backend, then see [docs/AGENTMEMORY_INTEGRATION.md](docs/AGENTMEMORY_INTEGRATION.md). The adapter is not live until the separate AgentMemory service is deployed and reachable.
 
 ## Automatic Browser Use
 
