@@ -207,7 +207,11 @@ test("agent keeps large speech payloads out of model context but returns them to
 test("background employee task requires explicit confirmation before database writes", async () => {
   let providerCalls = 0;
   let databaseCalls = 0;
-  const supabaseRest = async () => { databaseCalls += 1; return []; };
+  const supabaseRest = async (_req, table) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") return [];
+    databaseCalls += 1; return [];
+  };
   await withServer({ OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" }, async (_url, options) => {
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "employee-call", type: "function", function: { name: "enqueue_employee_task", arguments: JSON.stringify({ role: "web-dev", goal: "Review dependency risks", mode: "review" }) } }] } }] }), { status: 200 });
@@ -225,6 +229,8 @@ test("confirmed background employee task is stored as a guarded worker task", as
   let providerCalls = 0;
   const databaseCalls = [];
   const supabaseRest = async (_req, table, method, query, body) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") return [];
     databaseCalls.push({ table, method, query, body });
     if (table === "agent_tasks") return [{ id: "00000000-0000-4000-8000-000000000123", title: body.title, input: body.input, status: body.status, created_at: new Date().toISOString() }];
     return [];
