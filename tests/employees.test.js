@@ -1,4 +1,5 @@
 import test from "node:test";
+import { startWorker } from "../worker.js";
 import assert from "node:assert/strict";
 import express from "express";
 import { createFeatureRouter } from "../features.js";
@@ -113,4 +114,11 @@ test("employee schedule API bounds the recurring interval", async () => {
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, "INVALID_SCHEDULE_INTERVAL");
   });
+});
+
+
+test("worker reports disabled when its server-only Supabase credentials are missing", () => {
+  const worker = startWorker({ env: {}, logger: { warn() {}, info() {}, error() {} } });
+  assert.equal(worker.getStatus().state, "disabled");
+  assert.equal(worker.getStatus().lastErrorCode, "WORKER_CONFIGURATION_MISSING");
 });
