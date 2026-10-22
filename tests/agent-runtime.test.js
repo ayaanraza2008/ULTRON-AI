@@ -393,3 +393,23 @@ test("agent autonomously runs multiple safe tools when model function calling is
     assert.equal(modelCalls.length, 0, "missing provider credentials should fall back before making network calls");
   });
 });
+
+
+test("agent infers generic image-generation requests without requiring the user to name ComfyUI", async () => {
+  let providerCalls = 0;
+  let comfyCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
+    if (url.startsWith("https://comfy.example/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I can help create that image." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Attach a ComfyUI API workflow JSON so I can inspect it before asking for compute confirmation." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Create an image of a futuristic city at night" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].name, "run_comfyui_workflow");
+    assert.equal(body.toolResults[0].result.state, "needs_input");
+    assert.deepEqual(body.toolResults[0].result.requiredInputs, ["workflow"]);
+    assert.equal(comfyCalls, 0);
+  });
+});
