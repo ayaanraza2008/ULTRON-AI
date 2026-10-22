@@ -170,3 +170,35 @@ test("document extraction rejects malformed DOCX payloads", async () => {
     assert.equal((await response.json()).error.code, "INVALID_DOCX");
   });
 });
+
+test("coding assistance is disabled without a provider key", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Write a safe parser", mode: "generate" })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "CODING_PROVIDER_NOT_CONFIGURED");
+  });
+});
+
+test("coding assistance uses configured provider and never claims code execution", async () => {
+  let requestBody;
+  await withServer({ OPENROUTER_API_KEY: "test-secret", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Review this code", code: "console.log('hello')", language: "javascript", mode: "review" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.execution, "not_executed");
+    assert.match(body.notice, /did not execute/i);
+    assert.equal(body.answer, "Use strict validation.");
+    assert.equal(requestBody.model, "openrouter/free");
+    assert.equal(requestBody.messages[1].content.includes("console.log"), true);
+    assert.equal(JSON.stringify(body).includes("test-secret"), false);
+  }, { fetchImpl: async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({ model: "openrouter/free", choices: [{ message: { content: "Use strict validation." } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+});
