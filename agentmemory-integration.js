@@ -5,6 +5,12 @@ function bounded(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function scopedProject(env, userId) {
+  const base = bounded(env?.ULTRON_AGENTMEMORY_PROJECT || "ultron-ai", 80).replace(/[^a-zA-Z0-9._-]/g, "-") || "ultron-ai";
+  const user = bounded(userId, 80).replace(/[^a-zA-Z0-9._-]/g, "-");
+  return user ? base + "-user-" + user : base;
+}
+
 function baseUrl(value) {
   try {
     const url = new URL(String(value || ""));
@@ -70,7 +76,7 @@ function safeMemoryText(value) {
 export async function recallAgentMemory(task, options = {}) {
   const query = bounded(task, MAX_QUERY);
   if (!query || !shouldRecallAgentMemory(query)) return { state: "skipped", memories: [] };
-  const project = bounded(options.env?.ULTRON_AGENTMEMORY_PROJECT || "ultron-ai", 100);
+  const project = scopedProject(options.env, options.userId);
   const data = await requestMemory("/agentmemory/smart-search", { query, project, limit: 5 }, options);
   const candidates = Array.isArray(data.results) ? data.results
     : Array.isArray(data.memories) ? data.memories
@@ -88,11 +94,12 @@ export async function captureAgentMemory(task, options = {}) {
   const env = options.env || process.env;
   if (env.ULTRON_AGENTMEMORY_CAPTURE !== "true") return { state: "disabled" };
   const project = bounded(env.ULTRON_AGENTMEMORY_PROJECT || "ultron-ai", 100);
-  await requestMemory("/agentmemory/observe", {
-    text,
+  await requestMemory("/agentmemory/remember", {
+    content: text,
+    type: "decision",
+    concepts: ["ultron-agent", "durable-context"],
     project,
-    source: "ultron-agent",
-    sessionId: bounded(options.sessionId, 120) || undefined
+    agentId: "ultron-ai"
   }, options);
   return { state: "captured" };
 }
