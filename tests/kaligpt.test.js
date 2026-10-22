@@ -224,3 +224,50 @@ test("DNS evidence review rejects malformed domains and oversized record sets", 
     assert.equal((await tooMany.json()).error.code, "INVALID_DNS_RECORDS");
   });
 });
+
+
+test("HTTP response evidence analyzer checks cookie flags and security banners without network calls", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; throw new Error("passive analysis must not make network calls"); };
+  await withServer({}, fetchImpl, async base => {
+    const response = await fetch(base + "/api/kaligpt/security/http-evidence/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        statusCode: 500,
+        headers: {
+          "strict-transport-security": "includeSubDomains",
+          "content-security-policy": "default-src *; script-src 'unsafe-inline'",
+          "server": "ExampleServer/1.2",
+          "x-powered-by": "ExampleFramework"
+        },
+        setCookie: ["session=abc; Path=/"]
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.findings.some(item => item.id === "server-error"));
+    assert.ok(body.findings.some(item => item.id === "hsts-max-age"));
+    assert.ok(body.findings.some(item => item.id === "csp-permissive"));
+    assert.ok(body.findings.some(item => item.id === "server-banner"));
+    assert.deepEqual(body.cookieFindings[0].missingFlags, ["Secure", "HttpOnly", "SameSite"]);
+    assert.equal(body.execution, "local-analysis-only");
+    assert.equal(calls, 0);
+  });
+});
+
+test("HTTP response evidence analyzer validates status, header shape and cookie bounds", async () => {
+  await withServer({}, globalThis.fetch, async base => {
+    const invalidStatus = await fetch(base + "/api/kaligpt/security/http-evidence/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statusCode: 99, headers: {} })
+    });
+    assert.equal(invalidStatus.status, 400);
+    assert.equal((await invalidStatus.json()).error.code, "INVALID_HTTP_STATUS");
+    const invalidCookies = await fetch(base + "/api/kaligpt/security/http-evidence/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statusCode: 200, headers: {}, setCookie: Array(51).fill("a=b") })
+    });
+    assert.equal(invalidCookies.status, 400);
+    assert.equal((await invalidCookies.json()).error.code, "INVALID_COOKIE_EVIDENCE");
+  });
+});
