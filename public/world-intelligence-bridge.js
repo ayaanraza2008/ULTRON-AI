@@ -39,7 +39,10 @@
       const runner = gev?.voiceCommands?.runner;
       if (typeof runner !== 'function') throw new Error('The globe control engine is not ready yet.');
       const result = await runner(message.name, message.args, {});
-      reply({ ok: true, result: typeof result === 'string' ? result.slice(0, 5000) : result });
+      let summary;
+      try { summary = typeof result === 'string' ? result : JSON.stringify(result); }
+      catch { summary = String(result); }
+      reply({ ok: true, result: String(summary || 'Action completed.').slice(0, 5000) });
     } catch (error) {
       reply({ ok: false, error: String(error?.message || 'Globe action failed').slice(0, 500) });
     }
