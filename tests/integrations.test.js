@@ -101,3 +101,68 @@ test("Handy rejects non-base64 audio without calling the local bridge", async ()
     assert.equal(called, false);
   });
 });
+
+test("ComfyUI status reports device and queue counts", async () => {
+  const urls = [];
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async url => {
+    urls.push(url);
+    if (url.endsWith("/system_stats")) return new Response(JSON.stringify({ devices: [{ name: "GPU 0", type: "cuda", vram_total: 8000, vram_free: 4000 }] }), { status: 200 });
+    if (url.endsWith("/queue")) return new Response(JSON.stringify({ queue_running: [[1, "running_1"]], queue_pending: [[2, "pending_1"], [3, "pending_2"]] }), { status: 200 });
+    throw new Error("Unexpected URL " + url);
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/comfyui/status");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.reachable, true);
+    assert.equal(body.system.devices[0].name, "GPU 0");
+    assert.deepEqual(body.queue, { running: 1, pending: 2 });
+  });
+  assert.deepEqual(urls.sort(), ["https://comfy.example/queue", "https://comfy.example/system_stats"].sort());
+});
+
+test("ComfyUI queue inspection summarizes jobs without returning workflow payloads", async () => {
+  let requestedUrl;
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async url => {
+    requestedUrl = url;
+    return new Response(JSON.stringify({
+      queue_running: [[1, "active_123", { secret: "large workflow" }, { extra_pnginfo: { workflow: { name: "Test workflow" } } }]],
+      queue_pending: [[2, "waiting_456", { prompt: "omitted" }, {}]]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/comfyui/queue");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.running[0].promptId, "active_123");
+    assert.equal(body.running[0].workflowName, "Test workflow");
+    assert.equal(body.pending[0].promptId, "waiting_456");
+    assert.equal(JSON.stringify(body).includes("large workflow"), false);
+    assert.equal(requestedUrl, "https://comfy.example/queue");
+  });
+});
+
+test("ComfyUI queued-job cancellation sends only the requested prompt id", async () => {
+  let request;
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example", COMFYUI_API_KEY: "token" }, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/comfyui/jobs/queued_123", { method: "DELETE" });
+    assert.equal(response.status, 200);
+    assert.equal(request.url, "https://comfy.example/queue");
+    assert.equal(request.options.method, "POST");
+    assert.deepEqual(JSON.parse(request.options.body), { delete: ["queued_123"] });
+    assert.equal(request.options.headers.Authorization, "Bearer token");
+  });
+});
+
+test("ComfyUI cancellation rejects unsafe prompt ids", async () => {
+  let called = false;
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async () => {
+    called = true;
+    return new Response("{}", { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/comfyui/jobs/%2Fetc%2Fpasswd", { method: "DELETE" });
+    assert.equal(response.status, 400);
+    assert.equal(called, false);
+  });
+});
