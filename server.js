@@ -575,12 +575,28 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         const authHeaders = env.OPENVIKING_API_KEY
           ? { "X-API-Key": env.OPENVIKING_API_KEY, Authorization: "Bearer " + env.OPENVIKING_API_KEY }
           : {};
-        const sessionResponse = await fetchImpl(
-          base + "/api/v1/sessions/" + encodeURIComponent(openVikingSessionId) + "?auto_create=true",
+        const sessionUrl = base + "/api/v1/sessions/" + encodeURIComponent(openVikingSessionId);
+        let sessionResponse = await fetchImpl(
+          sessionUrl,
           { method: "GET", headers: { Accept: "application/json", ...authHeaders }, signal: AbortSignal.timeout(5000) }
         );
-        if (sessionResponse.ok) {
+        // OpenViking's GET session endpoint does not create missing sessions. Create explicitly
+        // on 404, then continue only after the server confirms that session exists.
+        if (sessionResponse.status === 404) {
+          sessionResponse = await fetchImpl(base + "/api/v1/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeaders },
+            body: JSON.stringify({ session_id: openVikingSessionId }),
+            signal: AbortSignal.timeout(5000)
+          });
+          if (sessionResponse.ok) {
+            // A successful create response is sufficient; avoid an unnecessary extra GET.
+            openVikingSessionReady = true;
+          }
+        } else if (sessionResponse.ok) {
           openVikingSessionReady = true;
+        }
+        if (openVikingSessionReady) {
           if (needsOpenViking) {
             const contextResponse = await fetchImpl(
               base + "/api/v1/sessions/" + encodeURIComponent(openVikingSessionId) + "/context?token_budget=3500",
