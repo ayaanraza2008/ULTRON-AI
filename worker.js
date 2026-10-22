@@ -10,7 +10,7 @@ function bounded(value, max = 4000) {
 }
 
 export function startWorker({ env = process.env, logger = console } = {}) {
-  const supabaseUrl = String(env.SUPABASE_URL || "").replace(/\\/+$/, "");
+  const supabaseUrl = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
