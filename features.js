@@ -500,10 +500,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const order = requestedProvider === "auto"
       ? ["openrouter", "openai", "gemini", "litellm", "ollama"]
       : [requestedProvider];
-    const provider = order.find(name => providerConfigs[name].ready);
-    if (!provider) return res.status(503).json({ error: { code: "SECURITY_PROVIDER_NOT_CONFIGURED", message: requestedProvider === "auto" ? "Configure at least one supported provider: OpenRouter, OpenAI, Gemini, LiteLLM, or Ollama." : "The selected provider is not configured on this server." } });
-    const config = providerConfigs[provider];
-    if (provider === "ollama" && !config.model) return res.status(503).json({ error: { code: "OLLAMA_MODEL_REQUIRED", message: "Set OLLAMA_DEFAULT_MODEL or choose a model in the local model settings." } });
+    const candidates = order.filter(name => providerConfigs[name].ready && (name !== "ollama" || providerConfigs[name].model));
+    if (!candidates.length) return res.status(503).json({ error: { code: "SECURITY_PROVIDER_NOT_CONFIGURED", message: requestedProvider === "auto" ? "Configure at least one supported provider: OpenRouter, OpenAI, Gemini, LiteLLM, or Ollama with OLLAMA_DEFAULT_MODEL." : requestedProvider === "ollama" && providerConfigs.ollama.ready ? "Set OLLAMA_DEFAULT_MODEL to use the local model provider." : "The selected provider is not configured on this server." } });
     const system = [
       "You are ULTRON's defensive cybersecurity and Linux administration assistant inspired by KaliGPT.",
       "Help with security learning, defensive review, Linux administration, and scoped authorized assessment planning.",
@@ -515,43 +513,60 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       "Return concise Markdown with scope, plan, expected evidence, risks, and cleanup."
     ].join(" ");
     const prompt = JSON.stringify({ mode, task, target: target || undefined, evidence: evidence || undefined });
-    const timeout = withTimeout(45000, req.signal);
-    try {
-      const messages = [{ role: "system", content: system }, { role: "user", content: prompt }];
-      const headers = { "Content-Type": "application/json" };
-      let body;
-      if (config.key) headers.Authorization = "Bearer " + config.key;
-      if (provider === "gemini") {
-        body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 2800 } };
-      } else if (provider === "ollama") {
-        body = { model: config.model, messages, stream: false, options: { temperature: 0.2, num_predict: 2800 } };
-      } else {
-        body = { model: config.model, messages, temperature: 0.2, max_tokens: 2800 };
+    const messages = [{ role: "system", content: system }, { role: "user", content: prompt }];
+    const failures = [];
+    for (const provider of candidates) {
+      const config = providerConfigs[provider];
+      const timeout = withTimeout(25000, req.signal);
+      try {
+        const headers = { "Content-Type": "application/json" };
+        let body;
+        if (config.key) headers.Authorization = "Bearer " + config.key;
+        if (provider === "gemini") {
+          body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 2800 } };
+        } else if (provider === "ollama") {
+          body = { model: config.model, messages, stream: false, options: { temperature: 0.2, num_predict: 2800 } };
+        } else {
+          body = { model: config.model, messages, temperature: 0.2, max_tokens: 2800 };
+        }
+        const response = await fetchImpl(config.url, {
+          method: "POST", headers, body: JSON.stringify(body), signal: timeout.signal
+        });
+        if (!response.ok) {
+          failures.push({ provider, status: response.status });
+          logger.warn?.("Security assistant provider failed; trying fallback if configured", { provider, status: response.status });
+          if (requestedProvider !== "auto") break;
+          continue;
+        }
+        const payload = await response.json();
+        const answer = provider === "gemini"
+          ? payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n")
+          : provider === "ollama" ? payload?.message?.content : payload?.choices?.[0]?.message?.content;
+        if (typeof answer !== "string" || !answer.trim()) {
+          failures.push({ provider, status: "empty_response" });
+          if (requestedProvider !== "auto") break;
+          continue;
+        }
+        return res.json({
+          mode, provider, model: boundedString(payload?.model, 120) || config.model,
+          fallbackUsed: provider !== candidates[0],
+          answer: answer.slice(0, 22000), execution: "not_executed",
+          approvalRequiredForExecution: true,
+          notice: "ULTRON only generated guidance. No commands were run and no target was contacted."
+        });
+      } catch (error) {
+        failures.push({ provider, status: error?.name === "AbortError" ? "timeout" : "unavailable" });
+        logger.warn?.("Security assistant provider request failed", { provider, name: error?.name || "Error" });
+        if (requestedProvider !== "auto") break;
+      } finally {
+        timeout.close();
       }
-      const response = await fetchImpl(config.url, {
-        method: "POST", headers, body: JSON.stringify(body), signal: timeout.signal
-      });
-      if (!response.ok) {
-        logger.warn?.("Security assistant provider failed", { provider, status: response.status });
-        return res.status(502).json({ error: { code: "SECURITY_PROVIDER_FAILED", message: "The selected security provider could not complete this request." } });
-      }
-      const payload = await response.json();
-      const answer = provider === "gemini"
-        ? payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n")
-        : provider === "ollama" ? payload?.message?.content : payload?.choices?.[0]?.message?.content;
-      if (typeof answer !== "string" || !answer.trim()) return res.status(502).json({ error: { code: "SECURITY_EMPTY_RESPONSE", message: "The provider returned no answer." } });
-      res.json({
-        mode, provider, model: boundedString(payload?.model, 120) || config.model,
-        answer: answer.slice(0, 22000), execution: "not_executed",
-        approvalRequiredForExecution: true,
-        notice: "ULTRON only generated guidance. No commands were run and no target was contacted."
-      });
-    } catch (error) {
-      logger.warn?.("Security assistant request failed", { provider, name: error?.name || "Error" });
-      res.status(502).json({ error: { code: "SECURITY_REQUEST_FAILED", message: "Security assistance failed or timed out. Please retry." } });
-    } finally {
-      timeout.close();
     }
+    return res.status(502).json({
+      error: { code: "SECURITY_PROVIDERS_FAILED", message: "No configured provider completed the security-assistant request. Check provider credentials, quota, and connectivity." },
+      attemptedProviders: failures.map(item => item.provider),
+      fallbackAttempted: requestedProvider === "auto" && candidates.length > 1
+    });
   });
 
   return router;
