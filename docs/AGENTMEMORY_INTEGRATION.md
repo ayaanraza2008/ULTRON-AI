@@ -6,7 +6,7 @@ ULTRON can use [rohitg00/agentmemory](https://github.com/rohitg00/agentmemory) a
 
 - On relevant repository, coding, continuation, decision, or memory-context tasks, ULTRON automatically calls `POST /agentmemory/smart-search` and injects a small bounded set of results into the model context.
 - Unrelated requests skip the external memory lookup.
-- Optional durable capture calls `POST /agentmemory/observe` only when `ULTRON_AGENTMEMORY_CAPTURE=true` and the prompt explicitly signals a durable decision, preference, or remember/save request.
+- Optional durable capture calls `POST /agentmemory/remember` only when `ULTRON_AGENTMEMORY_CAPTURE=true` and the prompt explicitly signals a durable decision, preference, or remember/save request.
 - Existing per-user Supabase memory remains available; AgentMemory supplements it rather than replacing it.
 - The authenticated `GET /api/agent/agentmemory?task=...` endpoint reports configuration and whether a task would be checked. It does not expose secrets or prove the remote service is live.
 
