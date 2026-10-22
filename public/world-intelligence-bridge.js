@@ -17,16 +17,14 @@
   const STYLES = new Set(['normal','retro','surveillance','thermal','anime','noir','snow']);
   function valid(name, args) {
     if (!ACTIONS.has(name) || !args || typeof args !== 'object' || Array.isArray(args)) return false;
-    if (name === 'set_layer_visibility') return LAYERS.has(args.layerId) && typeof args.enabled === 'boolean';
-    if (name === 'set_visual_style') return STYLES.has(args.style);
-    if (name === 'adjust_camera_zoom') return ['in','out'].includes(args.direction) && ['little','medium','lot'].includes(args.amount);
-    if (name === 'fly_to_location') {
-      if (typeof args.query === 'string') return args.query.trim().length > 0 && args.query.length <= 160;
-      return Number.isFinite(args.latitude) && args.latitude >= -90 && args.latitude <= 90 && Number.isFinite(args.longitude) && args.longitude >= -180 && args.longitude <= 180;
-    }
-    if (name === 'set_context_mode') return ['off','contacts','flights','space-missions','missions'].includes(args.mode);
-    if (name === 'track_entity') return ['flights','military','ais-live-vessels','satellites'].includes(args.layerId) && typeof args.query === 'string' && args.query.trim().length > 0 && args.query.length <= 120;
-    return name === 'zoom_to_globe' || name === 'stop_tracking' || name === 'get_current_view_state';
+    const exact = keys => Object.keys(args).every(key => keys.includes(key));
+    if (name === 'set_layer_visibility') return exact(['layerId','enabled']) && LAYERS.has(args.layerId) && typeof args.enabled === 'boolean';
+    if (name === 'set_visual_style') return exact(['style']) && STYLES.has(args.style);
+    if (name === 'adjust_camera_zoom') return exact(['direction','amount']) && ['in','out'].includes(args.direction) && ['little','medium','lot'].includes(args.amount);
+    if (name === 'fly_to_location') return exact(['query']) && typeof args.query === 'string' && args.query.trim().length > 0 && args.query.length <= 160;
+    if (name === 'set_context_mode') return exact(['mode']) && ['off','contacts','flights','space-missions','missions'].includes(args.mode);
+    if (name === 'track_entity') return exact(['layerId','query']) && ['flights','military','ais-live-vessels','satellites'].includes(args.layerId) && typeof args.query === 'string' && args.query.trim().length > 0 && args.query.length <= 120;
+    return ['zoom_to_globe','stop_tracking','get_current_view_state'].includes(name) && Object.keys(args).length === 0;
   }
   window.addEventListener('message', async event => {
     if (event.source !== window.parent || event.origin !== PARENT_ORIGIN) return;
