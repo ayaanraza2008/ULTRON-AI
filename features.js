@@ -452,6 +452,34 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_CANCEL_FAILED", message: error.message } }); }
   });
 
+  // Record a user-approved local diagnostic result as a review-only task.
+  // The cloud API never runs the diagnostic; it only stores bounded text the desktop user explicitly submits.
+  router.post("/kaligpt/tools/diagnostics/record", requireSupabaseUser, async (req, res) => {
+    const allowed = new Set(["systemSummary", "nodeVersion", "gitVersion", "pythonVersion", "diskUsage", "memoryUsage", "kernelVersion"]);
+    const diagnostic = boundedString(req.body?.diagnostic, 40);
+    const resultText = boundedString(req.body?.result, 6000);
+    if (!allowed.has(diagnostic)) return res.status(400).json({ error: { code: "DIAGNOSTIC_NOT_ALLOWED", message: "Choose a supported desktop diagnostic." } });
+    if (!resultText) return res.status(400).json({ error: { code: "DIAGNOSTIC_RESULT_REQUIRED", message: "Provide the diagnostic result to save for review." } });
+    const title = "Desktop diagnostic: " + diagnostic;
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", {
+        user_id: req.supabaseUser.id,
+        title,
+        input: { taskType: "manual", description: "User-submitted local diagnostic result. Review the content before sharing it with an AI provider.", diagnostic, result: resultText, requiresApproval: true, approved: false, executionMode: "record_only", createdBy: "desktop_diagnostic" },
+        status: "WAITING_FOR_PERMISSION"
+      });
+      if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "DIAGNOSTIC_RECORD_FAILED", message: "The diagnostic result could not be saved." } });
+      await supabaseRest(req, "audit_events", "POST", "", {
+        user_id: req.supabaseUser.id, action: "desktop.diagnostic.recorded", target_type: "agent_task",
+        target_id: rows[0].id, outcome: "recorded", metadata: { diagnostic, executionMode: "record_only" }
+      }, "return=minimal");
+      return res.status(201).json({ task: rows[0], notice: "Saved for review only. The server did not run any local command or execute this task." });
+    } catch (error) {
+      logger.warn?.("Desktop diagnostic record failed", { name: error?.name || "Error" });
+      return res.status(error.status || 502).json({ error: { code: "DIAGNOSTIC_RECORD_FAILED", message: "The diagnostic result could not be saved." } });
+    }
+  });
+
   // KaliGPT-inspired cybersecurity assistant. This endpoint plans authorized,
   // non-destructive assessments; it never executes shell commands or scans targets.
   router.get("/kaligpt/capabilities", requireSession, (_req, res) => {
