@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
+import { startWorker } from "./worker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -715,4 +716,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   const port = Number(process.env.PORT) || 10000;
   const app = createApp();
   app.listen(port, "0.0.0.0", () => console.log(`ULTRON AI listening on port ${port}`));
+  if (process.env.ULTRON_EMPLOYEES_ENABLED === "true") startWorker();
 }

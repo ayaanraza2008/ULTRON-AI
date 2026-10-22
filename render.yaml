@@ -27,6 +27,8 @@ services:
         value: "openrouter/free"
       - key: SUPABASE_URL
         value: https://opdjfhwepmcprbqojpat.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: ULTRON_WORKER_POLL_MS
@@ -68,7 +70,7 @@ services:
       - key: ULTRON_DESKTOP_AGENT_TOKEN
         sync: false
       - key: ULTRON_EMPLOYEES_ENABLED
-        value: "false"
+        value: "true"
 
   - type: web
     name: ultron-world-intelligence
