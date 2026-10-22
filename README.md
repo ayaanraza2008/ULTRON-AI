@@ -72,6 +72,10 @@ A native role/routine planning layer inspired by [markfulton/ai-employees](https
 **Important:** the runtime supports recurring plans/drafts/reviews/reports, not arbitrary external actions. It does not execute PC commands, send messages, publish posts, submit forms, or spend money. Apply `supabase/migrations/20261022160000_ai_employee_scheduler.sql` and configure the server-only `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, and `ULTRON_EMPLOYEES_ENABLED=true` in Render to enable the worker. Without these, schedule records can be managed but scheduled execution will not run.
 
 
+## Harness engineering runtime
+
+ULTRON now applies task-aware harness-engineering guidance automatically in its backend agent loop, based on patterns from [ai-boost/awesome-harness-engineering](https://github.com/ai-boost/awesome-harness-engineering). It classifies software-change, research, multi-step, memory/context, and consequential-action tasks, and applies verification, checkpoint, source-quality, and safety guidance without requiring the user to select tools. See [docs/HARNESS_ENGINEERING.md](docs/HARNESS_ENGINEERING.md). The source repository is a curated resource list, not a ready-to-install runtime dependency; this integration implements selected principles and does not copy the whole list.
+
 ## Automatic tool routing
 
 The authenticated `POST /api/agent/run` endpoint lets ULTRON select bounded tools from the user's request. `GET /api/agent/tools` lists readiness without exposing credentials. Available tools include public web research, AI Employee planning/drafting, coding assistance, integration readiness, live ComfyUI status, optional OmniVoice speech, optional HeyGem talking-avatar jobs, optional Handy desktop transcription, and explicitly confirmed ComfyUI workflow submission.
