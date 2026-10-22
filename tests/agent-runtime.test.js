@@ -177,7 +177,7 @@ test("agent retries plain chat when the model rejects function-calling schemas",
     const body = await response.json();
     assert.equal(body.toolsUsed[0].name, "check_integrations");
     assert.equal(body.content, "Integration status checked.");
-    assert.equal(calls, 3);
+    assert.equal(calls, 4);
   });
 });
 
@@ -272,7 +272,7 @@ test("background task intent fallback works when the free model does not support
     const body = await response.json();
     assert.equal(body.toolResults[0].name, "enqueue_employee_task");
     assert.equal(body.toolResults[0].result.state, "queued");
-    assert.equal(providerCalls, 3);
+    assert.equal(providerCalls, 4);
   }, { supabaseRest });
 });
 
