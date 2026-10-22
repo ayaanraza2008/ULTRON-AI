@@ -4,7 +4,7 @@ const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const pollMs = Math.max(1500, Math.min(30000, Number(process.env.ULTRON_WORKER_POLL_MS) || 5000));
 const tavilyKey = process.env.TAVILY_API_KEY || "";
-const openVikingUrl = String(process.env.OPENVIKING_URL || "").trim().replace(/\\/+$/, "");
+const openVikingUrl = String(process.env.OPENVIKING_URL || "").trim().replace(/\/+$/, "");
 const openVikingKey = process.env.OPENVIKING_API_KEY || "";
 
 function validOpenVikingUrl(value) {
