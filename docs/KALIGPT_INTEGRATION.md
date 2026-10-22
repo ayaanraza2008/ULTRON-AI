@@ -44,3 +44,8 @@ Run `npm test` and `npm run check` in the repository. These tests use mocked pro
 - In `auto` mode, it tries configured OpenRouter, OpenAI, Gemini, LiteLLM, and Ollama providers in order and falls back when a provider errors, times out, or returns an empty response.
 - The image is sent to the chosen provider for analysis; this is not local-only processing. Remote image URLs are not fetched. Images are limited to 5 MB, and the route does not execute actions based on image content.
 - A provider must use a vision-capable model; configuration alone does not guarantee that its selected model supports images. The endpoint reports provider failures rather than claiming vision support is live.
+
+
+## Chat attachment vision routing
+
+The existing `POST /api/chat` image-attachment path now prefers model IDs from `ULTRON_VISION_MODELS` (comma-separated). These IDs are added to the server-side model allowlist and tried before the regular model list only when image attachments are present. Text-only chats continue to use the requested/default model. Configure only model IDs that support image input; provider availability and quota still need to be verified. The separate `POST /api/kaligpt/vision/analyze` endpoint remains available for direct user-supplied-image analysis.
