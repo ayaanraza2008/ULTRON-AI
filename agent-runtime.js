@@ -79,7 +79,10 @@ function buildFallbackCalls(text) {
   };
   const intent = extractIntent(text);
   const browserGuidance = buildBrowserUseGuidance(text);
-  if (browserGuidance.browserRequested) add("browser_use", { task: bounded(text, 2500), maxSteps: 8, confirmExternalAction: false });
+  if (browserGuidance.browserRequested) {
+    const requestedSideEffect = text.match(/\\b(send|submit|purchase|buy|checkout|pay|transfer|delete|publish|post|comment|message|email|invite|book|reserve|upload)\\b/i);
+    add("browser_use", { task: bounded(text, 2500), maxSteps: 8, confirmExternalAction: Boolean(requestedSideEffect) });
+  }
   // Multi-intent requests should not force the user to name each tool manually.
   if (/\b(all integrations|all tools|all services|integration status|check integrations)\b/.test(s)) {
     add("check_integrations");
@@ -226,8 +229,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     if (name === "browser_use") {
       const task = bounded(args.task, 2500);
       const maxSteps = Number.isInteger(args.maxSteps) ? Math.max(1, Math.min(args.maxSteps, 12)) : 8;
-      const confirmExternalAction = args.confirmExternalAction === true;
       const guidance = buildBrowserUseGuidance(task);
+      const originalPrompt = bounded(requestBody.prompt, 6000);
+      const requestedVerb = originalPrompt.match(/\\b(send|submit|purchase|buy|checkout|pay|transfer|delete|publish|post|comment|message|email|invite|book|reserve|upload)\\b/i)?.[0]?.toLowerCase();
+      const taskVerb = task.match(/\\b(send|submit|purchase|buy|checkout|pay|transfer|delete|publish|post|comment|message|email|invite|book|reserve|upload)\\b/i)?.[0]?.toLowerCase();
+      const confirmExternalAction = args.confirmExternalAction === true && Boolean(requestedVerb && taskVerb && requestedVerb === taskVerb);
       if (!guidance.browserRequested) throw Object.assign(new Error("This task does not need interactive browser automation."), { code: "BROWSER_USE_NOT_NEEDED", status: 400 });
       if (guidance.consequentialAction && !confirmExternalAction) return { state: "confirmation_required", requiresExplicitConfirmation: true, execution: "not_started", message: "This browser task may submit data or cause an external side effect. Repeat the exact intended action with explicit confirmation before ULTRON proceeds." };
       const base = safeBase(env.ULTRON_BROWSER_USE_URL);
