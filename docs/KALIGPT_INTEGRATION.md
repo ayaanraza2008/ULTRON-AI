@@ -18,7 +18,8 @@ The endpoint rejects malformed targets, bounds input sizes, uses server-side pro
 
 Implemented in this branch:
 - KaliGPT-inspired capability/readiness manifest.
-- Model-backed cybersecurity learning and defensive planning endpoint with explicit provider selection (`openrouter`, `openai`, `gemini`, `litellm`, `ollama`) or `auto` selection based on configured credentials.
+- Model-backed cybersecurity learning and defensive planning endpoint with explicit provider selection (`openrouter`, `openai`, `gemini`, `litellm`, `ollama`) or `auto` selection with provider fallback.
+- `POST /api/kaligpt/tools/headers/analyze` — deterministic review of HTTP response headers supplied by the user, with findings for HSTS, CSP, nosniff, referrer policy, permissions policy, and frame protection; makes no outbound request.
 - Regression tests for secret redaction, missing provider configuration, and the no-execution boundary.
 
 Not claimed as complete:
