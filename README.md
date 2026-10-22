@@ -10,6 +10,11 @@ ULTRON automatically selects relevant defensive cybersecurity skill references w
 
 This is a selective runtime integration, not a vendored copy of the full upstream library. ULTRON does not automatically execute skill scripts, perform unscoped scans, exploit systems, collect credentials, or bypass approval boundaries. See [docs/CYBERSECURITY_SKILLS.md](docs/CYBERSECURITY_SKILLS.md).
 
+
+## Automatic Diagram Design skill
+
+When a request asks ULTRON to create or transform a diagram, it automatically selects a suitable diagram type and loads only the matching instructions from [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design). It prefers self-contained HTML with inline SVG, preserves existing project branding where available, and avoids loading diagram references for unrelated tasks. The authenticated `GET /api/agent/diagram-skills?task=...` endpoint exposes the selector's decision. See [docs/DIAGRAM_DESIGN_SKILL.md](docs/DIAGRAM_DESIGN_SKILL.md).
+
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
