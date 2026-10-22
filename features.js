@@ -295,17 +295,21 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const description = boundedString(req.body?.description, 12000);
     if (!title || !description) return res.status(400).json({ error: { code: "INVALID_TASK", message: "Provide a task title and description." } });
     const risk = req.body?.risk === "high" ? "high" : req.body?.risk === "medium" ? "medium" : "low";
-    const requiresApproval = risk !== "low" || req.body?.requiresApproval === true;
+    const taskType = boundedString(req.body?.taskType, 40).toLowerCase() || "manual";
+    if (!["research", "manual"].includes(taskType)) return res.status(400).json({ error: { code: "TASK_TYPE_NOT_ALLOWED", message: "Supported task types are research and manual." } });
+    const query = boundedString(req.body?.query, 400);
+    if (taskType === "research" && !query && !description) return res.status(400).json({ error: { code: "INVALID_RESEARCH_QUERY", message: "Provide a research query." } });
+    const requiresApproval = taskType !== "research" || risk !== "low" || req.body?.requiresApproval === true;
     try {
       const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", {
         user_id: req.supabaseUser.id,
         title,
-        input: { description, risk, requiresApproval, approved: false, executionMode: "planned_only", createdBy: "user" },
+        input: { description, taskType, ...(query ? { query } : {}), risk, requiresApproval, approved: false, executionMode: taskType === "research" && !requiresApproval ? "allowlisted_worker" : "planned_only", createdBy: "user" },
         status: requiresApproval ? "WAITING_FOR_PERMISSION" : "QUEUED"
       });
       if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "TASK_CREATE_FAILED", message: "The task could not be saved." } });
       await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created", target_type: "agent_task", target_id: rows[0].id, outcome: requiresApproval ? "recorded" : "allowed", metadata: { risk, requiresApproval } }, "return=minimal");
-      res.status(201).json({ task: rows[0], notice: "Task saved to the queue. Automated execution is not enabled by this endpoint; connect an approved worker before enabling actions." });
+      res.status(201).json({ task: rows[0], notice: taskType === "research" && !requiresApproval ? "Research task queued for the optional allowlisted worker. It runs only when that worker and its provider are configured." : "Task saved for review. It will not execute unless its type is supported by the allowlisted worker and required approvals are present." });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_CREATE_FAILED", message: error.message } }); }
   });
 
