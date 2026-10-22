@@ -499,6 +499,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         { id: "http-security-review", state: "available", execution: "user-supplied-evidence-only" },
         { id: "dns-recon", state: "planned", execution: "manual-evidence-only" },
         { id: "linux-command-guide", state: "available", execution: "suggestions-only" },
+        { id: "desktop-readonly-diagnostics", state: "available", execution: "local-explicit-approval-allowlist" },
+        { id: "diagnostic-task-recording", state: "available", execution: "user-submitted-review-only" },
         { id: "vulnerability-explainer", state: "available", execution: "analysis-only" }
       ],
       blockedByDesign: ["arbitrary-shell-execution", "credential-theft", "stealth", "persistence", "unauthorized-scanning"],
