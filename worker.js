@@ -15,7 +15,7 @@ export function startWorker({ env = process.env, logger = console } = {}) {
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
-  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksFailed: 0 };
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksFailed: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
@@ -181,9 +181,12 @@ export function startWorker({ env = process.env, logger = console } = {}) {
       try {
         status.lastCycleAt = new Date().toISOString();
         const didWork = await tick();
+        status.lastCycleSuccessAt = new Date().toISOString();
         if (!didWork) await sleep(pollMs);
       } catch (error) {
-        logger.error?.("Worker cycle failed:", error.message);
+        status.lastErrorAt = new Date().toISOString();
+        status.lastErrorCode = bounded(error?.code, 80) || "WORKER_CYCLE_FAILED";
+        logger.error?.("Worker cycle failed:", status.lastErrorCode, error.message);
         await sleep(pollMs);
       }
     }
