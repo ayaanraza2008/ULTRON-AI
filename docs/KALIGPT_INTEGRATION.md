@@ -9,6 +9,8 @@ This integration implements a native ULTRON security-assistance layer inspired b
 - Existing ULTRON endpoints remain the integration layer for web research, local-model chat, coding assistance, model selection, and task records.
 - Desktop local diagnostics are exposed through the Electron preload bridge as `ultronDesktop.runDiagnostic(id)`. The main process validates the trusted window, accepts only fixed IDs (`systemSummary`, `nodeVersion`, `gitVersion`, `pythonVersion`, `diskUsage`, `memoryUsage`, `kernelVersion`), asks for native approval each time, uses fixed argument arrays with `shell: false`, applies a five-second timeout, and bounds returned output. Linux utility commands are read-only and unavailable on Windows. No arbitrary command string, arguments, scripts, or shell access are exposed.
 - `POST /api/kaligpt/tools/diagnostics/record` stores a user-submitted, bounded diagnostic result as a `WAITING_FOR_PERMISSION` manual task and writes an audit event. It never runs a command; the result remains a review-only record.
+- `GET /api/kaligpt/tools` returns a machine-readable tool catalog with explicit states for implemented, configuration-dependent, unimplemented, and blocked-by-design tools.
+- `POST /api/kaligpt/security/dns-evidence/analyze` reviews up to 100 user-supplied DNS records for observed SPF and DMARC records and related basic signals. It performs no DNS lookup or target contact; findings explicitly warn that missing submitted evidence is not proof that a record is absent.
 
 ## Safety and execution boundary
 
