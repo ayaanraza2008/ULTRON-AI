@@ -1,18 +1,18 @@
 # ULTRON AI
 
-ULTRON AI is a modular, security-conscious personal AI ecosystem with a web client and a lightweight Windows companion.
+ULTRON AI is currently in a backend-only implementation phase. Frontend and Windows desktop UI work are deferred until the backend capabilities and integrations are complete and verified.
 
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted web service:** https://ultron-ai-zvd7.onrender.com. The health endpoint and initial deployment were previously verified; real chat remains dependent on server-side provider and access secrets.
+- **Hosted API service:** https://ultron-ai-zvd7.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Windows companion:** Electron shell and unsigned Windows NSIS workflow exist. The shell opens the hosted web client; a secure local automation agent is not yet implemented.
+- **Frontend status:** intentionally deferred. No web UI or Windows desktop app is built in this phase; focus is backend APIs, tools, integrations, worker reliability, and automated tests.
 
-## Capability integration phase
+## Backend-only capability integration phase
 
 Backend additions on the feature branch:
 
@@ -26,7 +26,7 @@ Backend additions on the feature branch:
 - `POST /api/documents/extract`: bounded text extraction for TXT, Markdown, CSV, JSON, and HTML. PDF/DOCX parsers and persistent uploads are not yet available.
 - `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
 
-These endpoints are backend building blocks, not a claim that all 20 requested capabilities are production-complete. PDF/DOCX parsing, a real background worker, coding sandbox, a Windows PC-control agent, live external-account integrations, and real provider/database end-to-end tests still require separate implementation. Premium speech endpoints need a compatible provider configuration. The frontend is intentionally deferred to the final phase.
+These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. Frontend build/deploy and the Windows UI are deliberately excluded from the current phase. PDF/DOCX parsing, a real background worker, coding sandbox, a Windows PC-control agent, live external-account integrations, and real provider/database end-to-end tests still require separate implementation. Premium speech endpoints need a compatible provider configuration. The frontend is intentionally deferred to the final phase. The standalone God’s Eye frontend service has been removed from the Render Blueprint; the existing Render service, if already provisioned separately, must be suspended separately to stop its running instance.
 
 ## Configuration
 
