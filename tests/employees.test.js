@@ -108,7 +108,7 @@ test("employee schedule API bounds the recurring interval", async () => {
   await withServer({}, async base => {
     const response = await fetch(base + "/api/employees/schedules", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: "web-dev", routineId: "dependency-review", goal: "Review dependencies", intervalMinutes: 10 })
+      body: JSON.stringify({ role: "web-dev", routineId: "web-dependency-run", goal: "Review dependencies", intervalMinutes: 10 })
     });
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, "INVALID_SCHEDULE_INTERVAL");
