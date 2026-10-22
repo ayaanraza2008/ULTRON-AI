@@ -375,11 +375,41 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         ...messages,
         { role: "assistant", content: assistantMessage?.content || null, tool_calls: calls.map(c => ({ id: c.id, type: "function", function: { name: c.function.name, arguments: c.function.arguments || "{}" } })) },
         ...toolMessages,
-        { role: "system", content: "Summarize the tool results accurately. Cite source URLs when research results exist. State blockers plainly. Never claim draft generation was external execution." }
+        { role: "system", content: "Summarize the tool results accurately. Cite source URLs when research results exist. State blockers plainly. Never claim draft generation was external execution. Use another allowlisted tool only if it is necessary to finish the user's request safely." }
       ];
       let content = "";
       try {
-        const final = await requestModel(finalMessages);
+        // Give the model one bounded follow-up tool round so it can inspect a result,
+        // then take the next safe step without forcing the user to orchestrate tools.
+        // Tool execution remains allowlisted and capped at three calls per round.
+        let final;
+        try {
+          final = await requestModel(finalMessages, { useTools: true });
+        } catch (toolSynthesisError) {
+          final = await requestModel(finalMessages);
+        }
+        const followCalls = Array.isArray(final?.choices?.[0]?.message?.tool_calls)
+          ? final.choices[0].message.tool_calls.slice(0, 3)
+          : [];
+        if (followCalls.length) {
+          const followToolMessages = [];
+          for (const call of followCalls) {
+            const name = call?.function?.name;
+            const args = parseArgs(call?.function?.arguments);
+            let result;
+            try { result = await executeTool(name, args, req.body || {}, req); }
+            catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
+            used.push({ name, ok: !result?.error, result });
+            followToolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)).slice(0, 18000) });
+          }
+          const followMessages = [
+            ...finalMessages,
+            { role: "assistant", content: final?.choices?.[0]?.message?.content || null, tool_calls: followCalls.map(call => ({ id: call.id, type: "function", function: { name: call.function.name, arguments: call.function.arguments || "{}" } })) },
+            ...followToolMessages,
+            { role: "system", content: "Summarize both tool rounds accurately. Cite source URLs when research results exist. State blockers plainly. Never claim a draft or proposed action was externally executed." }
+          ];
+          final = await requestModel(followMessages);
+        }
         content = typeof final?.choices?.[0]?.message?.content === "string" ? final.choices[0].message.content : "";
       } catch (error) {
         logger.warn?.("Agent synthesis failed", { code: error.code || "AGENT_SYNTHESIS_FAILED" });
