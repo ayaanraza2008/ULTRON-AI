@@ -240,3 +240,34 @@ test("task detail is owner-scoped and validates task IDs", async () => {
     assert.ok(calls[0].query.includes("user_id=eq." + userId));
   }, { supabaseRest: fakeSupabaseRest });
 });
+
+test("World Intelligence command only opens the workspace for explicit open intents", async () => {
+  await withServer({}, async base => {
+    const opened = await fetch(base + "/api/world-intelligence/command", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: "Open World Intelligence" })
+    });
+    assert.equal(opened.status, 200);
+    const body = await opened.json();
+    assert.equal(body.action.type, "open_workspace");
+    assert.equal(body.workspaceUrl, "/world-intelligence/");
+    assert.equal(body.execution, "open_workspace_only");
+
+    const unsupported = await fetch(base + "/api/world-intelligence/command", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: "Track the nearest satellite" })
+    });
+    assert.equal(unsupported.status, 501);
+    assert.equal((await unsupported.json()).error.code, "WORLD_TOOL_BRIDGE_NOT_CONNECTED");
+  });
+});
+
+test("World Intelligence command rejects empty input", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/world-intelligence/command", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: " " })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "WORLD_COMMAND_REQUIRED");
+  });
+});
