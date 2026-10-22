@@ -98,7 +98,7 @@ export function startWorker({ env = process.env, logger = console } = {}) {
         model,
         messages: [
           { role: "system", content: system },
-          { role: "user", content: JSON.stringify({ role, mode, goal, context: context || undefined, routineId: bounded(input.routineId, 80) || undefined }) }
+          { role: "user", content: JSON.stringify({ role, mode, goal, context: context || undefined, routine: routine ? { id: routine.id, name: routine.name, cadence: routine.cadence, description: routine.description } : { id: bounded(input.routineId, 80) || undefined } }) }
         ],
         temperature: 0.2, max_tokens: 2200
       }),
