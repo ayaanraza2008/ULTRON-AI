@@ -369,3 +369,27 @@ test("agent performs one bounded follow-up tool round and reports both results",
     assert.equal(modelCalls, 3);
   });
 });
+
+
+test("agent autonomously runs multiple safe tools when model function calling is unavailable", async () => {
+  const modelCalls = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (String(url).startsWith("https://openrouter.ai/api/v1/chat/completions")) {
+      modelCalls.push(JSON.parse(options.body));
+      throw new Error("free model endpoint unavailable");
+    }
+    if (url === "https://api.tavily.com/search") {
+      return new Response(JSON.stringify({ answer: "Found public research.", results: [{ title: "Public source", url: "https://example.com/source", content: "Verified public snippet." }] }), { status: 200 });
+    }
+    throw new Error("unexpected network call: " + url);
+  };
+  await withServer({ TAVILY_API_KEY: "tavily-test" }, fetchImpl, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Check integrations and research recent AI agent releases" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.toolsUsed.map(x => x.name), ["check_integrations", "research_web"]);
+    assert.equal(body.toolResults[1].result.provider, "tavily");
+    assert.match(body.content, /research_web/);
+    assert.equal(modelCalls.length, 0, "missing provider credentials should fall back before making network calls");
+  });
+});
