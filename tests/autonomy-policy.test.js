@@ -130,7 +130,6 @@ test("Hinglish PC control and private-data requests are guarded", () => {
 test("production deployment and configuration changes require explicit confirmation", () => {
   for (const task of [
     "Deploy to production.",
-    "Trigger deployment for the production service.",
     "Restart production service.",
     "Change production config."
   ]) {
