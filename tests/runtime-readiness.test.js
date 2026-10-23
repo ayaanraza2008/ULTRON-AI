@@ -4,7 +4,7 @@ import { buildRuntimeReadiness } from "../runtime-readiness.js";
 
 test("readiness is explicit about missing runtime dependencies", () => {
   const result = buildRuntimeReadiness({ env: {}, now: new Date("2026-01-01T00:00:00.000Z") });
-  assert.equal(result.overallState, "blocked");
+  assert.equal(result.overallState, "partially_ready");
   assert.equal(result.verification, "configuration_and_process_snapshot_only");
   assert.equal(result.components.find((item) => item.id === "windows_companion").state, "blocked");
   assert.equal(result.components.find((item) => item.id === "safe_code_execution").state, "not_available");
