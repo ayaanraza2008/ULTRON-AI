@@ -252,3 +252,29 @@ test("integration catalog accepts HTTPS and HTTP loopback development endpoints"
     assert.equal(body.integrations.find(item => item.id === "voicestudio").state, "configured_unverified");
   });
 });
+
+
+test("integration adapter stops reading provider responses after the 2 MB limit", async () => {
+  let responseBodyCancelled = false;
+  await withServer({
+    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_KEY: "token",
+    OMNIVOICE_SYNTHESIS_PATH: "/synthesize"
+  }, async () => {
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(2 * 1024 * 1024)));
+        controller.enqueue(new TextEncoder().encode("y"));
+      },
+      cancel() { responseBodyCancelled = true; }
+    });
+    return new Response(body, { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/omnivoice/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { text: "hello" } })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "PROVIDER_RESPONSE_TOO_LARGE");
+  });
+});
