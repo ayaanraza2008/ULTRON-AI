@@ -1,3 +1,4 @@
+import { buildIntegrationCatalog } from "../integrations/catalog.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -116,4 +117,18 @@ test("VoiceStudio transcription rejects invalid audio before network call", asyn
     assert.equal((await response.json()).error.code, "VOICESTUDIO_AUDIO_INVALID");
     assert.equal(called, false);
   });
+});
+
+
+test("VoiceStudio appears in the integration catalog without exposing credentials", () => {
+  const blocked = buildIntegrationCatalog({});
+  const missing = blocked.find(item => item.id === "voicestudio");
+  assert.equal(missing.configured, false);
+  const configured = buildIntegrationCatalog({
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "private-token"
+  }).find(item => item.id === "voicestudio");
+  assert.equal(configured.configured, true);
+  assert.equal(configured.state, "configured_unverified");
+  assert.equal(JSON.stringify(configured).includes("private-token"), false);
 });
