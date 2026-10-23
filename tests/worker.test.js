@@ -395,3 +395,51 @@ test("background AI Employee falls back to a configured provider after rate limi
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
 });
+
+
+test("worker falls back to the next configured model after a permanent provider rejection", async () => {
+  let worker;
+  const requestedProviders = [];
+  const task = {
+    id: "task-provider-rejection-fallback",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "invalid-primary-key",
+      OPENROUTER_DEFAULT_MODEL: "bad-model",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "fallback", baseUrl: "https://fallback.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
+      ]),
+      FALLBACK_API_KEY: "fallback-test-key"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        requestedProviders.push({ url, authorization: options.headers?.Authorization });
+        if (url.startsWith("https://openrouter.ai/")) return new Response("{}", { status: 401 });
+        return new Response(JSON.stringify({ model: "fallback-model", choices: [{ message: { content: "Fallback plan generated." } }] }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(requestedProviders.length, 2);
+  assert.equal(requestedProviders[0].authorization, "Bearer invalid-primary-key");
+  assert.equal(requestedProviders[1].authorization, "Bearer fallback-test-key");
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+});
