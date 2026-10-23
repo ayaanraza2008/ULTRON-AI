@@ -29,11 +29,13 @@ test("worker disables itself when the Supabase URL is not HTTPS", () => {
 test("worker records a successful poll and stops cleanly with an injected transport", async () => {
   let worker;
   let calls = 0;
+  const redirects = [];
   worker = startWorker({
     env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "test-only" },
     logger: { info() {}, warn() {}, error() {} },
     sleepImpl: async () => {},
-    fetchImpl: async () => {
+    fetchImpl: async (_url, options = {}) => {
+      redirects.push(options.redirect);
       calls += 1;
       if (calls === 2) worker.stop();
       return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
@@ -45,6 +47,7 @@ test("worker records a successful poll and stops cleanly with an injected transp
   assert.ok(status.lastCycleSuccessAt);
   assert.equal(status.lastErrorCode, null);
   assert.equal(calls, 2);
+  assert.deepEqual(redirects, ["error", "error"]);
 });
 
 test("audit failure after completion does not turn a completed task into a failed task", async () => {
