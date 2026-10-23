@@ -291,3 +291,46 @@ test("World Intelligence tool bridge validates layer actions and rejects unsafe 
     assert.equal((await unsafe.json()).error.code, "WORLD_ACTION_NOT_ALLOWED");
   });
 });
+
+
+test("saved AI Employee schedules can be queued immediately without performing external actions", async () => {
+  const calls = [];
+  const schedule = {
+    id: "00000000-0000-4000-8000-000000000010",
+    user_id: "00000000-0000-4000-8000-000000000001",
+    role_id: "chief-of-staff",
+    routine_id: "cos-decision-brief",
+    goal: "Prepare the weekly operations report",
+    context: "Use available internal notes only.",
+    enabled: true
+  };
+  const fakeSupabaseRest = async (_req, table, method, query, body) => {
+    calls.push({ table, method, query, body });
+    if (table === "employee_schedules" && method === "GET") return [schedule];
+    if (table === "agent_tasks" && method === "POST") {
+      return [{ id: "00000000-0000-4000-8000-000000000011", title: body.title, status: body.status, input: body.input, created_at: new Date().toISOString() }];
+    }
+    return [];
+  };
+  await withServer({ ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "test-only", OPENROUTER_API_KEY: "test-only" }, async base => {
+    const response = await fetch(base + "/api/employees/schedules/" + schedule.id + "/run", { method: "POST" });
+    assert.equal(response.status, 202);
+    const body = await response.json();
+    assert.equal(body.task.status, "QUEUED");
+    assert.equal(body.task.input.taskType, "autonomous");
+    assert.equal(body.task.input.routineId, schedule.routine_id);
+    assert.equal(body.task.input.scheduleId, schedule.id);
+    assert.match(body.notice, /will not perform external actions/i);
+    const scheduleRead = calls.find(call => call.table === "employee_schedules" && call.method === "GET");
+    assert.match(scheduleRead.query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
+    assert.equal(calls.some(call => call.table === "audit_events" && call.body.action === "employee.schedule_run_requested"), true);
+  }, { supabaseRest: fakeSupabaseRest });
+});
+
+test("running a saved schedule fails closed when the worker is not configured", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/employees/schedules/00000000-0000-4000-8000-000000000010/run", { method: "POST" });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "EMPLOYEE_WORKER_NOT_CONFIGURED");
+  });
+});

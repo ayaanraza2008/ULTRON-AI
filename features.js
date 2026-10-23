@@ -119,6 +119,61 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     }
   });
 
+  router.post("/employees/schedules/:id/run", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_SCHEDULE_ID", message: "Schedule ID is invalid." } });
+    if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !env.OPENROUTER_API_KEY) {
+      return res.status(503).json({ error: { code: "EMPLOYEE_WORKER_NOT_CONFIGURED", message: "Enable the employee worker and configure its server-side Supabase key and model provider before running a scheduled routine." } });
+    }
+    try {
+      const scheduleRows = await supabaseRest(req, "employee_schedules", "GET",
+        "?select=id,user_id,role_id,routine_id,goal,context,enabled&id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      const schedule = Array.isArray(scheduleRows) ? scheduleRows[0] : null;
+      if (!schedule) return res.status(404).json({ error: { code: "SCHEDULE_NOT_FOUND", message: "Schedule not found." } });
+      const role = employeeRoles.find(item => item.id === schedule.role_id);
+      const routine = employeeRoutineCatalog.find(item => item.id === schedule.routine_id && item.roles.includes(schedule.role_id));
+      if (!role || !routine || typeof schedule.goal !== "string" || !schedule.goal.trim()) {
+        return res.status(409).json({ error: { code: "SCHEDULE_CONFIGURATION_INVALID", message: "This schedule no longer matches a supported role, routine, and goal." } });
+      }
+      const input = {
+        taskType: "autonomous",
+        executionMode: "employee_worker",
+        role: schedule.role_id,
+        routineId: schedule.routine_id,
+        goal: schedule.goal,
+        context: boundedString(schedule.context, 4000),
+        mode: "report",
+        requiresApproval: false,
+        approved: true,
+        createdBy: "employee_schedule_run_now",
+        scheduleId: schedule.id
+      };
+      const taskRows = await supabaseRest(req, "agent_tasks", "POST",
+        "?select=id,title,status,created_at,input",
+        { user_id: req.supabaseUser.id, title: schedule.goal.slice(0, 240), input, status: "QUEUED" });
+      const task = Array.isArray(taskRows) ? taskRows[0] : null;
+      if (!task?.id) return res.status(502).json({ error: { code: "EMPLOYEE_TASK_QUEUE_FAILED", message: "The routine could not be queued." } });
+      try {
+        await supabaseRest(req, "audit_events", "POST", "", {
+          user_id: req.supabaseUser.id,
+          action: "employee.schedule_run_requested",
+          target_type: "employee_schedule",
+          target_id: schedule.id,
+          outcome: "allowed",
+          metadata: { taskId: task.id, roleId: schedule.role_id, routineId: schedule.routine_id }
+        }, "return=minimal");
+      } catch (error) {
+        logger.warn?.("Employee run-now audit write failed", { code: boundedString(error?.code || error?.message, 120) });
+      }
+      return res.status(202).json({
+        task,
+        execution: "queued_research_and_report",
+        notice: "The routine was queued for the background worker. ULTRON will prepare a report and disclose skipped stages; it will not perform external actions."
+      });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "EMPLOYEE_TASK_QUEUE_FAILED", message: "Could not queue this routine. Check the schedule and task database configuration." } });
+    }
+  });
+
   router.patch("/employees/schedules/:id", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_SCHEDULE_ID", message: "Schedule ID is invalid." } });
     if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: { code: "SCHEDULE_ENABLED_REQUIRED", message: "Set enabled to true or false." } });
