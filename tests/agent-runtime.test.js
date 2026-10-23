@@ -780,3 +780,37 @@ test("agent autonomously uses VoiceStudio for speech when configured", async () 
     assert.equal(body.toolResults[0].result.audioBase64, audioBytes.toString("base64"));
   });
 });
+
+
+test("research tool filters local, private-network, and credential-bearing source URLs", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      return new Response(JSON.stringify({ results: [
+        { title: "Public source", url: "https://example.com/article", content: "public" },
+        { title: "Loopback", url: "http://127.0.0.1/admin", content: "local" },
+        { title: "Private IPv4", url: "http://192.168.1.10/status", content: "private" },
+        { title: "Link local", url: "http://169.254.169.254/latest/meta-data", content: "metadata" },
+        { title: "Local hostname", url: "http://printer.local/", content: "local" },
+        { title: "Credentials", url: "https://user:password@example.org/private", content: "private" },
+        { title: "IPv6 loopback", url: "http://[::1]/", content: "local" }
+      ] }), { status: 200 });
+    }
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [
+        { id: "research-private-filter", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "public sources" }) } }
+      ] } }] }), { status: 200 });
+    }
+    const request = JSON.parse(options.body);
+    const toolMessage = request.messages.find(message => message.role === "tool" && message.tool_call_id === "research-private-filter");
+    assert.ok(toolMessage);
+    const toolResult = JSON.parse(toolMessage.content);
+    assert.deepEqual(toolResult.results.map(item => item.url), ["https://example.com/article"]);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Research completed with a public source." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Research public sources" }) });
+    assert.equal(response.status, 200);
+    assert.equal(providerCalls, 2);
+  });
+});
