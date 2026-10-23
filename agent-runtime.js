@@ -82,11 +82,15 @@ export function normalizeHinglishForRouting(value) {
     .replace(/\b(?:page|website|site)\s+(?:inspect|check|dekh)\s+kar(?:o|na)?\b/gi, "inspect the website")
     .replace(/\b(?:button|tab|link)\s+par\s+click\s+kar(?:o|na)?\b/gi, "click the tab")
     .replace(/\b(?:screenshot|screen shot)\s+(?:lo|le lo|banao)\b/gi, "take a screenshot")
-    .replace(/\b(?:employee|routine|task)\s+(?:schedule|queue|background mein chala)\s+kar(?:o|na)?\b/gi, "schedule employee task");
+    .replace(/\b(?:employee|routine|task)\s+(?:schedule|queue|background mein chala)\s+kar(?:o|na)?\b/gi, "schedule employee task")
+    .replace(/\b(?:geolocate|geo-locate|photo geolocation|find where (?:this|the) (?:photo|image|picture) was taken|where was this photo taken|find (?:the )?location of (?:this|the) (?:photo|image|picture))\b/gi, "geolocate photo")
+    .replace(/\b(?:is |yeh |ye )?(?:photo|picture|image)\s+(?:ki )?(?:location|jagah)\s+(?:find|pata|bata|dhundo)(?:o|na)?\b/gi, "geolocate photo")
+    .replace(/\b(?:yeh|ye|is)\s+(?:photo|tasveer|image)\s+(?:kahan|kahaan)\s+(?:ki|par|pe)?\s*(?:hai|tha|thi)?\b/gi, "where was this photo taken");
 }
 
 function extractIntent(text) {
   const s = normalizeHinglishForRouting(text).toLowerCase();
+  if (/\b(geolocate photo|where was this photo taken|photo geolocation|find (?:the )?location of (?:this|the) (?:photo|image|picture)|identify (?:the )?location of (?:this|the) (?:photo|image|picture)|locate this (?:photo|image|picture))\b/.test(s)) return "geo_sleuth_investigate";
   if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
@@ -137,6 +141,9 @@ function buildFallbackCalls(text) {
   }
   if (isSpacePlannerRequest(text)) add("create_spaceplanner_plan", { request: bounded(text, 3000) });
   // Deterministic multi-intent routing keeps safe capabilities usable even when
+  if (/\b(geolocate photo|where was this photo taken|photo geolocation|find (?:the )?location of (?:this|the) (?:photo|image|picture)|identify (?:the )?location of (?:this|the) (?:photo|image|picture)|locate this (?:photo|image|picture))\b/.test(s)) {
+    add("geo_sleuth_investigate", { includeReverseSearch: false });
+  }
   // a free model omits function calls or the provider is temporarily unavailable.
   // Only add tools when the user's wording clearly expresses that capability.
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) {
@@ -227,7 +234,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
-    { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search is off unless explicitly opted into.", parameters: { type: "object", properties: { includeReverseSearch: { type: "boolean", description: "Opt in to sending image-derived information to external reverse-image providers. Defaults to false." } }, additionalProperties: false } } },\n    { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search is off unless explicitly opted into.", parameters: { type: "object", properties: { includeReverseSearch: { type: "boolean", description: "Opt in to sending image-derived information to external reverse-image providers. Defaults to false." } }, additionalProperties: false } } },
+    { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
@@ -307,7 +315,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!response.ok) return { state: "failed", execution: "browser_bridge", status: response.status, error: bounded(body.detail || body.error || "Browser bridge request failed.", 500) };
       return { state: body.status === "completed" ? "completed" : "unknown", execution: "browser_use", result: bounded(body.result, 12000), steps: body.steps, model: body.model };
     }
-    if (name === "geo_sleuth_investigate") {\n      const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};\n      const imageBase64 = bounded(requestBody.imageBase64 || media.imageBase64, 12000000);\n      const includeReverseSearch = args.includeReverseSearch === true && requestBody.confirmReverseImageSearch === true;\n      return runGeoSleuthInvestigation({ imageBase64, includeReverseSearch, env });\n    }\n    if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
+    if (name === "geo_sleuth_investigate") {\n      const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};\n      const imageBase64 = bounded(requestBody.imageBase64 || media.imageBase64, 12000000);\n      const includeReverseSearch = args.includeReverseSearch === true && requestBody.confirmReverseImageSearch === true;\n      return runGeoSleuthInvestigation({ imageBase64, includeReverseSearch, env });\n    }
+    if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
     if (name === "research_web") {
       const query = bounded(args.query, 500);
       if (query.length < 2) throw Object.assign(new Error("A research query is required."), { code: "INVALID_RESEARCH_QUERY", status: 400 });
@@ -482,7 +491,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "create_spaceplanner_plan", available: true, execution: "automatic_spaceplanner_compatible_json_and_editor_link_no_external_save" },
         { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
-        { name: "check_integrations", available: true, execution: "configuration_readiness_only" },\n        { name: "geo_sleuth_investigate", available: env.GEO_SLEUTH_ENABLED === "true", execution: "bounded_autonomous_photo_geolocation" },
+        { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
+        { name: "geo_sleuth_investigate", available: env.GEO_SLEUTH_ENABLED === "true", execution: "bounded_autonomous_photo_geolocation" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
         { name: "world_intelligence_command", available: true, execution: "returns_validated_action_for_browser_dispatch_not_server_executed" },
         { name: "synthesize_speech", available: Boolean(safeBase(env.OMNIVOICE_API_BASE_URL) && env.OMNIVOICE_API_KEY && env.OMNIVOICE_SYNTHESIS_PATH), execution: "provider_job_when_configured" },
