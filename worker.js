@@ -127,6 +127,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     const response = await fetchImpl("https://api.tavily.com/search", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ api_key: tavilyKey, query, max_results: 5, search_depth: "basic", include_answer: true }),
+      redirect: "error",
       signal: AbortSignal.timeout(20000)
     });
     if (!response.ok) {
@@ -213,6 +214,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
             Accept: "application/json",
             ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Scheduled AI Employee" } : {})
           },
+          redirect: "error",
           body: JSON.stringify({
             model: provider.model,
             messages: [
