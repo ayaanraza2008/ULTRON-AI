@@ -321,7 +321,9 @@ test("autonomous task chains configured research into a report without another p
           { title: "Energy outlook", url: "https://example.com/energy", content: "Capacity and investment trends." },
           { title: "Metadata endpoint", url: "http://169.254.169.254/latest/meta-data", content: "Must never be included in model context." },
           { title: "Hex mapped loopback", url: "http://[::ffff:7f00:1]/admin", content: "Mapped loopback must be rejected." },
-          { title: "Hex mapped private", url: "http://[::ffff:c0a8:101]/", content: "Mapped private address must be rejected." }
+          { title: "Hex mapped private", url: "http://[::ffff:c0a8:101]/", content: "Mapped private address must be rejected." },
+          { title: "Teredo tunnel", url: "http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/", content: "Teredo-tunneled IPv4 must be rejected." },
+          { title: "6to4 tunnel", url: "http://[2002:7f00:1::]/", content: "6to4-tunneled IPv4 must be rejected." }
         ]
       }), { status: 200 });
       if (url.includes("/chat/completions")) {
@@ -335,6 +337,8 @@ test("autonomous task chains configured research into a report without another p
         assert.equal(userContent.includes("::ffff:c0a8:101"), false);
         assert.equal(userContent.includes("Mapped loopback must be rejected."), false);
         assert.equal(userContent.includes("Mapped private address must be rejected."), false);
+        assert.equal(userContent.includes("Teredo-tunneled IPv4 must be rejected."), false);
+        assert.equal(userContent.includes("6to4-tunneled IPv4 must be rejected."), false);
         return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Report drafted with cited research." } }] }), { status: 200 });
       }
       if (url.includes("/agent_tasks?") && options.method === "PATCH") {
