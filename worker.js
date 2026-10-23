@@ -380,12 +380,14 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       if (isBlocked) status.tasksBlocked += 1;
       else if (shouldRetry) status.tasksRetried += 1;
       else status.tasksFailed += 1;
+      const auditAction = isBlocked ? "task.blocked" : shouldRetry ? "task.retry_scheduled" : "task.failed";
+      const auditOutcome = isBlocked ? "blocked" : shouldRetry ? "retry" : "failed";
       try {
-        await audit(task, shouldRetry ? "task.retry_scheduled" : "task.failed", shouldRetry ? "retry" : "failed", { code, attempt: Number(task.attempts || 1) });
+        await audit(task, auditAction, auditOutcome, { code, attempt: Number(task.attempts || 1) });
       } catch (auditError) {
-        logger.error?.("Task failure audit failed:", task.id, bounded(auditError?.message, 200));
+        logger.error?.("Task outcome audit failed:", task.id, bounded(auditError?.message, 200));
       }
-      logger.error?.("Task outcome:", task.id, shouldRetry ? "retry scheduled" : code);
+      logger.error?.("Task outcome:", task.id, isBlocked ? "blocked" : shouldRetry ? "retry scheduled" : code);
     }
     return true;
   }
