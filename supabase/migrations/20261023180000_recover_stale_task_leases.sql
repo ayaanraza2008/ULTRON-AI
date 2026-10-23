@@ -1,6 +1,5 @@
 -- Recover abandoned worker leases and enforce the bounded retry budget atomically.
--- The worker's provider calls have bounded timeouts; a five-minute lease leaves
--- room for transient network delays without immediately duplicating in-flight work.
+-- Preserve the queue's existing retry backoff to avoid provider hammering.
 create or replace function public.ultron_claim_next_task()
 returns setof public.agent_tasks
 language plpgsql
@@ -26,7 +25,7 @@ begin
      and task.started_at is not null
      and task.started_at < now() - interval '5 minutes';
 
-  -- Keep the queue claim atomic, bounded, and restricted to worker-supported modes.
+  -- Keep claims atomic and honor increasing backoff after transient retries.
   update public.agent_tasks as task
      set status = 'RUNNING',
          attempts = task.attempts + 1,
@@ -40,6 +39,14 @@ begin
       where candidate.status = 'QUEUED'
         and candidate.attempts < 3
         and candidate.input->>'executionMode' in ('allowlisted_worker', 'employee_worker')
+        and (
+          candidate.attempts = 0
+          or candidate.updated_at <= now() - case candidate.attempts
+            when 1 then interval '10 seconds'
+            when 2 then interval '30 seconds'
+            else interval '60 seconds'
+          end
+        )
       order by candidate.created_at asc
       for update skip locked
       limit 1
