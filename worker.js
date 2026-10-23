@@ -17,7 +17,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
-  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksFailed: 0, tasksDiscarded: 0 };
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksRetried: 0, tasksFailed: 0, tasksDiscarded: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
@@ -318,11 +318,12 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       }
     } catch (error) {
       const code = bounded(error.code, 80) || "TASK_EXECUTION_FAILED";
-      status.tasksFailed += 1;
       status.lastErrorAt = new Date().toISOString();
       status.lastErrorCode = code;
       const retryable = ["RESEARCH_PROVIDER_RETRYABLE", "EMPLOYEE_PROVIDER_RETRYABLE", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
       const shouldRetry = retryable && Number(task.attempts || 1) < 3;
+      if (shouldRetry) status.tasksRetried += 1;
+      else status.tasksFailed += 1;
       await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
         method: "PATCH",
         body: JSON.stringify({
