@@ -378,6 +378,39 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
+  // Password recovery is a backend API; the UI can call it without exposing Supabase keys.
+  // Keep the redirect destination server-configured so callers cannot inject arbitrary redirects.
+  app.post("/api/auth/recovery", async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
+    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+      return res.status(400).json({ error: { code: "INVALID_EMAIL", message: "Enter a valid account email address." } });
+    }
+    const redirect = String(env.ULTRON_AUTH_REDIRECT_URL || "").trim();
+    let redirectTo;
+    if (redirect) {
+      try {
+        const parsed = new URL(redirect);
+        if (parsed.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(parsed.hostname)) throw new Error("unsafe redirect");
+        redirectTo = parsed.toString();
+      } catch {
+        return res.status(503).json({ error: { code: "AUTH_REDIRECT_MISCONFIGURED", message: "Password recovery is temporarily unavailable." } });
+      }
+    }
+    const path = "/auth/v1/recover" + (redirectTo ? "?redirect_to=" + encodeURIComponent(redirectTo) : "");
+    try {
+      await supabaseAuthRequest(path, { email });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ ok: true, message: "If an account exists for that email, recovery instructions will be sent." });
+    } catch (error) {
+      // Do not disclose whether the email is registered. Preserve throttling and
+      // service-outage signals so clients can respond safely.
+      if (error.status === 429 || error.status >= 500) {
+        return res.status(error.status).json({ error: { code: "RECOVERY_UNAVAILABLE", message: "Password recovery is temporarily unavailable. Please try again later." } });
+      }
+      return res.json({ ok: true, message: "If an account exists for that email, recovery instructions will be sent." });
+    }
+  });
+
   app.post("/api/auth/signout", (_req, res) => {
     res.append("Set-Cookie", `ultron_sb_access=; ${cookieOptions(0)}`);
     res.append("Set-Cookie", `ultron_sb_refresh=; ${cookieOptions(0)}`);
