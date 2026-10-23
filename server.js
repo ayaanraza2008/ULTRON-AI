@@ -8,6 +8,7 @@ import { createIntegrationRouter } from "./integrations/router.js";
 import { createVoiceStudioRouter } from "./integrations/voicestudio.js";
 import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
+import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -293,6 +294,19 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.get("/api/worker/status", requireSupabaseUser, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ worker: app.locals.workerRuntime() });
+  });
+
+  // Authenticated, secret-free snapshot for diagnosing which agent capabilities
+  // are configured versus actually verified. This performs no upstream calls.
+  app.get("/api/runtime/readiness", requireSupabaseUser, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const workerStatus = typeof app.locals.workerRuntime === "function" ? app.locals.workerRuntime() : null;
+    res.json(buildRuntimeReadiness({
+      env,
+      workerStatus,
+      modelProviderConfigured: hasConfiguredModelProvider(env),
+      supabaseConfigured: Boolean(supabaseConfig())
+    }));
   });
 
   app.get("/api/health", (_req, res) => {
