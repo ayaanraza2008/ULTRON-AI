@@ -85,22 +85,47 @@ test("OmniVoice sends payload to the configured provider path", async () => {
   });
 });
 
-test("Handy rejects non-base64 audio without calling the local bridge", async () => {
-  let called = false;
+test("Handy rejects malformed or non-canonical base64 audio without calling the local bridge", async () => {
+  for (const audioBase64 of ["not audio!", "Y===", "!!!!", "YQ"]) {
+    let called = false;
+    await withServer({
+      ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
+      ULTRON_HANDY_BRIDGE_TOKEN: "token",
+      ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
+    }, async () => {
+      called = true;
+      return new Response("{}", { status: 200 });
+    }, async base => {
+      const response = await fetch(base + "/api/integrations/handy/transcribe", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: { audioBase64 } })
+      });
+      assert.equal(response.status, 400, audioBase64);
+      assert.equal((await response.json()).error.code, "HANDY_AUDIO_REQUIRED");
+      assert.equal(called, false);
+    });
+  }
+});
+
+test("Handy forwards valid canonical base64 audio to the configured bridge", async () => {
+  let request;
   await withServer({
     ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
     ULTRON_HANDY_BRIDGE_TOKEN: "token",
     ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
-  }, async () => {
-    called = true;
-    return new Response("{}", { status: 200 });
+  }, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ text: "hello" }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/integrations/handy/transcribe", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: { audioBase64: "not audio!" } })
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { audioBase64: "UklGRg==", language: "en" } })
     });
-    assert.equal(response.status, 400);
-    assert.equal((await response.json()).error.code, "HANDY_AUDIO_REQUIRED");
-    assert.equal(called, false);
+    assert.equal(response.status, 200);
+    assert.equal(request.url, "https://handy.example/transcribe");
+    assert.equal(request.options.headers.Authorization, "Bearer token");
+    assert.equal(request.options.redirect, "error");
+    assert.equal(JSON.parse(request.options.body).audioBase64, "UklGRg==");
+    assert.equal((await response.json()).result.text, "hello");
   });
 });
 
