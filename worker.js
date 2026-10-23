@@ -192,15 +192,16 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     while (!stopping) {
       try {
         status.lastCycleAt = new Date().toISOString();
-        const didWork = await tick();
+        await tick();
         status.lastCycleSuccessAt = new Date().toISOString();
-        if (!didWork) await sleepImpl(pollMs);
       } catch (error) {
         status.lastErrorAt = new Date().toISOString();
         status.lastErrorCode = bounded(error?.code, 80) || "WORKER_CYCLE_FAILED";
         logger.error?.("Worker cycle failed:", status.lastErrorCode, error.message);
-        await sleepImpl(pollMs);
       }
+      // Always throttle the loop, including successful task execution. Otherwise a
+      // busy queue or immediately re-queued retry can hammer Supabase and providers.
+      if (!stopping) await sleepImpl(pollMs);
     }
     status.state = "stopped";
     logger.info?.("ULTRON task worker stopped.");
