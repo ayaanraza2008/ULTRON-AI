@@ -146,7 +146,7 @@ test("agent executes a model-selected research tool and passes results back for 
     if (url === "https://api.tavily.com/search") {
       researchCalls += 1;
       assert.equal(JSON.parse(options.body).query, "latest space launch");
-      return new Response(JSON.stringify({ answer: "A recent launch was reported.", results: [{ title: "Launch report", url: "https://example.com/launch", content: "Source snippet." }] }), { status: 200 });
+      return new Response(JSON.stringify({ answer: "A recent launch was reported.", results: [{ title: "Launch report", url: "https://example.com/launch", content: "Source snippet." }, { title: "Mapped loopback", url: "http://[::ffff:7f00:1]/admin", content: "Must be rejected." }, { title: "Mapped private address", url: "http://[::ffff:c0a8:101]/", content: "Must be rejected." }] }), { status: 200 });
     }
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
     providerCalls += 1;
@@ -162,7 +162,7 @@ test("agent executes a model-selected research tool and passes results back for 
     const body = await response.json();
     assert.equal(body.content, "Here is the sourced summary.");
     assert.deepEqual(body.toolsUsed, [{ name: "research_web", ok: true }]);
-    assert.equal(body.toolResults[0].result.results[0].url, "https://example.com/launch");
+    assert.deepEqual(body.toolResults[0].result.results.map(result => result.url), ["https://example.com/launch"]);
     assert.equal(researchCalls, 1);
     assert.equal(providerCalls, 2);
   });
