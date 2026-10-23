@@ -267,7 +267,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
           signal: AbortSignal.timeout(45000)
         });
         if (!response.ok) {
-          const retryable = response.status === 429 || response.status >= 500;
+          const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
           const error = Object.assign(new Error("AI Employee provider returned HTTP " + response.status), {
             code: retryable ? "EMPLOYEE_PROVIDER_RETRYABLE" : "EMPLOYEE_PROVIDER_REJECTED",
             retryable
