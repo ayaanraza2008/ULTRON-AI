@@ -26,7 +26,7 @@ function isPublicHttpUrl(value) {
       const normalized = host.toLowerCase();
       if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") ||
           normalized.startsWith("fd") || /^fe[89ab]/.test(normalized) ||
-          normalized.startsWith("2001:db8:")) return false;
+          normalized.startsWith("2001:db8:") || normalized.startsWith("2001:0:") || normalized.startsWith("2002:")) return false;
       const mapped = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
       if (mapped && !isPublicHttpUrl("https://" + mapped[1] + "/")) return false;
       // Hex-encoded IPv4-mapped IPv6 must inherit IPv4 private/reserved checks too.
