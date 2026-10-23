@@ -1,0 +1,69 @@
+import { execFile as execFileCallback } from "node:child_process";
+import { promisify } from "node:util";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+const execFile = promisify(execFileCallback);
+const GEO_SLEUTH_REPOSITORY = "https://github.com/Oldcircle/geo-sleuth.git";
+const GEO_SLEUTH_COMMIT = "e01849f778afeb7c53ca79331313fbcfcb879486";
+
+export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = execFile, log = console.warn } = {}) {
+  if (env.GEO_SLEUTH_ENABLED !== "true") return { state: "disabled" };
+  const root = path.resolve(env.GEO_SLEUTH_ROOT || path.join(process.cwd(), ".runtime", "geo-sleuth", "skills", "geo-sleuth"));
+  const scriptsExist = () => existsSync(path.join(root, "scripts", "intake.py")) && existsSync(path.join(root, "scripts", "board.py"));
+  if (scriptsExist()) return { state: "source_present", root };
+
+  // Render's Dashboard build command can override render.yaml. Bootstrap only the
+  // pinned source when absent; never replace or delete a pre-existing runtime.
+  const repositoryRoot = path.resolve(root, "..", "..");
+  if (existsSync(repositoryRoot)) {
+    log("Geo-Sleuth source is missing and its configured repository directory already exists; refusing to overwrite it.");
+    return { state: "blocked_existing_directory", root };
+  }
+
+  const temporaryParent = path.dirname(repositoryRoot);
+  let temporaryClone;
+  try {
+    await mkdir(temporaryParent, { recursive: true });
+    temporaryClone = await mkdtemp(path.join(temporaryParent, ".geo-sleuth-bootstrap-"));
+    const clonePath = path.join(temporaryClone, "repo");
+    await runCommand("git", ["clone", "--filter=blob:none", GEO_SLEUTH_REPOSITORY, clonePath], { timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true });
+    await runCommand("git", ["-C", clonePath, "checkout", GEO_SLEUTH_COMMIT], { timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true });
+    if (!existsSync(path.join(clonePath, "skills", "geo-sleuth", "scripts", "intake.py")) ||
+        !existsSync(path.join(clonePath, "skills", "geo-sleuth", "scripts", "board.py"))) {
+      throw new Error("Pinned Geo-Sleuth source is missing expected scripts.");
+    }
+    // Rename only after the pinned checkout passes validation.
+    const { rename } = await import("node:fs/promises");
+    await rename(clonePath, repositoryRoot);
+  } catch (error) {
+    log("Geo-Sleuth runtime bootstrap failed; ULTRON will start with this integration unavailable: " + String(error?.message || error).slice(0, 300));
+    return { state: "bootstrap_failed", root };
+  } finally {
+    if (temporaryClone) await rm(temporaryClone, { recursive: true, force: true }).catch(() => {});
+  }
+
+  try {
+    await runCommand("uv", ["--version"], { timeout: 10000, maxBuffer: 256 * 1024, windowsHide: true });
+  } catch {
+    let installer;
+    try {
+      installer = path.join(os.tmpdir(), "ultron-install-uv.sh");
+      await runCommand("curl", ["-LsSf", "https://astral.sh/uv/0.7.13/install.sh", "-o", installer], { timeout: 30000, maxBuffer: 256 * 1024, windowsHide: true });
+      await runCommand("sh", [installer], { timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true });
+    } catch (error) {
+      log("Geo-Sleuth source is present but uv could not be installed; integration remains unavailable: " + String(error?.message || error).slice(0, 300));
+      return { state: "source_present_uv_missing", root };
+    } finally {
+      if (installer) await rm(installer, { force: true }).catch(() => {});
+    }
+  }
+
+  return { state: scriptsExist() ? "source_present" : "bootstrap_failed", root };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+  await ensureGeoSleuthRuntime();
+}
