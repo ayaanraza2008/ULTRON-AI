@@ -498,10 +498,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     }
     if (name === "transcribe_audio") {
       const voiceStudio = voiceStudioSettings(env);
-      const audioBase64 = bounded(requestBody.audioBase64, 11000000);
-      if (voiceStudio && audioBase64 && /^[A-Za-z0-9+/]+={0,2}$/.test(audioBase64) && audioBase64.length % 4 === 0) {
-        const audio = Buffer.from(audioBase64, "base64");
-        if (!audio.length || audio.byteLength > 8 * 1024 * 1024 || audio.toString("base64") !== audioBase64) throw Object.assign(new Error("Audio must be valid base64 and no larger than 8 MB."), { code: "VOICESTUDIO_AUDIO_INVALID", status: 400 });
+      const voiceStudioAudioBase64 = bounded(requestBody.voiceStudioAudioBase64, 11000000);
+      if (voiceStudio && voiceStudioAudioBase64 && /^[A-Za-z0-9+/]+={0,2}$/.test(voiceStudioAudioBase64) && voiceStudioAudioBase64.length % 4 === 0) {
+        const audio = Buffer.from(voiceStudioAudioBase64, "base64");
+        if (!audio.length || audio.byteLength > 8 * 1024 * 1024 || audio.toString("base64") !== voiceStudioAudioBase64) throw Object.assign(new Error("Audio must be valid base64 and no larger than 8 MB."), { code: "VOICESTUDIO_AUDIO_INVALID", status: 400 });
         const mime = bounded(requestBody.mimeType || "audio/wav", 100).toLowerCase().split(";")[0];
         const allowedTypes = new Set(["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/webm", "audio/ogg", "audio/flac", "audio/x-flac", "audio/aac", "audio/opus", "audio/x-m4a", "video/mp4"]);
         if (!allowedTypes.has(mime)) throw Object.assign(new Error("Unsupported audio MIME type."), { code: "VOICESTUDIO_AUDIO_INVALID", status: 400 });
