@@ -103,6 +103,44 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
 
+  // Narrow OpenRouter proxy for the authenticated Browser Use bridge. The bridge
+  // receives only the shared ULTRON token; the provider key remains on this server.
+  app.post("/api/internal/browser-use/v1/chat/completions", async (req, res) => {
+    const configuredToken = String(env.ULTRON_BROWSER_USE_TOKEN || "");
+    const suppliedToken = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    if (!configuredToken || !suppliedToken || !safeEqual(suppliedToken, configuredToken)) {
+      return res.status(401).json({ error: { message: "Unauthorized", type: "authentication_error" } });
+    }
+    if (!env.OPENROUTER_API_KEY) return res.status(503).json({ error: { message: "Model provider is not configured", type: "provider_not_configured" } });
+    const payload = req.body;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Array.isArray(payload.messages) || payload.messages.length > 80 || JSON.stringify(payload).length > 1_000_000) {
+      return res.status(400).json({ error: { message: "Invalid or oversized chat completion request", type: "invalid_request_error" } });
+    }
+    const allowedModels = new Set([
+      String(env.OPENROUTER_DEFAULT_MODEL || "openrouter/free"),
+      ...String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean)
+    ]);
+    const model = allowedModels.has(String(payload.model || "")) ? String(payload.model) : String(env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
+    let base;
+    try { base = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
+    catch { return res.status(500).json({ error: { message: "Model provider URL is invalid", type: "provider_config_error" } }); }
+    try {
+      const upstream = await fetchImpl(base + "/chat/completions", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ ...payload, model, stream: false }),
+        signal: AbortSignal.timeout(Math.max(5000, Math.min(120000, Number(env.OPENROUTER_TIMEOUT_SECONDS || 60) * 1000)))
+      });
+      const raw = await upstream.text();
+      if (raw.length > 2_000_000) return res.status(502).json({ error: { message: "Model provider response exceeded the size limit", type: "provider_response_too_large" } });
+      if (!upstream.ok) return res.status(upstream.status === 429 ? 429 : 502).json({ error: { message: "Model provider request failed", type: "provider_request_failed" } });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).type("application/json").send(raw);
+    } catch {
+      return res.status(502).json({ error: { message: "Model provider is unavailable", type: "provider_unavailable" } });
+    }
+  });
+
   function supabaseConfig() {
     const url = String(env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
     const key = String(env.SUPABASE_PUBLISHABLE_KEY || "").trim();
