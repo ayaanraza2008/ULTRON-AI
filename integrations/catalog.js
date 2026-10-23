@@ -18,6 +18,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasOmniVoice = safeBaseUrl(env.OMNIVOICE_API_BASE_URL) && Boolean(env.OMNIVOICE_API_KEY) && typeof env.OMNIVOICE_SYNTHESIS_PATH === "string" && env.OMNIVOICE_SYNTHESIS_PATH.startsWith("/");
   const hasHandyBridge = safeBaseUrl(env.ULTRON_HANDY_BRIDGE_URL) && Boolean(env.ULTRON_HANDY_BRIDGE_TOKEN) && typeof env.ULTRON_HANDY_TRANSCRIBE_PATH === "string" && env.ULTRON_HANDY_TRANSCRIBE_PATH.startsWith("/");
   const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
+  const hasGeoSleuth = env.GEO_SLEUTH_ENABLED === "true";
 
   return [
     {
@@ -72,6 +73,19 @@ export function buildIntegrationCatalog(env = process.env) {
       note: hasHandyBridge
         ? "Bridge settings are present; local IPC, authentication, and transcription have not yet been verified."
         : "Handy is a local desktop app. The public Render service cannot access a user's microphone or local Handy process directly."
+    },
+    {
+      id: "geo-sleuth",
+      name: "Geo-Sleuth Photo Geolocation",
+      capability: "Prepare photo metadata, OCR, image crops and evidence for a photo-location investigation",
+      state: hasGeoSleuth ? "configured_unverified" : "disabled",
+      configured: hasGeoSleuth,
+      mode: "local_python_cli",
+      requiredEnv: ["GEO_SLEUTH_ENABLED=true", "GEO_SLEUTH_ROOT"],
+      apiRoutes: ["/api/integrations/geo-sleuth/status", "/api/integrations/geo-sleuth/intake"],
+      note: hasGeoSleuth
+        ? "Intake route is enabled; Python dependencies and end-to-end location verification still need a live test. Reverse-image search is opt-in."
+        : "Enable the pinned Geo-Sleuth runtime in the deployment. The tool prepares evidence but does not independently prove a location."
     },
     {
       id: "ai-employees",
