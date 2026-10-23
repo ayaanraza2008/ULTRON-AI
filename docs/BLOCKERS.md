@@ -15,6 +15,6 @@
 ## Verification discipline
 
 - Configuration means configured, not healthy. A real provider request or task completion is required before marking a feature verified.
-- Automated CI currently passes on the PR's tested commit for syntax checks, automated tests, deployed health smoke test, and the pinned God’s Eye bridge build. The latest documentation-only commit should receive its own CI run before calling the branch fully verified.
+- Latest observed CI run [#613](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/39998719928) passed both jobs: syntax checks, automated tests, deployed health smoke test, and pinned God’s Eye bridge build. This verifies the tested branch revision only; it does not prove live provider inference, account isolation, or end-to-end task completion.
 - Render production currently runs the `main` branch. PR #100 has not been merged, so its recovery endpoint and production-action policy changes are not live in production.
 - Do not paste credentials into chat or source control. Use Render's private environment settings.
