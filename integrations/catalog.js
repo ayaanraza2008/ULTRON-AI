@@ -97,7 +97,7 @@ export function buildIntegrationCatalog(env = process.env) {
       mode: "local_or_separate_https_service",
       requiredEnv: ["VOICESTUDIO_BASE_URL"],
       optionalEnv: ["VOICESTUDIO_API_KEY"],
-      apiRoutes: ["/api/integrations/voicestudio/status", "/api/integrations/voicestudio/voices", "/api/integrations/voicestudio/synthesize", "/api/integrations/voicestudio/transcribe"],
+      apiRoutes: ["/api/integrations/voicestudio/status", "/api/integrations/voicestudio/voices", "/api/integrations/voicestudio/speech", "/api/integrations/voicestudio/transcribe"],
       note: hasVoiceStudio
         ? "Endpoint is configured; live model readiness must be verified through the status route."
         : "Install and run VoiceStudio separately. Cloud ULTRON cannot reach a user's PC localhost; remote endpoints require HTTPS and an API key."
