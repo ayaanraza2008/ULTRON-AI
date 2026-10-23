@@ -1008,3 +1008,48 @@ test("worker falls back after a transient HTTP 408 provider timeout", async () =
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
 });
+
+
+test("worker retries malformed research provider JSON", async () => {
+  let worker;
+  let failureUpdate;
+  const task = {
+    id: "task-research-malformed-json",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "research", query: "renewable energy trends" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      TAVILY_API_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("api.tavily.com/search")) {
+        assert.equal(options.redirect, "error");
+        return new Response("{invalid-json", { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        failureUpdate = JSON.parse(options.body);
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(failureUpdate.status, "QUEUED");
+  assert.equal(failureUpdate.error_code, "RESEARCH_PROVIDER_RETRYABLE");
+  assert.equal(failureUpdate.result.retry, true);
+  assert.equal(worker.getStatus().tasksRetried, 1);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+});
