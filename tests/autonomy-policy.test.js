@@ -183,3 +183,17 @@ test("read-only repository review remains routine", () => {
     assert.equal(risk.requiresConfirmation, false, task);
   }
 });
+
+
+test("common PR and release phrasing cannot bypass production confirmation", () => {
+  for (const task of [
+    "Merge this PR into main.",
+    "Please merge this pull request.",
+    "Ship the release.",
+    "Release to production."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
