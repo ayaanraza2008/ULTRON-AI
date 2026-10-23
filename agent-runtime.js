@@ -474,10 +474,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json", "X-ULTRON-BROWSER-TOKEN": token },
         body: JSON.stringify({ task, maxSteps: Number.isInteger(args.maxSteps) ? Math.max(1, Math.min(args.maxSteps, 12)) : 8, confirmExternalAction: false }),
+        redirect: "error",
         signal: AbortSignal.timeout(110000)
       });
       let body = {};
-      try { body = await response.json(); } catch {}
+      try {
+        const raw = await readModelResponseTextLimited(response);
+        body = raw ? JSON.parse(raw) : {};
+      } catch (error) {
+        if (error?.code === "PROVIDER_RESPONSE_TOO_LARGE") throw error;
+      }
       if (!response.ok) return { state: "failed", execution: "browser_bridge", status: response.status, error: bounded(body.detail || body.error || "Browser bridge request failed.", 500) };
       return { state: body.status === "completed" ? "completed" : "unknown", execution: "browser_use", result: bounded(body.result, 12000), steps: body.steps, model: body.model };
     }
