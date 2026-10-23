@@ -217,5 +217,41 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     });
   }
 
+
+  // Optional VoiceStudio adapter: VoiceStudio must run as a separately hosted service.
+  router.get("/integrations/voicestudio/status", requireSupabaseUser, async (_req, res) => {
+    const base = configuredUrl(env.VOICESTUDIO_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL with a reachable VoiceStudio service." } });
+    try {
+      const models = await requestJson(fetchImpl, base + "/v1/models", { headers: providerHeaders(env.VOICESTUDIO_API_KEY), timeoutMs: 12000 });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", reachable: true, modelsAvailable: Array.isArray(models?.data) ? models.data.length : null });
+    } catch (error) { safeError(res, error, "VoiceStudio status check"); }
+  });
+
+  router.post("/integrations/voicestudio/speech", requireSupabaseUser, async (req, res) => {
+    const base = configuredUrl(env.VOICESTUDIO_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL with a reachable VoiceStudio service." } });
+    const text = bounded(req.body?.text, 12000);
+    if (!text) return res.status(400).json({ error: { code: "VOICESTUDIO_TEXT_REQUIRED", message: "text is required." } });
+    const voice = bounded(req.body?.voice, 160);
+    const model = bounded(req.body?.model, 160) || "tts-1";
+    const format = bounded(req.body?.response_format, 16) || "mp3";
+    if (!["mp3", "opus", "aac", "flac", "wav", "pcm"].includes(format)) return res.status(400).json({ error: { code: "VOICESTUDIO_FORMAT_INVALID", message: "Unsupported audio format." } });
+    try {
+      const response = await fetchImpl(base + "/v1/audio/speech", {
+        method: "POST",
+        headers: { Accept: "audio/*", "Content-Type": "application/json", ...providerHeaders(env.VOICESTUDIO_API_KEY) },
+        body: JSON.stringify({ model, input: text, ...(voice ? { voice } : {}), response_format: format, ...(bounded(req.body?.instructions, 1000) ? { instructions: bounded(req.body.instructions, 1000) } : {}) }),
+        signal: AbortSignal.timeout(90000)
+      });
+      if (!response.ok) return res.status(response.status === 429 ? 429 : response.status >= 500 ? 502 : 400).json({ error: { code: "VOICESTUDIO_SPEECH_FAILED", message: "VoiceStudio could not generate speech (HTTP " + response.status + ")." } });
+      const audio = Buffer.from(await response.arrayBuffer());
+      if (!audio.length || audio.length > 20 * 1024 * 1024) return res.status(502).json({ error: { code: "VOICESTUDIO_AUDIO_INVALID", message: "VoiceStudio returned empty or oversized audio." } });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", format, contentType: response.headers.get("content-type") || "audio/" + format, audioBase64: audio.toString("base64") });
+    } catch (error) { safeError(res, error, "VoiceStudio speech generation"); }
+  });
+
   return router;
 }
