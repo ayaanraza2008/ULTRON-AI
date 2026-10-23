@@ -16,7 +16,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
-  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksFailed: 0 };
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksFailed: 0, tasksDiscarded: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
@@ -151,10 +151,23 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     if (!task?.id) return false;
     try {
       const result = await execute(task);
-      await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
+      const completedRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
         method: "PATCH",
         body: JSON.stringify({ status: "COMPLETED", result, finished_at: new Date().toISOString() })
       });
+      // A user may cancel or otherwise transition a task while a provider call is in flight.
+      // The conditional update returns no rows if it is no longer RUNNING; do not report a
+      // completion or overwrite the newer state in that race.
+      if (!Array.isArray(completedRows) || completedRows.length === 0) {
+        status.tasksDiscarded += 1;
+        try {
+          await audit(task, "task.result_discarded", "denied", { reason: "task_state_changed_during_execution" });
+        } catch (auditError) {
+          logger.error?.("Discarded task result audit failed:", task.id, bounded(auditError?.message, 200));
+        }
+        logger.info?.("Discarded stale task result because task state changed:", task.id);
+        return true;
+      }
       status.tasksCompleted += 1;
       try {
         await audit(task, "task.completed", "allowed", { taskType: task.input?.taskType || "unknown", role: task.input?.role || null, sourceCount: result.sources?.length || 0 });
