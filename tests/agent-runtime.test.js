@@ -737,3 +737,46 @@ test("model provider registry ignores providers with missing keys or insecure UR
     assert.deepEqual(calls, ["https://openrouter.ai/api/v1/chat/completions"]);
   });
 });
+
+
+test("agent autonomously uses VoiceStudio for speech when configured", async () => {
+  let modelCalls = 0;
+  const audioBytes = Buffer.from("test-wav-audio");
+  await withServer({
+    OPENROUTER_API_KEY: "test-only",
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "voice-studio-test-token"
+  }, async (url, options) => {
+    if (url === "https://voice.example/v1/audio/speech") {
+      const body = JSON.parse(options.body);
+      assert.equal(options.headers.Authorization, "Bearer voice-studio-test-token");
+      assert.equal(body.input, "hello ULTRON");
+      assert.equal(body.response_format, "wav");
+      return new Response(audioBytes, { status: 200, headers: { "content-type": "audio/wav" } });
+    }
+    modelCalls += 1;
+    if (modelCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "voice-studio-call", type: "function",
+        function: { name: "synthesize_speech", arguments: JSON.stringify({ text: "hello ULTRON" }) }
+      }] } }] }), { status: 200 });
+    }
+    const body = JSON.parse(options.body);
+    const toolMessage = body.messages.find(message => message.role === "tool" && message.tool_call_id === "voice-studio-call");
+    assert.ok(toolMessage);
+    assert.equal(toolMessage.content.includes(audioBytes.toString("base64")), false);
+    assert.match(toolMessage.content, /binary payload omitted/);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "VoiceStudio generated the speech audio." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Generate speech saying hello ULTRON" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /generated the speech audio/i);
+    assert.equal(body.toolResults[0].name, "synthesize_speech");
+    assert.equal(body.toolResults[0].result.provider, "voicestudio");
+    assert.equal(body.toolResults[0].result.audioBase64, audioBytes.toString("base64"));
+  });
+});
