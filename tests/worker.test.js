@@ -138,3 +138,26 @@ test("background AI Employee receives task-aware diagram guidance automatically"
   assert.match(system, /Diagram request detected/);
   assert.equal(worker.getStatus().tasksCompleted, 1);
 });
+
+
+test("worker throttles after claiming scheduled work instead of busy-looping", async () => {
+  let worker;
+  let sleeps = 0;
+  let polls = 0;
+  worker = startWorker({
+    env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "test-only" },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => { sleeps += 1; worker.stop(); },
+    fetchImpl: async url => {
+      polls += 1;
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) {
+        return new Response(JSON.stringify([{ id: "schedule-1" }]), { status: 200 });
+      }
+      throw new Error("The claimed schedule should not trigger another poll in the same cycle.");
+    }
+  });
+  await worker.done;
+  assert.equal(sleeps, 1);
+  assert.equal(polls, 1);
+  assert.equal(worker.getStatus().state, "stopped");
+});
