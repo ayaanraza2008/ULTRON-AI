@@ -16,6 +16,35 @@ function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function hasEmployeeModelProvider(env) {
+  const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
+  if (primaryKey && safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")) return true;
+  let configured;
+  try { configured = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]"); } catch { return false; }
+  if (!Array.isArray(configured)) return false;
+  const names = new Set();
+  const urls = new Set();
+  return configured.slice(0, 12).some(item => {
+    if (!item || typeof item !== "object" || typeof item.name !== "string" ||
+        typeof item.baseUrl !== "string" || typeof item.apiKeyEnv !== "string" ||
+        typeof item.model !== "string" || !item.model.trim() || item.model.length > 160) return false;
+    const name = item.name.trim().toLowerCase();
+    const apiKeyEnv = item.apiKeyEnv.trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(name) ||
+        !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) ||
+        names.has(name) || !env[apiKeyEnv]?.trim?.()) return false;
+    try {
+      const url = new URL(item.baseUrl);
+      if (url.protocol !== "https:" || url.username || url.password) return false;
+      const baseUrl = url.toString().replace(/\\/+$/, "");
+      if (urls.has(baseUrl)) return false;
+      names.add(name);
+      urls.add(baseUrl);
+      return true;
+    } catch { return false; }
+  });
+}
+
 function withTimeout(ms, parentSignal) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error("Request timed out")), ms);
@@ -50,7 +79,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       routineTemplates: employeeRoutineCatalog,
       totalRoleRoutineSlots: employeeRoles.reduce((sum, role) => sum + role.routines, 0),
       execution: "planning_and_drafting_only",
-      scheduler: env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY ? "enabled" : "not_configured",
+      scheduler: env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env) ? "enabled" : "not_configured",
       notice: "This is a native ULTRON role/routine layer inspired by the MIT-licensed upstream project; it does not claim the upstream kit files or scheduler are installed."
     });
   });
@@ -61,7 +90,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       return res.status(400).json({ error: { code: "UNKNOWN_EMPLOYEE_ROLE", message: "Choose a role from /api/employees/roles." } });
     }
     res.setHeader("Cache-Control", "no-store");
-    res.json({ routines: employeeRoutineCatalog.filter(item => !roleId || item.roles.includes(roleId)), scheduler: env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY ? "enabled" : "not_configured" });
+    res.json({ routines: employeeRoutineCatalog.filter(item => !roleId || item.roles.includes(roleId)), scheduler: env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env) ? "enabled" : "not_configured" });
   });
 
   router.get("/employees/status", requireSupabaseUser, (_req, res) => {
@@ -69,9 +98,9 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     res.json({
       roles: employeeRoles.length,
       routineTemplates: employeeRoutineCatalog.length,
-      schedulerEnabled: env.ULTRON_EMPLOYEES_ENABLED === "true" && Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
+      schedulerEnabled: env.ULTRON_EMPLOYEES_ENABLED === "true" && Boolean(env.SUPABASE_SERVICE_ROLE_KEY) && hasEmployeeModelProvider(env),
       workerCredentialsConfigured: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
-      modelProviderConfigured: Boolean(env.OPENROUTER_API_KEY),
+      modelProviderConfigured: hasEmployeeModelProvider(env),
       scheduleCadenceMinutes: { min: 60, max: 10080 },
       execution: "drafts_and_reports_only",
       notice: "Scheduled routines create AI-generated plans and drafts only. They do not send, publish, spend, run commands, or control devices."
@@ -121,7 +150,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 
   router.post("/employees/schedules/:id/run", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_SCHEDULE_ID", message: "Schedule ID is invalid." } });
-    if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !env.OPENROUTER_API_KEY) {
+    if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !hasEmployeeModelProvider(env)) {
       return res.status(503).json({ error: { code: "EMPLOYEE_WORKER_NOT_CONFIGURED", message: "Enable the employee worker and configure its server-side Supabase key and model provider before running a scheduled routine." } });
     }
     try {
