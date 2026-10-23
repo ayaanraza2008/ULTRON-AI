@@ -17,6 +17,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasHeyGem = safeBaseUrl(env.HEYGEM_API_BASE_URL) && Boolean(env.HEYGEM_API_KEY) && typeof env.HEYGEM_JOB_PATH === "string" && env.HEYGEM_JOB_PATH.startsWith("/");
   const hasOmniVoice = safeBaseUrl(env.OMNIVOICE_API_BASE_URL) && Boolean(env.OMNIVOICE_API_KEY) && typeof env.OMNIVOICE_SYNTHESIS_PATH === "string" && env.OMNIVOICE_SYNTHESIS_PATH.startsWith("/");
   const hasHandyBridge = safeBaseUrl(env.ULTRON_HANDY_BRIDGE_URL) && Boolean(env.ULTRON_HANDY_BRIDGE_TOKEN) && typeof env.ULTRON_HANDY_TRANSCRIBE_PATH === "string" && env.ULTRON_HANDY_TRANSCRIBE_PATH.startsWith("/");
+  const hasVoiceStudio = safeBaseUrl(env.VOICESTUDIO_BASE_URL) && (Boolean(env.VOICESTUDIO_API_KEY) || ["localhost", "127.0.0.1", "::1"].includes(new URL(env.VOICESTUDIO_BASE_URL).hostname));
   const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const hasGeoSleuth = env.GEO_SLEUTH_ENABLED === "true";
 
@@ -86,6 +87,20 @@ export function buildIntegrationCatalog(env = process.env) {
       note: hasGeoSleuth
         ? "Intake route is enabled; Python dependencies and end-to-end location verification still need a live test. Reverse-image search is opt-in."
         : "Enable the pinned Geo-Sleuth runtime in the deployment. The tool prepares evidence but does not independently prove a location."
+    },
+    {
+      id: "voicestudio",
+      name: "VoiceStudio Speech Engine",
+      capability: "Multilingual speech synthesis, voice catalog, and transcription through VoiceStudio local API",
+      state: hasVoiceStudio ? "configured_unverified" : "desktop_companion_required",
+      configured: Boolean(hasVoiceStudio),
+      mode: "local_or_separate_https_service",
+      requiredEnv: ["VOICESTUDIO_BASE_URL"],
+      optionalEnv: ["VOICESTUDIO_API_KEY"],
+      apiRoutes: ["/api/integrations/voicestudio/status", "/api/integrations/voicestudio/voices", "/api/integrations/voicestudio/synthesize", "/api/integrations/voicestudio/transcribe"],
+      note: hasVoiceStudio
+        ? "Endpoint is configured; live model readiness must be verified through the status route."
+        : "Install and run VoiceStudio separately. Cloud ULTRON cannot reach a user's PC localhost; remote endpoints require HTTPS and an API key."
     },
     {
       id: "ai-employees",
