@@ -329,17 +329,18 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       // draft-only plan/review/report tasks, so do not interrupt with a second confirmation.
       if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !env.OPENROUTER_API_KEY) return { state: "blocked", role, mode, blocker: "The background worker, server-side Supabase key, and model provider must all be configured." };
       if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) throw Object.assign(new Error("Authenticated task storage is unavailable."), { code: "TASK_STORAGE_UNAVAILABLE", status: 503 });
-      const input = { taskType: "employee", executionMode: "employee_worker", role, goal, context, mode, requiresApproval: false, approved: true, createdBy: "ultron_agent_tool" };
+      const autonomousWorkflow = /\\b(research|investigate|look into|find sources)\\b/i.test(goal) && /\\b(report|summary|recommendations|brief)\\b/i.test(goal);
+      const input = { taskType: autonomousWorkflow ? "autonomous" : "employee", executionMode: "employee_worker", role, goal, context, mode: autonomousWorkflow ? "report" : mode, requiresApproval: false, approved: true, createdBy: "ultron_agent_tool" };
       const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", { user_id: req.supabaseUser.id, title: goal.slice(0, 240), input, status: "QUEUED" });
       if (!Array.isArray(rows) || !rows[0]?.id) throw Object.assign(new Error("Task queue did not return a task ID."), { code: "TASK_CREATE_FAILED", status: 502 });
       let auditRecorded = true;
       try {
-        await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created_by_agent_tool", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { role, mode, executionMode: "employee_worker" } }, "return=minimal");
+        await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created_by_agent_tool", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { role, mode: autonomousWorkflow ? "autonomous_report" : mode, taskType: input.taskType, executionMode: "employee_worker" } }, "return=minimal");
       } catch (error) {
         auditRecorded = false;
         logger.warn?.("Agent employee task audit write failed", { name: error?.name || "Error" });
       }
-      return { state: "queued", task: rows[0], auditRecorded, execution: "background_draft_only", notice: "ULTRON queued a draft-only AI Employee task. The worker must complete it before a result is available; no external action will be performed." };
+      return { state: "queued", task: rows[0], auditRecorded, execution: autonomousWorkflow ? "background_autonomous_research_and_report" : "background_draft_only", notice: autonomousWorkflow ? "ULTRON queued a bounded research-to-report workflow. It will gather sources when the research provider is configured, synthesize a report, and disclose any skipped stage. It will not publish, spend, contact people, or change external systems." : "ULTRON queued a draft-only AI Employee task. The worker must complete it before a result is available; no external action will be performed." };
     }
     if (name === "plan_employee") {
       const role = bounded(args.role, 80), goal = bounded(args.goal, 2000), context = bounded(args.context, 4000);
