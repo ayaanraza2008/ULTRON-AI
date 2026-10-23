@@ -70,6 +70,14 @@ function isPublicResearchHost(hostname) {
         || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")) return false;
     const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
     if (mapped) return isPublicResearchHost(mapped[1]);
+    // IPv4-mapped IPv6 also has a hexadecimal form, e.g. ::ffff:7f00:1 for 127.0.0.1.
+    const mappedHex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (mappedHex) {
+      const high = Number.parseInt(mappedHex[1], 16);
+      const low = Number.parseInt(mappedHex[2], 16);
+      const ipv4 = [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
+      return isPublicResearchHost(ipv4);
+    }
     return true;
   }
   // Hostnames with no dot are generally machine-local names, not public sources.
