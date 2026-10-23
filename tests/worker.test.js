@@ -430,6 +430,8 @@ test("autonomous task chains configured research into a report without another p
         assert.equal(patch.result.type, "autonomous_workflow");
         assert.equal(patch.result.stages[0].state, "completed");
         assert.equal(patch.result.stages[1].state, "completed");
+        assert.equal(patch.result.verification.state, "needs_review");
+        assert.equal(patch.result.verification.warning.includes("not factual correctness"), true);
         worker.stop();
         return new Response(JSON.stringify([task]), { status: 200 });
       }
@@ -439,6 +441,7 @@ test("autonomous task chains configured research into a report without another p
   });
   await worker.done;
   assert.equal(worker.getStatus().tasksCompleted, 1);
+  assert.equal(worker.getStatus().tasksNeedingReview, 1);
   assert.ok(calls.some(call => call.url.includes("api.tavily.com/search")));
   assert.ok(calls.filter(call => call.url.includes("api.tavily.com/search")).every(call => call.options.redirect === "error"));
   assert.ok(calls.some(call => call.url.includes("/chat/completions")));
