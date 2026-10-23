@@ -360,10 +360,10 @@ test("AI Employee scheduler accepts a configured alternate model provider withou
     ])
   };
   await withServer(env, async base => {
-    const status = await (await fetch(base + "/api/employees/status")).json();
+    const status = await (await fetch(base + "/api/employees/status", { signal: AbortSignal.timeout(5000) })).json();
     assert.equal(status.schedulerEnabled, true);
     assert.equal(status.modelProviderConfigured, true);
-    const response = await fetch(base + "/api/employees/schedules/" + schedule.id + "/run", { method: "POST" });
+    const response = await fetch(base + "/api/employees/schedules/" + schedule.id + "/run", { method: "POST", signal: AbortSignal.timeout(5000) });
     assert.equal(response.status, 202);
     assert.equal((await response.json()).task.status, "QUEUED");
   }, { supabaseRest: fakeSupabaseRest });
