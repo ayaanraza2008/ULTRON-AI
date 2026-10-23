@@ -57,3 +57,33 @@ test("invalid or insecure integration URLs are not treated as configured", () =>
   assert.equal(result.components.find((item) => item.id === "browser_automation").state, "blocked");
   assert.equal(result.components.find((item) => item.id === "local_models").state, "optional");
 });
+
+test("readiness rejects non-HTTP local URLs, embedded credentials, query strings, and fragments", () => {
+  const result = buildRuntimeReadiness({
+    env: {
+      ULTRON_BROWSER_USE_URL: "ftp://localhost:9000",
+      ULTRON_BROWSER_USE_TOKEN: "test-token",
+      ULTRON_DESKTOP_AGENT_URL: "https://user:password@desktop.example.com",
+      ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
+      OLLAMA_BASE_URL: "http://localhost:11434?token=unexpected"
+    }
+  });
+  assert.equal(result.components.find((item) => item.id === "browser_automation").state, "blocked");
+  assert.equal(result.components.find((item) => item.id === "windows_companion").state, "blocked");
+  assert.equal(result.components.find((item) => item.id === "local_models").state, "optional");
+});
+
+test("readiness accepts HTTPS services and plain HTTP loopback development services", () => {
+  const result = buildRuntimeReadiness({
+    env: {
+      ULTRON_BROWSER_USE_URL: "https://browser.example.com",
+      ULTRON_BROWSER_USE_TOKEN: "test-token",
+      ULTRON_DESKTOP_AGENT_URL: "http://127.0.0.1:8787",
+      ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
+      OLLAMA_BASE_URL: "http://localhost:11434"
+    }
+  });
+  assert.equal(result.components.find((item) => item.id === "browser_automation").state, "configured_unverified");
+  assert.equal(result.components.find((item) => item.id === "windows_companion").state, "configured_unverified");
+  assert.equal(result.components.find((item) => item.id === "local_models").state, "configured_unverified");
+});
