@@ -37,7 +37,7 @@ export function buildTaskSkillsGuidance(task) {
   const categories = [];
   if (/\b(code|coding|debug|implement|repository|repo|pull request|commit|build|test suite)\b/i.test(text)) categories.push("software_change");
   if (/\b(research|search|latest|current|sources|compare|investigate|look up)\b/i.test(text)) categories.push("research");
-  if (/\b(plan|workflow|automate|background|schedule|agent|integrate|deploy|migration)\b/i.test(text)) categories.push("multi_step");
+  if (/\b(plan|workflow|automate|background|schedule|agent|integrate|integration|deploy|migration)\b/i.test(text)) categories.push("multi_step");
   if (/\b(memory|remember|previous|history|context|preferences)\b/i.test(text)) categories.push("memory_context");
   if (/\b(delete|publish|send|purchase|spend|control my pc|run command)\b/i.test(text)) categories.push("consequential_action");
   const securitySkills = SECURITY.filter(x=>x.terms.test(text)).slice(0,3).map(({name,category,source})=>({name,category,source}));
