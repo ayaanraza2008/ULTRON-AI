@@ -14,7 +14,7 @@ function bounded(value, max = 4000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-async function readJsonLimited(response, maxBytes) {
+async function readTextLimited(response, maxBytes) {
   const declaredLength = Number(response.headers?.get?.("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     try { await response.body?.cancel?.(); } catch {}
@@ -46,7 +46,11 @@ async function readJsonLimited(response, maxBytes) {
       throw new Error("Provider response exceeded the configured size limit.");
     }
   }
-  return JSON.parse(raw);
+  return raw;
+}
+
+async function readJsonLimited(response, maxBytes) {
+  return JSON.parse(await readTextLimited(response, maxBytes));
 }
 
 function safeResearchUrl(value) {
@@ -141,7 +145,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       },
       signal: AbortSignal.timeout(15000)
     });
-    const raw = await response.text();
+    const raw = await readTextLimited(response, 2_000_000);
     let body = null;
     try { body = raw ? JSON.parse(raw) : null; } catch { body = raw; }
     if (!response.ok) throw new Error("Supabase request failed with HTTP " + response.status);
