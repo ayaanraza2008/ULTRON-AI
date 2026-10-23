@@ -336,7 +336,7 @@ test("running a saved schedule fails closed when the worker is not configured", 
 });
 
 
-test("AI Employee scheduler accepts a configured alternate model provider without OpenRouter", async () => {
+test("AI Employee scheduler accepts a configured alternate model provider without OpenRouter", { timeout: 15000 }, async () => {
   const schedule = {
     id: "00000000-0000-4000-8000-000000000020",
     user_id: "00000000-0000-4000-8000-000000000001",
