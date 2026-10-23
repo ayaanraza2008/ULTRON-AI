@@ -217,7 +217,10 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     }
     let data;
     try { data = await readJsonLimited(response, 1_000_000); }
-    catch {
+    catch (error) {
+      // Cancellation is control flow, not a malformed provider response. Preserve it
+      // so the task handler never schedules a retry for an explicitly cancelled task.
+      if (signal?.aborted) throw error;
       throw Object.assign(new Error("Research provider returned an invalid or oversized response."), { code: "RESEARCH_PROVIDER_RETRYABLE" });
     }
     if (!data || typeof data !== "object" || Array.isArray(data) ||
@@ -327,7 +330,10 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
           continue;
         }
         let payload;
-        try { payload = await readJsonLimited(response, 2_000_000); } catch {
+        try { payload = await readJsonLimited(response, 2_000_000); } catch (error) {
+          // Do not reinterpret an aborted read as malformed JSON or continue to a
+          // fallback provider after the worker has cancelled this task.
+          if (signal?.aborted) throw error;
           lastError = Object.assign(new Error("AI Employee provider returned malformed JSON."), { code: "EMPLOYEE_PROVIDER_RETRYABLE", retryable: true });
           continue;
         }
