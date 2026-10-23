@@ -6,8 +6,10 @@ import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
 import { createVoiceStudioRouter } from "./integrations/voicestudio.js";
+import { createVoiceStudioRouter } from "./integrations/voicestudio.js";
 import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
+import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -292,7 +294,23 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.get("/api/worker/status", requireSupabaseUser, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json({ worker: app.locals.workerRuntime() });
+    const worker = typeof app.locals.workerRuntime === "function"
+      ? app.locals.workerRuntime()
+      : { state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "not_started" : "disabled" };
+    res.json({ worker });
+  });
+
+  // Authenticated, secret-free snapshot for diagnosing which agent capabilities
+  // are configured versus actually verified. This performs no upstream calls.
+  app.get("/api/runtime/readiness", requireSupabaseUser, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const workerStatus = typeof app.locals.workerRuntime === "function" ? app.locals.workerRuntime() : null;
+    res.json(buildRuntimeReadiness({
+      env,
+      workerStatus,
+      modelProviderConfigured: hasConfiguredModelProvider(env),
+      supabaseConfigured: Boolean(supabaseConfig())
+    }));
   });
 
   app.get("/api/health", (_req, res) => {
@@ -767,7 +785,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
-
+  app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, logger }));
 
