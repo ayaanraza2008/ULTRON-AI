@@ -19,8 +19,9 @@ function isPublicHttpUrl(value) {
           (a === 100 && b >= 64 && b <= 127) ||
           (a === 169 && b === 254) ||
           (a === 172 && b >= 16 && b <= 31) ||
-          (a === 192 && (b === 0 || b === 168)) ||
-          (a === 198 && (b === 18 || b === 19))) return false;
+          (a === 192 && (b === 0 || b === 168 || (b === 88 && octets[2] === 99))) ||
+          (a === 198 && (b === 18 || b === 19 || (b === 51 && octets[2] === 100))) ||
+          (a === 203 && b === 0 && octets[2] === 113)) return false;
     } else if (isIP(host) === 6) {
       const normalized = host.toLowerCase();
       if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") ||
