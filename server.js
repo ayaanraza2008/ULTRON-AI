@@ -50,6 +50,39 @@ function parseCookies(header = "") {
   return out;
 }
 
+async function readResponseTextLimited(response, maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw new Error("Model provider response exceeded the size limit.");
+  }
+  if (!response.body?.getReader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw new Error("Model provider response exceeded the size limit.");
+    return raw;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw new Error("Model provider response exceeded the size limit.");
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join("");
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
@@ -169,14 +202,16 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             method: "POST",
             headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ ...payload, model: candidates[index], stream: false }),
+            redirect: "error",
             signal: AbortSignal.timeout(timeoutMs)
           });
         } catch (error) {
           if (index + 1 < candidates.length && (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError)) continue;
           throw error;
         }
-        const raw = await upstream.text();
-        if (raw.length > 2_000_000) return res.status(502).json({ error: { message: "Model provider response exceeded the size limit", type: "provider_response_too_large" } });
+        let raw;
+        try { raw = await readResponseTextLimited(upstream, 2_000_000); }
+        catch { return res.status(502).json({ error: { message: "Model provider response exceeded the size limit", type: "provider_response_too_large" } }); }
         if (upstream.ok) {
           res.setHeader("Cache-Control", "no-store");
           res.setHeader("X-ULTRON-Model", candidates[index]);
