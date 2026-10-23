@@ -9,7 +9,7 @@ function isPublicHttpUrl(value) {
   try {
     const url = new URL(value);
     if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return false;
-    const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
     if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
         host === "metadata.google.internal" || host === "metadata.google") return false;
     if (isIP(host) === 4) {
@@ -27,7 +27,7 @@ function isPublicHttpUrl(value) {
       if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") ||
           normalized.startsWith("fd") || /^fe[89ab]/.test(normalized) ||
           normalized.startsWith("2001:db8:")) return false;
-      const mapped = normalized.match(/::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/);
+      const mapped = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
       if (mapped && !isPublicHttpUrl("https://" + mapped[1] + "/")) return false;
     } else if (!host.includes(".")) {
       return false;
