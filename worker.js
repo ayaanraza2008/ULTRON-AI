@@ -82,7 +82,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     const providers = [];
     const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
     if (primaryKey) {
-      const baseUrl = String(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\\/+$/, "");
+      const baseUrl = String(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
       try {
         const parsed = new URL(baseUrl);
         if (parsed.protocol === "https:" && !parsed.username && !parsed.password) {
@@ -108,7 +108,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password || !item.model.trim() || item.model.length > 160) continue;
       const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
       if (!apiKey) continue;
-      const baseUrl = item.baseUrl.replace(/\\/+$/, "");
+      const baseUrl = item.baseUrl.replace(/\/+$/, "");
       if (providers.some(provider => provider.baseUrl === baseUrl)) continue;
       seenNames.add(name);
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100 });
