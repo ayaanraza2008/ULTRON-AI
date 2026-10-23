@@ -174,6 +174,69 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { safeError(res, error, "ComfyUI job cancellation"); }
   });
 
+  // VoiceStudio exposes OpenAI-compatible speech endpoints. Keep the upstream URL
+  // deployment-configured, require auth for the remote service, and never accept URLs
+  // or filesystem paths from the caller.
+  function voiceStudioConfig() {
+    const base = configuredUrl(env.VOICESTUDIO_API_BASE_URL);
+    const token = String(env.VOICESTUDIO_API_KEY || "").trim();
+    if (!base || !token) return null;
+    return { base: base.endsWith("/v1") ? base : base + "/v1", token };
+  }
+
+  router.get("/integrations/voicestudio/voices", requireSupabaseUser, async (_req, res) => {
+    const config = voiceStudioConfig();
+    if (!config) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_API_BASE_URL and VOICESTUDIO_API_KEY." } });
+    try {
+      const data = await requestJson(fetchImpl, config.base + "/audio/voices", {
+        headers: providerHeaders(config.token), timeoutMs: 15000
+      });
+      const voices = Array.isArray(data?.voices) ? data.voices.slice(0, 500).map(v => ({
+        id: bounded(v?.voice_id || v?.id, 160),
+        name: bounded(v?.name, 160),
+        addressableByName: v?.addressable_by_name === true
+      })).filter(v => v.id) : [];
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", voices });
+    } catch (error) { safeError(res, error, "VoiceStudio voice listing"); }
+  });
+
+  router.post("/integrations/voicestudio/speech", requireSupabaseUser, async (req, res) => {
+    const config = voiceStudioConfig();
+    if (!config) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_API_BASE_URL and VOICESTUDIO_API_KEY." } });
+    const input = req.body?.payload;
+    if (!isObject(input) || !bounded(input.input || input.text, 30000)) {
+      return res.status(400).json({ error: { code: "VOICESTUDIO_TEXT_REQUIRED", message: "payload.input or payload.text must contain 1–30000 characters." } });
+    }
+    const formats = new Set(["mp3", "opus", "aac", "flac", "wav", "pcm"]);
+    const payload = {
+      model: bounded(input.model, 160) || "tts-1",
+      input: bounded(input.input || input.text, 30000),
+      voice: bounded(input.voice, 160) || "default",
+      response_format: formats.has(input.response_format) ? input.response_format : "mp3",
+      ...(Number.isFinite(input.speed) && input.speed >= 0.25 && input.speed <= 4 ? { speed: input.speed } : {}),
+      ...(typeof input.instructions === "string" ? { instructions: bounded(input.instructions, 2000) } : {})
+    };
+    try {
+      const response = await fetchImpl(config.base + "/audio/speech", {
+        method: "POST",
+        headers: { ...providerHeaders(config.token), "Content-Type": "application/json", Accept: "audio/*" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(90000)
+      });
+      if (!response.ok) {
+        const status = response.status === 429 ? 429 : response.status >= 500 ? 502 : 400;
+        throw Object.assign(new Error("VoiceStudio returned HTTP " + response.status), { status, code: "VOICESTUDIO_REQUEST_FAILED" });
+      }
+      const audio = Buffer.from(await response.arrayBuffer());
+      if (!audio.length || audio.length > 20 * 1024 * 1024) {
+        return res.status(502).json({ error: { code: "VOICESTUDIO_AUDIO_SIZE_INVALID", message: "VoiceStudio audio was empty or exceeded the 20 MB limit." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", format: payload.response_format, contentType: response.headers.get("content-type") || "audio/mpeg", audioBase64: audio.toString("base64") });
+    } catch (error) { safeError(res, error, "VoiceStudio speech generation"); }
+  });
+
   // HeyGem, OmniVoice and Handy implementations differ by deployment. These
   // adapters require explicit paths, rather than guessing undocumented APIs.
   const genericAdapters = [
