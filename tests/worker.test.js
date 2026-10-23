@@ -468,6 +468,7 @@ test("background AI Employee falls back to a configured provider after rate limi
     logger: { info() {}, warn() {}, error() {} },
     sleepImpl: async () => {},
     fetchImpl: async (url, options = {}) => {
+      if (url.startsWith("https://example.supabase.co/rest/v1/")) assert.equal(options.redirect, "error");
       if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
       if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
       if (url.includes("/chat/completions")) {
