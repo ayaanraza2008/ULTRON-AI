@@ -53,6 +53,46 @@ test("agent cancels oversized model responses and falls back to the next configu
   });
 });
 
+
+test("browser bridge rejects redirects and bounds its response body", async () => {
+  let bridgeCalls = 0;
+  let providerCalls = 0;
+  await withServer({
+    OPENROUTER_API_KEY: "test-only",
+    ULTRON_BROWSER_USE_URL: "https://browser.example",
+    ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
+  }, async (url, options) => {
+    if (url === "https://browser.example/run") {
+      bridgeCalls += 1;
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers["X-ULTRON-BROWSER-TOKEN"], "bridge-test-token");
+      return new Response(JSON.stringify({ status: "completed", result: "Page inspected safely." }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "browser-safe-call", type: "function",
+        function: { name: "browser_use", arguments: JSON.stringify({ task: "Open the website and inspect the pricing page" }) }
+      }] } }] }), { status: 200 });
+    }
+    assert.ok(payload.messages.some(message => message.role === "system" && String(message.content).includes("Page inspected safely.")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The pricing page was inspected." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Open the website and inspect the pricing page" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /pricing page was inspected/i);
+    assert.equal(bridgeCalls, 1);
+    assert.equal(providerCalls, 2);
+  });
+});
+
 test("agent automatically injects relevant AgentMemory results for continuation tasks", async () => {
   let memoryCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
