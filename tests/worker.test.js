@@ -391,7 +391,7 @@ test("background AI Employee falls back to a configured provider after rate limi
       if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
       if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
       if (url.includes("/chat/completions")) {
-        modelUrls.push({ url, authorization: options.headers?.Authorization });
+        modelUrls.push({ url, authorization: options.headers?.Authorization, redirect: options.redirect });
         if (url.startsWith("https://openrouter.ai/")) return new Response("rate limited", { status: 429 });
         if (url.startsWith("https://api.groq.com/")) return new Response(JSON.stringify({ model: "groq-test-model", choices: [{ message: { content: "Fallback plan generated." } }] }), { status: 200 });
         throw new Error("Unexpected model endpoint: " + url);
@@ -410,6 +410,7 @@ test("background AI Employee falls back to a configured provider after rate limi
     "https://api.groq.com/openai/v1/chat/completions"
   ]);
   assert.deepEqual(modelUrls.map(item => item.authorization), ["Bearer primary-test-key", "Bearer fallback-test-key"]);
+  assert.deepEqual(modelUrls.map(item => item.redirect), ["error", "error"]);
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
 });
