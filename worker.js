@@ -356,9 +356,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       status.lastErrorCode = code;
       const retryable = ["RESEARCH_PROVIDER_RETRYABLE", "EMPLOYEE_PROVIDER_RETRYABLE", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
       const shouldRetry = retryable && Number(task.attempts || 1) < 3;
-      if (shouldRetry) status.tasksRetried += 1;
-      else status.tasksFailed += 1;
-      await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
+      const failureRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
         method: "PATCH",
         body: JSON.stringify({
           status: code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED" ? "BLOCKED" : shouldRetry ? "QUEUED" : "FAILED",
@@ -366,6 +364,20 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
           ...(shouldRetry ? { started_at: null, finished_at: null, updated_at: new Date().toISOString() } : { finished_at: new Date().toISOString() })
         })
       });
+      // A cancellation/state transition may race with a failing provider just as it can
+      // race with success. Count a failure or retry only if this worker changed RUNNING.
+      if (!Array.isArray(failureRows) || failureRows.length === 0) {
+        status.tasksDiscarded += 1;
+        try {
+          await audit(task, "task.failure_discarded", "denied", { reason: "task_state_changed_during_execution", code });
+        } catch (auditError) {
+          logger.error?.("Discarded task failure audit failed:", task.id, bounded(auditError?.message, 200));
+        }
+        logger.info?.("Discarded task failure because task state changed:", task.id);
+        return true;
+      }
+      if (shouldRetry) status.tasksRetried += 1;
+      else status.tasksFailed += 1;
       try {
         await audit(task, shouldRetry ? "task.retry_scheduled" : "task.failed", shouldRetry ? "retry" : "failed", { code, attempt: Number(task.attempts || 1) });
       } catch (auditError) {
