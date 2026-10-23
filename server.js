@@ -57,12 +57,34 @@ function normalizeBaseUrl(value) {
   return raw.replace(/\/+$/, "");
 }
 
+function hasConfiguredModelProvider(env) {
+  if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim() &&
+      typeof env.OPENROUTER_DEFAULT_MODEL === "string" && env.OPENROUTER_DEFAULT_MODEL.trim()) return true;
+  let providers;
+  try { providers = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]"); } catch { return false; }
+  if (!Array.isArray(providers)) return false;
+  return providers.slice(0, 12).some((provider) => {
+    if (!provider || typeof provider !== "object" ||
+        typeof provider.name !== "string" ||
+        typeof provider.baseUrl !== "string" ||
+        typeof provider.apiKeyEnv !== "string" ||
+        typeof provider.model !== "string" || !provider.model.trim()) return false;
+    if (!/^[a-z0-9][a-z0-9_-]{0,39}$/i.test(provider.name.trim()) ||
+        !/^[A-Z][A-Z0-9_]{1,79}$/.test(provider.apiKeyEnv.trim())) return false;
+    try {
+      const url = new URL(provider.baseUrl);
+      return url.protocol === "https:" && !url.username && !url.password &&
+        typeof env[provider.apiKeyEnv.trim()] === "string" && Boolean(env[provider.apiKeyEnv.trim()].trim());
+    } catch { return false; }
+  });
+}
+
 export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
   const app = express();
   app.locals.workerRuntime = () => ({
     state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "configured_not_started" : "disabled_by_config",
     serviceRoleConfigured: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
-    modelProviderConfigured: Boolean(env.OPENROUTER_API_KEY),
+    modelProviderConfigured: hasConfiguredModelProvider(env),
     researchProviderConfigured: Boolean(env.TAVILY_API_KEY)
   });
   app.disable("x-powered-by");
@@ -270,7 +292,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.json({
       status: "ok",
       app: "ULTRON AI",
-      providerConfigured: Boolean(env.OPENROUTER_API_KEY && env.OPENROUTER_DEFAULT_MODEL),
+      providerConfigured: hasConfiguredModelProvider(env),
       accessConfigured: Boolean(env.APP_ACCESS_PASSWORD || supabaseConfig()),
       supabaseConfigured: Boolean(supabaseConfig()),
       timestamp: new Date().toISOString()
