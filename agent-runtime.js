@@ -24,7 +24,7 @@ function voiceStudioSettings(env = process.env) {
     if (url.username || url.password || url.hash || url.search) return null;
     if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
     if (!local && !token) return null;
-    return { baseUrl: url.toString().replace(/\\/+$/, ""), token };
+    return { baseUrl: url.toString().replace(/\/+$/, ""), token };
   } catch { return null; }
 }
 const BROWSER_USE_RULES = [
