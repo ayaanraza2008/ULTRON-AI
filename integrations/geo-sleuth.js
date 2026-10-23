@@ -40,7 +40,7 @@ export function createGeoSleuthRouter({ env = process.env, requireSupabaseUser, 
     res.json({
       provider: "geo-sleuth",
       enabled: env.GEO_SLEUTH_ENABLED === "true",
-      installedPathConfigured: Boolean(env.GEO_SLEUTH_ROOT || root),
+      installedPathConfigured: Boolean(env.GEO_SLEUTH_ROOT),
       execution: "local-python-cli",
       reverseImageSearch: "opt-in-per-request",
       verified: false,
@@ -67,8 +67,9 @@ export function createGeoSleuthRouter({ env = process.env, requireSupabaseUser, 
       const args = ["run", "scripts/intake.py", photoPath, "--out-dir", outputDir];
       // Reverse-image providers may receive image-derived queries or crops. Keep them off unless the caller opts in.
       if (req.body?.includeReverseSearch !== true) args.push("--no-rev");
+      let commandResult = { stdout: "", stderr: "" };
       try {
-        await runCommand(uvBin, args, {
+        commandResult = await runCommand(uvBin, args, {
           cwd: root,
           timeout: 8 * 60 * 1000,
           maxBuffer: 2 * 1024 * 1024,
@@ -89,7 +90,7 @@ export function createGeoSleuthRouter({ env = process.env, requireSupabaseUser, 
       catch {
         return res.status(502).json({ error: { code: "GEO_SLEUTH_REPORT_MISSING", message: "Geo-Sleuth finished without producing intake.md; no location conclusion is available." } });
       }
-      const { stdout = "", stderr = "" } = {};
+      const { stdout = "", stderr = "" } = commandResult || {};
       return res.json({
         provider: "geo-sleuth",
         stage: "intake",
