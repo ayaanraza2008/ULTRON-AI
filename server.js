@@ -293,7 +293,10 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.get("/api/worker/status", requireSupabaseUser, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json({ worker: app.locals.workerRuntime() });
+    const worker = typeof app.locals.workerRuntime === "function"
+      ? app.locals.workerRuntime()
+      : { state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "not_started" : "disabled" };
+    res.json({ worker });
   });
 
   // Authenticated, secret-free snapshot for diagnosing which agent capabilities
