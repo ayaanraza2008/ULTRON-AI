@@ -68,6 +68,19 @@ test("worker records a successful poll and stops cleanly with an injected transp
   assert.deepEqual(redirects, ["error", "error"]);
 });
 
+test("worker bounds oversized Supabase responses before parsing", async () => {
+  let worker;
+  worker = startWorker({
+    env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "test-only" },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => worker.stop(),
+    fetchImpl: async () => new Response("x".repeat(2_000_001), { status: 200 })
+  });
+  await worker.done;
+  assert.equal(worker.getStatus().state, "stopped");
+  assert.equal(worker.getStatus().lastErrorCode, "WORKER_CYCLE_FAILED");
+});
+
 test("audit failure after completion does not turn a completed task into a failed task", async () => {
   let worker;
   let calls = 0;
