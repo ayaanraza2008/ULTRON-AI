@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker, renewTaskLease, readJsonLimited } from "../worker.js";
+import { startWorker, renewTaskLease, readJsonLimited, readTextLimited } from "../worker.js";
 
 test("lease renewal signals cancellation only when the task is no longer RUNNING", async () => {
   let inactiveSignals = 0;
@@ -1113,6 +1113,32 @@ test("worker alternates task and schedule polling to prevent starvation", async 
   await worker.done;
   assert.deepEqual(calls, ["schedule", "task", "task", "schedule"]);
   assert.equal(worker.getStatus().state, "stopped");
+});
+
+
+test("bounded text reader preserves UTF-8 characters split across stream chunks", async () => {
+  const bytes = new TextEncoder().encode('{"message":"नमस्ते 🌍"}');
+  const splitAt = bytes.length - 2;
+  const chunks = [bytes.slice(0, splitAt), bytes.slice(splitAt)];
+  let index = 0;
+  let released = false;
+  const response = {
+    headers: new Headers(),
+    body: {
+      getReader() {
+        return {
+          async read() {
+            if (index >= chunks.length) return { done: true, value: undefined };
+            return { done: false, value: chunks[index++] };
+          },
+          releaseLock() { released = true; }
+        };
+      }
+    }
+  };
+  const raw = await readTextLimited(response, 1024);
+  assert.deepEqual(JSON.parse(raw), { message: "नमस्ते 🌍" });
+  assert.equal(released, true, "reader lock must be released after streamed text is decoded");
 });
 
 test("bounded provider JSON reader preserves abort errors rather than relabeling them", async () => {
