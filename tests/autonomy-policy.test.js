@@ -197,3 +197,18 @@ test("common PR and release phrasing cannot bypass production confirmation", () 
     assert.equal(risk.requiresConfirmation, true, task);
   }
 });
+
+test("account creation, invitation acceptance, and permission changes require confirmation", () => {
+  for (const task of [
+    "Create a new account on this service.",
+    "Accept the invitation to the workspace.",
+    "Change permissions so everyone can edit the repository.",
+    "Make the repository public.",
+    "Enable public access to this folder.",
+    "Transfer ownership of the project."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
