@@ -588,3 +588,36 @@ test("high-impact user intent blocks tool dispatch until a task-specific approva
     assert.equal(externalCalls, 0);
   });
 });
+
+
+test("browser-use readiness explains that the optional bridge is not configured", async () => {
+  await withServer({}, async () => { throw new Error("readiness must not call a provider"); }, async base => {
+    const response = await fetch(base + "/api/agent/browser-use");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.mode, "automatic_task_aware_browser_use");
+    assert.equal(body.available, false);
+    assert.equal(body.browserRequested, false);
+  });
+});
+
+test("agent routes interactive website tasks to Browser Use and reports missing bridge", async () => {
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    const body = JSON.parse(options.body);
+    const isSynthesis = body.messages.some(message => message.role === "system" && String(message.content).includes("Summarize the tool results accurately"));
+    if (isSynthesis) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Browser bridge is not configured." } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "browser-call", type: "function", function: { name: "browser_use", arguments: JSON.stringify({ task: "Open the website and click the pricing tab", maxSteps: 5 }) } }] } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Open the website and click the pricing tab" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.toolsUsed.some(item => item.name === "browser_use"));
+    const browserResult = body.toolResults.find(item => item.name === "browser_use");
+    assert.equal(browserResult.result.state, "blocked");
+    assert.match(browserResult.result.blocker, /Browser Use bridge is not configured/);
+  });
+});
