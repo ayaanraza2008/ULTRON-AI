@@ -29,3 +29,21 @@ test("quality gate flags missing research, short output and missing citations wi
   assert.equal(result.checks.find(check => check.id === "research_available").passed, false);
   assert.match(result.warning, /not factual correctness/);
 });
+
+
+test("quality gate excludes localhost, private IPs and cloud metadata URLs from citations", () => {
+  const unsafeUrls = [
+    "http://127.0.0.1/internal",
+    "http://192.168.1.10/admin",
+    "http://169.254.169.254/latest/meta-data",
+    "https://printer.local/status",
+    "http://[::1]/private",
+    "https://metadata.google.internal/computeMetadata/v1"
+  ];
+  const result = verifyAutonomousOutput({
+    research: { sources: unsafeUrls.map(url => ({ url })) },
+    report: { answer: "A sufficiently substantive report with a conclusion, evidence and next steps. " + unsafeUrls.join(" ") }
+  });
+  assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
+  assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
+});
