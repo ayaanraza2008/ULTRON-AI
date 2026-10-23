@@ -500,7 +500,8 @@ test("worker blocks tasks that require approval when approval is absent and neve
   assert.equal(failureUpdate.error_code, "APPROVAL_REQUIRED");
   assert.equal(failureUpdate.result.retry, false);
   assert.deepEqual(providerCalls, []);
-  assert.equal(worker.getStatus().tasksFailed, 1);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+  assert.equal(worker.getStatus().tasksBlocked, 1);
   assert.equal(worker.getStatus().tasksRetried, 0);
 });
 
