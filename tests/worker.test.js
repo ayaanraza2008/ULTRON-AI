@@ -204,7 +204,8 @@ test("worker persists retry timestamp when scheduling a transient provider retry
   assert.equal(failureUpdate.started_at, null);
   assert.equal(failureUpdate.finished_at, null);
   assert.ok(Number.isFinite(Date.parse(failureUpdate.updated_at)));
-  assert.equal(worker.getStatus().tasksFailed, 1);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+  assert.equal(worker.getStatus().tasksRetried, 1);
 });
 
 
