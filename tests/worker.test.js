@@ -766,7 +766,7 @@ test("background AI Employee falls back when a provider response exceeds the siz
       if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
       if (url.includes("/chat/completions")) {
         attempts.push(url);
-        if (url.startsWith("https://openrouter.ai/")) return new Response("x".repeat(2_000_001), { status: 200 });
+        if (url.startsWith("https://openrouter.ai/")) return new Response("💥".repeat(600_000), { status: 200 });
         return new Response(JSON.stringify({ model: "backup-model", choices: [{ message: { content: "Fallback plan generated." } }] }), { status: 200 });
       }
       if (url.includes("/agent_tasks?") && options.method === "PATCH") return new Response(JSON.stringify([task]), { status: 200 });
