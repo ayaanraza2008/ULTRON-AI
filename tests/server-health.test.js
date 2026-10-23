@@ -73,7 +73,7 @@ test("password recovery validates email and sends a generic response without acc
     });
     assert.equal(response.status, 200);
     assert.match((await response.json()).message, /If an account exists/);
-    assert.match(request.url, /auth\\/v1\\/recover$/);
+    assert.ok(request.url.endsWith("/auth/v1/recover"));
     assert.deepEqual(JSON.parse(request.options.body), { email: "user@example.com" });
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
