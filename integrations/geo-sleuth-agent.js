@@ -98,10 +98,11 @@ export async function runGeoSleuthInvestigation({
 
     // Start a separate candidate board in the isolated workspace. Geo-Sleuth's
     // board CLI supports --state so independent user investigations cannot collide.
-    const init = await runStage("candidate_board_init", ["scripts/board.py", "init", "--photo", photoPath, "--state", path.join(boardDir, "board.json")], 120000);
+    const init = await runStage("candidate_board_init", ["scripts/board.py", "--board", path.join(boardDir, "board.json"), "init", "--photo", photoPath], 120000);
     if (init.ok) {
-      await runStage("candidate_board_next", ["scripts/board.py", "next", "--state", path.join(boardDir, "board.json")], 120000);
-      await runStage("candidate_board_report", ["scripts/board.py", "report", "--state", path.join(boardDir, "board.json")], 120000);
+      await runStage("candidate_board_next", ["scripts/board.py", "--board", path.join(boardDir, "board.json"), "next"], 120000);
+      await runStage("candidate_board_check", ["scripts/board.py", "--board", path.join(boardDir, "board.json"), "check"], 120000);
+      await runStage("candidate_board_report", ["scripts/board.py", "--board", path.join(boardDir, "board.json"), "report", "--merge", path.join(boardDir, "result.json")], 120000);
     }
 
     let boardReport = "";
