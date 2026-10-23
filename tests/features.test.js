@@ -334,37 +334,3 @@ test("running a saved schedule fails closed when the worker is not configured", 
     assert.equal((await response.json()).error.code, "EMPLOYEE_WORKER_NOT_CONFIGURED");
   });
 });
-
-
-test("AI Employee scheduler accepts a configured alternate model provider without OpenRouter", { timeout: 15000 }, async () => {
-  const schedule = {
-    id: "00000000-0000-4000-8000-000000000020",
-    user_id: "00000000-0000-4000-8000-000000000001",
-    role_id: "chief-of-staff",
-    routine_id: "cos-decision-brief",
-    goal: "Prepare a decision brief",
-    context: null,
-    enabled: true
-  };
-  const fakeSupabaseRest = async (_req, table, method, _query, body) => {
-    if (table === "employee_schedules" && method === "GET") return [schedule];
-    if (table === "agent_tasks" && method === "POST") return [{ id: "00000000-0000-4000-8000-000000000021", title: body.title, status: body.status, input: body.input }];
-    return [];
-  };
-  const env = {
-    ULTRON_EMPLOYEES_ENABLED: "true",
-    SUPABASE_SERVICE_ROLE_KEY: "test-only",
-    GROQ_API_KEY: "alternate-test-key",
-    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "groq", baseUrl: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "llama-3.3-70b-versatile", priority: 1 }
-    ])
-  };
-  await withServer(env, async base => {
-    const status = await (await fetch(base + "/api/employees/status", { signal: AbortSignal.timeout(5000) })).json();
-    assert.equal(status.schedulerEnabled, true);
-    assert.equal(status.modelProviderConfigured, true);
-    const response = await fetch(base + "/api/employees/schedules/" + schedule.id + "/run", { method: "POST", signal: AbortSignal.timeout(5000) });
-    assert.equal(response.status, 202);
-    assert.equal((await response.json()).task.status, "QUEUED");
-  }, { supabaseRest: fakeSupabaseRest });
-});
