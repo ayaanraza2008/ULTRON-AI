@@ -334,3 +334,44 @@ test("running a saved schedule fails closed when the worker is not configured", 
     assert.equal((await response.json()).error.code, "EMPLOYEE_WORKER_NOT_CONFIGURED");
   });
 });
+
+test("employee schedule creation stays successful when server-authored audit insert is denied", async () => {
+  const calls = [];
+  const saved = {
+    id: "00000000-0000-4000-8000-000000000020",
+    role_id: "chief-of-staff",
+    routine_id: "cos-decision-brief",
+    goal: "Prepare an operations report",
+    enabled: true,
+    next_run_at: new Date(Date.now() + 86400000).toISOString()
+  };
+  const fakeSupabaseRest = async (_req, table, method, _query, body) => {
+    calls.push({ table, method, body });
+    if (table === "employee_schedules" && method === "POST") return [saved];
+    if (table === "audit_events" && method === "POST") {
+      const error = new Error("new row violates row-level security policy");
+      error.status = 403;
+      error.code = "AUDIT_INSERT_DENIED";
+      throw error;
+    }
+    return [];
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/employees/schedules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role: "chief-of-staff",
+        routineId: "cos-decision-brief",
+        goal: "Prepare an operations report",
+        intervalMinutes: 1440
+      })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.schedule.id, saved.id);
+    assert.match(body.notice, /Schedule saved/);
+    assert.equal(calls.some(call => call.table === "employee_schedules" && call.method === "POST"), true);
+    assert.equal(calls.some(call => call.table === "audit_events" && call.method === "POST"), true);
+  }, { supabaseRest: fakeSupabaseRest });
+});
