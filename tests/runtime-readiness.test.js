@@ -29,6 +29,7 @@ test("readiness reports configured integrations as unverified and never exposes 
     supabaseConfigured: true,
     workerStatus: {
       state: "running", tasksCompleted: 3, tasksRetried: 2, tasksFailed: 1, tasksBlocked: 4,
+      tasksDiscarded: 5, taskStateUpdateFailures: 6,
       lastErrorCode: "SYNTHETIC_TEST_ERROR", internalToken: secret
     }
   });
@@ -41,6 +42,8 @@ test("readiness reports configured integrations as unverified and never exposes 
   assert.equal(result.worker.tasksCompleted, 3);
   assert.equal(result.worker.tasksRetried, 2);
   assert.equal(result.worker.tasksBlocked, 4);
+  assert.equal(result.worker.tasksDiscarded, 5);
+  assert.equal(result.worker.taskStateUpdateFailures, 6);
   assert.equal(Object.hasOwn(result.worker, "internalToken"), false);
 });
 
