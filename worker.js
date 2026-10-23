@@ -163,9 +163,11 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
             code: retryable ? "EMPLOYEE_PROVIDER_RETRYABLE" : "EMPLOYEE_PROVIDER_REJECTED",
             retryable
           });
-          if (!retryable) throw error;
           lastError = error;
-          logger.warn?.("AI Employee provider unavailable; trying fallback.", { provider: provider.name, status: response.status });
+          logger.warn?.(retryable
+            ? "AI Employee provider unavailable; trying fallback."
+            : "AI Employee provider rejected the request; trying the next configured provider.",
+          { provider: provider.name, status: response.status, retryable });
           continue;
         }
         let payload;
