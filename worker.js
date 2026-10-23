@@ -177,7 +177,15 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         code: retryable ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_REJECTED"
       });
     }
-    const data = await readJsonLimited(response, 1_000_000);
+    let data;
+    try { data = await readJsonLimited(response, 1_000_000); }
+    catch {
+      throw Object.assign(new Error("Research provider returned an invalid or oversized response."), { code: "RESEARCH_PROVIDER_RETRYABLE" });
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data) ||
+        (typeof data.answer !== "string" && !Array.isArray(data.results))) {
+      throw Object.assign(new Error("Research provider response did not match the expected schema."), { code: "RESEARCH_PROVIDER_RETRYABLE" });
+    }
     return {
       type: "research", query, answer: bounded(data.answer, 6000),
       sources: Array.isArray(data.results) ? data.results.slice(0, 5).map(item => ({
