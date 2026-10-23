@@ -50,6 +50,45 @@ function parseCookies(header = "") {
   return out;
 }
 
+async function readResponseTextLimited(response, maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw new Error("Model provider response exceeded the size limit.");
+  }
+  if (!response.body?.getReader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw new Error("Model provider response exceeded the size limit.");
+    return raw;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw new Error("Model provider response exceeded the size limit.");
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join("");
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
+async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
+  const raw = await readResponseTextLimited(response, maxBytes);
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
 function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
@@ -147,28 +186,52 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Array.isArray(payload.messages) || payload.messages.length > 80 || JSON.stringify(payload).length > 1_000_000) {
       return res.status(400).json({ error: { message: "Invalid or oversized chat completion request", type: "invalid_request_error" } });
     }
-    const allowedModels = new Set([
-      String(env.OPENROUTER_DEFAULT_MODEL || "openrouter/free"),
-      ...String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean)
-    ]);
-    const model = allowedModels.has(String(payload.model || "")) ? String(payload.model) : String(env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
+    const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free")
+      .split(",").map(value => value.trim()).filter(Boolean).slice(0, 12);
+    const defaultModel = String(env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
+    const allowedModels = new Set([defaultModel, ...configuredModels]);
+    const requestedModel = allowedModels.has(String(payload.model || "")) ? String(payload.model) : defaultModel;
+    // Try the requested approved model first, then distinct configured fallbacks.
+    // Only retry provider/model availability failures; ordinary invalid requests should
+    // surface immediately instead of silently sending them to another model.
+    const candidates = [...new Set([requestedModel, defaultModel, ...configuredModels])].slice(0, 12);
     let base;
     try { base = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
     catch { return res.status(500).json({ error: { message: "Model provider URL is invalid", type: "provider_config_error" } }); }
+    const timeoutMs = Math.max(5000, Math.min(120000, Number(env.OPENROUTER_TIMEOUT_SECONDS || 60) * 1000));
     try {
-      const upstream = await fetchImpl(base + "/chat/completions", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ ...payload, model, stream: false }),
-        signal: AbortSignal.timeout(Math.max(5000, Math.min(120000, Number(env.OPENROUTER_TIMEOUT_SECONDS || 60) * 1000)))
+      let lastStatus = 502;
+      for (let index = 0; index < candidates.length; index += 1) {
+        let upstream;
+        try {
+          upstream = await fetchImpl(base + "/chat/completions", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ ...payload, model: candidates[index], stream: false }),
+            redirect: "error",
+            signal: AbortSignal.timeout(timeoutMs)
+          });
+        } catch (error) {
+          if (index + 1 < candidates.length && (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError)) continue;
+          throw error;
+        }
+        let raw;
+        try { raw = await readResponseTextLimited(upstream, 2_000_000); }
+        catch { return res.status(502).json({ error: { message: "Model provider response exceeded the size limit", type: "provider_response_too_large" } }); }
+        if (upstream.ok) {
+          res.setHeader("Cache-Control", "no-store");
+          res.setHeader("X-ULTRON-Model", candidates[index]);
+          return res.status(200).type("application/json").send(raw);
+        }
+        lastStatus = upstream.status;
+        const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
+        if (!fallbackEligible || index + 1 >= candidates.length) break;
+      }
+      return res.status(lastStatus === 429 ? 429 : 502).json({
+        error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" }
       });
-      const raw = await upstream.text();
-      if (raw.length > 2_000_000) return res.status(502).json({ error: { message: "Model provider response exceeded the size limit", type: "provider_response_too_large" } });
-      if (!upstream.ok) return res.status(upstream.status === 429 ? 429 : 502).json({ error: { message: "Model provider request failed", type: "provider_request_failed" } });
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(200).type("application/json").send(raw);
     } catch {
-      return res.status(502).json({ error: { message: "Model provider is unavailable", type: "provider_unavailable" } });
+      return res.status(502).json({ error: { message: "Model provider is unavailable after configured fallback attempts", type: "provider_unavailable" } });
     }
   });
 
@@ -194,10 +257,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     try {
       if (token) {
         const response = await fetchImpl(config.url + "/auth/v1/user", {
-          headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" }
+          headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" },
+          redirect: "error", signal: AbortSignal.timeout(15_000)
         });
         if (response.ok) {
-          const user = await response.json();
+          const user = await readResponseJsonLimited(response, 512_000);
           if (user && typeof user.id === "string") { req.supabaseAccessToken = token; return user; }
         } else if (response.status !== 401 || !refreshToken) {
           return null;
@@ -207,10 +271,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       const refreshed = await fetchImpl(config.url + "/auth/v1/token?grant_type=refresh_token", {
         method: "POST",
         headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken })
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        redirect: "error", signal: AbortSignal.timeout(15_000)
       });
       if (!refreshed.ok) return null;
-      const payload = await refreshed.json();
+      const payload = await readResponseJsonLimited(refreshed, 1_000_000);
       if (!setSupabaseCookies(res, payload)) return null;
       req.supabaseAccessToken = payload.access_token;
       return payload.user && typeof payload.user.id === "string" ? payload.user : null;
@@ -222,10 +287,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const response = await fetchImpl(config.url + path, {
       method: "POST",
       headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      redirect: "error", signal: AbortSignal.timeout(15_000)
     });
     let payload = {};
-    try { payload = await response.json(); } catch {}
+    try { payload = await readResponseJsonLimited(response, 1_000_000); } catch { throw Object.assign(new Error("Supabase authentication response was invalid or too large."), { status: 502 }); }
     if (!response.ok) {
       const status = response.status === 429 ? 429 : response.status >= 500 ? 502 : 400;
       const message = response.status === 400 || response.status === 422
@@ -263,10 +329,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         Accept: "application/json",
         ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: prefer })
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      redirect: "error", signal: AbortSignal.timeout(15_000)
     });
     let payload = null;
-    try { payload = await response.json(); } catch {}
+    try { payload = await readResponseJsonLimited(response, 2_000_000); } catch { throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 }); }
     if (!response.ok) {
       logger.warn?.("Supabase data request failed", { table, status: response.status });
       const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : 502;
@@ -329,9 +396,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
     catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL is invalid." } }); }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
+      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY }, redirect: "error", signal: AbortSignal.timeout(15_000) });
       if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load free models from OpenRouter." } });
-      const payload = await upstream.json();
+      const payload = await readResponseJsonLimited(upstream, 2_000_000);
       const models = Array.isArray(payload?.data)
         ? payload.data.filter(item => item?.id && (String(item.id).endsWith(":free") || (Number(item?.pricing?.prompt) === 0 && Number(item?.pricing?.completion) === 0))).map(item => item.id)
         : [];
@@ -375,6 +442,39 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       return res.json({ authenticated: true, email: payload.user?.email || email });
     } catch (error) {
       return res.status(error.status || 502).json({ error: { code: "SIGNIN_FAILED", message: error.message } });
+    }
+  });
+
+  // Password recovery is a backend API; the UI can call it without exposing Supabase keys.
+  // Keep the redirect destination server-configured so callers cannot inject arbitrary redirects.
+  app.post("/api/auth/recovery", async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: { code: "INVALID_EMAIL", message: "Enter a valid account email address." } });
+    }
+    const redirect = String(env.ULTRON_AUTH_REDIRECT_URL || "").trim();
+    let redirectTo;
+    if (redirect) {
+      try {
+        const parsed = new URL(redirect);
+        if (parsed.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(parsed.hostname)) throw new Error("unsafe redirect");
+        redirectTo = parsed.toString();
+      } catch {
+        return res.status(503).json({ error: { code: "AUTH_REDIRECT_MISCONFIGURED", message: "Password recovery is temporarily unavailable." } });
+      }
+    }
+    const path = "/auth/v1/recover" + (redirectTo ? "?redirect_to=" + encodeURIComponent(redirectTo) : "");
+    try {
+      await supabaseAuthRequest(path, { email });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ ok: true, message: "If an account exists for that email, recovery instructions will be sent." });
+    } catch (error) {
+      // Do not disclose whether the email is registered. Preserve throttling and
+      // service-outage signals so clients can respond safely.
+      if (error.status === 429 || error.status >= 500) {
+        return res.status(error.status).json({ error: { code: "RECOVERY_UNAVAILABLE", message: "Password recovery is temporarily unavailable. Please try again later." } });
+      }
+      return res.json({ ok: true, message: "If an account exists for that email, recovery instructions will be sent." });
     }
   });
 
@@ -662,7 +762,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             stream: Boolean(stream),
             temperature: 0.7
           }),
-          signal: controller.signal
+          signal: controller.signal,
+          redirect: "error"
         });
         upstream = attempt;
         selectedModel = candidate;
@@ -706,7 +807,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (usedFallback) res.setHeader("X-ULTRON-Fallback", "true");
 
       if (!stream) {
-        const data = await upstream.json();
+        const data = await readResponseJsonLimited(upstream, 2_000_000);
         const content = data?.choices?.[0]?.message?.content;
         if (typeof content !== "string") return res.status(502).json({ error: { code: "INVALID_PROVIDER_RESPONSE", message: "The provider returned an unexpected response format." } });
         return res.json({ content, model: data.model || selectedModel });

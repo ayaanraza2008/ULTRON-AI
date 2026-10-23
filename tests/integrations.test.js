@@ -29,6 +29,7 @@ test("ComfyUI queue forwards workflow to the configured API and returns prompt i
     assert.equal((await response.json()).promptId, "prompt_123");
     assert.equal(request.url, "https://comfy.example/prompt");
     assert.equal(request.options.headers.Authorization, "Bearer test-token");
+    assert.equal(request.options.redirect, "error");
     assert.equal(JSON.parse(request.options.body).prompt["1"].class_type, "CheckpointLoaderSimple");
   });
 });
@@ -79,26 +80,52 @@ test("OmniVoice sends payload to the configured provider path", async () => {
     assert.equal(response.status, 200);
     assert.equal(request.url, "https://voice.example/v1/synthesize");
     assert.equal(request.options.headers.Authorization, "Bearer token");
+    assert.equal(request.options.redirect, "error");
     assert.equal((await response.json()).result.audioBase64, "YXVkaW8=");
   });
 });
 
-test("Handy rejects non-base64 audio without calling the local bridge", async () => {
-  let called = false;
+test("Handy rejects malformed or non-canonical base64 audio without calling the local bridge", async () => {
+  for (const audioBase64 of ["not audio!", "Y===", "!!!!", "YQ"]) {
+    let called = false;
+    await withServer({
+      ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
+      ULTRON_HANDY_BRIDGE_TOKEN: "token",
+      ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
+    }, async () => {
+      called = true;
+      return new Response("{}", { status: 200 });
+    }, async base => {
+      const response = await fetch(base + "/api/integrations/handy/transcribe", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: { audioBase64 } })
+      });
+      assert.equal(response.status, 400, audioBase64);
+      assert.equal((await response.json()).error.code, "HANDY_AUDIO_REQUIRED");
+      assert.equal(called, false);
+    });
+  }
+});
+
+test("Handy forwards valid canonical base64 audio to the configured bridge", async () => {
+  let request;
   await withServer({
     ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
     ULTRON_HANDY_BRIDGE_TOKEN: "token",
     ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
-  }, async () => {
-    called = true;
-    return new Response("{}", { status: 200 });
+  }, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ text: "hello" }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/integrations/handy/transcribe", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: { audioBase64: "not audio!" } })
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { audioBase64: "UklGRg==", language: "en" } })
     });
-    assert.equal(response.status, 400);
-    assert.equal((await response.json()).error.code, "HANDY_AUDIO_REQUIRED");
-    assert.equal(called, false);
+    assert.equal(response.status, 200);
+    assert.equal(request.url, "https://handy.example/transcribe");
+    assert.equal(request.options.headers.Authorization, "Bearer token");
+    assert.equal(request.options.redirect, "error");
+    assert.equal(JSON.parse(request.options.body).audioBase64, "UklGRg==");
+    assert.equal((await response.json()).result.text, "hello");
   });
 });
 
@@ -190,5 +217,64 @@ test("integration catalog reports readiness without exposing credentials or clai
     assert.equal(employees.state, "enabled_guarded_templates");
     assert.equal(JSON.stringify(body).includes("secret-comfy-test"), false);
     assert.equal(JSON.stringify(body).includes("secret-voice-test"), false);
+  });
+});
+
+test("integration catalog does not mark unsupported local URL schemes as configured", async () => {
+  await withServer({
+    COMFYUI_BASE_URL: "ftp://localhost:8188",
+    HEYGEM_API_BASE_URL: "https://user:password@avatar.example",
+    HEYGEM_API_KEY: "test-key",
+    HEYGEM_JOB_PATH: "/jobs"
+  }, async () => {
+    throw new Error("catalog readiness must not make provider requests");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/catalog");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.integrations.find(item => item.id === "comfyui").state, "blocked");
+    assert.equal(body.integrations.find(item => item.id === "heygem").state, "blocked");
+  });
+});
+
+test("integration catalog accepts HTTPS and HTTP loopback development endpoints", async () => {
+  await withServer({
+    COMFYUI_BASE_URL: "http://127.0.0.1:8188",
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "test-key"
+  }, async () => {
+    throw new Error("catalog readiness must not make provider requests");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/catalog");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.integrations.find(item => item.id === "comfyui").state, "configured_unverified");
+    assert.equal(body.integrations.find(item => item.id === "voicestudio").state, "configured_unverified");
+  });
+});
+
+
+test("integration adapter stops reading provider responses after the 2 MB limit", async () => {
+  let responseBodyCancelled = false;
+  await withServer({
+    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_KEY: "token",
+    OMNIVOICE_SYNTHESIS_PATH: "/synthesize"
+  }, async () => {
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(2 * 1024 * 1024)));
+        controller.enqueue(new TextEncoder().encode("y"));
+      },
+      cancel() { responseBodyCancelled = true; }
+    });
+    return new Response(body, { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/omnivoice/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { text: "hello" } })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "PROVIDER_RESPONSE_TOO_LARGE");
   });
 });

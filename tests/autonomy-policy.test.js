@@ -126,3 +126,92 @@ test("Hinglish PC control and private-data requests are guarded", () => {
   assert.equal(privateData.level, "private_data");
   assert.equal(privateData.requiresConfirmation, true);
 });
+
+test("production deployment and configuration changes require explicit confirmation", () => {
+  for (const task of [
+    "Deploy to production.",
+    "Restart production service.",
+    "Change production config."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("read-only deployment status checks remain routine", () => {
+  const risk = classifyAutonomyRisk("Check the production deployment status.");
+  assert.equal(risk.level, "routine");
+  assert.equal(risk.requiresConfirmation, false);
+});
+
+
+test("requests to disable endpoint security are guarded as device control", () => {
+  for (const task of [
+    "Disable Windows Defender.",
+    "Turn off the firewall.",
+    "Bypass antivirus protections."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "device_control", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("repository operations that can trigger production release require confirmation", () => {
+  for (const task of [
+    "Merge pull request #100.",
+    "Merge PR 100 into main.",
+    "Push changes to main.",
+    "Merge branch feature into production.",
+    "Promote the release."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("read-only repository review remains routine", () => {
+  for (const task of [
+    "Review pull request #100.",
+    "Check the latest commit on main.",
+    "Inspect production release status."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "routine", task);
+    assert.equal(risk.requiresConfirmation, false, task);
+  }
+});
+
+
+test("common PR and release phrasing cannot bypass production confirmation", () => {
+  for (const task of [
+    "Merge this PR into main.",
+    "Please merge this pull request.",
+    "Ship the release.",
+    "Release to production."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("account creation, invitation acceptance, and permission changes require confirmation", () => {
+  for (const task of [
+    "Create a new account on this service.",
+    "Accept the invitation to the workspace.",
+    "Change permissions so everyone can edit the repository.",
+    "Make the repository public.",
+    "Make this repo public.",
+    "Make our project public.",
+    "Set the repo to public.",
+    "Enable public access to this folder.",
+    "Transfer ownership of the project."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});

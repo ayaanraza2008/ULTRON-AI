@@ -34,15 +34,33 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Deployment: initial Render deployment and public health endpoint are verified. Real chat and authenticated UI remain blocked until access/provider secrets are configured.
 
 ## Blockers
-1. Supabase account login is now the primary access flow. Verify account signup/sign-in and email-confirmation behavior on the deployed service; password recovery UX remains to be implemented.
-2. `NARA_ROUTER_API_KEY` and a valid model alias are required for real model connectivity tests. Configure the key directly in Render secrets; do not paste it into source control or frontend code.
-3. The dedicated ULTRON database schema is applied. Verify authenticated conversation/message reads and writes under RLS before enabling long-term memory.
-4. The service-level health-check setting is not configurable through the available connected action; CI currently verifies the public health endpoint instead.
-5. External model weights/services and voice/search providers must be reviewed individually for license, resource, language, and cost.
+1. Real model inference and vision routing have not been verified end-to-end against the configured production provider and entitled model.
+2. Supabase signup/sign-in, recovery email delivery/reset, conversation persistence, and cross-user isolation still need live test-account verification. The password recovery API is implemented, but its end-to-end flow is not verified.
+3. The employee worker starts in Render logs, but successful production task completion, retries, and result retrieval have not been verified with a real queued task.
+4. Browser automation and the Windows companion require live bridge configuration, authenticated pairing, and action execution tests. Cloud hosting cannot directly control a local PC without the companion.
+5. Arbitrary code execution remains unavailable without a hardened isolated sandbox.
+6. Premium speech and research providers require real provider requests and license/usage review.
+7. The PR changes remain on branch `autonomy/guard-production-operations`; production runs `main`. No PR merge or production deploy has been performed for these changes.
 
 ## Next concrete action
-Configure `NARA_ROUTER_API_KEY` and `NARA_ROUTER_DEFAULT_MODEL` as Render secrets, then verify a real authorized chat. Verify Supabase signup, chat persistence, and cross-user isolation; implement password recovery and user-controlled memory. Rebuild and manually test the Windows companion after the web flow stabilizes.
+Use a dedicated test account and verify a real model response, one queued employee task from enqueue through persisted result, Supabase conversation/message read-write plus cross-user denial, password recovery email/reset, and browser/Windows bridge workflows. Configure missing secrets only in Render's private environment settings; never paste them into chat or commit them to source. Manually install and test the Windows companion before calling desktop control verified.
 
 
 ## Current follow-up work (2026-10-22)
 - Remaining before declaring persistence production-ready: verify deployed account creation and login, verify message insert/read under RLS, implement password recovery, and test session expiry. Access-token refresh and conversation last-activity ordering have now been implemented.
+
+
+## Current follow-up work (2026-10-23)
+- Added a server-side `POST /api/auth/recovery` endpoint. It validates email input, uses only the configured `ULTRON_AUTH_REDIRECT_URL` (HTTPS except loopback development), avoids account enumeration, and preserves throttling/service-outage responses.
+- Added mocked regression tests for recovery request validation, generic responses, and the configured redirect.
+- Updated `docs/BLOCKERS.md`: password recovery API is implemented; real email delivery, Auth settings, redirect configuration, and the end-to-end reset flow remain unverified.
+- Added regression coverage to ensure production deployment/restart/configuration requests require explicit confirmation while read-only deployment status checks remain routine.
+- PR #100 CI run 39972151399 passed `npm run check`, `npm test`, deployed health endpoint smoke test, and the God’s Eye bridge build verification. These checks validate the PR branch; the PR has not been merged and these changes have not been deployed to production.
+- Live model inference and authenticated-user E2E checks remain blocked until provider credentials/configuration and test-account access are available. Never add secret values to source control or chat.
+
+
+## Follow-up verification hardening (2026-10-23)
+- Hardened `autonomous-quality-gate.js`: source citations now count only when the supplied URL is a valid public HTTP(S) URL without embedded credentials. This prevents unsafe/malformed URLs from satisfying the traceability gate.
+- Added regression coverage for unsafe and malformed URLs in `tests/autonomous-quality-gate.test.js`.
+- The latest completed CI run before this change, run 39973156087, passed both jobs: `npm run check`, `npm test`, deployed health smoke test, pinned God’s Eye build, and injected ULTRON bridge verification.
+- New CI is running for the quality-gate hardening; wait for the run associated with the latest branch commit before treating this change as verified.

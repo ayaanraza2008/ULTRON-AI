@@ -28,15 +28,57 @@ function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function isValidBase64Audio(value, maxBytes = 8 * 1024 * 1024) {
+  if (typeof value !== "string" || !value.length || value.length % 4 !== 0 || value.length > Math.ceil(maxBytes * 4 / 3)) return false;
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) return false;
+  const decoded = Buffer.from(value, "base64");
+  return decoded.length > 0 && decoded.length <= maxBytes && decoded.toString("base64") === value;
+}
+
+async function readResponseTextLimited(response, maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+  }
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) {
+      throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+    }
+    return raw;
+  }
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+    return raw;
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 async function requestJson(fetchImpl, url, { method = "GET", headers = {}, body, timeoutMs = 20000 } = {}) {
   const response = await fetchImpl(url, {
     method,
     headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    redirect: "error",
     signal: AbortSignal.timeout(timeoutMs)
   });
-  const raw = await response.text();
-  if (raw.length > MAX_PROVIDER_RESPONSE) throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+  const raw = await readResponseTextLimited(response, MAX_PROVIDER_RESPONSE);
   let data = null;
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { responseText: raw.slice(0, 2000) }; }
   if (!response.ok) {
@@ -202,8 +244,8 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
       if (adapter.id === "omnivoice" && !bounded(payload.text, 30000)) {
         return res.status(400).json({ error: { code: "OMNIVOICE_TEXT_REQUIRED", message: "payload.text is required and must be non-empty." } });
       }
-      if (adapter.id === "handy" && (!bounded(payload.audioBase64, 10_000_000) || !/^[A-Za-z0-9+/=]+$/.test(payload.audioBase64))) {
-        return res.status(400).json({ error: { code: "HANDY_AUDIO_REQUIRED", message: "payload.audioBase64 must contain base64-encoded audio." } });
+      if (adapter.id === "handy" && !isValidBase64Audio(payload.audioBase64)) {
+        return res.status(400).json({ error: { code: "HANDY_AUDIO_REQUIRED", message: "payload.audioBase64 must be canonical base64 audio up to 8 MB decoded." } });
       }
       try {
         const data = await requestJson(fetchImpl, base + path, {

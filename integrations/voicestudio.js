@@ -49,6 +49,7 @@ async function requestJson(fetchImpl, url, config, options = {}) {
   const response = await fetchImpl(url, {
     ...options,
     headers: providerHeaders(config, options.headers || {}),
+    redirect: "error",
     signal: AbortSignal.timeout(options.timeoutMs || 15000)
   });
   const raw = await response.text();
@@ -146,6 +147,7 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
         method: "POST",
         headers: providerHeaders(config, { "Content-Type": "application/json", Accept: "audio/*" }),
         body: JSON.stringify(payload),
+        redirect: "error",
         signal: AbortSignal.timeout(120000)
       });
       if (!response.ok) {
@@ -186,6 +188,7 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
         method: "POST",
         headers: providerHeaders(config),
         body: form,
+        redirect: "error",
         signal: AbortSignal.timeout(120000)
       });
       const raw = await response.text();

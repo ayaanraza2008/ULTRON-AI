@@ -1,14 +1,49 @@
 import express from "express";
+import { isIP } from "node:net";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
-import { buildAutonomyPlan, resolveAutonomyIntent } from "./autonomy-policy.js";
+import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "./autonomy-policy.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
 const MAX_TEXT = 6000;
+const MAX_MODEL_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+async function readModelResponseTextLimited(response, maxBytes = MAX_MODEL_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+  }
+  if (!response.body?.getReader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+    return raw;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+    return raw;
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
 
 function bounded(value, max = MAX_TEXT) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -47,10 +82,56 @@ function safeBase(value) {
     return (u.protocol === "https:" || ["localhost", "127.0.0.1"].includes(u.hostname)) && !u.username && !u.password ? u.toString().replace(/\/+$/, "") : null;
   } catch { return null; }
 }
+function isPublicResearchHost(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")
+      || host === "metadata.google.internal" || host === "metadata.google") return false;
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    const octets = host.split(".").map(Number);
+    const [a, b] = octets;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && (b === 0 || b === 168)) return false;
+    if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
+    if (a === 203 && b === 0) return false;
+    return true;
+  }
+  if (ipVersion === 6) {
+    // Only global-unicast IPv6 (2000::/3) is eligible as a public source.
+    // Reject reserved/transition ranges as well as local, link-local and documentation addresses.
+    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+    if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
+        || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")
+        // Teredo and 6to4 tunnel IPv4 destinations inside IPv6; reject them rather than
+        // risk treating an embedded private/loopback destination as a public source.
+        || host.startsWith("2001:0:") || host.startsWith("2002:")) return false;
+    const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isPublicResearchHost(mapped[1]);
+    // IPv4-mapped IPv6 also has a hexadecimal form, e.g. ::ffff:7f00:1 for 127.0.0.1.
+    const mappedHex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (mappedHex) {
+      const high = Number.parseInt(mappedHex[1], 16);
+      const low = Number.parseInt(mappedHex[2], 16);
+      const ipv4 = [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
+      return isPublicResearchHost(ipv4);
+    }
+    // Only global-unicast IPv6 (2000::/3) is eligible as a public source.
+    // IPv4-mapped IPv6 is handled above using the stricter IPv4 checks.
+    return firstHextet >= 0x2000 && firstHextet <= 0x3fff;
+  }
+  // Hostnames with no dot are generally machine-local names, not public sources.
+  return host.includes(".") && !host.startsWith(".") && !host.endsWith(".");
+}
+
 function safePublicUrl(value) {
   try {
     const u = new URL(String(value || ""));
-    return ["http:", "https:"].includes(u.protocol) && !u.username && !u.password ? u.toString() : null;
+    if (!["http:", "https:"].includes(u.protocol) || u.username || u.password) return null;
+    if (!isPublicResearchHost(u.hostname)) return null;
+    return u.toString();
   } catch { return null; }
 }
 function htmlText(value) {
@@ -315,6 +396,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: { Authorization: "Bearer " + provider.apiKey, "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
+          redirect: "error",
           body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
           signal: AbortSignal.timeout(45000)
         });
@@ -326,8 +408,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           logger.warn?.("AI provider unavailable; trying fallback", { provider: provider.name, status: response.status });
           continue;
         }
+        const raw = await readModelResponseTextLimited(response);
         let data;
-        try { data = await response.json(); } catch {
+        try { data = raw ? JSON.parse(raw) : {}; } catch {
           lastError = Object.assign(new Error("AI provider returned malformed JSON."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
           continue;
         }
@@ -391,10 +474,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json", "X-ULTRON-BROWSER-TOKEN": token },
         body: JSON.stringify({ task, maxSteps: Number.isInteger(args.maxSteps) ? Math.max(1, Math.min(args.maxSteps, 12)) : 8, confirmExternalAction: false }),
+        redirect: "error",
         signal: AbortSignal.timeout(110000)
       });
       let body = {};
-      try { body = await response.json(); } catch {}
+      try {
+        const raw = await readModelResponseTextLimited(response);
+        body = raw ? JSON.parse(raw) : {};
+      } catch (error) {
+        if (error?.code === "PROVIDER_RESPONSE_TOO_LARGE") throw error;
+      }
       if (!response.ok) return { state: "failed", execution: "browser_bridge", status: response.status, error: bounded(body.detail || body.error || "Browser bridge request failed.", 500) };
       return { state: body.status === "completed" ? "completed" : "unknown", execution: "browser_use", result: bounded(body.result, 12000), steps: body.steps, model: body.model };
     }
@@ -410,14 +499,14 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const query = bounded(args.query, 500);
       if (query.length < 2) throw Object.assign(new Error("A research query is required."), { code: "INVALID_RESEARCH_QUERY", status: 400 });
       if (env.TAVILY_API_KEY) {
-        const response = await fetchImpl("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: true }), signal: AbortSignal.timeout(15000) });
+        const response = await fetchImpl("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: true }), redirect: "error", signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw Object.assign(new Error("Research provider failed."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
-        const data = await response.json();
+        const data = JSON.parse(await readModelResponseTextLimited(response));
         return { provider: "tavily", query, answer: bounded(data.answer, 3000), results: (Array.isArray(data.results) ? data.results : []).slice(0, 5).map(x => ({ title: bounded(x.title, 300), url: safePublicUrl(x.url), snippet: bounded(x.content, 1000) })).filter(x => x.url) };
       }
-      const response = await fetchImpl("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), { headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" }, signal: AbortSignal.timeout(15000) });
+      const response = await fetchImpl("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), { headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" }, redirect: "error", signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw Object.assign(new Error("Public search is unavailable; configure TAVILY_API_KEY for a dedicated provider."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
-      const results = parseSearch((await response.text()).slice(0, 1_500_000));
+      const results = parseSearch((await readModelResponseTextLimited(response, 1_500_000)));
       return { provider: "duckduckgo-html", query, results, notice: "Search snippets are untrusted; verify important claims against linked sources." };
     }
     if (name === "enqueue_employee_task") {
@@ -548,7 +637,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         body: JSON.stringify({ description }),
         signal: AbortSignal.timeout(15000)
       });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice description response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice description failed."), { code: "VOICESTUDIO_DESCRIBE_FAILED", status: response.status === 429 ? 429 : 502 });
       let result; try { result = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice description JSON."), { code: "VOICESTUDIO_DESCRIBE_INVALID", status: 502 }); }
@@ -562,7 +651,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" },
         signal: AbortSignal.timeout(15000)
       });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice catalog exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice listing failed."), { code: "VOICESTUDIO_VOICES_FAILED", status: response.status === 429 ? 429 : 502 });
       let data; try { data = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice catalog JSON."), { code: "VOICESTUDIO_VOICES_INVALID", status: 502 }); }
@@ -590,7 +679,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const token = bounded(env.OMNIVOICE_API_KEY, 500);
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "speech", state: "blocked", blocker: "Configure VoiceStudio (VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY) or OmniVoice (OMNIVOICE_API_BASE_URL, OMNIVOICE_API_KEY, and OMNIVOICE_SYNTHESIS_PATH)." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), signal: AbortSignal.timeout(90000) });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Speech provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Speech provider returned HTTP " + response.status), { code: "SPEECH_PROVIDER_FAILED", status: 502 });
       let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
@@ -606,7 +695,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "heygem", state: "blocked", blocker: "Configure a reachable HEYGEM_API_BASE_URL, HEYGEM_API_KEY, and explicit HEYGEM_JOB_PATH." };
       if (!imageBase64 || !audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64) || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "heygem", state: "needs_input", requiredInputs: ["media.imageBase64", "media.audioBase64"], message: "Attach the user's source portrait and audio before creating a talking-avatar job." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ imageBase64, audioBase64, prompt: bounded(args.prompt, 1000) || undefined }), signal: AbortSignal.timeout(45000) });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Avatar provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Avatar provider returned HTTP " + response.status), { code: "HEYGEM_PROVIDER_FAILED", status: 502 });
       let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
@@ -636,7 +725,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           body: form,
           signal: AbortSignal.timeout(120000)
         });
-        const raw = await response.text();
+        const raw = await readModelResponseTextLimited(response);
         if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio transcription response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
         if (!response.ok) throw Object.assign(new Error("VoiceStudio transcription failed."), { code: "VOICESTUDIO_TRANSCRIPTION_FAILED", status: response.status === 429 ? 429 : 502 });
         let result; try { result = JSON.parse(raw); } catch { result = { text: raw.slice(0, 10000) }; }
@@ -649,7 +738,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "handy", state: "blocked", blocker: "Configure a reachable authenticated Windows Handy bridge and explicit transcription path." };
       if (!audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "handy", state: "needs_input", requiredInputs: ["audioBase64"], message: "Provide recorded audio to transcribe." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ audioBase64, language: bounded(args.language, 40) || undefined }), signal: AbortSignal.timeout(90000) });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Transcription response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Transcription bridge returned HTTP " + response.status), { code: "HANDY_PROVIDER_FAILED", status: 502 });
       let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
@@ -665,7 +754,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (requestBody.confirmExternalAction !== true) return { provider: "comfyui", state: "needs_confirmation", message: "Review the exact workflow and expected compute use, then set confirmExternalAction=true to queue this generation job." }
       const response = await fetchImpl(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), signal: AbortSignal.timeout(30000) });
       if (!response.ok) throw Object.assign(new Error("ComfyUI returned HTTP " + response.status), { code: "COMFYUI_QUEUE_FAILED", status: 502 });
-      const result = await response.json();
+      const result = JSON.parse(await readModelResponseTextLimited(response));
       if (typeof result.prompt_id !== "string" || !result.prompt_id) throw Object.assign(new Error("ComfyUI returned no prompt ID."), { code: "COMFYUI_INVALID_RESPONSE", status: 502 });
       return { provider: "comfyui", state: "queued", promptId: result.prompt_id, nodeErrors: result.node_errors || {} };
     }
@@ -678,7 +767,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         fetchImpl(base + "/queue", { headers, signal: AbortSignal.timeout(10000) })
       ]);
       if (!systemResponse.ok || !queueResponse.ok) return { provider: "comfyui", reachable: false, state: "unhealthy", status: systemResponse.status || queueResponse.status };
-      const [system, queue] = await Promise.all([systemResponse.json(), queueResponse.json()]);
+      const [system, queue] = await Promise.all([
+        readModelResponseTextLimited(systemResponse).then(JSON.parse),
+        readModelResponseTextLimited(queueResponse).then(JSON.parse)
+      ]);
       return { provider: "comfyui", reachable: true, devices: Array.isArray(system.devices) ? system.devices.map(d => ({ name: bounded(d.name, 120), type: bounded(d.type, 80) })) : [], queue: { running: Array.isArray(queue.queue_running) ? queue.queue_running.length : 0, pending: Array.isArray(queue.queue_pending) ? queue.queue_pending.length : 0 } };
     }
     throw Object.assign(new Error("Tool is not allowlisted."), { code: "TOOL_NOT_ALLOWED", status: 400 });
@@ -801,7 +893,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           signal: AbortSignal.timeout(5000)
         });
         if (!response.ok) return null;
-        const content = (await response.text()).slice(0, 7000);
+        const content = (await readModelResponseTextLimited(response, 200_000)).slice(0, 7000);
         return content.trim() ? { name: reference.name, url: reference.url, content } : null;
       } catch (error) {
         logger.warn?.("Optional task skill retrieval failed", { skill: reference.name, name: error?.name || "Error" });
@@ -898,7 +990,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           // Enforce the autonomy policy at the dispatch boundary, not just in
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
-          if (autonomyPlan.risk.requiresConfirmation) {
+          if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
           } else {
             result = await executeTool(name, args, req.body || {}, req);
@@ -934,7 +1026,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             const args = parseArgs(call?.function?.arguments);
             let result;
             try {
-              if (autonomyPlan.risk.requiresConfirmation) {
+              if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
                 result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
               } else {
                 result = await executeTool(name, args, req.body || {}, req);

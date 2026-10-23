@@ -15,6 +15,84 @@ async function withServer(env, fetchImpl, run, extras = {}) {
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
 
+
+test("agent cancels oversized model responses and falls back to the next configured provider", async () => {
+  let firstCancelled = false;
+  let providerCalls = 0;
+  const env = {
+    FIRST_KEY: "first-test-key",
+    SECOND_KEY: "second-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/api/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/api/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+  await withServer(env, async (url) => {
+    providerCalls += 1;
+    if (url.startsWith("https://first.example/")) {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1));
+        },
+        cancel() { firstCancelled = true; }
+      });
+      return new Response(stream, { status: 200 });
+    }
+    assert.equal(url, "https://second.example/api/v1/chat/completions");
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered through the fallback provider." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Give me a short status update" })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /fallback provider/);
+    assert.equal(providerCalls, 2);
+    assert.equal(firstCancelled, true);
+  });
+});
+
+
+test("browser bridge requests reject redirects and keep the shared token on the configured bridge", async () => {
+  let bridgeCalls = 0;
+  let providerCalls = 0;
+  await withServer({
+    OPENROUTER_API_KEY: "test-only",
+    ULTRON_BROWSER_USE_URL: "https://browser.example",
+    ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
+  }, async (url, options) => {
+    if (url === "https://browser.example/run") {
+      bridgeCalls += 1;
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers["X-ULTRON-BROWSER-TOKEN"], "bridge-test-token");
+      return new Response(JSON.stringify({ status: "completed", result: "Page inspected safely." }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "browser-safe-call", type: "function",
+        function: { name: "browser_use", arguments: JSON.stringify({ task: "Open the website and inspect the pricing page" }) }
+      }] } }] }), { status: 200 });
+    }
+    assert.ok(payload.messages.some(message => message.role === "system" && String(message.content).includes("Page inspected safely.")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The pricing page was inspected." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Open the website and inspect the pricing page" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /Page inspected safely/i);
+    assert.equal(bridgeCalls, 1);
+    assert.ok(providerCalls >= 2, "expected the model to be called for tool execution and follow-up");
+  });
+});
+
 test("agent automatically injects relevant AgentMemory results for continuation tasks", async () => {
   let memoryCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
@@ -139,6 +217,41 @@ test("agent tool execution fails closed for invalid employee roles", async () =>
 });
 
 
+test("research tool rejects oversized upstream responses instead of buffering them unbounded", async () => {
+  let providerCalls = 0;
+  let researchCancelled = false;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url) => {
+    if (url === "https://api.tavily.com/search") {
+      const stream = new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1)); },
+        cancel() { researchCancelled = true; }
+      });
+      return new Response(stream, { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "research-large-response", type: "function",
+        function: { name: "research_web", arguments: JSON.stringify({ query: "recent AI security research" }) }
+      }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Research provider response was safely rejected." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research recent AI security research" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolsUsed[0].name, "research_web");
+    assert.equal(body.toolsUsed[0].ok, false);
+    assert.equal(providerCalls, 2);
+    assert.equal(researchCancelled, true);
+  });
+});
+
+
 test("agent executes a model-selected research tool and passes results back for synthesis", async () => {
   let providerCalls = 0;
   let researchCalls = 0;
@@ -146,7 +259,7 @@ test("agent executes a model-selected research tool and passes results back for 
     if (url === "https://api.tavily.com/search") {
       researchCalls += 1;
       assert.equal(JSON.parse(options.body).query, "latest space launch");
-      return new Response(JSON.stringify({ answer: "A recent launch was reported.", results: [{ title: "Launch report", url: "https://example.com/launch", content: "Source snippet." }] }), { status: 200 });
+      return new Response(JSON.stringify({ answer: "A recent launch was reported.", results: [{ title: "Launch report", url: "https://example.com/launch", content: "Source snippet." }, { title: "Mapped loopback", url: "http://[::ffff:7f00:1]/admin", content: "Must be rejected." }, { title: "Mapped private address", url: "http://[::ffff:c0a8:101]/", content: "Must be rejected." }] }), { status: 200 });
     }
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
     providerCalls += 1;
@@ -162,7 +275,7 @@ test("agent executes a model-selected research tool and passes results back for 
     const body = await response.json();
     assert.equal(body.content, "Here is the sourced summary.");
     assert.deepEqual(body.toolsUsed, [{ name: "research_web", ok: true }]);
-    assert.equal(body.toolResults[0].result.results[0].url, "https://example.com/launch");
+    assert.deepEqual(body.toolResults[0].result.results.map(result => result.url), ["https://example.com/launch"]);
     assert.equal(researchCalls, 1);
     assert.equal(providerCalls, 2);
   });
@@ -694,7 +807,7 @@ test("model provider registry falls back from OpenRouter rate limits to a config
     }])
   };
   await withServer(env, async (url, options) => {
-    calls.push({ url, auth: options.headers.Authorization });
+    calls.push({ url, auth: options.headers.Authorization, redirect: options.redirect });
     if (url === "https://openrouter.ai/api/v1/chat/completions") return new Response("rate limited", { status: 429 });
     assert.equal(url, "https://api.groq.com/openai/v1/chat/completions");
     assert.equal(options.headers.Authorization, "Bearer groq-test");
@@ -711,6 +824,7 @@ test("model provider registry falls back from OpenRouter rate limits to a config
     assert.equal(calls.length, 2);
     assert.equal(calls[0].auth, "Bearer openrouter-test");
     assert.equal(calls[1].auth, "Bearer groq-test");
+    assert.deepEqual(calls.map(call => call.redirect), ["error", "error"]);
   });
 });
 
@@ -778,5 +892,74 @@ test("agent autonomously uses VoiceStudio for speech when configured", async () 
     assert.equal(body.toolResults[0].name, "synthesize_speech");
     assert.equal(body.toolResults[0].result.provider, "voicestudio");
     assert.equal(body.toolResults[0].result.audioBase64, audioBytes.toString("base64"));
+  });
+});
+
+
+test("research tool filters local, private-network, and credential-bearing source URLs", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      return new Response(JSON.stringify({ results: [
+        { title: "Public source", url: "https://example.com/article", content: "public" },
+        { title: "Loopback", url: "http://127.0.0.1/admin", content: "local" },
+        { title: "Private IPv4", url: "http://192.168.1.10/status", content: "private" },
+        { title: "Link local", url: "http://169.254.169.254/latest/meta-data", content: "metadata" },
+        { title: "Local hostname", url: "http://printer.local/", content: "local" },
+        { title: "Credentials", url: "https://user:password@example.org/private", content: "private" },
+        { title: "IPv6 loopback", url: "http://[::1]/", content: "local" }
+      ] }), { status: 200 });
+    }
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [
+        { id: "research-private-filter", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "public sources" }) } }
+      ] } }] }), { status: 200 });
+    }
+    const request = JSON.parse(options.body);
+    const toolMessage = request.messages.find(message => message.role === "tool" && message.tool_call_id === "research-private-filter");
+    assert.ok(toolMessage);
+    const toolResult = JSON.parse(toolMessage.content);
+    assert.deepEqual(toolResult.results.map(item => item.url), ["https://example.com/article"]);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Research completed with a public source." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Research public sources" }) });
+    assert.equal(response.status, 200);
+    assert.equal(providerCalls, 2);
+  });
+});
+
+test("research tool rejects Teredo and 6to4 IPv6 URLs that can tunnel private IPv4 destinations", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      return new Response(JSON.stringify({ answer: "Test results", results: [
+        { title: "Safe source", url: "https://example.com/report", content: "Public source." },
+        { title: "6to4 loopback tunnel", url: "http://[2002:7f00:1::]/", content: "Reject." },
+        { title: "Teredo tunnel", url: "http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/", content: "Reject." },
+        { title: "Reserved IPv6", url: "http://[4000::1]/", content: "Reject." },
+        { title: "Outside global-unicast IPv6", url: "http://[1000::1]/", content: "Reject." }
+      ] }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [
+        { id: "research-tunnel-test", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "IPv6 tunnel URL validation" }) } }
+      ] } }] }), { status: 200 });
+    }
+    const body = JSON.parse(options.body);
+    const tool = body.messages.find(message => message.role === "tool" && message.tool_call_id === "research-tunnel-test");
+    assert.ok(tool);
+    const result = JSON.parse(tool.content);
+    assert.deepEqual(result.results.map(item => item.url), ["https://example.com/report"]);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Filtered sources." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research IPv6 tunnel URL validation" })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(providerCalls, 2);
   });
 });

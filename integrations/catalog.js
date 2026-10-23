@@ -2,7 +2,9 @@ const safeBaseUrl = (value) => {
   if (typeof value !== "string" || !value.trim()) return false;
   try {
     const url = new URL(value.trim());
-    return url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
   } catch {
     return false;
   }

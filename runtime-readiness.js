@@ -4,7 +4,10 @@ function secureServiceUrl(value) {
   if (!truthy(value)) return false;
   try {
     const url = new URL(value.trim());
-    return !url.username && !url.password && (url.protocol === "https:" || ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname));
+    const localHosts = ["localhost", "127.0.0.1", "[::1]", "::1"];
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && localHosts.includes(url.hostname);
   } catch {
     return false;
   }
@@ -94,8 +97,12 @@ export function buildRuntimeReadiness({
       lastCycleSuccessAt: workerStatus.lastCycleSuccessAt || null,
       lastErrorCode: workerStatus.lastErrorCode || null,
       tasksCompleted: Number(workerStatus.tasksCompleted) || 0,
+      tasksRetried: Number(workerStatus.tasksRetried) || 0,
       tasksFailed: Number(workerStatus.tasksFailed) || 0,
-      tasksDiscarded: Number(workerStatus.tasksDiscarded) || 0
+      tasksBlocked: Number(workerStatus.tasksBlocked) || 0,
+      tasksDiscarded: Number(workerStatus.tasksDiscarded) || 0,
+      taskStateUpdateFailures: Number(workerStatus.taskStateUpdateFailures) || 0,
+      taskLeaseRenewalFailures: Number(workerStatus.taskLeaseRenewalFailures) || 0
     } : { state: workerEnabled ? "not_started" : "disabled" },
     components,
     notes: [

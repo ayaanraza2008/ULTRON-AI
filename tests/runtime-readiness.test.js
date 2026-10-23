@@ -28,7 +28,8 @@ test("readiness reports configured integrations as unverified and never exposes 
     modelProviderConfigured: true,
     supabaseConfigured: true,
     workerStatus: {
-      state: "running", tasksCompleted: 3, tasksFailed: 1,
+      state: "running", tasksCompleted: 3, tasksRetried: 2, tasksFailed: 1, tasksBlocked: 4,
+      tasksDiscarded: 5, taskStateUpdateFailures: 6, taskLeaseRenewalFailures: 7,
       lastErrorCode: "SYNTHETIC_TEST_ERROR", internalToken: secret
     }
   });
@@ -39,6 +40,11 @@ test("readiness reports configured integrations as unverified and never exposes 
   assert.equal(result.components.find((item) => item.id === "windows_companion").state, "configured_unverified");
   assert.equal(result.worker.state, "running");
   assert.equal(result.worker.tasksCompleted, 3);
+  assert.equal(result.worker.tasksRetried, 2);
+  assert.equal(result.worker.tasksBlocked, 4);
+  assert.equal(result.worker.tasksDiscarded, 5);
+  assert.equal(result.worker.taskStateUpdateFailures, 6);
+  assert.equal(result.worker.taskLeaseRenewalFailures, 7);
   assert.equal(Object.hasOwn(result.worker, "internalToken"), false);
 });
 
@@ -56,4 +62,34 @@ test("invalid or insecure integration URLs are not treated as configured", () =>
   });
   assert.equal(result.components.find((item) => item.id === "browser_automation").state, "blocked");
   assert.equal(result.components.find((item) => item.id === "local_models").state, "optional");
+});
+
+test("readiness rejects non-HTTP local URLs, embedded credentials, query strings, and fragments", () => {
+  const result = buildRuntimeReadiness({
+    env: {
+      ULTRON_BROWSER_USE_URL: "ftp://localhost:9000",
+      ULTRON_BROWSER_USE_TOKEN: "test-token",
+      ULTRON_DESKTOP_AGENT_URL: "https://user:password@desktop.example.com",
+      ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
+      OLLAMA_BASE_URL: "http://localhost:11434?token=unexpected"
+    }
+  });
+  assert.equal(result.components.find((item) => item.id === "browser_automation").state, "blocked");
+  assert.equal(result.components.find((item) => item.id === "windows_companion").state, "blocked");
+  assert.equal(result.components.find((item) => item.id === "local_models").state, "optional");
+});
+
+test("readiness accepts HTTPS services and plain HTTP loopback development services", () => {
+  const result = buildRuntimeReadiness({
+    env: {
+      ULTRON_BROWSER_USE_URL: "https://browser.example.com",
+      ULTRON_BROWSER_USE_TOKEN: "test-token",
+      ULTRON_DESKTOP_AGENT_URL: "http://127.0.0.1:8787",
+      ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
+      OLLAMA_BASE_URL: "http://localhost:11434"
+    }
+  });
+  assert.equal(result.components.find((item) => item.id === "browser_automation").state, "configured_unverified");
+  assert.equal(result.components.find((item) => item.id === "windows_companion").state, "configured_unverified");
+  assert.equal(result.components.find((item) => item.id === "local_models").state, "configured_unverified");
 });
