@@ -47,19 +47,22 @@ test("integration catalog reports readiness without exposing secret values", asy
     OMNIVOICE_API_BASE_URL: "https://voice.example.test",
     OMNIVOICE_API_KEY: "private-voice-secret",
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
-    ULTRON_EMPLOYEES_ENABLED: "true"
+    ULTRON_EMPLOYEES_ENABLED: "true",
+    GEO_SLEUTH_ENABLED: "true",
+    GEO_SLEUTH_ROOT: ".runtime/geo-sleuth/skills/geo-sleuth"
   };
   await withServer(createApp({ env: configuredEnv, logger: { warn() {}, error() {} } }), async base => {
     const cookie = await login(base);
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 5);
+    assert.equal(payload.integrations.length, 6);
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "omnivoice").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "handy").state, "desktop_companion_required");
     assert.equal(payload.integrations.find(item => item.id === "ai-employees").configured, true);
+    assert.equal(payload.integrations.find(item => item.id === "geo-sleuth").configured, true);
     const serialized = JSON.stringify(payload);
     assert.equal(serialized.includes("private-heygem-secret"), false);
     assert.equal(serialized.includes("private-voice-secret"), false);
