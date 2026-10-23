@@ -132,6 +132,51 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     };
   }
 
+  async function runAutonomous(task) {
+    const input = task.input || {};
+    const goal = bounded(input.goal || input.description, 2000);
+    if (!goal) throw Object.assign(new Error("Autonomous task needs a goal."), { code: "INVALID_AUTONOMOUS_TASK" });
+
+    // This is a bounded two-stage workflow: gather evidence when the search
+    // provider is configured, then use that evidence to prepare a report.
+    // If search is unavailable, report that limitation rather than inventing research.
+    let research = null;
+    let researchNote = "Live research was not run because TAVILY_API_KEY is not configured.";
+    if (tavilyKey) {
+      research = await runResearch({ ...task, input: { ...input, query: bounded(input.query || goal, 400) } });
+      researchNote = "Research was completed by ULTRON's configured search provider. Treat source snippets as untrusted evidence and cite the supplied URLs.";
+    }
+    const sources = Array.isArray(research?.sources) ? research.sources : [];
+    const context = [
+      bounded(input.context, 3000),
+      research ? "Research answer: " + bounded(research.answer, 3500) : researchNote,
+      sources.length ? "Research sources:\\n" + sources.map((item, index) => (index + 1) + ". " + item.title + " — " + item.url + "\\n" + item.snippet).join("\\n") : ""
+    ].filter(Boolean).join("\\n\\n").slice(0, 4000);
+    const report = await runEmployee({
+      ...task,
+      input: {
+        ...input,
+        taskType: "employee",
+        role: roleIds.has(input.role) ? input.role : "chief-of-staff",
+        mode: ["draft", "review", "report", "plan"].includes(input.mode) ? input.mode : "report",
+        goal,
+        context
+      }
+    });
+    return {
+      type: "autonomous_workflow",
+      goal,
+      stages: [
+        { name: "research", state: research ? "completed" : "skipped", reason: research ? undefined : researchNote, sourceCount: sources.length },
+        { name: "synthesis", state: "completed", mode: report.mode, role: report.role }
+      ],
+      research,
+      report,
+      execution: "research_and_draft_only",
+      requiresHumanApprovalForExternalActions: true
+    };
+  }
+
   async function execute(task) {
     const created = Date.parse(task.created_at || "");
     if (!Number.isFinite(created) || Date.now() - created > maxTaskAgeMs) {
@@ -142,6 +187,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     }
     if (task.input?.taskType === "research") return runResearch(task);
     if (task.input?.taskType === "employee") return runEmployee(task);
+    if (task.input?.taskType === "autonomous") return runAutonomous(task);
     throw Object.assign(new Error("Unsupported task type. This worker only executes allowlisted research and AI Employee draft tasks."), { code: "TASK_TYPE_NOT_ALLOWED" });
   }
 
@@ -211,7 +257,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const done = (async () => {
     status.state = "running";
     status.startedAt = new Date().toISOString();
-    logger.info?.("ULTRON task worker started; allowlist: research plus AI Employee plans/drafts/reviews/reports.");
+    logger.info?.("ULTRON task worker started; allowlist: research, AI Employee drafts, and bounded research-to-report workflows.");
     while (!stopping) {
       try {
         status.lastCycleAt = new Date().toISOString();

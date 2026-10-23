@@ -243,3 +243,57 @@ test("worker discards provider results when the task was cancelled before comple
   assert.equal(status.tasksDiscarded, 1);
   assert.ok(errors.length === 0);
 });
+
+
+test("autonomous task chains configured research into a report without another prompt", async () => {
+  let worker;
+  const calls = [];
+  const task = {
+    id: "autonomous-1",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "autonomous", goal: "Research renewable energy trends and prepare a report", role: "chief-of-staff", mode: "report" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+      TAVILY_API_KEY: "test-tavily"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("api.tavily.com/search")) return new Response(JSON.stringify({
+        answer: "Renewables expanded in several markets.",
+        results: [{ title: "Energy outlook", url: "https://example.com/energy", content: "Capacity and investment trends." }]
+      }), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        const body = JSON.parse(options.body);
+        assert.match(body.messages.find(message => message.role === "user").content, /Research answer/);
+        assert.match(body.messages.find(message => message.role === "user").content, /https:\/\/example.com\/energy/);
+        return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Report drafted with cited research." } }] }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        const patch = JSON.parse(options.body);
+        assert.equal(patch.status, "COMPLETED");
+        assert.equal(patch.result.type, "autonomous_workflow");
+        assert.equal(patch.result.stages[0].state, "completed");
+        assert.equal(patch.result.stages[1].state, "completed");
+        worker.stop();
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+  assert.ok(calls.some(call => call.url.includes("api.tavily.com/search")));
+  assert.ok(calls.some(call => call.url.includes("/chat/completions")));
+});
