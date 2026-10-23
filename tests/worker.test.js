@@ -1141,6 +1141,35 @@ test("bounded text reader preserves UTF-8 characters split across stream chunks"
   assert.equal(released, true, "reader lock must be released after streamed text is decoded");
 });
 
+
+test("bounded text reader cancels a streamed response that exceeds its byte limit", async () => {
+  let cancelled = false;
+  let released = false;
+  const response = {
+    headers: new Headers(),
+    body: {
+      getReader() {
+        let first = true;
+        return {
+          async read() {
+            if (!first) return { done: true, value: undefined };
+            first = false;
+            return { done: false, value: new Uint8Array(9) };
+          },
+          async cancel() { cancelled = true; },
+          releaseLock() { released = true; }
+        };
+      }
+    }
+  };
+  await assert.rejects(
+    () => readTextLimited(response, 8),
+    /response exceeded the configured size limit/
+  );
+  assert.equal(cancelled, true, "oversized stream should be cancelled immediately");
+  assert.equal(released, true, "reader lock should be released after size rejection");
+});
+
 test("bounded provider JSON reader preserves abort errors rather than relabeling them", async () => {
   const abortError = new DOMException("The operation was aborted.", "AbortError");
   let released = false;
