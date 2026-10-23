@@ -14,7 +14,7 @@ function bounded(value, max = 4000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-async function readTextLimited(response, maxBytes) {
+export async function readTextLimited(response, maxBytes) {
   const declaredLength = Number(response.headers?.get?.("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     try { await response.body?.cancel?.(); } catch {}
