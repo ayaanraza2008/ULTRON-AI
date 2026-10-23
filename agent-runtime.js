@@ -108,7 +108,7 @@ function extractIntent(text) {
   if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
   if (/\b(list|show|available|what)\b/.test(s) && /\b(voices|voice profiles|voice options)\b/.test(s) && /\b(voicestudio|speech|tts|voice)\b/.test(s)) return "list_speech_voices";
-  if (/\b(create|design|save|make)\b/.test(s) && /\bvoice (?:profile|for|named|called|with)\b|\b(?:design|create|make) (?:me )?(?:a|an|new) voice\b/.test(s)) return "design_speech_voice";
+  if (/\b(create|design|save|make)\b.{0,100}\bvoice\b/.test(s) && !/\bvoice note\b/.test(s)) return "design_speech_voice";
   if (/\b(describe|design|create|preview|map)\b/.test(s) && /\b(voice|accent|pitch|timbre)\b/.test(s)) return "describe_speech_voice";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) return "synthesize_speech";
@@ -176,8 +176,8 @@ function buildFallbackCalls(text) {
   }
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) add("transcribe_audio", { language: /\bhindi|hinglish\b/.test(s) ? "Hindi" : "auto" });
   if (/\b(list|show|available|what)\b/.test(s) && /\b(voices|voice profiles|voice options)\b/.test(s) && /\b(voicestudio|speech|tts|voice)\b/.test(s)) add("list_speech_voices");
-  if (/\b(create|design|save|make)\b/.test(s) && /\bvoice (?:profile|for|named|called|with)\b|\b(?:design|create|make) (?:me )?(?:a|an|new) voice\b/.test(s)) add("design_speech_voice", { name: "ULTRON Custom Voice", description: bounded(text, 2000), language: /\bhindi|indian\b/i.test(text) ? "hi" : "Auto" });
-  if (/\b(describe|design|create|preview|map)\b/.test(s) && /\b(voice|accent|pitch|timbre)\b/.test(s)) add("describe_speech_voice", { description: bounded(text, 2000) });
+  if (/\b(create|design|save|make)\b.{0,100}\bvoice\b/.test(s) && !/\bvoice note\b/.test(s)) add("design_speech_voice", { name: "ULTRON Custom Voice", description: bounded(text, 2000), language: /\bhindi|indian\b/i.test(text) ? "hi" : "Auto" });
+  if (/\b(describe|preview|map)\b/.test(s) && /\b(voice|accent|pitch|timbre)\b/.test(s)) add("describe_speech_voice", { description: bounded(text, 2000) });
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) add("create_talking_avatar", { prompt: bounded(text, 1000) });
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) {
     const spoken = text.match(/(?:say|read|speak)(?: this)?(?: aloud)?[: ]+["“]?([\s\S]{1,12000})["”]?$/i);
