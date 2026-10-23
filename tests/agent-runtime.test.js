@@ -563,3 +563,28 @@ test("autonomous fallback combines research, image generation readiness, and cod
     assert.equal(tavilyCalls, 1);
   });
 });
+
+
+test("high-impact user intent blocks tool dispatch until a task-specific approval flow exists", async () => {
+  let externalCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    const body = JSON.parse(options.body);
+    if (body.messages.some(message => message.role === "system" && String(message.content).includes("Summarize the tool results accurately"))) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "ULTRON did not send anything because approval is required." } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "call-risky", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "customer email" }) } }] } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Send an email to the customer confirming the order." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.autonomy.risk.level, "external_effect");
+    assert.equal(body.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(body.toolResults[0].result.approvalRequired, true);
+    assert.equal(externalCalls, 0);
+  });
+});
