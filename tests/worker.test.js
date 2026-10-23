@@ -379,7 +379,8 @@ test("background AI Employee falls back to a configured provider after rate limi
       OPENROUTER_DEFAULT_MODEL: "openrouter/free",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
         { name: "groq", baseUrl: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "test-model", priority: 1 },
-        { name: "unsafe", baseUrl: "http://localhost:1234/v1", apiKeyEnv: "UNSAFE_KEY", model: "test-model", priority: 0 }
+        { name: "unsafe-localhost", baseUrl: "https://localhost:1234/v1", apiKeyEnv: "UNSAFE_KEY", model: "test-model", priority: 0 },
+        { name: "unsafe-private-ip", baseUrl: "https://192.168.1.10/v1", apiKeyEnv: "UNSAFE_KEY", model: "test-model", priority: 0 }
       ]),
       GROQ_API_KEY: "fallback-test-key",
       UNSAFE_KEY: "must-not-be-used"
