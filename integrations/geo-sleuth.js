@@ -23,7 +23,7 @@ function decodeImage(value) {
   }
   if (!ALLOWED_MIME.has(mime) || encoded.length > Math.ceil(MAX_IMAGE_BYTES * 4 / 3) + 8) return null;
   const bytes = Buffer.from(encoded, "base64");
-  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES || bytes.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, "")) return null;
+  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) return null;
   const signatureOk =
     (mime === "image/jpeg" && bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||
     (mime === "image/png" && bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) ||
