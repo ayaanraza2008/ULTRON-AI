@@ -93,3 +93,36 @@ test("ordinary new requests are not combined with stale history", () => {
   assert.equal(intent, "Research renewable energy trends.");
   assert.equal(classifyAutonomyRisk(intent).level, "routine");
 });
+
+test("common Hinglish destructive requests require the highest confirmation level", () => {
+  for (const task of [
+    "purani files delete kar de",
+    "saare documents hata do",
+    "database mita do"
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "destructive", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("Hinglish external actions and payments are guarded", () => {
+  for (const task of [
+    "customer ko email bhej do",
+    "paise transfer kar de",
+    "invoice upload kar do"
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("Hinglish PC control and private-data requests are guarded", () => {
+  const device = classifyAutonomyRisk("mera pc restart kar de");
+  assert.equal(device.level, "device_control");
+  assert.equal(device.requiresConfirmation, true);
+  const privateData = classifyAutonomyRisk("mera inbox check kar do");
+  assert.equal(privateData.level, "private_data");
+  assert.equal(privateData.requiresConfirmation, true);
+});
