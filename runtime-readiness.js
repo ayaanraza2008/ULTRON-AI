@@ -99,6 +99,7 @@ export function buildRuntimeReadiness({
       tasksCompleted: Number(workerStatus.tasksCompleted) || 0,
       tasksRetried: Number(workerStatus.tasksRetried) || 0,
       tasksFailed: Number(workerStatus.tasksFailed) || 0,
+      tasksBlocked: Number(workerStatus.tasksBlocked) || 0,
       tasksDiscarded: Number(workerStatus.tasksDiscarded) || 0
     } : { state: workerEnabled ? "not_started" : "disabled" },
     components,
