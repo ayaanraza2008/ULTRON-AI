@@ -589,3 +589,45 @@ test("worker records failed task-state persistence and leaves recovery to the ta
   assert.equal(status.tasksFailed, 0);
   assert.equal(status.tasksBlocked, 0);
 });
+
+
+test("worker does not mark a successfully executed task failed when completion persistence is unavailable", async () => {
+  let worker;
+  let patchCalls = 0;
+  const task = {
+    id: "task-completion-write-failure",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", executionMode: "employee_worker", role: "web-dev", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => worker.stop(),
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Plan generated." } }] }), { status: 200 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        patchCalls += 1;
+        return new Response(JSON.stringify({ message: "database temporarily unavailable" }), { status: 503 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(patchCalls, 1, "worker must not attempt to mark the task failed after completion persistence fails");
+  assert.equal(status.taskStateUpdateFailures, 1);
+  assert.equal(status.lastErrorCode, "TASK_STATE_UPDATE_FAILED");
+  assert.equal(status.tasksCompleted, 0);
+  assert.equal(status.tasksRetried, 0);
+  assert.equal(status.tasksFailed, 0);
+  assert.equal(status.tasksBlocked, 0);
+});
