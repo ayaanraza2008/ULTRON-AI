@@ -498,7 +498,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     }
     if (name === "transcribe_audio") {
       const voiceStudio = voiceStudioSettings(env);
-      const voiceStudioAudioBase64 = bounded(requestBody.voiceStudioAudioBase64, 11000000);
+      const voiceStudioAudioBase64 = bounded(requestBody.audioBase64, 11000000);
       if (voiceStudio && voiceStudioAudioBase64 && /^[A-Za-z0-9+/]+={0,2}$/.test(voiceStudioAudioBase64) && voiceStudioAudioBase64.length % 4 === 0) {
         const audio = Buffer.from(voiceStudioAudioBase64, "base64");
         if (!audio.length || audio.byteLength > 8 * 1024 * 1024 || audio.toString("base64") !== voiceStudioAudioBase64) throw Object.assign(new Error("Audio must be valid base64 and no larger than 8 MB."), { code: "VOICESTUDIO_AUDIO_INVALID", status: 400 });
