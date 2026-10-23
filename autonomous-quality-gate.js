@@ -29,6 +29,14 @@ function isPublicHttpUrl(value) {
           normalized.startsWith("2001:db8:")) return false;
       const mapped = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
       if (mapped && !isPublicHttpUrl("https://" + mapped[1] + "/")) return false;
+      // Hex-encoded IPv4-mapped IPv6 must inherit IPv4 private/reserved checks too.
+      const mappedHex = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+      if (mappedHex) {
+        const high = Number.parseInt(mappedHex[1], 16);
+        const low = Number.parseInt(mappedHex[2], 16);
+        const ipv4 = [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
+        if (!isPublicHttpUrl("https://" + ipv4 + "/")) return false;
+      }
     } else if (!host.includes(".")) {
       return false;
     }
