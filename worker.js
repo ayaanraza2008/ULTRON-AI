@@ -326,10 +326,22 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     if (!task?.id) return false;
     try {
       const result = await execute(task);
-      const completedRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
-        method: "PATCH",
-        body: JSON.stringify({ status: "COMPLETED", result, finished_at: new Date().toISOString() })
-      });
+      let completedRows;
+      try {
+        completedRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
+          method: "PATCH",
+          body: JSON.stringify({ status: "COMPLETED", result, finished_at: new Date().toISOString() })
+        });
+      } catch (transitionError) {
+        // A completion-write outage is not a task execution failure. Do not overwrite
+        // the task with FAILED/QUEUED in the catch below; retain its lease so the
+        // database recovery RPC can reconcile the uncertain completion safely.
+        status.taskStateUpdateFailures += 1;
+        status.lastErrorAt = new Date().toISOString();
+        status.lastErrorCode = "TASK_STATE_UPDATE_FAILED";
+        logger.error?.("Task completion could not be persisted; lease recovery will handle it:", task.id, bounded(transitionError?.message, 200));
+        return true;
+      }
       // A user may cancel or otherwise transition a task while a provider call is in flight.
       // The conditional update returns no rows if it is no longer RUNNING; do not report a
       // completion or overwrite the newer state in that race.
