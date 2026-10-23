@@ -86,7 +86,7 @@ test("Geo-Sleuth reports a missing runtime instead of claiming readiness", async
       assert.equal(state.ready, false);
 
       const response = await fetch(base + "/api/integrations/geo-sleuth/intake", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: png })
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: "data:image/png;base64," + png })
       });
       assert.equal(response.status, 503);
       assert.equal((await response.json()).error.code, "GEO_SLEUTH_RUNTIME_MISSING");
