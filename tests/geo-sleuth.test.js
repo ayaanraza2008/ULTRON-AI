@@ -71,3 +71,24 @@ test("Geo-Sleuth intake invokes the pinned local CLI and keeps reverse search op
     });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("Geo-Sleuth reports a missing runtime instead of claiming readiness", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "geo-sleuth-missing-"));
+  try {
+    await withServer({ GEO_SLEUTH_ENABLED: "true", GEO_SLEUTH_ROOT: root }, async () => {
+      assert.fail("must not launch a process when the runtime is missing");
+    }, async base => {
+      const status = await fetch(base + "/api/integrations/geo-sleuth/status");
+      const state = await status.json();
+      assert.equal(state.enabled, true);
+      assert.equal(state.sourceInstalled, false);
+      assert.equal(state.ready, false);
+
+      const response = await fetch(base + "/api/integrations/geo-sleuth/intake", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: png })
+      });
+      assert.equal(response.status, 503);
+      assert.equal((await response.json()).error.code, "GEO_SLEUTH_RUNTIME_MISSING");
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
