@@ -33,6 +33,7 @@ async function requestJson(fetchImpl, url, { method = "GET", headers = {}, body,
     method,
     headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    redirect: "error",
     signal: AbortSignal.timeout(timeoutMs)
   });
   const raw = await response.text();
