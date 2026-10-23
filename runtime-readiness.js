@@ -4,7 +4,10 @@ function secureServiceUrl(value) {
   if (!truthy(value)) return false;
   try {
     const url = new URL(value.trim());
-    return !url.username && !url.password && (url.protocol === "https:" || ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname));
+    const localHosts = ["localhost", "127.0.0.1", "[::1]", "::1"];
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && localHosts.includes(url.hostname);
   } catch {
     return false;
   }
