@@ -7,7 +7,7 @@
  */
 const RULES = [
   { level: "destructive", pattern: /\b(delete|erase|wipe|format|drop database|destroy|remove all|factory reset)\b/i, reason: "Destructive or hard-to-reverse change" },
-  { level: "external_effect", pattern: /\b(send email|send message|publish|post publicly|submit application|purchase|buy|pay|transfer money|book appointment|place order|change password|change account|invite user)\b/i, reason: "Affects an external account, person, or financial transaction" },
+  { level: "external_effect", pattern: /\b(send email|send an email|email the customer|send message|send a message|publish|post publicly|submit application|purchase|buy|pay|transfer money|book appointment|place order|change password|change account|invite user)\b/i, reason: "Affects an external account, person, or financial transaction" },
   { level: "device_control", pattern: /\b(control my pc|control my computer|run shell|execute command|install software|shutdown|restart computer|remote desktop|keyboard and mouse)\b/i, reason: "Controls a device or executes code outside the hosted service" },
   { level: "private_data", pattern: /\b(read my email|read inbox|access drive|private files|personal documents|download my files)\b/i, reason: "Accesses private user data" }
 ];
