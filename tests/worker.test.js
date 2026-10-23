@@ -163,6 +163,51 @@ test("worker throttles after claiming scheduled work instead of busy-looping", a
 });
 
 
+test("worker persists retry timestamp when scheduling a transient provider retry", async () => {
+  let worker;
+  let failureUpdate;
+  const task = {
+    id: "task-transient-provider-error",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response("{}", { status: 503 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        failureUpdate = JSON.parse(options.body);
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(failureUpdate.status, "QUEUED");
+  assert.equal(failureUpdate.error_code, "EMPLOYEE_PROVIDER_RETRYABLE");
+  assert.equal(failureUpdate.result.retry, true);
+  assert.equal(failureUpdate.started_at, null);
+  assert.equal(failureUpdate.finished_at, null);
+  assert.ok(Number.isFinite(Date.parse(failureUpdate.updated_at)));
+  assert.equal(worker.getStatus().tasksFailed, 1);
+});
+
+
 test("worker does not retry permanent AI provider 4xx responses", async () => {
   let worker;
   let failureUpdate;
