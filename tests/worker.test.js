@@ -1058,3 +1058,35 @@ test("worker retries malformed research provider JSON", async () => {
   assert.equal(worker.getStatus().tasksRetried, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
 });
+
+
+test("worker alternates task and schedule polling to prevent starvation", async () => {
+  let worker;
+  let cycles = 0;
+  const calls = [];
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {
+      cycles += 1;
+      if (cycles === 2) worker.stop();
+    },
+    fetchImpl: async (url) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) {
+        calls.push("schedule");
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/rpc/ultron_claim_next_task")) {
+        calls.push("task");
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.deepEqual(calls, ["schedule", "task", "task", "schedule"]);
+  assert.equal(worker.getStatus().state, "stopped");
+});
