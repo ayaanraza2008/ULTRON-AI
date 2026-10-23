@@ -10,6 +10,40 @@ import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
 const MAX_TEXT = 6000;
+const MAX_MODEL_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+async function readModelResponseTextLimited(response, maxBytes = MAX_MODEL_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+  }
+  if (!response.body?.getReader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+    return raw;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+    return raw;
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
 
 function bounded(value, max = MAX_TEXT) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -374,8 +408,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           logger.warn?.("AI provider unavailable; trying fallback", { provider: provider.name, status: response.status });
           continue;
         }
+        const raw = await readModelResponseTextLimited(response);
         let data;
-        try { data = await response.json(); } catch {
+        try { data = raw ? JSON.parse(raw) : {}; } catch {
           lastError = Object.assign(new Error("AI provider returned malformed JSON."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
           continue;
         }
