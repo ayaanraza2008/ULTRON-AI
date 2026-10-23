@@ -107,6 +107,7 @@ function extractIntent(text) {
   if (/\b(geolocate photo|where was this photo taken|photo geolocation|find (?:the )?location of (?:this|the) (?:photo|image|picture)|identify (?:the )?location of (?:this|the) (?:photo|image|picture)|locate this (?:photo|image|picture))\b/.test(s)) return "geo_sleuth_investigate";
   if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
+  if (/\b(list|show|available|what)\b/.test(s) && /\b(voices|voice profiles|voice options)\b/.test(s) && /\b(voicestudio|speech|tts|voice)\b/.test(s)) return "list_speech_voices";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) return "synthesize_speech";
   // Infer image-generation intent even when the user doesn't know the provider name.
@@ -172,6 +173,7 @@ function buildFallbackCalls(text) {
     add("world_intelligence_command", { command: bounded(text, 1000) });
   }
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) add("transcribe_audio", { language: /\bhindi|hinglish\b/.test(s) ? "Hindi" : "auto" });
+  if (/\b(list|show|available|what)\b/.test(s) && /\b(voices|voice profiles|voice options)\b/.test(s) && /\b(voicestudio|speech|tts|voice)\b/.test(s)) add("list_speech_voices");
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) add("create_talking_avatar", { prompt: bounded(text, 1000) });
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) {
     const spoken = text.match(/(?:say|read|speak)(?: this)?(?: aloud)?[: ]+["“]?([\s\S]{1,12000})["”]?$/i);
@@ -255,6 +257,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "synthesize_speech", description: "Generate speech through VoiceStudio when configured, otherwise use the compatible OmniVoice adapter. Returns audio data for a client player; requires a configured speech service.", parameters: { type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 12000 }, language: { type: "string", maxLength: 40 }, voice: { type: "string", maxLength: 120 } }, required: ["text"], additionalProperties: false } } },
+name: "list_speech_voices", description: "List voices available from the configured VoiceStudio speech service so ULTRON can select a voice for later speech synthesis. Does not create or clone voices.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "synthesize_speech", description:
     { type: "function", function: { name: "create_talking_avatar", description: "Create a talking-head/lip-sync job through configured HeyGem. Requires user-provided image and audio media; never invent media.", parameters: { type: "object", properties: { prompt: { type: "string", maxLength: 1000 } }, additionalProperties: false } } },
     { type: "function", function: { name: "transcribe_audio", description: "Transcribe supplied audio using VoiceStudio when configured, otherwise the Handy desktop bridge. Audio must be supplied with this agent request.", parameters: { type: "object", properties: { language: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
     { type: "function", function: { name: "browser_use", description: "Use the optional Browser Use bridge for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, and website tests. Read-only only; consequential actions are blocked.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 2500 }, maxSteps: { type: "integer", minimum: 1, maximum: 12 } }, required: ["task"], additionalProperties: false } } },
@@ -454,6 +458,21 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       return { mode, language, answer: answer.slice(0, 12000), execution: "draft_only" };
     }
     if (name === "synthesize_speech") {
+    if (name === "list_speech_voices") {
+      const voiceStudio = voiceStudioSettings(env);
+      if (!voiceStudio) return { provider: "voicestudio", state: "blocked", blocker: "Configure VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY. A cloud ULTRON cannot reach localhost on your PC." };
+      const response = await fetchImpl(voiceStudio.baseUrl + "/v1/audio/voices", {
+        method: "GET",
+        headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" },
+        signal: AbortSignal.timeout(15000)
+      });
+      const raw = await response.text();
+      if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice catalog exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
+      if (!response.ok) throw Object.assign(new Error("VoiceStudio voice listing failed."), { code: "VOICESTUDIO_VOICES_FAILED", status: response.status === 429 ? 429 : 502 });
+      let data; try { data = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice catalog JSON."), { code: "VOICESTUDIO_VOICES_INVALID", status: 502 }); }
+      const voices = Array.isArray(data.voices) ? data.voices : Array.isArray(data.data) ? data.data : [];
+      return { provider: "voicestudio", state: "completed", count: Math.min(voices.length, 100), voices: voices.slice(0, 100).map(v => ({ id: bounded(v?.voice_id || v?.id, 160), name: bounded(v?.name, 160), language: bounded(v?.language, 80) || undefined })).filter(v => v.id || v.name) };
+    }
       const text = bounded(args.text, 5000);
       if (!text) throw Object.assign(new Error("Speech text is required."), { code: "SPEECH_TEXT_REQUIRED", status: 400 });
       const voiceStudio = voiceStudioSettings(env);
@@ -615,6 +634,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
         { name: "world_intelligence_command", available: true, execution: "returns_validated_action_for_browser_dispatch_not_server_executed" },
         { name: "synthesize_speech", available: Boolean(voiceStudioSettings(env) || (safeBase(env.OMNIVOICE_API_BASE_URL) && env.OMNIVOICE_API_KEY && env.OMNIVOICE_SYNTHESIS_PATH)), providers: ["voicestudio", "omnivoice"], execution: "automatically_prefers_voicestudio_when_configured" },
+{ name: "list_speech_voices", available: Boolean(voiceStudioSettings(env)), providers: ["voicestudio"], execution: "live_voice_catalog_read_only" },
         { name: "create_talking_avatar", available: Boolean(safeBase(env.HEYGEM_API_BASE_URL) && env.HEYGEM_API_KEY && env.HEYGEM_JOB_PATH), execution: "requires_user_portrait_and_audio" },
         { name: "transcribe_audio", available: Boolean(voiceStudioSettings(env) || (safeBase(env.ULTRON_HANDY_BRIDGE_URL) && env.ULTRON_HANDY_BRIDGE_TOKEN && env.ULTRON_HANDY_TRANSCRIBE_PATH)), providers: ["voicestudio", "handy"], execution: "automatically_prefers_voicestudio_when_configured_and_audio_is_supplied" },
         { name: "run_comfyui_workflow", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "requires_attached_workflow_and_explicit_confirmation" }
