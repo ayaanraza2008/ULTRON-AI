@@ -29,6 +29,7 @@ test("ComfyUI queue forwards workflow to the configured API and returns prompt i
     assert.equal((await response.json()).promptId, "prompt_123");
     assert.equal(request.url, "https://comfy.example/prompt");
     assert.equal(request.options.headers.Authorization, "Bearer test-token");
+    assert.equal(request.options.redirect, "error");
     assert.equal(JSON.parse(request.options.body).prompt["1"].class_type, "CheckpointLoaderSimple");
   });
 });
@@ -79,6 +80,7 @@ test("OmniVoice sends payload to the configured provider path", async () => {
     assert.equal(response.status, 200);
     assert.equal(request.url, "https://voice.example/v1/synthesize");
     assert.equal(request.options.headers.Authorization, "Bearer token");
+    assert.equal(request.options.redirect, "error");
     assert.equal((await response.json()).result.audioBase64, "YXVkaW8=");
   });
 });
