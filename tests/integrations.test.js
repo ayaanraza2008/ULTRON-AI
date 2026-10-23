@@ -192,3 +192,36 @@ test("integration catalog reports readiness without exposing credentials or clai
     assert.equal(JSON.stringify(body).includes("secret-voice-test"), false);
   });
 });
+
+test("integration catalog does not mark unsupported local URL schemes as configured", async () => {
+  await withServer({
+    COMFYUI_BASE_URL: "ftp://localhost:8188",
+    HEYGEM_API_BASE_URL: "https://user:password@avatar.example",
+    HEYGEM_API_KEY: "test-key",
+    HEYGEM_JOB_PATH: "/jobs"
+  }, async () => {
+    throw new Error("catalog readiness must not make provider requests");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/catalog");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.integrations.find(item => item.id === "comfyui").state, "blocked");
+    assert.equal(body.integrations.find(item => item.id === "heygem").state, "blocked");
+  });
+});
+
+test("integration catalog accepts HTTPS and HTTP loopback development endpoints", async () => {
+  await withServer({
+    COMFYUI_BASE_URL: "http://127.0.0.1:8188",
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "test-key"
+  }, async () => {
+    throw new Error("catalog readiness must not make provider requests");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/catalog");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.integrations.find(item => item.id === "comfyui").state, "configured_unverified");
+    assert.equal(body.integrations.find(item => item.id === "voicestudio").state, "configured_unverified");
+  });
+});
