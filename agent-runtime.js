@@ -511,8 +511,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         const name = call?.function?.name;
         const args = parseArgs(call?.function?.arguments);
         let result;
-        try { result = await executeTool(name, args, req.body || {}, req); }
-        catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
+        try {
+          // Enforce the autonomy policy at the dispatch boundary, not just in
+          // response metadata. High-impact tasks must not execute tools until
+          // an explicit approval flow exists for the specific action.
+          if (autonomyPlan.risk.requiresConfirmation) {
+            result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
+          } else {
+            result = await executeTool(name, args, req.body || {}, req);
+          }
+        } catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
         used.push({ name, ok: !result?.error, result });
         toolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)).slice(0, 18000) });
       }
@@ -542,8 +550,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             const name = call?.function?.name;
             const args = parseArgs(call?.function?.arguments);
             let result;
-            try { result = await executeTool(name, args, req.body || {}, req); }
-            catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
+            try {
+              if (autonomyPlan.risk.requiresConfirmation) {
+                result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
+              } else {
+                result = await executeTool(name, args, req.body || {}, req);
+              }
+            } catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
             used.push({ name, ok: !result?.error, result });
             followToolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)).slice(0, 18000) });
           }
