@@ -58,8 +58,14 @@ function normalizeBaseUrl(value) {
 }
 
 function hasConfiguredModelProvider(env) {
-  if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim() &&
-      typeof env.OPENROUTER_DEFAULT_MODEL === "string" && env.OPENROUTER_DEFAULT_MODEL.trim()) return true;
+  // The runtime deliberately defaults to openrouter/free when no model is specified.
+  // Health readiness must match that runtime behavior rather than requiring an optional env var.
+  if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
+    try {
+      const baseUrl = new URL(env.OPENROUTER_BASE_URL || DEFAULT_BASE_URL);
+      if (baseUrl.protocol === "https:" && !baseUrl.username && !baseUrl.password) return true;
+    } catch { /* invalid primary endpoint; continue checking alternate providers */ }
+  }
   let providers;
   try { providers = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]"); } catch { return false; }
   if (!Array.isArray(providers)) return false;
