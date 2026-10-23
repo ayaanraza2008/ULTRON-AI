@@ -11,6 +11,11 @@ test("task-claim migration recovers expired leases and enforces the retry budget
   assert.match(sql, /case when task\.attempts < 3 then 'QUEUED' else 'FAILED' end/);
   assert.match(sql, /and candidate\.attempts < 3/);
   assert.match(sql, /candidate\.input->>'executionMode' in \('allowlisted_worker', 'employee_worker'\)/);
+  assert.match(sql, /candidate\.updated_at <= now\(\) - case candidate\.attempts/);
+  assert.match(sql, /when 1 then interval '10 seconds'/);
+  assert.match(sql, /when 2 then interval '30 seconds'/);
+  assert.match(sql, /else interval '60 seconds'/);
+  assert.match(sql, /finished_at = null/);
   assert.match(sql, /for update skip locked/i);
   assert.match(sql, /revoke all on function public\.ultron_claim_next_task\(\) from public, anon, authenticated/i);
   assert.match(sql, /grant execute on function public\.ultron_claim_next_task\(\) to service_role/i);
