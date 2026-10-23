@@ -79,7 +79,7 @@ test("audit failure after completion does not turn a completed task into a faile
         return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Plan generated." } }] }), { status: 200 });
       }
       if (url.includes("/agent_tasks?") && options.method === "PATCH") {
-        return new Response("[]", { status: 200 });
+        return new Response(JSON.stringify([task]), { status: 200 });
       }
       if (url.includes("/audit_events")) {
         worker.stop();
@@ -123,7 +123,7 @@ test("background AI Employee receives task-aware diagram guidance automatically"
         modelRequest = JSON.parse(options.body);
         return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Sequence diagram plan drafted." } }] }), { status: 200 });
       }
-      if (url.includes("/agent_tasks?") && options.method === "PATCH") return new Response("[]", { status: 200 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") return new Response(JSON.stringify([task]), { status: 200 });
       if (url.includes("/audit_events")) {
         worker.stop();
         return new Response("[]", { status: 200 });
@@ -202,4 +202,44 @@ test("worker does not retry permanent AI provider 4xx responses", async () => {
   assert.equal(failureUpdate.error_code, "EMPLOYEE_PROVIDER_REJECTED");
   assert.equal(failureUpdate.result.retry, false);
   assert.equal(worker.getStatus().tasksFailed, 1);
+});
+
+
+test("worker discards provider results when the task was cancelled before completion", async () => {
+  let worker;
+  const errors = [];
+  const task = {
+    id: "task-cancel-race",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error: (...args) => errors.push(args) },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Plan generated." } }] }), { status: 200 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") return new Response("[]", { status: 200 });
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(status.tasksCompleted, 0);
+  assert.equal(status.tasksFailed, 0);
+  assert.equal(status.tasksDiscarded, 1);
+  assert.ok(errors.length === 0);
 });
