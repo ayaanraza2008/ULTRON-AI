@@ -18,7 +18,7 @@ function safeResearchUrl(value) {
     if (typeof value !== "string" || value.length > 2048) return "";
     const url = new URL(value);
     if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return "";
-    const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
     if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
         host === "metadata.google.internal" || host === "metadata.google") return "";
     const version = isIP(host);
@@ -35,7 +35,7 @@ function safeResearchUrl(value) {
     } else if (version === 6) {
       if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") ||
           /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")) return "";
-      const mapped = host.match(/::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/);
+      const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
       if (mapped && !safeResearchUrl("https://" + mapped[1] + "/")) return "";
     } else if (!host.includes(".")) {
       return "";
