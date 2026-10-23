@@ -450,3 +450,56 @@ test("worker falls back to the next configured model after a permanent provider 
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
 });
+
+
+test("worker blocks tasks that require approval when approval is absent and never calls a provider", async () => {
+  let worker;
+  let failureUpdate;
+  const providerCalls = [];
+  const task = {
+    id: "task-approval-required",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: {
+      taskType: "employee",
+      role: "chief-of-staff",
+      goal: "Send an external message",
+      mode: "draft",
+      requiresApproval: true,
+      approved: false
+    }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions") || url.includes("api.tavily.com")) {
+        providerCalls.push(url);
+        throw new Error("Provider must not be called for an unapproved task.");
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        failureUpdate = JSON.parse(options.body);
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(failureUpdate.status, "BLOCKED");
+  assert.equal(failureUpdate.error_code, "APPROVAL_REQUIRED");
+  assert.equal(failureUpdate.result.retry, false);
+  assert.deepEqual(providerCalls, []);
+  assert.equal(worker.getStatus().tasksFailed, 1);
+  assert.equal(worker.getStatus().tasksRetried, 0);
+});
