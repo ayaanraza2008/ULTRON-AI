@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance } from "../agent-runtime.js";
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
@@ -620,4 +620,12 @@ test("agent routes interactive website tasks to Browser Use and reports missing 
     assert.equal(browserResult.result.state, "blocked");
     assert.match(browserResult.result.blocker, /Browser Use bridge is not configured/);
   });
+});
+
+
+test("browser intent recognises ordinary visit, URL navigation and page inspection phrasing", () => {
+  assert.equal(buildBrowserUseGuidance("Visit the website and inspect the pricing page").browserRequested, true);
+  assert.equal(buildBrowserUseGuidance("Go to the URL and check the documentation").browserRequested, true);
+  assert.equal(buildBrowserUseGuidance("Navigate to the site and take a screenshot").browserRequested, true);
+  assert.equal(buildBrowserUseGuidance("What is the latest news about browser automation?").browserRequested, false);
 });
