@@ -319,7 +319,9 @@ test("autonomous task chains configured research into a report without another p
         answer: "Renewables expanded in several markets.",
         results: [
           { title: "Energy outlook", url: "https://example.com/energy", content: "Capacity and investment trends." },
-          { title: "Metadata endpoint", url: "http://169.254.169.254/latest/meta-data", content: "Must never be included in model context." }
+          { title: "Metadata endpoint", url: "http://169.254.169.254/latest/meta-data", content: "Must never be included in model context." },
+          { title: "Hex mapped loopback", url: "http://[::ffff:7f00:1]/admin", content: "Mapped loopback must be rejected." },
+          { title: "Hex mapped private", url: "http://[::ffff:c0a8:101]/", content: "Mapped private address must be rejected." }
         ]
       }), { status: 200 });
       if (url.includes("/chat/completions")) {
@@ -329,6 +331,10 @@ test("autonomous task chains configured research into a report without another p
         assert.match(userContent, /https:\/\/example.com\/energy/);
         assert.equal(userContent.includes("169.254.169.254"), false);
         assert.equal(userContent.includes("Must never be included in model context."), false);
+        assert.equal(userContent.includes("::ffff:7f00:1"), false);
+        assert.equal(userContent.includes("::ffff:c0a8:101"), false);
+        assert.equal(userContent.includes("Mapped loopback must be rejected."), false);
+        assert.equal(userContent.includes("Mapped private address must be rejected."), false);
         return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Report drafted with cited research." } }] }), { status: 200 });
       }
       if (url.includes("/agent_tasks?") && options.method === "PATCH") {
