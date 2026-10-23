@@ -41,6 +41,7 @@ test("VoiceStudio status reports live discovery and model count without exposing
     assert.equal(JSON.stringify(body).includes("private-token"), false);
     assert.equal(seen.length, 2);
     assert.ok(seen.every(item => item.options.headers.Authorization === "Bearer private-token"));
+    assert.ok(seen.every(item => item.options.redirect === "error"));
   });
 });
 
@@ -59,6 +60,7 @@ test("VoiceStudio synthesis forwards validated options and returns bounded audio
     assert.equal(body.audioBase64, Buffer.from("fake-wav").toString("base64"));
     assert.equal(request.url, "https://voice.example/v1/audio/speech");
     assert.equal(request.options.headers.Authorization, "Bearer private-token");
+    assert.equal(request.options.redirect, "error");
     assert.deepEqual(JSON.parse(request.options.body), {
       model: "tts-1", input: "Hello ULTRON", voice: "vaultar-voice", response_format: "wav", speed: 1.1
     });
@@ -99,6 +101,7 @@ test("VoiceStudio transcription sends multipart audio and returns recognized tex
     assert.deepEqual(await response.json(), { provider: "voicestudio", text: "Namaste ULTRON", language: "hi" });
     assert.equal(request.url, "https://voice.example/v1/audio/transcriptions");
     assert.equal(request.options.headers.Authorization, "Bearer private-token");
+    assert.equal(request.options.redirect, "error");
   });
 });
 
