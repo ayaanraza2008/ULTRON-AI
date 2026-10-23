@@ -317,12 +317,18 @@ test("autonomous task chains configured research into a report without another p
       if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
       if (url.includes("api.tavily.com/search")) return new Response(JSON.stringify({
         answer: "Renewables expanded in several markets.",
-        results: [{ title: "Energy outlook", url: "https://example.com/energy", content: "Capacity and investment trends." }]
+        results: [
+          { title: "Energy outlook", url: "https://example.com/energy", content: "Capacity and investment trends." },
+          { title: "Metadata endpoint", url: "http://169.254.169.254/latest/meta-data", content: "Must never be included in model context." }
+        ]
       }), { status: 200 });
       if (url.includes("/chat/completions")) {
         const body = JSON.parse(options.body);
         assert.match(body.messages.find(message => message.role === "user").content, /Research answer/);
-        assert.match(body.messages.find(message => message.role === "user").content, /https:\/\/example.com\/energy/);
+        const userContent = body.messages.find(message => message.role === "user").content;
+        assert.match(userContent, /https:\/\/example.com\/energy/);
+        assert.equal(userContent.includes("169.254.169.254"), false);
+        assert.equal(userContent.includes("Must never be included in model context."), false);
         return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Report drafted with cited research." } }] }), { status: 200 });
       }
       if (url.includes("/agent_tasks?") && options.method === "PATCH") {
