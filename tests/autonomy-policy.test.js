@@ -204,6 +204,9 @@ test("account creation, invitation acceptance, and permission changes require co
     "Accept the invitation to the workspace.",
     "Change permissions so everyone can edit the repository.",
     "Make the repository public.",
+    "Make this repo public.",
+    "Make our project public.",
+    "Set the repo to public.",
     "Enable public access to this folder.",
     "Transfer ownership of the project."
   ]) {
