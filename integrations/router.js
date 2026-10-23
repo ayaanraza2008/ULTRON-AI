@@ -224,7 +224,11 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
   function voiceStudioConfig() {
     const base = configuredUrl(env.VOICESTUDIO_BASE_URL);
     if (!base) return null;
-    return { base, headers: providerHeaders(String(env.VOICESTUDIO_API_KEY || "").trim()) };
+    const token = String(env.VOICESTUDIO_API_KEY || "").trim();
+    const hostname = new URL(base).hostname;
+    // Do not send speech/audio to an unauthenticated remote endpoint.
+    if (!token && !["localhost", "127.0.0.1", "::1"].includes(hostname)) return null;
+    return { base, headers: providerHeaders(token) };
   }
 
   router.get("/integrations/voicestudio/status", requireSupabaseUser, async (_req, res) => {
