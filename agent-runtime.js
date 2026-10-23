@@ -108,6 +108,7 @@ function extractIntent(text) {
   if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
   if (/\b(list|show|available|what)\b/.test(s) && /\b(voices|voice profiles|voice options)\b/.test(s) && /\b(voicestudio|speech|tts|voice)\b/.test(s)) return "list_speech_voices";
+  if (/\b(describe|design|create|preview|map)\b/.test(s) && /\b(voice|accent|pitch|timbre)\b/.test(s)) return "describe_speech_voice";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) return "synthesize_speech";
   // Infer image-generation intent even when the user doesn't know the provider name.
@@ -174,6 +175,7 @@ function buildFallbackCalls(text) {
   }
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) add("transcribe_audio", { language: /\bhindi|hinglish\b/.test(s) ? "Hindi" : "auto" });
   if (/\b(list|show|available|what)\b/.test(s) && /\b(voices|voice profiles|voice options)\b/.test(s) && /\b(voicestudio|speech|tts|voice)\b/.test(s)) add("list_speech_voices");
+  if (/\b(describe|design|create|preview|map)\b/.test(s) && /\b(voice|accent|pitch|timbre)\b/.test(s)) add("describe_speech_voice", { description: bounded(text, 2000) });
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) add("create_talking_avatar", { prompt: bounded(text, 1000) });
   if (/\b(synthesize speech|generate speech|speak this|text to speech|say this aloud|read (this|that|it) aloud|read aloud)\b/.test(s)) {
     const spoken = text.match(/(?:say|read|speak)(?: this)?(?: aloud)?[: ]+["“]?([\s\S]{1,12000})["”]?$/i);
@@ -256,6 +258,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
+    { type: "function", function: { name: "describe_speech_voice", description: "Preview how a free-text voice description maps to VoiceStudio supported attributes. Read-only; does not save a profile or clone a real person.", parameters: { type: "object", properties: { description: { type: "string", minLength: 2, maxLength: 2000 } }, required: ["description"], additionalProperties: false } } },
     { type: "function", function: { name: "list_speech_voices", description: "List voices available from the configured VoiceStudio speech service so ULTRON can select a voice for later speech synthesis. Does not create or clone voices.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "synthesize_speech", description: "Generate speech through VoiceStudio when configured, otherwise use the compatible OmniVoice adapter. Returns audio data for a client player; requires a configured speech service.", parameters: { type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 12000 }, language: { type: "string", maxLength: 40 }, voice: { type: "string", maxLength: 120 } }, required: ["text"], additionalProperties: false } } },
     { type: "function", function: { name: "create_talking_avatar", description: "Create a talking-head/lip-sync job through configured HeyGem. Requires user-provided image and audio media; never invent media.", parameters: { type: "object", properties: { prompt: { type: "string", maxLength: 1000 } }, additionalProperties: false } } },
@@ -456,6 +459,23 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (typeof answer !== "string" || !answer.trim()) throw Object.assign(new Error("Coding assistant returned no content."), { code: "CODING_EMPTY_RESPONSE", status: 502 });
       return { mode, language, answer: answer.slice(0, 12000), execution: "draft_only" };
     }
+    if (name === "describe_speech_voice") {
+      const voiceStudio = voiceStudioSettings(env);
+      if (!voiceStudio) return { provider: "voicestudio", state: "blocked", blocker: "Configure VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY. A cloud ULTRON cannot reach localhost on your PC." };
+      const description = bounded(args.description, 2000);
+      if (description.length < 2) throw Object.assign(new Error("Describe the voice you want to preview."), { code: "VOICESTUDIO_DESCRIPTION_REQUIRED", status: 400 });
+      const response = await fetchImpl(voiceStudio.baseUrl + "/design/describe", {
+        method: "POST",
+        headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ description }),
+        signal: AbortSignal.timeout(15000)
+      });
+      const raw = await response.text();
+      if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice description response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
+      if (!response.ok) throw Object.assign(new Error("VoiceStudio voice description failed."), { code: "VOICESTUDIO_DESCRIBE_FAILED", status: response.status === 429 ? 429 : 502 });
+      let result; try { result = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice description JSON."), { code: "VOICESTUDIO_DESCRIBE_INVALID", status: 502 }); }
+      return { provider: "voicestudio", state: "completed", ...result };
+    }
     if (name === "list_speech_voices") {
       const voiceStudio = voiceStudioSettings(env);
       if (!voiceStudio) return { provider: "voicestudio", state: "blocked", blocker: "Configure VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY. A cloud ULTRON cannot reach localhost on your PC." };
@@ -632,6 +652,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "geo_sleuth_investigate", available: env.GEO_SLEUTH_ENABLED === "true", execution: "bounded_autonomous_photo_geolocation" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
         { name: "world_intelligence_command", available: true, execution: "returns_validated_action_for_browser_dispatch_not_server_executed" },
+        { name: "describe_speech_voice", available: Boolean(voiceStudioSettings(env)), providers: ["voicestudio"], execution: "read_only_voice_design_preview" },
         { name: "list_speech_voices", available: Boolean(voiceStudioSettings(env)), providers: ["voicestudio"], execution: "live_voice_catalog_read_only" },
         { name: "synthesize_speech", available: Boolean(voiceStudioSettings(env) || (safeBase(env.OMNIVOICE_API_BASE_URL) && env.OMNIVOICE_API_KEY && env.OMNIVOICE_SYNTHESIS_PATH)), providers: ["voicestudio", "omnivoice"], execution: "automatically_prefers_voicestudio_when_configured" },
         { name: "create_talking_avatar", available: Boolean(safeBase(env.HEYGEM_API_BASE_URL) && env.HEYGEM_API_KEY && env.HEYGEM_JOB_PATH), execution: "requires_user_portrait_and_audio" },
