@@ -67,7 +67,10 @@ function isPublicResearchHost(hostname) {
   }
   if (ipVersion === 6) {
     if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
-        || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")) return false;
+        || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")
+        // Teredo and 6to4 tunnel IPv4 destinations inside IPv6; reject them rather than
+        // risk treating an embedded private/loopback destination as a public source.
+        || host.startsWith("2001:0:") || host.startsWith("2002:")) return false;
     const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
     if (mapped) return isPublicResearchHost(mapped[1]);
     // IPv4-mapped IPv6 also has a hexadecimal form, e.g. ::ffff:7f00:1 for 127.0.0.1.
