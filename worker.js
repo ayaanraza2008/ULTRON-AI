@@ -50,9 +50,37 @@ async function readTextLimited(response, maxBytes) {
 }
 
 async function readJsonLimited(response, maxBytes) {
-  return JSON.parse(await readTextLimited(response, maxBytes));
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw new Error("Provider response exceeded the configured size limit.");
+  }
+  if (!response.body?.getReader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw new Error("Provider response exceeded the configured size limit.");
+    return JSON.parse(raw);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error("Provider response exceeded the configured size limit.");
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+    return JSON.parse(raw);
+  } finally {
+    reader.releaseLock?.();
+  }
 }
-
 function safeResearchUrl(value) {
   try {
     if (typeof value !== "string" || value.length > 2048) return "";
