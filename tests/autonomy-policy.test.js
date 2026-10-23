@@ -38,3 +38,32 @@ test("natural-language external actions are classified as guarded", () => {
     assert.equal(risk.requiresConfirmation, true, task);
   }
 });
+
+test("common UI actions with external consequences are guarded", () => {
+  for (const task of [
+    "Click submit to send this application.",
+    "Log in to my account and save changes.",
+    "Upload the invoice to the shared portal.",
+    "Checkout and confirm the purchase.",
+    "Grant access to this document."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("local computer execution is guarded while private-data reads are classified separately", () => {
+  const device = classifyAutonomyRisk("Run a PowerShell script on my computer.");
+  assert.equal(device.level, "device_control");
+  assert.equal(device.requiresConfirmation, true);
+  const privateData = classifyAutonomyRisk("Search my inbox for the invoice.");
+  assert.equal(privateData.level, "private_data");
+  assert.equal(privateData.requiresConfirmation, false);
+});
+
+test("read-only browsing does not become consequential just because it mentions a website", () => {
+  const risk = classifyAutonomyRisk("Open the website and inspect the public pricing page.");
+  assert.equal(risk.level, "routine");
+  assert.equal(risk.requiresConfirmation, false);
+});
