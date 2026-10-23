@@ -74,7 +74,7 @@ export function createGeoSleuthRouter({ env = process.env, requireSupabaseUser, 
           timeout: 8 * 60 * 1000,
           maxBuffer: 2 * 1024 * 1024,
           windowsHide: true,
-          env: { ...process.env, ...env, PYTHONUNBUFFERED: "1" }
+          env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, PYTHONUNBUFFERED: "1", GEO_DEVICE: "cpu" }
         });
       } catch (error) {
         const timedOut = error?.code === "ETIMEDOUT" || error?.killed;
