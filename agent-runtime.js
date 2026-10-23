@@ -475,11 +475,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!basis || (basis === "own_voice" && !ownVoiceConsent) || (basis === "speaker_permission" && !speakerConsent)) return { provider: "voicestudio", state: "needs_consent", requiredInputs: ["explicit consent statement"], message: "Before cloning, explicitly state that this is your own voice or that you have the speaker\x27s permission. Consent is checked from your message, not from the model." };
       const name = bounded(args.name, 100);
       const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};
-      const encoded = bounded(requestBody.audioBase64 || media.audioBase64, 11000000);
+      const encoded = bounded(requestBody.audioBase64 || media.audioBase64, 11200000);
       const mime = bounded(requestBody.mimeType || media.mimeType || "audio/wav", 100).toLowerCase().split(";")[0];
       const allowedTypes = new Set(["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/webm", "audio/ogg", "audio/flac", "audio/x-flac", "audio/aac", "audio/opus", "audio/x-m4a", "video/mp4"]);
       if (!name) throw Object.assign(new Error("A name is required for the cloned voice profile."), { code: "VOICESTUDIO_CLONE_NAME_REQUIRED", status: 400 });
-      if (!encoded || encoded.length > 11000000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0 || !allowedTypes.has(mime)) return { provider: "voicestudio", state: "needs_input", requiredInputs: ["audioBase64", "mimeType"], message: "Attach 5–30 seconds of clean single-speaker audio as base64, up to 8 MB, with a supported audio MIME type." };
+      if (!encoded || encoded.length > 11200000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0 || !allowedTypes.has(mime)) return { provider: "voicestudio", state: "needs_input", requiredInputs: ["audioBase64", "mimeType"], message: "Attach 5–30 seconds of clean single-speaker audio as base64, up to 8 MB, with a supported audio MIME type." };
       const audio = Buffer.from(encoded, "base64");
       if (audio.length < 1000 || audio.length > 8 * 1024 * 1024 || audio.toString("base64") !== encoded) throw Object.assign(new Error("Reference audio must be valid base64 between 1 KB and 8 MB."), { code: "VOICESTUDIO_AUDIO_INVALID", status: 400 });
       const ext = mime.includes("mpeg") || mime === "audio/mp3" ? "mp3" : mime.includes("webm") ? "webm" : mime.includes("ogg") || mime.includes("opus") ? "ogg" : mime.includes("flac") ? "flac" : mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("aac") ? "aac" : "wav";
