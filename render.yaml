@@ -12,7 +12,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WORLD_INTELLIGENCE_URL
-        value: https://ultron-world-intelligence.onrender.com
+        value: https://ultron-world-intelligence-live.onrender.com
       - key: NODE_VERSION
         value: 24.14.0
       - key: OPENROUTER_BASE_URL
