@@ -19,7 +19,7 @@ async function readModelResponseTextLimited(response, maxBytes = MAX_MODEL_RESPO
     throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
   }
   if (!response.body?.getReader) {
-    const raw = await readModelResponseTextLimited(response);
+    const raw = await response.text();
     if (Buffer.byteLength(raw, "utf8") > maxBytes) throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
     return raw;
   }
