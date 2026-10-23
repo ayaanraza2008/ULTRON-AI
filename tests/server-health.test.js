@@ -42,3 +42,8 @@ test("health continues to recognize the configured OpenRouter primary", async ()
   const result = await health({ OPENROUTER_API_KEY: "synthetic-test-key", OPENROUTER_DEFAULT_MODEL: "openrouter/free" });
   assert.equal(result.providerConfigured, true);
 });
+
+test("health recognizes OpenRouter when the runtime default model is used", async () => {
+  const result = await health({ OPENROUTER_API_KEY: "synthetic-test-key" });
+  assert.equal(result.providerConfigured, true);
+});
