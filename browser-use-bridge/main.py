@@ -21,6 +21,10 @@ def require_token(supplied: str | None) -> None:
     if not expected or not supplied or not hmac.compare_digest(supplied, expected):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+@app.get("/")
+async def root() -> dict[str, Any]:
+    return {"ok": True, "service": "ultron-browser-use-bridge", "health": "/health"}
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {"ok": True, "service": "ultron-browser-use-bridge", "browserUseConfigured": bool(os.getenv("OPENROUTER_API_KEY") and os.getenv("ULTRON_BROWSER_USE_TOKEN"))}
