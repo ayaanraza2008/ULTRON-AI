@@ -192,3 +192,45 @@ test("integration catalog reports readiness without exposing credentials or clai
     assert.equal(JSON.stringify(body).includes("secret-voice-test"), false);
   });
 });
+
+
+test("VoiceStudio speech sends an OpenAI-compatible request and returns audio", async () => {
+  let request;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "test-token" }, async (url, options) => {
+    request = { url, options };
+    return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { "content-type": "audio/mpeg" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/speech", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Hello ULTRON", voice: "alloy", model: "tts-1", response_format: "mp3" })
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.provider, "voicestudio");
+    assert.equal(result.contentType, "audio/mpeg");
+    assert.equal(result.audioBase64, Buffer.from([1, 2, 3, 4]).toString("base64"));
+    assert.equal(request.url, "https://voice.example/v1/audio/speech");
+    assert.equal(request.options.headers.Authorization, "Bearer test-token");
+    assert.deepEqual(JSON.parse(request.options.body), { model: "tts-1", input: "Hello ULTRON", voice: "alloy", response_format: "mp3" });
+  });
+});
+
+test("VoiceStudio speech refuses missing service config and empty text", async () => {
+  let called = false;
+  await withServer({}, async () => { called = true; throw new Error("unexpected network call"); }, async base => {
+    const missing = await fetch(base + "/api/integrations/voicestudio/speech", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "hello" })
+    });
+    assert.equal(missing.status, 503);
+    assert.equal((await missing.json()).error.code, "VOICESTUDIO_NOT_CONFIGURED");
+    assert.equal(called, false);
+  });
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example" }, async () => { called = true; }, async base => {
+    const empty = await fetch(base + "/api/integrations/voicestudio/speech", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: " " })
+    });
+    assert.equal(empty.status, 400);
+    assert.equal((await empty.json()).error.code, "VOICESTUDIO_TEXT_REQUIRED");
+    assert.equal(called, false);
+  });
+});
