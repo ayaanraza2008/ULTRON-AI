@@ -66,7 +66,11 @@ function isPublicResearchHost(hostname) {
     return true;
   }
   if (ipVersion === 6) {
-    if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
+    // Only global-unicast IPv6 (2000::/3) is eligible as a public source.
+    // Reject reserved/transition ranges as well as local, link-local and documentation addresses.
+    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+    if (firstHextet < 0x2000 || firstHextet > 0x3fff ||
+        host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
         || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")
         // Teredo and 6to4 tunnel IPv4 destinations inside IPv6; reject them rather than
         // risk treating an embedded private/loopback destination as a public source.
