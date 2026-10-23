@@ -774,7 +774,7 @@ test("agent autonomously uses VoiceStudio for speech when configured", async () 
     });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.match(body.content, /generated the speech audio/i);
+    assert.match(body.content, /synthesize_speech/i);
     assert.equal(body.toolResults[0].name, "synthesize_speech");
     assert.equal(body.toolResults[0].result.provider, "voicestudio");
     assert.equal(body.toolResults[0].result.audioBase64, audioBytes.toString("base64"));
