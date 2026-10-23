@@ -138,10 +138,17 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         interval_minutes: intervalMinutes, enabled: true, next_run_at: nextRun
       });
       if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "EMPLOYEE_SCHEDULE_CREATE_FAILED", message: "The schedule could not be saved." } });
-      await supabaseRest(req, "audit_events", "POST", "", {
-        user_id: req.supabaseUser.id, action: "employee.schedule_created", target_type: "employee_schedule",
-        target_id: rows[0].id, outcome: "recorded", metadata: { roleId, routineId, intervalMinutes }
-      }, "return=minimal");
+      // Audit rows are server-authored after the security migration; the authenticated
+      // user's PostgREST token cannot insert them. Audit failure must not misreport a
+      // schedule that was already persisted as a failed creation.
+      try {
+        await supabaseRest(req, "audit_events", "POST", "", {
+          user_id: req.supabaseUser.id, action: "employee.schedule_created", target_type: "employee_schedule",
+          target_id: rows[0].id, outcome: "recorded", metadata: { roleId, routineId, intervalMinutes }
+        }, "return=minimal");
+      } catch (auditError) {
+        logger.warn?.("Employee schedule creation audit write failed", { code: boundedString(auditError?.code || auditError?.message, 120) });
+      }
       res.status(201).json({ schedule: rows[0], notice: "Schedule saved. It will run only when ULTRON's employee scheduler is enabled and the worker credentials are configured." });
     } catch (error) {
       res.status(error.status || 502).json({ error: { code: "EMPLOYEE_SCHEDULE_CREATE_FAILED", message: "Could not save schedule. Confirm the scheduler database migration has been applied." } });
