@@ -2,6 +2,7 @@ import express from "express";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -37,14 +38,22 @@ export function createGeoSleuthRouter({ env = process.env, requireSupabaseUser, 
   router.get("/integrations/geo-sleuth/status", requireSupabaseUser, (_req, res) => {
     const root = path.resolve(env.GEO_SLEUTH_ROOT || path.join(process.cwd(), ".runtime", "geo-sleuth", "skills", "geo-sleuth"));
     res.setHeader("Cache-Control", "no-store");
+    const sourceInstalled = existsSync(path.join(root, "scripts", "intake.py")) && existsSync(path.join(root, "scripts", "board.py"));
+    const enabled = env.GEO_SLEUTH_ENABLED === "true";
     res.json({
       provider: "geo-sleuth",
-      enabled: env.GEO_SLEUTH_ENABLED === "true",
+      enabled,
       installedPathConfigured: Boolean(env.GEO_SLEUTH_ROOT),
+      sourceInstalled,
+      ready: enabled && sourceInstalled,
       execution: "local-python-cli",
       reverseImageSearch: "opt-in-per-request",
       verified: false,
-      note: env.GEO_SLEUTH_ENABLED === "true" ? "Configuration is enabled; run a photo intake to verify runtime dependencies." : "Set GEO_SLEUTH_ENABLED=true and install the pinned geo-sleuth source during build."
+      note: !enabled
+        ? "Set GEO_SLEUTH_ENABLED=true and install the pinned geo-sleuth source during build."
+        : sourceInstalled
+          ? "Source scripts are present; Python/uv dependencies and an end-to-end investigation still need verification."
+          : "Geo-Sleuth is enabled in configuration but its required scripts are missing. Fix the Render build command/runtime path before using intake."
     });
   });
 
@@ -57,6 +66,14 @@ export function createGeoSleuthRouter({ env = process.env, requireSupabaseUser, 
       return res.status(400).json({ error: { code: "GEO_SLEUTH_IMAGE_INVALID", message: "Provide a valid JPEG, PNG, or WebP image as base64 or a base64 data URI (max 8 MB)." } });
     }
     const root = path.resolve(env.GEO_SLEUTH_ROOT || path.join(process.cwd(), ".runtime", "geo-sleuth", "skills", "geo-sleuth"));
+    if (!existsSync(path.join(root, "scripts", "intake.py"))) {
+      return res.status(503).json({
+        error: {
+          code: "GEO_SLEUTH_RUNTIME_MISSING",
+          message: "Geo-Sleuth is enabled but its intake script is not installed at the configured runtime path. Fix the deployment build command and runtime path."
+        }
+      });
+    }
     const uvBin = typeof env.GEO_SLEUTH_UV_BIN === "string" && env.GEO_SLEUTH_UV_BIN.trim() ? env.GEO_SLEUTH_UV_BIN.trim() : "uv";
     const workspace = await mkdtemp(path.join(os.tmpdir(), "ultron-geo-sleuth-"));
     const outputDir = path.join(workspace, "intake");
