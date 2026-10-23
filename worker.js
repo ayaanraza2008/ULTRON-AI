@@ -534,12 +534,20 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     return true;
   }
 
+  let taskFirstNextTick = false;
   async function tick() {
+    // Alternate priority so a backlog of due schedules cannot starve queued tasks,
+    // and a busy task queue cannot permanently starve scheduled employee routines.
+    const taskFirst = taskFirstNextTick;
+    taskFirstNextTick = !taskFirstNextTick;
+    if (taskFirst && await processOne()) return true;
+
     // This database RPC atomically advances one due schedule and creates its task.
     const due = await rest("rpc/ultron_claim_due_employee_schedule", { method: "POST", body: "{}" });
     if (Array.isArray(due) && due[0]?.id) return true;
     if (due?.id) return true;
-    return processOne();
+    if (!taskFirst) return processOne();
+    return false;
   }
 
   const done = (async () => {
