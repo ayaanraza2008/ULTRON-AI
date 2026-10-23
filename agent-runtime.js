@@ -24,7 +24,10 @@ function voiceStudioSettings(env = process.env) {
     if (url.username || url.password || url.hash || url.search) return null;
     if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
     if (!local && !token) return null;
-    return { baseUrl: url.toString().replace(/\/+$/, ""), token };
+    // Accept both VoiceStudio's service root and OpenAI-compatible /v1 base URL.
+    // Discovery and profile routes live at the service root; audio routes add /v1.
+    const baseUrl = url.toString().replace(/\/+$/, "").replace(/\/v1$/i, "");
+    return { baseUrl, token };
   } catch { return null; }
 }
 const BROWSER_USE_RULES = [
