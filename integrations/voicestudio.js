@@ -1,3 +1,5 @@
+import express from "express";
+
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
 const AUDIO_TYPES = new Set([
@@ -86,7 +88,7 @@ export function voiceStudioReadiness(env = process.env) {
 }
 
 export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser }) {
-  const router = (awaitlessExpressRouter());
+  const router = express.Router();
   router.get("/integrations/voicestudio/status", requireSupabaseUser, async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const config = voiceStudioConfig(env);
@@ -171,7 +173,12 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
     }
     try {
       const form = new FormData();
-      form.append("file", new Blob([audio], { type: mime }), "ultron-audio." + (mime === "audio/mpeg" ? "mp3" : mime === "audio/webm" ? "webm" : mime === "audio/ogg" ? "ogg" : mime === "audio/flac" ? "flac" : mime === "audio/mp4" || mime === "video/mp4" ? "m4a" : "wav"));
+      const extension = mime === "audio/mpeg" || mime === "audio/mp3" ? "mp3"
+        : mime === "audio/webm" ? "webm" : mime === "audio/ogg" || mime === "audio/opus" ? "ogg"
+        : mime === "audio/flac" || mime === "audio/x-flac" ? "flac"
+        : mime === "audio/mp4" || mime === "video/mp4" || mime === "audio/x-m4a" ? "m4a"
+        : mime === "audio/aac" ? "aac" : "wav";
+      form.append("file", new Blob([audio], { type: mime }), "ultron-audio." + extension);
       form.append("model", bounded(req.body?.model || "whisper-1", 160));
       form.append("response_format", "json");
       if (language) form.append("language", language);
@@ -194,11 +201,3 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
   });
   return router;
 }
-
-function awaitlessExpressRouter() {
-  // Keep Express a runtime dependency and avoid coupling the adapter to server.js.
-  return expressRouterFactory();
-}
-
-import express from "express";
-function expressRouterFactory() { return express.Router(); }
