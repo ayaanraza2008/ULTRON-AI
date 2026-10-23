@@ -35,6 +35,41 @@ function isValidBase64Audio(value, maxBytes = 8 * 1024 * 1024) {
   return decoded.length > 0 && decoded.length <= maxBytes && decoded.toString("base64") === value;
 }
 
+async function readResponseTextLimited(response, maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+  }
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) {
+      throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+    }
+    return raw;
+  }
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+    return raw;
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 async function requestJson(fetchImpl, url, { method = "GET", headers = {}, body, timeoutMs = 20000 } = {}) {
   const response = await fetchImpl(url, {
     method,
@@ -43,8 +78,7 @@ async function requestJson(fetchImpl, url, { method = "GET", headers = {}, body,
     redirect: "error",
     signal: AbortSignal.timeout(timeoutMs)
   });
-  const raw = await response.text();
-  if (raw.length > MAX_PROVIDER_RESPONSE) throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
+  const raw = await readResponseTextLimited(response, MAX_PROVIDER_RESPONSE);
   let data = null;
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { responseText: raw.slice(0, 2000) }; }
   if (!response.ok) {
