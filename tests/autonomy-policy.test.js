@@ -144,3 +144,16 @@ test("read-only deployment status checks remain routine", () => {
   assert.equal(risk.level, "routine");
   assert.equal(risk.requiresConfirmation, false);
 });
+
+
+test("requests to disable endpoint security are guarded as device control", () => {
+  for (const task of [
+    "Disable Windows Defender.",
+    "Turn off the firewall.",
+    "Bypass antivirus protections."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "device_control", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
