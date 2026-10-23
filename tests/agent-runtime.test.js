@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter, buildBrowserUseGuidance } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting } from "../agent-runtime.js";
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
@@ -653,4 +653,21 @@ test("diagram requests load a bounded upstream reference as untrusted context", 
     assert.ok(referenceRequests.length >= 1);
     assert.ok(referenceRequests.length <= 3);
   });
+});
+
+
+test("Hinglish command normalization enables deterministic agent tool routing", () => {
+  assert.match(normalizeHinglishForRouting("AI agents ke baare mein research karo"), /research/i);
+  assert.match(normalizeHinglishForRouting("God's Eye me satellites dikhao"), /show satellites in God's Eye/i);
+  assert.match(normalizeHinglishForRouting("image banao"), /create image/i);
+  assert.match(normalizeHinglishForRouting("website bana do"), /build website/i);
+  assert.match(normalizeHinglishForRouting("is text ko awaaz mein sunao"), /read aloud/i);
+  assert.match(normalizeHinglishForRouting("integration status check karo"), /check integration status/i);
+});
+
+test("Hinglish normalization preserves the original request text", () => {
+  const request = "AI agents ke baare mein research karo";
+  const normalized = normalizeHinglishForRouting(request);
+  assert.notEqual(normalized, request);
+  assert.match(normalized, /AI agents ke baare mein research/i);
 });
