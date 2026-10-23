@@ -19,7 +19,7 @@ async function readModelResponseTextLimited(response, maxBytes = MAX_MODEL_RESPO
     throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
   }
   if (!response.body?.getReader) {
-    const raw = await response.text();
+    const raw = await readModelResponseTextLimited(response);
     if (Buffer.byteLength(raw, "utf8") > maxBytes) throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
     return raw;
   }
@@ -637,7 +637,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         body: JSON.stringify({ description }),
         signal: AbortSignal.timeout(15000)
       });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice description response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice description failed."), { code: "VOICESTUDIO_DESCRIBE_FAILED", status: response.status === 429 ? 429 : 502 });
       let result; try { result = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice description JSON."), { code: "VOICESTUDIO_DESCRIBE_INVALID", status: 502 }); }
@@ -651,7 +651,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" },
         signal: AbortSignal.timeout(15000)
       });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice catalog exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice listing failed."), { code: "VOICESTUDIO_VOICES_FAILED", status: response.status === 429 ? 429 : 502 });
       let data; try { data = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice catalog JSON."), { code: "VOICESTUDIO_VOICES_INVALID", status: 502 }); }
@@ -679,7 +679,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const token = bounded(env.OMNIVOICE_API_KEY, 500);
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "speech", state: "blocked", blocker: "Configure VoiceStudio (VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY) or OmniVoice (OMNIVOICE_API_BASE_URL, OMNIVOICE_API_KEY, and OMNIVOICE_SYNTHESIS_PATH)." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), signal: AbortSignal.timeout(90000) });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Speech provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Speech provider returned HTTP " + response.status), { code: "SPEECH_PROVIDER_FAILED", status: 502 });
       let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
@@ -695,7 +695,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "heygem", state: "blocked", blocker: "Configure a reachable HEYGEM_API_BASE_URL, HEYGEM_API_KEY, and explicit HEYGEM_JOB_PATH." };
       if (!imageBase64 || !audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64) || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "heygem", state: "needs_input", requiredInputs: ["media.imageBase64", "media.audioBase64"], message: "Attach the user's source portrait and audio before creating a talking-avatar job." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ imageBase64, audioBase64, prompt: bounded(args.prompt, 1000) || undefined }), signal: AbortSignal.timeout(45000) });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Avatar provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Avatar provider returned HTTP " + response.status), { code: "HEYGEM_PROVIDER_FAILED", status: 502 });
       let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
@@ -725,7 +725,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           body: form,
           signal: AbortSignal.timeout(120000)
         });
-        const raw = await response.text();
+        const raw = await readModelResponseTextLimited(response);
         if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio transcription response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
         if (!response.ok) throw Object.assign(new Error("VoiceStudio transcription failed."), { code: "VOICESTUDIO_TRANSCRIPTION_FAILED", status: response.status === 429 ? 429 : 502 });
         let result; try { result = JSON.parse(raw); } catch { result = { text: raw.slice(0, 10000) }; }
@@ -738,7 +738,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "handy", state: "blocked", blocker: "Configure a reachable authenticated Windows Handy bridge and explicit transcription path." };
       if (!audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "handy", state: "needs_input", requiredInputs: ["audioBase64"], message: "Provide recorded audio to transcribe." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ audioBase64, language: bounded(args.language, 40) || undefined }), signal: AbortSignal.timeout(90000) });
-      const raw = await response.text();
+      const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Transcription response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Transcription bridge returned HTTP " + response.status), { code: "HANDY_PROVIDER_FAILED", status: 502 });
       let result; try { result = JSON.parse(raw); } catch { result = { responseText: raw.slice(0, 2000) }; }
@@ -893,7 +893,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           signal: AbortSignal.timeout(5000)
         });
         if (!response.ok) return null;
-        const content = (await response.text()).slice(0, 7000);
+        const content = (await readModelResponseTextLimited(response, 200_000)).slice(0, 7000);
         return content.trim() ? { name: reference.name, url: reference.url, content } : null;
       } catch (error) {
         logger.warn?.("Optional task skill retrieval failed", { skill: reference.name, name: error?.name || "Error" });
