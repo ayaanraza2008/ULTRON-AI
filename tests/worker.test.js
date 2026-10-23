@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker } from "../worker.js";
+import { startWorker, renewTaskLease } from "../worker.js";
 
 test("worker disables itself safely when server-side Supabase credentials are missing", () => {
   const warnings = [];
@@ -630,4 +630,44 @@ test("worker does not mark a successfully executed task failed when completion p
   assert.equal(status.tasksRetried, 0);
   assert.equal(status.tasksFailed, 0);
   assert.equal(status.tasksBlocked, 0);
+});
+
+
+test("task lease renewal updates only a task that is still RUNNING", async () => {
+  let request;
+  const ok = await renewTaskLease({
+    taskId: "task/with space",
+    rest: async (endpoint, options) => {
+      request = { endpoint, options };
+      return [{ id: "task/with space", status: "RUNNING" }];
+    },
+    logger: { warn() {} }
+  });
+  assert.equal(ok, true);
+  assert.equal(request.endpoint, "agent_tasks?id=eq.task%2Fwith%20space&status=eq.RUNNING");
+  assert.equal(request.options.method, "PATCH");
+  const body = JSON.parse(request.options.body);
+  assert.ok(Number.isFinite(Date.parse(body.started_at)));
+  assert.ok(Number.isFinite(Date.parse(body.updated_at)));
+});
+
+test("task lease renewal does not report success after a cancellation or state transition", async () => {
+  const ok = await renewTaskLease({
+    taskId: "task-cancelled",
+    rest: async () => [],
+    logger: { warn() {} }
+  });
+  assert.equal(ok, false);
+});
+
+test("task lease renewal degrades safely when the database is unavailable", async () => {
+  const warnings = [];
+  const ok = await renewTaskLease({
+    taskId: "task-db-outage",
+    rest: async () => { throw new Error("database unavailable"); },
+    logger: { warn: (...args) => warnings.push(args) }
+  });
+  assert.equal(ok, false);
+  assert.equal(warnings.length, 1);
+  assert.match(String(warnings[0][0]), /lease renewal failed/i);
 });
