@@ -13,6 +13,20 @@ const MAX_TEXT = 6000;
 function bounded(value, max = MAX_TEXT) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
+
+function voiceStudioSettings(env = process.env) {
+  const raw = bounded(env.VOICESTUDIO_BASE_URL, 500);
+  const token = bounded(env.VOICESTUDIO_API_KEY, 2000);
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+    if (url.username || url.password || url.hash || url.search) return null;
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
+    if (!local && !token) return null;
+    return { baseUrl: url.toString().replace(/\\/+$/, ""), token };
+  } catch { return null; }
+}
 const BROWSER_USE_RULES = [
   "Use browser automation only for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, or browser tests; use web search for plain research.",
   "Default to read-only. Consequential actions (sending, publishing, purchasing, booking, deleting, changing account settings) are disabled until task-specific approval is implemented.",
@@ -240,9 +254,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
-    { type: "function", function: { name: "synthesize_speech", description: "Generate speech through the configured OmniVoice service when the user asks to speak or synthesize provided text. Requires a configured compatible inference API.", parameters: { type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 12000 }, language: { type: "string", maxLength: 40 }, voice: { type: "string", maxLength: 120 } }, required: ["text"], additionalProperties: false } } },
+    { type: "function", function: { name: "synthesize_speech", description: "Generate speech through VoiceStudio when configured, otherwise use the compatible OmniVoice adapter. Returns audio data for a client player; requires a configured speech service.", parameters: { type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 12000 }, language: { type: "string", maxLength: 40 }, voice: { type: "string", maxLength: 120 } }, required: ["text"], additionalProperties: false } } },
     { type: "function", function: { name: "create_talking_avatar", description: "Create a talking-head/lip-sync job through configured HeyGem. Requires user-provided image and audio media; never invent media.", parameters: { type: "object", properties: { prompt: { type: "string", maxLength: 1000 } }, additionalProperties: false } } },
-    { type: "function", function: { name: "transcribe_audio", description: "Transcribe user-provided audio using the configured Handy desktop companion. Audio must be supplied with this agent request.", parameters: { type: "object", properties: { language: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "transcribe_audio", description: "Transcribe supplied audio using VoiceStudio when configured, otherwise the Handy desktop bridge. Audio must be supplied with this agent request.", parameters: { type: "object", properties: { language: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
     { type: "function", function: { name: "browser_use", description: "Use the optional Browser Use bridge for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, and website tests. Read-only only; consequential actions are blocked.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 2500 }, maxSteps: { type: "integer", minimum: 1, maximum: 12 } }, required: ["task"], additionalProperties: false } } },
     { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
@@ -440,12 +454,25 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       return { mode, language, answer: answer.slice(0, 12000), execution: "draft_only" };
     }
     if (name === "synthesize_speech") {
+      const text = bounded(args.text, 5000);
+      if (!text) throw Object.assign(new Error("Speech text is required."), { code: "SPEECH_TEXT_REQUIRED", status: 400 });
+      const voiceStudio = voiceStudioSettings(env);
+      if (voiceStudio) {
+        const response = await fetchImpl(voiceStudio.baseUrl + "/v1/audio/speech", {
+          method: "POST",
+          headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), "Content-Type": "application/json", Accept: "audio/*" },
+          body: JSON.stringify({ model: "tts-1", input: text, voice: bounded(args.voice, 160) || "default", response_format: "wav", ...(bounded(args.language, 40) && args.language !== "auto" ? { instructions: "Speak in " + bounded(args.language, 40) + "." } : {}) }),
+          signal: AbortSignal.timeout(120000)
+        });
+        if (!response.ok) throw Object.assign(new Error("VoiceStudio speech synthesis failed."), { code: "VOICESTUDIO_SYNTHESIS_FAILED", status: response.status === 429 ? 429 : 502 });
+        const audio = Buffer.from(await response.arrayBuffer());
+        if (!audio.length || audio.byteLength > 12 * 1024 * 1024) throw Object.assign(new Error("VoiceStudio audio was empty or exceeded the 12 MB limit."), { code: "VOICESTUDIO_AUDIO_SIZE_INVALID", status: 502 });
+        return { provider: "voicestudio", state: "completed", format: "wav", contentType: response.headers.get("content-type") || "audio/wav", audioBase64: audio.toString("base64"), bytes: audio.byteLength, note: "Audio generated; a client audio player is required to play it." };
+      }
       const base = safeBase(env.OMNIVOICE_API_BASE_URL);
       const path = bounded(env.OMNIVOICE_SYNTHESIS_PATH, 200);
       const token = bounded(env.OMNIVOICE_API_KEY, 500);
-      const text = bounded(args.text, 12000);
-      if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "omnivoice", state: "blocked", blocker: "Configure a reachable OMNIVOICE_API_BASE_URL, OMNIVOICE_API_KEY, and explicit OMNIVOICE_SYNTHESIS_PATH." };
-      if (!text) throw Object.assign(new Error("Speech text is required."), { code: "SPEECH_TEXT_REQUIRED", status: 400 });
+      if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "speech", state: "blocked", blocker: "Configure VoiceStudio (VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY) or a compatible OmniVoice inference API." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), signal: AbortSignal.timeout(90000) });
       const raw = await response.text();
       if (raw.length > 2000000) throw Object.assign(new Error("Speech provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
@@ -470,6 +497,33 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       return { provider: "heygem", state: "submitted", result };
     }
     if (name === "transcribe_audio") {
+      const voiceStudio = voiceStudioSettings(env);
+      const audioBase64 = bounded(requestBody.audioBase64, 11000000);
+      if (voiceStudio && audioBase64 && /^[A-Za-z0-9+/]+={0,2}$/.test(audioBase64) && audioBase64.length % 4 === 0) {
+        const audio = Buffer.from(audioBase64, "base64");
+        if (!audio.length || audio.byteLength > 8 * 1024 * 1024 || audio.toString("base64") !== audioBase64) throw Object.assign(new Error("Audio must be valid base64 and no larger than 8 MB."), { code: "VOICESTUDIO_AUDIO_INVALID", status: 400 });
+        const mime = bounded(requestBody.mimeType || "audio/wav", 100).toLowerCase().split(";")[0];
+        const allowedTypes = new Set(["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/webm", "audio/ogg", "audio/flac", "audio/x-flac", "audio/aac", "audio/opus", "audio/x-m4a", "video/mp4"]);
+        if (!allowedTypes.has(mime)) throw Object.assign(new Error("Unsupported audio MIME type."), { code: "VOICESTUDIO_AUDIO_INVALID", status: 400 });
+        const ext = mime.includes("mpeg") || mime === "audio/mp3" ? "mp3" : mime.includes("webm") ? "webm" : mime.includes("ogg") || mime.includes("opus") ? "ogg" : mime.includes("flac") ? "flac" : mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("aac") ? "aac" : "wav";
+        const form = new FormData();
+        form.append("file", new Blob([audio], { type: mime }), "ultron-audio." + ext);
+        form.append("model", "whisper-1");
+        form.append("response_format", "json");
+        const language = bounded(args.language, 40);
+        if (language && language.toLowerCase() !== "auto") form.append("language", language.toLowerCase() === "hindi" ? "hi" : language);
+        const response = await fetchImpl(voiceStudio.baseUrl + "/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}) },
+          body: form,
+          signal: AbortSignal.timeout(120000)
+        });
+        const raw = await response.text();
+        if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio transcription response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
+        if (!response.ok) throw Object.assign(new Error("VoiceStudio transcription failed."), { code: "VOICESTUDIO_TRANSCRIPTION_FAILED", status: response.status === 429 ? 429 : 502 });
+        let result; try { result = JSON.parse(raw); } catch { result = { text: raw.slice(0, 10000) }; }
+        return { provider: "voicestudio", state: "completed", text: bounded(result.text || result.transcript, 20000), language: bounded(result.language, 40) || undefined };
+      }
       const base = safeBase(env.ULTRON_HANDY_BRIDGE_URL);
       const path = bounded(env.ULTRON_HANDY_TRANSCRIBE_PATH, 200);
       const token = bounded(env.ULTRON_HANDY_BRIDGE_TOKEN, 500);
