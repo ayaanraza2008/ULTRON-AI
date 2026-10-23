@@ -29,7 +29,7 @@ test("VoiceStudio readiness requires a secure remote endpoint and API key", () =
 
 test("VoiceStudio status reports live discovery and model count without exposing credentials", async () => {
   const seen = [];
-  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example/v1", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
     seen.push({ url, options });
     if (url.endsWith("/.well-known/voicestudio-speech")) return new Response(JSON.stringify({ name: "VoiceStudio", version: "0.5.3" }));
     return new Response(JSON.stringify({ data: [{ id: "omnivoice" }, { id: "whisper" }] }));
@@ -47,7 +47,7 @@ test("VoiceStudio status reports live discovery and model count without exposing
 
 test("VoiceStudio synthesis forwards validated options and returns bounded audio", async () => {
   let request;
-  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example/v1", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
     request = { url, options };
     return new Response(Buffer.from("fake-wav"), { status: 200, headers: { "content-type": "audio/wav" } });
   }, async base => {
