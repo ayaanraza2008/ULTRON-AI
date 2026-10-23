@@ -18,7 +18,7 @@ function boundedString(value, max = 12000) {
 
 export function hasEmployeeModelProvider(env) {
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
-  if (primaryKey && safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")) return true;
+  if (primaryKey && safeBaseUrl(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")) return true;
   let configured;
   try { configured = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]"); } catch { return false; }
   if (!Array.isArray(configured)) return false;
