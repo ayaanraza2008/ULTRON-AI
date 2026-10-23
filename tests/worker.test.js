@@ -357,6 +357,7 @@ test("autonomous task chains configured research into a report without another p
   await worker.done;
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.ok(calls.some(call => call.url.includes("api.tavily.com/search")));
+  assert.ok(calls.filter(call => call.url.includes("api.tavily.com/search")).every(call => call.options.redirect === "error"));
   assert.ok(calls.some(call => call.url.includes("/chat/completions")));
 });
 
