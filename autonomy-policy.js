@@ -13,6 +13,26 @@ const RULES = [
 ];
 
 const LEVEL_ORDER = { routine: 0, private_data: 1, device_control: 2, external_effect: 3, destructive: 4 };
+const ACKNOWLEDGEMENT = /^(?:yes|yeah|yep|ok|okay|do it|go ahead|proceed|sure|haan|han|haan bhai|kar do|kar de|karo|continue|confirm|approved|approve it|please do|do that|that's fine|sounds good)[.!\s🙏❤️]*$/i;
+
+/**
+ * Short confirmations inherit the immediately preceding user task so "yes,
+ * do it" cannot accidentally downgrade a consequential request to routine.
+ */
+export function resolveAutonomyIntent(prompt, history = []) {
+  const current = typeof prompt === "string" ? prompt.trim().slice(0, 6000) : "";
+  const messages = Array.isArray(history) ? history : [];
+  if (current && ACKNOWLEDGEMENT.test(current)) {
+    const priorUser = messages.filter(message => message?.role === "user" && typeof message.content === "string")
+      .map(message => message.content.trim())
+      .filter(content => content && content !== current)
+      .at(-1);
+    if (priorUser) return (priorUser.slice(0, 6000) + "\n" + current).slice(0, 6000);
+  }
+  if (current) return current;
+  return messages.filter(message => message?.role === "user" && typeof message.content === "string")
+    .at(-1)?.content?.slice(0, 6000) || "";
+}
 
 export function classifyAutonomyRisk(input) {
   const text = typeof input === "string" ? input.slice(0, 6000) : "";
@@ -27,7 +47,7 @@ export function classifyAutonomyRisk(input) {
     level: match.level,
     reason: match.reason,
     requiresConfirmation,
-    policyVersion: "1.1.0"
+    policyVersion: "1.2.0"
   };
 }
 
