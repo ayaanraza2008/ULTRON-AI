@@ -10,7 +10,7 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 - Repository: `ayaanraza2008/ULTRON-AI`
 - Active engineering branch: `autonomy/guard-production-operations`
 - Changes are not merged to `main`; production deployment has not been triggered by this work.
-- Previously verified CI run on the branch: [run 39981166906](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/39981166906), successful for commit `9de24ca213fb067a6e9f490e2ba7a3fbba590ee3`. This is a prior run, not verification of commits added after it.
+- Latest verified CI run checked during this review: [run 39997308408](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/39997308408). The `test` job passed `npm install --ignore-scripts`, `npm run check`, `npm test`, and the deployed health smoke test; `world-intelligence-build` passed the pinned God’s Eye build and injected ULTRON bridge verification. These results apply to the commit tested by that run only, not to later commits.
 - Existing backend modules include Express APIs, model-provider routing, task worker, Supabase task persistence, integration adapters, research/quality gates, memory adapters, and secret-free runtime readiness reporting.
 - Frontend source remains out of scope for this phase.
 
@@ -36,7 +36,7 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 | Scheduling and employee routines | Implemented partially; live queue unverified | Schedule-claim path exists. Live database last showed zero schedules and zero tasks; run controlled E2E after a test schedule is created. |
 | Security and operational audit | Partially implemented; live RLS inspected | All seven public application tables have RLS enabled; observed policies scope ordinary authenticated reads/writes to `auth.uid()`. Supabase advisor warns leaked-password protection is disabled. Some own-row task policies allow clients to update task state directly; assess a controlled transition API before narrowing grants because current server routes use user-scoped access. Five indexes are reported unused while the queue tables are empty; do not remove them without workload evidence. Rate limits, log redaction, and backup/recovery settings still need review. |
 | Production worker health | Unverified | Requires authorized Render logs/runtime configuration inspection and a real task execution. No deployment or configuration change is part of this ledger update. |
-| Automated tests and CI | Prior revision passed; new revision pending | Run full `npm test` / CI after lease-renewal commit and resolve all failures before merging. |
+| Automated tests and CI | Latest observed run passed; exact candidate must stay current | CI run 39997308408 passed syntax checks, tests, deployed health smoke test, and the pinned God’s Eye bridge build. Re-check CI after every subsequent code or documentation commit before merging. |
 | Frontend | Frozen by directive | No frontend work until backend acceptance review; keep UI unchanged. |
 
 ## Acceptance gates before backend completion review
