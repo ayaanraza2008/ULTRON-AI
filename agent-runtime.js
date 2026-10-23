@@ -49,7 +49,7 @@ function safeBase(value) {
   } catch { return null; }
 }
 function isPublicResearchHost(hostname) {
-  const host = String(hostname || "").toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+  const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")
       || host === "metadata.google.internal" || host === "metadata.google") return false;
   const ipVersion = isIP(host);
@@ -68,7 +68,7 @@ function isPublicResearchHost(hostname) {
   if (ipVersion === 6) {
     if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
         || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")) return false;
-    const mapped = host.match(/::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/);
+    const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
     if (mapped) return isPublicResearchHost(mapped[1]);
     return true;
   }
