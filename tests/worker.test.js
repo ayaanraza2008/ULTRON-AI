@@ -555,7 +555,7 @@ test("worker records failed task-state persistence and leaves recovery to the ta
   const task = {
     id: "task-state-update-failure",
     user_id: "user-1",
-    created_at: new Date().toISOString(),
+    created_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
     attempts: 1,
     input: { taskType: "employee", executionMode: "employee_worker", role: "web-dev", goal: "Create a plan", mode: "plan" }
   };
