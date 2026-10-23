@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAutonomyPlan, classifyAutonomyRisk } from "../autonomy-policy.js";
+import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "../autonomy-policy.js";
 
 test("routine research and drafting remain autonomously eligible", () => {
   const risk = classifyAutonomyRisk("Research renewable energy trends and draft a summary.");
@@ -37,4 +37,59 @@ test("natural-language external actions are classified as guarded", () => {
     assert.equal(risk.level, "external_effect", task);
     assert.equal(risk.requiresConfirmation, true, task);
   }
+});
+
+test("common UI actions with external consequences are guarded", () => {
+  for (const task of [
+    "Click submit to send this application.",
+    "Log in to my account and save changes.",
+    "Upload the invoice to the shared portal.",
+    "Checkout and confirm the purchase.",
+    "Grant access to this document."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("local computer execution and private-data access both require confirmation", () => {
+  const device = classifyAutonomyRisk("Run a PowerShell script on my computer.");
+  assert.equal(device.level, "device_control");
+  assert.equal(device.requiresConfirmation, true);
+  const privateData = classifyAutonomyRisk("Search my inbox for the invoice.");
+  assert.equal(privateData.level, "private_data");
+  assert.equal(privateData.requiresConfirmation, true);
+});
+
+test("read-only browsing does not become consequential just because it mentions a website", () => {
+  const risk = classifyAutonomyRisk("Open the website and inspect the public pricing page.");
+  assert.equal(risk.level, "routine");
+  assert.equal(risk.requiresConfirmation, false);
+});
+
+test("short confirmation inherits the preceding user task for risk classification", () => {
+  const intent = resolveAutonomyIntent("haan bhai kar de", [
+    { role: "user", content: "Please send the invoice email to the customer." },
+    { role: "assistant", content: "Please confirm before I send it." }
+  ]);
+  assert.match(intent, /send the invoice email/i);
+  assert.equal(classifyAutonomyRisk(intent).requiresConfirmation, true);
+});
+
+test("short confirmation does not erase the task context when prompt is supplied separately", () => {
+  const intent = resolveAutonomyIntent("yes, do it", [
+    { role: "user", content: "Delete the old deployment." },
+    { role: "assistant", content: "That is destructive; please confirm." },
+    { role: "user", content: "yes, do it" }
+  ]);
+  assert.equal(classifyAutonomyRisk(intent).level, "destructive");
+});
+
+test("ordinary new requests are not combined with stale history", () => {
+  const intent = resolveAutonomyIntent("Research renewable energy trends.", [
+    { role: "user", content: "Delete the old deployment." }
+  ]);
+  assert.equal(intent, "Research renewable energy trends.");
+  assert.equal(classifyAutonomyRisk(intent).level, "routine");
 });
