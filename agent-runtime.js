@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
-import { buildAutonomyPlan, resolveAutonomyIntent } from "./autonomy-policy.js";
+import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "./autonomy-policy.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 
@@ -937,7 +937,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           // Enforce the autonomy policy at the dispatch boundary, not just in
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
-          if (autonomyPlan.risk.requiresConfirmation) {
+          if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
           } else {
             result = await executeTool(name, args, req.body || {}, req);
@@ -973,7 +973,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             const args = parseArgs(call?.function?.arguments);
             let result;
             try {
-              if (autonomyPlan.risk.requiresConfirmation) {
+              if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
                 result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
               } else {
                 result = await executeTool(name, args, req.body || {}, req);
