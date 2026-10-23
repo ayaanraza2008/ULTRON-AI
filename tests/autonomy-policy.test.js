@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAutonomyPlan, classifyAutonomyRisk } from "../autonomy-policy.js";
+import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "../autonomy-policy.js";
 
 test("routine research and drafting remain autonomously eligible", () => {
   const risk = classifyAutonomyRisk("Research renewable energy trends and draft a summary.");
@@ -66,4 +66,30 @@ test("read-only browsing does not become consequential just because it mentions 
   const risk = classifyAutonomyRisk("Open the website and inspect the public pricing page.");
   assert.equal(risk.level, "routine");
   assert.equal(risk.requiresConfirmation, false);
+});
+
+test("short confirmation inherits the preceding user task for risk classification", () => {
+  const intent = resolveAutonomyIntent("haan bhai kar de", [
+    { role: "user", content: "Please send the invoice email to the customer." },
+    { role: "assistant", content: "Please confirm before I send it." }
+  ]);
+  assert.match(intent, /send the invoice email/i);
+  assert.equal(classifyAutonomyRisk(intent).requiresConfirmation, true);
+});
+
+test("short confirmation does not erase the task context when prompt is supplied separately", () => {
+  const intent = resolveAutonomyIntent("yes, do it", [
+    { role: "user", content: "Delete the old deployment." },
+    { role: "assistant", content: "That is destructive; please confirm." },
+    { role: "user", content: "yes, do it" }
+  ]);
+  assert.equal(classifyAutonomyRisk(intent).level, "destructive");
+});
+
+test("ordinary new requests are not combined with stale history", () => {
+  const intent = resolveAutonomyIntent("Research renewable energy trends.", [
+    { role: "user", content: "Delete the old deployment." }
+  ]);
+  assert.equal(intent, "Research renewable energy trends.");
+  assert.equal(classifyAutonomyRisk(intent).level, "routine");
 });
