@@ -234,3 +234,51 @@ test("VoiceStudio speech refuses missing service config and empty text", async (
     assert.equal(called, false);
   });
 });
+
+
+test("VoiceStudio lists voices through the configured service", async () => {
+  let requestedUrl;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example" }, async url => {
+    requestedUrl = url;
+    return new Response(JSON.stringify({ data: [{ id: "voice-1", name: "Test voice" }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/voices");
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).voices.data[0], { id: "voice-1", name: "Test voice" });
+    assert.equal(requestedUrl, "https://voice.example/v1/audio/voices");
+  });
+});
+
+test("VoiceStudio transcription validates audio and forwards multipart data", async () => {
+  let request;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "token" }, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ text: "Hello from audio" }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/transcribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { audioBase64: Buffer.from("audio").toString("base64"), mimeType: "audio/wav", language: "en" } })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).text, "Hello from audio");
+    assert.equal(request.url, "https://voice.example/v1/audio/transcriptions");
+    assert.equal(request.options.headers.Authorization, "Bearer token");
+    assert.equal(request.options.body instanceof FormData, true);
+  });
+});
+
+test("VoiceStudio transcription rejects invalid base64 before network access", async () => {
+  let called = false;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example" }, async () => {
+    called = true;
+    throw new Error("unexpected network call");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/transcribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { audioBase64: "not audio!", mimeType: "audio/wav" } })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "VOICESTUDIO_AUDIO_REQUIRED");
+    assert.equal(called, false);
+  });
+});
