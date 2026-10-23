@@ -259,7 +259,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         body: JSON.stringify({
           status: code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED" ? "BLOCKED" : shouldRetry ? "QUEUED" : "FAILED",
           error_code: code, result: { message: bounded(error.message, 500), retry: shouldRetry },
-          ...(shouldRetry ? { started_at: null, finished_at: null } : { finished_at: new Date().toISOString() })
+          ...(shouldRetry ? { started_at: null, finished_at: null, updated_at: new Date().toISOString() } : { finished_at: new Date().toISOString() })
         })
       });
       try {
