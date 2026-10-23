@@ -87,7 +87,7 @@ test("browser bridge requests reject redirects and keep the shared token on the 
     });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.match(body.content, /pricing page was inspected/i);
+    assert.match(body.content, /Page inspected safely/i);
     assert.equal(bridgeCalls, 1);
     assert.equal(providerCalls, 2);
   });
