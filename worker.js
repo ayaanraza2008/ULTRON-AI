@@ -13,6 +13,16 @@ function bounded(value, max = 4000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+async function readJsonLimited(response, maxChars) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxChars) {
+    throw new Error("Provider response exceeded the configured size limit.");
+  }
+  const raw = await response.text();
+  if (raw.length > maxChars) throw new Error("Provider response exceeded the configured size limit.");
+  return JSON.parse(raw);
+}
+
 function safeResearchUrl(value) {
   try {
     if (typeof value !== "string" || value.length > 2048) return "";
@@ -136,7 +146,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         code: retryable ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_REJECTED"
       });
     }
-    const data = await response.json();
+    const data = await readJsonLimited(response, 1_000_000);
     return {
       type: "research", query, answer: bounded(data.answer, 6000),
       sources: Array.isArray(data.results) ? data.results.slice(0, 5).map(item => ({
@@ -239,7 +249,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
           continue;
         }
         let payload;
-        try { payload = await response.json(); } catch {
+        try { payload = await readJsonLimited(response, 2_000_000); } catch {
           lastError = Object.assign(new Error("AI Employee provider returned malformed JSON."), { code: "EMPLOYEE_PROVIDER_RETRYABLE", retryable: true });
           continue;
         }
