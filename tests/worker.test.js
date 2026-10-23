@@ -785,3 +785,49 @@ test("background AI Employee falls back when a provider response exceeds the siz
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
 });
+
+
+test("worker rejects tasks with creation timestamps far in the future", async () => {
+  let worker;
+  let modelCalls = 0;
+  let failurePatch;
+  const task = {
+    id: "task-future-created-at",
+    user_id: "user-1",
+    created_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        modelCalls += 1;
+        throw new Error("Future-dated task must not reach a model provider.");
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        failurePatch = JSON.parse(options.body);
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(modelCalls, 0);
+  assert.equal(failurePatch.status, "FAILED");
+  assert.equal(failurePatch.error_code, "TASK_EXPIRED");
+  assert.equal(worker.getStatus().tasksFailed, 1);
+});
