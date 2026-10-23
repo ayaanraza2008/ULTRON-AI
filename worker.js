@@ -7,6 +7,7 @@ import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { verifyAutonomousOutput } from "./autonomous-quality-gate.js";
 
 const maxTaskAgeMs = 24 * 60 * 60 * 1000;
+const maxFutureTaskClockSkewMs = 5 * 60 * 1000;
 const roleIds = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 
 function bounded(value, max = 4000) {
@@ -378,7 +379,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
 
   async function execute(task) {
     const created = Date.parse(task.created_at || "");
-    if (!Number.isFinite(created) || Date.now() - created > maxTaskAgeMs) {
+    if (!Number.isFinite(created) || Date.now() - created > maxTaskAgeMs || created - Date.now() > maxFutureTaskClockSkewMs) {
       throw Object.assign(new Error("Task is older than the execution window."), { code: "TASK_EXPIRED" });
     }
     if (task.input?.requiresApproval && task.input?.approved !== true) {
