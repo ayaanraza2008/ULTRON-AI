@@ -9,7 +9,7 @@ test("agent task client-update guard permits cancellation only and protects work
   assert.match(sql, /auth\.role\(\)\s*=\s*'authenticated'/);
   assert.match(sql, /old\.status\s+not\s+in\s*\('QUEUED',\s*'RUNNING',\s*'WAITING_FOR_PERMISSION'\)/);
   assert.match(sql, /new\.status\s*<>\s*'CANCELLED'/);
-  assert.match(sql, /to_jsonb\(new\)\s*-\s*'status'\s*-\s*'updated_at'\s+is\s+distinct\s+from\s+\(to_jsonb\(old\)\s*-\s*'status'\s*-\s*'updated_at'\)/);
+  assert.match(sql, /to_jsonb\(new\)\s*-\s*'status'\s*-\s*'updated_at'\\)\\s+is\s+distinct\s+from\s+\(to_jsonb\(old\)\s*-\s*'status'\s*-\s*'updated_at'\)/);
   assert.match(sql, /before update on public\.agent_tasks/i);
   assert.match(sql, /revoke all on function public\.ultron_guard_agent_task_client_updates\(\) from public/i);
 });
