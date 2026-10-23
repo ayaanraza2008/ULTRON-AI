@@ -16,7 +16,7 @@ function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-function hasEmployeeModelProvider(env) {
+export function hasEmployeeModelProvider(env) {
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   if (primaryKey && safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")) return true;
   let configured;
