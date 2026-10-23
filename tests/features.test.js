@@ -299,7 +299,7 @@ test("saved AI Employee schedules can be queued immediately without performing e
     id: "00000000-0000-4000-8000-000000000010",
     user_id: "00000000-0000-4000-8000-000000000001",
     role_id: "chief-of-staff",
-    routine_id: "weekly-business-review",
+    routine_id: "cos-decision-brief",
     goal: "Prepare the weekly operations report",
     context: "Use available internal notes only.",
     enabled: true
