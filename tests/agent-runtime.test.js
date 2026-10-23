@@ -694,7 +694,7 @@ test("model provider registry falls back from OpenRouter rate limits to a config
     }])
   };
   await withServer(env, async (url, options) => {
-    calls.push({ url, auth: options.headers.Authorization });
+    calls.push({ url, auth: options.headers.Authorization, redirect: options.redirect });
     if (url === "https://openrouter.ai/api/v1/chat/completions") return new Response("rate limited", { status: 429 });
     assert.equal(url, "https://api.groq.com/openai/v1/chat/completions");
     assert.equal(options.headers.Authorization, "Bearer groq-test");
@@ -711,6 +711,7 @@ test("model provider registry falls back from OpenRouter rate limits to a config
     assert.equal(calls.length, 2);
     assert.equal(calls[0].auth, "Bearer openrouter-test");
     assert.equal(calls[1].auth, "Bearer groq-test");
+    assert.deepEqual(calls.map(call => call.redirect), ["error", "error"]);
   });
 });
 
