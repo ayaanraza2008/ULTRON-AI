@@ -38,7 +38,8 @@ test("quality gate excludes localhost, private IPs and cloud metadata URLs from 
     "http://169.254.169.254/latest/meta-data",
     "https://printer.local/status",
     "http://[::1]/private",
-    "https://metadata.google.internal/computeMetadata/v1"
+    "https://metadata.google.internal/computeMetadata/v1",
+    "https://203.0.113.10/documentation-only"
   ];
   const result = verifyAutonomousOutput({
     research: { sources: unsafeUrls.map(url => ({ url })) },
