@@ -46,3 +46,12 @@ Configure `NARA_ROUTER_API_KEY` and `NARA_ROUTER_DEFAULT_MODEL` as Render secret
 
 ## Current follow-up work (2026-10-22)
 - Remaining before declaring persistence production-ready: verify deployed account creation and login, verify message insert/read under RLS, implement password recovery, and test session expiry. Access-token refresh and conversation last-activity ordering have now been implemented.
+
+
+## Current follow-up work (2026-10-23)
+- Added a server-side `POST /api/auth/recovery` endpoint. It validates email input, uses only the configured `ULTRON_AUTH_REDIRECT_URL` (HTTPS except loopback development), avoids account enumeration, and preserves throttling/service-outage responses.
+- Added mocked regression tests for recovery request validation, generic responses, and the configured redirect.
+- Updated `docs/BLOCKERS.md`: password recovery API is implemented; real email delivery, Auth settings, redirect configuration, and the end-to-end reset flow remain unverified.
+- Added regression coverage to ensure production deployment/restart/configuration requests require explicit confirmation while read-only deployment status checks remain routine.
+- PR #100 CI run 39972151399 passed `npm run check`, `npm test`, deployed health endpoint smoke test, and the God’s Eye bridge build verification. These checks validate the PR branch; the PR has not been merged and these changes have not been deployed to production.
+- Live model inference and authenticated-user E2E checks remain blocked until provider credentials/configuration and test-account access are available. Never add secret values to source control or chat.
