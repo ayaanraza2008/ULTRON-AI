@@ -51,7 +51,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
-  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksRetried: 0, tasksFailed: 0, tasksDiscarded: 0 };
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
@@ -376,7 +376,9 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         logger.info?.("Discarded task failure because task state changed:", task.id);
         return true;
       }
-      if (shouldRetry) status.tasksRetried += 1;
+      const isBlocked = code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED";
+      if (isBlocked) status.tasksBlocked += 1;
+      else if (shouldRetry) status.tasksRetried += 1;
       else status.tasksFailed += 1;
       try {
         await audit(task, shouldRetry ? "task.retry_scheduled" : "task.failed", shouldRetry ? "retry" : "failed", { code, attempt: Number(task.attempts || 1) });
