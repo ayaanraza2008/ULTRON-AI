@@ -823,7 +823,9 @@ test("research tool rejects Teredo and 6to4 IPv6 URLs that can tunnel private IP
       return new Response(JSON.stringify({ answer: "Test results", results: [
         { title: "Safe source", url: "https://example.com/report", content: "Public source." },
         { title: "6to4 loopback tunnel", url: "http://[2002:7f00:1::]/", content: "Reject." },
-        { title: "Teredo tunnel", url: "http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/", content: "Reject." }
+        { title: "Teredo tunnel", url: "http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/", content: "Reject." },
+        { title: "Reserved IPv6", url: "http://[4000::1]/", content: "Reject." },
+        { title: "Outside global-unicast IPv6", url: "http://[1000::1]/", content: "Reject." }
       ] }), { status: 200 });
     }
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
