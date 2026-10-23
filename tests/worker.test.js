@@ -2,6 +2,27 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startWorker, renewTaskLease } from "../worker.js";
 
+test("lease renewal signals cancellation only when the task is no longer RUNNING", async () => {
+  let inactiveSignals = 0;
+  const inactive = await renewTaskLease({
+    taskId: "task-cancelled",
+    rest: async () => [],
+    logger: { warn() {} },
+    onInactive: () => { inactiveSignals += 1; }
+  });
+  assert.equal(inactive, false);
+  assert.equal(inactiveSignals, 1);
+
+  const failed = await renewTaskLease({
+    taskId: "task-temporary-db-error",
+    rest: async () => { throw new Error("temporary database failure"); },
+    logger: { warn() {} },
+    onInactive: () => { inactiveSignals += 1; }
+  });
+  assert.equal(failed, false);
+  assert.equal(inactiveSignals, 1, "transient database errors must not cancel provider work");
+});
+
 test("worker disables itself safely when server-side Supabase credentials are missing", () => {
   const warnings = [];
   const worker = startWorker({
