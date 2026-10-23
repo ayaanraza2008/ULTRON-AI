@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker, renewTaskLease } from "../worker.js";
+import { startWorker, renewTaskLease, readJsonLimited } from "../worker.js";
 
 test("lease renewal signals cancellation only when the task is no longer RUNNING", async () => {
   let inactiveSignals = 0;
@@ -1113,4 +1113,25 @@ test("worker alternates task and schedule polling to prevent starvation", async 
   await worker.done;
   assert.deepEqual(calls, ["schedule", "task", "task", "schedule"]);
   assert.equal(worker.getStatus().state, "stopped");
+});
+
+test("bounded provider JSON reader preserves abort errors rather than relabeling them", async () => {
+  const abortError = new DOMException("The operation was aborted.", "AbortError");
+  let released = false;
+  const response = {
+    headers: new Headers(),
+    body: {
+      getReader() {
+        return {
+          async read() { throw abortError; },
+          releaseLock() { released = true; }
+        };
+      }
+    }
+  };
+  await assert.rejects(
+    () => readJsonLimited(response, 1024),
+    error => error === abortError && error.name === "AbortError"
+  );
+  assert.equal(released, true, "reader lock must be released after an aborted read");
 });
