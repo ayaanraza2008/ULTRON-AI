@@ -814,3 +814,36 @@ test("research tool filters local, private-network, and credential-bearing sourc
     assert.equal(providerCalls, 2);
   });
 });
+
+test("research tool rejects Teredo and 6to4 IPv6 URLs that can tunnel private IPv4 destinations", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      return new Response(JSON.stringify({ answer: "Test results", results: [
+        { title: "Safe source", url: "https://example.com/report", content: "Public source." },
+        { title: "6to4 loopback tunnel", url: "http://[2002:7f00:1::]/", content: "Reject." },
+        { title: "Teredo tunnel", url: "http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/", content: "Reject." }
+      ] }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [
+        { id: "research-tunnel-test", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "IPv6 tunnel URL validation" }) } }
+      ] } }] }), { status: 200 });
+    }
+    const body = JSON.parse(options.body);
+    const tool = body.messages.find(message => message.role === "tool" && message.tool_call_id === "research-tunnel-test");
+    assert.ok(tool);
+    const result = JSON.parse(tool.content);
+    assert.deepEqual(result.results.map(item => item.url), ["https://example.com/report"]);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Filtered sources." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research IPv6 tunnel URL validation" })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(providerCalls, 2);
+  });
+});
