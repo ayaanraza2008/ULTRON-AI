@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 /**
  * Deterministic quality gate for autonomous worker deliverables.
  * Checks structure and traceability only; it does not certify factual truth.
@@ -6,8 +8,30 @@ function isPublicHttpUrl(value) {
   if (typeof value !== "string" || value.length > 2048) return false;
   try {
     const url = new URL(value);
-    return (url.protocol === "https:" || url.protocol === "http:") &&
-      Boolean(url.hostname) && !url.username && !url.password;
+    if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return false;
+    const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+        host === "metadata.google.internal" || host === "metadata.google") return false;
+    if (isIP(host) === 4) {
+      const octets = host.split(".").map(Number);
+      const [a, b] = octets;
+      if (a === 0 || a === 10 || a === 127 || a >= 224 ||
+          (a === 100 && b >= 64 && b <= 127) ||
+          (a === 169 && b === 254) ||
+          (a === 172 && b >= 16 && b <= 31) ||
+          (a === 192 && (b === 0 || b === 168)) ||
+          (a === 198 && (b === 18 || b === 19))) return false;
+    } else if (isIP(host) === 6) {
+      const normalized = host.toLowerCase();
+      if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") ||
+          normalized.startsWith("fd") || /^fe[89ab]/.test(normalized) ||
+          normalized.startsWith("2001:db8:")) return false;
+      const mapped = normalized.match(/::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/);
+      if (mapped && !isPublicHttpUrl("https://" + mapped[1] + "/")) return false;
+    } else if (!host.includes(".")) {
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
