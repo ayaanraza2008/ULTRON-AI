@@ -97,6 +97,7 @@ export function buildRuntimeReadiness({
       lastCycleSuccessAt: workerStatus.lastCycleSuccessAt || null,
       lastErrorCode: workerStatus.lastErrorCode || null,
       tasksCompleted: Number(workerStatus.tasksCompleted) || 0,
+      tasksRetried: Number(workerStatus.tasksRetried) || 0,
       tasksFailed: Number(workerStatus.tasksFailed) || 0,
       tasksDiscarded: Number(workerStatus.tasksDiscarded) || 0
     } : { state: workerEnabled ? "not_started" : "disabled" },
