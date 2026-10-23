@@ -54,7 +54,7 @@ test("agent cancels oversized model responses and falls back to the next configu
 });
 
 
-test("browser bridge rejects redirects and bounds its response body", async () => {
+test("browser bridge requests reject redirects and keep the shared token on the configured bridge", async () => {
   let bridgeCalls = 0;
   let providerCalls = 0;
   await withServer({
