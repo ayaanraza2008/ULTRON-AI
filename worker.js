@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
+import { verifyAutonomousOutput } from "./autonomous-quality-gate.js";
 
 const maxTaskAgeMs = 24 * 60 * 60 * 1000;
 const roleIds = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
@@ -163,16 +164,19 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         context
       }
     });
+    const verification = verifyAutonomousOutput({ research, report });
     return {
       type: "autonomous_workflow",
       goal,
       stages: [
         { name: "research", state: research ? "completed" : "skipped", reason: research ? undefined : researchNote, sourceCount: sources.length },
-        { name: "synthesis", state: "completed", mode: report.mode, role: report.role }
+        { name: "synthesis", state: "completed", mode: report.mode, role: report.role },
+        { name: "quality_gate", state: verification.state, checks: verification.checks }
       ],
       research,
       report,
-      execution: "research_and_draft_only",
+      verification,
+      execution: "research_draft_and_structural_verification_only",
       requiresHumanApprovalForExternalActions: true
     };
   }
