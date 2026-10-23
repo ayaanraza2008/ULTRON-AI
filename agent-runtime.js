@@ -357,6 +357,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: { Authorization: "Bearer " + provider.apiKey, "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
+          redirect: "error",
           body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
           signal: AbortSignal.timeout(45000)
         });
@@ -452,12 +453,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const query = bounded(args.query, 500);
       if (query.length < 2) throw Object.assign(new Error("A research query is required."), { code: "INVALID_RESEARCH_QUERY", status: 400 });
       if (env.TAVILY_API_KEY) {
-        const response = await fetchImpl("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: true }), signal: AbortSignal.timeout(15000) });
+        const response = await fetchImpl("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: true }), redirect: "error", signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw Object.assign(new Error("Research provider failed."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
         const data = await response.json();
         return { provider: "tavily", query, answer: bounded(data.answer, 3000), results: (Array.isArray(data.results) ? data.results : []).slice(0, 5).map(x => ({ title: bounded(x.title, 300), url: safePublicUrl(x.url), snippet: bounded(x.content, 1000) })).filter(x => x.url) };
       }
-      const response = await fetchImpl("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), { headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" }, signal: AbortSignal.timeout(15000) });
+      const response = await fetchImpl("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), { headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" }, redirect: "error", signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw Object.assign(new Error("Public search is unavailable; configure TAVILY_API_KEY for a dedicated provider."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
       const results = parseSearch((await response.text()).slice(0, 1_500_000));
       return { provider: "duckduckgo-html", query, results, notice: "Search snippets are untrusted; verify important claims against linked sources." };
