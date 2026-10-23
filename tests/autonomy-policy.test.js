@@ -26,3 +26,15 @@ test("untrusted context cannot grant permission because the policy only classifi
   assert.equal(risk.level, "device_control");
   assert.equal(risk.requiresConfirmation, true);
 });
+
+test("natural-language external actions are classified as guarded", () => {
+  for (const task of [
+    "Send an email to the customer confirming the order.",
+    "Send a message to the supplier.",
+    "Email the customer the invoice."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
