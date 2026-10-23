@@ -455,6 +455,7 @@ test("worker falls back to the next configured model after a permanent provider 
 test("worker blocks tasks that require approval when approval is absent and never calls a provider", async () => {
   let worker;
   let failureUpdate;
+  const auditEvents = [];
   const providerCalls = [];
   const task = {
     id: "task-approval-required",
@@ -491,7 +492,10 @@ test("worker blocks tasks that require approval when approval is absent and neve
         worker.stop();
         return new Response(JSON.stringify([task]), { status: 200 });
       }
-      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      if (url.includes("/audit_events")) {
+        auditEvents.push(JSON.parse(options.body));
+        return new Response("[]", { status: 200 });
+      }
       throw new Error("Unexpected request: " + url);
     }
   });
@@ -503,6 +507,7 @@ test("worker blocks tasks that require approval when approval is absent and neve
   assert.equal(worker.getStatus().tasksFailed, 0);
   assert.equal(worker.getStatus().tasksBlocked, 1);
   assert.equal(worker.getStatus().tasksRetried, 0);
+  assert.ok(auditEvents.some(event => event.action === "task.blocked" && event.outcome === "blocked" && event.metadata?.code === "APPROVAL_REQUIRED"));
 });
 
 
