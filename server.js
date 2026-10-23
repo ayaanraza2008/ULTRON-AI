@@ -767,6 +767,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
+  app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, logger }));
 
