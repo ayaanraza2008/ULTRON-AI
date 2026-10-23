@@ -217,6 +217,41 @@ test("agent tool execution fails closed for invalid employee roles", async () =>
 });
 
 
+test("research tool rejects oversized upstream responses instead of buffering them unbounded", async () => {
+  let providerCalls = 0;
+  let researchCancelled = false;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url) => {
+    if (url === "https://api.tavily.com/search") {
+      const stream = new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1)); },
+        cancel() { researchCancelled = true; }
+      });
+      return new Response(stream, { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "research-large-response", type: "function",
+        function: { name: "research_web", arguments: JSON.stringify({ query: "recent AI security research" }) }
+      }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Research provider response was safely rejected." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research recent AI security research" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolsUsed[0].name, "research_web");
+    assert.equal(body.toolsUsed[0].ok, false);
+    assert.equal(providerCalls, 2);
+    assert.equal(researchCancelled, true);
+  });
+});
+
+
 test("agent executes a model-selected research tool and passes results back for synthesis", async () => {
   let providerCalls = 0;
   let researchCalls = 0;
