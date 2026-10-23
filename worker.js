@@ -120,7 +120,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const tavilyKey = env.TAVILY_API_KEY || "";
   const leaseHeartbeatMs = Math.max(10000, Math.min(120000, Number(env.ULTRON_WORKER_LEASE_HEARTBEAT_MS) || 60000));
   const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, taskStateUpdateFailures: 0, taskLeaseRenewalFailures: 0 };
-  if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
+  if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl) || !safeResearchUrl(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
     logger.warn?.("ULTRON employee/task scheduler disabled: configure HTTPS SUPABASE_URL and server-only SUPABASE_SERVICE_ROLE_KEY.");
