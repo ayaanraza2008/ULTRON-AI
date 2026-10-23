@@ -10,10 +10,10 @@ const RULES = [
   "Do not execute destructive, financial, publishing, messaging, account-changing, or device-control actions without supported authorization and an explicit approval workflow."
 ];
 const SECURITY = [
-  {name:"secure-coding",category:"secure_coding",terms:/\b(security scan|secure code|sast|dast|dependency audit|vulnerabilit|sql injection|xss|prompt injection|agent security)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills"},
-  {name:"cloud-and-identity",category:"cloud_identity",terms:/\b(cloud security|aws|azure|gcp|iam|privilege escalation|account compromise|authentication|access control)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills"},
-  {name:"incident-response",category:"incident_response",terms:/\b(incident response|breach|ransomware|malware|intrusion|forensics|threat hunting)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills"},
-  {name:"attack-surface",category:"attack_surface",terms:/\b(attack surface|subdomain|certificate transparency|domain inventory|osint)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills"}
+  {name:"secure-coding",category:"secure_coding",terms:/\b(security scan|secure code|sast|dast|dependency audit|vulnerabilit|sql injection|xss|prompt injection|agent security)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills",path:"skills/implementing-devsecops-security-scanning/SKILL.md"},
+  {name:"cloud-and-identity",category:"cloud_identity",terms:/\b(cloud security|aws|azure|gcp|iam|privilege escalation|account compromise|authentication|access control)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills",path:"skills/analyzing-azure-activity-logs-for-threats/SKILL.md"},
+  {name:"incident-response",category:"incident_response",terms:/\b(incident response|breach|ransomware|malware|intrusion|forensics|threat hunting)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills",path:"skills/performing-memory-forensics-with-volatility3/SKILL.md"},
+  {name:"attack-surface",category:"attack_surface",terms:/\b(attack surface|subdomain|certificate transparency|domain inventory|osint)\b/i,source:"https://github.com/mukul975/Anthropic-Cybersecurity-Skills",path:"skills/auditing-tls-certificate-transparency-logs/SKILL.md"}
 ];
 const DIAGRAM = [
   {type:"architecture",terms:/\b(architecture diagram|system architecture|system design diagram|service topology)\b/i},
@@ -40,7 +40,7 @@ export function buildTaskSkillsGuidance(task) {
   if (/\b(plan|workflow|automate|background|schedule|agent|integrate|integration|deploy|migration)\b/i.test(text)) categories.push("multi_step");
   if (/\b(memory|remember|previous|history|context|preferences)\b/i.test(text)) categories.push("memory_context");
   if (/\b(delete|publish|send|purchase|spend|control my pc|run command)\b/i.test(text)) categories.push("consequential_action");
-  const securitySkills = SECURITY.filter(x=>x.terms.test(text)).slice(0,3).map(({name,category,source})=>({name,category,source}));
+  const securitySkills = SECURITY.filter(x=>x.terms.test(text)).slice(0,3).map(({name,category,source,path})=>({name,category,source,sourceUrl:source+"/blob/main/"+path,path}));
   const diagramRequested = /\b(diagram|flowchart|sequence diagram|architecture diagram|state machine|er diagram|timeline diagram|swimlane|gantt|data flow diagram|dependency graph|class diagram|journey map|redraw|excalidraw)\b/i.test(text);
   const diagramType = (DIAGRAM.find(x=>x.terms.test(text))||{}).type || (diagramRequested ? "flowchart" : null);
   const scienceSkills = SCIENCE.filter(x=>x.terms.test(text)).slice(0,3).map(({name})=>({name,source:"https://github.com/K-Dense-AI/scientific-agent-skills/tree/main/skills/"+name}));
