@@ -629,3 +629,28 @@ test("browser intent recognises ordinary visit, URL navigation and page inspecti
   assert.equal(buildBrowserUseGuidance("Navigate to the site and take a screenshot").browserRequested, true);
   assert.equal(buildBrowserUseGuidance("What is the latest news about browser automation?").browserRequested, false);
 });
+
+
+test("diagram requests load a bounded upstream reference as untrusted context", async () => {
+  const referenceRequests = [];
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (url, options) => {
+    if (url.startsWith("https://raw.githubusercontent.com/")) {
+      referenceRequests.push(url);
+      return new Response("# Diagram reference\\nUse labeled components and arrows.", { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    const request = JSON.parse(options.body);
+    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("UNTRUSTED reference data")));
+    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("Diagram reference")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I can draft the sequence diagram." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Create a sequence diagram for the login API" })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /sequence diagram/i);
+    assert.ok(referenceRequests.length >= 1);
+    assert.ok(referenceRequests.length <= 3);
+  });
+});
