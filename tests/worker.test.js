@@ -26,6 +26,24 @@ test("worker disables itself when the Supabase URL is not HTTPS", () => {
   assert.equal(worker.getStatus().lastErrorCode, "WORKER_CONFIGURATION_MISSING");
 });
 
+test("worker rejects HTTPS database endpoints that are local, private, or embed credentials", () => {
+  for (const url of [
+    "https://localhost:54321",
+    "https://192.168.1.10",
+    "https://user:password@example.supabase.co"
+  ]) {
+    let fetchCalls = 0;
+    const worker = startWorker({
+      env: { SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: "test-only" },
+      logger: { warn() {} },
+      fetchImpl: async () => { fetchCalls += 1; throw new Error("must not contact unsafe endpoint"); }
+    });
+    assert.equal(worker.getStatus().state, "disabled", url);
+    assert.equal(worker.getStatus().lastErrorCode, "WORKER_CONFIGURATION_MISSING", url);
+    assert.equal(fetchCalls, 0, url);
+  }
+});
+
 test("worker records a successful poll and stops cleanly with an injected transport", async () => {
   let worker;
   let calls = 0;
