@@ -7,7 +7,7 @@
  */
 const RULES = [
   { level: "destructive", pattern: /\b(delete|erase|wipe|format|drop database|destroy|remove all|factory reset|uninstall everything|permanently remove|empty trash)\b/i, reason: "Destructive or hard-to-reverse change" },
-  { level: "external_effect", pattern: /\b(send email|send an email|email the customer|send message|send a message|publish|post publicly|submit application|submit form|submit the form|confirm (purchase|booking|order|payment)|purchase|buy|pay|transfer money|book appointment|place order|checkout|save changes|change password|change account|change settings|invite user|upload (the |a )?(file|document|image)|share (the |a )?(file|document|link)|grant access|revoke access|connect account|sign (in|up)|log (in|out)|cancel subscription|unsubscribe)\b/i, reason: "Affects an external account, person, or financial transaction" },
+  { level: "external_effect", pattern: /\b(send email|send an email|email the customer|send message|send a message|publish|post publicly|submit\b|confirm (purchase|booking|order|payment)|purchase|buy|pay|transfer money|book appointment|place order|checkout|save changes|change password|change account|change settings|invite user|upload\b|share\b|grant access|revoke access|connect account|sign (in|up)|log (in|out)|cancel subscription|unsubscribe)\b/i, reason: "Affects an external account, person, or financial transaction" },
   { level: "device_control", pattern: /\b(control my pc|control my computer|run shell|run (a )?(terminal|command|script|powershell)|execute (a )?(command|script)|install software|install (an )?app|uninstall (an )?app|shutdown|shut down|restart computer|remote desktop|keyboard and mouse|move files on my pc|access local files|run code on my computer)\b/i, reason: "Controls a device or executes code outside the hosted service" },
   { level: "private_data", pattern: /\b(read my email|read (my )?(emails|inbox)|access (my )?(drive|email|inbox)|search my inbox|open my private files|private files|personal documents|download my files|read my documents)\b/i, reason: "Accesses private user data" }
 ];
@@ -22,7 +22,7 @@ export function classifyAutonomyRisk(input) {
       match = { level: rule.level, reason: rule.reason };
     }
   }
-  const requiresConfirmation = ["device_control", "external_effect", "destructive"].includes(match.level);
+  const requiresConfirmation = ["private_data", "device_control", "external_effect", "destructive"].includes(match.level);
   return {
     level: match.level,
     reason: match.reason,
