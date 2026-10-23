@@ -49,6 +49,7 @@ test("Geo-Sleuth intake invokes the pinned local CLI and keeps reverse search op
   let command;
   try {
     await mkdir(path.join(root, "scripts"), { recursive: true });
+    await writeFile(path.join(root, "scripts", "intake.py"), "# mocked runtime script\n");
     await withServer({ GEO_SLEUTH_ENABLED: "true", GEO_SLEUTH_ROOT: root }, async (bin, args, options) => {
       command = { bin, args, options };
       const outIndex = args.indexOf("--out-dir");
