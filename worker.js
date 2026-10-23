@@ -62,7 +62,12 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       body: JSON.stringify({ api_key: tavilyKey, query, max_results: 5, search_depth: "basic", include_answer: true }),
       signal: AbortSignal.timeout(20000)
     });
-    if (!response.ok) throw Object.assign(new Error("Research provider returned HTTP " + response.status), { code: "RESEARCH_PROVIDER_FAILED" });
+    if (!response.ok) {
+      const retryable = response.status === 429 || response.status >= 500;
+      throw Object.assign(new Error("Research provider returned HTTP " + response.status), {
+        code: retryable ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_REJECTED"
+      });
+    }
     const data = await response.json();
     return {
       type: "research", query, answer: bounded(data.answer, 6000),
@@ -110,7 +115,12 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       }),
       signal: AbortSignal.timeout(45000)
     });
-    if (!response.ok) throw Object.assign(new Error("AI Employee provider returned HTTP " + response.status), { code: "EMPLOYEE_PROVIDER_FAILED" });
+    if (!response.ok) {
+      const retryable = response.status === 429 || response.status >= 500;
+      throw Object.assign(new Error("AI Employee provider returned HTTP " + response.status), {
+        code: retryable ? "EMPLOYEE_PROVIDER_RETRYABLE" : "EMPLOYEE_PROVIDER_REJECTED"
+      });
+    }
     const payload = await response.json();
     const answer = payload?.choices?.[0]?.message?.content;
     if (typeof answer !== "string" || !answer.trim()) throw Object.assign(new Error("AI Employee provider returned no content."), { code: "EMPLOYEE_EMPTY_RESPONSE" });
@@ -157,7 +167,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       status.tasksFailed += 1;
       status.lastErrorAt = new Date().toISOString();
       status.lastErrorCode = code;
-      const retryable = ["RESEARCH_PROVIDER_FAILED", "EMPLOYEE_PROVIDER_FAILED", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
+      const retryable = ["RESEARCH_PROVIDER_RETRYABLE", "EMPLOYEE_PROVIDER_RETRYABLE", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
       const shouldRetry = retryable && Number(task.attempts || 1) < 3;
       await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
         method: "PATCH",
