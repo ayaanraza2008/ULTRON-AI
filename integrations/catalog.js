@@ -21,7 +21,21 @@ export function buildIntegrationCatalog(env = process.env) {
   const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const hasGeoSleuth = env.GEO_SLEUTH_ENABLED === "true";
 
+  const hasVoiceStudio = safeBaseUrl(env.VOICESTUDIO_API_BASE_URL) && Boolean(env.VOICESTUDIO_API_KEY);
   return [
+    {
+      id: "voicestudio",
+      name: "VoiceStudio Speech",
+      capability: "Authenticated voice listing and OpenAI-compatible speech synthesis",
+      state: hasVoiceStudio ? "configured_unverified" : "blocked",
+      configured: hasVoiceStudio,
+      mode: "separate_service",
+      requiredEnv: ["VOICESTUDIO_API_BASE_URL", "VOICESTUDIO_API_KEY"],
+      apiRoutes: ["/api/integrations/voicestudio/voices", "/api/integrations/voicestudio/speech"],
+      note: hasVoiceStudio
+        ? "Configuration is present; remote reachability, engine/model availability, voice rights, and audio quality still need verification."
+        : "Requires a reachable VoiceStudio service exposing /v1/audio/voices and /v1/audio/speech. Deploy VoiceStudio separately; this adapter does not install GPU models into the ULTRON API."
+    },
     {
       id: "heygem",
       name: "HeyGem Avatar",
