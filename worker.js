@@ -16,7 +16,29 @@ function bounded(value, max = 4000) {
 async function readJsonLimited(response, maxChars) {
   const declaredLength = Number(response.headers?.get?.("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxChars) {
+    try { await response.body?.cancel?.(); } catch {}
     throw new Error("Provider response exceeded the configured size limit.");
+  }
+  if (response.body?.getReader) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let raw = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        if (raw.length > maxChars) {
+          try { await reader.cancel(); } catch {}
+          throw new Error("Provider response exceeded the configured size limit.");
+        }
+      }
+      raw += decoder.decode();
+    } finally {
+      try { reader.releaseLock(); } catch {}
+    }
+    if (raw.length > maxChars) throw new Error("Provider response exceeded the configured size limit.");
+    return JSON.parse(raw);
   }
   const raw = await response.text();
   if (raw.length > maxChars) throw new Error("Provider response exceeded the configured size limit.");
