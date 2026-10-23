@@ -569,5 +569,18 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (isMain) {
   const worker = startWorker();
-  await worker.done;
+  const requestShutdown = signal => {
+    console.info("ULTRON worker received " + signal + "; finishing the active task before shutdown.");
+    worker.stop();
+  };
+  const onInterrupt = () => requestShutdown("SIGINT");
+  const onTerminate = () => requestShutdown("SIGTERM");
+  process.once("SIGINT", onInterrupt);
+  process.once("SIGTERM", onTerminate);
+  try {
+    await worker.done;
+  } finally {
+    process.removeListener("SIGINT", onInterrupt);
+    process.removeListener("SIGTERM", onTerminate);
+  }
 }
