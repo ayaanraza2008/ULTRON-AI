@@ -456,7 +456,6 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (typeof answer !== "string" || !answer.trim()) throw Object.assign(new Error("Coding assistant returned no content."), { code: "CODING_EMPTY_RESPONSE", status: 502 });
       return { mode, language, answer: answer.slice(0, 12000), execution: "draft_only" };
     }
-    if (name === "synthesize_speech") {
     if (name === "list_speech_voices") {
       const voiceStudio = voiceStudioSettings(env);
       if (!voiceStudio) return { provider: "voicestudio", state: "blocked", blocker: "Configure VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY. A cloud ULTRON cannot reach localhost on your PC." };
@@ -472,6 +471,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const voices = Array.isArray(data.voices) ? data.voices : Array.isArray(data.data) ? data.data : [];
       return { provider: "voicestudio", state: "completed", count: Math.min(voices.length, 100), voices: voices.slice(0, 100).map(v => ({ id: bounded(v?.voice_id || v?.id, 160), name: bounded(v?.name, 160), language: bounded(v?.language, 80) || undefined })).filter(v => v.id || v.name) };
     }
+    if (name === "synthesize_speech") {
       const text = bounded(args.text, 5000);
       if (!text) throw Object.assign(new Error("Speech text is required."), { code: "SPEECH_TEXT_REQUIRED", status: 400 });
       const voiceStudio = voiceStudioSettings(env);
