@@ -28,6 +28,7 @@ export function buildRuntimeReadiness({
   const browserConfigured = secureServiceUrl(env.ULTRON_BROWSER_USE_URL) && truthy(env.ULTRON_BROWSER_USE_TOKEN);
   const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN);
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
+  const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
   const premiumTtsConfigured = secureServiceUrl(env.TTS_API_BASE_URL) && truthy(env.TTS_API_KEY);
   const premiumSttConfigured = secureServiceUrl(env.STT_API_BASE_URL) && truthy(env.STT_API_KEY);
@@ -47,6 +48,10 @@ export function buildRuntimeReadiness({
       ["ULTRON_EMPLOYEES_ENABLED=true", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"], workerState === "running"
         ? "Worker process reports running; successful task execution is tracked separately."
         : workerState === "disabled" ? "Worker is disabled by configuration." : "Worker is not currently reporting a running state."),
+    component("memory", "Account-scoped memory", memoryConfigured ? "configured_unverified" : "blocked",
+      ["SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY (or AGENTMEMORY_URL and AGENTMEMORY_SECRET)"], memoryConfigured
+        ? "Memory storage configuration exists; user consent/preferences, retrieval quality, and cross-account isolation still require live verification."
+        : "Configure authenticated Supabase persistence or the separate authenticated AgentMemory service."),
     component("research", "Web research", tavilyConfigured ? "configured_unverified" : "best_effort_fallback",
       ["TAVILY_API_KEY (recommended)"], tavilyConfigured
         ? "Tavily is configured; provider reachability is not tested here."
