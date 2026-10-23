@@ -342,3 +342,56 @@ test("autonomous task chains configured research into a report without another p
   assert.ok(calls.some(call => call.url.includes("api.tavily.com/search")));
   assert.ok(calls.some(call => call.url.includes("/chat/completions")));
 });
+
+
+test("background AI Employee falls back to a configured provider after rate limiting", async () => {
+  let worker;
+  const modelUrls = [];
+  const task = {
+    id: "task-employee-provider-fallback",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "primary-test-key",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "groq", baseUrl: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "test-model", priority: 1 },
+        { name: "unsafe", baseUrl: "http://localhost:1234/v1", apiKeyEnv: "UNSAFE_KEY", model: "test-model", priority: 0 }
+      ]),
+      GROQ_API_KEY: "fallback-test-key",
+      UNSAFE_KEY: "must-not-be-used"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        modelUrls.push({ url, authorization: options.headers?.Authorization });
+        if (url.startsWith("https://openrouter.ai/")) return new Response("rate limited", { status: 429 });
+        if (url.startsWith("https://api.groq.com/")) return new Response(JSON.stringify({ model: "groq-test-model", choices: [{ message: { content: "Fallback plan generated." } }] }), { status: 200 });
+        throw new Error("Unexpected model endpoint: " + url);
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.deepEqual(modelUrls.map(item => item.url), [
+    "https://openrouter.ai/api/v1/chat/completions",
+    "https://api.groq.com/openai/v1/chat/completions"
+  ]);
+  assert.deepEqual(modelUrls.map(item => item.authorization), ["Bearer primary-test-key", "Bearer fallback-test-key"]);
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+});
