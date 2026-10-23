@@ -157,3 +157,29 @@ test("requests to disable endpoint security are guarded as device control", () =
     assert.equal(risk.requiresConfirmation, true, task);
   }
 });
+
+test("repository operations that can trigger production release require confirmation", () => {
+  for (const task of [
+    "Merge pull request #100.",
+    "Merge PR 100 into main.",
+    "Push changes to main.",
+    "Merge branch feature into production.",
+    "Promote the release."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("read-only repository review remains routine", () => {
+  for (const task of [
+    "Review pull request #100.",
+    "Check the latest commit on main.",
+    "Inspect production release status."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "routine", task);
+    assert.equal(risk.requiresConfirmation, false, task);
+  }
+});
