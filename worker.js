@@ -127,6 +127,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   async function rest(endpoint, options = {}) {
     const response = await fetchImpl(supabaseUrl + "/rest/v1/" + endpoint, {
       ...options,
+      redirect: "error",
       headers: {
         apikey: serviceKey,
         Authorization: "Bearer " + serviceKey,
