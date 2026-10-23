@@ -671,3 +671,10 @@ test("Hinglish normalization preserves the original request text", () => {
   assert.notEqual(normalized, request);
   assert.match(normalized, /AI agents ke baare mein research/i);
 });
+
+
+test("browser guidance recognizes common Hinglish navigation and screenshot requests", () => {
+  assert.equal(buildBrowserUseGuidance("website kholo aur pricing tab par click karo").browserRequested, true);
+  assert.equal(buildBrowserUseGuidance("site par jao aur screenshot lo").browserRequested, true);
+  assert.equal(buildBrowserUseGuidance("website check karo").browserRequested, true);
+});

@@ -19,8 +19,9 @@ const BROWSER_USE_RULES = [
 ];
 export function buildBrowserUseGuidance(task) {
   const text = typeof task === "string" ? task.slice(0, 4000) : "";
-  const browserRequested = /\b(click|type into|fill in|interact with|navigate the website|navigate this site|navigate to (the )?(website|site|url|page|domain)|open the website|open the site|open https?:|visit (the )?(website|site|url|page|domain)|go to (the )?(website|site|url|page|domain)|inspect (the )?(website|site|url|page)|use the browser|browser automation|web automation|javascript-rendered|rendered page|scrape this site|extract from this page|take a screenshot of|test this website|test the web app)\b/i.test(text)
-    && /\b(read|inspect|view|find|extract|summarize|check|test|navigate|open|search|look at|screenshot|click|type|fill)\b/i.test(text);
+  const routingText = normalizeHinglishForRouting(text);
+  const browserRequested = /\b(click|type into|fill in|interact with|navigate the website|navigate this site|navigate to (the )?(website|site|url|page|domain)|open the website|open the site|open https?:|visit (the )?(website|site|url|page|domain)|go to (the )?(website|site|url|page|domain)|inspect (the )?(website|site|url|page)|use the browser|browser automation|web automation|javascript-rendered|rendered page|scrape this site|extract from this page|take a screenshot of|test this website|test the web app)\b/i.test(routingText)
+    && /\b(read|inspect|view|find|extract|summarize|check|test|navigate|open|search|look at|screenshot|click|type|fill)\b/i.test(routingText);
   const consequentialAction = /\b(send|submit|purchase|buy|checkout|pay|transfer|delete|publish|post|comment|message|email|invite|book|reserve|cancel subscription|upload|share publicly|sign contract)\b/i.test(text);
   return { browserRequested, consequentialAction, rules: BROWSER_USE_RULES };
 }
@@ -75,6 +76,11 @@ export function normalizeHinglishForRouting(value) {
     .replace(/\b(?:background mein|peeche se)\s+(?:chala|chalao|run kar)(?:o|na)?\b/gi, "run automatically")
     .replace(/\b(?:report|summary|plan)\s+(?:bana|banao|taiyar kar)(?:o|na)?\b/gi, "write a report")
     .replace(/\b(?:transcribe|transcription)\s+kar(?:o|na)?\b/gi, "transcribe")
+    .replace(/\b(?:website|site)\s+(?:kholo|khol do|open karo)\b/gi, "open the website")
+    .replace(/\b(?:website|site)\s+(?:par jao|pe jao)\b/gi, "visit the website")
+    .replace(/\b(?:page|website|site)\s+(?:inspect|check|dekh)\s+kar(?:o|na)?\b/gi, "inspect the website")
+    .replace(/\b(?:button|tab|link)\s+par\s+click\s+kar(?:o|na)?\b/gi, "click the tab")
+    .replace(/\b(?:screenshot|screen shot)\s+(?:lo|le lo|banao)\b/gi, "take a screenshot")
     .replace(/\b(?:employee|routine|task)\s+(?:schedule|queue|background mein chala)\s+kar(?:o|na)?\b/gi, "schedule employee task");
 }
 
