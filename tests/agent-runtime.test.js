@@ -678,3 +678,62 @@ test("browser guidance recognizes common Hinglish navigation and screenshot requ
   assert.equal(buildBrowserUseGuidance("site par jao aur screenshot lo").browserRequested, true);
   assert.equal(buildBrowserUseGuidance("website check karo").browserRequested, true);
 });
+
+test("model provider registry falls back from OpenRouter rate limits to a configured provider", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test",
+    GROQ_API_KEY: "groq-test",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKeyEnv: "GROQ_API_KEY",
+      model: "test-model",
+      priority: 1,
+      supportsTools: true
+    }])
+  };
+  await withServer(env, async (url, options) => {
+    calls.push({ url, auth: options.headers.Authorization });
+    if (url === "https://openrouter.ai/api/v1/chat/completions") return new Response("rate limited", { status: 429 });
+    assert.equal(url, "https://api.groq.com/openai/v1/chat/completions");
+    assert.equal(options.headers.Authorization, "Bearer groq-test");
+    return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { role: "assistant", content: "Fallback provider works." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Explain a simple concept without using tools." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /Fallback provider works/);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].auth, "Bearer openrouter-test");
+    assert.equal(calls[1].auth, "Bearer groq-test");
+  });
+});
+
+test("model provider registry ignores providers with missing keys or insecure URLs", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "missing", baseUrl: "https://api.example.com/v1", apiKeyEnv: "MISSING_KEY", model: "model", priority: 1 },
+      { name: "insecure", baseUrl: "http://api.example.com/v1", apiKeyEnv: "INSECURE_KEY", model: "model", priority: 2 }
+    ])
+  };
+  await withServer(env, async (url, options) => {
+    calls.push(url);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Primary provider works." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Explain a simple concept without using tools." })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /Primary provider works/);
+    assert.deepEqual(calls, ["https://openrouter.ai/api/v1/chat/completions"]);
+  });
+});
