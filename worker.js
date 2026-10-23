@@ -46,11 +46,35 @@ function safeResearchUrl(value) {
   }
 }
 
+/**
+ * Refreshes the worker lease while a task is executing. The database recovery RPC
+ * uses started_at as the lease clock, so long provider fallback chains must renew it.
+ * Returns false if the task is no longer RUNNING or the refresh could not be saved.
+ */
+export async function renewTaskLease({ taskId, rest, logger = console }) {
+  if (!taskId || typeof rest !== "function") return false;
+  try {
+    const rows = await rest("agent_tasks?id=eq." + encodeURIComponent(taskId) + "&status=eq.RUNNING", {
+      method: "PATCH",
+      body: JSON.stringify({ started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    });
+    if (!Array.isArray(rows) || rows.length === 0) {
+      logger.warn?.("Task lease renewal skipped because the task is no longer RUNNING:", taskId);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.warn?.("Task lease renewal failed; database recovery remains the fallback:", taskId, bounded(error?.message, 200));
+    return false;
+  }
+}
+
 export function startWorker({ env = process.env, logger = console, fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
   const supabaseUrl = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
+  const leaseHeartbeatMs = Math.max(10000, Math.min(120000, Number(env.ULTRON_WORKER_LEASE_HEARTBEAT_MS) || 60000));
   const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, taskStateUpdateFailures: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
     status.state = "disabled";
@@ -324,6 +348,21 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     const claimed = await rest("rpc/ultron_claim_next_task", { method: "POST", body: "{}" });
     const task = Array.isArray(claimed) ? claimed[0] : claimed;
     if (!task?.id) return false;
+    let heartbeatInFlight = Promise.resolve();
+    const heartbeat = setInterval(() => {
+      heartbeatInFlight = heartbeatInFlight.then(async () => {
+        const renewed = await renewTaskLease({ taskId: task.id, rest, logger });
+        if (!renewed) {
+          // Do not interrupt in-flight work on a transient renewal error; conditional
+          // completion writes and database recovery still prevent stale state overwrites.
+          status.lastErrorAt = new Date().toISOString();
+          status.lastErrorCode = "TASK_LEASE_RENEWAL_FAILED";
+        }
+      }).catch(error => {
+        logger.warn?.("Unexpected task lease heartbeat error:", bounded(error?.message, 200));
+      });
+    }, leaseHeartbeatMs);
+    heartbeat.unref?.();
     try {
       const result = await execute(task);
       let completedRows;
@@ -413,6 +452,9 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         logger.error?.("Task outcome audit failed:", task.id, bounded(auditError?.message, 200));
       }
       logger.error?.("Task outcome:", task.id, isBlocked ? "blocked" : shouldRetry ? "retry scheduled" : code);
+    } finally {
+      clearInterval(heartbeat);
+      await heartbeatInFlight;
     }
     return true;
   }
