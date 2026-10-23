@@ -292,6 +292,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     ].join(" ");
     let lastError;
     for (const provider of providers) {
+      if (signal?.aborted) throw signal.reason || new DOMException("Task cancelled", "AbortError");
       try {
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
@@ -343,6 +344,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
           requiresHumanApprovalForExternalActions: true
         };
       } catch (error) {
+        if (signal?.aborted) throw error;
         if (error?.retryable === false || (error?.code === "EMPLOYEE_PROVIDER_REJECTED")) throw error;
         lastError = error;
         logger.warn?.("AI Employee provider network/timeout failure; trying fallback.", {
