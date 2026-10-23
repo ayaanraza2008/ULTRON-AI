@@ -315,7 +315,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!response.ok) return { state: "failed", execution: "browser_bridge", status: response.status, error: bounded(body.detail || body.error || "Browser bridge request failed.", 500) };
       return { state: body.status === "completed" ? "completed" : "unknown", execution: "browser_use", result: bounded(body.result, 12000), steps: body.steps, model: body.model };
     }
-    if (name === "geo_sleuth_investigate") {\n      const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};\n      const imageBase64 = bounded(requestBody.imageBase64 || media.imageBase64, 12000000);\n      const includeReverseSearch = args.includeReverseSearch === true && requestBody.confirmReverseImageSearch === true;\n      return runGeoSleuthInvestigation({ imageBase64, includeReverseSearch, env });\n    }
+    if (name === "geo_sleuth_investigate") {
+      const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};
+      const imageBase64 = bounded(requestBody.imageBase64 || media.imageBase64, 12000000);
+      const includeReverseSearch = args.includeReverseSearch === true && requestBody.confirmReverseImageSearch === true;
+      return runGeoSleuthInvestigation({ imageBase64, includeReverseSearch, env });
+    }
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
     if (name === "research_web") {
       const query = bounded(args.query, 500);
