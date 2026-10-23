@@ -51,7 +51,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
-  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0 };
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, taskStateUpdateFailures: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
@@ -356,14 +356,27 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       status.lastErrorCode = code;
       const retryable = ["RESEARCH_PROVIDER_RETRYABLE", "EMPLOYEE_PROVIDER_RETRYABLE", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
       const shouldRetry = retryable && Number(task.attempts || 1) < 3;
-      const failureRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
-        method: "PATCH",
-        body: JSON.stringify({
-          status: code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED" ? "BLOCKED" : shouldRetry ? "QUEUED" : "FAILED",
-          error_code: code, result: { message: bounded(error.message, 500), retry: shouldRetry },
-          ...(shouldRetry ? { started_at: null, finished_at: null, updated_at: new Date().toISOString() } : { finished_at: new Date().toISOString() })
-        })
-      });
+      let failureRows;
+      try {
+        failureRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED" ? "BLOCKED" : shouldRetry ? "QUEUED" : "FAILED",
+            error_code: code, result: { message: bounded(error.message, 500), retry: shouldRetry },
+            ...(shouldRetry ? { started_at: null, finished_at: null, updated_at: new Date().toISOString() } : { finished_at: new Date().toISOString() })
+          })
+        });
+      } catch (transitionError) {
+        // Do not claim the task was retried/failed unless Supabase persisted that transition.
+        // Leave the RUNNING lease intact; the database recovery RPC can safely reclaim it
+        // after its timeout. This also prevents a transient database outage from escaping
+        // the task handler and repeatedly obscuring the original provider error.
+        status.taskStateUpdateFailures += 1;
+        status.lastErrorAt = new Date().toISOString();
+        status.lastErrorCode = "TASK_STATE_UPDATE_FAILED";
+        logger.error?.("Task state transition could not be persisted; lease recovery will handle it:", task.id, bounded(transitionError?.message, 200), "original:", code);
+        return true;
+      }
       // A cancellation/state transition may race with a failing provider just as it can
       // race with success. Count a failure or retry only if this worker changed RUNNING.
       if (!Array.isArray(failureRows) || failureRows.length === 0) {
