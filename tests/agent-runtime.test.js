@@ -584,7 +584,7 @@ test("high-impact user intent blocks tool dispatch until a task-specific approva
     const body = await response.json();
     assert.equal(body.autonomy.risk.level, "external_effect");
     assert.equal(body.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
-    assert.equal(body.toolResults[0].approvalRequired, true);
+    assert.equal(body.toolResults[0].result.approvalRequired, true);
     assert.equal(externalCalls, 0);
   });
 });
