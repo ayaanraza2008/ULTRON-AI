@@ -247,19 +247,76 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
 
+  function configuredModelProviders() {
+    const providers = [];
+    const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
+    if (primaryKey) {
+      const baseUrl = safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
+      if (baseUrl) providers.push({ name: "openrouter", baseUrl, apiKey: primaryKey, model: bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", priority: 0, supportsTools: true });
+    }
+    let configured = [];
+    try {
+      const parsed = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]");
+      if (Array.isArray(parsed)) configured = parsed.slice(0, 12);
+    } catch {
+      logger.warn?.("Model provider registry JSON is invalid", { code: "PROVIDER_REGISTRY_INVALID" });
+    }
+    const seen = new Set(providers.map(p => p.name));
+    for (const item of configured) {
+      if (!item || typeof item !== "object" || typeof item.name !== "string" || typeof item.baseUrl !== "string" || typeof item.apiKeyEnv !== "string" || typeof item.model !== "string") continue;
+      const name = item.name.trim().toLowerCase();
+      const apiKeyEnv = item.apiKeyEnv.trim();
+      if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(name) || !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) || seen.has(name)) continue;
+      let url;
+      try { url = new URL(item.baseUrl); } catch { continue; }
+      if (url.protocol !== "https:" || url.username || url.password || !item.model.trim() || item.model.length > 160) continue;
+      const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
+      if (!apiKey) continue;
+      const baseUrl = safeBase(item.baseUrl);
+      if (!baseUrl || providers.some(p => p.baseUrl === baseUrl)) continue;
+      seen.add(name);
+      providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100, supportsTools: item.supportsTools !== false });
+    }
+    return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
+  }
+
   async function requestModel(messages, { useTools = false } = {}) {
-    const apiKey = env.OPENROUTER_API_KEY;
-    if (!apiKey) throw Object.assign(new Error("AI provider is not configured."), { status: 503, code: "PROVIDER_NOT_CONFIGURED" });
-    const base = safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
-    if (!base) throw Object.assign(new Error("AI provider URL is invalid."), { status: 500, code: "PROVIDER_CONFIG_INVALID" });
-    const response = await fetchImpl(base + "/chat/completions", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json", Accept: "application/json", "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" },
-      body: JSON.stringify({ model: bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
-      signal: AbortSignal.timeout(45000)
-    });
-    if (!response.ok) throw Object.assign(new Error("AI provider returned HTTP " + response.status), { status: response.status === 429 ? 429 : 502, code: "PROVIDER_REQUEST_FAILED" });
-    return response.json();
+    const providers = configuredModelProviders().filter(provider => !useTools || provider.supportsTools);
+    if (!providers.length) throw Object.assign(new Error("No configured AI provider is available. Add OPENROUTER_API_KEY or a valid provider entry with its server-side API key."), { status: 503, code: "PROVIDER_NOT_CONFIGURED" });
+    let lastError;
+    for (const provider of providers) {
+      try {
+        const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + provider.apiKey, "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
+          body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
+          signal: AbortSignal.timeout(45000)
+        });
+        if (!response.ok) {
+          const retryable = response.status === 429 || response.status >= 500;
+          const error = Object.assign(new Error("AI provider request failed."), { status: response.status === 429 ? 429 : 502, code: "PROVIDER_REQUEST_FAILED", retryable });
+          if (!retryable) throw error;
+          lastError = error;
+          logger.warn?.("AI provider unavailable; trying fallback", { provider: provider.name, status: response.status });
+          continue;
+        }
+        let data;
+        try { data = await response.json(); } catch {
+          lastError = Object.assign(new Error("AI provider returned malformed JSON."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
+          continue;
+        }
+        if (!data || !Array.isArray(data.choices) || !data.choices[0]?.message) {
+          lastError = Object.assign(new Error("AI provider returned an invalid completion."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
+          continue;
+        }
+        return data;
+      } catch (error) {
+        if (error?.retryable === false || (error?.status && error.status !== 429 && error.status < 500)) throw error;
+        lastError = error;
+        logger.warn?.("AI provider network/timeout failure; trying fallback", { provider: provider.name, code: error?.name === "TimeoutError" ? "PROVIDER_TIMEOUT" : error?.code || "PROVIDER_NETWORK_ERROR" });
+      }
+    }
+    throw Object.assign(new Error("All configured AI providers failed. Check provider keys, model IDs, quotas, and network access."), { status: 502, code: lastError?.code || "ALL_PROVIDERS_FAILED" });
   }
 
   async function executeTool(name, args, requestBody = {}, req = {}) {
