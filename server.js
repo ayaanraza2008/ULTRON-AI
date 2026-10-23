@@ -382,7 +382,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   // Keep the redirect destination server-configured so callers cannot inject arbitrary redirects.
   app.post("/api/auth/recovery", async (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
-    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: { code: "INVALID_EMAIL", message: "Enter a valid account email address." } });
     }
     const redirect = String(env.ULTRON_AUTH_REDIRECT_URL || "").trim();
