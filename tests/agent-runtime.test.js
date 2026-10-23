@@ -15,6 +15,44 @@ async function withServer(env, fetchImpl, run, extras = {}) {
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
 
+
+test("agent cancels oversized model responses and falls back to the next configured provider", async () => {
+  let firstCancelled = false;
+  let providerCalls = 0;
+  const env = {
+    FIRST_KEY: "first-test-key",
+    SECOND_KEY: "second-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/api/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/api/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+  await withServer(env, async (url) => {
+    providerCalls += 1;
+    if (url.startsWith("https://first.example/")) {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1));
+        },
+        cancel() { firstCancelled = true; }
+      });
+      return new Response(stream, { status: 200 });
+    }
+    assert.equal(url, "https://second.example/api/v1/chat/completions");
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered through the fallback provider." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Give me a short status update" })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /fallback provider/);
+    assert.equal(providerCalls, 2);
+    assert.equal(firstCancelled, true);
+  });
+});
+
 test("agent automatically injects relevant AgentMemory results for continuation tasks", async () => {
   let memoryCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
