@@ -73,6 +73,10 @@ function safeResearchUrl(value) {
           (a === 198 && (b === 18 || b === 19 || (b === 51 && octets[2] === 100))) ||
           (a === 203 && b === 0 && octets[2] === 113)) return "";
     } else if (version === 6) {
+      const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+      // Only global-unicast IPv6 (2000::/3) is eligible as an external source.
+      // This also excludes IPv4-compatible/mapped forms, link-local, multicast and ULA.
+      if (firstHextet < 0x2000 || firstHextet > 0x3fff) return "";
       if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") ||
           /^fe[89ab]/.test(host) || host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:")) return "";
       const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
