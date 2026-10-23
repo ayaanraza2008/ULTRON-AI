@@ -253,5 +253,50 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { safeError(res, error, "VoiceStudio speech generation"); }
   });
 
+  router.get("/integrations/voicestudio/voices", requireSupabaseUser, async (_req, res) => {
+    const base = configuredUrl(env.VOICESTUDIO_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL first." } });
+    try {
+      const data = await requestJson(fetchImpl, base + "/v1/audio/voices", { headers: providerHeaders(env.VOICESTUDIO_API_KEY), timeoutMs: 15000 });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", voices: data });
+    } catch (error) { safeError(res, error, "VoiceStudio voice listing"); }
+  });
+
+  router.post("/integrations/voicestudio/transcribe", requireSupabaseUser, async (req, res) => {
+    const base = configuredUrl(env.VOICESTUDIO_BASE_URL);
+    if (!base) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL first." } });
+    const payload = req.body?.payload;
+    const encoded = typeof payload?.audioBase64 === "string" ? payload.audioBase64 : "";
+    const mimeType = typeof payload?.mimeType === "string" ? payload.mimeType : "audio/wav";
+    if (!encoded || encoded.length > 11000000 || !/^(audio\/(wav|mpeg|mp4|webm|ogg|flac|x-wav)|video\/webm)$/.test(mimeType) || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+      return res.status(400).json({ error: { code: "VOICESTUDIO_AUDIO_REQUIRED", message: "Provide valid base64 audio in payload.audioBase64 and a supported payload.mimeType." } });
+    }
+    const audio = Buffer.from(encoded, "base64");
+    if (!audio.length || audio.length > 8 * 1024 * 1024 || audio.toString("base64") !== encoded) {
+      return res.status(400).json({ error: { code: "VOICESTUDIO_AUDIO_SIZE", message: "Audio must be valid base64 and no larger than 8 MB." } });
+    }
+    try {
+      const form = new FormData();
+      form.append("file", new Blob([audio], { type: mimeType }), "ultron-audio");
+      form.append("model", bounded(payload.model, 120) || "whisper-1");
+      if (bounded(payload.language, 20)) form.append("language", bounded(payload.language, 20));
+      if (bounded(payload.prompt, 1000)) form.append("prompt", bounded(payload.prompt, 1000));
+      const response = await fetchImpl(base + "/v1/audio/transcriptions", {
+        method: "POST", headers: { Accept: "application/json", ...providerHeaders(env.VOICESTUDIO_API_KEY) },
+        body: form, signal: AbortSignal.timeout(120000)
+      });
+      const raw = await response.text();
+      if (raw.length > MAX_PROVIDER_RESPONSE) return res.status(502).json({ error: { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", message: "Transcription response exceeded the size limit." } });
+      let data;
+      try { data = JSON.parse(raw); } catch { data = null; }
+      if (!response.ok || !isObject(data) || typeof data.text !== "string") {
+        return res.status(response.status === 429 ? 429 : response.status >= 500 ? 502 : 400).json({ error: { code: "VOICESTUDIO_TRANSCRIPTION_FAILED", message: "VoiceStudio could not transcribe this audio." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", text: data.text, ...(Array.isArray(data.segments) ? { segments: data.segments } : {}) });
+    } catch (error) { safeError(res, error, "VoiceStudio transcription"); }
+  });
+
   return router;
 }
