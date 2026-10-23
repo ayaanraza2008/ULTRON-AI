@@ -58,8 +58,28 @@ function parseSearch(html) {
   }
   return results;
 }
+// Normalize common Romanized Hindi/Hinglish commands for deterministic tool routing.
+// This changes only intent detection; the original user text is preserved for tool arguments.
+export function normalizeHinglishForRouting(value) {
+  return String(value || "")
+    .replace(/\b(?:internet pe|online)\s+(?:search|khoj)\s+kar(?:o|na)?\b/gi, "search online")
+    .replace(/\b(?:research|search|khoj)\s+kar(?:o|na)?\b/gi, "research")
+    .replace(/\b(?:latest|taaza)\s+(?:news|khabar)\s+(?:batao|dikhao|search kar(?:o|na)?)\b/gi, "latest news")
+    .replace(/\b(?:integration|integrations|tools|capabilities)\s+(?:ka\s+)?status\s+(?:check|batao|dikhao)\s+kar(?:o|na)?\b/gi, "check integration status")
+    .replace(/\b(?:check|dekh|dikha)\s+kar(?:o|na)?\s+(?:integrations|tools|capabilities)\b/gi, "check integrations")
+    .replace(/\b(?:god'?s eye|globe|world intelligence)\s+(?:mein|me)\s+(satellites|earthquakes|flights|vessels)\s+(?:dikhao|chalao|on kar(?:o|na)?)\b/gi, "show $1 in God's Eye")
+    .replace(/\b(?:image|tasveer|photo)\s+(?:bana|banao|create kar|generate kar)(?:o|na)?\b/gi, "create image")
+    .replace(/\b(?:website|web app|application)\s+(?:bana|banao|taiyar kar)(?:o|na)?\b/gi, "build website")
+    .replace(/\b(?:code|script|program)\s+(?:likh|likho|bana|banao|debug kar)(?:o|na)?\b/gi, "write code")
+    .replace(/\b(?:awaaz mein|bol ke|voice mein)\s+(?:suna|sunao|padh|padhkar sunao)\b/gi, "read aloud")
+    .replace(/\b(?:background mein|peeche se)\s+(?:chala|chalao|run kar)(?:o|na)?\b/gi, "run automatically")
+    .replace(/\b(?:report|summary|plan)\s+(?:bana|banao|taiyar kar)(?:o|na)?\b/gi, "write a report")
+    .replace(/\b(?:transcribe|transcription)\s+kar(?:o|na)?\b/gi, "transcribe")
+    .replace(/\b(?:employee|routine|task)\s+(?:schedule|queue|background mein chala)\s+kar(?:o|na)?\b/gi, "schedule employee task");
+}
+
 function extractIntent(text) {
-  const s = text.toLowerCase();
+  const s = normalizeHinglishForRouting(text).toLowerCase();
   if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
   if (/\b(heygem|talking head|lip.?sync avatar|make .* avatar)\b/.test(s)) return "create_talking_avatar";
@@ -83,7 +103,7 @@ function parseArgs(raw) {
 }
 
 function buildFallbackCalls(text) {
-  const s = String(text || "").toLowerCase();
+  const s = normalizeHinglishForRouting(text).toLowerCase();
   const calls = [];
   const add = (name, args = {}) => {
     if (!calls.some(call => call.function.name === name)) {
