@@ -472,7 +472,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const base = safeBase(env.OMNIVOICE_API_BASE_URL);
       const path = bounded(env.OMNIVOICE_SYNTHESIS_PATH, 200);
       const token = bounded(env.OMNIVOICE_API_KEY, 500);
-      if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "speech", state: "blocked", blocker: "Configure VoiceStudio (VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY) or a compatible OmniVoice inference API." };
+      if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "speech", state: "blocked", blocker: "Configure VoiceStudio (VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY) or OmniVoice (OMNIVOICE_API_BASE_URL, OMNIVOICE_API_KEY, and OMNIVOICE_SYNTHESIS_PATH)." };
       const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), signal: AbortSignal.timeout(90000) });
       const raw = await response.text();
       if (raw.length > 2000000) throw Object.assign(new Error("Speech provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
