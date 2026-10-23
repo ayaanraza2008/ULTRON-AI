@@ -24,6 +24,10 @@ function isPublicHttpUrl(value) {
           (a === 203 && b === 0 && octets[2] === 113)) return false;
     } else if (isIP(host) === 6) {
       const normalized = host.toLowerCase();
+      const firstHextet = Number.parseInt(normalized.split(":")[0] || "0", 16);
+      // Citation URLs may use only global-unicast IPv6, never local, multicast,
+      // IPv4-compatible, or mapped forms that could disguise private destinations.
+      if (firstHextet < 0x2000 || firstHextet > 0x3fff) return false;
       if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") ||
           normalized.startsWith("fd") || /^fe[89ab]/.test(normalized) ||
           normalized.startsWith("2001:db8:") || normalized.startsWith("2001:0:") || normalized.startsWith("2002:")) return false;
