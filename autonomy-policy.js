@@ -13,7 +13,7 @@ const RULES = [
 ];
 
 const LEVEL_ORDER = { routine: 0, private_data: 1, device_control: 2, external_effect: 3, destructive: 4 };
-const ACKNOWLEDGEMENT = /^(?:yes|yeah|yep|ok|okay|do it|go ahead|proceed|sure|haan|han|haan bhai|kar do|kar de|karo|continue|confirm|approved|approve it|please do|do that|that's fine|sounds good)[.!\s🙏❤️]*$/i;
+const ACKNOWLEDGEMENT = /^(?:yes|yeah|yep|ok|okay|do it|yes do it|go ahead|proceed|sure|haan|han|haan bhai|haan bhai kar de|haan bhai kar do|kar do|kar de|karo|continue|confirm|approved|approve it|please do|do that|that's fine|sounds good)[\s🙏❤️]*$/i;
 
 /**
  * Short confirmations inherit the immediately preceding user task so "yes,
@@ -22,7 +22,8 @@ const ACKNOWLEDGEMENT = /^(?:yes|yeah|yep|ok|okay|do it|go ahead|proceed|sure|ha
 export function resolveAutonomyIntent(prompt, history = []) {
   const current = typeof prompt === "string" ? prompt.trim().slice(0, 6000) : "";
   const messages = Array.isArray(history) ? history : [];
-  if (current && ACKNOWLEDGEMENT.test(current)) {
+  const normalizedCurrent = current.toLowerCase().replace(/[.,!?]/g, " ").replace(/\s+/g, " ").trim();
+  if (current && ACKNOWLEDGEMENT.test(normalizedCurrent)) {
     const priorUser = messages.filter(message => message?.role === "user" && typeof message.content === "string")
       .map(message => message.content.trim())
       .filter(content => content && content !== current)
