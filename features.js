@@ -36,7 +36,7 @@ function hasEmployeeModelProvider(env) {
     try {
       const url = new URL(item.baseUrl);
       if (url.protocol !== "https:" || url.username || url.password) return false;
-      const baseUrl = url.toString().replace(/\\/+$/, "");
+      const baseUrl = url.toString().replace(/\/+$/, "");
       if (urls.has(baseUrl)) return false;
       names.add(name);
       urls.add(baseUrl);
