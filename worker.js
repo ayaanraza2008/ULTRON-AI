@@ -172,7 +172,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       signal: AbortSignal.timeout(20000)
     });
     if (!response.ok) {
-      const retryable = response.status === 429 || response.status >= 500;
+      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
       throw Object.assign(new Error("Research provider returned HTTP " + response.status), {
         code: retryable ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_REJECTED"
       });
