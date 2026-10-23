@@ -41,7 +41,10 @@ test("quality gate excludes localhost, private IPs and cloud metadata URLs from 
     "https://metadata.google.internal/computeMetadata/v1",
     "https://203.0.113.10/documentation-only",
     "http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/tunneled-loopback",
-    "http://[2002:7f00:1::]/6to4-loopback"
+    "http://[2002:7f00:1::]/6to4-loopback",
+    "http://[fe80::1]/link-local",
+    "http://[ff02::1]/multicast",
+    "http://[::192.168.1.10]/ipv4-compatible"
   ];
   const result = verifyAutonomousOutput({
     research: { sources: unsafeUrls.map(url => ({ url })) },
