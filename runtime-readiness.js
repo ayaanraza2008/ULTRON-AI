@@ -10,24 +10,6 @@ function secureServiceUrl(value) {
   }
 }
 
-function configuredAlternateProvider(env) {
-  let providers;
-  try {
-    providers = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]");
-  } catch {
-    return false;
-  }
-  if (!Array.isArray(providers)) return false;
-  return providers.slice(0, 12).some((item) =>
-    item && typeof item === "object" &&
-    /^[a-z0-9][a-z0-9_-]{0,39}$/i.test(String(item.name || "")) &&
-    /^[A-Z][A-Z0-9_]{1,79}$/.test(String(item.apiKeyEnv || "")) &&
-    truthy(env[item.apiKeyEnv]) &&
-    typeof item.model === "string" && truthy(item.model) &&
-    secureServiceUrl(item.baseUrl)
-  );
-}
-
 function component(id, label, state, requiredEnv, note) {
   return { id, label, state, requiredEnv, note };
 }
