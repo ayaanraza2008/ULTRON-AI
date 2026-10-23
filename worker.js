@@ -34,7 +34,7 @@ function safeResearchUrl(value) {
           (a === 203 && b === 0 && octets[2] === 113)) return "";
     } else if (version === 6) {
       if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") ||
-          /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")) return "";
+          /^fe[89ab]/.test(host) || host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:")) return "";
       const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
       if (mapped && !safeResearchUrl("https://" + mapped[1] + "/")) return "";
       // Hex IPv4-mapped IPv6, e.g. ::ffff:7f00:1, must inherit IPv4 restrictions.
