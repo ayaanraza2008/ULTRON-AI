@@ -501,12 +501,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (env.TAVILY_API_KEY) {
         const response = await fetchImpl("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: true }), redirect: "error", signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw Object.assign(new Error("Research provider failed."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
-        const data = await response.json();
+        const data = JSON.parse(await readModelResponseTextLimited(response));
         return { provider: "tavily", query, answer: bounded(data.answer, 3000), results: (Array.isArray(data.results) ? data.results : []).slice(0, 5).map(x => ({ title: bounded(x.title, 300), url: safePublicUrl(x.url), snippet: bounded(x.content, 1000) })).filter(x => x.url) };
       }
       const response = await fetchImpl("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), { headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" }, redirect: "error", signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw Object.assign(new Error("Public search is unavailable; configure TAVILY_API_KEY for a dedicated provider."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
-      const results = parseSearch((await response.text()).slice(0, 1_500_000));
+      const results = parseSearch((await readModelResponseTextLimited(response, 1_500_000)));
       return { provider: "duckduckgo-html", query, results, notice: "Search snippets are untrusted; verify important claims against linked sources." };
     }
     if (name === "enqueue_employee_task") {
@@ -754,7 +754,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (requestBody.confirmExternalAction !== true) return { provider: "comfyui", state: "needs_confirmation", message: "Review the exact workflow and expected compute use, then set confirmExternalAction=true to queue this generation job." }
       const response = await fetchImpl(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), signal: AbortSignal.timeout(30000) });
       if (!response.ok) throw Object.assign(new Error("ComfyUI returned HTTP " + response.status), { code: "COMFYUI_QUEUE_FAILED", status: 502 });
-      const result = await response.json();
+      const result = JSON.parse(await readModelResponseTextLimited(response));
       if (typeof result.prompt_id !== "string" || !result.prompt_id) throw Object.assign(new Error("ComfyUI returned no prompt ID."), { code: "COMFYUI_INVALID_RESPONSE", status: 502 });
       return { provider: "comfyui", state: "queued", promptId: result.prompt_id, nodeErrors: result.node_errors || {} };
     }
@@ -767,7 +767,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         fetchImpl(base + "/queue", { headers, signal: AbortSignal.timeout(10000) })
       ]);
       if (!systemResponse.ok || !queueResponse.ok) return { provider: "comfyui", reachable: false, state: "unhealthy", status: systemResponse.status || queueResponse.status };
-      const [system, queue] = await Promise.all([systemResponse.json(), queueResponse.json()]);
+      const [system, queue] = await Promise.all([
+        readModelResponseTextLimited(systemResponse).then(JSON.parse),
+        readModelResponseTextLimited(queueResponse).then(JSON.parse)
+      ]);
       return { provider: "comfyui", reachable: true, devices: Array.isArray(system.devices) ? system.devices.map(d => ({ name: bounded(d.name, 120), type: bounded(d.type, 80) })) : [], queue: { running: Array.isArray(queue.queue_running) ? queue.queue_running.length : 0, pending: Array.isArray(queue.queue_pending) ? queue.queue_pending.length : 0 } };
     }
     throw Object.assign(new Error("Tool is not allowlisted."), { code: "TOOL_NOT_ALLOWED", status: 400 });
