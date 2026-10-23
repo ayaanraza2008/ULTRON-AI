@@ -218,5 +218,88 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
   }
 
 
+
+  // VoiceStudio OpenAI-compatible speech service. The upstream origin is
+  // server-configured, never caller-controlled; only speech endpoints are exposed.
+  function voiceStudioConfig() {
+    const base = configuredUrl(env.VOICESTUDIO_BASE_URL);
+    if (!base) return null;
+    return { base, headers: providerHeaders(String(env.VOICESTUDIO_API_KEY || "").trim()) };
+  }
+
+  router.get("/integrations/voicestudio/status", requireSupabaseUser, async (_req, res) => {
+    const cfg = voiceStudioConfig();
+    if (!cfg) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL to a reachable VoiceStudio service." } });
+    try {
+      const models = await requestJson(fetchImpl, cfg.base + "/v1/models", { headers: cfg.headers, timeoutMs: 12000 });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", configured: true, reachable: true, models: Array.isArray(models?.data) ? models.data.slice(0, 100).map(item => ({ id: bounded(item?.id, 160), object: bounded(item?.object, 40) })) : [] });
+    } catch (error) { safeError(res, error, "VoiceStudio status check"); }
+  });
+
+  router.get("/integrations/voicestudio/voices", requireSupabaseUser, async (_req, res) => {
+    const cfg = voiceStudioConfig();
+    if (!cfg) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL first." } });
+    try {
+      const data = await requestJson(fetchImpl, cfg.base + "/v1/audio/voices", { headers: cfg.headers, timeoutMs: 15000 });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", voices: Array.isArray(data?.data) ? data.data.slice(0, 200) : Array.isArray(data?.voices) ? data.voices.slice(0, 200) : [] });
+    } catch (error) { safeError(res, error, "VoiceStudio voice listing"); }
+  });
+
+  router.post("/integrations/voicestudio/speech", requireSupabaseUser, async (req, res) => {
+    const cfg = voiceStudioConfig();
+    if (!cfg) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL first." } });
+    const body = req.body || {};
+    const input = bounded(body.input, 12000);
+    const model = bounded(body.model || "tts-1", 120);
+    const voice = bounded(body.voice || "default", 160);
+    const format = bounded(body.response_format || "mp3", 16).toLowerCase();
+    if (!input) return res.status(400).json({ error: { code: "VOICE_TEXT_REQUIRED", message: "input text is required." } });
+    if (!["mp3", "opus", "aac", "flac", "wav", "pcm"].includes(format)) return res.status(400).json({ error: { code: "VOICE_FORMAT_INVALID", message: "response_format must be mp3, opus, aac, flac, wav, or pcm." } });
+    const payload = { model, voice, input, response_format: format };
+    if (Number.isFinite(body.speed)) payload.speed = Math.max(0.25, Math.min(4, body.speed));
+    if (typeof body.instructions === "string") payload.instructions = body.instructions.slice(0, 2000);
+    try {
+      const response = await fetchImpl(cfg.base + "/v1/audio/speech", {
+        method: "POST", headers: { Accept: "audio/*, application/json", "Content-Type": "application/json", ...cfg.headers },
+        body: JSON.stringify(payload), signal: AbortSignal.timeout(90000)
+      });
+      if (!response.ok) return res.status(response.status === 429 ? 429 : response.status >= 500 ? 502 : 400).json({ error: { code: "VOICESTUDIO_SPEECH_FAILED", message: "VoiceStudio could not generate speech." } });
+      const audio = Buffer.from(await response.arrayBuffer());
+      if (!audio.length || audio.length > 20 * 1024 * 1024) return res.status(502).json({ error: { code: "VOICESTUDIO_AUDIO_SIZE_INVALID", message: "VoiceStudio returned empty or oversized audio." } });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", format, contentType: response.headers.get("content-type") || "audio/mpeg", audioBase64: audio.toString("base64") });
+    } catch (error) { safeError(res, error, "VoiceStudio speech generation"); }
+  });
+
+  router.post("/integrations/voicestudio/transcribe", requireSupabaseUser, async (req, res) => {
+    const cfg = voiceStudioConfig();
+    if (!cfg) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL first." } });
+    const audioBase64 = bounded(req.body?.audioBase64, 18_000_000);
+    const mime = bounded(req.body?.mimeType || "audio/webm", 80).toLowerCase();
+    const filename = bounded(req.body?.filename || "recording.webm", 100).replace(/[^a-zA-Z0-9._-]/g, "_");
+    if (!audioBase64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(audioBase64) || !["audio/webm", "audio/wav", "audio/mpeg", "audio/mp4", "audio/ogg", "audio/flac", "audio/x-wav"].includes(mime)) {
+      return res.status(400).json({ error: { code: "VOICE_AUDIO_INVALID", message: "Provide base64 audio and a supported audio MIME type." } });
+    }
+    const bytes = Buffer.from(audioBase64, "base64");
+    if (!bytes.length || bytes.length > 12 * 1024 * 1024) return res.status(413).json({ error: { code: "VOICE_AUDIO_SIZE_INVALID", message: "Audio must be no larger than 12 MB." } });
+    try {
+      const form = new FormData();
+      form.append("file", new Blob([bytes], { type: mime }), filename);
+      form.append("model", bounded(req.body?.model || "whisper-1", 120));
+      if (typeof req.body?.language === "string" && /^[a-zA-Z-]{2,12}$/.test(req.body.language)) form.append("language", req.body.language);
+      if (typeof req.body?.prompt === "string") form.append("prompt", req.body.prompt.slice(0, 1000));
+      const response = await fetchImpl(cfg.base + "/v1/audio/transcriptions", { method: "POST", headers: { Accept: "application/json", ...cfg.headers }, body: form, signal: AbortSignal.timeout(90000) });
+      const raw = await response.text();
+      if (!response.ok) return res.status(response.status === 429 ? 429 : response.status >= 500 ? 502 : 400).json({ error: { code: "VOICESTUDIO_TRANSCRIPTION_FAILED", message: "VoiceStudio could not transcribe this audio." } });
+      if (raw.length > 2 * 1024 * 1024) return res.status(502).json({ error: { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", message: "Transcription response exceeded the size limit." } });
+      let result;
+      try { result = JSON.parse(raw); } catch { result = { text: raw.slice(0, 12000) }; }
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ provider: "voicestudio", result });
+    } catch (error) { safeError(res, error, "VoiceStudio transcription"); }
+  });
+
   return router;
 }
