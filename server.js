@@ -83,6 +83,12 @@ async function readResponseTextLimited(response, maxBytes) {
   }
 }
 
+async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
+  const raw = await readResponseTextLimited(response, maxBytes);
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
 function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
@@ -254,7 +260,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" }
         });
         if (response.ok) {
-          const user = await response.json();
+          const user = await readResponseJsonLimited(response, 512_000);
           if (user && typeof user.id === "string") { req.supabaseAccessToken = token; return user; }
         } else if (response.status !== 401 || !refreshToken) {
           return null;
@@ -267,7 +273,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         body: JSON.stringify({ refresh_token: refreshToken })
       });
       if (!refreshed.ok) return null;
-      const payload = await refreshed.json();
+      const payload = await readResponseJsonLimited(refreshed, 1_000_000);
       if (!setSupabaseCookies(res, payload)) return null;
       req.supabaseAccessToken = payload.access_token;
       return payload.user && typeof payload.user.id === "string" ? payload.user : null;
@@ -282,7 +288,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       body: JSON.stringify(body)
     });
     let payload = {};
-    try { payload = await response.json(); } catch {}
+    try { payload = await readResponseJsonLimited(response, 1_000_000); } catch { throw Object.assign(new Error("Supabase authentication response was invalid or too large."), { status: 502 }); }
     if (!response.ok) {
       const status = response.status === 429 ? 429 : response.status >= 500 ? 502 : 400;
       const message = response.status === 400 || response.status === 422
@@ -323,7 +329,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     let payload = null;
-    try { payload = await response.json(); } catch {}
+    try { payload = await readResponseJsonLimited(response, 2_000_000); } catch { throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 }); }
     if (!response.ok) {
       logger.warn?.("Supabase data request failed", { table, status: response.status });
       const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : 502;
@@ -388,7 +394,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     try {
       const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
       if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load free models from OpenRouter." } });
-      const payload = await upstream.json();
+      const payload = await readResponseJsonLimited(upstream, 2_000_000);
       const models = Array.isArray(payload?.data)
         ? payload.data.filter(item => item?.id && (String(item.id).endsWith(":free") || (Number(item?.pricing?.prompt) === 0 && Number(item?.pricing?.completion) === 0))).map(item => item.id)
         : [];
@@ -796,7 +802,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (usedFallback) res.setHeader("X-ULTRON-Fallback", "true");
 
       if (!stream) {
-        const data = await upstream.json();
+        const data = await readResponseJsonLimited(upstream, 2_000_000);
         const content = data?.choices?.[0]?.message?.content;
         if (typeof content !== "string") return res.status(502).json({ error: { code: "INVALID_PROVIDER_RESPONSE", message: "The provider returned an unexpected response format." } });
         return res.json({ content, model: data.model || selectedModel });
