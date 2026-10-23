@@ -48,3 +48,18 @@ test("quality gate excludes localhost, private IPs and cloud metadata URLs from 
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
   assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
 });
+
+test("quality gate rejects hex-encoded IPv4-mapped private and loopback IPv6 URLs", () => {
+  const unsafeUrls = [
+    "http://[::ffff:7f00:1]/private",
+    "http://[::ffff:a00:1]/private",
+    "http://[::ffff:a9fe:a9fe]/metadata",
+    "http://[::ffff:c0a8:101]/admin"
+  ];
+  const result = verifyAutonomousOutput({
+    research: { sources: unsafeUrls.map(url => ({ url })) },
+    report: { answer: "A sufficiently substantive report with a conclusion, evidence and next steps. " + unsafeUrls.join(" ") }
+  });
+  assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
+  assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
+});
