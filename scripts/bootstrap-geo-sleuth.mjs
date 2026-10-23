@@ -45,8 +45,14 @@ export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = e
     if (temporaryClone) await rm(temporaryClone, { recursive: true, force: true }).catch(() => {});
   }
 
+  const localBin = path.join(os.homedir(), ".local", "bin");
+  const uvExecutable = path.join(localBin, process.platform === "win32" ? "uv.exe" : "uv");
   try {
-    await runCommand("uv", ["--version"], { timeout: 10000, maxBuffer: 256 * 1024, windowsHide: true });
+    if (existsSync(uvExecutable)) {
+      await runCommand(uvExecutable, ["--version"], { timeout: 10000, maxBuffer: 256 * 1024, windowsHide: true });
+    } else {
+      await runCommand("uv", ["--version"], { timeout: 10000, maxBuffer: 256 * 1024, windowsHide: true });
+    }
   } catch {
     let installer;
     try {
