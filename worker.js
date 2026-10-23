@@ -49,7 +49,7 @@ async function readTextLimited(response, maxBytes) {
   return raw;
 }
 
-async function readJsonLimited(response, maxBytes) {
+export async function readJsonLimited(response, maxBytes) {
   const declaredLength = Number(response.headers?.get?.("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     try { await response.body?.cancel?.(); } catch {}
