@@ -57,7 +57,7 @@ test("Geo-Sleuth intake invokes the pinned local CLI and keeps reverse search op
       return { stdout: "ok", stderr: "" };
     }, async base => {
       const response = await fetch(base + "/api/integrations/geo-sleuth/intake", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: png })
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: "data:image/png;base64," + png })
       });
       assert.equal(response.status, 200);
       const body = await response.json();
