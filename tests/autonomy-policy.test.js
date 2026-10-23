@@ -126,3 +126,22 @@ test("Hinglish PC control and private-data requests are guarded", () => {
   assert.equal(privateData.level, "private_data");
   assert.equal(privateData.requiresConfirmation, true);
 });
+
+test("production deployment and configuration changes require explicit confirmation", () => {
+  for (const task of [
+    "Deploy to production.",
+    "Trigger deployment for the production service.",
+    "Restart production service.",
+    "Change production config."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("read-only deployment status checks remain routine", () => {
+  const risk = classifyAutonomyRisk("Check the production deployment status.");
+  assert.equal(risk.level, "routine");
+  assert.equal(risk.requiresConfirmation, false);
+});
