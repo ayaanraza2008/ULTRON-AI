@@ -257,7 +257,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     try {
       if (token) {
         const response = await fetchImpl(config.url + "/auth/v1/user", {
-          headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" }
+          headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" },
+          redirect: "error", signal: AbortSignal.timeout(15_000)
         });
         if (response.ok) {
           const user = await readResponseJsonLimited(response, 512_000);
@@ -270,7 +271,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       const refreshed = await fetchImpl(config.url + "/auth/v1/token?grant_type=refresh_token", {
         method: "POST",
         headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken })
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        redirect: "error", signal: AbortSignal.timeout(15_000)
       });
       if (!refreshed.ok) return null;
       const payload = await readResponseJsonLimited(refreshed, 1_000_000);
@@ -285,7 +287,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const response = await fetchImpl(config.url + path, {
       method: "POST",
       headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      redirect: "error", signal: AbortSignal.timeout(15_000)
     });
     let payload = {};
     try { payload = await readResponseJsonLimited(response, 1_000_000); } catch { throw Object.assign(new Error("Supabase authentication response was invalid or too large."), { status: 502 }); }
@@ -326,7 +329,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         Accept: "application/json",
         ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: prefer })
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      redirect: "error", signal: AbortSignal.timeout(15_000)
     });
     let payload = null;
     try { payload = await readResponseJsonLimited(response, 2_000_000); } catch { throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 }); }
@@ -392,7 +396,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
     catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL is invalid." } }); }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY } });
+      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY }, redirect: "error", signal: AbortSignal.timeout(15_000) });
       if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load free models from OpenRouter." } });
       const payload = await readResponseJsonLimited(upstream, 2_000_000);
       const models = Array.isArray(payload?.data)
@@ -758,7 +762,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             stream: Boolean(stream),
             temperature: 0.7
           }),
-          signal: controller.signal
+          signal: controller.signal,
+          redirect: "error"
         });
         upstream = attempt;
         selectedModel = candidate;
