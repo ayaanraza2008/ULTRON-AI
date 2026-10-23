@@ -53,13 +53,13 @@ test("common UI actions with external consequences are guarded", () => {
   }
 });
 
-test("local computer execution is guarded while private-data reads are classified separately", () => {
+test("local computer execution and private-data access both require confirmation", () => {
   const device = classifyAutonomyRisk("Run a PowerShell script on my computer.");
   assert.equal(device.level, "device_control");
   assert.equal(device.requiresConfirmation, true);
   const privateData = classifyAutonomyRisk("Search my inbox for the invoice.");
   assert.equal(privateData.level, "private_data");
-  assert.equal(privateData.requiresConfirmation, false);
+  assert.equal(privateData.requiresConfirmation, true);
 });
 
 test("read-only browsing does not become consequential just because it mentions a website", () => {
