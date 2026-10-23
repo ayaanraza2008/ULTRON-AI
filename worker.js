@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
@@ -10,6 +11,39 @@ const roleIds = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "
 
 function bounded(value, max = 4000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function safeResearchUrl(value) {
+  try {
+    if (typeof value !== "string" || value.length > 2048) return "";
+    const url = new URL(value);
+    if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return "";
+    const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+        host === "metadata.google.internal" || host === "metadata.google") return "";
+    const version = isIP(host);
+    if (version === 4) {
+      const octets = host.split(".").map(Number);
+      const [a, b] = octets;
+      if (a === 0 || a === 10 || a === 127 || a >= 224 ||
+          (a === 100 && b >= 64 && b <= 127) ||
+          (a === 169 && b === 254) ||
+          (a === 172 && b >= 16 && b <= 31) ||
+          (a === 192 && (b === 0 || b === 168 || (b === 88 && octets[2] === 99))) ||
+          (a === 198 && (b === 18 || b === 19 || (b === 51 && octets[2] === 100))) ||
+          (a === 203 && b === 0 && octets[2] === 113)) return "";
+    } else if (version === 6) {
+      if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") ||
+          /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")) return "";
+      const mapped = host.match(/::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/);
+      if (mapped && !safeResearchUrl("https://" + mapped[1] + "/")) return "";
+    } else if (!host.includes(".")) {
+      return "";
+    }
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 export function startWorker({ env = process.env, logger = console, fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
@@ -73,8 +107,8 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     return {
       type: "research", query, answer: bounded(data.answer, 6000),
       sources: Array.isArray(data.results) ? data.results.slice(0, 5).map(item => ({
-        title: bounded(item.title, 300), url: bounded(item.url, 1000), snippet: bounded(item.content, 1200)
-      })) : []
+        title: bounded(item.title, 300), url: safeResearchUrl(item.url), snippet: bounded(item.content, 1200)
+      })).filter(item => item.url) : []
     };
   }
 
