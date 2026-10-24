@@ -116,6 +116,25 @@ test("AgentMemory rejects oversized declared response lengths without reading th
   assert.equal(cancelled, true);
 });
 
+test("AgentMemory rejects unstreamable response bodies without calling text()", async () => {
+  let textCalled = false;
+  await assert.rejects(
+    recallAgentMemory("Continue the previous repository implementation", {
+      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+      userId: "user-123",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        body: null,
+        text: async () => { textCalled = true; return "unbounded response"; }
+      })
+    }),
+    error => error.code === "AGENTMEMORY_RESPONSE_UNBOUNDED" && error.retryable === true
+  );
+  assert.equal(textCalled, false);
+});
+
 test("AgentMemory fails safely when the remote service is unavailable", async () => {
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
