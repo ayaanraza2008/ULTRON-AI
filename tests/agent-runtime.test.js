@@ -98,7 +98,7 @@ test("agent automatically injects relevant AgentMemory results for continuation 
   await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
     if (url === "https://memory.example/agentmemory/smart-search") {
       memoryCalls += 1;
-      assert.match(JSON.parse(options.body).project, /^ultron-ai-user-[a-f0-9]{40}$/);
+      assert.equal(JSON.parse(options.body).project, "ultron-ai-user-00000000-0000-4000-8000-000000000001");
       assert.equal(options.headers.Authorization, "Bearer memory-test-secret");
       return new Response(JSON.stringify({ results: [{ title: "Prior architecture", content: "The worker is isolated from the API process." }] }), { status: 200 });
     }
