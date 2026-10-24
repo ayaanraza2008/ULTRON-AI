@@ -158,3 +158,42 @@ test("agent model routing returns a bounded failure when every provider returns 
     assert.doesNotMatch(body, /only-test-key|not-json/);
   });
 });
+
+
+test("agent model routing fails over after a provider timeout without exposing provider details", async () => {
+  const calls = [];
+  const env = {
+    FIRST_KEY: "first-timeout-test-key",
+    SECOND_KEY: "second-timeout-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+  await withServer(env, async url => {
+    calls.push(url);
+    if (url.startsWith("https://first.example/")) {
+      const timeout = new Error("synthetic timeout detail");
+      timeout.name = "TimeoutError";
+      throw timeout;
+    }
+    return new Response(JSON.stringify({
+      model: "model-b",
+      choices: [{ message: { role: "assistant", content: "Recovered after provider timeout." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.match(body, /Recovered after provider timeout/);
+    assert.doesNotMatch(body, /first-timeout-test-key|second-timeout-test-key|synthetic timeout detail/);
+    assert.deepEqual(calls, [
+      "https://first.example/v1/chat/completions",
+      "https://second.example/v1/chat/completions"
+    ]);
+  });
+});
