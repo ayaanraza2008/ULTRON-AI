@@ -68,8 +68,12 @@ class WakeWordService : Service() {
         } catch (_: RuntimeException) {
             updateListeningNotification("Could not start local recognition. Listening stopped.")
             stopWakeWordService()
+            return START_NOT_STICKY
         }
-        return START_NOT_STICKY
+        // Request best-effort system restart if Android reclaims this process.
+        // User Stop explicitly calls stopSelf(), so intentional shutdown remains non-sticky.
+        // This does not restart after force-stop or device reboot.
+        return START_STICKY
     }
 
     private val listener = object : RecognitionListener {
