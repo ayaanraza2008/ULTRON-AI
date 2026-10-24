@@ -13,6 +13,6 @@ Requirements: Java 17, Android SDK 35, and Gradle 8.9. From this directory run `
 - Android 12 or newer is required.
 - An on-device English speech model must already be installed; the app does not download models or fall back to cloud recognition.
 - Keep the ongoing listening notification visible and use its Stop action to disable the microphone.
-- Android controls background microphone access, battery optimization, and service restarts. Listening is not guaranteed after force-stop, reboot, deep sleep, or OEM restrictions.
+- The foreground service requests a best-effort restart if Android reclaims its process. Android controls background microphone access and battery optimization; listening is not guaranteed after force-stop, reboot, deep sleep, or OEM restrictions. After reboot, open the companion and enable listening again.
 - Wake notifications do not bypass the lock screen or device authentication.
 - This is a wake-word companion, not the full mobile ULTRON app or remote phone-control system.
