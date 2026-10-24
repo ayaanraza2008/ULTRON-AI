@@ -81,6 +81,10 @@ test("AgentMemory rejects private, local, credentialed and insecure remote endpo
   for (const url of [
     "https://127.0.0.1:8080",
     "https://10.0.0.5",
+    "https://192.0.2.10",
+    "https://192.88.99.10",
+    "https://198.51.100.10",
+    "https://203.0.113.10",
     "https://[::1]",
     "https://[::ffff:7f00:1]",
     "https://[fd00::1]",
