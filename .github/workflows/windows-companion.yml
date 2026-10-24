@@ -1,0 +1,37 @@
+name: ULTRON Windows Companion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "windows-companion/**"
+      - ".github/workflows/windows-companion.yml"
+  pull_request:
+    paths:
+      - "windows-companion/**"
+      - ".github/workflows/windows-companion.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-companion:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore dependencies
+        run: dotnet restore windows-companion/Ultron.Companion.csproj
+      - name: Compile
+        run: dotnet build windows-companion/Ultron.Companion.csproj --configuration Release --no-restore
+      - name: Publish standalone x64 executable
+        run: dotnet publish windows-companion/Ultron.Companion.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output artifacts/ultron-windows-companion
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ULTRON-Windows-Wake-Companion
+          path: artifacts/ultron-windows-companion/ULTRON.Companion.exe
+          if-no-files-found: error
+          retention-days: 14
