@@ -745,3 +745,28 @@ test("coding assistance retries a provider timeout with the next eligible provid
   ]);
 });
 
+test("feature endpoints reject unsafe fallback provider URLs without making network requests", async () => {
+  let providerCalls = 0;
+  const secret = "must-never-be-returned";
+  const env = {
+    UNSAFE_API_KEY: secret,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "unsafe", baseUrl: "http://provider.example/v1", apiKeyEnv: "UNSAFE_API_KEY", model: "unsafe-model", priority: 1 }
+    ])
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Check provider safety", mode: "review" })
+    });
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.error.code, "CODING_PROVIDER_NOT_CONFIGURED");
+    assert.equal(JSON.stringify(body).includes(secret), false);
+    assert.equal(providerCalls, 0);
+  }, { fetchImpl: async () => {
+    providerCalls += 1;
+    throw new Error("Unsafe provider URL must not be called");
+  } });
+});
+
