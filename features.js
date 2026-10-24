@@ -288,9 +288,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const prompt = JSON.stringify({ role: { id: role.id, name: role.name, owns: role.owns, capabilities: role.capabilities }, mode, goal, context: context || undefined });
     const timeout = withTimeout(45000, req.signal);
     try {
-      const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
+      const providerBase = safeBaseUrl(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
+      if (!providerBase || !env.OPENROUTER_API_KEY?.trim()) {
+        return res.status(503).json({ error: { code: "EMPLOYEE_PROVIDER_NOT_CONFIGURED", message: "AI Employee planning provider is not configured securely." } });
+      }
+      const response = await fetchImpl(providerBase + "/chat/completions", {
         method: "POST",
-        headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI Employees" },
+        redirect: "error",
+        headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", Accept: "application/json", "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI Employees" },
         body: JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 2200 }),
         signal: timeout.signal
       });
@@ -298,7 +303,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         logger.warn?.("AI Employee provider request failed", { status: response.status });
         return res.status(502).json({ error: { code: "EMPLOYEE_PROVIDER_FAILED", message: "The AI Employee provider could not complete this request." } });
       }
-      const payload = await response.json();
+      let payload;
+      try {
+        const bytes = await readResponseBytes(response, 2_000_000);
+        payload = JSON.parse(bytes.toString("utf8"));
+      } catch (error) {
+        logger.warn?.("AI Employee provider response rejected", { code: error?.code || "INVALID_PROVIDER_RESPONSE" });
+        return res.status(502).json({ error: { code: "EMPLOYEE_INVALID_PROVIDER_RESPONSE", message: "The AI Employee provider returned an invalid or oversized response." } });
+      }
       const answer = payload?.choices?.[0]?.message?.content;
       if (typeof answer !== "string" || !answer.trim()) return res.status(502).json({ error: { code: "EMPLOYEE_EMPTY_RESPONSE", message: "The provider returned no plan." } });
       res.json({
