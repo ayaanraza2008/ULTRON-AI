@@ -522,7 +522,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       // draft-only plan/review/report tasks, so do not interrupt with a second confirmation.
       if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !env.OPENROUTER_API_KEY) return { state: "blocked", role, mode, blocker: "The background worker, server-side Supabase key, and model provider must all be configured." };
       if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) throw Object.assign(new Error("Authenticated task storage is unavailable."), { code: "TASK_STORAGE_UNAVAILABLE", status: 503 });
-      const autonomousWorkflow = /\\b(research|investigate|look into|find sources)\\b/i.test(goal) && /\\b(report|summary|recommendations|brief)\\b/i.test(goal);
+      const autonomousWorkflow = /\b(research|investigate|look into|find sources)\b/i.test(goal) && /\b(report|summary|recommendations|brief)\b/i.test(goal);
       const input = { taskType: autonomousWorkflow ? "autonomous" : "employee", executionMode: "employee_worker", role, goal, context, mode: autonomousWorkflow ? "report" : mode, requiresApproval: false, approved: true, createdBy: "ultron_agent_tool" };
       const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", { user_id: req.supabaseUser.id, title: goal.slice(0, 240), input, status: "QUEUED" });
       if (!Array.isArray(rows) || !rows[0]?.id) throw Object.assign(new Error("Task queue did not return a task ID."), { code: "TASK_CREATE_FAILED", status: 502 });
