@@ -987,9 +987,27 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       }
       const toolMessages = [];
       const used = [];
+      const executedToolCalls = new Set();
+      function stableToolArguments(value) {
+  if (Array.isArray(value)) return "[" + value.map(stableToolArguments).join(",") + "]";
+  if (value && typeof value === "object") {
+    return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + stableToolArguments(value[key])).join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+const toolCallKey = (name, args) => name + ":" + stableToolArguments(args);
       for (const call of calls) {
         const name = call?.function?.name;
         const args = parseArgs(call?.function?.arguments);
+        const dedupeKey = toolCallKey(name, args);
+        if (executedToolCalls.has(dedupeKey)) {
+          const result = { error: { code: "DUPLICATE_TOOL_CALL_SKIPPED", message: "This identical tool call was already executed during the current request." } };
+          used.push({ name, ok: false, result });
+          toolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)) });
+          continue;
+        }
+        executedToolCalls.add(dedupeKey);
         let result;
         try {
           // Enforce the autonomy policy at the dispatch boundary, not just in
@@ -1029,6 +1047,14 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           for (const call of followCalls) {
             const name = call?.function?.name;
             const args = parseArgs(call?.function?.arguments);
+            const dedupeKey = toolCallKey(name, args);
+            if (executedToolCalls.has(dedupeKey)) {
+              const result = { error: { code: "DUPLICATE_TOOL_CALL_SKIPPED", message: "This identical tool call was already executed during the current request." } };
+              used.push({ name, ok: false, result });
+              followToolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)) });
+              continue;
+            }
+            executedToolCalls.add(dedupeKey);
             let result;
             try {
               if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
