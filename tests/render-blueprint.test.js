@@ -5,10 +5,18 @@ import { readFile } from "node:fs/promises";
 const blueprint = await readFile(new URL("../render.yaml", import.meta.url), "utf8");
 
 function serviceBlock(name) {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = blueprint.match(new RegExp(`(?ms)^  - type: web\\n(?:(?!^  - type: web).)*?^    name: ${escaped}\\n(?:(?!^  - type: web).)*`));
-  assert.ok(match, `Render Blueprint must define service ${name}`);
-  return match[0];
+  const lines = blueprint.split(/\r?\n/);
+  const start = lines.findIndex(line => line.trim() === "- type: web");
+  const starts = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].trim() === "- type: web") starts.push(i);
+  }
+  const serviceStart = starts.findIndex(index => lines.slice(index, starts[starts.indexOf(index) + 1] ?? lines.length)
+    .some(line => line.trim() === `name: ${name}`));
+  assert.ok(serviceStart >= 0, `Render Blueprint must define service ${name}`);
+  const from = starts[serviceStart];
+  const to = starts[serviceStart + 1] ?? lines.length;
+  return lines.slice(from, to).join("\n");
 }
 
 test("God's Eye blueprint removes stale build cache before cloning pinned source", () => {
