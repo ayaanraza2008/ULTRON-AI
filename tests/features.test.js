@@ -150,6 +150,48 @@ test("task approval requires explicit confirmation and preserves original task i
   }, { supabaseRest: fakeSupabaseRest });
 });
 
+
+test("speech synthesis rejects oversized streamed provider responses without buffering them fully", async () => {
+  let cancelled = false;
+  await withServer({ TTS_API_BASE_URL: "https://speech.example", TTS_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/speech/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "hello" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "TTS_INVALID_AUDIO");
+    assert.equal(cancelled, true);
+  }, {
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.redirect, "error");
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(12_000_001)); },
+        cancel() { cancelled = true; }
+      }), { status: 200, headers: { "content-type": "audio/mpeg" } });
+    }
+  });
+});
+
+test("speech transcription rejects oversized streamed provider responses", async () => {
+  let called = false;
+  await withServer({ STT_API_BASE_URL: "https://speech.example", STT_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/speech/transcribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audioBase64: Buffer.from("audio").toString("base64"), mimeType: "audio/wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "STT_RESPONSE_TOO_LARGE");
+    assert.equal(called, true);
+  }, {
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.redirect, "error");
+      called = true;
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(1_000_001)); }
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+  });
+});
+
 test("premium speech endpoints fail clearly when no provider is configured", async () => {
   await withServer({}, async base => {
     const response = await fetch(base + "/api/speech/synthesize", {
