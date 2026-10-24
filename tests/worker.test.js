@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker, renewTaskLease, readJsonLimited, readTextLimited } from "../worker.js";
+import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner } from "../worker.js";
 
 test("limited response readers reject non-streaming fallbacks before buffering", async () => {
   let textCalls = 0;
@@ -1201,4 +1201,26 @@ test("bounded provider JSON reader preserves abort errors rather than relabeling
     error => error === abortError && error.name === "AbortError"
   );
   assert.equal(released, true, "reader lock must be released after an aborted read");
+});
+
+
+test("task lease heartbeat skips overlapping ticks instead of queueing requests", async () => {
+  let release;
+  let calls = 0;
+  const runner = createNonOverlappingRunner(() => {
+    calls += 1;
+    return new Promise(resolve => { release = resolve; });
+  });
+  assert.equal(runner.trigger(), true);
+  await Promise.resolve();
+  assert.equal(runner.trigger(), false, "a second tick must be skipped while the first is pending");
+  assert.equal(runner.trigger(), false);
+  assert.equal(calls, 1);
+  release();
+  await runner.wait();
+  assert.equal(runner.trigger(), true, "heartbeat may run again after the previous request settles");
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  release();
+  await runner.wait();
 });
