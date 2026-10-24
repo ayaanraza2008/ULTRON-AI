@@ -5,7 +5,7 @@ create or replace function public.ultron_claim_next_task()
 returns setof public.agent_tasks
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   claimed public.agent_tasks;
