@@ -155,3 +155,75 @@ test("Browser Use model proxy rejects malformed and empty completions when no fa
     assert.equal((await response.json()).error.type, "provider_request_failed");
   });
 });
+
+test("Browser Use model proxy works with a configured alternate provider when OpenRouter is absent", async () => {
+  let forwarded;
+  const app = createApp({
+    env: {
+      ULTRON_BROWSER_USE_TOKEN: "shared-test-token",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "groq", baseUrl: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "llama-3.3-70b-versatile", priority: 10 }
+      ]),
+      GROQ_API_KEY: "secondary-provider-secret"
+    },
+    fetchImpl: async (url, options) => {
+      forwarded = { url, options };
+      return new Response(JSON.stringify({ model: "llama-3.3-70b-versatile", choices: [{ message: { content: "alternate provider ok" } }] }), { status: 200 });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer shared-test-token" },
+      body: JSON.stringify({ model: "unapproved/model", messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ultron-provider"), "groq");
+    assert.equal(response.headers.get("x-ultron-model"), "llama-3.3-70b-versatile");
+    assert.equal((await response.json()).choices[0].message.content, "alternate provider ok");
+    assert.equal(forwarded.url, "https://api.groq.com/openai/v1/chat/completions");
+    assert.equal(forwarded.options.headers.Authorization, "Bearer secondary-provider-secret");
+    assert.equal(JSON.parse(forwarded.options.body).model, "llama-3.3-70b-versatile");
+    assert.equal(JSON.stringify(forwarded).includes("shared-test-token"), false);
+  });
+});
+
+test("Browser Use model proxy falls back from an OpenRouter rate limit to an alternate provider", async () => {
+  const attempted = [];
+  const app = createApp({
+    env: {
+      ULTRON_BROWSER_USE_TOKEN: "shared-test-token",
+      OPENROUTER_API_KEY: "primary-provider-secret",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+      OPENROUTER_DEFAULT_MODEL: "provider/primary:free",
+      ULTRON_AVAILABLE_MODELS: "provider/primary:free",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "groq", baseUrl: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "llama-3.3-70b-versatile", priority: 10 }
+      ]),
+      GROQ_API_KEY: "secondary-provider-secret"
+    },
+    fetchImpl: async (url, options) => {
+      const model = JSON.parse(options.body).model;
+      attempted.push({ url, model });
+      if (url.startsWith("https://openrouter.ai/")) return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+      return new Response(JSON.stringify({ model, choices: [{ message: { content: "fallback ok" } }] }), { status: 200 });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer shared-test-token" },
+      body: JSON.stringify({ model: "provider/primary:free", messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ultron-provider"), "groq");
+    assert.deepEqual(attempted, [
+      { url: "https://openrouter.ai/api/v1/chat/completions", model: "provider/primary:free" },
+      { url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" }
+    ]);
+    assert.equal((await response.json()).choices[0].message.content, "fallback ok");
+  });
+});
+
