@@ -15,8 +15,12 @@ function isPrivateOrLocalHost(hostname) {
       (a >= 224);
   }
   if (ipVersion === 6) {
-    return host === "::1" || host === "::" || /^f[cd]/i.test(host) ||
-      /^fe[89ab]/i.test(host) || /^::ffff:(?:10\\.|127\\.|192\\.168\\.|169\\.254\\.|172\\.(?:1[6-9]|2[0-9]|3[01])\\.)/i.test(host);
+    // Only global-unicast IPv6 is eligible. Reject loopback, unspecified,
+    // IPv4-mapped, ULA, link-local, multicast and documentation/tunnel ranges.
+    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+    if (firstHextet < 0x2000 || firstHextet > 0x3fff) return true;
+    if (host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:")) return true;
+    return false;
   }
   // Single-label names are usually local network aliases rather than public services.
   return !host.includes(".");
