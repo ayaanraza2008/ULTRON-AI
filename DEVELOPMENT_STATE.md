@@ -40,3 +40,32 @@ Last verified: 2026-10-24 UTC
 
 ## Reporting standard
 For each capability, distinguish implemented, unit-tested, integration-tested, deployed, live-verified, and blocked. Never claim full autonomy, 100% correctness, or successful provider inference based only on configuration or a passing mock test.
+
+## Backend development checkpoint — 2026-10-24 UTC
+
+This checkpoint describes candidate work on draft pull requests. None of these changes are merged to `main` or deployed to Render. Production remains on `main` commit `d6d116008d3e1e77fb2491bc04d96ea2d5516e08`; CI's deployed health smoke test returned `status: ok` and configuration flags only. This is not proof of successful model inference.
+
+### Candidate changes and evidence
+
+- **PR #185 — provider fallback for coding assistance and AI Employee planning:** `features.js` and `tests/features.test.js`. The feature endpoints now share an ordered, server-side provider registry, bounded provider attempts and response handling. The stacked verification run for PR #186 passed 312 tests with 0 failures on a merge snapshot containing this branch at head `41d27c72122a8868d850664d01f23f884c20c865`. The direct PR workflow initially hit an intermittent Puppeteer download error; retry attempt 2 passed both jobs. [PR #185](https://github.com/ayaanraza2008/ULTRON-AI/pull/185) · [retry run](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40126085702)
+- **PR #186 — stacked provider safety regression:** includes a check that insecure HTTP fallback providers are rejected before any request and secrets are not returned. Both CI jobs passed; 312 tests passed. It targets the #185 branch and should be considered in dependency order. [PR #186](https://github.com/ayaanraza2008/ULTRON-AI/pull/186) · [CI run](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40126177950)
+- **PR #187 — base URL hardening:** `agent-runtime.js`, `integrations/router.js`, and regression tests reject query strings/fragments in configured provider and bridge base URLs. Both CI jobs passed; 307 tests passed, 0 failed. [PR #187](https://github.com/ayaanraza2008/ULTRON-AI/pull/187) · [CI run](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40126299617)
+- **PR #188 — opt-in live Supabase isolation test:** adds a two-user test for conversations/messages/memory, cross-account read denial and rejection of forged row ownership, with cleanup of temporary test rows. CI passed (305 passed, 0 failed, 1 skipped) and the World Intelligence build passed. The live test was skipped because the explicit write-confirmation value and dedicated test-account credentials were not supplied. Thus, live cross-account RLS behavior remains unverified. [PR #188](https://github.com/ayaanraza2008/ULTRON-AI/pull/188) · [CI run](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40126559013)
+
+### Remaining verified blockers
+
+1. Real authenticated cloud-model inference has not been proven from the deployed chat API. Health only confirms settings are present.
+2. Live conversation/memory persistence and cross-account isolation still require dedicated test-account credentials and the opt-in test described in `docs/SUPABASE_E2E_ISOLATION.md`.
+3. Supabase Security Advisor reports **Leaked Password Protection Disabled**. This is an Auth dashboard setting; the available Supabase connector does not expose a safe Auth-settings mutation.
+4. The worker queue and task transitions still need a controlled live test task.
+5. Google/phone Auth, confirmation/recovery email delivery, research/voice providers, Browser Use bridge, Windows companion pairing, and other external services still need credential-backed live verification.
+6. Windows PC control requires a paired local companion. Arbitrary generated code execution remains unavailable until a properly isolated sandbox is implemented and tested.
+
+### Resume order
+
+1. Review draft PRs and resolve them in dependency order; do not merge/deploy automatically during a backend-only session because Render auto-deploys from `main`.
+2. Run the opt-in two-account Supabase test only with dedicated test users and the explicit confirmation flag; never store their credentials in source control.
+3. Verify a real authenticated model completion and a controlled task-worker state transition through approved credentials.
+4. Enable leaked-password protection in Supabase Auth settings, then rerun the Security Advisor.
+5. Continue backend-only work. Keep frontend source untouched until the final frontend phase is explicitly authorized.
+
