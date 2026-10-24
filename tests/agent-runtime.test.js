@@ -1165,3 +1165,41 @@ test("employee model readiness rejects alternate provider URLs with credentials,
     });
   }
 });
+
+test("browser bridge rejects a configured URL with query parameters before forwarding its token", async () => {
+  let bridgeCalls = 0;
+  let providerCalls = 0;
+  const querySecret = "no-query-token-forwarding";
+  await withServer({
+    OPENROUTER_API_KEY: "test-only",
+    ULTRON_BROWSER_USE_URL: "https://browser.example?token=" + querySecret,
+    ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
+  }, async (url, options) => {
+    if (url.startsWith("https://browser.example")) {
+      bridgeCalls += 1;
+      throw new Error("unsafe bridge URL must not be called");
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "browser-invalid-base", type: "function",
+        function: { name: "browser_use", arguments: JSON.stringify({ task: "Open the website and inspect the pricing page" }) }
+      }] } }] }), { status: 200 });
+    }
+    assert.ok(payload.messages.some(message => message.role === "tool" && String(message.content).includes("not configured")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Browser bridge was safely blocked." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Open the website and inspect the pricing page" })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(bridgeCalls, 0);
+    const body = await response.json();
+    assert.match(body.content, /safely blocked/i);
+    assert.equal(JSON.stringify(body).includes(querySecret), false);
+    assert.ok(providerCalls >= 2);
+  });
+});
