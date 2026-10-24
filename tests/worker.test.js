@@ -1271,3 +1271,39 @@ test("worker discards a retryable provider failure when the task was cancelled b
   assert.equal(auditEvents[0]?.outcome, "denied");
   assert.equal(auditEvents[0]?.metadata?.reason, "task_state_changed_during_execution");
 });
+
+
+test("worker continues polling after a transient database cycle error", async () => {
+  let worker;
+  let schedulePolls = 0;
+  let taskPolls = 0;
+  let sleeps = 0;
+  const errors = [];
+  worker = startWorker({
+    env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "test-only" },
+    logger: { info() {}, warn() {}, error: (...args) => errors.push(args) },
+    sleepImpl: async () => {
+      sleeps += 1;
+      if (sleeps === 2) worker.stop();
+    },
+    fetchImpl: async url => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) {
+        schedulePolls += 1;
+        if (schedulePolls === 1) throw new Error("temporary Supabase network interruption");
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/rpc/ultron_claim_next_task")) {
+        taskPolls += 1;
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(status.state, "stopped");
+  assert.equal(schedulePolls, 2, "the next cycle must retry the schedule poll");
+  assert.equal(taskPolls, 2, "the worker must keep servicing task polling after recovery");
+  assert.ok(status.lastCycleSuccessAt, "a successful cycle should be recorded after the transient failure");
+  assert.ok(errors.some(args => String(args[0]).includes("Worker cycle failed")));
+});
