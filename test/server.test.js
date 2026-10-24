@@ -331,6 +331,29 @@ test("phone sign-in validates input and completes provider verification", async 
   });
 });
 
+test("phone OTP verification rejects malformed codes without contacting Supabase", async () => {
+  let calls = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async () => { calls++; throw new Error("invalid OTP must not reach provider"); },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    for (const input of [
+      { phone: "not-a-phone", token: "123456" },
+      { phone: "+19999999999", token: "abc123" },
+      { phone: "+19999999999", token: "123" }
+    ]) {
+      const response = await fetch(base + "/api/auth/phone/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input)
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, "INVALID_PHONE_OTP");
+    }
+    assert.equal(calls, 0);
+  });
+});
+
 test("expired Supabase access tokens refresh before database requests", async () => {
   const supabaseEnv = { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
   let restAuthorization = "";
