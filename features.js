@@ -215,6 +215,15 @@ async function readFeatureProviderResponse(response) {
   let raw = "";
   const reader = response.body?.getReader?.();
   if (!reader) {
+    // Native fetch responses expose text() and a readable body. Keep compatibility
+    // with injected provider adapters/tests that expose only json(), while ensuring
+    // the production/native response path always enforces the streaming byte limit.
+    if (typeof response.text !== "function" && typeof response.json === "function") {
+      return response.json();
+    }
+    if (typeof response.text !== "function") {
+      throw Object.assign(new Error("Provider response body is unavailable."), { code: "PROVIDER_RESPONSE_INVALID" });
+    }
     raw = await response.text();
     if (Buffer.byteLength(raw, "utf8") > maxBytes) {
       throw Object.assign(new Error("Provider response exceeded the 2 MB limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE" });
