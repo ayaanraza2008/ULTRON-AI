@@ -66,9 +66,11 @@ async function readResponseTextLimited(response, maxBytes = MAX_RESPONSE_BYTES) 
     throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
   }
   if (!response.body?.getReader) {
-    const raw = await response.text();
-    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
-    return raw;
+    // Fail closed: measuring after response.text() would allocate the full body first.
+    throw Object.assign(new Error("AgentMemory response cannot be safely size-limited."), {
+      code: "AGENTMEMORY_RESPONSE_UNBOUNDED",
+      retryable: true
+    });
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
