@@ -7,7 +7,7 @@ function configuredUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     const url = new URL(value.trim());
-    if (url.username || url.password || url.hash) return null;
+    if (url.username || url.password || url.search || url.hash) return null;
     if (url.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(url.hostname)) return null;
     return url.toString().replace(/\/+$/, "");
   } catch { return null; }
