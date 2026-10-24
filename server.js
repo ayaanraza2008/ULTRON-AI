@@ -606,6 +606,48 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
+  app.post("/api/auth/resend-confirmation", authRateLimiter, async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: { code: "INVALID_EMAIL", message: "Enter a valid account email address." } });
+    }
+
+    // Only accept an owner-configured HTTPS redirect. Supabase still enforces its
+    // own redirect allow-list; this endpoint never trusts a redirect from request data.
+    const redirect = String(env.ULTRON_AUTH_REDIRECT_URL || "").trim();
+    let emailRedirectTo;
+    if (redirect) {
+      try {
+        const parsed = new URL(redirect);
+        const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(parsed.hostname.toLowerCase());
+        if ((parsed.protocol !== "https:" && !(parsed.protocol === "http:" && local)) ||
+            parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error("unsafe redirect");
+        emailRedirectTo = parsed.toString();
+      } catch {
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(503).json({ error: { code: "AUTH_REDIRECT_MISCONFIGURED", message: "Confirmation email resend is temporarily unavailable." } });
+      }
+    }
+
+    try {
+      const body = { type: "signup", email };
+      if (emailRedirectTo) body.options = { emailRedirectTo };
+      await supabaseAuthRequest("/auth/v1/resend", body);
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ ok: true, message: "If this account can receive a confirmation email, instructions will be sent." });
+    } catch (error) {
+      res.setHeader("Cache-Control", "no-store");
+      // Hide whether the email exists or is already confirmed.
+      if (error.status === 429) {
+        return res.status(429).json({ error: { code: "RESEND_RATE_LIMITED", message: "Too many requests. Please wait before retrying." } });
+      }
+      if (error.status >= 500) {
+        return res.status(error.status).json({ error: { code: "RESEND_UNAVAILABLE", message: "Confirmation email resend is temporarily unavailable." } });
+      }
+      return res.json({ ok: true, message: "If this account can receive a confirmation email, instructions will be sent." });
+    }
+  });
+
   app.post("/api/auth/signin", authRateLimiter, async (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
