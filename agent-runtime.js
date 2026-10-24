@@ -299,7 +299,12 @@ function modelSafeResult(value, depth = 0) {
   if (!value || typeof value !== "object") return value;
   const out = {};
   for (const [key, item] of Object.entries(value)) {
-    if (typeof item === "string" && /(base64|audio|video|image|binary|blob)/i.test(key) && item.length > 1000) {
+    // Tool outputs are untrusted. Never feed credential-bearing fields back to a
+    // model, even if an integration accidentally echoes request headers/config.
+    if (/(?:^|[_-])(api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|password|passwd|secret|credential|cookie|private[_-]?key)(?:$|[_-])/i.test(key)
+        || /^(?:apiKey|accessToken|refreshToken|authorization|password|passwd|secret|credential|cookie|privateKey)$/i.test(key)) {
+      out[key] = "[redacted]";
+    } else if (typeof item === "string" && /(base64|audio|video|image|binary|blob)/i.test(key) && item.length > 1000) {
       out[key] = "[binary payload omitted from model context; available in toolResults]";
     } else {
       out[key] = modelSafeResult(item, depth + 1);
