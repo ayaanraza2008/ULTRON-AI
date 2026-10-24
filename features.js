@@ -15,6 +15,37 @@ function safeBaseUrl(value) {
 function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
+async function readResponseBytes(response, maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("Upstream response exceeded its size limit."), { code: "UPSTREAM_RESPONSE_TOO_LARGE" });
+  }
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxBytes) throw Object.assign(new Error("Upstream response exceeded its size limit."), { code: "UPSTREAM_RESPONSE_TOO_LARGE" });
+    return bytes;
+  }
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("Upstream response exceeded its size limit."), { code: "UPSTREAM_RESPONSE_TOO_LARGE" });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, total);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 
 export function hasEmployeeModelProvider(env) {
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
@@ -475,17 +506,19 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const response = await fetchImpl(base + "/audio/speech", {
         method: "POST", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.TTS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
-        body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" })
+        body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" }),
+        redirect: "error"
       });
       if (!response.ok) return res.status(502).json({ error: { code: "TTS_PROVIDER_FAILED", message: "The configured OpenAI-compatible speech provider failed." } });
-      const bytes = Buffer.from(await response.arrayBuffer());
-      if (!bytes.length || bytes.length > 12_000_000) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty or oversized audio." } });
+      const bytes = await readResponseBytes(response, 12_000_000);
+      if (!bytes.length) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty audio." } });
       res.setHeader("Content-Type", response.headers.get("content-type")?.startsWith("audio/") ? response.headers.get("content-type") : "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Content-Length", String(bytes.length));
       res.send(bytes);
     } catch (error) {
-      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "TTS_TIMEOUT" : "TTS_UNAVAILABLE", message: "Speech synthesis failed or timed out." } });
+      const oversized = error?.code === "UPSTREAM_RESPONSE_TOO_LARGE";
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "TTS_TIMEOUT" : oversized ? "TTS_INVALID_AUDIO" : "TTS_UNAVAILABLE", message: oversized ? "The speech provider returned oversized audio." : "Speech synthesis failed or timed out." } });
     } finally { timeout.close(); }
   });
 
@@ -507,14 +540,19 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const response = await fetchImpl(base + "/audio/transcriptions", {
         method: "POST", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.STT_API_KEY },
-        body: form
+        body: form,
+        redirect: "error"
       });
       if (!response.ok) return res.status(502).json({ error: { code: "STT_PROVIDER_FAILED", message: "The configured OpenAI-compatible transcription provider failed." } });
-      const payload = await response.json();
+      const raw = await readResponseBytes(response, 1_000_000);
+      let payload;
+      try { payload = JSON.parse(raw.toString("utf8")); } catch { payload = null; }
+      if (!payload || typeof payload !== "object") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
       if (typeof payload.text !== "string") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
       res.json({ text: payload.text.slice(0, 12000), language: payload.language || null });
-    } catch {
-      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "STT_TIMEOUT" : "STT_UNAVAILABLE", message: "Transcription failed or timed out." } });
+    } catch (error) {
+      const oversized = error?.code === "UPSTREAM_RESPONSE_TOO_LARGE";
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "STT_TIMEOUT" : oversized ? "STT_RESPONSE_TOO_LARGE" : "STT_UNAVAILABLE", message: oversized ? "The transcription provider returned an oversized response." : "Transcription failed or timed out." } });
     } finally { timeout.close(); }
   });
 
