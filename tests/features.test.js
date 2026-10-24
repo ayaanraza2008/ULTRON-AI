@@ -1,7 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createFeatureRouter } from "../features.js";
+import { createFeatureRouter, hasEmployeeModelProvider } from "../features.js";
+
+
+test("employee provider readiness rejects private and reserved HTTPS endpoints", () => {
+  for (const baseUrl of [
+    "https://localhost/v1",
+    "https://127.0.0.1/v1",
+    "https://10.0.0.8/v1",
+    "https://192.0.2.10/v1",
+    "https://169.254.169.254/latest/meta-data",
+    "https://[::1]/v1",
+    "https://host.internal/v1"
+  ]) {
+    assert.equal(hasEmployeeModelProvider({
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "alternate", baseUrl, apiKeyEnv: "ALT_PROVIDER_KEY", model: "test-model" }
+      ]),
+      ALT_PROVIDER_KEY: "test-key"
+    }), false, baseUrl);
+  }
+});
+
+test("employee provider readiness accepts a public HTTPS endpoint", () => {
+  assert.equal(hasEmployeeModelProvider({
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "alternate", baseUrl: "https://api.example.com/v1", apiKeyEnv: "ALT_PROVIDER_KEY", model: "test-model" }
+    ]),
+    ALT_PROVIDER_KEY: "test-key"
+  }), true);
+});
 
 async function withServer(env, run, extras = {}) {
   const app = express();
