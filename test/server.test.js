@@ -323,6 +323,11 @@ test("phone sign-in validates input and completes provider verification", async 
     assert.equal(requested.status, 200);
     assert.equal((await requested.json()).ok, true);
     assert.deepEqual(calls[0].body, { phone: "+19999999999", create_user: true });
+    const repeated = await fetch(base + "/api/auth/phone/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "+19999999999" }) });
+    assert.equal(repeated.status, 429);
+    assert.equal(repeated.headers.get("cache-control"), "no-store");
+    assert.ok(Number(repeated.headers.get("retry-after")) > 0);
+    assert.equal(calls.length, 1, "cooldown must block the repeated provider request");
     const verified = await fetch(base + "/api/auth/phone/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "+19999999999", token: "123456" }) });
     assert.equal(verified.status, 200);
     assert.equal((await verified.json()).authenticated, true);
