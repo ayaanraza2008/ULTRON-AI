@@ -155,7 +155,10 @@ function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
   if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-    throw new Error("OPENROUTER_BASE_URL must use HTTPS outside localhost.");
+    throw new Error("Model provider base URL must use HTTPS outside localhost.");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error("Model provider base URL must not include credentials, query parameters, or fragments.");
   }
   return raw.replace(/\/+$/, "");
 }
@@ -186,6 +189,60 @@ function hasConfiguredModelProvider(env) {
         typeof env[provider.apiKeyEnv.trim()] === "string" && Boolean(env[provider.apiKeyEnv.trim()].trim());
     } catch { return false; }
   });
+}
+
+function configuredChatProviders(env, openRouterBaseUrl = null) {
+  const providers = [];
+  const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
+  if (primaryKey && openRouterBaseUrl) {
+    providers.push({
+      name: "openrouter",
+      baseUrl: openRouterBaseUrl,
+      apiKey: primaryKey,
+      model: typeof env.OPENROUTER_DEFAULT_MODEL === "string" && env.OPENROUTER_DEFAULT_MODEL.trim()
+        ? env.OPENROUTER_DEFAULT_MODEL.trim()
+        : "openrouter/free",
+      priority: 0,
+      supportsVision: true,
+      isOpenRouter: true
+    });
+  }
+
+  let configured = [];
+  try {
+    const parsed = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]");
+    if (Array.isArray(parsed)) configured = parsed.slice(0, 12);
+  } catch {
+    // Invalid optional provider configuration should not prevent the primary provider from working.
+  }
+
+  for (const item of configured) {
+    if (!item || typeof item !== "object" || typeof item.name !== "string" ||
+        typeof item.baseUrl !== "string" || typeof item.apiKeyEnv !== "string" ||
+        typeof item.model !== "string") continue;
+    const name = item.name.trim().toLowerCase();
+    const apiKeyEnv = item.apiKeyEnv.trim();
+    const model = item.model.trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(name) ||
+        !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) ||
+        !model || model.length > 160) continue;
+    let parsed;
+    try { parsed = new URL(item.baseUrl); } catch { continue; }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) continue;
+    const baseUrl = parsed.toString().replace(/\/+$/, "");
+    const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
+    if (!apiKey || providers.some(provider => provider.name === name || provider.baseUrl === baseUrl)) continue;
+    providers.push({
+      name,
+      baseUrl,
+      apiKey,
+      model,
+      priority: Number.isFinite(item.priority) ? item.priority : 100,
+      supportsVision: item.supportsVision === true,
+      isOpenRouter: false
+    });
+  }
+  return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
 }
 
 export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
@@ -801,8 +858,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const maxChars = Math.max(1000, Number(env.MAX_MESSAGE_CHARS) || 12_000);
     const { messages, stream = true, model: requestedModel, attachments = [] } = req.body || {};
     const knownModels = ["openrouter/free"];
-    const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean);
-    const visionModels = [...new Set(String(env.ULTRON_VISION_MODELS || env.OPENROUTER_VISION_MODEL || "").split(",").map(value => value.trim()).filter(value => /^[a-zA-Z0-9._/-]{1,154}(?::free)?$/.test(value)))];
+    const configuredModels = [...new Set(String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean))].slice(0, 12);
+    const visionModels = [...new Set(String(env.ULTRON_VISION_MODELS || env.OPENROUTER_VISION_MODEL || "").split(",").map(value => value.trim()).filter(value => /^[a-zA-Z0-9._/-]{1,154}(?::free)?$/.test(value)))].slice(0, 8);
     const allowedModels = [...new Set([...knownModels, ...configuredModels, visionModels, env.OPENROUTER_DEFAULT_MODEL].flat().filter(Boolean))];
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || (!allowedModels.includes(requestedModel) && requestedModel !== "openrouter/free" && !/^[a-zA-Z0-9._/-]+:free$/.test(requestedModel)))) {
       return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
@@ -811,7 +868,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     // Image messages prefer explicitly configured vision models rather than the normal text model.
     let selectedModel = hasImageAttachments && visionModels.length
       ? (requestedModel && visionModels.includes(requestedModel) ? requestedModel : visionModels[0])
-      : (requestedModel || env.OPENROUTER_DEFAULT_MODEL);
+      : (requestedModel || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
       return res.status(400).json({ error: { code: "INVALID_MESSAGES", message: "Send between 1 and 40 messages." } });
     }
@@ -883,16 +940,26 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (!last || last.role !== "user") return res.status(400).json({ error: { code: "IMAGE_REQUIRES_USER_MESSAGE", message: "Images must be attached to a user message." } });
       last.content = [{ type: "text", text: last.content || "Please describe and analyze the attached image." }, ...imageParts];
     }
-    if (!env.OPENROUTER_API_KEY) {
-      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "OpenRouter API key is not configured on the server." } });
+    let baseUrl = null;
+    let primaryProviderConfigInvalid = false;
+    if (env.OPENROUTER_API_KEY) {
+      try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
+      catch { primaryProviderConfigInvalid = true; }
+    }
+    const chatProviders = configuredChatProviders(env, baseUrl);
+    if (!chatProviders.length) {
+      return res.status(primaryProviderConfigInvalid ? 500 : 503).json({
+        error: {
+          code: primaryProviderConfigInvalid ? "PROVIDER_CONFIG_INVALID" : "PROVIDER_NOT_CONFIGURED",
+          message: primaryProviderConfigInvalid
+            ? "OpenRouter base URL configuration is invalid and no alternate provider is configured."
+            : "Configure OPENROUTER_API_KEY or a valid ULTRON_MODEL_PROVIDERS_JSON provider with a server-side API key."
+        }
+      });
     }
     if (!selectedModel) {
-      return res.status(503).json({ error: { code: "MODEL_NOT_CONFIGURED", message: "Set OPENROUTER_DEFAULT_MODEL to a model available to your API key." } });
+      return res.status(503).json({ error: { code: "MODEL_NOT_CONFIGURED", message: "Select a configured model or set OPENROUTER_DEFAULT_MODEL." } });
     }
-
-    let baseUrl;
-    try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
-    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL configuration is invalid." } }); }
 
     const timeoutSeconds = Math.min(120, Math.max(5, Number(env.OPENROUTER_TIMEOUT_SECONDS) || 60));
     const controller = new AbortController();
@@ -902,28 +969,45 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.on("close", () => { if (!res.writableEnded) abortUpstream(); });
 
     try {
-      const configuredOrder = hasImageAttachments && visionModels.length
-        ? [...new Set(visionModels)]
+      const openRouterCandidates = hasImageAttachments
+        // Keep backward compatibility: when no dedicated vision list is configured,
+        // try the explicitly selected/allowed model, as older ULTRON deployments did.
+        ? [...new Set(visionModels.length ? visionModels : [selectedModel, ...configuredModels].filter(Boolean))]
         : [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
-      const modelCandidates = configuredOrder;
-      if (!modelCandidates.length) {
-        return res.status(503).json({ error: { code: "VISION_MODEL_NOT_CONFIGURED", message: "No configured vision model is available. Add the exact MiniMax vision model ID to ULTRON_AVAILABLE_MODELS." } });
+      const modelAttempts = [];
+      for (const provider of chatProviders) {
+        let candidates = [];
+        if (provider.isOpenRouter) {
+          // Images are sent only to explicitly configured vision models.
+          candidates = openRouterCandidates;
+        } else if (hasImageAttachments) {
+          candidates = provider.supportsVision ? [provider.model] : [];
+        } else {
+          candidates = [provider.model];
+        }
+        for (const candidate of candidates) modelAttempts.push({ provider, candidate });
+      }
+      if (!modelAttempts.length) {
+        return res.status(503).json({ error: { code: "VISION_MODEL_NOT_CONFIGURED", message: "No eligible text or vision model provider is configured. Add an OpenRouter vision model or a provider with supportsVision=true." } });
       }
 
       let upstream;
       let lastStatus = 0;
       let lastProviderCode = "";
+      let lastProviderName = "";
       let usedFallback = false;
-      for (let index = 0; index < modelCandidates.length; index++) {
-        const candidate = modelCandidates[index];
+      for (let index = 0; index < modelAttempts.length; index++) {
+        const { provider, candidate } = modelAttempts[index];
+        lastProviderName = provider.name;
         let attempt;
         try {
-          attempt = await fetchImpl(`${baseUrl}/chat/completions`, {
+          attempt = await fetchImpl(`${provider.baseUrl}/chat/completions`, {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
+              "Authorization": `Bearer ${provider.apiKey}`,
               "Content-Type": "application/json",
-              "Accept": stream ? "text/event-stream, application/json" : "application/json"
+              "Accept": stream ? "text/event-stream, application/json" : "application/json",
+              ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
             },
             body: JSON.stringify({
               model: candidate,
@@ -935,18 +1019,17 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             redirect: "error"
           });
         } catch (error) {
-          // A network failure for one model must not prevent trying the next configured free model.
+          // Fail over across configured models/providers when one upstream is unreachable.
           upstream = null;
           lastStatus = 0;
           lastProviderCode = error?.name === "TimeoutError" || /timeout/i.test(String(error?.message)) ? "NETWORK_TIMEOUT" : "NETWORK_ERROR";
-          logger.warn?.("OpenRouter model request failed; trying fallback", { code: lastProviderCode, modelIndex: index });
+          logger.warn?.("ULTRON model request failed; trying fallback", { provider: provider.name, code: lastProviderCode, modelIndex: index });
           continue;
         }
 
         if (!attempt.ok) {
           upstream = attempt;
           lastStatus = attempt.status;
-          // Read only a small bounded error body; never clone/buffer arbitrary provider payloads.
           try {
             const providerPayload = await readResponseJsonLimited(attempt, 64_000);
             lastProviderCode = String(providerPayload?.error?.code || providerPayload?.error?.type || "").slice(0, 100);
@@ -954,22 +1037,20 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             lastProviderCode = "";
             try { await attempt.body?.cancel?.(); } catch { /* body may already be closed */ }
           }
-          // 403/404 can mean this key cannot use the selected model. Try other configured candidates.
-          if (![403, 404, 429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
-          logger.warn?.("OpenRouter model fallback", { status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
+          // A different model/provider may be available even when this key or model is denied.
+          if (index === modelAttempts.length - 1) break;
+          logger.warn?.("ULTRON model fallback", { provider: provider.name, status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
           continue;
         }
 
         if (!stream) {
-          // A 200 response can still be unusable (invalid JSON or an empty completion).
-          // Validate it before committing to this model so the next candidate can recover.
           let data;
           try { data = await readResponseJsonLimited(attempt, 2_000_000); }
           catch {
             upstream = null;
             lastStatus = 502;
             lastProviderCode = "INVALID_RESPONSE";
-            logger.warn?.("OpenRouter returned an unreadable completion; trying fallback", { modelIndex: index });
+            logger.warn?.("Model provider returned invalid JSON; trying fallback", { provider: provider.name, modelIndex: index });
             continue;
           }
           const content = data?.choices?.[0]?.message?.content;
@@ -977,26 +1058,28 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             upstream = null;
             lastStatus = 502;
             lastProviderCode = "INVALID_RESPONSE";
-            logger.warn?.("OpenRouter returned an empty completion; trying fallback", { modelIndex: index });
+            logger.warn?.("Model provider returned an empty completion; trying fallback", { provider: provider.name, modelIndex: index });
             continue;
           }
           selectedModel = candidate;
           usedFallback = index > 0;
           res.setHeader("X-ULTRON-Model", selectedModel);
+          res.setHeader("X-ULTRON-Provider", provider.name);
           if (usedFallback) res.setHeader("X-ULTRON-Fallback", "true");
-          return res.json({ content, model: data.model || selectedModel });
+          return res.json({ content, model: data.model || selectedModel, provider: provider.name });
         }
 
         if (!attempt.body) {
           upstream = null;
           lastStatus = 502;
           lastProviderCode = "EMPTY_STREAM";
-          logger.warn?.("OpenRouter returned no stream; trying fallback", { modelIndex: index });
+          logger.warn?.("Model provider returned no stream; trying fallback", { provider: provider.name, modelIndex: index });
           continue;
         }
         upstream = attempt;
         selectedModel = candidate;
         usedFallback = index > 0;
+        res.setHeader("X-ULTRON-Provider", provider.name);
         break;
       }
       if (!upstream?.ok) {
@@ -1010,16 +1093,16 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           : status === 429 ? "PROVIDER_RATE_LIMIT"
           : status === 503 ? "PROVIDER_OVERLOADED"
           : "PROVIDER_ERROR";
-        logger.warn?.("OpenRouter request failed", { status, code, providerCode: lastProviderCode || undefined });
+        logger.warn?.("ULTRON model request failed", { provider: lastProviderName || undefined, status, code, providerCode: lastProviderCode || undefined });
         const message = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" ? "All configured models returned an unusable response."
           : lastProviderCode === "NETWORK_ERROR" || lastProviderCode === "NETWORK_TIMEOUT" ? "Could not connect to a configured model. Please retry shortly."
-          : status === 401 ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
-          : status === 402 ? "OpenRouter reports insufficient credits."
-          : status === 403 ? "OpenRouter denied access to every configured model. Check your plan, model access, or account status."
-          : status === 404 ? "None of the configured model IDs are available to this OpenRouter key. Refresh the model list and select an available ID."
-          : status === 429 ? "All configured models are rate-limited right now."
-          : status === 503 ? "All eligible models are temporarily unavailable."
-          : "OpenRouter could not complete the request.";
+          : status === 401 ? `The ${lastProviderName || "configured model provider"} rejected its API key.`
+          : status === 402 ? `The ${lastProviderName || "configured model provider"} reports insufficient credits.`
+          : status === 403 ? `The ${lastProviderName || "configured model provider"} denied access to the selected model.`
+          : status === 404 ? `The selected model is unavailable on ${lastProviderName || "the configured provider"}.`
+          : status === 429 ? "All remaining configured model attempts are rate-limited right now."
+          : status === 503 ? "All eligible model providers are temporarily unavailable."
+          : "The configured model providers could not complete the request.";
         return res.status(status === 429 ? 429 : status === 402 ? 402 : 502).json({ error: { code, message } });
       }
       res.setHeader("X-ULTRON-Model", selectedModel);
