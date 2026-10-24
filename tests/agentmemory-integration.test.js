@@ -72,3 +72,23 @@ test("AgentMemory fails safely when the remote service is unavailable", async ()
     error => error.code === "AGENTMEMORY_REQUEST_FAILED"
   );
 });
+
+
+test("AgentMemory response body is bounded while streaming", async () => {
+  let cancelled = false;
+  const oversized = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(200_001));
+    },
+    cancel() { cancelled = true; }
+  });
+  await assert.rejects(
+    recallAgentMemory("Continue the previous repository implementation", {
+      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret" },
+      userId: "user-123",
+      fetchImpl: async () => new Response(oversized, { status: 200 })
+    }),
+    error => error.code === "AGENTMEMORY_RESPONSE_TOO_LARGE"
+  );
+  assert.equal(cancelled, true);
+});
