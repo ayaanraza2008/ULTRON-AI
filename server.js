@@ -1017,8 +1017,15 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
 
     const timeoutSeconds = Math.min(120, Math.max(5, Number(env.OPENROUTER_TIMEOUT_SECONDS) || 60));
+    const attemptTimeoutMs = Math.min(30_000, Math.max(250, Number(env.OPENROUTER_ATTEMPT_TIMEOUT_MS) || 15_000));
     const controller = new AbortController();
+    let activeAttemptController = null;
     const timeout = setTimeout(() => controller.abort(new Error("Provider timeout")), timeoutSeconds * 1000);
+    controller.signal.addEventListener("abort", () => {
+      if (activeAttemptController && !activeAttemptController.signal.aborted) {
+        activeAttemptController.abort(controller.signal.reason || new Error("Request aborted"));
+      }
+    }, { once: true });
     const abortUpstream = () => controller.abort(new Error("Client disconnected"));
     req.on("aborted", abortUpstream);
     res.on("close", () => { if (!res.writableEnded) abortUpstream(); });
@@ -1057,6 +1064,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         const { provider, candidate } = modelAttempts[index];
         lastProviderName = provider.name;
         let attempt;
+        const attemptController = new AbortController();
+        activeAttemptController = attemptController;
+        const attemptTimeout = setTimeout(() => {
+          attemptController.abort(new Error("Provider attempt timeout"));
+        }, attemptTimeoutMs);
         try {
           attempt = await fetchImpl(`${provider.baseUrl}/chat/completions`, {
             method: "POST",
@@ -1072,17 +1084,31 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
               stream: Boolean(stream),
               temperature: 0.7
             }),
-            signal: controller.signal,
+            signal: attemptController.signal,
             redirect: "error"
           });
         } catch (error) {
-          // Fail over across configured models/providers when one upstream is unreachable.
+          clearTimeout(attemptTimeout);
+          if (activeAttemptController === attemptController) activeAttemptController = null;
+          // A whole-request deadline or client disconnect cancels every provider attempt.
+          if (controller.signal.aborted) {
+            upstream = null;
+            lastStatus = 0;
+            lastProviderCode = /client disconnected/i.test(String(controller.signal.reason?.message)) ? "CLIENT_DISCONNECTED" : "NETWORK_TIMEOUT";
+            break;
+          }
+          // A provider that does not return response headers quickly should not stall
+          // the entire failover chain. Each retry gets its own independent controller.
           upstream = null;
           lastStatus = 0;
-          lastProviderCode = error?.name === "TimeoutError" || /timeout/i.test(String(error?.message)) ? "NETWORK_TIMEOUT" : "NETWORK_ERROR";
+          lastProviderCode = attemptController.signal.aborted ||
+            error?.name === "TimeoutError" || /timeout/i.test(String(error?.message)) ? "NETWORK_TIMEOUT" : "NETWORK_ERROR";
           logger.warn?.("ULTRON model request failed; trying fallback", { provider: provider.name, code: lastProviderCode, modelIndex: index });
           continue;
         }
+        // The per-attempt timer bounds time-to-first-response only. The separate global
+        // deadline continues to cover body parsing/streaming and disconnect cancellation.
+        clearTimeout(attemptTimeout);
 
         if (!attempt.ok) {
           upstream = attempt;
@@ -1286,6 +1312,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     } finally {
       clearTimeout(timeout);
       req.off("aborted", abortUpstream);
+      activeAttemptController = null;
     }
   });
 
