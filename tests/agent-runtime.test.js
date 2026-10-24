@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult } from "../agent-runtime.js";
+
+test("model tool context redacts inline credential values and preserves safe text", () => {
+  const safe = modelSafeResult({
+    message: "Request failed: Authorization: Bearer abc.def.ghi and api_key=supersecretvalue",
+    details: "provider returned sk-1234567890abcdefghijkl and github_pat_abcdefghijklmnop",
+    safe: "Task completed successfully."
+  });
+  assert.doesNotMatch(JSON.stringify(safe), /abc\.def\.ghi|supersecretvalue|sk-1234567890abcdefghijkl|github_pat_abcdefghijklmnop/);
+  assert.match(safe.message, /Bearer \[redacted\]/);
+  assert.match(safe.message, /api_key=\[redacted\]/);
+  assert.equal(safe.safe, "Task completed successfully.");
+});
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
