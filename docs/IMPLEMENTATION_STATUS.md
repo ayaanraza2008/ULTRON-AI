@@ -64,3 +64,14 @@ Use a dedicated test account and verify a real model response, one queued employ
 - Added regression coverage for unsafe and malformed URLs in `tests/autonomous-quality-gate.test.js`.
 - The latest completed CI run before this change, run 39973156087, passed both jobs: `npm run check`, `npm test`, deployed health smoke test, pinned God’s Eye build, and injected ULTRON bridge verification.
 - New CI is running for the quality-gate hardening; wait for the run associated with the latest branch commit before treating this change as verified.
+
+
+## Verified status snapshot — 2026-10-24
+
+- The Android wake-word companion was merged in PR [#170](https://github.com/ayaanraza2008/ULTRON-AI/pull/170). CI compiled the debug APK and uploaded artifact `ULTRON-Android-Wake-Companion-debug-apk` in [workflow run 40119732174](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40119732174). This verifies build output only; a physical Android device test remains outstanding.
+- The same PR's repository CI passed `npm run check`, `npm test`, the deployed health smoke test, and the pinned God’s Eye bridge build. Render deploy for merged commit `d8983ced854d13043efa4ededfd1474eb3e5aac1` is live.
+- The dedicated Supabase project reports `ACTIVE_HEALTHY` in `ap-south-1`; the live migration history contains 14 recorded migrations, including privilege revocation and scoped stale-task recovery.
+- Supabase Security Advisor still reports **Leaked Password Protection Disabled**. This needs to be enabled in Supabase Auth password-security settings and then rechecked; it is not a source-code-only fix.
+- Multi-provider chat fallback and its regression tests are present. A CI-green mocked provider response does not prove the current OpenRouter key, quotas, chosen free model, image model, or live response quality; an authorized end-to-end provider request remains outstanding.
+- Google OAuth and SMS/phone OTP routes are implemented, but live login is still unverified until the Supabase provider credentials, redirect allow-list, and SMS provider are configured and tested. No credentials should be placed in source control or chat.
+- The native wake-word companion raises a notification that the user taps to open ULTRON. It does not bypass device authentication, and a powered-off phone or PC cannot run wake-word recognition.
