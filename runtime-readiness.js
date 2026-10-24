@@ -77,7 +77,9 @@ export function buildRuntimeReadiness({
       [], "ULTRON does not claim to run arbitrary user code in an isolated sandbox; coding assistance is limited to supported plan, draft, and review workflows.")
   ];
 
-  // A deliberately unsupported optional capability is disclosed in the component list,\n  // but must not make otherwise configured core services permanently unready.\n  const blockers = components.filter((item) => ["blocked", "disabled", "not_started"].includes(item.state));
+  // A deliberately unsupported optional capability is disclosed in the component list,
+  // but must not make otherwise configured core services permanently unready.
+  const blockers = components.filter((item) => ["blocked", "disabled", "not_started"].includes(item.state));
   const configuredCount = components.filter((item) => ["configured_unverified", "running", "best_effort_fallback"].includes(item.state)).length;
   return {
     app: "ULTRON AI",
