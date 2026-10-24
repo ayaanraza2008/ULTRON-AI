@@ -85,8 +85,9 @@ function validateDocxArchive(bytes) {
         compressedSize === 0xffffffff || localOffset === 0xffffffff) return invalid();
 
     const name = bytes.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
+    const pathParts = name.replace(/\/$/, "").split("/");
     if (!name || name.includes("\\") || name.startsWith("/") ||
-        name.split("/").some(part => part === ".." || part === "." || part === "" && name !== "/")) return invalid();
+        pathParts.some(part => !part || part === ".." || part === ".")) return invalid();
     if (entries.has(name)) return invalid("The DOCX archive contains duplicate file names.");
     entries.add(name);
     if ((flags & 0x41) !== 0) return invalid("Encrypted DOCX archives are not supported.");
