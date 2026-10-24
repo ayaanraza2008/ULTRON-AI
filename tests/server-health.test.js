@@ -107,3 +107,23 @@ test("password recovery uses only the configured HTTPS redirect destination", as
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test("security headers allow the configured live God's Eye service", async () => {
+  const app = createApp({
+    env: { WORLD_INTELLIGENCE_URL: "https://ultron-world-intelligence-live.onrender.com" },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/health`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-security-policy") || "", /frame-src 'self' https:\/\/ultron-world-intelligence-live\.onrender\.com/);
+    assert.match(response.headers.get("permissions-policy") || "", /microphone=\(self "https:\/\/ultron-world-intelligence-live\.onrender\.com"\)/);
+    assert.doesNotMatch(response.headers.get("content-security-policy") || "", /ultron-world-intelligence\.onrender\.com/);
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
