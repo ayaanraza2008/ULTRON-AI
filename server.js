@@ -852,7 +852,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split(/\\r?\n/);
+          const parts = buffer.split(/\r?\n/);
           buffer = parts.pop() || "";
           for (const line of parts) processLine(line);
           if (res.writableNeedDrain) await new Promise(resolve => res.once("drain", resolve));
