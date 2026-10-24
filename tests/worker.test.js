@@ -1512,3 +1512,57 @@ test("worker records a retry only after the queued transition is persisted", asy
   assert.equal(auditEvents[0]?.outcome, "retry");
   assert.equal(auditEvents[0]?.metadata?.attempt, 1);
 });
+
+
+test("worker keeps a persisted completion successful when the audit write fails", async () => {
+  let worker;
+  let completionWrites = 0;
+  const errors = [];
+  const task = {
+    id: "task-completed-audit-outage",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error: (...args) => errors.push(args) },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        return new Response(JSON.stringify({
+          model: "test-model",
+          choices: [{ message: { content: "Plan drafted safely." } }]
+        }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        completionWrites += 1;
+        const patch = JSON.parse(options.body);
+        assert.equal(patch.status, "COMPLETED");
+        assert.equal(patch.result.answer, "Plan drafted safely.");
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, status: "COMPLETED" }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        throw new Error("temporary audit database outage");
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(completionWrites, 1, "the completed task must be persisted exactly once");
+  assert.equal(status.tasksCompleted, 1, "audit failure must not undo a persisted completion");
+  assert.equal(status.tasksFailed, 0);
+  assert.equal(status.tasksRetried, 0);
+  assert.ok(errors.some(args => String(args[0]).includes("Task completion audit failed:")));
+});
