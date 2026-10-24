@@ -41,10 +41,9 @@ export async function readTextLimited(response, maxBytes) {
       try { reader.releaseLock(); } catch {}
     }
   } else {
-    raw = await response.text();
-    if (new TextEncoder().encode(raw).byteLength > maxBytes) {
-      throw new Error("Provider response exceeded the configured size limit.");
-    }
+    // Never buffer a provider response without a streaming reader: checking its
+    // size after response.text() has already allocated the entire payload.
+    throw new Error("Provider response cannot be safely size-limited without a streaming body.");
   }
   return raw;
 }
@@ -56,9 +55,9 @@ export async function readJsonLimited(response, maxBytes) {
     throw new Error("Provider response exceeded the configured size limit.");
   }
   if (!response.body?.getReader) {
-    const raw = await response.text();
-    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw new Error("Provider response exceeded the configured size limit.");
-    return JSON.parse(raw);
+    // Reject rather than buffer an unbounded payload and only inspect its size
+    // after allocation. Fetch Response objects normally expose a readable body.
+    throw new Error("Provider response cannot be safely size-limited without a streaming body.");
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

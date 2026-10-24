@@ -2,6 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startWorker, renewTaskLease, readJsonLimited, readTextLimited } from "../worker.js";
 
+test("limited response readers reject non-streaming fallbacks before buffering", async () => {
+  let textCalls = 0;
+  const response = {
+    headers: { get: () => null },
+    text: async () => { textCalls += 1; return "x".repeat(10_000_000); }
+  };
+  await assert.rejects(readTextLimited(response, 10), /without a streaming body/);
+  await assert.rejects(readJsonLimited(response, 10), /without a streaming body/);
+  assert.equal(textCalls, 0, "must reject before allocating an unbounded text body");
+});
+
+
 test("lease renewal signals cancellation only when the task is no longer RUNNING", async () => {
   let inactiveSignals = 0;
   const inactive = await renewTaskLease({
