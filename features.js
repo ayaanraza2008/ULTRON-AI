@@ -91,9 +91,10 @@ export function hasEmployeeModelProvider(env) {
         !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) ||
         names.has(name) || !env[apiKeyEnv]?.trim?.()) return false;
     try {
-      const url = new URL(item.baseUrl);
-      if (url.protocol !== "https:" || url.username || url.password) return false;
-      const baseUrl = url.toString().replace(/\/+$/, "");
+      // Use the same public-endpoint policy as the actual request path. HTTPS
+      // alone does not make localhost/private/reserved addresses safe.
+      const baseUrl = safeBaseUrl(item.baseUrl);
+      if (!baseUrl) return false;
       if (urls.has(baseUrl)) return false;
       names.add(name);
       urls.add(baseUrl);
