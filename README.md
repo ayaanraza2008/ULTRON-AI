@@ -108,3 +108,10 @@ Configure on the ULTRON backend only:
 All endpoints require a signed-in Supabase user. Audio inputs are capped at 8 MB and generated audio responses at 12 MB. Remote HTTP endpoints are rejected; no arbitrary URL is accepted from a request body.
 
 **Important deployment boundary:** the public Render service cannot connect to `localhost:3900` on your Windows PC. For a PC-local VoiceStudio installation, ULTRON needs a later authenticated Windows companion/bridge to call the local service. Alternatively, use a secured, reachable HTTPS VoiceStudio host. Do not expose VoiceStudio's admin API to the public internet. VoiceStudio is AGPL-3.0; if modified VoiceStudio is provided over a network, comply with its source-offer obligations. Voice/model weights and voice likeness permissions have separate terms. See [VoiceStudio license notice](https://github.com/debpalash/VoiceStudio/blob/main/LICENSE-NOTICE.md).
+
+
+## Resend signup confirmation email
+
+The backend exposes a rate-limited \`POST /api/auth/resend-confirmation\` endpoint. Send JSON \`{"email":"user@example.com"}\`. It does not accept redirect destinations from the request body; an optional owner-configured \`ULTRON_AUTH_REDIRECT_URL\` is validated and sent as \`options.emailRedirectTo\`. Supabase also requires that destination to be on its Auth redirect allow-list.
+
+For account-enumeration resistance, invalid input is rejected, but upstream errors such as an already-confirmed/nonexistent email get the same generic success response. Throttling and upstream outages receive sanitized error responses. The endpoint does not bypass confirmation or SMTP requirements; it only asks Supabase Auth to resend the message.
