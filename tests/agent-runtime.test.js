@@ -1116,3 +1116,52 @@ test("background employee task queues with a configured alternate model provider
     assert.equal(JSON.stringify(body).includes("service-role-test-secret"), false);
   }, { supabaseRest });
 });
+
+
+test("agent tool readiness advertises draft and background task features for alternate-only providers", async () => {
+  const env = {
+    ALTERNATE_MODEL_KEY: "alternate-model-test-secret",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-secret",
+    ULTRON_EMPLOYEES_ENABLED: "true",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "alternate", baseUrl: "https://alternate.example/v1", apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model", priority: 10 }
+    ])
+  };
+  await withServer(env, async () => {
+    throw new Error("tool readiness must not call a model provider");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/tools");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.tools.find(item => item.name === "plan_employee").available, true);
+    assert.equal(body.tools.find(item => item.name === "coding_assist").available, true);
+    assert.equal(body.tools.find(item => item.name === "enqueue_employee_task").available, true);
+    assert.equal(JSON.stringify(body).includes("alternate-model-test-secret"), false);
+    assert.equal(JSON.stringify(body).includes("service-role-test-secret"), false);
+  }, { supabaseRest: async () => [] });
+});
+
+test("employee model readiness rejects alternate provider URLs with credentials, query, or fragments", async () => {
+  for (const baseUrl of [
+    "https://user:password@unsafe.example/v1",
+    "https://unsafe.example/v1?token=leaked",
+    "https://unsafe.example/v1#fragment"
+  ]) {
+    const env = {
+      ALTERNATE_MODEL_KEY: "alternate-model-test-secret",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "alternate", baseUrl, apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model" }
+      ])
+    };
+    await withServer(env, async () => {
+      throw new Error("invalid provider configuration must be rejected before networking");
+    }, async base => {
+      const response = await fetch(base + "/api/agent/tools");
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.tools.find(item => item.name === "plan_employee").available, false);
+      assert.equal(body.tools.find(item => item.name === "coding_assist").available, false);
+      assert.equal(JSON.stringify(body).includes("alternate-model-test-secret"), false);
+    });
+  }
+});
