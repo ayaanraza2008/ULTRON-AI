@@ -1004,3 +1004,31 @@ test("agent rejects provider responses that cannot be safely streamed and contin
     assert.equal(firstTextCalls, 0);
   });
 });
+
+test("task-skill retrieval rejects redirects and never follows a redirect target", async () => {
+  const calls = [];
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (url, options = {}) => {
+    calls.push({ url, redirect: options.redirect });
+    if (url.includes("raw.githubusercontent.com")) {
+      assert.equal(options.redirect, "error");
+      // Native fetch rejects redirects in error mode; simulate that behavior.
+      throw new TypeError("fetch failed because redirect mode is error");
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Security review completed safely." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Audit this API for SQL injection and prompt injection vulnerabilities" })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /Security review completed safely/);
+    const skillCalls = calls.filter(call => call.url.includes("raw.githubusercontent.com"));
+    assert.ok(skillCalls.length > 0, "expected at least one task-skill reference fetch");
+    assert.ok(skillCalls.every(call => call.redirect === "error"));
+    assert.equal(calls.some(call => call.url === "https://attacker.example/steal"), false);
+  });
+});
