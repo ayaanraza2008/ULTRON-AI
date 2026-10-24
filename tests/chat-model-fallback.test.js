@@ -146,3 +146,28 @@ test("chat works with a configured alternate provider even when OpenRouter is no
     assert.equal(calls[0].authorization, "Bearer fallback-only-secret");
   }, overrides);
 });
+
+
+test("chat falls back when a provider times out before returning response headers", async () => {
+  const calls = [];
+  await withApp(async (_url, options) => {
+    const model = JSON.parse(options.body).model;
+    calls.push(model);
+    if (model === "vendor/model-a") {
+      return new Promise((resolve, reject) => {
+        if (options.signal.aborted) return reject(options.signal.reason || new Error("aborted"));
+        options.signal.addEventListener("abort", () => {
+          reject(options.signal.reason || new Error("aborted"));
+        }, { once: true });
+      });
+    }
+    return success("Recovered after provider first-response timeout.");
+  }, async (base, cookie) => {
+    const response = await chat(base, cookie);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Recovered after provider first-response timeout/);
+    assert.equal(response.headers.get("x-ultron-model"), "vendor/model-b");
+    assert.equal(response.headers.get("x-ultron-fallback"), "true");
+    assert.deepEqual(calls, ["vendor/model-a", "vendor/model-b"]);
+  }, { OPENROUTER_ATTEMPT_TIMEOUT_MS: "250" });
+});
