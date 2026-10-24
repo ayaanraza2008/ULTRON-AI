@@ -133,6 +133,7 @@ export async function recallAgentMemory(task, options = {}) {
   if (!query || !shouldRecallAgentMemory(query)) return { state: "skipped", memories: [] };
   const project = scopedProject(options.env, options.userId);
   const data = await requestMemory("/agentmemory/smart-search", { query, project, limit: 5 }, options);
+  if (data?.state === "not_configured") return { state: "not_configured", memories: [] };
   const candidates = Array.isArray(data.results) ? data.results
     : Array.isArray(data.memories) ? data.memories
     : Array.isArray(data.items) ? data.items
@@ -149,12 +150,13 @@ export async function captureAgentMemory(task, options = {}) {
   const env = options.env || process.env;
   if (env.ULTRON_AGENTMEMORY_CAPTURE === "false") return { state: "disabled" };
   const project = scopedProject(env, options.userId);
-  await requestMemory("/agentmemory/remember", {
+  const result = await requestMemory("/agentmemory/remember", {
     content: text,
     type: "decision",
     concepts: ["ultron-agent", "durable-context"],
     project,
     agentId: "ultron-ai"
   }, options);
+  if (result?.state === "not_configured") return { state: "not_configured" };
   return { state: "captured" };
 }
