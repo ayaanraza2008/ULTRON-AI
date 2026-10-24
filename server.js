@@ -482,6 +482,38 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
+  // Phone OTP is opt-in and depends on SMS being enabled in the Supabase Auth project.
+  // Never log phone numbers or OTPs; do not expose provider responses to callers.
+  app.post("/api/auth/phone/request", async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+      return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter a phone number in international E.164 format, such as +14155552671." } });
+    }
+    try {
+      await supabaseAuthRequest("/auth/v1/otp", { phone, create_user: true });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ ok: true, message: "If SMS sign-in is enabled for this project, a verification code will be sent." });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "PHONE_OTP_UNAVAILABLE", message: error.status === 429 ? "Too many code requests. Please wait before trying again." : "Phone sign-in is unavailable. Check that SMS authentication is enabled." } });
+    }
+  });
+
+  app.post("/api/auth/phone/verify", async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!/^\+[1-9]\d{7,14}$/.test(phone) || !/^\d{4,12}$/.test(token)) {
+      return res.status(400).json({ error: { code: "INVALID_PHONE_OTP", message: "Enter the same international phone number and the numeric verification code." } });
+    }
+    try {
+      const payload = await supabaseAuthRequest("/auth/v1/verify", { phone, token, type: "sms" });
+      if (!setSupabaseCookies(res, payload)) return res.status(502).json({ error: { code: "AUTH_RESPONSE_INVALID", message: "The authentication provider returned an incomplete sign-in response." } });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ authenticated: true, phone: payload.user?.phone || phone });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "PHONE_VERIFY_FAILED", message: error.status === 429 ? "Too many verification attempts. Please wait before trying again." : "The code was not accepted or phone sign-in is not enabled." } });
+    }
+  });
+
   // Password recovery is a backend API; the UI can call it without exposing Supabase keys.
   // Keep the redirect destination server-configured so callers cannot inject arbitrary redirects.
   app.post("/api/auth/recovery", async (req, res) => {
