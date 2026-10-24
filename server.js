@@ -92,9 +92,8 @@ async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
 
 function isUnsafeProviderHost(hostname) {
   const host = String(hostname || "").replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
-  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || !host.includes(".")) {
-    return host !== "localhost" && host !== "127.0.0.1" && host !== "::1";
-  }
+  if (!host) return true;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
   const ipVersion = isIP(host);
   if (ipVersion === 4) {
     const octets = host.split(".").map(Number);
@@ -108,7 +107,7 @@ function isUnsafeProviderHost(hostname) {
       (a === 203 && b === 0 && octets[2] === 113);
   }
   if (ipVersion === 6) return !host.startsWith("2") || host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:");
-  return false;
+  return !host.includes(".");
 }
 
 function normalizeBaseUrl(value) {
