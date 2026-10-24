@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createApp } from "../server.js";
 
 const validEnv = {
@@ -160,5 +161,87 @@ test("Google OAuth rejects callback state mismatches and fails closed when callb
     const response = await fetch(base + "/api/auth/google", { redirect: "manual" });
     assert.equal(response.status, 503);
     assert.equal(calls, 0);
+  });
+});
+
+
+test("signup rejects a known compromised password before contacting Supabase", async () => {
+  const calls = [];
+  await withServer({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
+        assert.equal(url, "https://api.pwnedpasswords.com/range/5BAA6");
+        assert.equal(options.body, undefined);
+        assert.equal(options.headers["Add-Padding"], "true");
+        assert.match(options.headers["User-Agent"], /ULTRON-AI/);
+        return new Response("1E4C9B93F3F0682250B6CF8331B7EE68FD8:123\r\n", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" }
+        });
+      }
+      throw new Error("Supabase must not receive a compromised password");
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "person@example.com", password: "password" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "COMPROMISED_PASSWORD");
+    assert.equal(calls.length, 1);
+  });
+});
+
+test("signup screens a password using only its five-character hash prefix then sends it to Supabase", async () => {
+  const calls = [];
+  const password = "Ultron-safe-phrase-2026!";
+  const hash = createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
+  await withServer({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
+        assert.equal(url, "https://api.pwnedpasswords.com/range/" + hash.slice(0, 5));
+        assert.equal(options.body, undefined);
+        assert.equal(JSON.stringify(options.headers).includes(password), false);
+        return new Response("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:0\r\n", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" }
+        });
+      }
+      assert.equal(url, "https://project.example.supabase.co/auth/v1/signup");
+      assert.equal(JSON.parse(options.body).password, password);
+      return jsonResponse({ user: { email: "person@example.com" } });
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "person@example.com", password })
+    });
+    assert.equal(response.status, 202);
+    assert.equal((await response.json()).confirmationRequired, true);
+    assert.equal(calls.length, 2);
+  });
+});
+
+test("signup rejects safely when the privacy-preserving password screening service is unavailable", async () => {
+  const calls = [];
+  await withServer({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      throw new TypeError("synthetic screening network failure");
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "person@example.com", password: "Ultron-safe-phrase-2026!" })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "PASSWORD_SCREENING_UNAVAILABLE");
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /^https:\/\/api\.pwnedpasswords\.com\/range\/[0-9A-F]{5}$/);
   });
 });
