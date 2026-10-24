@@ -1,3 +1,4 @@
+import { inflateRawSync } from "node:zlib";
 import express from "express";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
@@ -21,9 +22,9 @@ const DOCX_MAX_ENTRY_EXPANSION = 16 * 1024 * 1024;
 const DOCX_MAX_TOTAL_EXPANSION = 24 * 1024 * 1024;
 
 /**
- * Preflight DOCX ZIP metadata before Mammoth expands XML or embedded files.
- * The upload is already capped at 5 MB, but compressed archives can declare
- * much larger expanded sizes. This check is deliberately bounded and read-only.
+ * Preflight DOCX ZIP metadata and actual DEFLATE output before Mammoth expands XML
+ * or embedded files. Declared ZIP sizes are untrusted; inflate each entry under
+ * per-entry and total output limits before passing the archive to Mammoth.
  */
 function validateDocxArchive(bytes) {
   const invalid = (message = "The DOCX ZIP archive is malformed.") => ({
@@ -96,9 +97,6 @@ function validateDocxArchive(bytes) {
     if (expandedSize > DOCX_MAX_ENTRY_EXPANSION) {
       return oversized("A DOCX entry exceeds the safe extraction limit.");
     }
-    expandedTotal += expandedSize;
-    if (expandedTotal > DOCX_MAX_TOTAL_EXPANSION) return oversized();
-
     if (localOffset + 30 > centralOffset || bytes.readUInt32LE(localOffset) !== 0x04034b50) return invalid();
     const localNameLength = bytes.readUInt16LE(localOffset + 26);
     const localExtraLength = bytes.readUInt16LE(localOffset + 28);
@@ -108,6 +106,35 @@ function validateDocxArchive(bytes) {
         localNameStart + localNameLength > centralOffset) return invalid();
     const localName = bytes.subarray(localNameStart, localNameStart + localNameLength).toString("utf8");
     if (localName !== name) return invalid();
+
+    // ZIP metadata can lie about decompressed size; measure bounded DEFLATE output.
+    let actualExpandedSize = compressedSize;
+    if (method === 0) {
+      if (compressedSize !== expandedSize) return invalid("Stored DOCX entries have inconsistent sizes.");
+    } else {
+      const outputLimit = Math.min(DOCX_MAX_ENTRY_EXPANSION, DOCX_MAX_TOTAL_EXPANSION - expandedTotal);
+      if (outputLimit <= 0) return oversized();
+      let inflated;
+      try {
+        inflated = inflateRawSync(bytes.subarray(dataStart, dataStart + compressedSize), {
+          maxOutputLength: outputLimit
+        });
+      } catch (error) {
+        if (error?.code === "ERR_BUFFER_TOO_LARGE") {
+          return oversized("A DOCX entry exceeds the safe expansion limit when decompressed.");
+        }
+        return invalid("A DOCX entry could not be safely decompressed.");
+      }
+      actualExpandedSize = inflated.length;
+      if (actualExpandedSize !== expandedSize) {
+        return invalid("DOCX ZIP metadata does not match the actual decompressed size.");
+      }
+    }
+    if (actualExpandedSize > DOCX_MAX_ENTRY_EXPANSION) {
+      return oversized("A DOCX entry exceeds the safe extraction limit.");
+    }
+    expandedTotal += actualExpandedSize;
+    if (expandedTotal > DOCX_MAX_TOTAL_EXPANSION) return oversized();
 
     if (name === "word/document.xml") hasDocumentXml = true;
     if (name === "[Content_Types].xml") hasContentTypes = true;
