@@ -47,3 +47,6 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Reports signup/email/Google/phone provider switches and whether email confirmation is required, but does not claim email delivery is working.
 - The diagnostic makes no account, email, SMS, or database writes. Live run still requires the public key in a trusted environment.
 - Supabase's leaked-password protection warning remains a dashboard-level Auth security setting and is not exposed by the public settings response.
+
+
+- Added explicit Render Blueprint placeholders and .env.example entries for ULTRON_AUTH_CALLBACK_URL and ULTRON_AUTH_REDIRECT_URL so Google OAuth and recovery redirects are discoverable/configurable; actual values must match the deployed public origin and Supabase redirect allow-list.
