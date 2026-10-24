@@ -15,7 +15,7 @@ function bounded(value, max) {
 }
 
 function isPrivateOrLocalHost(hostname) {
-  const host = hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
   const version = isIP(host);
   if (version === 4) {
