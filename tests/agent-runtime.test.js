@@ -10,7 +10,7 @@ test("model tool context redacts inline credential values and preserves safe tex
     safe: "Task completed successfully."
   });
   assert.doesNotMatch(JSON.stringify(safe), /abc\.def\.ghi|supersecretvalue|sk-1234567890abcdefghijkl|github_pat_abcdefghijklmnop/);
-  assert.match(safe.message, /Bearer \[redacted\]/);
+  assert.match(safe.message, /Authorization:\[redacted\]/i);
   assert.match(safe.message, /api_key=\[redacted\]/);
   assert.equal(safe.safe, "Task completed successfully.");
 });
