@@ -1073,7 +1073,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       { id: "frame-protection", header: "x-frame-options", severity: "medium", title: "Clickjacking protection", recommendation: "Use frame-ancestors in CSP; X-Frame-Options can be retained for older browsers." }
     ];
     const findings = checks.map(check => {
-      const present = Boolean(normalized[check.header]) || (check.id === "frame-protection" && /(?:^|;)\\s*frame-ancestors\\b/i.test(normalized["content-security-policy"] || ""));
+      const present = Boolean(normalized[check.header]) || (check.id === "frame-protection" && /(?:^|;)\s*frame-ancestors\b/i.test(normalized["content-security-policy"] || ""));
       return { ...check, status: present ? "present-review-value" : "missing", evidence: normalized[check.header] || (check.id === "frame-protection" ? (normalized["content-security-policy"] || "") : "") };
     });
     res.setHeader("Cache-Control", "no-store");
