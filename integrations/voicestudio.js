@@ -23,7 +23,8 @@ function voiceStudioConfig(env = process.env) {
     const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
     if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return { configured: false, reason: "https_required" };
     if (!local && !token) return { configured: false, reason: "remote_api_key_required" };
-    return { configured: true, baseUrl: url.toString().replace(/\\/+$/, ""), token, local };
+    const baseUrl = url.toString();
+    return { configured: true, baseUrl: baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl, token, local };
   } catch {
     return { configured: false, reason: "invalid_url" };
   }
