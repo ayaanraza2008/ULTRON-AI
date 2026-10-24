@@ -91,8 +91,12 @@ export function hasEmployeeModelProvider(env) {
         !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) ||
         names.has(name) || !env[apiKeyEnv]?.trim?.()) return false;
     try {
-      // Use the same public-endpoint policy as the actual request path. HTTPS
-      // alone does not make localhost/private/reserved addresses safe.
+      // Alternate cloud providers must be public HTTPS endpoints. Local HTTP
+      // is allowed only for explicit local model features, never employee providers.
+      let parsedUrl;
+      try { parsedUrl = new URL(item.baseUrl); } catch { return false; }
+      if (parsedUrl.protocol !== "https:") return false;
+      // HTTPS alone does not make localhost/private/reserved addresses safe.
       const baseUrl = safeBaseUrl(item.baseUrl);
       if (!baseUrl) return false;
       if (urls.has(baseUrl)) return false;
