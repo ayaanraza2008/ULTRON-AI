@@ -151,6 +151,41 @@ async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
   return JSON.parse(raw);
 }
 
+async function isCompromisedPassword(password, fetchImpl) {
+  // HIBP's Pwned Passwords range API uses k-anonymity: transmit only the first
+  // five SHA-1 hex characters, never the password or its complete hash.
+  const hash = crypto.createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
+  const prefix = hash.slice(0, 5);
+  const targetSuffix = hash.slice(5);
+  const response = await fetchImpl("https://api.pwnedpasswords.com/range/" + prefix, {
+    method: "GET",
+    headers: {
+      "Accept": "text/plain",
+      "User-Agent": "ULTRON-AI/1.0",
+      "Add-Padding": "true"
+    },
+    redirect: "error",
+    signal: AbortSignal.timeout(5000)
+  });
+  if (!response.ok) {
+    try { await response.body?.cancel?.(); } catch { /* body may already be closed */ }
+    throw Object.assign(new Error("Password safety check unavailable."), {
+      code: "PASSWORD_SCREENING_UNAVAILABLE",
+      status: 503
+    });
+  }
+  const text = await readResponseTextLimited(response, 1_000_000);
+  for (const line of text.split(/\r?\n/)) {
+    const separator = line.indexOf(":");
+    if (separator < 1) continue;
+    const suffix = line.slice(0, separator).trim().toUpperCase();
+    if (suffix !== targetSuffix) continue;
+    const count = Number(line.slice(separator + 1).trim());
+    if (Number.isFinite(count) && count > 0) return true;
+  }
+  return false;
+}
+
 function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
@@ -543,6 +578,26 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       return res.status(400).json({ error: { code: "INVALID_CREDENTIALS", message: "Enter a valid email and a password between 8 and 256 characters." } });
     }
     try {
+      let compromised;
+      try {
+        compromised = await isCompromisedPassword(password, fetchImpl);
+      } catch (error) {
+        logger.warn?.("Password screening unavailable; signup rejected safely", { code: error?.code || "PASSWORD_SCREENING_UNAVAILABLE" });
+        return res.status(503).json({
+          error: {
+            code: "PASSWORD_SCREENING_UNAVAILABLE",
+            message: "Password safety screening is temporarily unavailable. Please retry shortly."
+          }
+        });
+      }
+      if (compromised) {
+        return res.status(400).json({
+          error: {
+            code: "COMPROMISED_PASSWORD",
+            message: "Choose a different password that has not appeared in known data breaches."
+          }
+        });
+      }
       const payload = await supabaseAuthRequest("/auth/v1/signup", { email, password });
       if (setSupabaseCookies(res, payload)) return res.status(201).json({ authenticated: true, email: payload.user?.email || email });
       return res.status(202).json({ authenticated: false, confirmationRequired: true, message: "Check your email to confirm the account, then sign in." });
