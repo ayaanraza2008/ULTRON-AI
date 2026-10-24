@@ -121,9 +121,10 @@ test("agent automatically injects relevant AgentMemory results for continuation 
 
 test("automatically stores high-signal decisions in the existing durable Supabase memory when AgentMemory is not configured", async () => {
   const writes = [];
+  const lookups = [];
   const supabaseRest = async (_req, table, method, query, body) => {
     if (table === "user_preferences") return [{ memory_enabled: true }];
-    if (table === "memory_items" && method === "GET") return [];
+    if (table === "memory_items" && method === "GET") { lookups.push(query); return []; }
     if (table === "memory_items" && method === "POST") {
       writes.push({ query, body });
       return [{ id: "memory-row-1", ...body }];
