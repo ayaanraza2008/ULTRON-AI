@@ -1202,3 +1202,37 @@ test("bounded provider JSON reader preserves abort errors rather than relabeling
   );
   assert.equal(released, true, "reader lock must be released after an aborted read");
 });
+
+
+test("worker health resets consecutive cycle failures after polling recovers", async () => {
+  let worker;
+  let scheduleCalls = 0;
+  let sleeps = 0;
+  const observedFailureCounts = [];
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {
+      observedFailureCounts.push(worker.getStatus().consecutiveCycleFailures);
+      sleeps += 1;
+      if (sleeps === 2) worker.stop();
+    },
+    fetchImpl: async (url) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) {
+        scheduleCalls += 1;
+        if (scheduleCalls === 1) throw new Error("temporary database outage");
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.deepEqual(observedFailureCounts, [1, 0]);
+  assert.equal(worker.getStatus().consecutiveCycleFailures, 0);
+  assert.ok(worker.getStatus().lastCycleSuccessAt);
+  assert.equal(worker.getStatus().state, "stopped");
+});
