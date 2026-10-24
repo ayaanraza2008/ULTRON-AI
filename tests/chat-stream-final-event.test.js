@@ -65,3 +65,15 @@ test("chat stream does not emit duplicate done events when provider sends [DONE]
     assert.equal((body.match(/event: done/g) || []).length, 1);
   }, providerStream);
 });
+
+
+test("chat stream aborts an oversized unfinished provider event", async () => {
+  const oversizedUnterminatedEvent = "x".repeat(1_000_001);
+  await withAuthenticatedServer(async (base, cookie) => {
+    const response = await requestChat(base, cookie);
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.match(body, /PROVIDER_STREAM_INTERRUPTED/);
+    assert.doesNotMatch(body, /x{1000}/);
+  }, oversizedUnterminatedEvent);
+});
