@@ -20,6 +20,36 @@ const AUTH_RATE_LIMIT = 10;
 
 // Small bounded in-process guard for public auth endpoints. Production deployments
 // with multiple instances should additionally enforce limits at a shared edge/store.
+export function createApiRateLimiter({ now = Date.now, windowMs = 60_000, maxRequests = 30, maxBuckets = 5000 } = {}) {
+  const limits = new Map();
+  const middleware = (req, res, next) => {
+    const key = String(req.ip || req.socket?.remoteAddress || "unknown").slice(0, 128);
+    const time = now();
+    const current = limits.get(key);
+    if (!current || time - current.start >= windowMs || time < current.start) {
+      limits.set(key, { start: time, count: 1 });
+    } else {
+      current.count += 1;
+      if (current.count > maxRequests) {
+        res.setHeader("Retry-After", String(Math.max(1, Math.ceil((windowMs - (time - current.start)) / 1000))));
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(429).json({ error: { code: "RATE_LIMITED", message: "Too many requests. Please wait and try again." } });
+      }
+    }
+    // Bound memory even if many distinct source addresses arrive inside one window.
+    if (limits.size > maxBuckets) {
+      for (const [address, entry] of limits) {
+        if (time - entry.start >= windowMs || time < entry.start) limits.delete(address);
+        if (limits.size <= Math.max(1, Math.floor(maxBuckets * 0.8))) break;
+      }
+      while (limits.size > maxBuckets) limits.delete(limits.keys().next().value);
+    }
+    return next();
+  };
+  middleware.getBucketCount = () => limits.size;
+  return middleware;
+}
+
 export function createAuthRateLimiter({ now = Date.now, limit = AUTH_RATE_LIMIT, windowMs = AUTH_RATE_WINDOW_MS } = {}) {
   const buckets = new Map();
   return function authRateLimiter(req, res, next) {
@@ -182,27 +212,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     next();
   });
 
-  const limits = new Map();
-  const windowMs = Math.max(10_000, Number(env.RATE_LIMIT_WINDOW_MS) || 60_000);
-  const maxRequests = Math.max(1, Number(env.RATE_LIMIT_MAX_REQUESTS) || 30);
-  app.use("/api", (req, res, next) => {
-    const key = req.ip || req.socket.remoteAddress || "unknown";
-    const now = Date.now();
-    const current = limits.get(key);
-    if (!current || now - current.start >= windowMs) {
-      limits.set(key, { start: now, count: 1 });
-    } else {
-      current.count += 1;
-      if (current.count > maxRequests) {
-        res.setHeader("Retry-After", String(Math.ceil((windowMs - (now - current.start)) / 1000)));
-        return res.status(429).json({ error: { code: "RATE_LIMITED", message: "Too many requests. Please wait and try again." } });
-      }
-    }
-    if (limits.size > 5000) {
-      for (const [ip, entry] of limits) if (now - entry.start > windowMs) limits.delete(ip);
-    }
-    next();
+  const apiRateLimiter = createApiRateLimiter({
+    windowMs: Math.max(10_000, Number(env.RATE_LIMIT_WINDOW_MS) || 60_000),
+    maxRequests: Math.max(1, Number(env.RATE_LIMIT_MAX_REQUESTS) || 30)
   });
+  app.use("/api", apiRateLimiter);
 
 
   // Narrow OpenRouter proxy for the authenticated Browser Use bridge. The bridge
