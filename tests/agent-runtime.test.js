@@ -143,6 +143,7 @@ test("automatically stores high-signal decisions in the existing durable Supabas
     assert.equal(response.status, 200);
     assert.equal(writes.length, 1);
     assert.equal(writes[0].body.user_id, "00000000-0000-4000-8000-000000000001");
+    assert.match(writes[0].query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
     assert.equal(writes[0].body.kind, "project_fact");
     assert.equal(writes[0].body.source, "conversation_summary");
     assert.match(writes[0].body.content, /worker isolated/);
