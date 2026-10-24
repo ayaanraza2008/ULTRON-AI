@@ -57,8 +57,38 @@ async function requestMemory(path, body, { env = process.env, fetchImpl = global
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000)
   });
-  const raw = await response.text();
-  if (raw.length > 200000) throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  const maxBytes = 200_000;
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+  }
+  let raw = "";
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) {
+      throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+    }
+  } else {
+    const decoder = new TextDecoder();
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          try { await reader.cancel(); } catch {}
+          throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+        }
+        raw += decoder.decode(value, { stream: true });
+      }
+      raw += decoder.decode();
+    } finally {
+      try { reader.releaseLock(); } catch {}
+    }
+  }
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { text: raw.slice(0, 4000) }; }
   if (!response.ok) throw Object.assign(new Error("AgentMemory returned HTTP " + response.status), { code: "AGENTMEMORY_REQUEST_FAILED", status: response.status });
