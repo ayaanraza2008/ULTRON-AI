@@ -108,3 +108,16 @@ Configure on the ULTRON backend only:
 All endpoints require a signed-in Supabase user. Audio inputs are capped at 8 MB and generated audio responses at 12 MB. Remote HTTP endpoints are rejected; no arbitrary URL is accepted from a request body.
 
 **Important deployment boundary:** the public Render service cannot connect to `localhost:3900` on your Windows PC. For a PC-local VoiceStudio installation, ULTRON needs a later authenticated Windows companion/bridge to call the local service. Alternatively, use a secured, reachable HTTPS VoiceStudio host. Do not expose VoiceStudio's admin API to the public internet. VoiceStudio is AGPL-3.0; if modified VoiceStudio is provided over a network, comply with its source-offer obligations. Voice/model weights and voice likeness permissions have separate terms. See [VoiceStudio license notice](https://github.com/debpalash/VoiceStudio/blob/main/LICENSE-NOTICE.md).
+
+
+## Read-only Supabase Auth configuration diagnostic
+
+Run this in a trusted environment with the existing Supabase project URL and its public publishable/legacy anon key:
+
+~~~bash
+npm run diagnose:auth
+~~~
+
+It reads only the public Auth runtime settings endpoint. It does not create users, send confirmation emails or SMS, attempt sign-in, modify settings, or return API keys. The report shows whether email signup, email confirmation, Google OAuth, and phone authentication are enabled in the running Auth configuration. It explicitly marks email delivery as **not verified** because runtime settings cannot prove SMTP delivery.
+
+The script accepts SUPABASE_URL plus SUPABASE_PUBLISHABLE_KEY (or the legacy SUPABASE_ANON_KEY). It rejects non-HTTPS/non-Supabase project URLs. Do not copy any service-role secret into this command or chat. For missing confirmation emails, a successful settings report is only the first diagnosis: SMTP delivery, provider rate limits, message templates, redirects, and spam filtering still require separate checks.
