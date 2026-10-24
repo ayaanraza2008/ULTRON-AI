@@ -80,7 +80,8 @@ test("distinct user IDs that normalize similarly cannot share an AgentMemory pro
   assert.match(projects[0], /^ultron-ai-user-[a-f0-9]{40}$/);
   assert.match(projects[1], /^ultron-ai-user-[a-f0-9]{40}$/);
 });
-\ntest("AgentMemory fails safely when the remote service is unavailable", async () => {
+
+test("AgentMemory fails safely when the remote service is unavailable", async () => {
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
       env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret" },
