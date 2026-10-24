@@ -188,6 +188,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
   const limits = new Map();
+  const phoneOtpCooldowns = new Map();
+  const phoneOtpCooldownMs = Math.max(10_000, Number(env.PHONE_OTP_COOLDOWN_MS) || 30_000);
   const windowMs = Math.max(10_000, Number(env.RATE_LIMIT_WINDOW_MS) || 60_000);
   const maxRequests = Math.max(1, Number(env.RATE_LIMIT_MAX_REQUESTS) || 30);
   app.use("/api", (req, res, next) => {
@@ -488,6 +490,17 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
     if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
       return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter a phone number in international E.164 format, such as +14155552671." } });
+    }
+    const now = Date.now();
+    const lastRequested = phoneOtpCooldowns.get(phone);
+    if (lastRequested && now - lastRequested < phoneOtpCooldownMs) {
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Retry-After", String(Math.ceil((phoneOtpCooldownMs - (now - lastRequested)) / 1000)));
+      return res.status(429).json({ error: { code: "PHONE_OTP_COOLDOWN", message: "A code was requested recently. Please wait before requesting another." } });
+    }
+    phoneOtpCooldowns.set(phone, now);
+    if (phoneOtpCooldowns.size > 5000) {
+      for (const [number, timestamp] of phoneOtpCooldowns) if (now - timestamp >= phoneOtpCooldownMs) phoneOtpCooldowns.delete(number);
     }
     try {
       await supabaseAuthRequest("/auth/v1/otp", { phone, create_user: true });
