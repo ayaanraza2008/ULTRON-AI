@@ -79,6 +79,41 @@ test("readiness rejects non-HTTP local URLs, embedded credentials, query strings
   assert.equal(result.components.find((item) => item.id === "local_models").state, "optional");
 });
 
+test("readiness rejects private-network and local HTTPS service targets", () => {
+  for (const target of [
+    "https://127.0.0.1:8787",
+    "https://10.0.0.5",
+    "https://172.16.0.1",
+    "https://192.168.1.20",
+    "https://192.0.2.10",
+    "https://192.88.99.10",
+    "https://198.51.100.10",
+    "https://203.0.113.10",
+    "https://169.254.169.254",
+    "https://service.internal",
+    "https://printer.local",
+    "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "https://[::ffff:192.168.1.1]",
+    "https://[fe80::1]",
+    "https://[ff02::1]",
+    "https://[2001:db8::1]",
+    "https://[fd00::1]"
+  ]) {
+    const result = buildRuntimeReadiness({
+      env: { ULTRON_BROWSER_USE_URL: target, ULTRON_BROWSER_USE_TOKEN: "test-token" }
+    });
+    assert.equal(result.components.find((item) => item.id === "browser_automation").state, "blocked", target);
+  }
+});
+
+test("readiness accepts a public global-unicast IPv6 HTTPS endpoint", () => {
+  const result = buildRuntimeReadiness({
+    env: { OLLAMA_BASE_URL: "https://[2606:4700:4700::1111]:11434" }
+  });
+  assert.equal(result.components.find((item) => item.id === "local_models").state, "configured_unverified");
+});
+
 test("readiness accepts HTTPS services and plain HTTP loopback development services", () => {
   const result = buildRuntimeReadiness({
     env: {
@@ -92,4 +127,35 @@ test("readiness accepts HTTPS services and plain HTTP loopback development servi
   assert.equal(result.components.find((item) => item.id === "browser_automation").state, "configured_unverified");
   assert.equal(result.components.find((item) => item.id === "windows_companion").state, "configured_unverified");
   assert.equal(result.components.find((item) => item.id === "local_models").state, "configured_unverified");
+});
+
+
+test("VoiceStudio readiness requires a secure endpoint and remote API key without exposing secrets", () => {
+  const secret = "voice-studio-secret-test";
+  const configured = buildRuntimeReadiness({
+    env: {
+      VOICESTUDIO_BASE_URL: "https://speech.example.com",
+      VOICESTUDIO_API_KEY: secret
+    }
+  });
+  assert.equal(configured.components.find((item) => item.id === "voicestudio").state, "configured_unverified");
+  assert.equal(JSON.stringify(configured).includes(secret), false);
+
+  const missingKey = buildRuntimeReadiness({
+    env: { VOICESTUDIO_BASE_URL: "https://speech.example.com" }
+  });
+  assert.equal(missingKey.components.find((item) => item.id === "voicestudio").state, "optional");
+
+  const unsafe = buildRuntimeReadiness({
+    env: {
+      VOICESTUDIO_BASE_URL: "http://speech.example.com",
+      VOICESTUDIO_API_KEY: secret
+    }
+  });
+  assert.equal(unsafe.components.find((item) => item.id === "voicestudio").state, "optional");
+
+  const local = buildRuntimeReadiness({
+    env: { VOICESTUDIO_BASE_URL: "http://127.0.0.1:7860" }
+  });
+  assert.equal(local.components.find((item) => item.id === "voicestudio").state, "configured_unverified");
 });

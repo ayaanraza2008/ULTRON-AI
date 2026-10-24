@@ -77,10 +77,69 @@ test("AI Employee planner generates a draft but explicitly does not execute it",
     assert.match(body.notice, /No schedule was registered/i);
     assert.equal(request.model, "openrouter/free");
     assert.match(request.messages[0].content, /Never send messages, publish posts/i);
-  }, async (_url, options) => {
+  }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    assert.equal(options.redirect, "error");
     request = JSON.parse(options.body);
-    return { ok: true, json: async () => ({ model: "openrouter/free", choices: [{ message: { content: "## Draft\n1. Prepare three editable posts.\n2. Review claims and brand tone.\n3. Request approval before publishing." } }] }) };
+    return new Response(JSON.stringify({ model: "openrouter/free", choices: [{ message: { content: "## Draft\\n1. Prepare three editable posts.\\n2. Review claims and brand tone.\\n3. Request approval before publishing." } }] }), {
+      status: 200, headers: { "Content-Type": "application/json" }
+    });
   });
+});
+
+test("AI Employee planner rejects oversized provider responses without parsing them", async () => {
+  await withServer({ OPENROUTER_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/employees/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "chief-of-staff", goal: "Summarize blockers" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "EMPLOYEE_INVALID_PROVIDER_RESPONSE");
+  }, async () => ({
+    ok: true,
+    headers: { get: name => name.toLowerCase() === "content-length" ? "2000001" : null },
+    body: { cancel: async () => { } }
+  }));
+});
+
+test("AI Employee planner fails closed when provider redirects are rejected", async () => {
+  await withServer({ OPENROUTER_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/employees/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "chief-of-staff", goal: "Summarize blockers" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "EMPLOYEE_REQUEST_FAILED");
+  }, async (_url, options) => {
+    assert.equal(options.redirect, "error");
+    throw new TypeError("redirect mode error");
+  });
+});
+
+test("AI Employee planner rejects unsafe provider base URLs before network access", async () => {
+  for (const providerUrl of [
+    "https://127.0.0.1:8080",
+    "https://192.168.1.5",
+    "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "https://[fc00::1]",
+    "https://[fe80::1]",
+    "https://[ff02::1]",
+    "https://metadata.google.internal",
+    "https://user:password@openrouter.ai/api/v1",
+    "http://openrouter.ai/api/v1"
+  ]) {
+    let called = false;
+    await withServer({ OPENROUTER_API_KEY: "test-key", OPENROUTER_BASE_URL: providerUrl }, async base => {
+      const response = await fetch(base + "/api/employees/plan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "chief-of-staff", goal: "Summarize blockers" })
+      });
+      assert.equal(response.status, 503, providerUrl);
+      assert.equal((await response.json()).error.code, "EMPLOYEE_PROVIDER_NOT_CONFIGURED", providerUrl);
+      assert.equal(called, false, providerUrl);
+    }, async () => { called = true; throw new Error("unsafe provider URL must never be contacted"); });
+  }
 });
 
 test("AI Employee planner fails closed when no provider is configured", async () => {

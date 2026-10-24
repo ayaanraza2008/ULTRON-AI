@@ -1,7 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createFeatureRouter } from "../features.js";
+import { createFeatureRouter, hasEmployeeModelProvider } from "../features.js";
+
+
+test("employee provider readiness rejects private and reserved HTTPS endpoints", () => {
+  for (const baseUrl of [
+    "https://localhost/v1",
+    "https://127.0.0.1/v1",
+    "https://10.0.0.8/v1",
+    "https://192.0.2.10/v1",
+    "https://169.254.169.254/latest/meta-data",
+    "https://[::1]/v1",
+    "https://host.internal/v1"
+  ]) {
+    assert.equal(hasEmployeeModelProvider({
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "alternate", baseUrl, apiKeyEnv: "ALT_PROVIDER_KEY", model: "test-model" }
+      ]),
+      ALT_PROVIDER_KEY: "test-key"
+    }), false, baseUrl);
+  }
+});
+
+test("employee provider readiness accepts a public HTTPS endpoint", () => {
+  assert.equal(hasEmployeeModelProvider({
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "alternate", baseUrl: "https://api.example.com/v1", apiKeyEnv: "ALT_PROVIDER_KEY", model: "test-model" }
+    ]),
+    ALT_PROVIDER_KEY: "test-key"
+  }), true);
+});
 
 async function withServer(env, run, extras = {}) {
   const app = express();
@@ -148,6 +177,48 @@ test("task approval requires explicit confirmation and preserves original task i
     assert.equal(body.task.input.approved, true);
     assert.match(body.notice, /worker is still required/i);
   }, { supabaseRest: fakeSupabaseRest });
+});
+
+
+test("speech synthesis rejects oversized streamed provider responses without buffering them fully", async () => {
+  let cancelled = false;
+  await withServer({ TTS_API_BASE_URL: "https://speech.example", TTS_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/speech/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "hello" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "TTS_INVALID_AUDIO");
+    assert.equal(cancelled, true);
+  }, {
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.redirect, "error");
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(12_000_001)); },
+        cancel() { cancelled = true; }
+      }), { status: 200, headers: { "content-type": "audio/mpeg" } });
+    }
+  });
+});
+
+test("speech transcription rejects oversized streamed provider responses", async () => {
+  let called = false;
+  await withServer({ STT_API_BASE_URL: "https://speech.example", STT_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/speech/transcribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audioBase64: Buffer.from("audio").toString("base64"), mimeType: "audio/wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "STT_RESPONSE_TOO_LARGE");
+    assert.equal(called, true);
+  }, {
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.redirect, "error");
+      called = true;
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(1_000_001)); }
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+  });
 });
 
 test("premium speech endpoints fail clearly when no provider is configured", async () => {

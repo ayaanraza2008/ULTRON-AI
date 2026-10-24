@@ -1,4 +1,5 @@
 import express from "express";
+import { isIP } from "node:net";
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
@@ -13,6 +14,25 @@ function bounded(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function isPrivateOrLocalHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const version = isIP(host);
+  if (version === 4) {
+    const [a, b] = host.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) || (a === 100 && b >= 64 && b <= 127) ||
+      (a === 198 && (b === 18 || b === 19));
+  }
+  if (version === 6) {
+    const first = Number.parseInt(host.split(":")[0] || "0", 16);
+    return first < 0x2000 || first > 0x3fff ||
+      host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:");
+  }
+  return !host.includes(".");
+}
+
 function voiceStudioConfig(env = process.env) {
   const raw = bounded(env.VOICESTUDIO_BASE_URL, 500);
   const token = bounded(env.VOICESTUDIO_API_KEY, 2000);
@@ -21,9 +41,12 @@ function voiceStudioConfig(env = process.env) {
     const url = new URL(raw);
     if (url.username || url.password || url.hash || url.search) return { configured: false, reason: "invalid_url" };
     const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return { configured: false, reason: "https_required" };
+    if (url.protocol === "https:") {
+      if (isPrivateOrLocalHost(url.hostname)) return { configured: false, reason: "unsafe_remote_host" };
+    } else if (url.protocol !== "http:" || !local) return { configured: false, reason: "https_required" };
     if (!local && !token) return { configured: false, reason: "remote_api_key_required" };
-    return { configured: true, baseUrl: url.toString().replace(/\/+$/, ""), token, local };
+    const baseUrl = url.toString();
+    return { configured: true, baseUrl: baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl, token, local };
   } catch {
     return { configured: false, reason: "invalid_url" };
   }
@@ -38,11 +61,43 @@ function providerHeaders(config, extra = {}) {
 }
 
 async function readLimited(response, maxBytes) {
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
     throw Object.assign(new Error("VoiceStudio response exceeded the configured size limit."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
   }
-  return buffer;
+
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes) {
+      throw Object.assign(new Error("VoiceStudio response exceeded the configured size limit."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
+    }
+    return buffer;
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("VoiceStudio response exceeded the configured size limit."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, totalBytes);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
+async function readTextLimited(response, maxBytes) {
+  const buffer = await readLimited(response, maxBytes);
+  return buffer.toString("utf8");
 }
 
 async function requestJson(fetchImpl, url, config, options = {}) {
@@ -52,8 +107,7 @@ async function requestJson(fetchImpl, url, config, options = {}) {
     redirect: "error",
     signal: AbortSignal.timeout(options.timeoutMs || 15000)
   });
-  const raw = await response.text();
-  if (raw.length > 1_000_000) throw Object.assign(new Error("VoiceStudio JSON response was too large."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
+  const raw = await readTextLimited(response, 1_000_000);
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
   if (!response.ok) {
@@ -191,8 +245,7 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
         redirect: "error",
         signal: AbortSignal.timeout(120000)
       });
-      const raw = await response.text();
-      if (raw.length > 1_000_000) throw Object.assign(new Error("VoiceStudio transcription response was too large."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
+      const raw = await readTextLimited(response, 1_000_000);
       let data = {};
       try { data = raw ? JSON.parse(raw) : {}; } catch { data = { text: raw.slice(0, 10000) }; }
       if (!response.ok) {

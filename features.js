@@ -1,13 +1,43 @@
 import express from "express";
+import { isIP } from "node:net";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
+
+function isPrivateProviderHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const version = isIP(host);
+  if (version === 4) {
+    const [a, b, c] = host.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 2 || b === 168)) ||
+      (a === 192 && b === 88 && c === 99) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0 && c === 113) ||
+      (a === 100 && b >= 64 && b <= 127);
+  }
+  if (version === 6) {
+    // Only globally-routable unicast IPv6 is accepted. This rejects loopback,
+    // IPv4-mapped IPv6 (including hex forms), ULA, link-local and multicast.
+    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+    if (firstHextet < 0x2000 || firstHextet > 0x3fff) return true;
+    if (host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:")) return true;
+    return false;
+  }
+  return !host.includes(".");
+}
 
 function safeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     const url = new URL(value.trim());
-    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") return null;
+    if (url.username || url.password || url.search || url.hash) return null;
+    const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+    if (url.protocol === "https:") {
+      if (isPrivateProviderHost(url.hostname)) return null;
+    } else if (url.protocol !== "http:" || !loopback) return null;
     return url.toString().replace(/\/+$/, "");
   } catch { return null; }
 }
@@ -15,6 +45,37 @@ function safeBaseUrl(value) {
 function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
+async function readResponseBytes(response, maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("Upstream response exceeded its size limit."), { code: "UPSTREAM_RESPONSE_TOO_LARGE" });
+  }
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxBytes) throw Object.assign(new Error("Upstream response exceeded its size limit."), { code: "UPSTREAM_RESPONSE_TOO_LARGE" });
+    return bytes;
+  }
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("Upstream response exceeded its size limit."), { code: "UPSTREAM_RESPONSE_TOO_LARGE" });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, total);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 
 export function hasEmployeeModelProvider(env) {
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
@@ -34,9 +95,14 @@ export function hasEmployeeModelProvider(env) {
         !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) ||
         names.has(name) || !env[apiKeyEnv]?.trim?.()) return false;
     try {
-      const url = new URL(item.baseUrl);
-      if (url.protocol !== "https:" || url.username || url.password) return false;
-      const baseUrl = url.toString().replace(/\/+$/, "");
+      // Alternate cloud providers must be public HTTPS endpoints. Local HTTP
+      // is allowed only for explicit local model features, never employee providers.
+      let parsedUrl;
+      try { parsedUrl = new URL(item.baseUrl); } catch { return false; }
+      if (parsedUrl.protocol !== "https:") return false;
+      // HTTPS alone does not make localhost/private/reserved addresses safe.
+      const baseUrl = safeBaseUrl(item.baseUrl);
+      if (!baseUrl) return false;
       if (urls.has(baseUrl)) return false;
       names.add(name);
       urls.add(baseUrl);
@@ -257,9 +323,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const prompt = JSON.stringify({ role: { id: role.id, name: role.name, owns: role.owns, capabilities: role.capabilities }, mode, goal, context: context || undefined });
     const timeout = withTimeout(45000, req.signal);
     try {
-      const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
+      const providerBase = safeBaseUrl(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
+      if (!providerBase || !env.OPENROUTER_API_KEY?.trim()) {
+        return res.status(503).json({ error: { code: "EMPLOYEE_PROVIDER_NOT_CONFIGURED", message: "AI Employee planning provider is not configured securely." } });
+      }
+      const response = await fetchImpl(providerBase + "/chat/completions", {
         method: "POST",
-        headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI Employees" },
+        redirect: "error",
+        headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", Accept: "application/json", "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI Employees" },
         body: JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 2200 }),
         signal: timeout.signal
       });
@@ -267,7 +338,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         logger.warn?.("AI Employee provider request failed", { status: response.status });
         return res.status(502).json({ error: { code: "EMPLOYEE_PROVIDER_FAILED", message: "The AI Employee provider could not complete this request." } });
       }
-      const payload = await response.json();
+      let payload;
+      try {
+        const bytes = await readResponseBytes(response, 2_000_000);
+        payload = JSON.parse(bytes.toString("utf8"));
+      } catch (error) {
+        logger.warn?.("AI Employee provider response rejected", { code: error?.code || "INVALID_PROVIDER_RESPONSE" });
+        return res.status(502).json({ error: { code: "EMPLOYEE_INVALID_PROVIDER_RESPONSE", message: "The AI Employee provider returned an invalid or oversized response." } });
+      }
       const answer = payload?.choices?.[0]?.message?.content;
       if (typeof answer !== "string" || !answer.trim()) return res.status(502).json({ error: { code: "EMPLOYEE_EMPTY_RESPONSE", message: "The provider returned no plan." } });
       res.json({
@@ -475,17 +553,19 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const response = await fetchImpl(base + "/audio/speech", {
         method: "POST", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.TTS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
-        body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" })
+        body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" }),
+        redirect: "error"
       });
       if (!response.ok) return res.status(502).json({ error: { code: "TTS_PROVIDER_FAILED", message: "The configured OpenAI-compatible speech provider failed." } });
-      const bytes = Buffer.from(await response.arrayBuffer());
-      if (!bytes.length || bytes.length > 12_000_000) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty or oversized audio." } });
+      const bytes = await readResponseBytes(response, 12_000_000);
+      if (!bytes.length) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty audio." } });
       res.setHeader("Content-Type", response.headers.get("content-type")?.startsWith("audio/") ? response.headers.get("content-type") : "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Content-Length", String(bytes.length));
       res.send(bytes);
     } catch (error) {
-      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "TTS_TIMEOUT" : "TTS_UNAVAILABLE", message: "Speech synthesis failed or timed out." } });
+      const oversized = error?.code === "UPSTREAM_RESPONSE_TOO_LARGE";
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "TTS_TIMEOUT" : oversized ? "TTS_INVALID_AUDIO" : "TTS_UNAVAILABLE", message: oversized ? "The speech provider returned oversized audio." : "Speech synthesis failed or timed out." } });
     } finally { timeout.close(); }
   });
 
@@ -507,14 +587,19 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const response = await fetchImpl(base + "/audio/transcriptions", {
         method: "POST", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.STT_API_KEY },
-        body: form
+        body: form,
+        redirect: "error"
       });
       if (!response.ok) return res.status(502).json({ error: { code: "STT_PROVIDER_FAILED", message: "The configured OpenAI-compatible transcription provider failed." } });
-      const payload = await response.json();
+      const raw = await readResponseBytes(response, 1_000_000);
+      let payload;
+      try { payload = JSON.parse(raw.toString("utf8")); } catch { payload = null; }
+      if (!payload || typeof payload !== "object") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
       if (typeof payload.text !== "string") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
       res.json({ text: payload.text.slice(0, 12000), language: payload.language || null });
-    } catch {
-      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "STT_TIMEOUT" : "STT_UNAVAILABLE", message: "Transcription failed or timed out." } });
+    } catch (error) {
+      const oversized = error?.code === "UPSTREAM_RESPONSE_TOO_LARGE";
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "STT_TIMEOUT" : oversized ? "STT_RESPONSE_TOO_LARGE" : "STT_UNAVAILABLE", message: oversized ? "The transcription provider returned an oversized response." : "Transcription failed or timed out." } });
     } finally { timeout.close(); }
   });
 

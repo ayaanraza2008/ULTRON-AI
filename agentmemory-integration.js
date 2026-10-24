@@ -1,5 +1,30 @@
+import { isIP } from "node:net";
+
 const MAX_QUERY = 1200;
 const MAX_MEMORY_TEXT = 2400;
+
+function isPrivateOrLocalHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const version = isIP(host);
+  if (version === 4) {
+    const [a, b] = host.split(".").map(Number);
+    const c = host.split(".").map(Number)[2];
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 2 || b === 168)) ||
+      (a === 192 && b === 88 && c === 99) ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0 && c === 113);
+  }
+  if (version === 6) {
+    const first = Number.parseInt(host.split(":")[0] || "0", 16);
+    return first < 0x2000 || first > 0x3fff ||
+      host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:");
+  }
+  return !host.includes(".");
+}
 
 function bounded(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -14,8 +39,11 @@ function scopedProject(env, userId) {
 function baseUrl(value) {
   try {
     const url = new URL(String(value || ""));
-    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return null;
-    if (url.protocol === "http:" && !["localhost", "127.0.0.1"].includes(url.hostname)) return null;
+    if (url.username || url.password || url.search || url.hash) return null;
+    const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+    if (url.protocol === "https:") {
+      if (isPrivateOrLocalHost(url.hostname)) return null;
+    } else if (url.protocol !== "http:" || !loopback) return null;
     return url.toString().replace(/\/+$/, "");
   } catch {
     return null;
@@ -53,12 +81,43 @@ async function requestMemory(path, body, { env = process.env, fetchImpl = global
   if (!base || !token) return { state: "not_configured" };
   const response = await fetchImpl(base + path, {
     method: "POST",
+    redirect: "error",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000)
   });
-  const raw = await response.text();
-  if (raw.length > 200000) throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  const maxBytes = 200_000;
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+  }
+  let raw = "";
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) {
+      throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+    }
+  } else {
+    const decoder = new TextDecoder();
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          try { await reader.cancel(); } catch {}
+          throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+        }
+        raw += decoder.decode(value, { stream: true });
+      }
+      raw += decoder.decode();
+    } finally {
+      try { reader.releaseLock(); } catch {}
+    }
+  }
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { text: raw.slice(0, 4000) }; }
   if (!response.ok) throw Object.assign(new Error("AgentMemory returned HTTP " + response.status), { code: "AGENTMEMORY_REQUEST_FAILED", status: response.status });
@@ -78,6 +137,7 @@ export async function recallAgentMemory(task, options = {}) {
   if (!query || !shouldRecallAgentMemory(query)) return { state: "skipped", memories: [] };
   const project = scopedProject(options.env, options.userId);
   const data = await requestMemory("/agentmemory/smart-search", { query, project, limit: 5 }, options);
+  if (data?.state === "not_configured") return { state: "not_configured", memories: [] };
   const candidates = Array.isArray(data.results) ? data.results
     : Array.isArray(data.memories) ? data.memories
     : Array.isArray(data.items) ? data.items
@@ -94,12 +154,13 @@ export async function captureAgentMemory(task, options = {}) {
   const env = options.env || process.env;
   if (env.ULTRON_AGENTMEMORY_CAPTURE === "false") return { state: "disabled" };
   const project = scopedProject(env, options.userId);
-  await requestMemory("/agentmemory/remember", {
+  const result = await requestMemory("/agentmemory/remember", {
     content: text,
     type: "decision",
     concepts: ["ultron-agent", "durable-context"],
     project,
     agentId: "ultron-ai"
   }, options);
+  if (result?.state === "not_configured") return { state: "not_configured" };
   return { state: "captured" };
 }

@@ -2,6 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isIP } from "node:net";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
@@ -89,13 +90,48 @@ async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
   return JSON.parse(raw);
 }
 
+function isUnsafeProviderHost(hostname) {
+  const host = String(hostname || "").replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
+  if (!host) return true;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    const octets = host.split(".").map(Number);
+    const [a, b] = octets;
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0 && octets[2] === 113);
+  }
+  if (ipVersion === 6) return !host.startsWith("2") || host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:");
+  return !host.includes(".");
+}
+
 function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
-  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-    throw new Error("OPENROUTER_BASE_URL must use HTTPS outside localhost.");
+  const loopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  const localHttp = parsed.protocol === "http:" && loopback;
+  if ((parsed.protocol !== "https:" && !localHttp) ||
+      parsed.username || parsed.password || parsed.search || parsed.hash ||
+      (!localHttp && isUnsafeProviderHost(parsed.hostname))) {
+    throw new Error("OPENROUTER_BASE_URL must be HTTPS with a public host, or HTTP loopback for local development.");
   }
   return raw.replace(/\/+$/, "");
+}
+
+function worldIntelligenceOrigin(env) {
+  const fallback = "https://ultron-world-intelligence-live.onrender.com";
+  try {
+    const url = new URL(String(env.WORLD_INTELLIGENCE_URL || fallback));
+    if (url.protocol !== "https:" || url.username || url.password) return new URL(fallback).origin;
+    return url.origin;
+  } catch {
+    return new URL(fallback).origin;
+  }
 }
 
 function hasConfiguredModelProvider(env) {
@@ -143,14 +179,17 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const worldIntelligence = req.path === "/world-intelligence" || req.path.startsWith("/world-intelligence/");
     if (worldIntelligence) res.removeHeader("X-Frame-Options");
     else res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
+    const globeOrigin = worldIntelligenceOrigin(env);
+    res.setHeader("Permissions-Policy", `camera=(), geolocation=(), microphone=(self "${globeOrigin}")`);
     res.setHeader("Content-Security-Policy", worldIntelligence
       ? "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' blob: https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https: wss: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
-      : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+      : `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' ${globeOrigin}; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`);
     next();
   });
 
   const limits = new Map();
+  const phoneOtpCooldowns = new Map();
+  const phoneOtpCooldownMs = Math.max(10_000, Number(env.PHONE_OTP_COOLDOWN_MS) || 30_000);
   const windowMs = Math.max(10_000, Number(env.RATE_LIMIT_WINDOW_MS) || 60_000);
   const maxRequests = Math.max(1, Number(env.RATE_LIMIT_MAX_REQUESTS) || 30);
   app.use("/api", (req, res, next) => {
@@ -442,6 +481,49 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       return res.json({ authenticated: true, email: payload.user?.email || email });
     } catch (error) {
       return res.status(error.status || 502).json({ error: { code: "SIGNIN_FAILED", message: error.message } });
+    }
+  });
+
+  // Phone OTP is opt-in and depends on SMS being enabled in the Supabase Auth project.
+  // Never log phone numbers or OTPs; do not expose provider responses to callers.
+  app.post("/api/auth/phone/request", async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+      return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter a phone number in international E.164 format, such as +14155552671." } });
+    }
+    const now = Date.now();
+    const lastRequested = phoneOtpCooldowns.get(phone);
+    if (lastRequested && now - lastRequested < phoneOtpCooldownMs) {
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Retry-After", String(Math.ceil((phoneOtpCooldownMs - (now - lastRequested)) / 1000)));
+      return res.status(429).json({ error: { code: "PHONE_OTP_COOLDOWN", message: "A code was requested recently. Please wait before requesting another." } });
+    }
+    phoneOtpCooldowns.set(phone, now);
+    if (phoneOtpCooldowns.size > 5000) {
+      for (const [number, timestamp] of phoneOtpCooldowns) if (now - timestamp >= phoneOtpCooldownMs) phoneOtpCooldowns.delete(number);
+    }
+    try {
+      await supabaseAuthRequest("/auth/v1/otp", { phone, create_user: true });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ ok: true, message: "If SMS sign-in is enabled for this project, a verification code will be sent." });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "PHONE_OTP_UNAVAILABLE", message: error.status === 429 ? "Too many code requests. Please wait before trying again." : "Phone sign-in is unavailable. Check that SMS authentication is enabled." } });
+    }
+  });
+
+  app.post("/api/auth/phone/verify", async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!/^\+[1-9]\d{7,14}$/.test(phone) || !/^\d{4,12}$/.test(token)) {
+      return res.status(400).json({ error: { code: "INVALID_PHONE_OTP", message: "Enter the same international phone number and the numeric verification code." } });
+    }
+    try {
+      const payload = await supabaseAuthRequest("/auth/v1/verify", { phone, token, type: "sms" });
+      if (!setSupabaseCookies(res, payload)) return res.status(502).json({ error: { code: "AUTH_RESPONSE_INVALID", message: "The authentication provider returned an incomplete sign-in response." } });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ authenticated: true, phone: payload.user?.phone || phone });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "PHONE_VERIFY_FAILED", message: error.status === 429 ? "Too many verification attempts. Please wait before trying again." : "The code was not accepted or phone sign-in is not enabled." } });
     }
   });
 
@@ -892,7 +974,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
   const worldIntelligenceUrl = (() => {
     try {
-      const url = new URL(String(env.WORLD_INTELLIGENCE_URL || "https://ultron-world-intelligence.onrender.com"));
+      const url = new URL(String(env.WORLD_INTELLIGENCE_URL || "https://ultron-world-intelligence-live.onrender.com"));
       return url.protocol === "https:" ? url.toString().replace(/\/$/, "") : null;
     } catch { return null; }
   })();

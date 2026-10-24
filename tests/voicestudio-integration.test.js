@@ -26,6 +26,24 @@ test("VoiceStudio readiness requires a secure remote endpoint and API key", () =
   assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "http://localhost:3900" }).configured, true);
 });
 
+test("VoiceStudio rejects private, local-network and credentialed remote URLs", () => {
+  for (const url of [
+    "https://127.0.0.1:9000",
+    "https://10.1.2.3",
+    "https://192.168.1.5",
+    "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "https://[fc00::1]",
+    "https://[fe80::1]",
+    "https://metadata.google.internal",
+    "https://user:password@voice.example"
+  ]) {
+    const result = voiceStudioReadiness({ VOICESTUDIO_BASE_URL: url, VOICESTUDIO_API_KEY: "test-key" });
+    assert.equal(result.configured, false, url);
+  }
+  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "http://127.0.0.1:3900" }).configured, true);
+});
+
 test("VoiceStudio status reports live discovery and model count without exposing credentials", async () => {
   const seen = [];
   await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
@@ -64,6 +82,42 @@ test("VoiceStudio synthesis forwards validated options and returns bounded audio
     assert.deepEqual(JSON.parse(request.options.body), {
       model: "tts-1", input: "Hello ULTRON", voice: "vaultar-voice", response_format: "wav", speed: 1.1
     });
+  });
+});
+
+test("VoiceStudio synthesis rejects an oversized declared response before reading it", async () => {
+  let cancelled = false;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async () => {
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array([1])); },
+      cancel() { cancelled = true; }
+    }), { status: 200, headers: { "content-type": "audio/wav", "content-length": String(12 * 1024 * 1024 + 1) } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "test", format: "wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "VOICESTUDIO_RESPONSE_TOO_LARGE");
+    assert.equal(cancelled, true);
+  });
+});
+
+test("VoiceStudio synthesis cancels a streamed response that crosses the byte limit", async () => {
+  let cancelled = false;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async () => {
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(12 * 1024 * 1024 + 1)); },
+      cancel() { cancelled = true; }
+    }), { status: 200, headers: { "content-type": "audio/wav" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "test", format: "wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "VOICESTUDIO_RESPONSE_TOO_LARGE");
+    assert.equal(cancelled, true);
   });
 });
 

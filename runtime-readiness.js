@@ -1,13 +1,43 @@
+import { isIP } from "node:net";
+
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
+
+function isPrivateOrLocalHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    const octets = host.split(".").map(Number);
+    const [a, b] = octets;
+    const c = octets[2];
+    return a === 0 || a === 10 || a === 127 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 2 || b === 168)) ||
+      (a === 192 && b === 88 && c === 99) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0 && c === 113) ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a >= 224);
+  }
+  if (ipVersion === 6) {
+    // Only global-unicast IPv6 is eligible. Reject loopback, unspecified,
+    // IPv4-mapped, ULA, link-local, multicast and documentation/tunnel ranges.
+    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+    if (firstHextet < 0x2000 || firstHextet > 0x3fff) return true;
+    if (host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:")) return true;
+    return false;
+  }
+  // Single-label names are usually local network aliases rather than public services.
+  return !host.includes(".");
+}
 
 function secureServiceUrl(value) {
   if (!truthy(value)) return false;
   try {
     const url = new URL(value.trim());
-    const localHosts = ["localhost", "127.0.0.1", "[::1]", "::1"];
     if (url.username || url.password || url.search || url.hash) return false;
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && localHosts.includes(url.hostname);
+    if (url.protocol === "https:") return !isPrivateOrLocalHost(url.hostname);
+    return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
   } catch {
     return false;
   }
@@ -35,6 +65,18 @@ export function buildRuntimeReadiness({
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
   const premiumTtsConfigured = secureServiceUrl(env.TTS_API_BASE_URL) && truthy(env.TTS_API_KEY);
   const premiumSttConfigured = secureServiceUrl(env.STT_API_BASE_URL) && truthy(env.STT_API_KEY);
+  const voiceStudioConfigured = (() => {
+    const value = env.VOICESTUDIO_BASE_URL;
+    if (!secureServiceUrl(value)) return false;
+    try {
+      const url = new URL(value.trim());
+      const loopback = url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
+      return loopback || (url.protocol === "https:" && truthy(env.VOICESTUDIO_API_KEY));
+    } catch {
+      return false;
+    }
+  })();
   const workerEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const workerState = workerStatus?.state || (workerEnabled ? "not_started" : "disabled");
 
@@ -73,6 +115,10 @@ export function buildRuntimeReadiness({
         : "Optional. A cloud-hosted service cannot reach a PC-local localhost endpoint."),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
+    component("voicestudio", "VoiceStudio speech and transcription", voiceStudioConfigured ? "configured_unverified" : "optional",
+      ["VOICESTUDIO_BASE_URL", "VOICESTUDIO_API_KEY (remote HTTPS only)"], voiceStudioConfigured
+        ? "VoiceStudio endpoint settings are present; upstream reachability, installed models, and audio quality are not tested by readiness."
+        : "Optional. Configure a loopback HTTP endpoint for a local companion, or a public HTTPS endpoint with an API key."),
     component("safe_code_execution", "Isolated code execution", "not_available",
       [], "ULTRON does not claim to run arbitrary user code in an isolated sandbox; coding assistance is limited to supported plan, draft, and review workflows.")
   ];

@@ -207,6 +207,36 @@ test("model discovery returns only model identifiers from the configured provide
   });
 });
 
+test("model gateway rejects private, reserved and credentialed provider URLs before network access", async () => {
+  for (const providerUrl of [
+    "https://127.0.0.1:8080",
+    "https://10.0.0.5/v1",
+    "https://192.168.1.4/v1",
+    "https://192.0.2.10/v1",
+    "https://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal",
+    "https://user:password@openrouter.ai/api/v1",
+    "http://openrouter.ai/api/v1"
+  ]) {
+    let calls = 0;
+    const app = createApp({
+      env: { ...env, OPENROUTER_BASE_URL: providerUrl, ULTRON_BROWSER_USE_TOKEN: "bridge-test-token" },
+      fetchImpl: async () => { calls++; throw new Error("unsafe provider URL must not be contacted"); },
+      logger: { warn() {}, error() {} }
+    });
+    await withServer(app, async base => {
+      const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: "Bearer bridge-test-token", "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "test" }] })
+      });
+      assert.equal(response.status, 500, providerUrl);
+      assert.equal((await response.json()).error.type, "provider_config_error", providerUrl);
+      assert.equal(calls, 0, providerUrl);
+    });
+  }
+});
+
 test("missing access password fails closed", async () => {
   const app = createApp({ env: { ...env, APP_ACCESS_PASSWORD: "" }, logger: { warn() {}, error() {} } });
   await withServer(app, async base => {
@@ -268,6 +298,63 @@ test("Supabase signup validates credentials before making an upstream request", 
     });
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, "INVALID_CREDENTIALS");
+    assert.equal(calls, 0);
+  });
+});
+
+test("phone sign-in validates input and completes provider verification", async () => {
+  const supabaseEnv = { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
+  const calls = [];
+  const app = createApp({
+    env: supabaseEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, body: options.body ? JSON.parse(options.body) : null });
+      if (url.endsWith("/auth/v1/otp")) return new Response(JSON.stringify({ message: "sent" }), { status: 200 });
+      if (url.endsWith("/auth/v1/verify")) return new Response(JSON.stringify({ access_token: "access-test", refresh_token: "refresh-test", expires_in: 3600, user: { id: "123e4567-e89b-12d3-a456-426614174000", phone: "+19999999999" } }), { status: 200 });
+      throw new Error("Unexpected mocked URL");
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const invalid = await fetch(base + "/api/auth/phone/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "invalid" }) });
+    assert.equal(invalid.status, 400);
+    assert.equal(calls.length, 0);
+    const requested = await fetch(base + "/api/auth/phone/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "+19999999999" }) });
+    assert.equal(requested.status, 200);
+    assert.equal((await requested.json()).ok, true);
+    assert.deepEqual(calls[0].body, { phone: "+19999999999", create_user: true });
+    const repeated = await fetch(base + "/api/auth/phone/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "+19999999999" }) });
+    assert.equal(repeated.status, 429);
+    assert.equal(repeated.headers.get("cache-control"), "no-store");
+    assert.ok(Number(repeated.headers.get("retry-after")) > 0);
+    assert.equal(calls.length, 1, "cooldown must block the repeated provider request");
+    const verified = await fetch(base + "/api/auth/phone/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "+19999999999", token: "123456" }) });
+    assert.equal(verified.status, 200);
+    assert.equal((await verified.json()).authenticated, true);
+    assert.match(verified.headers.get("set-cookie"), /ultron_sb_access=access-test/);
+    assert.deepEqual(calls[1].body, { phone: "+19999999999", token: "123456", type: "sms" });
+  });
+});
+
+test("phone OTP verification rejects malformed codes without contacting Supabase", async () => {
+  let calls = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async () => { calls++; throw new Error("invalid OTP must not reach provider"); },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    for (const input of [
+      { phone: "not-a-phone", token: "123456" },
+      { phone: "+19999999999", token: "abc123" },
+      { phone: "+19999999999", token: "123" }
+    ]) {
+      const response = await fetch(base + "/api/auth/phone/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input)
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, "INVALID_PHONE_OTP");
+    }
     assert.equal(calls, 0);
   });
 });

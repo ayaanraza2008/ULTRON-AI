@@ -62,6 +62,62 @@ test("durable capture uses supported remember API and can be disabled", async ()
   assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
 
+test("AgentMemory recall and capture report missing configuration truthfully", async () => {
+  const recalled = await recallAgentMemory("Continue the previous repository implementation", {
+    env: {},
+    userId: "user-123",
+    fetchImpl: async () => { throw new Error("unconfigured memory must not call network"); }
+  });
+  assert.deepEqual(recalled, { state: "not_configured", memories: [] });
+  const captured = await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", {
+    env: {},
+    userId: "user-123",
+    fetchImpl: async () => { throw new Error("unconfigured memory must not call network"); }
+  });
+  assert.deepEqual(captured, { state: "not_configured" });
+});
+
+test("AgentMemory rejects private, local, credentialed and insecure remote endpoints", async () => {
+  for (const url of [
+    "https://127.0.0.1:8080",
+    "https://10.0.0.5",
+    "https://192.0.2.10",
+    "https://192.88.99.10",
+    "https://198.51.100.10",
+    "https://203.0.113.10",
+    "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "https://[fd00::1]",
+    "https://[fe80::1]",
+    "https://metadata.google.internal",
+    "https://user:password@memory.example",
+    "http://memory.example"
+  ]) {
+    let called = false;
+    const result = await recallAgentMemory("Continue the previous repository implementation", {
+      env: { AGENTMEMORY_URL: url, AGENTMEMORY_SECRET: "test-secret" },
+      userId: "user-123",
+      fetchImpl: async () => { called = true; throw new Error("unsafe endpoint must not be called"); }
+    });
+    assert.equal(result.state, "not_configured", url);
+    assert.equal(called, false, url);
+  }
+});
+
+test("AgentMemory requests refuse redirects so credentials cannot be forwarded", async () => {
+  let options;
+  const result = await recallAgentMemory("Continue the previous repository implementation", {
+    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+    userId: "user-123",
+    fetchImpl: async (_url, input) => {
+      options = input;
+      return new Response(JSON.stringify({ results: [] }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(options.redirect, "error");
+});
+
 test("AgentMemory fails safely when the remote service is unavailable", async () => {
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
@@ -71,4 +127,24 @@ test("AgentMemory fails safely when the remote service is unavailable", async ()
     }),
     error => error.code === "AGENTMEMORY_REQUEST_FAILED"
   );
+});
+
+
+test("AgentMemory response body is bounded while streaming", async () => {
+  let cancelled = false;
+  const oversized = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(200_001));
+    },
+    cancel() { cancelled = true; }
+  });
+  await assert.rejects(
+    recallAgentMemory("Continue the previous repository implementation", {
+      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret" },
+      userId: "user-123",
+      fetchImpl: async () => new Response(oversized, { status: 200 })
+    }),
+    error => error.code === "AGENTMEMORY_RESPONSE_TOO_LARGE"
+  );
+  assert.equal(cancelled, true);
 });

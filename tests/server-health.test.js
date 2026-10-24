@@ -107,3 +107,35 @@ test("password recovery uses only the configured HTTPS redirect destination", as
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test("security headers follow the configured God’s Eye origin and reject unsafe origins", async () => {
+  async function headersFor(url) {
+    const app = createApp({
+      env: { WORLD_INTELLIGENCE_URL: url },
+      logger: { info() {}, warn() {}, error() {} }
+    });
+    const server = await new Promise(resolve => {
+      const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+    });
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/health`);
+      assert.equal(response.status, 200);
+      return {
+        csp: response.headers.get("content-security-policy") || "",
+        permissions: response.headers.get("permissions-policy") || ""
+      };
+    } finally {
+      await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  }
+
+  const configured = await headersFor("https://globe.example.org/path");
+  assert.match(configured.csp, /frame-src 'self' https:\/\/globe\.example\.org/);
+  assert.match(configured.permissions, /microphone=\(self "https:\/\/globe\.example\.org"\)/);
+  assert.doesNotMatch(configured.csp, /ultron-world-intelligence\.onrender\.com/);
+
+  const unsafe = await headersFor("http://attacker.example");
+  assert.match(unsafe.csp, /frame-src 'self' https:\/\/ultron-world-intelligence-live\.onrender\.com/);
+  assert.match(unsafe.permissions, /microphone=\(self "https:\/\/ultron-world-intelligence-live\.onrender\.com"\)/);
+});
