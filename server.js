@@ -611,7 +611,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
     if (!Object.keys(patch).length) return res.status(400).json({ error: { code: "EMPTY_MEMORY_UPDATE", message: "Provide a title, content, or active-state change." } });
     try {
-      const query = "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at";
+      const query = "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at";
       const rows = await supabaseRest(req, "memory_items", "PATCH", query, patch);
       if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "MEMORY_NOT_FOUND", message: "Memory item was not found or is not accessible." } });
       res.json({ item: rows[0] });
@@ -621,7 +621,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.delete("/api/memory/:id", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_MEMORY_ID", message: "Memory item ID is invalid." } });
     try {
-      await supabaseRest(req, "memory_items", "DELETE", "?id=eq." + encodeURIComponent(req.params.id));
+      await supabaseRest(req, "memory_items", "DELETE", "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id));
       res.json({ ok: true });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_DELETE_FAILED", message: error.message } }); }
   });
