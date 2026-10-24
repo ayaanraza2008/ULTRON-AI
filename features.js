@@ -14,8 +14,14 @@ function isPrivateProviderHost(hostname) {
       (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
       (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
   }
-  if (version === 6) return host === "::" || host === "::1" || /^f[cd]/i.test(host) ||
-    /^fe[89ab]/i.test(host) || /^::ffff:(?:10\.|127\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2[0-9]|3[01])\.)/i.test(host);
+  if (version === 6) {
+    // Only globally-routable unicast IPv6 is accepted. This rejects loopback,
+    // IPv4-mapped IPv6 (including hex forms), ULA, link-local and multicast.
+    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+    if (firstHextet < 0x2000 || firstHextet > 0x3fff) return true;
+    if (host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:")) return true;
+    return false;
+  }
   return !host.includes(".");
 }
 
