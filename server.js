@@ -916,45 +916,94 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       let usedFallback = false;
       for (let index = 0; index < modelCandidates.length; index++) {
         const candidate = modelCandidates[index];
-        const attempt = await fetchImpl(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-            "Accept": stream ? "text/event-stream, application/json" : "application/json"
-          },
-          body: JSON.stringify({
-            model: candidate,
-            messages: cleanMessages,
-            stream: Boolean(stream),
-            temperature: 0.7
-          }),
-          signal: controller.signal,
-          redirect: "error"
-        });
+        let attempt;
+        try {
+          attempt = await fetchImpl(`${baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json",
+              "Accept": stream ? "text/event-stream, application/json" : "application/json"
+            },
+            body: JSON.stringify({
+              model: candidate,
+              messages: cleanMessages,
+              stream: Boolean(stream),
+              temperature: 0.7
+            }),
+            signal: controller.signal,
+            redirect: "error"
+          });
+        } catch (error) {
+          // A network failure for one model must not prevent trying the next configured free model.
+          upstream = null;
+          lastStatus = 0;
+          lastProviderCode = error?.name === "TimeoutError" || /timeout/i.test(String(error?.message)) ? "NETWORK_TIMEOUT" : "NETWORK_ERROR";
+          logger.warn?.("OpenRouter model request failed; trying fallback", { code: lastProviderCode, modelIndex: index });
+          continue;
+        }
+
+        if (!attempt.ok) {
+          upstream = attempt;
+          lastStatus = attempt.status;
+          // Read only a small bounded error body; never clone/buffer arbitrary provider payloads.
+          try {
+            const providerPayload = await readResponseJsonLimited(attempt, 64_000);
+            lastProviderCode = String(providerPayload?.error?.code || providerPayload?.error?.type || "").slice(0, 100);
+          } catch {
+            lastProviderCode = "";
+            try { await attempt.body?.cancel?.(); } catch { /* body may already be closed */ }
+          }
+          // 403/404 can mean this key cannot use the selected model. Try other configured candidates.
+          if (![403, 404, 429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
+          logger.warn?.("OpenRouter model fallback", { status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
+          continue;
+        }
+
+        if (!stream) {
+          // A 200 response can still be unusable (invalid JSON or an empty completion).
+          // Validate it before committing to this model so the next candidate can recover.
+          let data;
+          try { data = await readResponseJsonLimited(attempt, 2_000_000); }
+          catch {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "INVALID_RESPONSE";
+            logger.warn?.("OpenRouter returned an unreadable completion; trying fallback", { modelIndex: index });
+            continue;
+          }
+          const content = data?.choices?.[0]?.message?.content;
+          if (typeof content !== "string" || !content.trim()) {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "INVALID_RESPONSE";
+            logger.warn?.("OpenRouter returned an empty completion; trying fallback", { modelIndex: index });
+            continue;
+          }
+          selectedModel = candidate;
+          usedFallback = index > 0;
+          res.setHeader("X-ULTRON-Model", selectedModel);
+          if (usedFallback) res.setHeader("X-ULTRON-Fallback", "true");
+          return res.json({ content, model: data.model || selectedModel });
+        }
+
+        if (!attempt.body) {
+          upstream = null;
+          lastStatus = 502;
+          lastProviderCode = "EMPTY_STREAM";
+          logger.warn?.("OpenRouter returned no stream; trying fallback", { modelIndex: index });
+          continue;
+        }
         upstream = attempt;
         selectedModel = candidate;
-        if (attempt.ok) {
-          usedFallback = index > 0;
-          break;
-        }
-        lastStatus = attempt.status;
-        // Read only a small bounded error body; never clone/buffer arbitrary provider payloads.
-        try {
-          const providerPayload = await readResponseJsonLimited(attempt, 64_000);
-          lastProviderCode = String(providerPayload?.error?.code || providerPayload?.error?.type || "").slice(0, 100);
-        } catch {
-          lastProviderCode = "";
-          try { await attempt.body?.cancel?.(); } catch { /* body may already be closed */ }
-        }
-        // 403/404 can mean this key cannot use the selected model. Try other configured candidates.
-        if (![403, 404, 429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
-        logger.warn?.("OpenRouter model fallback", { status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
+        usedFallback = index > 0;
+        break;
       }
-
       if (!upstream?.ok) {
         const status = lastStatus || upstream?.status || 502;
-        const code = status === 401 ? "PROVIDER_AUTH"
+        const code = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" ? "INVALID_PROVIDER_RESPONSE"
+          : lastProviderCode === "NETWORK_ERROR" || lastProviderCode === "NETWORK_TIMEOUT" ? "PROVIDER_UNAVAILABLE"
+          : status === 401 ? "PROVIDER_AUTH"
           : status === 402 ? "PROVIDER_CREDITS"
           : status === 403 ? "PROVIDER_FORBIDDEN"
           : status === 404 ? "MODEL_UNAVAILABLE"
@@ -962,7 +1011,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           : status === 503 ? "PROVIDER_OVERLOADED"
           : "PROVIDER_ERROR";
         logger.warn?.("OpenRouter request failed", { status, code, providerCode: lastProviderCode || undefined });
-        const message = status === 401 ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
+        const message = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" ? "All configured models returned an unusable response."
+          : lastProviderCode === "NETWORK_ERROR" || lastProviderCode === "NETWORK_TIMEOUT" ? "Could not connect to a configured model. Please retry shortly."
+          : status === 401 ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
           : status === 402 ? "OpenRouter reports insufficient credits."
           : status === 403 ? "OpenRouter denied access to every configured model. Check your plan, model access, or account status."
           : status === 404 ? "None of the configured model IDs are available to this OpenRouter key. Refresh the model list and select an available ID."
