@@ -80,6 +80,42 @@ test("distinct user IDs that normalize similarly cannot share an AgentMemory pro
   assert.equal(projects[1], "ultron-ai-user-a-b");
 });
 
+
+test("AgentMemory cancels oversized streamed responses before buffering the whole body", async () => {
+  let cancelled = false;
+  await assert.rejects(
+    recallAgentMemory("Continue the previous repository implementation", {
+      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+      userId: "user-123",
+      fetchImpl: async (_url, options) => {
+        assert.equal(options.redirect, "error");
+        return new Response(new ReadableStream({
+          start(controller) { controller.enqueue(new Uint8Array(200_001)); },
+          cancel() { cancelled = true; }
+        }), { status: 200 });
+      }
+    }),
+    error => error.code === "AGENTMEMORY_RESPONSE_TOO_LARGE"
+  );
+  assert.equal(cancelled, true);
+});
+
+test("AgentMemory rejects oversized declared response lengths without reading the body", async () => {
+  let cancelled = false;
+  await assert.rejects(
+    recallAgentMemory("Continue the previous repository implementation", {
+      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+      userId: "user-123",
+      fetchImpl: async () => new Response(new ReadableStream({
+        start() {},
+        cancel() { cancelled = true; }
+      }), { status: 200, headers: { "Content-Length": "200001" } })
+    }),
+    error => error.code === "AGENTMEMORY_RESPONSE_TOO_LARGE"
+  );
+  assert.equal(cancelled, true);
+});
+
 test("AgentMemory fails safely when the remote service is unavailable", async () => {
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
