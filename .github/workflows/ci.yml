@@ -20,6 +20,10 @@ jobs:
         with:
           node-version: 20
       - run: npm install --ignore-scripts
+      - name: Report high-severity runtime dependency advisories
+        continue-on-error: true
+        run: |
+          npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: npm test
       - name: Smoke test deployed health endpoint
