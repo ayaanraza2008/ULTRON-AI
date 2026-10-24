@@ -157,3 +157,8 @@ test("AgentMemory refuses to persist common access-token and cloud-key formats",
   ];
   for (const value of sensitive) assert.equal(shouldCaptureAgentMemory(value), false, value);
 });
+
+
+test("AgentMemory refuses to persist bearer token wording even without an authorization header", () => {
+  assert.equal(shouldCaptureAgentMemory("We decided: bearer token abcdefghijklmnopqrstuvwxyz should be saved for debugging."), false);
+});
