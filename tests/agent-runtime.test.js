@@ -1043,3 +1043,125 @@ test("background research-to-report task is classified as an autonomous report",
     assert.equal(providerCalls, 2);
   }, { supabaseRest });
 });
+
+
+test("background employee task queues with a configured alternate model provider and no OpenRouter key", async () => {
+  let providerCalls = 0;
+  const databaseCalls = [];
+  const testUserId = "00000000-0000-4000-8000-000000000001";
+  const env = {
+    ULTRON_EMPLOYEES_ENABLED: "true",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-secret",
+    ALTERNATE_MODEL_KEY: "alternate-model-test-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "alternate", baseUrl: "https://alternate.example/v1", apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model", priority: 10 }
+    ])
+  };
+  const supabaseRest = async (_req, table, method, query, body) => {
+    if (table === "user_preferences" && method === "GET") return [{ memory_enabled: false }];
+    if (table === "memory_items" && method === "GET") return [];
+    databaseCalls.push({ table, method, query, body });
+    if (table === "agent_tasks" && method === "POST") {
+      return [{ id: "queued-task-alternate-only", title: body.title, input: body.input, status: "QUEUED", created_at: "fixed-time" }];
+    }
+    if (table === "audit_events" && method === "POST") return [];
+    throw new Error("Unexpected Supabase operation");
+  };
+  await withServer(env, async (url, options) => {
+    assert.equal(url, "https://alternate.example/v1/chat/completions");
+    assert.equal(options.headers.Authorization, "Bearer alternate-model-test-secret");
+    assert.equal(options.redirect, "error");
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      assert.ok(Array.isArray(request.tools));
+      return new Response(JSON.stringify({ choices: [{ message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "enqueue-alt-provider-task",
+          type: "function",
+          function: { name: "enqueue_employee_task", arguments: JSON.stringify({
+            role: "chief-of-staff",
+            goal: "Research current AI security risks and write a report with sources and recommendations",
+            mode: "report"
+          }) }
+        }]
+      } }] }), { status: 200 });
+    }
+    assert.ok(request.messages.some(message => message.role === "tool" && message.tool_call_id === "enqueue-alt-provider-task"));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The background research report is queued." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Please queue a background research report with sources." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /report is queued/i);
+    assert.equal(body.toolResults[0].name, "enqueue_employee_task");
+    assert.equal(body.toolResults[0].result.state, "queued");
+    assert.equal(body.toolResults[0].result.task.id, "queued-task-alternate-only");
+    assert.equal(body.toolResults[0].result.execution, "background_autonomous_research_and_report");
+    const taskWrite = databaseCalls.find(call => call.table === "agent_tasks");
+    const auditWrite = databaseCalls.find(call => call.table === "audit_events");
+    assert.ok(taskWrite);
+    assert.ok(auditWrite);
+    assert.equal(taskWrite.body.user_id, testUserId);
+    assert.equal(taskWrite.body.input.taskType, "autonomous");
+    assert.equal(taskWrite.body.input.mode, "report");
+    assert.equal(providerCalls, 2);
+    assert.equal(JSON.stringify(body).includes("alternate-model-test-secret"), false);
+    assert.equal(JSON.stringify(body).includes("service-role-test-secret"), false);
+  }, { supabaseRest });
+});
+
+
+test("agent tool readiness advertises draft and background task features for alternate-only providers", async () => {
+  const env = {
+    ALTERNATE_MODEL_KEY: "alternate-model-test-secret",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-secret",
+    ULTRON_EMPLOYEES_ENABLED: "true",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "alternate", baseUrl: "https://alternate.example/v1", apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model", priority: 10 }
+    ])
+  };
+  await withServer(env, async () => {
+    throw new Error("tool readiness must not call a model provider");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/tools");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.tools.find(item => item.name === "plan_employee").available, true);
+    assert.equal(body.tools.find(item => item.name === "coding_assist").available, true);
+    assert.equal(body.tools.find(item => item.name === "enqueue_employee_task").available, true);
+    assert.equal(JSON.stringify(body).includes("alternate-model-test-secret"), false);
+    assert.equal(JSON.stringify(body).includes("service-role-test-secret"), false);
+  }, { supabaseRest: async () => [] });
+});
+
+test("employee model readiness rejects alternate provider URLs with credentials, query, or fragments", async () => {
+  for (const baseUrl of [
+    "https://user:password@unsafe.example/v1",
+    "https://unsafe.example/v1?token=leaked",
+    "https://unsafe.example/v1#fragment"
+  ]) {
+    const env = {
+      ALTERNATE_MODEL_KEY: "alternate-model-test-secret",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "alternate", baseUrl, apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model" }
+      ])
+    };
+    await withServer(env, async () => {
+      throw new Error("invalid provider configuration must be rejected before networking");
+    }, async base => {
+      const response = await fetch(base + "/api/agent/tools");
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.tools.find(item => item.name === "plan_employee").available, false);
+      assert.equal(body.tools.find(item => item.name === "coding_assist").available, false);
+      assert.equal(JSON.stringify(body).includes("alternate-model-test-secret"), false);
+    });
+  }
+});
