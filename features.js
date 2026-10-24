@@ -1,13 +1,33 @@
 import express from "express";
+import { isIP } from "node:net";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
+
+function isPrivateProviderHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const version = isIP(host);
+  if (version === 4) {
+    const [a, b] = host.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  if (version === 6) return host === "::" || host === "::1" || /^f[cd]/i.test(host) ||
+    /^fe[89ab]/i.test(host) || /^::ffff:(?:10\.|127\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2[0-9]|3[01])\.)/i.test(host);
+  return !host.includes(".");
+}
 
 function safeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     const url = new URL(value.trim());
-    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") return null;
+    if (url.username || url.password || url.search || url.hash) return null;
+    const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+    if (url.protocol === "https:") {
+      if (isPrivateProviderHost(url.hostname)) return null;
+    } else if (url.protocol !== "http:" || !loopback) return null;
     return url.toString().replace(/\/+$/, "");
   } catch { return null; }
 }
