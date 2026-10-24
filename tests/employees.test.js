@@ -77,9 +77,13 @@ test("AI Employee planner generates a draft but explicitly does not execute it",
     assert.match(body.notice, /No schedule was registered/i);
     assert.equal(request.model, "openrouter/free");
     assert.match(request.messages[0].content, /Never send messages, publish posts/i);
-  }, async (_url, options) => {
+  }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    assert.equal(options.redirect, "error");
     request = JSON.parse(options.body);
-    return { ok: true, json: async () => ({ model: "openrouter/free", choices: [{ message: { content: "## Draft\n1. Prepare three editable posts.\n2. Review claims and brand tone.\n3. Request approval before publishing." } }] }) };
+    return new Response(JSON.stringify({ model: "openrouter/free", choices: [{ message: { content: "## Draft\\n1. Prepare three editable posts.\\n2. Review claims and brand tone.\\n3. Request approval before publishing." } }] }), {
+      status: 200, headers: { "Content-Type": "application/json" }
+    });
   });
 });
 
