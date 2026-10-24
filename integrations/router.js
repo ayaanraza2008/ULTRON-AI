@@ -7,7 +7,7 @@ function configuredUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     const url = new URL(value.trim());
-    if (url.username || url.password || url.hash) return null;
+    if (url.username || url.password || url.search || url.hash) return null;
     if (url.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(url.hostname)) return null;
     return url.toString().replace(/\/+$/, "");
   } catch { return null; }
@@ -43,11 +43,12 @@ async function readResponseTextLimited(response, maxBytes) {
   }
   const reader = response.body?.getReader?.();
   if (!reader) {
-    const raw = await response.text();
-    if (Buffer.byteLength(raw, "utf8") > maxBytes) {
-      throw Object.assign(new Error("Integration response exceeded the 2 MB limit."), { status: 502, code: "PROVIDER_RESPONSE_TOO_LARGE" });
-    }
-    return raw;
+    // Reject non-streaming bodies before allocating their full contents. Checking
+    // response.text() afterwards cannot enforce a memory bound on the allocation.
+    throw Object.assign(new Error("Integration response cannot be safely size-limited without a streaming body."), {
+      status: 502,
+      code: "PROVIDER_RESPONSE_UNSAFE_STREAM"
+    });
   }
   const decoder = new TextDecoder();
   let totalBytes = 0;
