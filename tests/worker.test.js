@@ -1360,3 +1360,56 @@ test("worker finishes an active task after shutdown is requested and claims no n
   assert.equal(status.tasksCompleted, 1);
   assert.equal(status.state, "stopped");
 });
+
+
+test("worker fails a retryable provider error once the task attempt limit is reached", async () => {
+  let worker;
+  let providerCalls = 0;
+  let failurePatch;
+  const auditEvents = [];
+  const task = {
+    id: "task-retry-limit-reached",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 3,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        providerCalls += 1;
+        return new Response("provider temporarily unavailable", { status: 503 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        failurePatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        auditEvents.push(JSON.parse(options.body));
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  assert.equal(providerCalls, 1, "the final allowed attempt should not trigger another provider attempt");
+  assert.equal(failurePatch.status, "FAILED");
+  assert.equal(failurePatch.error_code, "EMPLOYEE_PROVIDER_RETRYABLE");
+  assert.equal(failurePatch.result.retry, false);
+  assert.equal(worker.getStatus().tasksRetried, 0);
+  assert.equal(worker.getStatus().tasksFailed, 1);
+  assert.equal(auditEvents[0]?.action, "task.failed");
+  assert.equal(auditEvents[0]?.metadata?.attempt, 3);
+});
