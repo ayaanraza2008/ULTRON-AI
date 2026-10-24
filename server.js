@@ -15,6 +15,38 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
 
+const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_RATE_LIMIT = 10;
+
+// Small bounded in-process guard for public auth endpoints. Production deployments
+// with multiple instances should additionally enforce limits at a shared edge/store.
+export function createAuthRateLimiter({ now = Date.now, limit = AUTH_RATE_LIMIT, windowMs = AUTH_RATE_WINDOW_MS } = {}) {
+  const buckets = new Map();
+  return function authRateLimiter(req, res, next) {
+    const key = String(req.ip || req.socket?.remoteAddress || "unknown").slice(0, 128);
+    const time = now();
+    let bucket = buckets.get(key);
+    if (!bucket || time - bucket.startedAt >= windowMs || time < bucket.startedAt) {
+      bucket = { startedAt: time, count: 0 };
+      buckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (buckets.size > 5000) {
+      for (const [address, entry] of buckets) {
+        if (time - entry.startedAt >= windowMs || time < entry.startedAt) buckets.delete(address);
+        if (buckets.size <= 4000) break;
+      }
+      if (buckets.size > 5000) buckets.delete(buckets.keys().next().value);
+    }
+    if (bucket.count > limit) {
+      res.setHeader("Retry-After", String(Math.max(1, Math.ceil((bucket.startedAt + windowMs - time) / 1000))));
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(429).json({ error: { code: "AUTH_RATE_LIMITED", message: "Too many authentication attempts. Please wait before trying again." } });
+    }
+    return next();
+  };
+}
+
 function safeEqual(a, b) {
   const left = Buffer.from(String(a ?? ""));
   const right = Buffer.from(String(b ?? ""));
@@ -417,7 +449,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     res.json({ authenticated: Boolean(user), configured: true, authType: user ? "supabase" : null, email: user?.email || null });
   });
 
-  app.post("/api/auth/signup", async (req, res) => {
+  const authRateLimiter = createAuthRateLimiter();
+
+  app.post("/api/auth/signup", authRateLimiter, async (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 256) {
@@ -432,7 +466,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
-  app.post("/api/auth/signin", async (req, res) => {
+  app.post("/api/auth/signin", authRateLimiter, async (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!email || !password || password.length > 256) return res.status(400).json({ error: { code: "INVALID_CREDENTIALS", message: "Enter your account email and password." } });
@@ -447,7 +481,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   // Password recovery is a backend API; the UI can call it without exposing Supabase keys.
   // Keep the redirect destination server-configured so callers cannot inject arbitrary redirects.
-  app.post("/api/auth/recovery", async (req, res) => {
+  app.post("/api/auth/recovery", authRateLimiter, async (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: { code: "INVALID_EMAIL", message: "Enter a valid account email address." } });
