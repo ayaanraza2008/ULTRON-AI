@@ -136,8 +136,13 @@ internal sealed class CompanionContext : ApplicationContext
 
         // A background launch is permitted only when the user previously enabled
         // the visible "Start with Windows and listen" option in this app.
-        if (backgroundLaunch && IsAutoStartEnabled())
+        // Create the hidden window handle so recognition callbacks can safely marshal
+        // to the UI thread even when the app starts directly into the tray.
+        _ = _window.Handle;
+        var autoListenEnabled = IsAutoStartEnabled();
+        if (autoListenEnabled)
         {
+            if (!backgroundLaunch) _window.Show();
             StartListening(previouslyConsented: true);
         }
         else
