@@ -392,10 +392,23 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 
   router.get("/capabilities", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
+    const openRouterConfigured = Boolean(
+      env.OPENROUTER_API_KEY?.trim() &&
+      safeBaseUrl(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")
+    );
+    const cloudConfigured = hasEmployeeModelProvider(env);
     res.json({
       app: "ULTRON AI",
       providers: {
-        cloud: { configured: Boolean(env.OPENROUTER_API_KEY), provider: "OpenRouter", defaultModel: env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" },
+        cloud: {
+          configured: cloudConfigured,
+          provider: openRouterConfigured
+            ? "OpenRouter"
+            : cloudConfigured ? "OpenAI-compatible fallback" : "none",
+          ...(openRouterConfigured
+            ? { defaultModel: env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" }
+            : {})
+        },
         local: { configured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)), provider: "Ollama", baseUrlConfigured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)) },
         speech: { browserSpeechAvailable: true, premiumTtsConfigured: Boolean(env.TTS_API_BASE_URL && env.TTS_API_KEY), premiumSttConfigured: Boolean(env.STT_API_BASE_URL && env.STT_API_KEY) },
         research: { configured: Boolean(env.TAVILY_API_KEY), mode: env.TAVILY_API_KEY ? "tavily" : "public-html-fallback" },
@@ -405,10 +418,10 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         chat: "available_when_provider_configured",
         codingAgent: "text-only plan/generate/review; code execution disabled",
         multimodel: "cloud_model_ids_configured_by_environment",
-        memory: "authenticated_crud_available; retrieval_integration_pending",
+        memory: "account_scoped_crud_and_chat_retrieval_available_when_enabled",
         research: "search_endpoint_available",
         tasks: "authenticated task queue plus optional allowlisted research worker",
-        documents: "upload_parser_pipeline_pending",
+        documents: "authenticated_txt_md_csv_json_html_pdf_docx_extraction; transient_only",
         desktopAutomation: "local_companion_required",
         voice: "browser_native_available; premium_services_optional",
         integrations: "configuration_readiness_only"

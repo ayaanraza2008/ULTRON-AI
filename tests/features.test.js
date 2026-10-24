@@ -396,3 +396,52 @@ test("HTTP security header analyzer recognizes CSP frame-ancestors as clickjacki
     assert.equal(finding.execution, undefined);
   });
 });
+
+
+test("capabilities accurately report alternate model providers, memory retrieval, and document extraction", async () => {
+  const fallbackSecret = "do-not-return-alternate-secret";
+  const env = {
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "secondary",
+      baseUrl: "https://provider.example/v1",
+      apiKeyEnv: "SECONDARY_API_KEY",
+      model: "example/free-model",
+      priority: 10
+    }]),
+    SECONDARY_API_KEY: fallbackSecret
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/capabilities");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.providers.cloud.configured, true);
+    assert.equal(body.providers.cloud.provider, "OpenAI-compatible fallback");
+    assert.equal(Object.hasOwn(body.providers.cloud, "defaultModel"), false);
+    assert.match(body.modules.memory, /chat_retrieval_available/i);
+    assert.match(body.modules.documents, /pdf_docx_extraction/i);
+    assert.match(body.modules.documents, /transient_only/i);
+    assert.equal(JSON.stringify(body).includes(fallbackSecret), false);
+  });
+});
+
+
+test("capabilities report a configured fallback when the OpenRouter base URL is invalid", async () => {
+  await withServer({
+    OPENROUTER_API_KEY: "invalid-primary-key",
+    OPENROUTER_BASE_URL: "http://public-provider.invalid/v1",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "secondary",
+      baseUrl: "https://provider.example/v1",
+      apiKeyEnv: "SECONDARY_API_KEY",
+      model: "example/free-model",
+      priority: 10
+    }]),
+    SECONDARY_API_KEY: "secondary-key"
+  }, async base => {
+    const response = await fetch(base + "/api/capabilities");
+    const body = await response.json();
+    assert.equal(body.providers.cloud.configured, true);
+    assert.equal(body.providers.cloud.provider, "OpenAI-compatible fallback");
+    assert.equal(Object.hasOwn(body.providers.cloud, "defaultModel"), false);
+  });
+});
