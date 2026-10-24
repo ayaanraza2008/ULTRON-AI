@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const MAX_QUERY = 1200;
 const MAX_MEMORY_TEXT = 2400;
 
@@ -7,8 +9,16 @@ function bounded(value, max) {
 
 function scopedProject(env, userId) {
   const base = bounded(env?.ULTRON_AGENTMEMORY_PROJECT || "ultron-ai", 80).replace(/[^a-zA-Z0-9._-]/g, "-") || "ultron-ai";
-  const user = bounded(userId, 80).replace(/[^a-zA-Z0-9._-]/g, "-");
-  return user ? base + "-user-" + user : base;
+  const user = bounded(userId, 500);
+  // Preserve existing project names for already-safe IDs (including Supabase UUIDs)
+  // so existing users do not lose access to their memories. Hash unsafe IDs instead
+  // of replacing punctuation, which could make distinct identities collide.
+  const userKey = user
+    ? (/^[a-zA-Z0-9._-]{1,80}$/.test(user)
+      ? user
+      : "sha256-" + createHash("sha256").update(user, "utf8").digest("hex").slice(0, 40))
+    : "";
+  return userKey ? base + "-user-" + userKey : base;
 }
 
 function baseUrl(value) {
