@@ -26,6 +26,24 @@ test("VoiceStudio readiness requires a secure remote endpoint and API key", () =
   assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "http://localhost:3900" }).configured, true);
 });
 
+test("VoiceStudio rejects private, local-network and credentialed remote URLs", () => {
+  for (const url of [
+    "https://127.0.0.1:9000",
+    "https://10.1.2.3",
+    "https://192.168.1.5",
+    "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "https://[fc00::1]",
+    "https://[fe80::1]",
+    "https://metadata.google.internal",
+    "https://user:password@voice.example"
+  ]) {
+    const result = voiceStudioReadiness({ VOICESTUDIO_BASE_URL: url, VOICESTUDIO_API_KEY: "test-key" });
+    assert.equal(result.configured, false, url);
+  }
+  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "http://127.0.0.1:3900" }).configured, true);
+});
+
 test("VoiceStudio status reports live discovery and model count without exposing credentials", async () => {
   const seen = [];
   await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
