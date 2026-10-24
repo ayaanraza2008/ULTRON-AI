@@ -76,3 +76,35 @@ test("agent model routing rejects insecure provider URLs and skips providers wit
     assert.deepEqual(calls, ["https://openrouter.ai/api/v1/chat/completions"]);
   });
 });
+
+
+test("agent model routing fails over when a provider returns HTTP 200 with an empty completion", async () => {
+  const calls = [];
+  const env = {
+    FIRST_KEY: "first-test-key",
+    SECOND_KEY: "second-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+  await withServer(env, async url => {
+    calls.push(url);
+    if (url.startsWith("https://first.example/")) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "" } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered from an empty completion." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.text()), /Recovered from an empty completion/);
+    assert.deepEqual(calls, [
+      "https://first.example/v1/chat/completions",
+      "https://second.example/v1/chat/completions"
+    ]);
+  });
+});
