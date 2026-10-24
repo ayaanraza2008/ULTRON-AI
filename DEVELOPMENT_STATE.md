@@ -40,3 +40,10 @@ Last verified: 2026-10-24 UTC
 
 ## Reporting standard
 For each capability, distinguish implemented, unit-tested, integration-tested, deployed, live-verified, and blocked. Never claim full autonomy, 100% correctness, or successful provider inference based only on configuration or a passing mock test.
+
+
+## 2026-10-25 confirmation resend endpoint
+- Added rate-limited POST /api/auth/resend-confirmation for Supabase signup confirmation re-sends.
+- Uses only the server-configured optional redirect (never a redirect from request JSON), validates HTTPS/loopback-only redirects, applies generic responses to avoid email account enumeration, and sanitizes provider failures.
+- Includes test coverage for redirect safety, invalid email, generic responses, rate limiting, outage handling, and static checks.
+- Actual delivery remains dependent on Supabase Auth confirmation configuration, an allow-listed redirect, and working SMTP/provider delivery; no email was sent during code/CI tests.
