@@ -293,7 +293,7 @@ function buildFallbackCalls(text) {
   return calls.slice(0, 3);
 }
 
-function modelSafeResult(value, depth = 0) {
+export function modelSafeResult(value, depth = 0) {
   if (depth > 6) return "[nested result omitted]";
   if (Array.isArray(value)) return value.slice(0, 20).map(item => modelSafeResult(item, depth + 1));
   if (!value || typeof value !== "object") return value;
