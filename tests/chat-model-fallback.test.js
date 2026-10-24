@@ -11,8 +11,9 @@ const env = {
   ULTRON_AVAILABLE_MODELS: "vendor/model-a,vendor/model-b"
 };
 
-async function withApp(fetchImpl, run) {
-  const app = createApp({ env: { ...env }, fetchImpl, logger: { warn() {}, error() {} } });
+async function withApp(fetchImpl, run, overrides = {}) {
+  const testEnv = { ...env, ...overrides };
+  const app = createApp({ env: testEnv, fetchImpl, logger: { warn() {}, error() {} } });
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
@@ -21,7 +22,7 @@ async function withApp(fetchImpl, run) {
     const login = await fetch(base + "/api/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: env.APP_ACCESS_PASSWORD })
+      body: JSON.stringify({ password: testEnv.APP_ACCESS_PASSWORD })
     });
     assert.equal(login.status, 200);
     const cookie = (login.headers.get("set-cookie") || "").split(";")[0];
@@ -93,4 +94,55 @@ test("chat falls back when a model returns an empty HTTP 200 completion", async 
     assert.match(await response.text(), /Recovered from an empty completion/);
     assert.deepEqual(calls, ["vendor/model-a", "vendor/model-b"]);
   });
+});
+
+
+test("chat falls back from exhausted OpenRouter models to a configured alternate provider", async () => {
+  const calls = [];
+  const overrides = {
+    FALLBACK_API_KEY: "fallback-provider-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "secondary", baseUrl: "https://secondary.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "secondary-chat-model", priority: 1 }
+    ])
+  };
+  await withApp(async (url, options) => {
+    const model = JSON.parse(options.body).model;
+    calls.push({ url, model, authorization: options.headers.Authorization });
+    if (url.startsWith("https://openrouter.ai/")) {
+      return new Response(JSON.stringify({ error: { code: "rate_limit" } }), { status: 429 });
+    }
+    assert.equal(url, "https://secondary.example/v1/chat/completions");
+    return success("Secondary provider recovered the chat.");
+  }, async (base, cookie) => {
+    const response = await chat(base, cookie);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Secondary provider recovered the chat/);
+    assert.equal(response.headers.get("x-ultron-provider"), "secondary");
+    assert.equal(response.headers.get("x-ultron-fallback"), "true");
+    assert.deepEqual(calls.map(call => call.model), ["vendor/model-a", "vendor/model-b", "openrouter/free", "secondary-chat-model"]);
+    assert.equal(calls.at(-1).authorization, "Bearer fallback-provider-secret");
+  }, overrides);
+});
+
+test("chat works with a configured alternate provider even when OpenRouter is not configured", async () => {
+  const calls = [];
+  const overrides = {
+    OPENROUTER_API_KEY: "",
+    FALLBACK_API_KEY: "fallback-only-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "secondary", baseUrl: "https://secondary.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "secondary-chat-model", priority: 1 }
+    ])
+  };
+  await withApp(async (url, options) => {
+    calls.push({ url, model: JSON.parse(options.body).model, authorization: options.headers.Authorization });
+    return success("Chat works without the primary provider.");
+  }, async (base, cookie) => {
+    const response = await chat(base, cookie);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Chat works without the primary provider/);
+    assert.equal(response.headers.get("x-ultron-provider"), "secondary");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].model, "secondary-chat-model");
+    assert.equal(calls[0].authorization, "Bearer fallback-only-secret");
+  }, overrides);
 });
