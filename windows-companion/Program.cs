@@ -22,6 +22,8 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _startItem;
     private readonly ToolStripMenuItem _stopItem;
+    private readonly Button _startButton;
+    private readonly Button _stopButton;
     private SpeechRecognitionEngine? _recognizer;
     private bool _allowExit;
     private DateTime _lastWakeUtc = DateTime.MinValue;
@@ -70,14 +72,14 @@ internal sealed class CompanionContext : ApplicationContext
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true
         };
-        var startButton = new Button { Text = "Start wake word", AutoSize = true };
-        var stopButton = new Button { Text = "Pause listening", AutoSize = true, Enabled = false };
+        _startButton = new Button { Text = "Start wake word", AutoSize = true };
+        _stopButton = new Button { Text = "Pause listening", AutoSize = true, Enabled = false };
         var openButton = new Button { Text = "Open ULTRON", AutoSize = true };
-        startButton.Click += (_, _) => StartListening();
-        stopButton.Click += (_, _) => StopListening();
+        _startButton.Click += (_, _) => StartListening();
+        _stopButton.Click += (_, _) => StopListening();
         openButton.Click += (_, _) => OpenAssistant();
-        buttons.Controls.Add(startButton);
-        buttons.Controls.Add(stopButton);
+        buttons.Controls.Add(_startButton);
+        buttons.Controls.Add(_stopButton);
         buttons.Controls.Add(openButton);
 
         layout.Controls.Add(title, 0, 0);
@@ -178,6 +180,8 @@ internal sealed class CompanionContext : ApplicationContext
             _recognizer.RecognizeAsync(RecognizeMode.Multiple);
             _startItem.Enabled = false;
             _stopItem.Enabled = true;
+            _startButton.Enabled = false;
+            _stopButton.Enabled = true;
             ShowStatus("Listening locally for “Ultron”. Use the tray menu to pause or exit.");
         }
         catch (Exception)
@@ -202,6 +206,8 @@ internal sealed class CompanionContext : ApplicationContext
         }
         _startItem.Enabled = true;
         _stopItem.Enabled = false;
+        _startButton.Enabled = true;
+        _stopButton.Enabled = false;
         ShowStatus("Wake word paused. Microphone listener is off.");
     }
 
