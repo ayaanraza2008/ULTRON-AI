@@ -1,7 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult } from "../agent-runtime.js";
+
+test("model tool context redacts credential fields recursively while preserving ordinary results", () => {
+  const safe = modelSafeResult({
+    status: "completed",
+    apiKey: "never-send-this",
+    nested: {
+      access_token: "also-secret",
+      Authorization: "Bearer hidden",
+      password: "private",
+      title: "safe output",
+      audioBase64: "x".repeat(1200)
+    },
+    items: [{ refreshToken: "hidden-too", result: "ok" }]
+  });
+  assert.equal(safe.apiKey, "[redacted]");
+  assert.equal(safe.nested.access_token, "[redacted]");
+  assert.equal(safe.nested.Authorization, "[redacted]");
+  assert.equal(safe.nested.password, "[redacted]");
+  assert.equal(safe.nested.title, "safe output");
+  assert.match(safe.nested.audioBase64, /binary payload omitted/);
+  assert.equal(safe.items[0].refreshToken, "[redacted]");
+  assert.doesNotMatch(JSON.stringify(safe), /never-send-this|also-secret|Bearer hidden|private|hidden-too/);
+});
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
