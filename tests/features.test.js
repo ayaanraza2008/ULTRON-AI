@@ -423,3 +423,25 @@ test("capabilities accurately report alternate model providers, memory retrieval
     assert.equal(JSON.stringify(body).includes(fallbackSecret), false);
   });
 });
+
+
+test("capabilities report a configured fallback when the OpenRouter base URL is invalid", async () => {
+  await withServer({
+    OPENROUTER_API_KEY: "invalid-primary-key",
+    OPENROUTER_BASE_URL: "http://public-provider.invalid/v1",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "secondary",
+      baseUrl: "https://provider.example/v1",
+      apiKeyEnv: "SECONDARY_API_KEY",
+      model: "example/free-model",
+      priority: 10
+    }]),
+    SECONDARY_API_KEY: "secondary-key"
+  }, async base => {
+    const response = await fetch(base + "/api/capabilities");
+    const body = await response.json();
+    assert.equal(body.providers.cloud.configured, true);
+    assert.equal(body.providers.cloud.provider, "OpenAI-compatible fallback");
+    assert.equal(Object.hasOwn(body.providers.cloud, "defaultModel"), false);
+  });
+});
