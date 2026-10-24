@@ -189,17 +189,23 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const key = req.ip || req.socket.remoteAddress || "unknown";
     const now = Date.now();
     const current = limits.get(key);
-    if (!current || now - current.start >= windowMs) {
+    if (!current || now - current.start >= windowMs || now < current.start) {
       limits.set(key, { start: now, count: 1 });
     } else {
       current.count += 1;
       if (current.count > maxRequests) {
-        res.setHeader("Retry-After", String(Math.ceil((windowMs - (now - current.start)) / 1000)));
+        res.setHeader("Retry-After", String(Math.max(1, Math.ceil((windowMs - (now - current.start)) / 1000))));
+        res.setHeader("Cache-Control", "no-store");
         return res.status(429).json({ error: { code: "RATE_LIMITED", message: "Too many requests. Please wait and try again." } });
       }
     }
+    // Bound memory even if many distinct source addresses arrive inside one window.
     if (limits.size > 5000) {
-      for (const [ip, entry] of limits) if (now - entry.start > windowMs) limits.delete(ip);
+      for (const [ip, entry] of limits) {
+        if (now - entry.start >= windowMs || now < entry.start) limits.delete(ip);
+        if (limits.size <= 4000) break;
+      }
+      if (limits.size > 5000) limits.delete(limits.keys().next().value);
     }
     next();
   });
