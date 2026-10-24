@@ -93,3 +93,24 @@ test("readiness accepts HTTPS services and plain HTTP loopback development servi
   assert.equal(result.components.find((item) => item.id === "windows_companion").state, "configured_unverified");
   assert.equal(result.components.find((item) => item.id === "local_models").state, "configured_unverified");
 });
+
+
+test("an intentionally unavailable optional capability does not permanently block core readiness", () => {
+  const result = buildRuntimeReadiness({
+    env: {
+      ULTRON_EMPLOYEES_ENABLED: "true",
+      ULTRON_BROWSER_USE_URL: "https://browser.example.com",
+      ULTRON_BROWSER_USE_TOKEN: "test-token",
+      ULTRON_DESKTOP_AGENT_URL: "https://desktop.example.com",
+      ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
+      TAVILY_API_KEY: "test-key"
+    },
+    modelProviderConfigured: true,
+    supabaseConfigured: true,
+    workerStatus: { state: "running" }
+  });
+
+  assert.equal(result.components.find((item) => item.id === "safe_code_execution").state, "not_available");
+  assert.equal(result.overallState, "ready_for_live_verification");
+  assert.equal(result.summary.blockerCount, 0);
+});
