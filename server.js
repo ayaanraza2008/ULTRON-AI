@@ -992,6 +992,8 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       }
 
       let upstream;
+      let upstreamReader = null;
+      let prefetchedStreamChunk = null;
       let lastStatus = 0;
       let lastProviderCode = "";
       let lastProviderName = "";
@@ -1071,9 +1073,43 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
         if (!attempt.body) {
           upstream = null;
+          upstreamReader = null;
+          prefetchedStreamChunk = null;
           lastStatus = 502;
           lastProviderCode = "EMPTY_STREAM";
           logger.warn?.("Model provider returned no stream; trying fallback", { provider: provider.name, modelIndex: index });
+          continue;
+        }
+
+        // Prime the stream before committing response headers. A provider can return
+        // HTTP 200 with a body that immediately closes; in that case, try the next
+        // configured model instead of sending the user an empty streamed answer.
+        let candidateReader;
+        try {
+          candidateReader = attempt.body.getReader();
+          const firstChunk = await candidateReader.read();
+          if (firstChunk.done || !firstChunk.value || firstChunk.value.byteLength === 0) {
+            try { await candidateReader.cancel(); } catch { /* the stream may already be closed */ }
+            try { candidateReader.releaseLock(); } catch { /* already released */ }
+            upstream = null;
+            upstreamReader = null;
+            prefetchedStreamChunk = null;
+            lastStatus = 502;
+            lastProviderCode = "EMPTY_STREAM";
+            logger.warn?.("Model provider returned an empty stream; trying fallback", { provider: provider.name, modelIndex: index });
+            continue;
+          }
+          upstreamReader = candidateReader;
+          prefetchedStreamChunk = firstChunk.value;
+        } catch (error) {
+          try { await candidateReader?.cancel(); } catch { /* provider stream may be closed */ }
+          try { candidateReader?.releaseLock(); } catch { /* already released */ }
+          upstream = null;
+          upstreamReader = null;
+          prefetchedStreamChunk = null;
+          lastStatus = 502;
+          lastProviderCode = "STREAM_READ_FAILED";
+          logger.warn?.("Model provider stream could not be read; trying fallback", { provider: provider.name, modelIndex: index, error: error?.name || "Error" });
           continue;
         }
         upstream = attempt;
@@ -1084,7 +1120,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       }
       if (!upstream?.ok) {
         const status = lastStatus || upstream?.status || 502;
-        const code = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" ? "INVALID_PROVIDER_RESPONSE"
+        const code = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" || lastProviderCode === "STREAM_READ_FAILED" ? "INVALID_PROVIDER_RESPONSE"
           : lastProviderCode === "NETWORK_ERROR" || lastProviderCode === "NETWORK_TIMEOUT" ? "PROVIDER_UNAVAILABLE"
           : status === 401 ? "PROVIDER_AUTH"
           : status === 402 ? "PROVIDER_CREDITS"
@@ -1094,7 +1130,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           : status === 503 ? "PROVIDER_OVERLOADED"
           : "PROVIDER_ERROR";
         logger.warn?.("ULTRON model request failed", { provider: lastProviderName || undefined, status, code, providerCode: lastProviderCode || undefined });
-        const message = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" ? "All configured models returned an unusable response."
+        const message = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" || lastProviderCode === "STREAM_READ_FAILED" ? "All configured models returned an unusable response."
           : lastProviderCode === "NETWORK_ERROR" || lastProviderCode === "NETWORK_TIMEOUT" ? "Could not connect to a configured model. Please retry shortly."
           : status === 401 ? `The ${lastProviderName || "configured model provider"} rejected its API key.`
           : status === 402 ? `The ${lastProviderName || "configured model provider"} reports insufficient credits.`
@@ -1122,7 +1158,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       res.setHeader("Connection", "keep-alive");
       res.flushHeaders?.();
 
-      const reader = upstream.body.getReader();
+      const reader = upstreamReader || upstream.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let doneSent = false;
@@ -1149,21 +1185,28 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           logger.warn?.("Skipped malformed OpenRouter stream event");
         }
       };
+      const consumeChunk = async (value) => {
+        buffer += decoder.decode(value, { stream: true });
+        // SSE events are line-delimited. Cap a single unfinished line so a
+        // malformed provider stream cannot grow memory without bound.
+        if (Buffer.byteLength(buffer, "utf8") > 1_000_000) {
+          try { await reader.cancel(); } catch { /* provider stream may already be closed */ }
+          throw new Error("Model provider stream event exceeded the size limit.");
+        }
+        const parts = buffer.split(/\r?\n/);
+        buffer = parts.pop() || "";
+        for (const line of parts) processLine(line);
+        if (res.writableNeedDrain) await new Promise(resolve => res.once("drain", resolve));
+      };
       try {
+        if (prefetchedStreamChunk) {
+          await consumeChunk(prefetchedStreamChunk);
+          prefetchedStreamChunk = null;
+        }
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          // SSE events are line-delimited. Cap a single unfinished line so a
-          // malformed provider stream cannot grow memory without bound.
-          if (Buffer.byteLength(buffer, "utf8") > 1_000_000) {
-            try { await reader.cancel(); } catch { /* provider stream may already be closed */ }
-            throw new Error("Model provider stream event exceeded the size limit.");
-          }
-          const parts = buffer.split(/\r?\n/);
-          buffer = parts.pop() || "";
-          for (const line of parts) processLine(line);
-          if (res.writableNeedDrain) await new Promise(resolve => res.once("drain", resolve));
+          await consumeChunk(value);
         }
         // Flush the decoder and process a final SSE line even if the provider
         // closes the stream without a trailing newline.
