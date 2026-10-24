@@ -1,0 +1,30 @@
+# ULTRON Windows Wake Companion
+
+This is a small, free-first Windows tray companion for the exact wake word **“Ultron”**. It uses the installed Windows System.Speech recognition engine and does not send microphone audio to the ULTRON server. No speech model is downloaded automatically.
+
+## Build
+
+Requires the .NET 8 SDK and Windows Desktop targeting support.
+
+```powershell
+dotnet restore .\windows-companion\Ultron.Companion.csproj
+dotnet publish .\windows-companion\Ultron.Companion.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o .\artifacts\ultron-windows-companion
+```
+
+The GitHub Actions workflow builds this project on Windows and uploads a downloadable ULTRON.Companion.exe artifact.
+
+## Use
+
+1. Start ULTRON.Companion.exe.
+2. Click **Start wake word** and accept the microphone-consent prompt.
+3. Keep the companion running in the Windows tray. Saying “Ultron” opens the hosted ULTRON assistant in the default browser.
+4. Use the tray menu to pause listening or exit the companion.
+
+Windows must have an installed compatible English speech-recognition engine and microphone permission. If no compatible recognizer is installed, the listener stays off and reports the problem. Audio is not sent to ULTRON by this app.
+
+## Boundaries
+
+- This is a wake-word launcher, not a completed Windows PC-control agent or a full live voice conversation client.
+- It cannot unlock Windows, bypass PIN/biometrics, or run while the PC is powered off. Sleep/resume and locked-session behavior depend on Windows and device policy.
+- Wake-word recognition is available only while the companion is running, the Windows session/audio device is available, and the installed speech recognizer works.
+- It does not auto-start with Windows, hide microphone activity, execute arbitrary commands, or perform consequential actions.
