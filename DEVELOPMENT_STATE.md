@@ -40,3 +40,30 @@ Last verified: 2026-10-24 UTC
 
 ## Reporting standard
 For each capability, distinguish implemented, unit-tested, integration-tested, deployed, live-verified, and blocked. Never claim full autonomy, 100% correctness, or successful provider inference based only on configuration or a passing mock test.
+
+## 2026-10-25 backend verification tool
+- Added npm run smoke:model, an explicit operator-invoked live model completion check for configured OpenRouter and ULTRON_MODEL_PROVIDERS_JSON providers.
+- The check bounds time and response size, rejects unsafe URLs, supports bounded fallback, and emits a redacted report. It is not run automatically and does not itself prove production inference.
+- Unit tests cover a successful completion, HTTP 429 fallback, unsafe URL rejection, empty completion handling, and the no-provider case.
+- Remaining: run the command in an environment with the actual server-side provider keys to verify live inference. Do not paste keys into chat or commit them.
+
+## 2026-10-25 explicit worker smoke tooling
+- Added npm run smoke:worker as an opt-in task-queue integration test guarded by ULTRON_CONFIRM_WORKER_SMOKE=YES.
+- It requires a valid Supabase project URL, server-side service-role key, and existing test-user UUID; it inserts one plan-only task, polls boundedly, and attempts cleanup without emitting task content or credentials.
+- Added mocked tests for confirmation gating, successful completion/cleanup, invalid configuration, failure redaction, and queued-task timeout cancellation.
+- Live test remains unverified until run intentionally in a trusted environment with the needed server configuration. This command creates a real database row and may consume one model attempt; do not set the confirmation flag casually.
+
+## 2026-10-25 read-only Auth diagnostic
+- Added npm run diagnose:auth to read the live public Supabase Auth settings using the publishable/legacy anon key, with bounded streaming response parsing and sanitized diagnostics.
+- Reports signup/email/Google/phone provider switches and whether email confirmation is required, but does not claim email delivery is working.
+- The diagnostic makes no account, email, SMS, or database writes. Live run still requires the public key in a trusted environment.
+- Supabase's leaked-password protection warning remains a dashboard-level Auth security setting and is not exposed by the public settings response.
+
+
+- Added explicit Render Blueprint placeholders and .env.example entries for ULTRON_AUTH_CALLBACK_URL and ULTRON_AUTH_REDIRECT_URL so Google OAuth and recovery redirects are discoverable/configurable; actual values must match the deployed public origin and Supabase redirect allow-list.
+
+## 2026-10-25 confirmation resend endpoint
+- Added rate-limited POST /api/auth/resend-confirmation for Supabase signup confirmation re-sends.
+- Uses only the server-configured optional redirect (never a redirect from request JSON), validates HTTPS/loopback-only redirects, applies generic responses to avoid email account enumeration, and sanitizes provider failures.
+- Includes test coverage for redirect safety, invalid email, generic responses, rate limiting, outage handling, and static checks.
+- Actual delivery remains dependent on Supabase Auth confirmation configuration, an allow-listed redirect, and working SMTP/provider delivery; no email was sent during code/CI tests.
