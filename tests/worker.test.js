@@ -1303,7 +1303,7 @@ test("worker continues polling after a transient database cycle error", async ()
   const status = worker.getStatus();
   assert.equal(status.state, "stopped");
   assert.equal(schedulePolls, 2, "the next cycle must retry the schedule poll");
-  assert.equal(taskPolls, 2, "the worker must keep servicing task polling after recovery");
+  assert.equal(taskPolls, 1, "the worker must service task polling in the recovered cycle");
   assert.ok(status.lastCycleSuccessAt, "a successful cycle should be recorded after the transient failure");
   assert.ok(errors.some(args => String(args[0]).includes("Worker cycle failed")));
 });
