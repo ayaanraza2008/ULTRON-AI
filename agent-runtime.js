@@ -988,7 +988,15 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const toolMessages = [];
       const used = [];
       const executedToolCalls = new Set();
-      const toolCallKey = (name, args) => name + ":" + JSON.stringify(args);
+      function stableToolArguments(value) {
+  if (Array.isArray(value)) return "[" + value.map(stableToolArguments).join(",") + "]";
+  if (value && typeof value === "object") {
+    return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + stableToolArguments(value[key])).join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+const toolCallKey = (name, args) => name + ":" + stableToolArguments(args);
       for (const call of calls) {
         const name = call?.function?.name;
         const args = parseArgs(call?.function?.arguments);
