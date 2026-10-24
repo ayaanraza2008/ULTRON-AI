@@ -35,8 +35,7 @@ test("relevant task recall uses the authenticated user's isolated project", asyn
   });
   assert.equal(call.url, "https://memory.example/agentmemory/smart-search");
   assert.equal(call.options.headers.Authorization, "Bearer private-test-secret");
-  assert.deepEqual(JSON.parse(call.options.body), { query: "Continue the previous repository implementation", project: JSON.parse(call.options.body).project, limit: 5 });
-  assert.match(JSON.parse(call.options.body).project, /^ultron-ai-user-[a-f0-9]{40}$/);
+  assert.deepEqual(JSON.parse(call.options.body), { query: "Continue the previous repository implementation", project: "ultron-ai-user-user-123", limit: 5 });
   assert.equal(result.memories.length, 2);
   assert.match(result.memories[0], /Architecture/);
 });
@@ -77,8 +76,8 @@ test("distinct user IDs that normalize similarly cannot share an AgentMemory pro
     });
   }
   assert.notEqual(projects[0], projects[1]);
-  assert.match(projects[0], /^ultron-ai-user-[a-f0-9]{40}$/);
-  assert.match(projects[1], /^ultron-ai-user-[a-f0-9]{40}$/);
+  assert.match(projects[0], /^ultron-ai-user-sha256-[a-f0-9]{40}$/);
+  assert.equal(projects[1], "ultron-ai-user-a-b");
 });
 
 test("AgentMemory fails safely when the remote service is unavailable", async () => {
