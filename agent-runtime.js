@@ -298,7 +298,8 @@ function redactInlineSecrets(value) {
   return value
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
     .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\b/g, "[redacted]")
-    .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|credential)\s*([:=])\s*(['"]?)[^\s,;'"]+/gi, "$1$2[redacted]");
+    .replace(/\b(authorization)\s*([:=])\s*(?:Bearer\s+)?[^\s,;'\"]+/gi, "$1$2[redacted]")
+    .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\s*([:=])\s*(['"]?)[^\s,;'\"]+/gi, "$1$2[redacted]");
 }
 
 export function modelSafeResult(value, depth = 0) {
