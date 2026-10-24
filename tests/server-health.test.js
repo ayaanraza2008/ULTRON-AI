@@ -115,7 +115,7 @@ test("OpenRouter proxy falls back on rate limits and unusable successful respons
     env: {
       OPENROUTER_API_KEY: "synthetic-openrouter-key",
       OPENROUTER_DEFAULT_MODEL: "model-primary",
-      ULTRON_AVAILABLE_MODELS: "model-primary,model-fallback",
+      ULTRON_AVAILABLE_MODELS: "model-primary,model-fallback-a,model-fallback-b",
       ULTRON_BROWSER_USE_TOKEN: "synthetic-bridge-token"
     },
     logger: { info() {}, warn() {}, error() {} },
@@ -140,9 +140,9 @@ test("OpenRouter proxy falls back on rate limits and unusable successful respons
       body: JSON.stringify({ model: "model-primary", messages: [{ role: "user", content: "hello" }] })
     });
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get("x-ultron-model"), "model-fallback");
+    assert.equal(response.headers.get("x-ultron-model"), "model-fallback-b");
     assert.match((await response.json()).choices[0].message.content, /Fallback model is healthy/);
-    assert.deepEqual(attempts, ["model-primary", "model-fallback", "model-fallback"]);
+    assert.deepEqual(attempts, ["model-primary", "model-fallback-a", "model-fallback-b"]);
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
