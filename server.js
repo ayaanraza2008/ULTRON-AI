@@ -1061,11 +1061,23 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       let lastProviderName = "";
       let usedFallback = false;
       for (let index = 0; index < modelAttempts.length; index++) {
+        // Never start another provider after the overall deadline or a client disconnect.
+        if (controller.signal.aborted) {
+          lastStatus = 0;
+          lastProviderCode = /client disconnected/i.test(String(controller.signal.reason?.message))
+            ? "CLIENT_DISCONNECTED" : "NETWORK_TIMEOUT";
+          break;
+        }
         const { provider, candidate } = modelAttempts[index];
         lastProviderName = provider.name;
         let attempt;
         const attemptController = new AbortController();
         activeAttemptController = attemptController;
+        // Cover the narrow race where the overall abort fired just before the
+        // active controller was assigned and its one-shot listener ran.
+        if (controller.signal.aborted) {
+          attemptController.abort(controller.signal.reason || new Error("Request aborted"));
+        }
         const attemptTimeout = setTimeout(() => {
           attemptController.abort(new Error("Provider attempt timeout"));
         }, attemptTimeoutMs);
