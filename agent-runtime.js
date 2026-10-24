@@ -414,7 +414,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           lastError = Object.assign(new Error("AI provider returned malformed JSON."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
           continue;
         }
-        if (!data || !Array.isArray(data.choices) || !data.choices[0]?.message) {
+        const message = data?.choices?.[0]?.message;
+        const hasText = typeof message?.content === "string" && message.content.trim().length > 0;
+        const hasToolCalls = Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
+        if (!Array.isArray(data?.choices) || (!hasText && !hasToolCalls)) {
+          // A successful HTTP response can still be unusable. Fail over rather
+          // than returning an empty assistant answer to the user.
           lastError = Object.assign(new Error("AI provider returned an invalid completion."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
           continue;
         }
