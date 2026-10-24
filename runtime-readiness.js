@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
 
 function isPrivateOrLocalHost(hostname) {
-  const host = hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
   const ipVersion = isIP(host);
   if (ipVersion === 4) {
