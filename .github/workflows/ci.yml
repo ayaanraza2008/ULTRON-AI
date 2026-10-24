@@ -27,7 +27,7 @@ jobs:
           for i in $(seq 1 18); do
             if curl --fail --silent https://ultron-ai-zvd7.onrender.com/api/health -o /tmp/ultron-health.json; then
               cat /tmp/ultron-health.json
-              node -e "const d=require('/tmp/ultron-health.json'); if(d.status!=='ok') process.exit(1)"
+              node -e "const d=require('/tmp/ultron-health.json'); const required=['providerConfigured','accessConfigured','supabaseConfigured']; const missing=required.filter(k=>d[k]!==true); if(d.status!=='ok'||missing.length){console.error('Health/configuration check failed:', {status:d.status,missing}); process.exit(1)}; console.log('Runtime configuration flags verified:', required.join(', '))"
               exit 0
             fi
             sleep 8
