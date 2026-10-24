@@ -2,6 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isIP } from "node:net";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
@@ -89,11 +90,35 @@ async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
   return JSON.parse(raw);
 }
 
+function isUnsafeProviderHost(hostname) {
+  const host = String(hostname || "").replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || !host.includes(".")) {
+    return host !== "localhost" && host !== "127.0.0.1" && host !== "::1";
+  }
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    const octets = host.split(".").map(Number);
+    const [a, b] = octets;
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0 && octets[2] === 113);
+  }
+  if (ipVersion === 6) return !host.startsWith("2") || host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:");
+  return false;
+}
+
 function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
-  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-    throw new Error("OPENROUTER_BASE_URL must use HTTPS outside localhost.");
+  const loopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  if ((parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) ||
+      parsed.username || parsed.password || parsed.search || parsed.hash ||
+      (!loopback && isUnsafeProviderHost(parsed.hostname))) {
+    throw new Error("OPENROUTER_BASE_URL must be HTTPS with a public host, or HTTP loopback for local development.");
   }
   return raw.replace(/\/+$/, "");
 }
