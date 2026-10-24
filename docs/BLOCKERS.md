@@ -15,7 +15,7 @@
 ## Verification discipline
 
 - Configuration means configured, not healthy. A real provider request or task completion is required before marking a feature verified.
-- Latest observed CI run [#40023681574](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40023681574) passed both jobs: syntax checks, automated tests, deployed health smoke test, and pinned God’s Eye bridge build. This verifies the tested PR revision only; it does not prove live provider inference, account isolation, or end-to-end task completion.
+- Latest observed CI run [#40064374027](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40064374027) passed both jobs on PR #101: syntax checks, automated tests, deployed health smoke test, pinned God’s Eye build, and injected bridge validation. This verifies the tested PR revision only; it does not prove live provider inference, account isolation, or end-to-end task completion.
 - PR #101 makes the standalone God’s Eye build repeatable by removing the stale checkout directory before cloning, updates CI to Node 24, and points the Render Blueprint at the known-live `ultron-world-intelligence-live` service. The blueprint change does not automatically reconfigure an already-existing Render service; its live environment must be checked separately.
-- Render production runs `main`; commit `c753d0524c4a03532bcfefb0d7186b27c561e386` is deployed. The password-recovery endpoint and production-action confirmation policy are live, but end-to-end auth recovery and provider behavior remain unverified.
+- Render production runs `main`; commit `e04a0792101ef9805ed936dd9ba1d78a36c35294` is deployed to the main API and the known-live God’s Eye service. The password-recovery endpoint and production-action confirmation policy are live, but end-to-end auth recovery and provider behavior remain unverified.
 - Do not paste credentials into chat or source control. Use Render's private environment settings.
