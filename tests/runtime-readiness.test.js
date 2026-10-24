@@ -89,6 +89,11 @@ test("readiness rejects private-network and local HTTPS service targets", () => 
     "https://service.internal",
     "https://printer.local",
     "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "https://[::ffff:192.168.1.1]",
+    "https://[fe80::1]",
+    "https://[ff02::1]",
+    "https://[2001:db8::1]",
     "https://[fd00::1]"
   ]) {
     const result = buildRuntimeReadiness({
