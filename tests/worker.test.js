@@ -1566,3 +1566,54 @@ test("worker keeps a persisted completion successful when the audit write fails"
   assert.equal(status.tasksRetried, 0);
   assert.ok(errors.some(args => String(args[0]).includes("Task completion audit failed:")));
 });
+
+test("worker rejects query/fragment-bearing model provider base URLs before attempting requests", async () => {
+  let worker;
+  const providerUrls = [];
+  const task = {
+    id: "task-unsafe-provider-base-urls",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "synthetic-primary-secret",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1?token=must-not-be-used",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "query-provider", baseUrl: "https://query.example.com/v1?token=secret", apiKeyEnv: "QUERY_PROVIDER_KEY", model: "test-model", priority: 0 },
+        { name: "fragment-provider", baseUrl: "https://fragment.example.com/v1#secret", apiKeyEnv: "FRAGMENT_PROVIDER_KEY", model: "test-model", priority: 1 },
+        { name: "safe-provider", baseUrl: "https://safe.example.com/v1", apiKeyEnv: "SAFE_PROVIDER_KEY", model: "test-model", priority: 2 }
+      ]),
+      QUERY_PROVIDER_KEY: "synthetic-query-secret",
+      FRAGMENT_PROVIDER_KEY: "synthetic-fragment-secret",
+      SAFE_PROVIDER_KEY: "synthetic-safe-secret"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        providerUrls.push(url);
+        assert.equal(url, "https://safe.example.com/v1/chat/completions");
+        assert.equal(options.headers.Authorization, "Bearer synthetic-safe-secret");
+        return new Response(JSON.stringify({ model: "safe-model", choices: [{ message: { content: "A safe fallback plan was generated." } }] }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.deepEqual(providerUrls, ["https://safe.example.com/v1/chat/completions"]);
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+});
+
