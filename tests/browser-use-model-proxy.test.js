@@ -99,3 +99,59 @@ test("Browser Use model proxy stops reading oversized provider responses", async
     assert.equal((await response.json()).error.type, "provider_response_too_large");
   });
 });
+
+
+test("Browser Use model proxy falls back after an empty or malformed HTTP 200 completion", async () => {
+  const attempted = [];
+  const app = createApp({
+    env: {
+      ULTRON_BROWSER_USE_TOKEN: "shared-test-token",
+      OPENROUTER_API_KEY: "provider-secret",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+      OPENROUTER_DEFAULT_MODEL: "provider/primary:free",
+      ULTRON_AVAILABLE_MODELS: "provider/primary:free,provider/backup:free"
+    },
+    fetchImpl: async (_url, options = {}) => {
+      const model = JSON.parse(options.body).model;
+      attempted.push(model);
+      if (model === "provider/primary:free") {
+        return new Response(JSON.stringify({ choices: [{ message: { content: "   " } }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ model, choices: [{ message: { content: "fallback ok" } }] }), { status: 200 });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer shared-test-token" },
+      body: JSON.stringify({ model: "provider/primary:free", messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ultron-model"), "provider/backup:free");
+    assert.equal((await response.json()).choices[0].message.content, "fallback ok");
+    assert.deepEqual(attempted, ["provider/primary:free", "provider/backup:free"]);
+  });
+});
+
+test("Browser Use model proxy rejects malformed and empty completions when no fallback remains", async () => {
+  const app = createApp({
+    env: {
+      ULTRON_BROWSER_USE_TOKEN: "shared-test-token",
+      OPENROUTER_API_KEY: "provider-secret",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+      OPENROUTER_DEFAULT_MODEL: "provider/primary:free"
+    },
+    fetchImpl: async () => new Response("{malformed", { status: 200 }),
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer shared-test-token" },
+      body: JSON.stringify({ model: "provider/primary:free", messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.type, "provider_request_failed");
+  });
+});
