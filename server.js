@@ -221,7 +221,7 @@ function hasConfiguredModelProvider(env) {
     try {
       const url = new URL(provider.baseUrl);
       return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash &&
-        provider.model.trim().length <= 160 &&
+        provider.model.trim().length > 0 && provider.model.trim().length <= 160 &&
         typeof env[provider.apiKeyEnv.trim()] === "string" && Boolean(env[provider.apiKeyEnv.trim()].trim());
     } catch { return false; }
   });
