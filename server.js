@@ -57,9 +57,9 @@ async function readResponseTextLimited(response, maxBytes) {
     throw new Error("Model provider response exceeded the size limit.");
   }
   if (!response.body?.getReader) {
-    const raw = await response.text();
-    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw new Error("Model provider response exceeded the size limit.");
-    return raw;
+    // Reject before buffering: checking byte length after response.text() has
+    // already allocated the full upstream response and defeats the memory cap.
+    throw new Error("Model provider response cannot be safely size-limited without a streaming body.");
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
