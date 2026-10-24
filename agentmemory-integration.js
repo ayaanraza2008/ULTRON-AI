@@ -53,7 +53,7 @@ export function shouldRecallAgentMemory(task) {
 
 export function shouldCaptureAgentMemory(task) {
   const text = bounded(task, MAX_QUERY);
-  if (text.length < 25 || /(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|password|secret|authorization|bearer\\s+|private key|-----begin|AKIA[0-9A-Z]{16})/i.test(text)) return false;
+  if (text.length < 25 || /(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|password|secret|authorization|bearer\s+|private key|-----begin|AKIA[0-9A-Z]{16})/i.test(text)) return false;
   return /\b(remember this|save this|we decided|decision:|project uses|the project uses|my preference is|from now on|going forward|important project context|implementation decision|architecture decision)\b/i.test(text);
 }
 
