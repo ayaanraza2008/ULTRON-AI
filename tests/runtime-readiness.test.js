@@ -103,6 +103,13 @@ test("readiness rejects private-network and local HTTPS service targets", () => 
   }
 });
 
+test("readiness accepts a public global-unicast IPv6 HTTPS endpoint", () => {
+  const result = buildRuntimeReadiness({
+    env: { OLLAMA_BASE_URL: "https://[2606:4700:4700::1111]:11434" }
+  });
+  assert.equal(result.components.find((item) => item.id === "local_models").state, "configured_unverified");
+});
+
 test("readiness accepts HTTPS services and plain HTTP loopback development services", () => {
   const result = buildRuntimeReadiness({
     env: {
