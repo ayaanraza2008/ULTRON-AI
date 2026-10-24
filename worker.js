@@ -130,6 +130,23 @@ function safeResearchUrl(value) {
  * uses started_at as the lease clock, so long provider fallback chains must renew it.
  * Returns false if the task is no longer RUNNING or the refresh could not be saved.
  */
+
+
+/** Runs at most one asynchronous heartbeat at a time; missed ticks are skipped. */
+export function createNonOverlappingRunner(run, onError = () => {}) {
+  let busy = false;
+  let inFlight = Promise.resolve();
+  return {
+    trigger() {
+      if (busy) return false;
+      busy = true;
+      inFlight = Promise.resolve().then(run).catch(onError).finally(() => { busy = false; });
+      return true;
+    },
+    wait() { return inFlight; }
+  };
+}
+
 export async function renewTaskLease({ taskId, rest, logger = console, onInactive }) {
   if (!taskId || typeof rest !== "function") return false;
   try {
@@ -465,20 +482,24 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     const task = Array.isArray(claimed) ? claimed[0] : claimed;
     if (!task?.id) return false;
     const taskController = new AbortController();
-    let heartbeatInFlight = Promise.resolve();
-    const heartbeat = setInterval(() => {
-      heartbeatInFlight = heartbeatInFlight.then(async () => {
-        const renewed = await renewTaskLease({ taskId: task.id, rest, logger, onInactive: () => taskController.abort(new Error("Task is no longer RUNNING.")) });
-        if (!renewed) {
-          status.taskLeaseRenewalFailures += 1;
-          // Do not interrupt in-flight work on a transient renewal error; conditional
-          // completion writes and database recovery still prevent stale state overwrites.
-          status.lastErrorAt = new Date().toISOString();
-          status.lastErrorCode = "TASK_LEASE_RENEWAL_FAILED";
-        }
-      }).catch(error => {
-        logger.warn?.("Unexpected task lease heartbeat error:", bounded(error?.message, 200));
+    const heartbeatRunner = createNonOverlappingRunner(async () => {
+      const renewed = await renewTaskLease({
+        taskId: task.id,
+        rest,
+        logger,
+        onInactive: () => taskController.abort(new Error("Task is no longer RUNNING."))
       });
+      if (!renewed) {
+        status.taskLeaseRenewalFailures += 1;
+        // Do not interrupt in-flight work on a transient renewal error; conditional
+        // completion writes and database recovery still prevent stale state overwrites.
+        status.lastErrorAt = new Date().toISOString();
+        status.lastErrorCode = "TASK_LEASE_RENEWAL_FAILED";
+      }
+    }, error => logger.warn?.("Unexpected task lease heartbeat error:", bounded(error?.message, 200)));
+    const heartbeat = setInterval(() => {
+      // Skip ticks while a renewal is pending instead of queuing stale PATCH requests.
+      heartbeatRunner.trigger();
     }, leaseHeartbeatMs);
     heartbeat.unref?.();
     try {
@@ -574,7 +595,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       logger.error?.("Task outcome:", task.id, isBlocked ? "blocked" : shouldRetry ? "retry scheduled" : code);
     } finally {
       clearInterval(heartbeat);
-      await heartbeatInFlight;
+      await heartbeatRunner.wait();
     }
     return true;
   }

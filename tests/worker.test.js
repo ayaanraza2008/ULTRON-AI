@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker, renewTaskLease, readJsonLimited, readTextLimited } from "../worker.js";
+import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner } from "../worker.js";
 
 test("limited response readers reject non-streaming fallbacks before buffering", async () => {
   let textCalls = 0;
@@ -1201,4 +1201,368 @@ test("bounded provider JSON reader preserves abort errors rather than relabeling
     error => error === abortError && error.name === "AbortError"
   );
   assert.equal(released, true, "reader lock must be released after an aborted read");
+});
+
+
+test("task lease heartbeat skips overlapping ticks instead of queueing requests", async () => {
+  let release;
+  let calls = 0;
+  const runner = createNonOverlappingRunner(() => {
+    calls += 1;
+    return new Promise(resolve => { release = resolve; });
+  });
+  assert.equal(runner.trigger(), true);
+  await Promise.resolve();
+  assert.equal(runner.trigger(), false, "a second tick must be skipped while the first is pending");
+  assert.equal(runner.trigger(), false);
+  assert.equal(calls, 1);
+  release();
+  await runner.wait();
+  assert.equal(runner.trigger(), true, "heartbeat may run again after the previous request settles");
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  release();
+  await runner.wait();
+});
+
+
+test("worker discards a retryable provider failure when the task was cancelled before retry persistence", async () => {
+  let worker;
+  const auditEvents = [];
+  const task = {
+    id: "task-retry-cancel-race",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response("provider temporarily unavailable", { status: 503 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        const patch = JSON.parse(options.body);
+        assert.equal(patch.status, "QUEUED", "worker should attempt a retry transition conditionally");
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        auditEvents.push(JSON.parse(options.body));
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(status.tasksRetried, 0, "a retry counts only when the conditional state update succeeds");
+  assert.equal(status.tasksFailed, 0, "a concurrent cancellation is not a task failure");
+  assert.equal(status.tasksDiscarded, 1);
+  assert.equal(auditEvents[0]?.action, "task.failure_discarded");
+  assert.equal(auditEvents[0]?.outcome, "denied");
+  assert.equal(auditEvents[0]?.metadata?.reason, "task_state_changed_during_execution");
+});
+
+
+test("worker continues polling after a transient database cycle error", async () => {
+  let worker;
+  let schedulePolls = 0;
+  let taskPolls = 0;
+  let sleeps = 0;
+  const errors = [];
+  worker = startWorker({
+    env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "test-only" },
+    logger: { info() {}, warn() {}, error: (...args) => errors.push(args) },
+    sleepImpl: async () => {
+      sleeps += 1;
+      if (sleeps === 2) worker.stop();
+    },
+    fetchImpl: async url => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) {
+        schedulePolls += 1;
+        if (schedulePolls === 1) throw new Error("temporary Supabase network interruption");
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/rpc/ultron_claim_next_task")) {
+        taskPolls += 1;
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(status.state, "stopped");
+  assert.equal(schedulePolls, 2, "the next cycle must retry the schedule poll");
+  assert.equal(taskPolls, 1, "the worker must service task polling in the recovered cycle");
+  assert.ok(status.lastCycleSuccessAt, "a successful cycle should be recorded after the transient failure");
+  assert.ok(errors.some(args => String(args[0]).includes("Worker cycle failed")));
+});
+
+
+test("worker finishes an active task after shutdown is requested and claims no new task", async () => {
+  let worker;
+  let taskClaims = 0;
+  let completionWrites = 0;
+  const task = {
+    id: "task-shutdown-during-provider-call",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) {
+        taskClaims += 1;
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/chat/completions")) {
+        worker.stop();
+        return new Response(JSON.stringify({
+          model: "test-model",
+          choices: [{ message: { content: "Plan drafted safely." } }]
+        }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        completionWrites += 1;
+        const patch = JSON.parse(options.body);
+        assert.equal(patch.status, "COMPLETED");
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(completionWrites, 1, "the active task result must be persisted before shutdown");
+  assert.equal(taskClaims, 1, "shutdown must prevent the next task from being claimed");
+  assert.equal(status.tasksCompleted, 1);
+  assert.equal(status.state, "stopped");
+});
+
+
+test("worker fails a retryable provider error once the task attempt limit is reached", async () => {
+  let worker;
+  let providerCalls = 0;
+  let failurePatch;
+  const auditEvents = [];
+  const task = {
+    id: "task-retry-limit-reached",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 3,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        providerCalls += 1;
+        return new Response("provider temporarily unavailable", { status: 503 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        failurePatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        auditEvents.push(JSON.parse(options.body));
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  assert.equal(providerCalls, 1, "the final allowed attempt should not trigger another provider attempt");
+  assert.equal(failurePatch.status, "FAILED");
+  assert.equal(failurePatch.error_code, "EMPLOYEE_PROVIDER_RETRYABLE");
+  assert.equal(failurePatch.result.retry, false);
+  assert.equal(worker.getStatus().tasksRetried, 0);
+  assert.equal(worker.getStatus().tasksFailed, 1);
+  assert.equal(auditEvents[0]?.action, "task.failed");
+  assert.equal(auditEvents[0]?.metadata?.attempt, 3);
+});
+
+
+test("worker leaves retryable task lease intact when retry persistence fails", async () => {
+  let worker;
+  let attemptedRetryPatch;
+  const errors = [];
+  const task = {
+    id: "task-retry-write-failure",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error: (...args) => errors.push(args) },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response("provider temporarily unavailable", { status: 503 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        attemptedRetryPatch = JSON.parse(options.body);
+        worker.stop();
+        throw new Error("temporary Supabase write outage");
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(attemptedRetryPatch.status, "QUEUED", "the worker should attempt the conditional retry transition");
+  assert.equal(status.taskStateUpdateFailures, 1);
+  assert.equal(status.lastErrorCode, "TASK_STATE_UPDATE_FAILED");
+  assert.equal(status.tasksRetried, 0, "a failed database write must not be reported as a scheduled retry");
+  assert.equal(status.tasksFailed, 0, "the worker must not claim a terminal failure without persistence");
+  assert.equal(status.tasksDiscarded, 0, "a write outage is not evidence that another actor changed task state");
+  assert.ok(errors.some(args => String(args[0]).includes("lease recovery will handle it")));
+});
+
+
+test("worker records a retry only after the queued transition is persisted", async () => {
+  let worker;
+  let retryPatch;
+  const auditEvents = [];
+  const task = {
+    id: "task-retry-transition-saved",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response("provider temporarily unavailable", { status: 503 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        retryPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, status: "QUEUED" }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        auditEvents.push(JSON.parse(options.body));
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(retryPatch.status, "QUEUED");
+  assert.equal(retryPatch.error_code, "EMPLOYEE_PROVIDER_RETRYABLE");
+  assert.equal(retryPatch.result.retry, true);
+  assert.equal(retryPatch.started_at, null);
+  assert.equal(retryPatch.finished_at, null);
+  assert.equal(status.tasksRetried, 1);
+  assert.equal(status.tasksFailed, 0);
+  assert.equal(status.taskStateUpdateFailures, 0);
+  assert.equal(auditEvents[0]?.action, "task.retry_scheduled");
+  assert.equal(auditEvents[0]?.outcome, "retry");
+  assert.equal(auditEvents[0]?.metadata?.attempt, 1);
+});
+
+
+test("worker keeps a persisted completion successful when the audit write fails", async () => {
+  let worker;
+  let completionWrites = 0;
+  const errors = [];
+  const task = {
+    id: "task-completed-audit-outage",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error: (...args) => errors.push(args) },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        return new Response(JSON.stringify({
+          model: "test-model",
+          choices: [{ message: { content: "Plan drafted safely." } }]
+        }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        completionWrites += 1;
+        const patch = JSON.parse(options.body);
+        assert.equal(patch.status, "COMPLETED");
+        assert.equal(patch.result.answer, "Plan drafted safely.");
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, status: "COMPLETED" }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        throw new Error("temporary audit database outage");
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(completionWrites, 1, "the completed task must be persisted exactly once");
+  assert.equal(status.tasksCompleted, 1, "audit failure must not undo a persisted completion");
+  assert.equal(status.tasksFailed, 0);
+  assert.equal(status.tasksRetried, 0);
+  assert.ok(errors.some(args => String(args[0]).includes("Task completion audit failed:")));
 });
