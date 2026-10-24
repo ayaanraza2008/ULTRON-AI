@@ -204,7 +204,7 @@ function hasConfiguredModelProvider(env) {
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
     try {
       const baseUrl = new URL(env.OPENROUTER_BASE_URL || DEFAULT_BASE_URL);
-      if (baseUrl.protocol === "https:" && !baseUrl.username && !baseUrl.password) return true;
+      if (baseUrl.protocol === "https:" && !baseUrl.username && !baseUrl.password && !baseUrl.search && !baseUrl.hash) return true;
     } catch { /* invalid primary endpoint; continue checking alternate providers */ }
   }
   let providers;
@@ -220,7 +220,8 @@ function hasConfiguredModelProvider(env) {
         !/^[A-Z][A-Z0-9_]{1,79}$/.test(provider.apiKeyEnv.trim())) return false;
     try {
       const url = new URL(provider.baseUrl);
-      return url.protocol === "https:" && !url.username && !url.password &&
+      return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash &&
+        provider.model.trim().length <= 160 &&
         typeof env[provider.apiKeyEnv.trim()] === "string" && Boolean(env[provider.apiKeyEnv.trim()].trim());
     } catch { return false; }
   });
