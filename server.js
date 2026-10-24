@@ -565,7 +565,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.get("/api/conversations/:id/messages", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_CONVERSATION_ID", message: "Conversation ID is invalid." } });
     try {
-      const ownership = await supabaseRest(req, "conversations", "GET", "?select=id& id=eq.".replace("& id", "&id") + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      const ownership = await supabaseRest(req, "conversations", "GET", "?select=id&id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
       if (!Array.isArray(ownership) || !ownership[0]) return res.status(404).json({ error: { code: "CONVERSATION_NOT_FOUND", message: "Conversation was not found or is not accessible." } });
       const query = "?select=id,conversation_id,role,content,model,created_at&conversation_id=eq." + encodeURIComponent(req.params.id) + "&order=created_at.asc&limit=200";
       const rows = await supabaseRest(req, "messages", "GET", query);
