@@ -23,6 +23,8 @@ services:
         sync: false
       - key: OPENROUTER_DEFAULT_MODEL
         sync: false
+      - key: ULTRON_MODEL_PROVIDERS_JSON
+        sync: false
       - key: ULTRON_AVAILABLE_MODELS
         value: "openrouter/free"
       - key: SUPABASE_URL
