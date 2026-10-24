@@ -123,6 +123,9 @@ function safeMemoryText(value) {
 export async function recallAgentMemory(task, options = {}) {
   const query = bounded(task, MAX_QUERY);
   if (!query || !shouldRecallAgentMemory(query)) return { state: "skipped", memories: [] };
+  // Never use the shared base project for an unauthenticated request: that could
+  // expose durable context across accounts if the caller forgot to pass userId.
+  if (!bounded(options.userId, 500)) return { state: "skipped", memories: [] };
   const project = scopedProject(options.env, options.userId);
   const data = await requestMemory("/agentmemory/smart-search", { query, project, limit: 5 }, options);
   const candidates = Array.isArray(data.results) ? data.results
@@ -138,6 +141,8 @@ export async function recallAgentMemory(task, options = {}) {
 export async function captureAgentMemory(task, options = {}) {
   const text = bounded(task, MAX_MEMORY_TEXT);
   if (!text || !shouldCaptureAgentMemory(text)) return { state: "skipped" };
+  // Fail closed when authentication context is missing; do not write to a shared project.
+  if (!bounded(options.userId, 500)) return { state: "skipped" };
   const env = options.env || process.env;
   if (env.ULTRON_AGENTMEMORY_CAPTURE === "false") return { state: "disabled" };
   const project = scopedProject(env, options.userId);
