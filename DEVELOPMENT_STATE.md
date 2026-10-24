@@ -40,3 +40,10 @@ Last verified: 2026-10-24 UTC
 
 ## Reporting standard
 For each capability, distinguish implemented, unit-tested, integration-tested, deployed, live-verified, and blocked. Never claim full autonomy, 100% correctness, or successful provider inference based only on configuration or a passing mock test.
+
+
+## 2026-10-25 backend verification tool
+- Added npm run smoke:model, an explicit operator-invoked live model completion check for configured OpenRouter and ULTRON_MODEL_PROVIDERS_JSON providers.
+- The check bounds time and response size, rejects unsafe URLs, supports bounded fallback, and emits a redacted report. It is not run automatically and does not itself prove production inference.
+- Unit tests cover a successful completion, HTTP 429 fallback, unsafe URL rejection, empty completion handling, and the no-provider case.
+- Remaining: run the command in an environment with the actual server-side provider keys to verify live inference. Do not paste keys into chat or commit them.
