@@ -319,7 +319,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     if (!shouldCaptureAgentMemory(task)) return { state: "skipped" };
     const content = bounded(task, 2400);
     if (!content) return { state: "skipped" };
-    const query = "?select=id&content=eq." + encodeURIComponent(content) + "&is_active=eq.true&limit=1";
+    const query = "?select=id&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&content=eq." + encodeURIComponent(content) + "&is_active=eq.true&limit=1";
     const existing = await supabaseRest(req, "memory_items", "GET", query);
     if (Array.isArray(existing) && existing.length) return { state: "already_saved" };
     const rows = await supabaseRest(req, "memory_items", "POST", "?select=id,kind,title,content", {
