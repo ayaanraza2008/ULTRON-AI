@@ -107,3 +107,77 @@ test("password recovery uses only the configured HTTPS redirect destination", as
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test("OpenRouter proxy falls back on rate limits and unusable successful responses", async () => {
+  const attempts = [];
+  const app = createApp({
+    env: {
+      OPENROUTER_API_KEY: "synthetic-openrouter-key",
+      OPENROUTER_DEFAULT_MODEL: "model-primary",
+      ULTRON_AVAILABLE_MODELS: "model-primary,model-fallback-a,model-fallback-b",
+      ULTRON_BROWSER_USE_TOKEN: "synthetic-bridge-token"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async (url, options = {}) => {
+      assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, "Bearer synthetic-openrouter-key");
+      const model = JSON.parse(options.body).model;
+      attempts.push(model);
+      if (attempts.length === 1) return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+      if (attempts.length === 2) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "" } }] }), { status: 200 });
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Fallback model is healthy." } }] }), { status: 200 });
+    }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/internal/browser-use/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer synthetic-bridge-token" },
+      body: JSON.stringify({ model: "model-primary", messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ultron-model"), "model-fallback-b");
+    assert.match((await response.json()).choices[0].message.content, /Fallback model is healthy/);
+    assert.deepEqual(attempts, ["model-primary", "model-fallback-a", "model-fallback-b"]);
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test("OpenRouter proxy does not retry a non-retryable invalid-request response", async () => {
+  let attempts = 0;
+  const app = createApp({
+    env: {
+      OPENROUTER_API_KEY: "synthetic-openrouter-key",
+      OPENROUTER_DEFAULT_MODEL: "model-primary",
+      ULTRON_AVAILABLE_MODELS: "model-primary,model-fallback",
+      ULTRON_BROWSER_USE_TOKEN: "synthetic-bridge-token"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async () => {
+      attempts += 1;
+      return new Response(JSON.stringify({ error: { message: "invalid request" } }), { status: 400 });
+    }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/internal/browser-use/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer synthetic-bridge-token" },
+      body: JSON.stringify({ model: "model-primary", messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(response.status, 502);
+    assert.equal(attempts, 1, "invalid requests must not be retried against another model");
+    const body = await response.json();
+    assert.equal(body.error.type, "provider_request_failed");
+    assert.equal(JSON.stringify(body).includes("synthetic-openrouter-key"), false);
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
