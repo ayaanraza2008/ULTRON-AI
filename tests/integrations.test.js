@@ -278,3 +278,24 @@ test("integration adapter stops reading provider responses after the 2 MB limit"
     assert.equal((await response.json()).error.code, "PROVIDER_RESPONSE_TOO_LARGE");
   });
 });
+
+test("integration adapter rejects non-streaming responses before buffering unbounded text", async () => {
+  let textCalls = 0;
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async () => ({
+    status: 200,
+    ok: true,
+    headers: { get: () => null },
+    body: null,
+    text: async () => {
+      textCalls += 1;
+      return "x".repeat(10_000_000);
+    }
+  }), async base => {
+    const response = await fetch(base + "/api/integrations/comfyui/status");
+    assert.equal(response.status, 502);
+    const body = await response.json();
+    assert.equal(body.error.code, "PROVIDER_RESPONSE_UNSAFE_STREAM");
+    assert.equal(textCalls, 0, "non-streaming response text must not be allocated");
+  });
+});
+
