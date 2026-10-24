@@ -17,7 +17,7 @@ test("memory list, update, and delete queries are scoped to the authenticated us
         return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (parsed.pathname === "/rest/v1/memory_items" && options.method === "DELETE") {
-        return new Response(null, { status: 204 });
+        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (parsed.pathname === "/rest/v1/memory_items") {
         return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
