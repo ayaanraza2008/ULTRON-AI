@@ -901,6 +901,12 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
+          // SSE events are line-delimited. Cap a single unfinished line so a
+          // malformed provider stream cannot grow memory without bound.
+          if (Buffer.byteLength(buffer, "utf8") > 1_000_000) {
+            try { await reader.cancel(); } catch { /* provider stream may already be closed */ }
+            throw new Error("Model provider stream event exceeded the size limit.");
+          }
           const parts = buffer.split(/\r?\n/);
           buffer = parts.pop() || "";
           for (const line of parts) processLine(line);
