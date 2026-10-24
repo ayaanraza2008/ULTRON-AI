@@ -114,9 +114,10 @@ function normalizeBaseUrl(value) {
   const raw = (value || DEFAULT_BASE_URL).trim();
   const parsed = new URL(raw);
   const loopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
-  if ((parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) ||
+  const localHttp = parsed.protocol === "http:" && loopback;
+  if ((parsed.protocol !== "https:" && !localHttp) ||
       parsed.username || parsed.password || parsed.search || parsed.hash ||
-      (!loopback && isUnsafeProviderHost(parsed.hostname))) {
+      (!localHttp && isUnsafeProviderHost(parsed.hostname))) {
     throw new Error("OPENROUTER_BASE_URL must be HTTPS with a public host, or HTTP loopback for local development.");
   }
   return raw.replace(/\/+$/, "");
