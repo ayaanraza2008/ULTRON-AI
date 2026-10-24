@@ -40,3 +40,10 @@ Last verified: 2026-10-24 UTC
 
 ## Reporting standard
 For each capability, distinguish implemented, unit-tested, integration-tested, deployed, live-verified, and blocked. Never claim full autonomy, 100% correctness, or successful provider inference based only on configuration or a passing mock test.
+
+
+## 2026-10-25 read-only Auth diagnostic
+- Added npm run diagnose:auth to read the live public Supabase Auth settings using the publishable/legacy anon key, with bounded streaming response parsing and sanitized diagnostics.
+- Reports signup/email/Google/phone provider switches and whether email confirmation is required, but does not claim email delivery is working.
+- The diagnostic makes no account, email, SMS, or database writes. Live run still requires the public key in a trusted environment.
+- Supabase's leaked-password protection warning remains a dashboard-level Auth security setting and is not exposed by the public settings response.
