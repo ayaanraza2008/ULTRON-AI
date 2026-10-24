@@ -107,3 +107,57 @@ test("password recovery uses only the configured HTTPS redirect destination", as
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test("chat scopes memory retrieval to the authenticated Supabase user", async () => {
+  const requests = [];
+  const app = createApp({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+      OPENROUTER_API_KEY: "synthetic-provider-key",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+      requests.push({ url: String(url), options });
+      if (parsedUrl.pathname === "/auth/v1/user") {
+        return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (parsedUrl.pathname === "/rest/v1/user_preferences") {
+        return new Response(JSON.stringify([{ memory_enabled: true }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (parsedUrl.pathname === "/rest/v1/memory_items") {
+        return new Response(JSON.stringify([{ kind: "preference", title: "Test memory", content: "Memory owned by user-123" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (parsedUrl.pathname === "/api/v1/chat/completions") {
+        return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "ultron_sb_access=test-access-token"
+      },
+      body: JSON.stringify({ stream: false, messages: [{ role: "user", content: "Hello" }] })
+    });
+    assert.equal(response.status, 200);
+    const memoryRequest = requests.find(item => new URL(item.url).pathname === "/rest/v1/memory_items");
+    assert.ok(memoryRequest, "expected chat to request personal memories");
+    assert.equal(new URL(memoryRequest.url).searchParams.get("user_id"), "eq.user-123");
+    const providerRequest = requests.find(item => new URL(item.url).pathname === "/api/v1/chat/completions");
+    assert.ok(providerRequest, "expected chat to call the configured model provider");
+    const providerBody = JSON.parse(providerRequest.options.body);
+    assert.ok(providerBody.messages.some(message => typeof message.content === "string" && message.content.includes("Memory owned by user-123")));
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
