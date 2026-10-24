@@ -79,6 +79,25 @@ test("readiness rejects non-HTTP local URLs, embedded credentials, query strings
   assert.equal(result.components.find((item) => item.id === "local_models").state, "optional");
 });
 
+test("readiness rejects private-network and local HTTPS service targets", () => {
+  for (const target of [
+    "https://127.0.0.1:8787",
+    "https://10.0.0.5",
+    "https://172.16.0.1",
+    "https://192.168.1.20",
+    "https://169.254.169.254",
+    "https://service.internal",
+    "https://printer.local",
+    "https://[::1]",
+    "https://[fd00::1]"
+  ]) {
+    const result = buildRuntimeReadiness({
+      env: { ULTRON_BROWSER_USE_URL: target, ULTRON_BROWSER_USE_TOKEN: "test-token" }
+    });
+    assert.equal(result.components.find((item) => item.id === "browser_automation").state, "blocked", target);
+  }
+});
+
 test("readiness accepts HTTPS services and plain HTTP loopback development services", () => {
   const result = buildRuntimeReadiness({
     env: {
