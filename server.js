@@ -582,7 +582,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.post("/api/auth/phone/send-otp", authRateLimiter, async (req, res) => {
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
-    if (!/^\\+[1-9]\\d{7,14}$/.test(phone)) {
+    if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
       return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter the phone number in international format, for example +919876543210." } });
     }
     try {
@@ -597,7 +597,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.post("/api/auth/phone/verify-otp", authRateLimiter, async (req, res) => {
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
-    if (!/^\\+[1-9]\\d{7,14}$/.test(phone) || !/^\\d{6,8}$/.test(token)) {
+    if (!/^\+[1-9]\d{7,14}$/.test(phone) || !/^\d{6,8}$/.test(token)) {
       return res.status(400).json({ error: { code: "INVALID_PHONE_OTP", message: "Enter a valid international phone number and the SMS code." } });
     }
     try {
