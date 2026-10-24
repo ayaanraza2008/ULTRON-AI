@@ -154,3 +154,7 @@ The script accepts SUPABASE_URL plus SUPABASE_PUBLISHABLE_KEY (or the legacy SUP
 The backend exposes a rate-limited \`POST /api/auth/resend-confirmation\` endpoint. Send JSON \`{"email":"user@example.com"}\`. It does not accept redirect destinations from the request body; an optional owner-configured \`ULTRON_AUTH_REDIRECT_URL\` is validated and sent as \`options.emailRedirectTo\`. Supabase also requires that destination to be on its Auth redirect allow-list.
 
 For account-enumeration resistance, invalid input is rejected, but upstream errors such as an already-confirmed/nonexistent email get the same generic success response. Throttling and upstream outages receive sanitized error responses. The endpoint does not bypass confirmation or SMTP requirements; it only asks Supabase Auth to resend the message.
+
+## Opt-in live Supabase isolation test
+
+`npm run test:supabase:e2e` runs the two-account conversation, message, memory, and row-level-security test. It is skipped unless dedicated, confirmed test accounts and all required variables are supplied, including `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`. It is hard-scoped to the configured ULTRON Supabase project and creates/deletes temporary test rows. Read `docs/SUPABASE_E2E_ISOLATION.md` first. Do not use personal/admin accounts or commit secrets. A skipped test is not evidence that live data isolation works.
