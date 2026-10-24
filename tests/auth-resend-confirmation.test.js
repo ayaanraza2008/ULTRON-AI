@@ -135,3 +135,20 @@ test("confirmation resend sanitizes provider outages", async () => {
     assert.equal(JSON.stringify(body).includes("database credentials"), false);
   });
 });
+
+
+test("confirmation resend reports network failures instead of claiming an email was sent", async () => {
+  await withServer({}, async () => {
+    throw new Error("synthetic private network error");
+  }, async base => {
+    const response = await fetch(base + "/api/auth/resend-confirmation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "user@example.com" })
+    });
+    assert.equal(response.status, 502);
+    const body = await response.json();
+    assert.equal(body.error.code, "RESEND_UNAVAILABLE");
+    assert.equal(JSON.stringify(body).includes("synthetic private network error"), false);
+  });
+});
