@@ -121,9 +121,10 @@ test("agent automatically injects relevant AgentMemory results for continuation 
 
 test("automatically stores high-signal decisions in the existing durable Supabase memory when AgentMemory is not configured", async () => {
   const writes = [];
+  const lookups = [];
   const supabaseRest = async (_req, table, method, query, body) => {
     if (table === "user_preferences") return [{ memory_enabled: true }];
-    if (table === "memory_items" && method === "GET") return [];
+    if (table === "memory_items" && method === "GET") { lookups.push(query); return []; }
     if (table === "memory_items" && method === "POST") {
       writes.push({ query, body });
       return [{ id: "memory-row-1", ...body }];
@@ -143,6 +144,7 @@ test("automatically stores high-signal decisions in the existing durable Supabas
     assert.equal(response.status, 200);
     assert.equal(writes.length, 1);
     assert.equal(writes[0].body.user_id, "00000000-0000-4000-8000-000000000001");
+    assert.match(lookups.find(query => query.includes("content=eq.")) || "", /user_id=eq\.00000000-0000-4000-8000-000000000001/);
     assert.equal(writes[0].body.kind, "project_fact");
     assert.equal(writes[0].body.source, "conversation_summary");
     assert.match(writes[0].body.content, /worker isolated/);
