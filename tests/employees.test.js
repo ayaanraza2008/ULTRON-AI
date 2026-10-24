@@ -116,6 +116,27 @@ test("AI Employee planner fails closed when provider redirects are rejected", as
   });
 });
 
+test("AI Employee planner rejects unsafe provider base URLs before network access", async () => {
+  for (const providerUrl of [
+    "https://127.0.0.1:8080",
+    "https://192.168.1.5",
+    "https://metadata.google.internal",
+    "https://user:password@openrouter.ai/api/v1",
+    "http://openrouter.ai/api/v1"
+  ]) {
+    let called = false;
+    await withServer({ OPENROUTER_API_KEY: "test-key", OPENROUTER_BASE_URL: providerUrl }, async base => {
+      const response = await fetch(base + "/api/employees/plan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "chief-of-staff", goal: "Summarize blockers" })
+      });
+      assert.equal(response.status, 503, providerUrl);
+      assert.equal((await response.json()).error.code, "EMPLOYEE_PROVIDER_NOT_CONFIGURED", providerUrl);
+      assert.equal(called, false, providerUrl);
+    }, async () => { called = true; throw new Error("unsafe provider URL must never be contacted"); });
+  }
+});
+
 test("AI Employee planner fails closed when no provider is configured", async () => {
   await withServer({}, async base => {
     const response = await fetch(base + "/api/employees/plan", {
