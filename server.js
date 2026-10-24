@@ -641,8 +641,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (error.status === 429) {
         return res.status(429).json({ error: { code: "RESEND_RATE_LIMITED", message: "Too many requests. Please wait before retrying." } });
       }
-      if (error.status >= 500) {
-        return res.status(error.status).json({ error: { code: "RESEND_UNAVAILABLE", message: "Confirmation email resend is temporarily unavailable." } });
+      if (!Number.isFinite(error.status) || error.status >= 500) {
+        const status = Number.isFinite(error.status) && error.status >= 500 ? error.status : 502;
+        return res.status(status).json({ error: { code: "RESEND_UNAVAILABLE", message: "Confirmation email resend is temporarily unavailable." } });
       }
       return res.json({ ok: true, message: "If this account can receive a confirmation email, instructions will be sent." });
     }
