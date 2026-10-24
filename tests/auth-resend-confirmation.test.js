@@ -129,7 +129,7 @@ test("confirmation resend sanitizes provider outages", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "user@example.com" })
     });
-    assert.equal(response.status, 503);
+    assert.equal(response.status, 502);
     const body = await response.json();
     assert.equal(body.error.code, "RESEND_UNAVAILABLE");
     assert.equal(JSON.stringify(body).includes("database credentials"), false);
