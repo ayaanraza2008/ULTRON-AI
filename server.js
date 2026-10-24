@@ -970,14 +970,16 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
     try {
       const openRouterCandidates = hasImageAttachments
-        ? [...new Set(visionModels)]
+        // Keep backward compatibility: when no dedicated vision list is configured,
+        // try the explicitly selected/allowed model, as older ULTRON deployments did.
+        ? [...new Set(visionModels.length ? visionModels : [selectedModel, ...configuredModels].filter(Boolean))]
         : [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelAttempts = [];
       for (const provider of chatProviders) {
         let candidates = [];
         if (provider.isOpenRouter) {
           // Images are sent only to explicitly configured vision models.
-          candidates = hasImageAttachments ? openRouterCandidates.filter(model => visionModels.includes(model)) : openRouterCandidates;
+          candidates = openRouterCandidates;
         } else if (hasImageAttachments) {
           candidates = provider.supportsVision ? [provider.model] : [];
         } else {
