@@ -393,3 +393,47 @@ test("chat rejects image inputs with unsupported data URLs", async () => {
     assert.equal(calls, 0);
   });
 });
+
+
+test("chat falls back to the next model when a streaming provider closes immediately", async () => {
+  const calls = [];
+  const configuredEnv = {
+    ...env,
+    OPENROUTER_DEFAULT_MODEL: "first-model",
+    ULTRON_AVAILABLE_MODELS: "first-model,second-model"
+  };
+  const app = createApp({
+    env: configuredEnv,
+    fetchImpl: async (_url, options) => {
+      const model = JSON.parse(options.body).model;
+      calls.push(model);
+      if (model === "first-model") {
+        return new Response(new ReadableStream({
+          start(controller) { controller.close(); }
+        }), { status: 200, headers: { "Content-Type": "text/event-stream" } });
+      }
+      return new Response(
+        'data: {"choices":[{"delta":{"content":"Recovered streamed answer."}}]}\n\ndata: [DONE]\n\n',
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+    },
+    logger: { warn() {}, error() {} }
+  });
+
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "Say hello" }],
+        stream: true
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ultron-model"), "second-model");
+    assert.equal(response.headers.get("x-ultron-fallback"), "true");
+    assert.match(await response.text(), /Recovered streamed answer/);
+    assert.deepEqual(calls, ["first-model", "second-model"]);
+  });
+});
