@@ -311,80 +311,119 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.use("/api", apiRateLimiter);
 
 
-  // Narrow OpenRouter proxy for the authenticated Browser Use bridge. The bridge
-  // receives only the shared ULTRON token; the provider key remains on this server.
+  // Authenticated OpenAI-compatible proxy for the Browser Use bridge.
+  // Provider credentials stay server-side and only configured model targets are eligible.
   app.post("/api/internal/browser-use/v1/chat/completions", async (req, res) => {
     const configuredToken = String(env.ULTRON_BROWSER_USE_TOKEN || "");
-    const suppliedToken = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    const suppliedToken = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
     if (!configuredToken || !suppliedToken || !safeEqual(suppliedToken, configuredToken)) {
       return res.status(401).json({ error: { message: "Unauthorized", type: "authentication_error" } });
     }
-    if (!env.OPENROUTER_API_KEY) return res.status(503).json({ error: { message: "Model provider is not configured", type: "provider_not_configured" } });
     const payload = req.body;
     if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Array.isArray(payload.messages) || payload.messages.length > 80 || JSON.stringify(payload).length > 1_000_000) {
       return res.status(400).json({ error: { message: "Invalid or oversized chat completion request", type: "invalid_request_error" } });
     }
+
     const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free")
       .split(",").map(value => value.trim()).filter(Boolean).slice(0, 12);
     const defaultModel = String(env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
     const allowedModels = new Set([defaultModel, ...configuredModels]);
     const requestedModel = allowedModels.has(String(payload.model || "")) ? String(payload.model) : defaultModel;
-    // Try the requested approved model first, then distinct configured fallbacks.
-    // Only retry provider/model availability failures; ordinary invalid requests should
-    // surface immediately instead of silently sending them to another model.
-    const candidates = [...new Set([requestedModel, defaultModel, ...configuredModels])].slice(0, 12);
-    let base;
-    try { base = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
-    catch { return res.status(500).json({ error: { message: "Model provider URL is invalid", type: "provider_config_error" } }); }
-    const timeoutMs = Math.max(5000, Math.min(120000, Number(env.OPENROUTER_TIMEOUT_SECONDS || 60) * 1000));
-    try {
-      let lastStatus = 502;
-      for (let index = 0; index < candidates.length; index += 1) {
-        let upstream;
-        try {
-          upstream = await fetchImpl(base + "/chat/completions", {
-            method: "POST",
-            headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ ...payload, model: candidates[index], stream: false }),
-            redirect: "error",
-            signal: AbortSignal.timeout(timeoutMs)
-          });
-        } catch (error) {
-          if (index + 1 < candidates.length && (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError)) continue;
-          throw error;
-        }
-        let raw;
-        try { raw = await readResponseTextLimited(upstream, 2_000_000); }
-        catch { return res.status(502).json({ error: { message: "Model provider response exceeded the size limit", type: "provider_response_too_large" } }); }
-        if (upstream.ok) {
-          // A successful HTTP status is not enough: reject malformed or empty
-          // completions so the next approved model can be tried instead of
-          // forwarding a nominally successful but unusable response to Browser Use.
-          let completion;
-          try { completion = JSON.parse(raw); } catch { completion = null; }
-          const message = completion?.choices?.[0]?.message;
-          const hasText = typeof message?.content === "string" && message.content.trim().length > 0;
-          const hasContentParts = Array.isArray(message?.content) && message.content.length > 0;
-          const hasToolCalls = Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
-          if (completion && typeof completion === "object" && (hasText || hasContentParts || hasToolCalls)) {
-            res.setHeader("Cache-Control", "no-store");
-            res.setHeader("X-ULTRON-Model", candidates[index]);
-            return res.status(200).type("application/json").send(raw);
-          }
-          lastStatus = 502;
-          if (index + 1 < candidates.length) continue;
-          break;
-        }
-        lastStatus = upstream.status;
-        const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
-        if (!fallbackEligible || index + 1 >= candidates.length) break;
-      }
-      return res.status(lastStatus === 429 ? 429 : 502).json({
-        error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" }
-      });
-    } catch {
-      return res.status(502).json({ error: { message: "Model provider is unavailable after configured fallback attempts", type: "provider_unavailable" } });
+    const openRouterCandidates = [...new Set([requestedModel, defaultModel, ...configuredModels])].slice(0, 12);
+
+    let openRouterBaseUrl = null;
+    let primaryProviderConfigInvalid = false;
+    if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
+      try { openRouterBaseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
+      catch { primaryProviderConfigInvalid = true; }
     }
+    const providers = configuredChatProviders(env, openRouterBaseUrl);
+    if (!providers.length) {
+      return res.status(primaryProviderConfigInvalid ? 500 : 503).json({
+        error: {
+          message: primaryProviderConfigInvalid
+            ? "OpenRouter base URL configuration is invalid and no alternate provider is configured."
+            : "Configure OPENROUTER_API_KEY or a valid ULTRON_MODEL_PROVIDERS_JSON provider with a server-side API key.",
+          type: primaryProviderConfigInvalid ? "provider_config_error" : "provider_not_configured"
+        }
+      });
+    }
+
+    const hasImagePayload = payload.messages.some(message =>
+      Array.isArray(message?.content) && message.content.some(part =>
+        part?.type === "image_url" || (part && typeof part === "object" && "image_url" in part)
+      )
+    );
+    const attempts = [];
+    for (const provider of providers) {
+      if (provider.isOpenRouter) {
+        for (const candidate of openRouterCandidates) attempts.push({ provider, model: candidate });
+      } else if (!hasImagePayload || provider.supportsVision) {
+        attempts.push({ provider, model: provider.model });
+      }
+    }
+    if (!attempts.length) {
+      return res.status(503).json({
+        error: { message: "No configured provider supports the requested message content.", type: "vision_provider_not_configured" }
+      });
+    }
+
+    const timeoutMs = Math.max(5000, Math.min(120000, Number(env.OPENROUTER_TIMEOUT_SECONDS || 60) * 1000));
+    let lastStatus = 502;
+    for (let index = 0; index < attempts.length; index += 1) {
+      const { provider, model } = attempts[index];
+      let upstream;
+      try {
+        upstream = await fetchImpl(provider.baseUrl + "/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + provider.apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
+          },
+          body: JSON.stringify({ ...payload, model, stream: false }),
+          redirect: "error",
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+      } catch (error) {
+        if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
+          lastStatus = 502;
+          if (index + 1 < attempts.length) continue;
+        }
+        return res.status(502).json({ error: { message: "Model provider is unavailable after configured fallback attempts", type: "provider_unavailable" } });
+      }
+
+      let raw;
+      try { raw = await readResponseTextLimited(upstream, 2_000_000); }
+      catch {
+        return res.status(502).json({ error: { message: "Model provider response exceeded the size limit or was not safely streamable", type: "provider_response_too_large" } });
+      }
+      if (upstream.ok) {
+        let completion;
+        try { completion = JSON.parse(raw); } catch { completion = null; }
+        const message = completion?.choices?.[0]?.message;
+        const hasText = typeof message?.content === "string" && message.content.trim().length > 0;
+        const hasContentParts = Array.isArray(message?.content) && message.content.length > 0;
+        const hasToolCalls = Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
+        if (completion && typeof completion === "object" && (hasText || hasContentParts || hasToolCalls)) {
+          res.setHeader("Cache-Control", "no-store");
+          res.setHeader("X-ULTRON-Model", model);
+          res.setHeader("X-ULTRON-Provider", provider.name);
+          return res.status(200).type("application/json").send(raw);
+        }
+        lastStatus = 502;
+        if (index + 1 < attempts.length) continue;
+        break;
+      }
+
+      lastStatus = upstream.status;
+      const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
+      if (!fallbackEligible || index + 1 >= attempts.length) break;
+    }
+    return res.status(lastStatus === 429 ? 429 : 502).json({
+      error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" }
+    });
   });
 
   function supabaseConfig() {
