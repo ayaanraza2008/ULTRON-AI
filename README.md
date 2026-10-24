@@ -108,3 +108,16 @@ Configure on the ULTRON backend only:
 All endpoints require a signed-in Supabase user. Audio inputs are capped at 8 MB and generated audio responses at 12 MB. Remote HTTP endpoints are rejected; no arbitrary URL is accepted from a request body.
 
 **Important deployment boundary:** the public Render service cannot connect to `localhost:3900` on your Windows PC. For a PC-local VoiceStudio installation, ULTRON needs a later authenticated Windows companion/bridge to call the local service. Alternatively, use a secured, reachable HTTPS VoiceStudio host. Do not expose VoiceStudio's admin API to the public internet. VoiceStudio is AGPL-3.0; if modified VoiceStudio is provided over a network, comply with its source-offer obligations. Voice/model weights and voice likeness permissions have separate terms. See [VoiceStudio license notice](https://github.com/debpalash/VoiceStudio/blob/main/LICENSE-NOTICE.md).
+
+
+## Explicit live model smoke check
+
+Use this command only when you intentionally want ULTRON to send a tiny real completion to configured model providers:
+
+~~~bash
+npm run smoke:model
+~~~
+
+The command reads only server-side environment variables (OPENROUTER_API_KEY, optional OPENROUTER_BASE_URL and OPENROUTER_DEFAULT_MODEL, and optional ULTRON_MODEL_PROVIDERS_JSON entries with their named key environment variables). It makes a small non-streaming chat-completion request, applies a timeout and response-size limit, and tries eligible fallback providers after a failed, rate-limited, invalid, or empty response. HTTPS is required except for loopback development URLs. It rejects URL credentials, query strings, and fragments.
+
+The report includes only pass/fail status, provider/model labels, attempt count, and sanitized error codes. It does **not** print credentials, raw upstream error messages, or generated response text. A blocked result means no safe configured provider/key was eligible; a failed result means all eligible providers failed. A passing result proves a completion succeeded at the time of this explicit check, not that future calls will always work. The command is never run automatically during app startup or normal CI, and it may consume a small amount of provider quota.
