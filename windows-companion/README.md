@@ -18,7 +18,8 @@ The GitHub Actions workflow builds this project on Windows and uploads a downloa
 1. Start ULTRON.Companion.exe.
 2. Click **Start wake word** and accept the microphone-consent prompt.
 3. Keep the companion running in the Windows tray. Saying “Ultron” opens the hosted ULTRON assistant in the default browser.
-4. Use the tray menu to pause listening or exit the companion.
+4. Optionally enable **Start with Windows and listen**. The app asks for microphone consent first, then registers a visible, per-user Windows startup entry. On future sign-ins, the app starts into the tray and begins listening using that previously granted opt-in.
+5. Use the tray menu to pause listening or exit the companion. Uncheck **Start with Windows and listen** to remove automatic startup.
 
 Windows must have an installed compatible English speech-recognition engine and microphone permission. If no compatible recognizer is installed, the listener stays off and reports the problem. Audio is not sent to ULTRON by this app.
 
@@ -27,4 +28,5 @@ Windows must have an installed compatible English speech-recognition engine and 
 - This is a wake-word launcher, not a completed Windows PC-control agent or a full live voice conversation client.
 - It cannot unlock Windows, bypass PIN/biometrics, or run while the PC is powered off. Sleep/resume and locked-session behavior depend on Windows and device policy.
 - Wake-word recognition is available only while the companion is running, the Windows session/audio device is available, and the installed speech recognizer works.
-- It does not auto-start with Windows, hide microphone activity, execute arbitrary commands, or perform consequential actions.
+- Automatic startup is off by default and only enabled by an explicit checkbox after microphone consent. It uses the current user's normal Windows Run registry entry and stays visible in the system tray; it does not create a hidden task or service.
+- It does not hide microphone activity, execute arbitrary commands, or perform consequential actions.
