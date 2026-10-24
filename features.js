@@ -8,7 +8,9 @@ function safeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     const url = new URL(value.trim());
-    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") return null;
+    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname.toLowerCase());
+    if (url.username || url.password || url.search || url.hash) return null;
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
     return url.toString().replace(/\/+$/, "");
   } catch { return null; }
 }
@@ -163,7 +165,7 @@ export function hasEmployeeModelProvider(env) {
         names.has(name) || !env[apiKeyEnv]?.trim?.()) return false;
     try {
       const url = new URL(item.baseUrl);
-      if (url.protocol !== "https:" || url.username || url.password) return false;
+      if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return false;
       const baseUrl = url.toString().replace(/\/+$/, "");
       if (urls.has(baseUrl)) return false;
       names.add(name);
