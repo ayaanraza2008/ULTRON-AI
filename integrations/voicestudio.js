@@ -1,4 +1,5 @@
 import express from "express";
+import { isIP } from "node:net";
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
@@ -13,6 +14,25 @@ function bounded(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function isPrivateOrLocalHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const version = isIP(host);
+  if (version === 4) {
+    const [a, b] = host.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) || (a === 100 && b >= 64 && b <= 127) ||
+      (a === 198 && (b === 18 || b === 19));
+  }
+  if (version === 6) {
+    const first = Number.parseInt(host.split(":")[0] || "0", 16);
+    return first < 0x2000 || first > 0x3fff ||
+      host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:");
+  }
+  return !host.includes(".");
+}
+
 function voiceStudioConfig(env = process.env) {
   const raw = bounded(env.VOICESTUDIO_BASE_URL, 500);
   const token = bounded(env.VOICESTUDIO_API_KEY, 2000);
@@ -21,7 +41,9 @@ function voiceStudioConfig(env = process.env) {
     const url = new URL(raw);
     if (url.username || url.password || url.hash || url.search) return { configured: false, reason: "invalid_url" };
     const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return { configured: false, reason: "https_required" };
+    if (url.protocol === "https:") {
+      if (isPrivateOrLocalHost(url.hostname)) return { configured: false, reason: "unsafe_remote_host" };
+    } else if (url.protocol !== "http:" || !local) return { configured: false, reason: "https_required" };
     if (!local && !token) return { configured: false, reason: "remote_api_key_required" };
     const baseUrl = url.toString();
     return { configured: true, baseUrl: baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl, token, local };
