@@ -145,3 +145,15 @@ test("AgentMemory fails safely when the remote service is unavailable", async ()
     error => error.code === "AGENTMEMORY_REQUEST_FAILED"
   );
 });
+
+
+test("AgentMemory refuses to persist common access-token and cloud-key formats", () => {
+  const sensitive = [
+    "We decided: store this access token abcdefghijklmnopqrstuvwxyz in the project notes.",
+    "We decided: save this refresh_token: example-refresh-token for later use.",
+    "We decided: client_secret=example-secret-value should be used by the integration.",
+    "We decided: Authorization: Bearer example-token must be retained for debugging.",
+    "We decided: AWS key AKIA1234567890ABCDEF belongs in the configuration notes."
+  ];
+  for (const value of sensitive) assert.equal(shouldCaptureAgentMemory(value), false, value);
+});
