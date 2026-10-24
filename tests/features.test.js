@@ -375,3 +375,24 @@ test("employee schedule creation stays successful when server-authored audit ins
     assert.equal(calls.some(call => call.table === "audit_events" && call.method === "POST"), true);
   }, { supabaseRest: fakeSupabaseRest });
 });
+
+
+test("HTTP security header analyzer recognizes CSP frame-ancestors as clickjacking protection", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/kaligpt/tools/headers/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        headers: {
+          "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'"
+        }
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const finding = body.findings.find(item => item.id === "frame-protection");
+    assert.equal(finding.status, "present-review-value");
+    assert.match(finding.evidence, /frame-ancestors 'none'/);
+    assert.equal(finding.execution, undefined);
+  });
+});
