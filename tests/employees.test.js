@@ -120,6 +120,11 @@ test("AI Employee planner rejects unsafe provider base URLs before network acces
   for (const providerUrl of [
     "https://127.0.0.1:8080",
     "https://192.168.1.5",
+    "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "https://[fc00::1]",
+    "https://[fe80::1]",
+    "https://[ff02::1]",
     "https://metadata.google.internal",
     "https://user:password@openrouter.ai/api/v1",
     "http://openrouter.ai/api/v1"
