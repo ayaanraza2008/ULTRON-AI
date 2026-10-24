@@ -392,15 +392,20 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 
   router.get("/capabilities", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
+    const openRouterConfigured = Boolean(
+      env.OPENROUTER_API_KEY?.trim() &&
+      safeBaseUrl(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")
+    );
+    const cloudConfigured = hasEmployeeModelProvider(env);
     res.json({
       app: "ULTRON AI",
       providers: {
         cloud: {
-          configured: hasEmployeeModelProvider(env),
-          provider: env.OPENROUTER_API_KEY?.trim()
+          configured: cloudConfigured,
+          provider: openRouterConfigured
             ? "OpenRouter"
-            : hasEmployeeModelProvider(env) ? "OpenAI-compatible fallback" : "none",
-          ...(env.OPENROUTER_API_KEY?.trim()
+            : cloudConfigured ? "OpenAI-compatible fallback" : "none",
+          ...(openRouterConfigured
             ? { defaultModel: env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" }
             : {})
         },
