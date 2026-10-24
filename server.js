@@ -820,20 +820,21 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           break;
         }
         lastStatus = attempt.status;
-        // Log only structured provider codes; never log response bodies or secrets.
+        // Read only a small bounded error body; never clone/buffer arbitrary provider payloads.
         try {
-          const providerPayload = await attempt.clone().json();
+          const providerPayload = await readResponseJsonLimited(attempt, 64_000);
           lastProviderCode = String(providerPayload?.error?.code || providerPayload?.error?.type || "").slice(0, 100);
-        } catch { lastProviderCode = ""; }
+        } catch {
+          lastProviderCode = "";
+          try { await attempt.body?.cancel?.(); } catch { /* body may already be closed */ }
+        }
         // 403/404 can mean this key cannot use the selected model. Try other configured candidates.
         if (![403, 404, 429, 503].includes(attempt.status) || index === modelCandidates.length - 1) break;
-        try { await attempt.arrayBuffer(); } catch { /* ignore provider error body */ }
         logger.warn?.("OpenRouter model fallback", { status: attempt.status, providerCode: lastProviderCode || undefined, modelIndex: index });
       }
 
       if (!upstream?.ok) {
         const status = lastStatus || upstream?.status || 502;
-        try { await upstream?.arrayBuffer(); } catch { /* ignore provider error body */ }
         const code = status === 401 ? "PROVIDER_AUTH"
           : status === 402 ? "PROVIDER_CREDITS"
           : status === 403 ? "PROVIDER_FORBIDDEN"
