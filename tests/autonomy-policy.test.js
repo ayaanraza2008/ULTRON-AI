@@ -215,3 +215,17 @@ test("account creation, invitation acceptance, and permission changes require co
     assert.equal(risk.requiresConfirmation, true, task);
   }
 });
+
+
+test("specific destructive file, folder, and database changes require confirmation", () => {
+  for (const task of [
+    "Remove the old config file.",
+    "Remove the backup folder.",
+    "Clear the database.",
+    "Delete the temporary file."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "destructive", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
