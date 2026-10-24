@@ -16,6 +16,107 @@ function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+const DOCX_MAX_ENTRIES = 256;
+const DOCX_MAX_ENTRY_EXPANSION = 16 * 1024 * 1024;
+const DOCX_MAX_TOTAL_EXPANSION = 24 * 1024 * 1024;
+
+/**
+ * Preflight DOCX ZIP metadata before Mammoth expands XML or embedded files.
+ * The upload is already capped at 5 MB, but compressed archives can declare
+ * much larger expanded sizes. This check is deliberately bounded and read-only.
+ */
+function validateDocxArchive(bytes) {
+  const invalid = (message = "The DOCX ZIP archive is malformed.") => ({
+    ok: false, status: 400, code: "INVALID_DOCX", message
+  });
+  const oversized = (message = "The DOCX archive expands beyond the safe extraction limit.") => ({
+    ok: false, status: 413, code: "DOCUMENT_EXPANSION_LIMIT", message
+  });
+  if (!Buffer.isBuffer(bytes) || bytes.length < 22) return invalid();
+
+  const minEocd = Math.max(0, bytes.length - 22 - 65_535);
+  let eocdOffset = -1;
+  for (let offset = bytes.length - 22; offset >= minEocd; offset--) {
+    if (bytes.readUInt32LE(offset) !== 0x06054b50) continue;
+    const commentLength = bytes.readUInt16LE(offset + 20);
+    if (offset + 22 + commentLength === bytes.length) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0) return invalid();
+
+  const diskNumber = bytes.readUInt16LE(eocdOffset + 4);
+  const centralDisk = bytes.readUInt16LE(eocdOffset + 6);
+  const entriesOnDisk = bytes.readUInt16LE(eocdOffset + 8);
+  const entryCount = bytes.readUInt16LE(eocdOffset + 10);
+  const centralSize = bytes.readUInt32LE(eocdOffset + 12);
+  const centralOffset = bytes.readUInt32LE(eocdOffset + 16);
+  if (diskNumber !== 0 || centralDisk !== 0 || entriesOnDisk !== entryCount ||
+      entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) {
+    return invalid("Split or ZIP64 DOCX archives are not supported.");
+  }
+  if (entryCount < 1 || entryCount > DOCX_MAX_ENTRIES) {
+    return oversized("The DOCX archive contains too many entries.");
+  }
+  if (centralOffset + centralSize > eocdOffset || centralOffset > bytes.length || centralSize > bytes.length) {
+    return invalid();
+  }
+
+  let cursor = centralOffset;
+  let expandedTotal = 0;
+  const entries = new Set();
+  let hasDocumentXml = false;
+  let hasContentTypes = false;
+  for (let index = 0; index < entryCount; index++) {
+    if (cursor + 46 > centralOffset + centralSize || bytes.readUInt32LE(cursor) !== 0x02014b50) {
+      return invalid();
+    }
+    const flags = bytes.readUInt16LE(cursor + 8);
+    const method = bytes.readUInt16LE(cursor + 10);
+    const compressedSize = bytes.readUInt32LE(cursor + 20);
+    const expandedSize = bytes.readUInt32LE(cursor + 24);
+    const nameLength = bytes.readUInt16LE(cursor + 28);
+    const extraLength = bytes.readUInt16LE(cursor + 30);
+    const commentLength = bytes.readUInt16LE(cursor + 32);
+    const localOffset = bytes.readUInt32LE(cursor + 42);
+    const end = cursor + 46 + nameLength + extraLength + commentLength;
+    if (!nameLength || end > centralOffset + centralSize || expandedSize === 0xffffffff ||
+        compressedSize === 0xffffffff || localOffset === 0xffffffff) return invalid();
+
+    const name = bytes.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
+    const pathParts = name.replace(/\/$/, "").split("/");
+    if (!name || name.includes("\\") || name.startsWith("/") ||
+        pathParts.some(part => !part || part === ".." || part === ".")) return invalid();
+    if (entries.has(name)) return invalid("The DOCX archive contains duplicate file names.");
+    entries.add(name);
+    if ((flags & 0x41) !== 0) return invalid("Encrypted DOCX archives are not supported.");
+    if (method !== 0 && method !== 8) return invalid("The DOCX archive uses an unsupported compression method.");
+
+    if (expandedSize > DOCX_MAX_ENTRY_EXPANSION) {
+      return oversized("A DOCX entry exceeds the safe extraction limit.");
+    }
+    expandedTotal += expandedSize;
+    if (expandedTotal > DOCX_MAX_TOTAL_EXPANSION) return oversized();
+
+    if (localOffset + 30 > centralOffset || bytes.readUInt32LE(localOffset) !== 0x04034b50) return invalid();
+    const localNameLength = bytes.readUInt16LE(localOffset + 26);
+    const localExtraLength = bytes.readUInt16LE(localOffset + 28);
+    const localNameStart = localOffset + 30;
+    const dataStart = localNameStart + localNameLength + localExtraLength;
+    if (dataStart > centralOffset || dataStart + compressedSize > centralOffset ||
+        localNameStart + localNameLength > centralOffset) return invalid();
+    const localName = bytes.subarray(localNameStart, localNameStart + localNameLength).toString("utf8");
+    if (localName !== name) return invalid();
+
+    if (name === "word/document.xml") hasDocumentXml = true;
+    if (name === "[Content_Types].xml") hasContentTypes = true;
+    cursor = end;
+  }
+  if (cursor !== centralOffset + centralSize || !hasDocumentXml || !hasContentTypes) return invalid();
+  return { ok: true, entryCount, expandedBytes: expandedTotal };
+}
+
 export function hasEmployeeModelProvider(env) {
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   if (primaryKey && safeBaseUrl(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")) return true;
@@ -643,6 +744,10 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           text = String(parsed.text || "");
         } else {
           if (bytes.subarray(0, 2).toString("hex") !== "504b") return res.status(400).json({ error: { code: "INVALID_DOCX", message: "File does not have a valid DOCX/ZIP signature." } });
+          const validation = validateDocxArchive(bytes);
+          if (!validation.ok) {
+            return res.status(validation.status).json({ error: { code: validation.code, message: validation.message } });
+          }
           const parsed = await mammoth.extractRawText({ buffer: bytes });
           text = String(parsed.value || "");
         }

@@ -25,6 +25,41 @@ async function withServer(env, run, extras = {}) {
   }
 }
 
+function makeZipBombDocxEntry(name = "word/document.xml", expandedSize = 25 * 1024 * 1024) {
+  const nameBytes = Buffer.from(name, "utf8");
+  const local = Buffer.alloc(30 + nameBytes.length);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(0, 6);
+  local.writeUInt16LE(0, 8);
+  local.writeUInt32LE(1, 18);
+  local.writeUInt32LE(expandedSize, 22);
+  local.writeUInt16LE(nameBytes.length, 26);
+  nameBytes.copy(local, 30);
+  const payload = Buffer.from([0x41]);
+
+  const central = Buffer.alloc(46 + nameBytes.length);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(0, 8);
+  central.writeUInt16LE(0, 10);
+  central.writeUInt32LE(1, 20);
+  central.writeUInt32LE(expandedSize, 24);
+  central.writeUInt16LE(nameBytes.length, 28);
+  central.writeUInt32LE(0, 42);
+  nameBytes.copy(central, 46);
+
+  const centralOffset = local.length + payload.length;
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(central.length, 12);
+  end.writeUInt32LE(centralOffset, 16);
+  return Buffer.concat([local, payload, central, end]);
+}
+
 test("capabilities endpoint reports provider readiness without exposing secrets", async () => {
   await withServer({ OPENROUTER_API_KEY: "do-not-return-this", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async base => {
     const response = await fetch(base + "/api/capabilities");
@@ -443,5 +478,22 @@ test("capabilities report a configured fallback when the OpenRouter base URL is 
     assert.equal(body.providers.cloud.configured, true);
     assert.equal(body.providers.cloud.provider, "OpenAI-compatible fallback");
     assert.equal(Object.hasOwn(body.providers.cloud, "defaultModel"), false);
+  });
+});
+
+
+test("DOCX extraction rejects excessive declared ZIP expansion before decompression", async () => {
+  const archive = makeZipBombDocxEntry();
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/documents/extract", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: "compressed-bomb.docx",
+        format: "docx",
+        fileBase64: archive.toString("base64")
+      })
+    });
+    assert.equal(response.status, 413);
+    assert.equal((await response.json()).error.code, "DOCUMENT_EXPANSION_LIMIT");
   });
 });
