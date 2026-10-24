@@ -315,7 +315,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   // Provider credentials stay server-side and only configured model targets are eligible.
   app.post("/api/internal/browser-use/v1/chat/completions", async (req, res) => {
     const configuredToken = String(env.ULTRON_BROWSER_USE_TOKEN || "");
-    const suppliedToken = String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "");
+    const suppliedToken = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     if (!configuredToken || !suppliedToken || !safeEqual(suppliedToken, configuredToken)) {
       return res.status(401).json({ error: { message: "Unauthorized", type: "authentication_error" } });
     }
