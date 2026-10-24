@@ -1004,3 +1004,42 @@ test("agent rejects provider responses that cannot be safely streamed and contin
     assert.equal(firstTextCalls, 0);
   });
 });
+
+
+test("background research-to-report task is classified as an autonomous report", async () => {
+  let providerCalls = 0;
+  const databaseCalls = [];
+  const supabaseRest = async (_req, table, method, query, body) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") return [];
+    databaseCalls.push({ table, method, query, body });
+    if (table === "agent_tasks") return [{ id: "00000000-0000-4000-8000-000000000789", title: body.title, input: body.input, status: body.status, created_at: new Date().toISOString() }];
+    return [];
+  };
+  await withServer({ OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" }, async (_url, options) => {
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      assert.ok(Array.isArray(request.tools));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "research-report-call", type: "function", function: { name: "enqueue_employee_task", arguments: JSON.stringify({ role: "chief-of-staff", goal: "Research recent AI security tools and write a report with sources and recommendations", mode: "report" }) } }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The research-to-report task is queued." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Queue a background research report", confirmBackgroundTask: true })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "queued");
+    assert.equal(body.toolResults[0].result.execution, "background_autonomous_research_and_report");
+    assert.equal(databaseCalls.length, 2);
+    assert.equal(databaseCalls[0].table, "agent_tasks");
+    assert.equal(databaseCalls[0].body.input.taskType, "autonomous");
+    assert.equal(databaseCalls[0].body.input.mode, "report");
+    assert.equal(databaseCalls[0].body.input.requiresApproval, false);
+    assert.equal(databaseCalls[1].table, "audit_events");
+    assert.equal(providerCalls, 2);
+  }, { supabaseRest });
+});
