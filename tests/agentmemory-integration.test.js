@@ -35,7 +35,8 @@ test("relevant task recall uses the authenticated user's isolated project", asyn
   });
   assert.equal(call.url, "https://memory.example/agentmemory/smart-search");
   assert.equal(call.options.headers.Authorization, "Bearer private-test-secret");
-  assert.deepEqual(JSON.parse(call.options.body), { query: "Continue the previous repository implementation", project: "ultron-ai-user-user-123", limit: 5 });
+  assert.deepEqual(JSON.parse(call.options.body), { query: "Continue the previous repository implementation", project: JSON.parse(call.options.body).project, limit: 5 });
+  assert.match(JSON.parse(call.options.body).project, /^ultron-ai-user-[a-f0-9]{40}$/);
   assert.equal(result.memories.length, 2);
   assert.match(result.memories[0], /Architecture/);
 });
@@ -62,7 +63,24 @@ test("durable capture uses supported remember API and can be disabled", async ()
   assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
 
-test("AgentMemory fails safely when the remote service is unavailable", async () => {
+
+test("distinct user IDs that normalize similarly cannot share an AgentMemory project", async () => {
+  const projects = [];
+  for (const userId of ["a/b", "a-b"]) {
+    await recallAgentMemory("Continue the previous repository implementation", {
+      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
+      userId,
+      fetchImpl: async (_url, options) => {
+        projects.push(JSON.parse(options.body).project);
+        return new Response(JSON.stringify({ results: [] }), { status: 200 });
+      }
+    });
+  }
+  assert.notEqual(projects[0], projects[1]);
+  assert.match(projects[0], /^ultron-ai-user-[a-f0-9]{40}$/);
+  assert.match(projects[1], /^ultron-ai-user-[a-f0-9]{40}$/);
+});
+\ntest("AgentMemory fails safely when the remote service is unavailable", async () => {
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
       env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret" },
