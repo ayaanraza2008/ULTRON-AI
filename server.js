@@ -98,6 +98,17 @@ function normalizeBaseUrl(value) {
   return raw.replace(/\/+$/, "");
 }
 
+function worldIntelligenceOrigin(env) {
+  const fallback = "https://ultron-world-intelligence-live.onrender.com";
+  try {
+    const url = new URL(String(env.WORLD_INTELLIGENCE_URL || fallback));
+    if (url.protocol !== "https:" || url.username || url.password) return new URL(fallback).origin;
+    return url.origin;
+  } catch {
+    return new URL(fallback).origin;
+  }
+}
+
 function hasConfiguredModelProvider(env) {
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
@@ -143,10 +154,11 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const worldIntelligence = req.path === "/world-intelligence" || req.path.startsWith("/world-intelligence/");
     if (worldIntelligence) res.removeHeader("X-Frame-Options");
     else res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self \"https://ultron-world-intelligence-live.onrender.com\")");
+    const globeOrigin = worldIntelligenceOrigin(env);
+    res.setHeader("Permissions-Policy", `camera=(), geolocation=(), microphone=(self "${globeOrigin}")`);
     res.setHeader("Content-Security-Policy", worldIntelligence
       ? "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' blob: https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https: wss: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
-      : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence-live.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+      : `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' ${globeOrigin}; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`);
     next();
   });
 
