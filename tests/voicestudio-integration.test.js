@@ -67,6 +67,42 @@ test("VoiceStudio synthesis forwards validated options and returns bounded audio
   });
 });
 
+test("VoiceStudio synthesis rejects an oversized declared response before reading it", async () => {
+  let cancelled = false;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async () => {
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array([1])); },
+      cancel() { cancelled = true; }
+    }), { status: 200, headers: { "content-type": "audio/wav", "content-length": String(12 * 1024 * 1024 + 1) } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "test", format: "wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "VOICESTUDIO_RESPONSE_TOO_LARGE");
+    assert.equal(cancelled, true);
+  });
+});
+
+test("VoiceStudio synthesis cancels a streamed response that crosses the byte limit", async () => {
+  let cancelled = false;
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async () => {
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(12 * 1024 * 1024 + 1)); },
+      cancel() { cancelled = true; }
+    }), { status: 200, headers: { "content-type": "audio/wav" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "test", format: "wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "VOICESTUDIO_RESPONSE_TOO_LARGE");
+    assert.equal(cancelled, true);
+  });
+});
+
 test("VoiceStudio synthesis rejects unsupported format before network call", async () => {
   let called = false;
   await withServer({ VOICESTUDIO_BASE_URL: "http://localhost:3900" }, async () => {
