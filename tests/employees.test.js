@@ -87,6 +87,35 @@ test("AI Employee planner generates a draft but explicitly does not execute it",
   });
 });
 
+test("AI Employee planner rejects oversized provider responses without parsing them", async () => {
+  await withServer({ OPENROUTER_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/employees/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "chief-of-staff", goal: "Summarize blockers" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "EMPLOYEE_INVALID_PROVIDER_RESPONSE");
+  }, async () => ({
+    ok: true,
+    headers: { get: name => name.toLowerCase() === "content-length" ? "2000001" : null },
+    body: { cancel: async () => { } }
+  }));
+});
+
+test("AI Employee planner fails closed when provider redirects are rejected", async () => {
+  await withServer({ OPENROUTER_API_KEY: "test-key" }, async base => {
+    const response = await fetch(base + "/api/employees/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "chief-of-staff", goal: "Summarize blockers" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "EMPLOYEE_REQUEST_FAILED");
+  }, async (_url, options) => {
+    assert.equal(options.redirect, "error");
+    throw new TypeError("redirect mode error");
+  });
+});
+
 test("AI Employee planner fails closed when no provider is configured", async () => {
   await withServer({}, async base => {
     const response = await fetch(base + "/api/employees/plan", {
