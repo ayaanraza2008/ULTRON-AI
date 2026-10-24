@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Win32;
 using System.Speech.Recognition;
 using System.Windows.Forms;
 
@@ -7,16 +8,19 @@ namespace Ultron.Companion;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
-        Application.Run(new CompanionContext());
+        var backgroundLaunch = args.Any(arg => arg.Equals("--background-listen", StringComparison.OrdinalIgnoreCase));
+        Application.Run(new CompanionContext(backgroundLaunch));
     }
 }
 
 internal sealed class CompanionContext : ApplicationContext
 {
     private const string AssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
+    private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string StartupRegistryValue = "ULTRONWakeCompanion";
     private readonly Form _window;
     private readonly Label _status;
     private readonly NotifyIcon _tray;
@@ -24,12 +28,14 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly ToolStripMenuItem _stopItem;
     private readonly Button _startButton;
     private readonly Button _stopButton;
+    private readonly CheckBox _autoStartCheckBox;
+    private bool _suppressAutoStartChange;
     private SpeechRecognitionEngine? _recognizer;
     private bool _allowExit;
     private DateTime _lastWakeUtc = DateTime.MinValue;
     private readonly object _wakeLock = new();
 
-    public CompanionContext()
+    public CompanionContext(bool backgroundLaunch = false)
     {
         _window = new Form
         {
@@ -44,12 +50,13 @@ internal sealed class CompanionContext : ApplicationContext
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 4,
             Padding = new Padding(16)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 18));
 
         var title = new Label
         {
@@ -65,6 +72,14 @@ internal sealed class CompanionContext : ApplicationContext
             TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
             AutoEllipsis = true
         };
+
+        _autoStartCheckBox = new CheckBox
+        {
+            Text = "Start with Windows and listen",
+            AutoSize = true,
+            Checked = IsAutoStartEnabled()
+        };
+        _autoStartCheckBox.CheckedChanged += (_, _) => HandleAutoStartChanged();
 
         var buttons = new FlowLayoutPanel
         {
@@ -85,6 +100,7 @@ internal sealed class CompanionContext : ApplicationContext
         layout.Controls.Add(title, 0, 0);
         layout.Controls.Add(_status, 0, 1);
         layout.Controls.Add(buttons, 0, 2);
+        layout.Controls.Add(_autoStartCheckBox, 0, 3);
         _window.Controls.Add(layout);
 
         _startItem = new ToolStripMenuItem("Start wake word", null, (_, _) => StartListening());
@@ -118,10 +134,93 @@ internal sealed class CompanionContext : ApplicationContext
             if (_window.WindowState == FormWindowState.Minimized) _window.Hide();
         };
 
-        _window.Show();
+        // A background launch is permitted only when the user previously enabled
+        // the visible "Start with Windows and listen" option in this app.
+        if (backgroundLaunch && IsAutoStartEnabled())
+        {
+            StartListening(previouslyConsented: true);
+        }
+        else
+        {
+            _window.Show();
+            if (backgroundLaunch)
+                ShowStatus("Automatic listening is disabled. Enable it from this window to use wake word at sign-in.");
+        }
     }
 
-    private void StartListening()
+    private void HandleAutoStartChanged()
+    {
+        if (_suppressAutoStartChange) return;
+        if (_autoStartCheckBox.Checked)
+        {
+            // Enabling sign-in listening always starts with an explicit consent prompt.
+            StartListening();
+            if (_recognizer is null)
+            {
+                SetAutoStartChecked(false);
+                return;
+            }
+            try
+            {
+                WriteAutoStartRegistration(true);
+                ShowStatus("Listening locally now; ULTRON will listen after future Windows sign-ins while this option remains enabled.");
+            }
+            catch
+            {
+                SetAutoStartChecked(false);
+                ShowStatus("Listening locally now, but Windows startup registration failed. Run as your normal user and retry.");
+            }
+        }
+        else
+        {
+            try
+            {
+                WriteAutoStartRegistration(false);
+                ShowStatus(_recognizer is null
+                    ? "Automatic listening at Windows sign-in is disabled."
+                    : "Listening locally now; automatic listening at the next sign-in is disabled.");
+            }
+            catch
+            {
+                SetAutoStartChecked(true);
+                ShowStatus("Could not update the Windows startup setting.");
+            }
+        }
+    }
+
+    private void SetAutoStartChecked(bool value)
+    {
+        _suppressAutoStartChange = true;
+        _autoStartCheckBox.Checked = value;
+        _suppressAutoStartChange = false;
+    }
+
+    private bool IsAutoStartEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryPath, writable: false);
+            var value = key?.GetValue(StartupRegistryValue) as string;
+            var expected = $"\"{Application.ExecutablePath}\" --background-listen";
+            return string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void WriteAutoStartRegistration(bool enabled)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(StartupRegistryPath, writable: true)
+            ?? throw new InvalidOperationException("Could not open the current-user startup registry key.");
+        if (enabled)
+            key.SetValue(StartupRegistryValue, $"\"{Application.ExecutablePath}\" --background-listen", RegistryValueKind.String);
+        else
+            key.DeleteValue(StartupRegistryValue, throwOnMissingValue: false);
+    }
+
+    private void StartListening(bool previouslyConsented = false)
     {
         if (_recognizer is not null)
         {
@@ -129,16 +228,19 @@ internal sealed class CompanionContext : ApplicationContext
             return;
         }
 
-        var consent = MessageBox.Show(
-            _window,
-            "Enable the ULTRON wake word?\n\nThe default microphone will remain active while this companion runs. It uses an installed Windows speech recognizer to listen for the exact word “Ultron” and does not upload microphone audio to the ULTRON server. Windows may display its own microphone indicator.\n\nThis does not unlock Windows or work while the PC is powered off or asleep.",
-            "Microphone consent",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Information);
-        if (consent != DialogResult.Yes)
+        if (!previouslyConsented)
         {
-            ShowStatus("Wake word paused. Microphone permission was not enabled.");
-            return;
+            var consent = MessageBox.Show(
+                _window,
+                "Enable the ULTRON wake word?\n\nThe default microphone will remain active while this companion runs. It uses an installed Windows speech recognizer to listen for the exact word “Ultron” and does not upload microphone audio to the ULTRON server. Windows may display its own microphone indicator.\n\nThis does not unlock Windows or work while the PC is powered off or asleep. Automatic listening at Windows sign-in is a separate opt-in.",
+                "Microphone consent",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+            if (consent != DialogResult.Yes)
+            {
+                ShowStatus("Wake word paused. Microphone permission was not enabled.");
+                return;
+            }
         }
 
         try
@@ -152,9 +254,12 @@ internal sealed class CompanionContext : ApplicationContext
             if (available.Length == 0)
             {
                 ShowStatus("Unavailable: install an English Windows speech recognition language.");
-                MessageBox.Show(_window,
-                    "No compatible installed English speech recognizer was found. ULTRON will remain paused; this app will not download a speech model automatically.",
-                    "Speech recognizer unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (!previouslyConsented)
+                {
+                    MessageBox.Show(_window,
+                        "No compatible installed English speech recognizer was found. ULTRON will remain paused; this app will not download a speech model automatically.",
+                        "Speech recognizer unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
                 return;
             }
 
@@ -189,8 +294,9 @@ internal sealed class CompanionContext : ApplicationContext
             StopListening();
             var detail = "Windows could not start the speech recognizer. Check microphone permission and install a compatible English speech-recognition language.";
             ShowStatus("Unavailable: microphone or speech recognition could not start.");
-            MessageBox.Show(_window, detail, "ULTRON wake word unavailable",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (!previouslyConsented)
+                MessageBox.Show(_window, detail, "ULTRON wake word unavailable",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
