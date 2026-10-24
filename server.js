@@ -265,9 +265,23 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         try { raw = await readResponseTextLimited(upstream, 2_000_000); }
         catch { return res.status(502).json({ error: { message: "Model provider response exceeded the size limit", type: "provider_response_too_large" } }); }
         if (upstream.ok) {
-          res.setHeader("Cache-Control", "no-store");
-          res.setHeader("X-ULTRON-Model", candidates[index]);
-          return res.status(200).type("application/json").send(raw);
+          // A successful HTTP status is not enough: reject malformed or empty
+          // completions so the next approved model can be tried instead of
+          // forwarding a nominally successful but unusable response to Browser Use.
+          let completion;
+          try { completion = JSON.parse(raw); } catch { completion = null; }
+          const message = completion?.choices?.[0]?.message;
+          const hasText = typeof message?.content === "string" && message.content.trim().length > 0;
+          const hasContentParts = Array.isArray(message?.content) && message.content.length > 0;
+          const hasToolCalls = Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
+          if (completion && typeof completion === "object" && (hasText || hasContentParts || hasToolCalls)) {
+            res.setHeader("Cache-Control", "no-store");
+            res.setHeader("X-ULTRON-Model", candidates[index]);
+            return res.status(200).type("application/json").send(raw);
+          }
+          lastStatus = 502;
+          if (index + 1 < candidates.length) continue;
+          break;
         }
         lastStatus = upstream.status;
         const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
