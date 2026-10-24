@@ -417,7 +417,7 @@ test("capabilities accurately report alternate model providers, memory retrieval
     assert.equal(body.providers.cloud.configured, true);
     assert.equal(body.providers.cloud.provider, "OpenAI-compatible fallback");
     assert.equal(Object.hasOwn(body.providers.cloud, "defaultModel"), false);
-    assert.match(body.modules.memory, /chat retrieval available/i);
+    assert.match(body.modules.memory, /chat_retrieval_available/i);
     assert.match(body.modules.documents, /pdf_docx_extraction/i);
     assert.match(body.modules.documents, /transient_only/i);
     assert.equal(JSON.stringify(body).includes(fallbackSecret), false);
