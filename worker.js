@@ -466,9 +466,18 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     if (!task?.id) return false;
     const taskController = new AbortController();
     let heartbeatInFlight = Promise.resolve();
+    let heartbeatBusy = false;
     const heartbeat = setInterval(() => {
-      heartbeatInFlight = heartbeatInFlight.then(async () => {
-        const renewed = await renewTaskLease({ taskId: task.id, rest, logger, onInactive: () => taskController.abort(new Error("Task is no longer RUNNING.")) });
+      // Never queue lease PATCHes behind a slow database request. A backlog can
+      // otherwise continue renewing a task after its execution has already ended.
+      if (heartbeatBusy) return;
+      heartbeatBusy = true;
+      heartbeatInFlight = renewTaskLease({
+        taskId: task.id,
+        rest,
+        logger,
+        onInactive: () => taskController.abort(new Error("Task is no longer RUNNING."))
+      }).then(renewed => {
         if (!renewed) {
           status.taskLeaseRenewalFailures += 1;
           // Do not interrupt in-flight work on a transient renewal error; conditional
@@ -478,6 +487,8 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         }
       }).catch(error => {
         logger.warn?.("Unexpected task lease heartbeat error:", bounded(error?.message, 200));
+      }).finally(() => {
+        heartbeatBusy = false;
       });
     }, leaseHeartbeatMs);
     heartbeat.unref?.();
