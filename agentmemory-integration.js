@@ -57,6 +57,41 @@ export function shouldCaptureAgentMemory(task) {
   return /\b(remember this|save this|we decided|decision:|project uses|the project uses|my preference is|from now on|going forward|important project context|implementation decision|architecture decision)\b/i.test(text);
 }
 
+const MAX_RESPONSE_BYTES = 200_000;
+
+async function readResponseTextLimited(response, maxBytes = MAX_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+  }
+  if (!response.body?.getReader) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > maxBytes) throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+    return raw;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+    return raw;
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 async function requestMemory(path, body, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   const base = baseUrl(env.AGENTMEMORY_URL || env.ULTRON_AGENTMEMORY_URL);
   const token = bounded(env.AGENTMEMORY_SECRET || env.ULTRON_AGENTMEMORY_SECRET, 1000);
@@ -65,10 +100,10 @@ async function requestMemory(path, body, { env = process.env, fetchImpl = global
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(8000)
+    signal: AbortSignal.timeout(8000),
+    redirect: "error"
   });
-  const raw = await response.text();
-  if (raw.length > 200000) throw Object.assign(new Error("AgentMemory response exceeded the limit."), { code: "AGENTMEMORY_RESPONSE_TOO_LARGE" });
+  const raw = await readResponseTextLimited(response);
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { text: raw.slice(0, 4000) }; }
   if (!response.ok) throw Object.assign(new Error("AgentMemory returned HTTP " + response.status), { code: "AGENTMEMORY_REQUEST_FAILED", status: response.status });
