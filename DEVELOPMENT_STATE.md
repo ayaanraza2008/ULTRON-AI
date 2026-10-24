@@ -40,3 +40,10 @@ Last verified: 2026-10-24 UTC
 
 ## Reporting standard
 For each capability, distinguish implemented, unit-tested, integration-tested, deployed, live-verified, and blocked. Never claim full autonomy, 100% correctness, or successful provider inference based only on configuration or a passing mock test.
+
+
+## 2026-10-25 explicit worker smoke tooling
+- Added npm run smoke:worker as an opt-in task-queue integration test guarded by ULTRON_CONFIRM_WORKER_SMOKE=YES.
+- It requires a valid Supabase project URL, server-side service-role key, and existing test-user UUID; it inserts one plan-only task, polls boundedly, and attempts cleanup without emitting task content or credentials.
+- Added mocked tests for confirmation gating, successful completion/cleanup, invalid configuration, failure redaction, and queued-task timeout cancellation.
+- Live test remains unverified until run intentionally in a trusted environment with the needed server configuration. This command creates a real database row and may consume one model attempt; do not set the confirmation flag casually.
