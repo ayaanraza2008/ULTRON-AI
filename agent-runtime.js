@@ -895,6 +895,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       try {
         const response = await fetchImpl(reference.url, {
           headers: { Accept: "text/plain", "User-Agent": "ULTRON-AI-Task-Skills/1.0" },
+          redirect: "error",
           signal: AbortSignal.timeout(5000)
         });
         if (!response.ok) return null;
