@@ -62,6 +62,21 @@ test("durable capture uses supported remember API and can be disabled", async ()
   assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
 
+test("AgentMemory recall and capture report missing configuration truthfully", async () => {
+  const recalled = await recallAgentMemory("Continue the previous repository implementation", {
+    env: {},
+    userId: "user-123",
+    fetchImpl: async () => { throw new Error("unconfigured memory must not call network"); }
+  });
+  assert.deepEqual(recalled, { state: "not_configured", memories: [] });
+  const captured = await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", {
+    env: {},
+    userId: "user-123",
+    fetchImpl: async () => { throw new Error("unconfigured memory must not call network"); }
+  });
+  assert.deepEqual(captured, { state: "not_configured" });
+});
+
 test("AgentMemory rejects private, local, credentialed and insecure remote endpoints", async () => {
   for (const url of [
     "https://127.0.0.1:8080",
