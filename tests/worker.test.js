@@ -1413,3 +1413,49 @@ test("worker fails a retryable provider error once the task attempt limit is rea
   assert.equal(auditEvents[0]?.action, "task.failed");
   assert.equal(auditEvents[0]?.metadata?.attempt, 3);
 });
+
+
+test("worker leaves retryable task lease intact when retry persistence fails", async () => {
+  let worker;
+  let attemptedRetryPatch;
+  const errors = [];
+  const task = {
+    id: "task-retry-write-failure",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error: (...args) => errors.push(args) },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response("provider temporarily unavailable", { status: 503 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        attemptedRetryPatch = JSON.parse(options.body);
+        worker.stop();
+        throw new Error("temporary Supabase write outage");
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(attemptedRetryPatch.status, "QUEUED", "the worker should attempt the conditional retry transition");
+  assert.equal(status.taskStateUpdateFailures, 1);
+  assert.equal(status.lastErrorCode, "TASK_STATE_UPDATE_FAILED");
+  assert.equal(status.tasksRetried, 0, "a failed database write must not be reported as a scheduled retry");
+  assert.equal(status.tasksFailed, 0, "the worker must not claim a terminal failure without persistence");
+  assert.equal(status.tasksDiscarded, 0, "a write outage is not evidence that another actor changed task state");
+  assert.ok(errors.some(args => String(args[0]).includes("lease recovery will handle it")));
+});
