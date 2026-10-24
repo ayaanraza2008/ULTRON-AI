@@ -634,3 +634,114 @@ test("DOCX extraction rejects actual DEFLATE expansion when ZIP sizes underrepor
     assert.equal((await response.json()).error.code, "DOCUMENT_EXPANSION_LIMIT");
   });
 });
+
+test("coding assistance falls back after malformed provider JSON", async () => {
+  const calls = [];
+  const env = {
+    FIRST_API_KEY: "first-malformed-secret",
+    SECOND_API_KEY: "second-valid-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://malformed.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "malformed-model", priority: 1 },
+      { name: "second", baseUrl: "https://valid.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "valid-model", priority: 2 }
+    ])
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Review malformed-response fallback", mode: "review" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "second");
+    assert.equal(body.model, "valid-model");
+    assert.equal(body.answer, "Recovered from malformed JSON.");
+  }, { fetchImpl: async url => {
+    calls.push(url);
+    if (url.startsWith("https://malformed.example/")) return new Response("{malformed-json", { status: 200 });
+    return new Response(JSON.stringify({
+      model: "valid-model",
+      choices: [{ message: { content: "Recovered from malformed JSON." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+  assert.deepEqual(calls, [
+    "https://malformed.example/v1/chat/completions",
+    "https://valid.example/v1/chat/completions"
+  ]);
+});
+
+test("coding assistance bounds oversized provider responses and tries the next provider", async () => {
+  const calls = [];
+  const env = {
+    FIRST_API_KEY: "first-oversized-secret",
+    SECOND_API_KEY: "second-small-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://oversized.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "large-model", priority: 1 },
+      { name: "second", baseUrl: "https://small.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "small-model", priority: 2 }
+    ])
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Handle oversized upstream output", mode: "review" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "second");
+    assert.equal(body.answer, "Recovered from oversized output.");
+  }, { fetchImpl: async url => {
+    calls.push(url);
+    if (url.startsWith("https://oversized.example/")) {
+      return new Response(" ".repeat(2 * 1024 * 1024 + 128), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      model: "small-model",
+      choices: [{ message: { content: "Recovered from oversized output." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+  assert.deepEqual(calls, [
+    "https://oversized.example/v1/chat/completions",
+    "https://small.example/v1/chat/completions"
+  ]);
+});
+
+test("coding assistance retries a provider timeout with the next eligible provider", async () => {
+  const calls = [];
+  const env = {
+    ULTRON_PROVIDER_FIRST_RESPONSE_TIMEOUT_MS: "1000",
+    FIRST_API_KEY: "first-timeout-secret",
+    SECOND_API_KEY: "second-timeout-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://timeout.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "slow-model", priority: 1 },
+      { name: "second", baseUrl: "https://fast.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "fast-model", priority: 2 }
+    ])
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Use timeout fallback", mode: "review" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "second");
+    assert.equal(body.model, "fast-model");
+    assert.equal(body.answer, "Recovered after timeout.");
+  }, { fetchImpl: async (url, options) => {
+    calls.push(url);
+    if (url.startsWith("https://timeout.example/")) {
+      return new Promise((resolve, reject) => {
+        const rejectOnAbort = () => reject(options.signal.reason || new DOMException("Timed out", "TimeoutError"));
+        if (options.signal.aborted) rejectOnAbort();
+        else options.signal.addEventListener("abort", rejectOnAbort, { once: true });
+      });
+    }
+    return new Response(JSON.stringify({
+      model: "fast-model",
+      choices: [{ message: { content: "Recovered after timeout." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+  assert.deepEqual(calls, [
+    "https://timeout.example/v1/chat/completions",
+    "https://fast.example/v1/chat/completions"
+  ]);
+});
+
