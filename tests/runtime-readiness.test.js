@@ -124,3 +124,34 @@ test("readiness accepts HTTPS services and plain HTTP loopback development servi
   assert.equal(result.components.find((item) => item.id === "windows_companion").state, "configured_unverified");
   assert.equal(result.components.find((item) => item.id === "local_models").state, "configured_unverified");
 });
+
+
+test("VoiceStudio readiness requires a secure endpoint and remote API key without exposing secrets", () => {
+  const secret = "voice-studio-secret-test";
+  const configured = buildRuntimeReadiness({
+    env: {
+      VOICESTUDIO_BASE_URL: "https://speech.example.com",
+      VOICESTUDIO_API_KEY: secret
+    }
+  });
+  assert.equal(configured.components.find((item) => item.id === "voicestudio").state, "configured_unverified");
+  assert.equal(JSON.stringify(configured).includes(secret), false);
+
+  const missingKey = buildRuntimeReadiness({
+    env: { VOICESTUDIO_BASE_URL: "https://speech.example.com" }
+  });
+  assert.equal(missingKey.components.find((item) => item.id === "voicestudio").state, "optional");
+
+  const unsafe = buildRuntimeReadiness({
+    env: {
+      VOICESTUDIO_BASE_URL: "http://speech.example.com",
+      VOICESTUDIO_API_KEY: secret
+    }
+  });
+  assert.equal(unsafe.components.find((item) => item.id === "voicestudio").state, "optional");
+
+  const local = buildRuntimeReadiness({
+    env: { VOICESTUDIO_BASE_URL: "http://127.0.0.1:7860" }
+  });
+  assert.equal(local.components.find((item) => item.id === "voicestudio").state, "configured_unverified");
+});
