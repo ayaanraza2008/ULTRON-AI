@@ -115,7 +115,8 @@ test("AgentMemory rejects oversized declared response lengths without reading th
   );
   assert.equal(cancelled, true);
 });
-\ntest("AgentMemory fails safely when the remote service is unavailable", async () => {
+
+test("AgentMemory fails safely when the remote service is unavailable", async () => {
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
       env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret" },
