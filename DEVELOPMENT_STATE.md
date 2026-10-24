@@ -67,3 +67,8 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Uses only the server-configured optional redirect (never a redirect from request JSON), validates HTTPS/loopback-only redirects, applies generic responses to avoid email account enumeration, and sanitizes provider failures.
 - Includes test coverage for redirect safety, invalid email, generic responses, rate limiting, outage handling, and static checks.
 - Actual delivery remains dependent on Supabase Auth confirmation configuration, an allow-listed redirect, and working SMTP/provider delivery; no email was sent during code/CI tests.
+
+## 2026-10-25 consolidated backend coverage
+- Included provider fallback and unsafe URL regression work previously developed in drafts #185–#191: feature provider fallback, Browser Use alternate-provider proxy, worker URL validation, unbounded integration response protection, query/fragment rejection, and opt-in two-account Supabase isolation coverage.
+- The Supabase two-account test remains opt-in and is not considered live-verified until it runs with dedicated accounts and explicit write confirmation.
+- Production main remains untouched in this branch; all runtime credentials and provider delivery checks remain operator-controlled.
