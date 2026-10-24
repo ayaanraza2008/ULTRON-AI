@@ -1307,3 +1307,56 @@ test("worker continues polling after a transient database cycle error", async ()
   assert.ok(status.lastCycleSuccessAt, "a successful cycle should be recorded after the transient failure");
   assert.ok(errors.some(args => String(args[0]).includes("Worker cycle failed")));
 });
+
+
+test("worker finishes an active task after shutdown is requested and claims no new task", async () => {
+  let worker;
+  let taskClaims = 0;
+  let completionWrites = 0;
+  const task = {
+    id: "task-shutdown-during-provider-call",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) {
+        taskClaims += 1;
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/chat/completions")) {
+        worker.stop();
+        return new Response(JSON.stringify({
+          model: "test-model",
+          choices: [{ message: { content: "Plan drafted safely." } }]
+        }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        completionWrites += 1;
+        const patch = JSON.parse(options.body);
+        assert.equal(patch.status, "COMPLETED");
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  const status = worker.getStatus();
+  assert.equal(completionWrites, 1, "the active task result must be persisted before shutdown");
+  assert.equal(taskClaims, 1, "shutdown must prevent the next task from being claimed");
+  assert.equal(status.tasksCompleted, 1);
+  assert.equal(status.state, "stopped");
+});
