@@ -963,3 +963,44 @@ test("research tool rejects Teredo and 6to4 IPv6 URLs that can tunnel private IP
     assert.equal(providerCalls, 2);
   });
 });
+
+
+test("agent rejects provider responses that cannot be safely streamed and continues to the next provider", async () => {
+  let firstTextCalls = 0;
+  let providerCalls = 0;
+  const env = {
+    FIRST_KEY: "first-test-key",
+    SECOND_KEY: "second-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/api/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/api/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+  await withServer(env, async url => {
+    providerCalls += 1;
+    if (url.startsWith("https://first.example/")) {
+      return {
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        body: undefined,
+        async text() {
+          firstTextCalls += 1;
+          throw new Error("unbounded text fallback must not be called");
+        }
+      };
+    }
+    assert.equal(url, "https://second.example/api/v1/chat/completions");
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered safely." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Give me a short status update" })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /Recovered safely/);
+    assert.equal(providerCalls, 2);
+    assert.equal(firstTextCalls, 0);
+  });
+});
