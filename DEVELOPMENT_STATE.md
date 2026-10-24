@@ -10,10 +10,12 @@ Last verified: 2026-10-24 UTC
 - Consequential external actions require explicit approval.
 
 ## Verified progress
+- PR #129: reject JWT-shaped strings and GitHub access-token formats from AgentMemory durable capture; merged, CI passed, and Render deployment verified `live` at commit `76a49edb5e08bd469fab596484330257e21344b1`.
+- PR #130: AgentMemory recall and capture now fail closed when the authenticated user ID is absent, preventing fallback to a shared project namespace; regression test added, CI jobs passed, and Render deployment verified `live` at commit `56583bb56c438fa00cec917edd3166a1e053894a`.
 - PR #122: server-side multi-provider fallback registry and regression coverage merged.
 - PR #123: empty/malformed assistant completions trigger provider fallback in the main agent runtime; regression test merged.
 - PR #124: Browser Use model proxy now rejects malformed/empty HTTP 200 completions and tries the next approved model; regression tests added. CI test job and world-intelligence build passed. Render deployment was queued at last check, not yet verified live.
-- Latest previously live Render deployment: commit `e937668085fd33d3a1146d42e617bc8da5d37f47`, status `live`. Render service: `https://ultron-ai-zvd7.onrender.com`.
+- Render service `https://ultron-ai-zvd7.onrender.com` is configured for automatic deployment from `main`. Verified live deployment on 2026-10-24: commit `56583bb56c438fa00cec917edd3166a1e053894a` (PR #130), status `live`.
 - Backend worker has an allowlist for research, AI Employee drafts, and bounded research-to-report workflows. It does not execute arbitrary code or perform external consequential actions.
 - Readiness endpoint is intentionally a configuration/process snapshot, not proof of live provider, database, or device functionality.
 - Supabase RLS policies and revocation of anonymous table grants have been applied, but two-account isolation still needs authenticated end-to-end testing.
@@ -29,11 +31,11 @@ Last verified: 2026-10-24 UTC
 8. Arbitrary code execution is intentionally unavailable without a suitable sandbox. Do not claim otherwise.
 
 ## Next actions, in order
-1. Verify PR #124's Render deployment reaches `live`; check the health endpoint and logs.
-2. Add a safe live inference smoke test that never prints or returns provider secrets; distinguish actual completion from configuration-only health.
-3. Add authenticated Supabase integration tests for persistence and cross-account isolation when test identities/credentials are available.
-4. Verify task worker execution and task state transitions against a test task; record actual completed/retried/failed outcomes.
-5. Resolve the Supabase leaked-password protection warning via dashboard configuration, then recheck the security advisor.
+1. Verify a real authenticated model completion through the deployed API using a safe smoke test that never prints or returns provider secrets; distinguish actual completion from configuration-only health.
+2. Add authenticated Supabase integration tests for persistence and cross-account isolation when test identities/credentials are available.
+3. Verify task worker execution and task state transitions against a test task; record actual completed/retried/failed outcomes.
+4. Resolve the Supabase leaked-password protection warning via dashboard configuration, then recheck the security advisor.
+5. Verify PR #124's Browser Use proxy deployment and live bridge behavior when bridge credentials are configured.
 6. Continue backend capability work and regression tests. Frontend remains deferred.
 
 ## Reporting standard
