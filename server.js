@@ -507,6 +507,111 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
+  // OAuth cookies are short-lived, HttpOnly, and scoped to the Google callback flow.
+  const googleOAuthCookieOptions = (maxAge) =>
+    `HttpOnly; SameSite=Lax; Path=/api/auth/google; Max-Age=${maxAge}${env.NODE_ENV === "production" ? "; Secure" : ""}`;
+  const clearGoogleOAuthCookies = (res) => {
+    res.append("Set-Cookie", `ultron_oauth_verifier=; ${googleOAuthCookieOptions(0)}`);
+    res.append("Set-Cookie", `ultron_oauth_state=; ${googleOAuthCookieOptions(0)}`);
+  };
+  const configuredGoogleCallback = () => {
+    const raw = String(env.ULTRON_AUTH_CALLBACK_URL || "").trim();
+    if (!raw) return null;
+    try {
+      const url = new URL(raw);
+      const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+      if ((url.protocol !== "https:" && !(url.protocol === "http:" && local)) ||
+          url.username || url.password || url.search || url.hash ||
+          url.pathname !== "/api/auth/google/callback") return null;
+      return url;
+    } catch { return null; }
+  };
+
+  // Server-side Google OAuth uses PKCE, one-time state, and HttpOnly cookies.
+  // Supabase must have Google enabled and this callback URL allow-listed.
+  app.get("/api/auth/google", authRateLimiter, (req, res) => {
+    const config = supabaseConfig();
+    const callback = configuredGoogleCallback();
+    if (!config || !callback) {
+      return res.status(503).json({
+        error: { code: "GOOGLE_OAUTH_NOT_CONFIGURED", message: "Configure Supabase Auth and ULTRON_AUTH_CALLBACK_URL for Google sign-in." }
+      });
+    }
+    const verifier = crypto.randomBytes(32).toString("base64url");
+    const state = crypto.randomBytes(32).toString("base64url");
+    const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+    const redirect = new URL(callback.href);
+    redirect.searchParams.set("state", state);
+    const authorize = new URL(config.url + "/auth/v1/authorize");
+    authorize.searchParams.set("provider", "google");
+    authorize.searchParams.set("redirect_to", redirect.href);
+    authorize.searchParams.set("code_challenge", challenge);
+    authorize.searchParams.set("code_challenge_method", "s256");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.append("Set-Cookie", `ultron_oauth_verifier=${encodeURIComponent(verifier)}; ${googleOAuthCookieOptions(600)}`);
+    res.append("Set-Cookie", `ultron_oauth_state=${encodeURIComponent(state)}; ${googleOAuthCookieOptions(600)}`);
+    return res.redirect(302, authorize.href);
+  });
+
+  app.get("/api/auth/google/callback", authRateLimiter, async (req, res) => {
+    const cookies = parseCookies(req.headers.cookie);
+    const expectedState = cookies.ultron_oauth_state || "";
+    const suppliedState = typeof req.query.state === "string" ? req.query.state : "";
+    const verifier = cookies.ultron_oauth_verifier || "";
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    clearGoogleOAuthCookies(res);
+    if (req.query.error || !code || !verifier || !expectedState || !suppliedState || !safeEqual(expectedState, suppliedState)) {
+      return res.status(400).json({ error: { code: "GOOGLE_OAUTH_INVALID_CALLBACK", message: "Google sign-in could not be verified. Start sign-in again." } });
+    }
+    try {
+      const payload = await supabaseAuthRequest("/auth/v1/token?grant_type=pkce", {
+        auth_code: code,
+        code_verifier: verifier
+      });
+      if (!setSupabaseCookies(res, payload)) {
+        return res.status(502).json({ error: { code: "AUTH_RESPONSE_INVALID", message: "Supabase returned an incomplete sign-in response." } });
+      }
+      return res.json({ authenticated: true, provider: "google", email: payload.user?.email || null });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "GOOGLE_SIGNIN_FAILED", message: "Google sign-in could not be completed. Please try again." } });
+    }
+  });
+
+  app.post("/api/auth/phone/send-otp", authRateLimiter, async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    if (!/^\\+[1-9]\\d{7,14}$/.test(phone)) {
+      return res.status(400).json({ error: { code: "INVALID_PHONE", message: "Enter the phone number in international format, for example +919876543210." } });
+    }
+    try {
+      await supabaseAuthRequest("/auth/v1/otp", { phone, create_user: true });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ ok: true, message: "If SMS sign-in is configured, a verification code has been sent." });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "PHONE_OTP_SEND_FAILED", message: error.status === 429 ? "Too many code requests. Please wait and try again." : "The sign-in code could not be sent. Check SMS provider configuration and try again." } });
+    }
+  });
+
+  app.post("/api/auth/phone/verify-otp", authRateLimiter, async (req, res) => {
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!/^\\+[1-9]\\d{7,14}$/.test(phone) || !/^\\d{6,8}$/.test(token)) {
+      return res.status(400).json({ error: { code: "INVALID_PHONE_OTP", message: "Enter a valid international phone number and the SMS code." } });
+    }
+    try {
+      const payload = await supabaseAuthRequest("/auth/v1/verify", { phone, token, type: "sms" });
+      if (!setSupabaseCookies(res, payload)) {
+        return res.status(502).json({ error: { code: "AUTH_RESPONSE_INVALID", message: "Supabase returned an incomplete verification response." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ authenticated: true, phone: payload.user?.phone || phone });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "PHONE_OTP_VERIFY_FAILED", message: error.status === 429 ? "Too many verification attempts. Please wait and try again." : "The verification code was not accepted. Request a new code and try again." } });
+    }
+  });
+
   // Password recovery is a backend API; the UI can call it without exposing Supabase keys.
   // Keep the redirect destination server-configured so callers cannot inject arbitrary redirects.
   app.post("/api/auth/recovery", authRateLimiter, async (req, res) => {
