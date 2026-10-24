@@ -302,6 +302,35 @@ test("Supabase signup validates credentials before making an upstream request", 
   });
 });
 
+test("phone sign-in validates input and completes provider verification", async () => {
+  const supabaseEnv = { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
+  const calls = [];
+  const app = createApp({
+    env: supabaseEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, body: options.body ? JSON.parse(options.body) : null });
+      if (url.endsWith("/auth/v1/otp")) return new Response(JSON.stringify({ message: "sent" }), { status: 200 });
+      if (url.endsWith("/auth/v1/verify")) return new Response(JSON.stringify({ access_token: "access-test", refresh_token: "refresh-test", expires_in: 3600, user: { id: "123e4567-e89b-12d3-a456-426614174000", phone: "+19999999999" } }), { status: 200 });
+      throw new Error("Unexpected mocked URL");
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const invalid = await fetch(base + "/api/auth/phone/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "invalid" }) });
+    assert.equal(invalid.status, 400);
+    assert.equal(calls.length, 0);
+    const requested = await fetch(base + "/api/auth/phone/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "+19999999999" }) });
+    assert.equal(requested.status, 200);
+    assert.equal((await requested.json()).ok, true);
+    assert.deepEqual(calls[0].body, { phone: "+19999999999", create_user: true });
+    const verified = await fetch(base + "/api/auth/phone/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "+19999999999", token: "123456" }) });
+    assert.equal(verified.status, 200);
+    assert.equal((await verified.json()).authenticated, true);
+    assert.match(verified.headers.get("set-cookie"), /ultron_sb_access=access-test/);
+    assert.deepEqual(calls[1].body, { phone: "+19999999999", token: "123456", type: "sms" });
+  });
+});
+
 test("expired Supabase access tokens refresh before database requests", async () => {
   const supabaseEnv = { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
   let restAuthorization = "";
