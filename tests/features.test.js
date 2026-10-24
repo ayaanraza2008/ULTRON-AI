@@ -213,6 +213,116 @@ test("document extraction rejects malformed DOCX payloads", async () => {
   });
 });
 
+test("coding assistance falls back to a configured provider after OpenRouter rate limiting", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "primary-test-secret",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    SECONDARY_API_KEY: "secondary-test-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "secondary", baseUrl: "https://api.secondary.example/v1", apiKeyEnv: "SECONDARY_API_KEY", model: "secondary-model", priority: 1 }
+    ])
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Review a bounded parser", mode: "review" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "secondary");
+    assert.equal(body.model, "secondary-model");
+    assert.equal(body.answer, "Recovered by fallback.");
+    assert.equal(body.execution, "not_executed");
+    assert.equal(JSON.stringify(body).includes("secondary-test-secret"), false);
+  }, { fetchImpl: async (url, options) => {
+    calls.push({ url, authorization: options.headers.Authorization });
+    if (url.startsWith("https://openrouter.ai/")) {
+      return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+    }
+    assert.equal(url, "https://api.secondary.example/v1/chat/completions");
+    return new Response(JSON.stringify({
+      model: "secondary-model",
+      choices: [{ message: { content: "Recovered by fallback." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+  assert.deepEqual(calls.map(call => call.url), [
+    "https://openrouter.ai/api/v1/chat/completions",
+    "https://api.secondary.example/v1/chat/completions"
+  ]);
+  assert.deepEqual(calls.map(call => call.authorization), [
+    "Bearer primary-test-secret",
+    "Bearer secondary-test-secret"
+  ]);
+});
+
+test("coding assistance falls back when a provider returns an empty HTTP 200 completion", async () => {
+  const calls = [];
+  const env = {
+    FIRST_API_KEY: "first-test-secret",
+    SECOND_API_KEY: "second-test-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "first-model", priority: 1 },
+      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "second-model", priority: 2 }
+    ])
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Review a parser", mode: "review" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "second");
+    assert.equal(body.model, "second-model");
+    assert.equal(body.answer, "Recovered from an empty completion.");
+  }, { fetchImpl: async url => {
+    calls.push(url);
+    if (url.startsWith("https://first.example/")) {
+      return new Response(JSON.stringify({ choices: [{ message: { content: " " } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      model: "second-model",
+      choices: [{ message: { content: "Recovered from an empty completion." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+  assert.deepEqual(calls, [
+    "https://first.example/v1/chat/completions",
+    "https://second.example/v1/chat/completions"
+  ]);
+});
+
+test("AI Employee planning works with a configured secondary provider and no OpenRouter key", async () => {
+  let requestedModel;
+  const env = {
+    EMPLOYEE_FALLBACK_KEY: "employee-fallback-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "employee-fallback", baseUrl: "https://employee.example/v1", apiKeyEnv: "EMPLOYEE_FALLBACK_KEY", model: "employee-model", priority: 1 }
+    ])
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/employees/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "chief-of-staff", goal: "Prepare a launch checklist", mode: "plan" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "employee-fallback");
+    assert.equal(body.model, "employee-model");
+    assert.equal(body.answer, "Drafted through the configured fallback.");
+    assert.equal(body.execution, "not_executed");
+    assert.equal(JSON.stringify(body).includes("employee-fallback-secret"), false);
+  }, { fetchImpl: async (url, options) => {
+    assert.equal(url, "https://employee.example/v1/chat/completions");
+    requestedModel = JSON.parse(options.body).model;
+    return new Response(JSON.stringify({
+      model: "employee-model",
+      choices: [{ message: { content: "Drafted through the configured fallback." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+  assert.equal(requestedModel, "employee-model");
+});
+
 test("coding assistance is disabled without a provider key", async () => {
   await withServer({}, async base => {
     const response = await fetch(base + "/api/coding/assist", {
