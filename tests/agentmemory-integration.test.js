@@ -172,3 +172,17 @@ test("AgentMemory refuses to persist JWTs and GitHub access tokens", () => {
   ];
   for (const value of sensitive) assert.equal(shouldCaptureAgentMemory(value), false, value);
 });
+
+
+test("AgentMemory fails closed without an authenticated user ID", async () => {
+  let calls = 0;
+  const options = {
+    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+    fetchImpl: async () => { calls += 1; return new Response(JSON.stringify({ results: [] }), { status: 200 }); }
+  };
+  const recalled = await recallAgentMemory("Continue the previous repository implementation", options);
+  const captured = await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", options);
+  assert.deepEqual(recalled, { state: "skipped", memories: [] });
+  assert.deepEqual(captured, { state: "skipped" });
+  assert.equal(calls, 0, "unauthenticated memory operations must not reach the upstream service");
+});
