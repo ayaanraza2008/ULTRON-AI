@@ -1004,3 +1004,31 @@ test("agent rejects provider responses that cannot be safely streamed and contin
     assert.equal(firstTextCalls, 0);
   });
 });
+
+
+test("agent skips an identical tool call repeated by the follow-up model round", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "check-once", type: "function", function: { name: "check_integrations", arguments: "{}" } }] } }] }), { status: 200 });
+    }
+    if (providerCalls === 2) {
+      assert.ok(request.messages.some(message => message.role === "tool" && String(message.content).includes("integrations")));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "check-again", type: "function", function: { name: "check_integrations", arguments: "{}" } }] } }] }), { status: 200 });
+    }
+    assert.ok(request.messages.some(message => message.role === "tool" && String(message.content).includes("DUPLICATE_TOOL_CALL_SKIPPED")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Repeated tool call safely skipped." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Check available integrations" }) });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /Repeated tool call safely skipped/);
+    assert.equal(body.toolsUsed.length, 2);
+    assert.equal(body.toolsUsed[0].ok, true);
+    assert.equal(body.toolsUsed[1].ok, false);
+    assert.equal(body.toolResults[1].result.error.code, "DUPLICATE_TOOL_CALL_SKIPPED");
+    assert.equal(providerCalls, 3);
+  });
+});
