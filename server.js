@@ -823,6 +823,30 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       const reader = upstream.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let doneSent = false;
+      const processLine = (line) => {
+        if (!line.startsWith("data:")) return;
+        const data = line.slice(5).trim();
+        if (!data) return;
+        if (data === "[DONE]") {
+          if (!doneSent) {
+            res.write("event: done\ndata: {}\n\n");
+            doneSent = true;
+          }
+          return;
+        }
+        try {
+          const event = JSON.parse(data);
+          const delta = event?.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta.length) {
+            res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+          } else if (event?.error) {
+            res.write(`event: provider_error\ndata: ${JSON.stringify({ error: { code: "PROVIDER_STREAM_ERROR", message: "The AI provider interrupted the response." } })}\n\n`);
+          }
+        } catch {
+          logger.warn?.("Skipped malformed OpenRouter stream event");
+        }
+      };
       try {
         while (true) {
           const { value, done } = await reader.read();
@@ -830,29 +854,14 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           buffer += decoder.decode(value, { stream: true });
           const parts = buffer.split(/\r?\n/);
           buffer = parts.pop() || "";
-          for (const line of parts) {
-            if (!line.startsWith("data:")) continue;
-            const data = line.slice(5).trim();
-            if (!data) continue;
-            if (data === "[DONE]") {
-              res.write("event: done\ndata: {}\n\n");
-              continue;
-            }
-            try {
-              const event = JSON.parse(data);
-              const delta = event?.choices?.[0]?.delta?.content;
-              if (typeof delta === "string" && delta.length) {
-                res.write(`data: ${JSON.stringify({ delta })}\n\n`);
-              } else if (event?.error) {
-                res.write(`event: provider_error\ndata: ${JSON.stringify({ error: { code: "PROVIDER_STREAM_ERROR", message: "The AI provider interrupted the response." } })}\n\n`);
-              }
-            } catch {
-              logger.warn?.("Skipped malformed OpenRouter stream event");
-            }
-          }
+          for (const line of parts) processLine(line);
           if (res.writableNeedDrain) await new Promise(resolve => res.once("drain", resolve));
         }
-        res.write("event: done\ndata: {}\n\n");
+        // Flush the decoder and process a final SSE line even if the provider
+        // closes the stream without a trailing newline.
+        buffer += decoder.decode();
+        if (buffer) processLine(buffer);
+        if (!doneSent) res.write("event: done\ndata: {}\n\n");
         res.end();
       } finally {
         reader.releaseLock();
