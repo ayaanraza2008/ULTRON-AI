@@ -35,6 +35,13 @@ export function buildRuntimeReadiness({
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
   const premiumTtsConfigured = secureServiceUrl(env.TTS_API_BASE_URL) && truthy(env.TTS_API_KEY);
   const premiumSttConfigured = secureServiceUrl(env.STT_API_BASE_URL) && truthy(env.STT_API_KEY);
+  const authCallbackConfigured = (() => {
+    if (!secureServiceUrl(env.ULTRON_AUTH_CALLBACK_URL)) return false;
+    try { return new URL(env.ULTRON_AUTH_CALLBACK_URL.trim()).pathname === "/api/auth/google/callback"; }
+    catch { return false; }
+  })();
+  const googleAuthConfigured = supabaseConfigured && authCallbackConfigured;
+  const phoneOtpConfigured = supabaseConfigured;
   const workerEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const workerState = workerStatus?.state || (workerEnabled ? "not_started" : "disabled");
 
@@ -47,6 +54,14 @@ export function buildRuntimeReadiness({
       ["SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"], supabaseConfigured
         ? "Database URL and publishable key are configured; account login, row-level security, and writes still need end-to-end verification."
         : "Configure Supabase Auth and database settings."),
+    component("google_auth", "Google sign-in", googleAuthConfigured ? "configured_unverified" : "blocked",
+      ["SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "ULTRON_AUTH_CALLBACK_URL"], googleAuthConfigured
+        ? "OAuth callback is configured; the Google provider, Supabase redirect allow-list, and live token exchange still need verification."
+        : "Configure a valid HTTPS callback ending in /api/auth/google/callback and enable Google in Supabase Auth."),
+    component("phone_otp", "Phone number sign-in", phoneOtpConfigured ? "configured_unverified" : "blocked",
+      ["SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"], phoneOtpConfigured
+        ? "Supabase Auth is configured; phone sign-in, SMS provider credentials, delivery, and rate limits still require live verification."
+        : "Configure Supabase Auth, enable phone sign-in, and configure an SMS provider before sending OTPs."),
     component("background_tasks", "Background task worker", workerState,
       ["ULTRON_EMPLOYEES_ENABLED=true", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"], workerState === "running"
         ? "Worker process reports running; successful task execution is tracked separately."
