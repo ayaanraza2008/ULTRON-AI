@@ -60,6 +60,18 @@ export function buildRuntimeReadiness({
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
   const premiumTtsConfigured = secureServiceUrl(env.TTS_API_BASE_URL) && truthy(env.TTS_API_KEY);
   const premiumSttConfigured = secureServiceUrl(env.STT_API_BASE_URL) && truthy(env.STT_API_KEY);
+  const voiceStudioConfigured = (() => {
+    const value = env.VOICESTUDIO_BASE_URL;
+    if (!secureServiceUrl(value)) return false;
+    try {
+      const url = new URL(value.trim());
+      const loopback = url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
+      return loopback || (url.protocol === "https:" && truthy(env.VOICESTUDIO_API_KEY));
+    } catch {
+      return false;
+    }
+  })();
   const workerEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const workerState = workerStatus?.state || (workerEnabled ? "not_started" : "disabled");
 
@@ -98,6 +110,10 @@ export function buildRuntimeReadiness({
         : "Optional. A cloud-hosted service cannot reach a PC-local localhost endpoint."),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
+    component("voicestudio", "VoiceStudio speech and transcription", voiceStudioConfigured ? "configured_unverified" : "optional",
+      ["VOICESTUDIO_BASE_URL", "VOICESTUDIO_API_KEY (remote HTTPS only)"], voiceStudioConfigured
+        ? "VoiceStudio endpoint settings are present; upstream reachability, installed models, and audio quality are not tested by readiness."
+        : "Optional. Configure a loopback HTTP endpoint for a local companion, or a public HTTPS endpoint with an API key."),
     component("safe_code_execution", "Isolated code execution", "not_available",
       [], "ULTRON does not claim to run arbitrary user code in an isolated sandbox; coding assistance is limited to supported plan, draft, and review workflows.")
   ];
