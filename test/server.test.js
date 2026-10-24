@@ -207,6 +207,36 @@ test("model discovery returns only model identifiers from the configured provide
   });
 });
 
+test("model gateway rejects private, reserved and credentialed provider URLs before network access", async () => {
+  for (const providerUrl of [
+    "https://127.0.0.1:8080",
+    "https://10.0.0.5/v1",
+    "https://192.168.1.4/v1",
+    "https://192.0.2.10/v1",
+    "https://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal",
+    "https://user:password@openrouter.ai/api/v1",
+    "http://openrouter.ai/api/v1"
+  ]) {
+    let calls = 0;
+    const app = createApp({
+      env: { ...env, OPENROUTER_BASE_URL: providerUrl, ULTRON_BROWSER_USE_TOKEN: "bridge-test-token" },
+      fetchImpl: async () => { calls++; throw new Error("unsafe provider URL must not be contacted"); },
+      logger: { warn() {}, error() {} }
+    });
+    await withServer(app, async base => {
+      const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: "Bearer bridge-test-token", "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "test" }] })
+      });
+      assert.equal(response.status, 500, providerUrl);
+      assert.equal((await response.json()).error.type, "provider_config_error", providerUrl);
+      assert.equal(calls, 0, providerUrl);
+    });
+  }
+});
+
 test("missing access password fails closed", async () => {
   const app = createApp({ env: { ...env, APP_ACCESS_PASSWORD: "" }, logger: { warn() {}, error() {} } });
   await withServer(app, async base => {
