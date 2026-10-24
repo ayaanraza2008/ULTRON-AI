@@ -103,7 +103,8 @@ test("an intentionally unavailable optional capability does not permanently bloc
       ULTRON_BROWSER_USE_TOKEN: "test-token",
       ULTRON_DESKTOP_AGENT_URL: "https://desktop.example.com",
       ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
-      TAVILY_API_KEY: "test-key"
+      TAVILY_API_KEY: "test-key",
+      ULTRON_AUTH_CALLBACK_URL: "https://ultron.example.com/api/auth/google/callback"
     },
     modelProviderConfigured: true,
     supabaseConfigured: true,
