@@ -108,3 +108,53 @@ test("agent model routing fails over when a provider returns HTTP 200 with an em
     ]);
   });
 });
+
+
+test("agent model routing falls back after malformed JSON from an HTTP 200 provider", async () => {
+  const calls = [];
+  const env = {
+    FIRST_KEY: "first-test-key",
+    SECOND_KEY: "second-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+  await withServer(env, async url => {
+    calls.push(url);
+    if (url.startsWith("https://first.example/")) return new Response("{malformed-json", { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered from malformed JSON." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Recovered from malformed JSON/);
+    assert.deepEqual(calls, [
+      "https://first.example/v1/chat/completions",
+      "https://second.example/v1/chat/completions"
+    ]);
+  });
+});
+
+test("agent model routing returns a bounded failure when every provider returns malformed JSON", async () => {
+  const env = {
+    ONLY_KEY: "only-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "only", baseUrl: "https://only.example/v1", apiKeyEnv: "ONLY_KEY", model: "model-a", priority: 0 }
+    ])
+  };
+  await withServer(env, async () => new Response("{not-json", { status: 200 }), async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 502);
+    const body = await response.text();
+    assert.match(body, /PROVIDER_RESPONSE_INVALID|All configured AI providers failed/);
+    assert.doesNotMatch(body, /only-test-key|not-json/);
+  });
+});
