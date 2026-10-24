@@ -126,3 +126,15 @@ test("health does not mark query/fragment-bearing provider URLs as configured", 
   assert.equal(alternates.providerConfigured, false);
 });
 
+test("health rejects alternate providers with empty or oversized model IDs", async () => {
+  const result = await health({
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "empty-model", baseUrl: "https://empty.example.com/v1", apiKeyEnv: "EMPTY_MODEL_KEY", model: "   " },
+      { name: "oversized-model", baseUrl: "https://oversized.example.com/v1", apiKeyEnv: "OVERSIZED_MODEL_KEY", model: "x".repeat(161) }
+    ]),
+    EMPTY_MODEL_KEY: "synthetic-empty-model-key",
+    OVERSIZED_MODEL_KEY: "synthetic-oversized-model-key"
+  });
+  assert.equal(result.providerConfigured, false);
+});
+
