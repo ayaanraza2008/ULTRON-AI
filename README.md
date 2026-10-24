@@ -108,3 +108,20 @@ Configure on the ULTRON backend only:
 All endpoints require a signed-in Supabase user. Audio inputs are capped at 8 MB and generated audio responses at 12 MB. Remote HTTP endpoints are rejected; no arbitrary URL is accepted from a request body.
 
 **Important deployment boundary:** the public Render service cannot connect to `localhost:3900` on your Windows PC. For a PC-local VoiceStudio installation, ULTRON needs a later authenticated Windows companion/bridge to call the local service. Alternatively, use a secured, reachable HTTPS VoiceStudio host. Do not expose VoiceStudio's admin API to the public internet. VoiceStudio is AGPL-3.0; if modified VoiceStudio is provided over a network, comply with its source-offer obligations. Voice/model weights and voice likeness permissions have separate terms. See [VoiceStudio license notice](https://github.com/debpalash/VoiceStudio/blob/main/LICENSE-NOTICE.md).
+
+
+## Explicit live worker smoke check
+
+The command below creates one uniquely labeled AI Employee **plan-only** task in the configured Supabase project, polls it for a terminal state, then deletes it (or cancels it first only if it remains queued after timeout). It does not send messages, publish, execute commands, change production settings, or return the stored task result.
+
+Run only in a trusted environment with the real Supabase service-role key and a valid existing test-user UUID:
+
+~~~bash
+ULTRON_CONFIRM_WORKER_SMOKE=YES \
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_SIDE_SECRET \
+ULTRON_SMOKE_USER_ID=YOUR_EXISTING_TEST_USER_UUID \
+npm run smoke:worker
+~~~
+
+Use the shell's protected secret environment (or your hosting provider's environment-variable UI); never put a service-role key in source control or chat. This is an explicit write test, requires the exact confirmation value, and consumes one task/model attempt. Its redacted output reports the task state and cleanup result only. A successful worker test also requires the worker to be enabled, a valid model provider and usable model quota. A timeout can leave a task requiring manual cleanup if Supabase becomes unreachable during polling/deletion. Do not point this smoke test at a production account unless intentionally approved.
