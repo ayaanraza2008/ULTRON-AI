@@ -107,3 +107,40 @@ test("password recovery uses only the configured HTTPS redirect destination", as
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test("private runtime, worker, and conversation routes fail closed without a verified Supabase session", async () => {
+  let upstreamCalls = 0;
+  const app = createApp({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "test-publishable-key"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async () => {
+      upstreamCalls += 1;
+      throw new Error("unauthenticated requests must not reach upstream services");
+    }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    for (const path of ["/api/runtime/readiness", "/api/worker/status", "/api/conversations"]) {
+      const response = await fetch(base + path);
+      assert.equal(response.status, 401, path);
+      assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED", path);
+    }
+    const forged = await fetch(base + "/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: "some-other-user", title: "Forged request" })
+    });
+    assert.equal(forged.status, 401);
+    assert.equal((await forged.json()).error.code, "SUPABASE_AUTH_REQUIRED");
+    assert.equal(upstreamCalls, 0, "unauthenticated requests must not reach Supabase or model providers");
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
