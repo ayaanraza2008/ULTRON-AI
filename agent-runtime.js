@@ -79,7 +79,7 @@ export function buildBrowserUseGuidance(task) {
 function safeBase(value) {
   try {
     const u = new URL(String(value || ""));
-    return (u.protocol === "https:" || ["localhost", "127.0.0.1"].includes(u.hostname)) && !u.username && !u.password ? u.toString().replace(/\/+$/, "") : null;
+    return (u.protocol === "https:" || ["localhost", "127.0.0.1"].includes(u.hostname)) && !u.username && !u.password && !u.search && !u.hash ? u.toString().replace(/\/+$/, "") : null;
   } catch { return null; }
 }
 function isPublicResearchHost(hostname) {
