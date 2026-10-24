@@ -33,6 +33,10 @@ services:
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
+      - key: ULTRON_AUTH_CALLBACK_URL
+        sync: false
+      - key: ULTRON_AUTH_REDIRECT_URL
+        sync: false
       - key: ULTRON_WORKER_POLL_MS
         value: "5000"
       - key: APP_ACCESS_PASSWORD
