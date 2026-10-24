@@ -258,7 +258,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       const baseUrl = String(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
       try {
         const parsed = new URL(baseUrl);
-        if (parsed.protocol === "https:" && !parsed.username && !parsed.password && safeResearchUrl(baseUrl)) {
+        if (parsed.protocol === "https:" && !parsed.username && !parsed.password && !parsed.search && !parsed.hash && safeResearchUrl(baseUrl)) {
           providers.push({ name: "openrouter", baseUrl, apiKey: primaryKey, model: bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", priority: 0 });
         }
       } catch {}
@@ -278,7 +278,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(name) || !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) || seenNames.has(name)) continue;
       let parsedUrl;
       try { parsedUrl = new URL(item.baseUrl); } catch { continue; }
-      if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password || !safeResearchUrl(item.baseUrl) || !item.model.trim() || item.model.length > 160) continue;
+      if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash || !safeResearchUrl(item.baseUrl) || !item.model.trim() || item.model.length > 160) continue;
       const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
       if (!apiKey) continue;
       const baseUrl = item.baseUrl.replace(/\/+$/, "");
