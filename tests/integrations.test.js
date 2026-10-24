@@ -278,3 +278,19 @@ test("integration adapter stops reading provider responses after the 2 MB limit"
     assert.equal((await response.json()).error.code, "PROVIDER_RESPONSE_TOO_LARGE");
   });
 });
+
+test("ComfyUI adapter rejects a base URL containing query parameters before network access", async () => {
+  const secret = "query-secret-must-not-be-forwarded";
+  let called = false;
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example?token=" + secret }, async () => {
+    called = true;
+    throw new Error("invalid base URL must not reach the ComfyUI provider");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/comfyui/status");
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.error.code, "COMFYUI_NOT_CONFIGURED");
+    assert.equal(JSON.stringify(body).includes(secret), false);
+    assert.equal(called, false);
+  });
+});
