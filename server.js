@@ -1094,13 +1094,13 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         logger.warn?.("ULTRON model request failed", { provider: lastProviderName || undefined, status, code, providerCode: lastProviderCode || undefined });
         const message = lastProviderCode === "INVALID_RESPONSE" || lastProviderCode === "EMPTY_STREAM" ? "All configured models returned an unusable response."
           : lastProviderCode === "NETWORK_ERROR" || lastProviderCode === "NETWORK_TIMEOUT" ? "Could not connect to a configured model. Please retry shortly."
-          : status === 401 ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
-          : status === 402 ? "OpenRouter reports insufficient credits."
-          : status === 403 ? "OpenRouter denied access to every configured model. Check your plan, model access, or account status."
-          : status === 404 ? "None of the configured model IDs are available to this OpenRouter key. Refresh the model list and select an available ID."
-          : status === 429 ? "All configured models are rate-limited right now."
-          : status === 503 ? "All eligible models are temporarily unavailable."
-          : "OpenRouter could not complete the request.";
+          : status === 401 ? `The ${lastProviderName || "configured model provider"} rejected its API key.`
+          : status === 402 ? `The ${lastProviderName || "configured model provider"} reports insufficient credits.`
+          : status === 403 ? `The ${lastProviderName || "configured model provider"} denied access to the selected model.`
+          : status === 404 ? `The selected model is unavailable on ${lastProviderName || "the configured provider"}.`
+          : status === 429 ? "All remaining configured model attempts are rate-limited right now."
+          : status === 503 ? "All eligible model providers are temporarily unavailable."
+          : "The configured model providers could not complete the request.";
         return res.status(status === 429 ? 429 : status === 402 ? 402 : 502).json({ error: { code, message } });
       }
       res.setHeader("X-ULTRON-Model", selectedModel);
