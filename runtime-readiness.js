@@ -1,13 +1,34 @@
+import { isIP } from "node:net";
+
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
+
+function isPrivateOrLocalHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    const octets = host.split(".").map(Number);
+    const [a, b] = octets;
+    return a === 0 || a === 10 || a === 127 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) ||
+      (a >= 224);
+  }
+  if (ipVersion === 6) {
+    return host === "::1" || host === "::" || /^f[cd]/i.test(host) ||
+      /^fe[89ab]/i.test(host) || /^::ffff:(?:10\\.|127\\.|192\\.168\\.|169\\.254\\.|172\\.(?:1[6-9]|2[0-9]|3[01])\\.)/i.test(host);
+  }
+  // Single-label names are usually local network aliases rather than public services.
+  return !host.includes(".");
+}
 
 function secureServiceUrl(value) {
   if (!truthy(value)) return false;
   try {
     const url = new URL(value.trim());
-    const localHosts = ["localhost", "127.0.0.1", "[::1]", "::1"];
     if (url.username || url.password || url.search || url.hash) return false;
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && localHosts.includes(url.hostname);
+    if (url.protocol === "https:") return !isPrivateOrLocalHost(url.hostname);
+    return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
   } catch {
     return false;
   }
