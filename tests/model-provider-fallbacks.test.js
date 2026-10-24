@@ -197,3 +197,38 @@ test("agent model routing fails over after a provider timeout without exposing p
     ]);
   });
 });
+
+
+test("agent model routing falls back after an upstream HTTP 408 timeout response", async () => {
+  const calls = [];
+  const env = {
+    FIRST_KEY: "first-408-test-key",
+    SECOND_KEY: "second-408-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+  await withServer(env, async url => {
+    calls.push(url);
+    if (url.startsWith("https://first.example/")) {
+      return new Response(JSON.stringify({ error: { message: "upstream timeout" } }), { status: 408 });
+    }
+    return new Response(JSON.stringify({
+      model: "model-b",
+      choices: [{ message: { role: "assistant", content: "Recovered after HTTP 408." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Recovered after HTTP 408/);
+    assert.deepEqual(calls, [
+      "https://first.example/v1/chat/completions",
+      "https://second.example/v1/chat/completions"
+    ]);
+  });
+});
