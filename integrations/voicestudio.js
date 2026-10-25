@@ -38,11 +38,36 @@ function providerHeaders(config, extra = {}) {
 }
 
 async function readLimited(response, maxBytes) {
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
     throw Object.assign(new Error("VoiceStudio response exceeded the configured size limit."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
   }
-  return buffer;
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    throw Object.assign(new Error("VoiceStudio response cannot be safely size-limited without a streaming body."), { status: 502, code: "VOICESTUDIO_RESPONSE_UNSAFE_STREAM" });
+  }
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("VoiceStudio response exceeded the configured size limit."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, totalBytes);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
+async function readTextLimited(response, maxBytes) {
+  return (await readLimited(response, maxBytes)).toString("utf8");
 }
 
 async function requestJson(fetchImpl, url, config, options = {}) {
@@ -52,8 +77,7 @@ async function requestJson(fetchImpl, url, config, options = {}) {
     redirect: "error",
     signal: AbortSignal.timeout(options.timeoutMs || 15000)
   });
-  const raw = await response.text();
-  if (raw.length > 1_000_000) throw Object.assign(new Error("VoiceStudio JSON response was too large."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
+  const raw = await readTextLimited(response, 1_000_000);
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
   if (!response.ok) {
@@ -90,7 +114,30 @@ export function voiceStudioReadiness(env = process.env) {
 
 export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser }) {
   const router = express.Router();
-  router.get("/integrations/voicestudio/status", requireSupabaseUser, async (_req, res) => {
+
+  function requireIntegrationOwner(req, res, next) {
+    const expectedOwnerId = bounded(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
+    if (!expectedOwnerId) {
+      return res.status(503).json({
+        error: {
+          code: "INTEGRATION_OWNER_NOT_CONFIGURED",
+          message: "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner account UUID before exposing shared VoiceStudio credentials."
+        }
+      });
+    }
+    const userId = typeof req.supabaseUser?.id === "string" ? req.supabaseUser.id : "";
+    if (!userId) return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Sign in to use VoiceStudio." } });
+    if (userId !== expectedOwnerId) {
+      return res.status(403).json({
+        error: {
+          code: "INTEGRATION_OWNER_ONLY",
+          message: "VoiceStudio is restricted to the configured ULTRON owner account."
+        }
+      });
+    }
+    return next();
+  }
+  router.get("/integrations/voicestudio/status", requireSupabaseUser, requireIntegrationOwner, async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const config = voiceStudioConfig(env);
     if (!config.configured) return res.status(503).json({ ...voiceStudioReadiness(env), reachable: false });
@@ -113,7 +160,7 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
     }
   });
 
-  router.get("/integrations/voicestudio/voices", requireSupabaseUser, async (_req, res) => {
+  router.get("/integrations/voicestudio/voices", requireSupabaseUser, requireIntegrationOwner, async (_req, res) => {
     const config = voiceStudioConfig(env);
     if (!config.configured) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL; remote hosts also require VOICESTUDIO_API_KEY." } });
     try {
@@ -127,7 +174,7 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { return errorResponse(res, error, "VoiceStudio voice listing"); }
   });
 
-  router.post("/integrations/voicestudio/synthesize", requireSupabaseUser, async (req, res) => {
+  router.post("/integrations/voicestudio/synthesize", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
     const config = voiceStudioConfig(env);
     if (!config.configured) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL; remote hosts also require VOICESTUDIO_API_KEY." } });
     const text = bounded(req.body?.text, 5000);
@@ -160,7 +207,7 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { return errorResponse(res, error, "VoiceStudio speech synthesis"); }
   });
 
-  router.post("/integrations/voicestudio/transcribe", requireSupabaseUser, async (req, res) => {
+  router.post("/integrations/voicestudio/transcribe", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
     const config = voiceStudioConfig(env);
     if (!config.configured) return res.status(503).json({ error: { code: "VOICESTUDIO_NOT_CONFIGURED", message: "Configure VOICESTUDIO_BASE_URL; remote hosts also require VOICESTUDIO_API_KEY." } });
     const encoded = bounded(req.body?.audioBase64, Math.ceil(MAX_AUDIO_BYTES * 4 / 3) + 16);
@@ -191,8 +238,7 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
         redirect: "error",
         signal: AbortSignal.timeout(120000)
       });
-      const raw = await response.text();
-      if (raw.length > 1_000_000) throw Object.assign(new Error("VoiceStudio transcription response was too large."), { status: 502, code: "VOICESTUDIO_RESPONSE_TOO_LARGE" });
+      const raw = await readTextLimited(response, 1_000_000);
       let data = {};
       try { data = raw ? JSON.parse(raw) : {}; } catch { data = { text: raw.slice(0, 10000) }; }
       if (!response.ok) {
