@@ -164,3 +164,28 @@ test("Obscura fails safely on MCP errors without leaking response bodies", async
   assert.equal(JSON.stringify(result).includes("secret internal stack path"), false);
   assert.equal(calls, 3);
 });
+
+
+test("Obscura refuses private and metadata MCP service endpoints before sending the gateway token", async () => {
+  for (const url of [
+    "https://192.168.1.10/mcp",
+    "https://169.254.169.254/mcp",
+    "https://metadata.google.internal/mcp",
+    "https://[fd00::1]/mcp",
+    "https://[::1]/mcp"
+  ]) {
+    let called = false;
+    const env = {
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      OBSCURA_MCP_URL: url,
+      OBSCURA_MCP_TOKEN: "synthetic-token"
+    };
+    assert.equal(getObscuraReadiness(env).configured, false, url);
+    const result = await inspectPublicPageWithObscura({
+      env, userId: ownerId, url: "https://example.com",
+      fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+    });
+    assert.equal(result.state, "blocked", url);
+    assert.equal(called, false, url);
+  }
+});
