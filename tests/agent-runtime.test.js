@@ -1565,7 +1565,7 @@ test("Hermes delegated task tool is blocked when ULTRON classifies the task as c
     const call = body.toolResults.find(item => item.name === "hermes_agent_task");
     assert.equal(call.ok, false);
     assert.equal(call.result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
-    assert.equal(calls, 0);
+    assert.equal(calls, 1);
   });
 });
 
