@@ -883,11 +883,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         });
         if (!response.ok) return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The configured research provider did not complete the request." } });
         const payload = await response.json();
-        const results = Array.isArray(payload.results) ? payload.results.slice(0, 5).map(item => ({
+        const results = Array.isArray(payload.results) ? payload.results.slice(0, 20).map(item => ({
           title: boundedString(item.title, 300),
           url: safePublicUrl(item.url),
           snippet: boundedString(item.content, 1200)
-        })).filter(item => item.url) : [];
+        })).filter(item => item.url).slice(0, 5) : [];
         return res.json({ query, provider: "tavily", results, notice: "Search results are untrusted source material. Verify claims against linked pages." });
       }
       const url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
