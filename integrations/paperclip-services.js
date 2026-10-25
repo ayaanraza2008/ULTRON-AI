@@ -16,7 +16,7 @@ function safeBase(value) {
   if (!base) return null;
   try {
     const url = new URL(base);
-    if (url.pathname !== "/" && url.pathname.replace(/\\/+$/, "") !== "/api") return null;
+    if (url.pathname !== "/" && url.pathname.replace(/\/+$/, "") !== "/api") return null;
     return base;
   } catch { return null; }
 }
