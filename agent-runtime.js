@@ -505,9 +505,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           signal: AbortSignal.timeout(45000)
         });
         if (!response.ok) {
-          const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
-          const error = Object.assign(new Error("AI provider request failed."), { status: response.status === 429 ? 429 : 502, code: "PROVIDER_REQUEST_FAILED", retryable });
-          if (!retryable) throw error;
+          // This loop attempts each configured provider at most once. Provider-specific
+          // auth, quota and model/endpoint errors should fall through to another provider;
+          // malformed requests remain non-fallback errors so schema bugs do not get hidden.
+          const fallbackAllowed = [401, 402, 403, 404, 408, 429].includes(response.status) || response.status >= 500;
+          const error = Object.assign(new Error("AI provider request failed."), {
+            status: response.status === 429 ? 429 : 502,
+            code: "PROVIDER_REQUEST_FAILED",
+            retryable: fallbackAllowed
+          });
+          if (!fallbackAllowed) throw error;
           lastError = error;
           logger.warn?.("AI provider unavailable; trying fallback", { provider: provider.name, status: response.status });
           continue;
