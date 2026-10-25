@@ -375,6 +375,26 @@ export function modelSafeResult(value, depth = 0) {
   return out;
 }
 
+const AUTONOMY_RISK_RANK = { routine: 0, private_data: 1, device_control: 2, external_effect: 3, destructive: 4 };
+
+function classifyToolDispatchRisk(name, args, requestRisk) {
+  let delegatedTask = "";
+  if (name === "hermes_agent_task" || name === "browser_use") delegatedTask = args?.task;
+  else if (name === "enqueue_employee_task") delegatedTask = args?.goal;
+  const delegatedRisk = typeof delegatedTask === "string" && delegatedTask.trim()
+    ? classifyAutonomyRisk(delegatedTask)
+    : null;
+  const requestLevel = requestRisk?.level || "routine";
+  const delegatedLevel = delegatedRisk?.level || "routine";
+  const risk = AUTONOMY_RISK_RANK[delegatedLevel] > AUTONOMY_RISK_RANK[requestLevel]
+    ? delegatedRisk
+    : requestRisk;
+  return {
+    requiresConfirmation: Boolean(requestRisk?.requiresConfirmation || delegatedRisk?.requiresConfirmation),
+    risk: risk || { level: "routine", reason: "Read-only, informational, or draft-oriented request", requiresConfirmation: false }
+  };
+}
+
 export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
   const router = express.Router();
 
@@ -1192,8 +1212,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           // Enforce the autonomy policy at the dispatch boundary, not just in
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
-          if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
-            result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
+          const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk);
+          if (dispatchRisk.requiresConfirmation) {
+            result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
           } else {
             result = await executeTool(name, args, req.body || {}, req);
           }
@@ -1236,8 +1257,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             executedToolCalls.add(dedupeKey);
             let result;
             try {
-              if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
-                result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
+              const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk);
+          if (dispatchRisk.requiresConfirmation) {
+            result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
               } else {
                 result = await executeTool(name, args, req.body || {}, req);
               }
