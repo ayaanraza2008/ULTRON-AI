@@ -8,7 +8,7 @@ async function withServer(env, run, extras = {}) {
   const app = express();
   app.use(express.json());
   const requireSession = (_req, _res, next) => next();
-  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
+  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: extras.userId || "00000000-0000-4000-8000-000000000001" }; next(); };
   const supabaseRest = extras.supabaseRest || (async () => []);
   app.use("/api", createFeatureRouter({
     env, requireSession, requireSupabaseUser, supabaseRest,
@@ -1090,3 +1090,251 @@ test("STT JSON response is bounded and cancelled when declared oversized", async
     cancel() { bodyCancelled = true; }
   }), { status: 200, headers: { "content-length": "1000001", "content-type": "application/json" } }) });
 });
+
+const DESKTOP_OWNER = "00000000-0000-4000-8000-000000000001";
+const DESKTOP_DEVICE = "desktop-test-01";
+const DESKTOP_ACTION_ID = "00000000-0000-4000-8000-000000000091";
+const DESKTOP_CONFIG = {
+  ULTRON_INTEGRATION_OWNER_USER_ID: DESKTOP_OWNER,
+  ULTRON_DESKTOP_DEVICE_ID: DESKTOP_DEVICE,
+  ULTRON_DESKTOP_POLL_TOKEN: "test-only-desktop-poll-token"
+};
+
+test("desktop companion queues read-only system information without a redundant approval gate", async () => {
+  const writes = [];
+  const privilegedSupabaseRest = async (_req, table, method, query, body) => {
+    writes.push({ table, method, query, body });
+    if (table === "desktop_actions" && method === "POST") {
+      return [{
+        id: DESKTOP_ACTION_ID, ...body, result: null, error_code: null,
+        created_at: "2026-10-25T18:00:00Z", updated_at: "2026-10-25T18:00:00Z",
+        started_at: null, finished_at: null
+      }];
+    }
+    if (table === "audit_events" && method === "POST") return [];
+    throw new Error("Unexpected privileged desktop operation");
+  };
+  let userWriteCalls = 0;
+  await withServer(DESKTOP_CONFIG, async base => {
+    const response = await fetch(base + "/api/desktop-companion/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionType: "system_info" })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.action.status, "QUEUED");
+    assert.equal(body.action.requiresApproval, false);
+    assert.deepEqual(body.action.payload, {});
+    assert.match(body.notice, /Read-only system information/i);
+    assert.equal(writes.find(item => item.table === "desktop_actions").body.user_id, DESKTOP_OWNER);
+    assert.equal(writes.find(item => item.table === "desktop_actions").body.device_id, DESKTOP_DEVICE);
+    assert.equal(writes.find(item => item.table === "audit_events").body.action, "desktop_action.requested");
+    assert.equal(userWriteCalls, 0);
+  }, {
+    supabaseRest: async () => { userWriteCalls += 1; return []; },
+    privilegedSupabaseRest
+  });
+});
+
+test("desktop companion app launches always wait for explicit owner approval", async () => {
+  let saved;
+  const privilegedSupabaseRest = async (_req, table, method, _query, body) => {
+    if (table === "desktop_actions" && method === "POST") {
+      saved = {
+        id: DESKTOP_ACTION_ID, ...body, result: null, error_code: null,
+        created_at: "2026-10-25T18:00:00Z", updated_at: "2026-10-25T18:00:00Z"
+      };
+      return [saved];
+    }
+    if (table === "audit_events" && method === "POST") return [];
+    throw new Error("Unexpected privileged desktop operation");
+  };
+  await withServer(DESKTOP_CONFIG, async base => {
+    const response = await fetch(base + "/api/desktop-companion/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionType: "launch_app", payload: { app: "notepad" }, requiresApproval: false })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(saved.status, "WAITING_FOR_PERMISSION");
+    assert.equal(saved.requires_approval, true);
+    assert.equal(body.action.requiresApproval, true);
+    assert.match(body.notice, /waiting for explicit approval/i);
+  }, { privilegedSupabaseRest });
+});
+
+test("desktop companion rejects arbitrary command actions before writing to the database", async () => {
+  let writes = 0;
+  await withServer(DESKTOP_CONFIG, async base => {
+    const response = await fetch(base + "/api/desktop-companion/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionType: "run_shell", payload: { command: "whoami" } })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "ACTION_NOT_ALLOWED");
+    assert.equal(writes, 0);
+  }, { privilegedSupabaseRest: async () => { writes += 1; return []; } });
+});
+
+test("desktop companion explicit approval transitions only the owner's pending app action", async () => {
+  const writes = [];
+  const pending = {
+    id: DESKTOP_ACTION_ID, user_id: DESKTOP_OWNER, device_id: DESKTOP_DEVICE,
+    action_type: "launch_app", payload: { app: "notepad" }, status: "WAITING_FOR_PERMISSION",
+    requires_approval: true, approved_at: null
+  };
+  const supabaseRest = async (_req, table, method, query) => {
+    writes.push({ layer: "user", table, method, query });
+    if (table === "desktop_actions" && method === "GET") return [pending];
+    return [];
+  };
+  const privilegedSupabaseRest = async (_req, table, method, query, body) => {
+    writes.push({ layer: "service", table, method, query, body });
+    if (table === "desktop_actions" && method === "PATCH") {
+      assert.match(query, /status=eq\.WAITING_FOR_PERMISSION/);
+      return [{ ...pending, ...body }];
+    }
+    if (table === "audit_events" && method === "POST") return [];
+    throw new Error("Unexpected privileged desktop operation");
+  };
+  await withServer(DESKTOP_CONFIG, async base => {
+    const missingConfirm = await fetch(base + "/api/desktop-companion/actions/" + DESKTOP_ACTION_ID + "/approve", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({})
+    });
+    assert.equal(missingConfirm.status, 400);
+    const response = await fetch(base + "/api/desktop-companion/actions/" + DESKTOP_ACTION_ID + "/approve", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true })
+    });
+    assert.equal(response.status, 202);
+    const body = await response.json();
+    assert.equal(body.action.status, "QUEUED");
+    assert.equal(body.action.approvedAt, "2026-10-25T18:00:00.000Z");
+    const patch = writes.find(item => item.table === "desktop_actions" && item.method === "PATCH");
+    assert.match(patch.query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
+    assert.equal(patch.body.approved_by, DESKTOP_OWNER);
+    assert.equal(writes.some(item => item.table === "audit_events" && item.body.action === "desktop_action.approved"), true);
+  }, { supabaseRest, privilegedSupabaseRest });
+});
+
+test("desktop companion polling requires the private token and matching stable device ID", async () => {
+  let dbCalls = 0;
+  await withServer(DESKTOP_CONFIG, async base => {
+    const rejected = await fetch(base + "/api/desktop-companion/poll", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-ULTRON-Protocol-Version": "1" },
+      body: JSON.stringify({ deviceId: DESKTOP_DEVICE })
+    });
+    assert.equal(rejected.status, 401);
+    const wrongDevice = await fetch(base + "/api/desktop-companion/poll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      body: JSON.stringify({ deviceId: "some-other-device" })
+    });
+    assert.equal(wrongDevice.status, 403);
+    assert.equal(dbCalls, 0);
+  }, { privilegedSupabaseRest: async () => { dbCalls += 1; return []; } });
+});
+
+test("desktop companion polling atomically returns only the claimed allowlisted action", async () => {
+  const writes = [];
+  const claimed = {
+    id: DESKTOP_ACTION_ID, user_id: DESKTOP_OWNER, device_id: DESKTOP_DEVICE,
+    action_type: "launch_app", payload: { app: "notepad" }, status: "RUNNING",
+    requires_approval: true, approved_at: "2026-10-25T18:00:00Z",
+    created_at: "2026-10-25T17:59:00Z"
+  };
+  const privilegedSupabaseRest = async (_req, table, method, query, body) => {
+    writes.push({ table, method, query, body });
+    if (table === "rpc/ultron_claim_next_desktop_action" && method === "POST") {
+      assert.deepEqual(body, { p_user_id: DESKTOP_OWNER, p_device_id: DESKTOP_DEVICE });
+      return [claimed];
+    }
+    throw new Error("Unexpected privileged desktop operation");
+  };
+  await withServer(DESKTOP_CONFIG, async base => {
+    const response = await fetch(base + "/api/desktop-companion/poll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      body: JSON.stringify({ deviceId: DESKTOP_DEVICE })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.action.id, DESKTOP_ACTION_ID);
+    assert.equal(body.action.actionType, "launch_app");
+    assert.equal(body.action.requiresApproval, true);
+    assert.equal(body.action.payload.app, "notepad");
+    assert.equal("user_id" in body.action, false);
+    assert.equal(writes.length, 1);
+  }, { privilegedSupabaseRest });
+});
+
+test("desktop companion completion sanitizes returned system information before persistence", async () => {
+  const writes = [];
+  const running = {
+    id: DESKTOP_ACTION_ID, user_id: DESKTOP_OWNER, device_id: DESKTOP_DEVICE,
+    action_type: "system_info", payload: {}, status: "RUNNING",
+    requires_approval: false, approved_at: null
+  };
+  const privilegedSupabaseRest = async (_req, table, method, query, body) => {
+    writes.push({ table, method, query, body });
+    if (table === "desktop_actions" && method === "GET") return [running];
+    if (table === "desktop_actions" && method === "PATCH") return [{ id: DESKTOP_ACTION_ID, status: body.status, result: body.result, error_code: body.error_code, finished_at: body.finished_at }];
+    if (table === "audit_events" && method === "POST") return [];
+    throw new Error("Unexpected privileged desktop operation");
+  };
+  await withServer(DESKTOP_CONFIG, async base => {
+    const response = await fetch(base + "/api/desktop-companion/actions/" + DESKTOP_ACTION_ID + "/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      body: JSON.stringify({
+        deviceId: DESKTOP_DEVICE,
+        status: "completed",
+        result: {
+          platform: "win32", architecture: "x64", nodeVersion: "v24.1.0", osRelease: "10.0",
+          uptimeSeconds: 10, totalMemoryBytes: 8000000000, freeMemoryBytes: 4000000000, logicalCpuCount: 8,
+          hostname: "must-not-be-stored", environment: { SECRET: "must-not-be-stored" }
+        }
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.action.status, "COMPLETED");
+    assert.equal("hostname" in body.action.result, false);
+    assert.equal("environment" in body.action.result, false);
+    const patch = writes.find(item => item.table === "desktop_actions" && item.method === "PATCH");
+    assert.equal(patch.body.result.hostname, undefined);
+    assert.equal(patch.body.result.environment, undefined);
+    assert.match(patch.query, /status=eq.RUNNING/);
+  }, { privilegedSupabaseRest });
+});
+
+test("desktop companion completion rejects a result for a different task and records a safe failure", async () => {
+  const writes = [];
+  const running = {
+    id: DESKTOP_ACTION_ID, user_id: DESKTOP_OWNER, device_id: DESKTOP_DEVICE,
+    action_type: "launch_app", payload: { app: "notepad" }, status: "RUNNING",
+    requires_approval: true, approved_at: "2026-10-25T18:00:00Z"
+  };
+  const privilegedSupabaseRest = async (_req, table, method, _query, body) => {
+    writes.push({ table, method, body });
+    if (table === "desktop_actions" && method === "GET") return [running];
+    if (table === "desktop_actions" && method === "PATCH") return [{ id: DESKTOP_ACTION_ID, status: body.status, result: body.result, error_code: body.error_code }];
+    if (table === "audit_events" && method === "POST") return [];
+    throw new Error("Unexpected privileged desktop operation");
+  };
+  await withServer(DESKTOP_CONFIG, async base => {
+    const response = await fetch(base + "/api/desktop-companion/actions/" + DESKTOP_ACTION_ID + "/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      body: JSON.stringify({ deviceId: DESKTOP_DEVICE, status: "completed", result: { app: "calculator", started: true } })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.action.status, "FAILED");
+    assert.equal(body.action.error_code, "RESULT_INVALID");
+    assert.equal(writes.find(item => item.table === "desktop_actions" && item.method === "PATCH").body.error_code, "RESULT_INVALID");
+  }, { privilegedSupabaseRest });
+});
+
