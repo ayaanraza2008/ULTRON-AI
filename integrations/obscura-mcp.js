@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { isPublicNetworkHost, safeServiceBase } from "../network-safety.js";
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_PAGE_TEXT = 12_000;
@@ -17,16 +18,17 @@ function endpointConfig(env, userId) {
       env.ULTRON_INTEGRATION_OWNER_USER_ID !== userId) {
     return { error: blocked("INTEGRATION_OWNER_NOT_CONFIGURED", "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner's exact Supabase Auth UUID before exposing the Obscura bridge.") };
   }
-  let url;
-  try { url = new URL(String(env.OBSCURA_MCP_URL || "")); } catch {
-    return { error: blocked("OBSCURA_NOT_CONFIGURED", "Set OBSCURA_MCP_URL to the configured Obscura MCP /mcp endpoint. No upstream request was made.") };
+  const raw = String(env.OBSCURA_MCP_URL || "");
+  const normalized = safeServiceBase(raw);
+  if (!normalized) {
+    return { error: blocked(raw.trim() ? "OBSCURA_ENDPOINT_INVALID" : "OBSCURA_NOT_CONFIGURED",
+      "Obscura MCP must use HTTPS through an authenticated public gateway, or loopback HTTP, and end in /mcp. No upstream request was made.") };
   }
+  const url = new URL(normalized);
   const local = loopbackHost(url.hostname);
-  if (url.username || url.password || url.search || url.hash ||
-      !(url.protocol === "https:" || (url.protocol === "http:" && local)) ||
-      !url.pathname.replace(/\/+$/, "").endsWith("/mcp") ||
+  if (!url.pathname.replace(/\\/+$/, "").endsWith("/mcp") ||
       (url.port && url.port !== "443" && !local)) {
-    return { error: blocked("OBSCURA_ENDPOINT_INVALID", "Obscura MCP must use HTTPS through an authenticated gateway, or loopback HTTP, and end in /mcp. No upstream request was made.") };
+    return { error: blocked("OBSCURA_ENDPOINT_INVALID", "Obscura MCP must use HTTPS through an authenticated public gateway, or loopback HTTP, and end in /mcp. No upstream request was made.") };
   }
   const token = bounded(env.OBSCURA_MCP_TOKEN, 3000);
   if (!local && !token) {
@@ -45,8 +47,7 @@ function validatePublicTarget(value) {
     const host = url.hostname.toLowerCase().replace(/\.$/, "");
     if (url.protocol !== "https:" || url.username || url.password ||
         url.port && url.port !== "443" ||
-        !host.includes(".") || loopbackHost(host) || host.endsWith(".local") ||
-        host === "metadata.google.internal" || host === "metadata.google" ||
+        !host.includes(".") || loopbackHost(host) || !isPublicNetworkHost(host) ||
         isIP(host) !== 0) return null;
     return url.toString();
   } catch { return null; }
