@@ -12,6 +12,7 @@ const ownerId = "00000000-0000-4000-8000-000000000001";
 function configuredEnv(overrides = {}) {
   return {
     HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_CHAT_PROVIDER: "true",
     HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
     HERMES_AGENT_API_KEY: "private-hermes-api-key",
     HERMES_AGENT_MODEL: "hermes-agent",
