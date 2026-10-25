@@ -1,9 +1,9 @@
 # Implementation Status
 
 ## Current phase
-Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` was confirmed empty before this initial documentation commit: size 0, no branches, no commits, no README, no package manifests, no tests, and no application configuration. The repository is owned by the connected GitHub account and reports admin/push access.
+Phase 2 — Backend hardening and live verification. The empty-repository audit below is historical, not the current repository state. `main` now contains a Node/Express API, Supabase-backed auth/chat/preferences/memory/task routes, model-provider fallback, bounded transient TXT/Markdown/CSV/JSON/HTML/PDF/DOCX extraction, a database-polled worker for allowlisted tasks, browser-use and other guarded integration adapters, and a task-matched capability registry. Full frontend redesign and the Windows PC-control UI remain deferred. A passing CI run is not proof that every upstream provider or account workflow works in production.
 
-## Work completed
+## Historical foundation and implementation milestones
 - Added server-side Node/Express foundation, secure session gate, validated chat route, SSE forwarding, static web UI, responsive styling, and browser-native voice loop.
 - Added environment template, `.gitignore`, Render Blueprint, and six initial API security/provider-contract tests.
 - Added GitHub Actions workflow; latest observed run `39651294713` completed successfully (`npm run check`, `npm test`).
@@ -25,6 +25,12 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 - Added Supabase URL and publishable-key configuration to `.env.example` and `render.yaml`; configured these two values on the ULTRON Render service. New mocked auth/database tests were committed; the current deployment and CI run still need to be checked.
 
 ## Tests and verification
+
+### Latest observed snapshot (2026-10-25)
+- GitHub Actions run `40187140720` completed the browser-use policy/Python checks, dependency audit, `npm run check`, `npm test`, deployed `/api/health` smoke test, and the pinned God’s Eye bridge build successfully on the PR source revision.
+- Render reports recent deploy attempts as failed with `pipeline_minutes_exhausted`. These attempts were stopped by the workspace build-pipeline limit before a new deployment could be confirmed; do not describe the latest `main` revision as live solely because source tests pass.
+- The deployed health endpoint passed the CI smoke check for status plus provider/access/Supabase configuration. Live model inference, user email/recovery flows, cross-user RLS isolation, and real queued-task completion remain separately unverified.
+- `ULTRON_INTEGRATION_OWNER_USER_ID` is declared in the Render Blueprint so shared integration adapters can be owner-scoped. The actual private environment value and the corresponding live upstream integrations are not readable/verified from source control.
 - Render reports deploy `dep-dbcg3g6i0phs73a9p5ag` as `live`; server startup log confirms it bound to port 10000. GitHub Actions smoke run `39651873155` successfully fetched and validated `/api/health` from the deployed service.
 - GitHub Actions run `39651294713`: completed successfully; Node syntax checks and automated tests passed.
 - Render build log: `npm install --ignore-scripts` succeeded and reported 0 npm audit vulnerabilities at build time. Render marked the deployment live and the CI smoke test verified `/api/health`.
@@ -40,7 +46,7 @@ Phase 1 — Audit and Baseline. The target repository `ayaanraza2008/ULTRON-AI` 
 4. Browser automation and the Windows companion require live bridge configuration, authenticated pairing, and action execution tests. Cloud hosting cannot directly control a local PC without the companion.
 5. Arbitrary code execution remains unavailable without a hardened isolated sandbox.
 6. Premium speech and research providers require real provider requests and license/usage review.
-7. The PR changes remain on branch `autonomy/guard-production-operations`; production runs `main`. No PR merge or production deploy has been performed for these changes.
+7. Render workspace build-pipeline minutes were exhausted on 2026-10-25; subsequent automatic deploy attempts failed with `pipeline_minutes_exhausted`. Latest source changes cannot be called production-live until Render permits a deployment and its deployed revision is verified.
 
 ## Next concrete action
 Use a dedicated test account and verify a real model response, one queued employee task from enqueue through persisted result, Supabase conversation/message read-write plus cross-user denial, password recovery email/reset, and browser/Windows bridge workflows. Configure missing secrets only in Render's private environment settings; never paste them into chat or commit them to source. Manually install and test the Windows companion before calling desktop control verified.
