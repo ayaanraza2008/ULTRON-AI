@@ -4,6 +4,7 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
+import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 
 function safeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -149,6 +150,8 @@ function validateDocxArchive(bytes) {
 
 function configuredFeatureProviders(env = {}) {
   const providers = [];
+  const hermesProvider = resolveHermesAgentProvider(env);
+  if (hermesProvider) providers.push(hermesProvider);
   const cactusProvider = resolveCactusProvider(env);
   if (cactusProvider) providers.push(cactusProvider);
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
