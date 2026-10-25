@@ -920,12 +920,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     // account's memory preference permits it. RLS scopes all reads to this user.
     if (typeof supabaseRest === "function" && req.supabaseUser?.id) {
       try {
-        const preferenceRows = await supabaseRest(req, "user_preferences", "GET", "?select=memory_enabled&limit=1");
+        const preferenceRows = await supabaseRest(req, "user_preferences", "GET", "?select=memory_enabled&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
         userMemoryEnabled = preferenceRows?.[0]?.memory_enabled !== false;
         if (userMemoryEnabled) {
           const now = encodeURIComponent(new Date().toISOString());
           const memoryRows = await supabaseRest(req, "memory_items", "GET",
-            "?select=kind,title,content&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + now + ")&order=updated_at.desc&limit=8");
+            "?select=kind,title,content&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + now + ")&order=updated_at.desc&limit=8");
           const memories = (Array.isArray(memoryRows) ? memoryRows : []).slice(0, 8).map(item => ({
             kind: bounded(item.kind, 40), title: bounded(item.title, 160), content: bounded(item.content, 800)
           })).filter(item => item.title && item.content);
