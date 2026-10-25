@@ -33,7 +33,7 @@ test("relevant task recall uses the authenticated user's isolated project", asyn
       return new Response(JSON.stringify({ results: [{ title: "Architecture", content: "Use an isolated worker." }, { text: "Tests run with node --test." }] }), { status: 200 });
     }
   });
-  assert.equal(call.url, "https://memory.example/agentmemory/smart-search");
+  assert.equal(call.url, "https://memory.example.com/agentmemory/smart-search");
   assert.equal(call.options.headers.Authorization, "Bearer private-test-secret");
   assert.deepEqual(JSON.parse(call.options.body), { query: "Continue the previous repository implementation", project: "ultron-ai-user-user-123", limit: 5 });
   assert.equal(result.memories.length, 2);
@@ -57,7 +57,7 @@ test("durable capture uses supported remember API and can be disabled", async ()
     }
   });
   assert.equal(captured.state, "captured");
-  assert.equal(call.url, "https://memory.example/agentmemory/remember");
+  assert.equal(call.url, "https://memory.example.com/agentmemory/remember");
   assert.equal(JSON.parse(call.options.body).project, "ultron-ai-user-user-123");
   assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
