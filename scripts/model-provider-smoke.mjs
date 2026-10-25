@@ -68,6 +68,34 @@ function loadProviderCandidates(env) {
     candidates.push({ name, baseUrl, apiKey, model, priority: Number.isFinite(Number(entry.priority)) ? Number(entry.priority) : 100 });
   }
 
+  // Keep the explicit smoke diagnostic aligned with runtime routing: after a
+  // primary OpenRouter failure, it may try other free IDs from the same model list.
+  const openRouter = candidates.find(candidate => candidate.name === "openrouter");
+  if (openRouter) {
+    const knownModels = new Set(
+      candidates.filter(candidate => candidate.baseUrl === openRouter.baseUrl).map(candidate => candidate.model)
+    );
+    const freeModels = String(env.ULTRON_AVAILABLE_MODELS || "")
+      .slice(0, 3000)
+      .split(",")
+      .map(model => model.trim())
+      .filter(model => model === "openrouter/free" ||
+        /^[a-z0-9][a-z0-9._-]{0,79}\\/[a-z0-9][a-z0-9._-]{0,119}:free$/i.test(model))
+      .slice(0, 12);
+    let fallbackIndex = 0;
+    for (const model of freeModels) {
+      if (knownModels.has(model) || fallbackIndex >= 5) continue;
+      candidates.push({
+        name: "openrouter-free-fallback-" + (++fallbackIndex),
+        baseUrl: openRouter.baseUrl,
+        apiKey: openRouter.apiKey,
+        model,
+        priority: 10 + fallbackIndex
+      });
+      knownModels.add(model);
+    }
+  }
+
   return { candidates: candidates.slice(0, MAX_PROVIDER_COUNT + 1).sort((a, b) => a.priority - b.priority), errors };
 }
 
