@@ -86,7 +86,7 @@ class NavigationPolicyTests(unittest.TestCase):
             resolve_public_https_targets(text, fake_resolver("8.8.8.8"))
 
     def test_host_resolver_policy_never_allows_an_empty_target_list(self):
-        with self.assertRaisesRegex(ValueError, "at least one"):
+        with self.assertRaisesRegex(ValueError, "(?i)at least one"):
             build_host_resolver_rules({})
 
 
