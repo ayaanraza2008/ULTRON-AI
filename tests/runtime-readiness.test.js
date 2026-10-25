@@ -95,6 +95,35 @@ test("readiness accepts HTTPS services and plain HTTP loopback development servi
 });
 
 
+test("readiness blocks private, metadata, and local HTTPS service endpoints", () => {
+  for (const unsafeUrl of [
+    "https://169.254.169.254/latest/meta-data",
+    "https://192.168.1.10",
+    "https://10.0.0.4",
+    "https://metadata.google.internal",
+    "https://printer.local",
+    "https://[::1]",
+    "https://[fd00::1]"
+  ]) {
+    const result = buildRuntimeReadiness({
+      env: {
+        ULTRON_BROWSER_USE_URL: unsafeUrl,
+        ULTRON_BROWSER_USE_TOKEN: "synthetic-test-token",
+        ULTRON_DESKTOP_AGENT_URL: unsafeUrl,
+        ULTRON_DESKTOP_AGENT_TOKEN: "synthetic-test-token",
+        TTS_API_BASE_URL: unsafeUrl,
+        TTS_API_KEY: "synthetic-test-token",
+        STT_API_BASE_URL: unsafeUrl,
+        STT_API_KEY: "synthetic-test-token"
+      }
+    });
+    assert.equal(result.components.find(item => item.id === "browser_automation").state, "blocked", unsafeUrl);
+    assert.equal(result.components.find(item => item.id === "windows_companion").state, "blocked", unsafeUrl);
+    assert.equal(result.components.find(item => item.id === "premium_speech").state, "optional", unsafeUrl);
+    assert.equal(JSON.stringify(result).includes("synthetic-test-token"), false);
+  }
+});
+
 test("an intentionally unavailable optional capability does not permanently block core readiness", () => {
   const result = buildRuntimeReadiness({
     env: {
