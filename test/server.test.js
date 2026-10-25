@@ -851,7 +851,7 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
     HERMES_AGENT_ENABLED: "true",
     HERMES_AGENT_CHAT_PROVIDER: "true",
-    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
     HERMES_AGENT_API_KEY: "private-hermes-test-key",
     HERMES_AGENT_MODEL: "hermes-agent",
     HERMES_AGENT_PRIORITY: "-5"
@@ -866,7 +866,7 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
         return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       seen = { url, options, body: JSON.parse(options.body) };
-      assert.equal(url, "https://hermes.example/v1/chat/completions");
+      assert.equal(url, "https://hermes.example.com/v1/chat/completions");
       assert.equal(options.headers.Authorization, "Bearer private-hermes-test-key");
       return new Response(JSON.stringify({
         model: "hermes-agent",
