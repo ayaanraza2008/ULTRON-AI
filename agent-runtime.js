@@ -1160,6 +1160,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       try {
         const response = await fetchImpl(reference.url, {
           headers: { Accept: "text/plain", "User-Agent": "ULTRON-AI-Task-Skills/1.0" },
+          // Skill URLs are fixed upstream references, but redirects can change the
+          // destination. Keep this read-only fetch aligned with the backend's
+          // fail-closed network policy and never follow an upstream redirect.
+          redirect: "error",
           signal: AbortSignal.timeout(5000)
         });
         if (!response.ok) return null;
