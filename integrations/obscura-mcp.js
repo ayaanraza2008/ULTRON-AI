@@ -26,7 +26,7 @@ function endpointConfig(env, userId) {
   }
   const url = new URL(normalized);
   const local = loopbackHost(url.hostname);
-  if (!url.pathname.replace(/\\/+$/, "").endsWith("/mcp") ||
+  if (!url.pathname.replace(/\/+$/, "").endsWith("/mcp") ||
       (url.port && url.port !== "443" && !local)) {
     return { error: blocked("OBSCURA_ENDPOINT_INVALID", "Obscura MCP must use HTTPS through an authenticated public gateway, or loopback HTTP, and end in /mcp. No upstream request was made.") };
   }
