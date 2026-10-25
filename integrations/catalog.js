@@ -1,6 +1,7 @@
 import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
+import { getHermesAgentReadiness } from "./hermes-agent.js";
 
 const safeBaseUrl = (value) => {
   if (typeof value !== "string" || !value.trim()) return false;
@@ -19,6 +20,7 @@ const safeBaseUrl = (value) => {
  * service is reachable or that model weights are installed.
  */
 export function buildIntegrationCatalog(env = process.env) {
+  const hermesReadiness = getHermesAgentReadiness(env);
   const hasComfy = safeBaseUrl(env.COMFYUI_BASE_URL);
   const hasHeyGem = safeBaseUrl(env.HEYGEM_API_BASE_URL) && Boolean(env.HEYGEM_API_KEY) && typeof env.HEYGEM_JOB_PATH === "string" && env.HEYGEM_JOB_PATH.startsWith("/");
   const hasOmniVoice = safeBaseUrl(env.OMNIVOICE_API_BASE_URL) && Boolean(env.OMNIVOICE_API_KEY) && typeof env.OMNIVOICE_SYNTHESIS_PATH === "string" && env.OMNIVOICE_SYNTHESIS_PATH.startsWith("/");
@@ -184,6 +186,20 @@ export function buildIntegrationCatalog(env = process.env) {
         : "Requires an already-running Cactus OpenAI-compatible server, an installed model ID, and an authenticated HTTPS gateway for remote endpoints. On the same machine, loopback HTTP is allowed."
     },
     {
+      id: "hermes-agent",
+      name: "Hermes Agent Runtime",
+      capability: "Delegated tool-enabled agent runtime, skills, memory, subagents, and scheduled routines",
+      state: hermesReadiness.state,
+      configured: Boolean(hermesReadiness.configured),
+      mode: "owner_scoped_agent_gateway",
+      requiredEnv: ["HERMES_AGENT_ENABLED=true", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_CHAT_PROVIDER=true"],
+      apiRoutes: ["agent tools: check_hermes_agent, hermes_agent_task"],
+      note: hermesReadiness.configured
+        ? "Configured but not live-verified; Hermes-side toolsets, model provider, skills, memory, terminal sandbox and integrations must be configured separately."
+        : "Requires a separately installed and authenticated Hermes Agent API server. ULTRON does not install the runtime or enable external messaging/cron actions automatically."
+    },
+  {
       id: "paperclip",
       name: "Paperclip Agent Governance",
       capability: "Read-only agent roster, company dashboard, and monthly cost summary",
