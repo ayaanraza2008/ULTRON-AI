@@ -571,7 +571,7 @@ test("worker falls back to the next configured model after a permanent provider 
       OPENROUTER_API_KEY: "invalid-primary-key",
       OPENROUTER_DEFAULT_MODEL: "bad-model",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "fallback", baseUrl: "https://fallback.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
+        { name: "fallback", baseUrl: "https://fallback.example.com/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
       ]),
       FALLBACK_API_KEY: "fallback-test-key"
     },
@@ -839,7 +839,7 @@ test("background AI Employee falls back when a provider returns malformed JSON",
       OPENROUTER_API_KEY: "primary-test-key",
       OPENROUTER_DEFAULT_MODEL: "openrouter/free",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "backup", baseUrl: "https://backup.example/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
+        { name: "backup", baseUrl: "https://backup.example.com/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
       ]),
       BACKUP_API_KEY: "backup-test-key"
     },
@@ -864,7 +864,7 @@ test("background AI Employee falls back when a provider returns malformed JSON",
   await worker.done;
   assert.deepEqual(attempts, [
     "https://openrouter.ai/api/v1/chat/completions",
-    "https://backup.example/v1/chat/completions"
+    "https://backup.example.com/v1/chat/completions"
   ]);
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
@@ -889,7 +889,7 @@ test("background AI Employee falls back when a provider response exceeds the siz
       OPENROUTER_API_KEY: "primary-test-key",
       OPENROUTER_DEFAULT_MODEL: "openrouter/free",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "backup", baseUrl: "https://backup.example/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
+        { name: "backup", baseUrl: "https://backup.example.com/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
       ]),
       BACKUP_API_KEY: "backup-test-key"
     },
@@ -914,7 +914,7 @@ test("background AI Employee falls back when a provider response exceeds the siz
   await worker.done;
   assert.deepEqual(attempts, [
     "https://openrouter.ai/api/v1/chat/completions",
-    "https://backup.example/v1/chat/completions"
+    "https://backup.example.com/v1/chat/completions"
   ]);
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
@@ -1037,7 +1037,7 @@ test("worker falls back after a transient HTTP 408 provider timeout", async () =
       OPENROUTER_API_KEY: "invalid-primary-key",
       OPENROUTER_DEFAULT_MODEL: "bad-model",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "fallback", baseUrl: "https://fallback.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
+        { name: "fallback", baseUrl: "https://fallback.example.com/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
       ]),
       FALLBACK_API_KEY: "fallback-test-key"
     },
