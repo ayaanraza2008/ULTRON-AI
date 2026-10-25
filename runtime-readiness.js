@@ -76,7 +76,7 @@ export function buildRuntimeReadiness({
       ["ULTRON_DESKTOP_AGENT_URL", "ULTRON_DESKTOP_AGENT_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], desktopConfigured
         ? "Bridge settings and the owner guard are present; live pairing is unverified. The current adapter only probes status and does not execute PC commands."
         : "A reachable, authenticated Windows companion is required. A cloud server cannot directly control the user's PC."),
-    component("windows_local_automation", "Windows local automation", desktopAutomationConfigured ? "configured_unverified" : "blocked",
+    component("windows_local_automation", "Windows local automation", desktopAutomationConfigured ? "configured_unverified" : "optional",
       ["ULTRON_DESKTOP_POLL_TOKEN", "ULTRON_DESKTOP_DEVICE_ID", "ULTRON_INTEGRATION_OWNER_USER_ID"], desktopAutomationConfigured
         ? "The outbound-only local agent is configured for read-only system information and approval-gated launching of three built-in apps; installation and live execution are unverified."
         : "Set a server-side polling token and stable device ID, then install and explicitly enable the Windows companion. It never accepts arbitrary shell commands or reads local files."),
