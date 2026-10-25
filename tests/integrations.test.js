@@ -387,3 +387,38 @@ test("ComfyUI adapter rejects a base URL containing query parameters before netw
     assert.equal(called, false);
   });
 });
+
+
+test("integration catalog and live adapters block private service URLs before any upstream request", async () => {
+  let called = false;
+  const env = {
+    COMFYUI_BASE_URL: "https://192.168.1.10",
+    COMFYUI_API_KEY: "synthetic-token",
+    HEYGEM_API_BASE_URL: "https://169.254.169.254/metadata",
+    HEYGEM_API_KEY: "synthetic-heygem-token",
+    HEYGEM_JOB_PATH: "/jobs"
+  };
+  const fetchImpl = async () => {
+    called = true;
+    throw new Error("Private provider endpoint must never be called.");
+  };
+  await withServer(env, fetchImpl, async base => {
+    const catalogResponse = await fetch(base + "/api/integrations/catalog");
+    assert.equal(catalogResponse.status, 200);
+    const catalog = await catalogResponse.json();
+    assert.equal(catalog.integrations.find(item => item.id === "comfyui").state, "blocked");
+    assert.equal(catalog.integrations.find(item => item.id === "heygem").state, "blocked");
+
+    const comfy = await fetch(base + "/api/integrations/comfyui/status");
+    assert.equal(comfy.status, 503);
+    assert.equal((await comfy.json()).error.code, "COMFYUI_NOT_CONFIGURED");
+
+    const heygem = await fetch(base + "/api/integrations/heygem/jobs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { text: "test" } })
+    });
+    assert.equal(heygem.status, 503);
+    assert.equal((await heygem.json()).error.code, "HEYGEM_NOT_CONFIGURED");
+    assert.equal(called, false);
+  });
+});
