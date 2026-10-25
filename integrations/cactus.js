@@ -3,6 +3,7 @@
  * Cactus is an optional external runtime; ULTRON never downloads model weights.
  */
 import { isIP } from "node:net";
+import { safeServiceBase } from "../network-safety.js";
 
 function bounded(value, max = 300) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -14,19 +15,20 @@ function loopbackHost(host) {
 }
 
 function parseCactusBase(value) {
+  const normalized = safeServiceBase(String(value || ""));
+  if (!normalized) return null;
   let url;
-  try { url = new URL(String(value || "")); } catch { return null; }
+  try { url = new URL(normalized); } catch { return null; }
   const local = loopbackHost(url.hostname);
-  if (url.username || url.password || url.search || url.hash ||
-      !(url.protocol === "https:" || (url.protocol === "http:" && local)) ||
-      (url.port && url.port !== "443" && !local) ||
+  const host = url.hostname.replace(/^\\[|\\]$/g, "");
+  if ((url.port && url.port !== "443" && !local) ||
       url.pathname.split("/").some(segment => segment === "..")) return null;
-  const path = url.pathname.replace(/\/+$/, "");
+  // Cactus remote services must use a hostname, not an IP literal.
+  if (!local && isIP(host) !== 0) return null;
+  const path = url.pathname.replace(/\\/+$/, "");
   if (path && path !== "/v1") return null;
   url.pathname = path || "/v1";
-  url.search = "";
-  url.hash = "";
-  return { baseUrl: url.toString().replace(/\/+$/, ""), local };
+  return { baseUrl: url.toString().replace(/\\/+$/, ""), local };
 }
 
 function blocked(code, message) {
