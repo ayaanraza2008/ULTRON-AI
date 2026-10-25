@@ -3,20 +3,77 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createVoiceStudioRouter, voiceStudioReadiness } from "../integrations/voicestudio.js";
 
-async function withServer(env, fetchImpl, run) {
+async function withServer(env, fetchImpl, run, { userId = "00000000-0000-4000-8000-000000000001" } = {}) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
+  const configuredEnv = { ...env };
+  if (!Object.hasOwn(configuredEnv, "ULTRON_INTEGRATION_OWNER_USER_ID")) {
+    configuredEnv.ULTRON_INTEGRATION_OWNER_USER_ID = "00000000-0000-4000-8000-000000000001";
+  }
   const requireSupabaseUser = (req, _res, next) => {
-    req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" };
+    req.supabaseUser = { id: userId };
     next();
   };
-  app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
+  app.use("/api", createVoiceStudioRouter({ env: configuredEnv, fetchImpl, requireSupabaseUser }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
   try { await run("http://127.0.0.1:" + server.address().port); }
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
+
+test("VoiceStudio refuses shared credentials when the owner guard is missing", async () => {
+  let called = false;
+  await withServer({
+    ULTRON_INTEGRATION_OWNER_USER_ID: "",
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "synthetic-voice-key"
+  }, async () => {
+    called = true;
+    throw new Error("VoiceStudio request should not reach the provider without an owner guard.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/voices");
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "INTEGRATION_OWNER_NOT_CONFIGURED");
+    assert.equal(called, false);
+  });
+});
+
+test("VoiceStudio denies non-owner accounts before calling the upstream service", async () => {
+  let called = false;
+  await withServer({
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000002",
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "synthetic-voice-key"
+  }, async () => {
+    called = true;
+    throw new Error("Non-owner request must be rejected locally.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Hello world", format: "wav" })
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "INTEGRATION_OWNER_ONLY");
+    assert.equal(called, false);
+  });
+});
+
+test("VoiceStudio JSON response reader stops at the byte limit instead of buffering the entire response", async () => {
+  await withServer({
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "synthetic-voice-key"
+  }, async url => {
+    assert.equal(url, "https://voice.example/v1/audio/voices");
+    return new Response("x".repeat(1_000_001), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/voicestudio/voices");
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "VOICESTUDIO_RESPONSE_TOO_LARGE");
+  });
+});
+
 
 test("VoiceStudio readiness requires a secure remote endpoint and API key", () => {
   assert.equal(voiceStudioReadiness({}).configured, false);
