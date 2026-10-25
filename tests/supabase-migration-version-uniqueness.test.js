@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const migrationsDirectory = fileURLToPath(new URL("../supabase/migrations/", import.meta.url));
@@ -29,3 +29,17 @@ test("Supabase migration filenames have valid, unique version prefixes", async (
     seenVersions.set(version, filename);
   }
 });
+
+test("task-worker migration keeps its attempts ALTER outside the SQL comment", async () => {
+  const sql = await readFile(
+    fileURLToPath(new URL("../supabase/migrations/202610220001_task_worker.sql", import.meta.url)),
+    "utf8"
+  );
+  assert.match(
+    sql,
+    /^-- Safe queue claim RPC[^\r\n]*\r?\n(?=alter table public\\.agent_tasks)/,
+    "the ALTER TABLE must start on a real SQL line, not inside the preceding comment"
+  );
+  assert.match(sql, /^alter table public\.agent_tasks add column if not exists attempts/m);
+});
+
