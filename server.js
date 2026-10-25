@@ -325,12 +325,23 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       return res.status(400).json({ error: { message: "Invalid or oversized chat completion request", type: "invalid_request_error" } });
     }
 
-    const configuredModels = String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free")
-      .split(",").map(value => value.trim()).filter(Boolean).slice(0, 12);
+    const configuredModels = [...new Set(String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free")
+      .split(",").map(value => value.trim()).filter(Boolean))].slice(0, 12);
     const defaultModel = String(env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
-    const allowedModels = new Set([defaultModel, ...configuredModels]);
-    const requestedModel = allowedModels.has(String(payload.model || "")) ? String(payload.model) : defaultModel;
-    const openRouterCandidates = [...new Set([requestedModel, defaultModel, ...configuredModels])].slice(0, 12);
+    const visionModels = [...new Set(String(env.ULTRON_VISION_MODELS || "openrouter/free")
+      .split(",").map(value => value.trim())
+      .filter(value => /^[a-zA-Z0-9._/-]{1,154}(?::free)?$/.test(value)))].slice(0, 8);
+    const hasImagePayload = payload.messages.some(message =>
+      Array.isArray(message?.content) && message.content.some(part =>
+        part?.type === "image_url" || (part && typeof part === "object" && "image_url" in part)
+      )
+    );
+    const allowedModels = new Set([defaultModel, ...configuredModels, ...visionModels]);
+    const suppliedModel = String(payload.model || "");
+    const requestedModel = allowedModels.has(suppliedModel) ? suppliedModel : defaultModel;
+    const openRouterCandidates = hasImagePayload
+      ? [...new Set([...(visionModels.includes(requestedModel) ? [requestedModel] : []), ...visionModels])].slice(0, 8)
+      : [...new Set([requestedModel, defaultModel, ...configuredModels])].slice(0, 12);
 
     let openRouterBaseUrl = null;
     let primaryProviderConfigInvalid = false;
@@ -350,11 +361,6 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       });
     }
 
-    const hasImagePayload = payload.messages.some(message =>
-      Array.isArray(message?.content) && message.content.some(part =>
-        part?.type === "image_url" || (part && typeof part === "object" && "image_url" in part)
-      )
-    );
     const attempts = [];
     for (const provider of providers) {
       if (provider.isOpenRouter) {
