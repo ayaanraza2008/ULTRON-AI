@@ -27,7 +27,7 @@ test("VoiceStudio refuses shared credentials when the owner guard is missing", a
   let called = false;
   await withServer({
     ULTRON_INTEGRATION_OWNER_USER_ID: "",
-    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_BASE_URL: "https://voice.example.com",
     VOICESTUDIO_API_KEY: "synthetic-voice-key"
   }, async () => {
     called = true;
@@ -44,7 +44,7 @@ test("VoiceStudio denies non-owner accounts before calling the upstream service"
   let called = false;
   await withServer({
     ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000002",
-    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_BASE_URL: "https://voice.example.com",
     VOICESTUDIO_API_KEY: "synthetic-voice-key"
   }, async () => {
     called = true;
@@ -63,7 +63,7 @@ test("VoiceStudio denies non-owner accounts before calling the upstream service"
 
 test("VoiceStudio JSON response reader stops at the byte limit instead of buffering the entire response", async () => {
   await withServer({
-    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_BASE_URL: "https://voice.example.com",
     VOICESTUDIO_API_KEY: "synthetic-voice-key"
   }, async url => {
     assert.equal(url, "https://voice.example.com/v1/audio/voices");
@@ -78,15 +78,15 @@ test("VoiceStudio JSON response reader stops at the byte limit instead of buffer
 
 test("VoiceStudio readiness requires a secure remote endpoint and API key", () => {
   assert.equal(voiceStudioReadiness({}).configured, false);
-  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "http://voice.example" }).state, "https_required");
-  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "https://voice.example" }).state, "remote_api_key_required");
-  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "secret" }).configured, true);
+  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "http://voice.example.com" }).state, "https_required");
+  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "https://voice.example.com" }).state, "remote_api_key_required");
+  assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "secret" }).configured, true);
   assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: "http://localhost:3900" }).configured, true);
 });
 
 test("VoiceStudio status reports live discovery and model count without exposing credentials", async () => {
   const seen = [];
-  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
     seen.push({ url, options });
     if (url.endsWith("/.well-known/voicestudio-speech")) return new Response(JSON.stringify({ name: "VoiceStudio", version: "0.5.3" }));
     return new Response(JSON.stringify({ data: [{ id: "omnivoice" }, { id: "whisper" }] }));
@@ -105,7 +105,7 @@ test("VoiceStudio status reports live discovery and model count without exposing
 
 test("VoiceStudio synthesis forwards validated options and returns bounded audio", async () => {
   let request;
-  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
     request = { url, options };
     return new Response(Buffer.from("fake-wav"), { status: 200, headers: { "content-type": "audio/wav" } });
   }, async base => {
@@ -143,7 +143,7 @@ test("VoiceStudio synthesis rejects unsupported format before network call", asy
 
 test("VoiceStudio transcription sends multipart audio and returns recognized text", async () => {
   let request;
-  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+  await withServer({ VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
     request = { url, options };
     assert.ok(options.body instanceof FormData);
     assert.equal(options.body.get("model"), "whisper-1");
@@ -209,5 +209,5 @@ test("VoiceStudio blocks private, link-local, metadata, and local HTTPS endpoint
 
 test("VoiceStudio still allows local loopback development and secure public remote services", () => {
   assert.equal(voiceStudioSettings({ VOICESTUDIO_BASE_URL: "http://localhost:3900" }).baseUrl, "http://localhost:3900");
-  assert.equal(voiceStudioSettings({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "synthetic-token" }).baseUrl, "https://voice.example");
+  assert.equal(voiceStudioSettings({ VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "synthetic-token" }).baseUrl, "https://voice.example.com");
 });
