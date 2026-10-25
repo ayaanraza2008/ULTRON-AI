@@ -189,7 +189,7 @@ export async function checkHermesAgentService({ env = process.env, fetchImpl = g
   ].map(p => p.then(value => value).catch(error => ({ ok: false, error: {
     code: bounded(error?.code, 80) || "HERMES_AGENT_REQUEST_FAILED",
     message: "The Hermes Agent service did not return a valid response for this check."
-  } })));
+  } }))));
   const [modelsResult, capabilitiesResult] = results;
   const successes = results.filter(item => item.ok).length;
   return {
