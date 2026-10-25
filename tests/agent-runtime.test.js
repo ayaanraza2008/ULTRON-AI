@@ -6,7 +6,7 @@ import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
-  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
+  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: extras.userId || "00000000-0000-4000-8000-000000000001" }; next(); };
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, privilegedSupabaseRest: extras.privilegedSupabaseRest || extras.supabaseRest, logger: { warn() {} } }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
@@ -1667,3 +1667,34 @@ test("Hermes delegated task tool is blocked when ULTRON classifies the task as c
   });
 });
 
+
+test("Hermes direct model provider is not exposed to non-owner agent requests", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const otherUserId = "00000000-0000-4000-8000-000000000002";
+  const urls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_CHAT_PROVIDER: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId
+  };
+  await withServer(env, async url => {
+    urls.push(url);
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Response from the account-safe fallback provider." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello in one sentence." })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /account-safe fallback provider/);
+    assert.deepEqual(urls, ["https://openrouter.ai/api/v1/chat/completions"]);
+  }, { userId: otherUserId });
+});

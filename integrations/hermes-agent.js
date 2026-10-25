@@ -140,9 +140,11 @@ export function getHermesAgentReadiness(env = process.env) {
   };
 }
 
-export function resolveHermesAgentProvider(env = process.env) {
+export function resolveHermesAgentProvider(env = process.env, userId) {
   if (env.HERMES_AGENT_CHAT_PROVIDER !== "true") return null;
-  const config = getConfig(env);
+  // Direct chat-provider access is owner-scoped just like delegated tasks.
+  // Callers without an authenticated ULTRON user identity must not receive the owner's upstream token.
+  const config = getConfig(env, userId, true);
   if (config.error) return null;
   return {
     name: "hermes-agent",
