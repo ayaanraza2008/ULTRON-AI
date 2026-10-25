@@ -156,11 +156,18 @@ export async function runModelProviderSmoke({ env = process.env, fetchImpl = glo
         attempts.push({ provider: provider.name, model: provider.model, code: "EMPTY_COMPLETION", httpStatus: response.status });
         continue;
       }
+      // HTTP 200 plus arbitrary text is not enough to prove the expected model
+      // completion contract. Verify the challenge token without exposing output.
+      if (!completion.toUpperCase().includes("ULTRON_SMOKE_OK")) {
+        attempts.push({ provider: provider.name, model: provider.model, code: "UNEXPECTED_COMPLETION", httpStatus: response.status });
+        continue;
+      }
       return {
         status: "passed",
         provider: provider.name,
         model: safeModel(data?.model) || provider.model,
         completionReceived: true,
+        challengeVerified: true,
         attempts,
         successfulAttempt: attempts.length + 1,
         generatedAt: now()
