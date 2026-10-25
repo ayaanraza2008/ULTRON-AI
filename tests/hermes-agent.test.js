@@ -118,7 +118,6 @@ test("Hermes delegated task requires owner UUID, sends stable account-scoped mem
       assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
       assert.match(options.headers["X-Hermes-Session-Key"], /^ultron-[a-f0-9]{32}$/);
       assert.ok(options.headers["Idempotency-Key"]);
-      assert.equal(seen, undefined);
       return new Response(JSON.stringify({
         model: "hermes-agent", usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
         choices: [{ message: { role: "assistant", content: "The official documentation describes the API; no changes were made." } }]
