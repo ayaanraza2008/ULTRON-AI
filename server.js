@@ -12,6 +12,7 @@ import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
+import { safeServiceBase } from "./network-safety.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -226,15 +227,10 @@ async function isCompromisedPassword(password, fetchImpl) {
 }
 
 function normalizeBaseUrl(value) {
-  const raw = (value || DEFAULT_BASE_URL).trim();
-  const parsed = new URL(raw);
-  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-    throw new Error("Model provider base URL must use HTTPS outside localhost.");
-  }
-  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error("Model provider base URL must not include credentials, query parameters, or fragments.");
-  }
-  return raw.replace(/\/+$/, "");
+  const raw = (typeof value === "string" && value.trim()) ? value.trim() : DEFAULT_BASE_URL;
+  const normalized = safeServiceBase(raw);
+  if (!normalized) throw new Error("Model provider base URL must be HTTPS and must not target private, local, metadata, or reserved network endpoints.");
+  return normalized;
 }
 
 function hasConfiguredModelProvider(env) {
@@ -244,8 +240,8 @@ function hasConfiguredModelProvider(env) {
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
     try {
-      const baseUrl = new URL(env.OPENROUTER_BASE_URL || DEFAULT_BASE_URL);
-      if (baseUrl.protocol === "https:" && !baseUrl.username && !baseUrl.password && !baseUrl.search && !baseUrl.hash) return true;
+      const baseUrl = safeServiceBase(env.OPENROUTER_BASE_URL || DEFAULT_BASE_URL);
+      if (baseUrl) return true;
     } catch { /* invalid primary endpoint; continue checking alternate providers */ }
   }
   let providers;
@@ -519,9 +515,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const key = String(env.SUPABASE_PUBLISHABLE_KEY || "").trim();
     if (!url || !key) return null;
     try {
-      const parsed = new URL(url);
-      if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") return null;
-      return { url, key };
+      const normalized = safeServiceBase(url);
+      if (!normalized) return null;
+      return { url: normalized, key };
     } catch { return null; }
   }
   function cookieOptions(maxAge) {
