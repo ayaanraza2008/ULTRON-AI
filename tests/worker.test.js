@@ -1,6 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner } from "../worker.js";
+import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner, safeResearchUrl } from "../worker.js";
+
+test("worker research URL validation shares reserved IPv4 and IPv6 host rules", () => {
+  for (const url of [
+    "http://127.0.0.1/admin",
+    "http://192.168.1.10/admin",
+    "http://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal/computeMetadata/v1",
+    "http://[::1]/private",
+    "http://[2002:7f00:1::]/loopback-tunnel",
+    "http://[2001:2::1]/benchmarking",
+    "http://[2001:10::1]/orchid",
+    "http://[2001:20::1]/orchid-v2",
+    "http://[3fff::1]/documentation-prefix",
+    "https://user:password@example.com/private"
+  ]) assert.equal(safeResearchUrl(url), "", url);
+  assert.equal(safeResearchUrl("https://www.example.com/article"), "https://www.example.com/article");
+});
 
 test("limited response readers reject non-streaming fallbacks before buffering", async () => {
   let textCalls = 0;
