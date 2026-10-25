@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { isIP } from "node:net";
+import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
@@ -80,45 +80,12 @@ export async function readJsonLimited(response, maxBytes) {
     reader.releaseLock?.();
   }
 }
-function safeResearchUrl(value) {
+export function safeResearchUrl(value) {
   try {
     if (typeof value !== "string" || value.length > 2048) return "";
     const url = new URL(value);
-    if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return "";
-    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
-    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-        host === "metadata.google.internal" || host === "metadata.google") return "";
-    const version = isIP(host);
-    if (version === 4) {
-      const octets = host.split(".").map(Number);
-      const [a, b] = octets;
-      if (a === 0 || a === 10 || a === 127 || a >= 224 ||
-          (a === 100 && b >= 64 && b <= 127) ||
-          (a === 169 && b === 254) ||
-          (a === 172 && b >= 16 && b <= 31) ||
-          (a === 192 && (b === 0 || b === 168 || (b === 88 && octets[2] === 99))) ||
-          (a === 198 && (b === 18 || b === 19 || (b === 51 && octets[2] === 100))) ||
-          (a === 203 && b === 0 && octets[2] === 113)) return "";
-    } else if (version === 6) {
-      const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
-      // Only global-unicast IPv6 (2000::/3) is eligible as an external source.
-      // This also excludes IPv4-compatible/mapped forms, link-local, multicast and ULA.
-      if (firstHextet < 0x2000 || firstHextet > 0x3fff) return "";
-      if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") ||
-          /^fe[89ab]/.test(host) || host.startsWith("2001:db8:") || host.startsWith("2001:0:") || host.startsWith("2002:")) return "";
-      const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-      if (mapped && !safeResearchUrl("https://" + mapped[1] + "/")) return "";
-      // Hex IPv4-mapped IPv6, e.g. ::ffff:7f00:1, must inherit IPv4 restrictions.
-      const mappedHex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
-      if (mappedHex) {
-        const high = Number.parseInt(mappedHex[1], 16);
-        const low = Number.parseInt(mappedHex[2], 16);
-        const ipv4 = [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
-        if (!safeResearchUrl("https://" + ipv4 + "/")) return "";
-      }
-    } else if (!host.includes(".")) {
-      return "";
-    }
+    if (!["https:", "http:"].includes(url.protocol) || !url.hostname ||
+        url.username || url.password || !isPublicNetworkHost(url.hostname)) return "";
     return url.toString();
   } catch {
     return "";
@@ -256,13 +223,11 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     const providers = [];
     const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
     if (primaryKey) {
-      const baseUrl = String(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
-      try {
-        const parsed = new URL(baseUrl);
-        if (parsed.protocol === "https:" && !parsed.username && !parsed.password && !parsed.search && !parsed.hash && safeResearchUrl(baseUrl)) {
-          providers.push({ name: "openrouter", baseUrl, apiKey: primaryKey, model: bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", priority: 0 });
-        }
-      } catch {}
+      const rawBaseUrl = env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+      const baseUrl = safeServiceBase(rawBaseUrl);
+      if (baseUrl) {
+        providers.push({ name: "openrouter", baseUrl, apiKey: primaryKey, model: bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", priority: 0 });
+      }
     }
     let configured = [];
     try {
@@ -279,10 +244,11 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(name) || !/^[A-Z][A-Z0-9_]{1,79}$/.test(apiKeyEnv) || seenNames.has(name)) continue;
       let parsedUrl;
       try { parsedUrl = new URL(item.baseUrl); } catch { continue; }
-      if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash || !safeResearchUrl(item.baseUrl) || !item.model.trim() || item.model.length > 160) continue;
+      if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash || !item.model.trim() || item.model.length > 160) continue;
+      const baseUrl = safeServiceBase(parsedUrl.toString());
+      if (!baseUrl) continue;
       const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
       if (!apiKey) continue;
-      const baseUrl = item.baseUrl.replace(/\/+$/, "");
       if (providers.some(provider => provider.baseUrl === baseUrl)) continue;
       seenNames.add(name);
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100 });
