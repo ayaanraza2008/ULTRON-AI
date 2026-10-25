@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { safeServiceBase } from "../network-safety.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED", "BLOCKED", "WAITING_FOR_PERMISSION"]);
@@ -11,11 +12,15 @@ function safeCode(value, fallback = "WORKER_SMOKE_FAILED") {
 }
 
 function validSupabaseUrl(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
+  const safe = safeServiceBase(value);
+  if (!safe) return null;
   try {
-    const url = new URL(value.trim());
-    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) return null;
-    return url.origin;
+    const url = new URL(safe);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
+        (url.pathname !== "/" && url.pathname !== "") || (url.port && url.port !== "443") ||
+        !hostname.endsWith(".supabase.co") || hostname === "supabase.co") return null;
+    return "https://" + hostname;
   } catch {
     return null;
   }
