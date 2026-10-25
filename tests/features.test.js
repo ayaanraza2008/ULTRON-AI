@@ -359,9 +359,9 @@ test("task approval uses privileged state transition and audit writes after owne
   const privilegedRest = async (_req, table, method, query, body) => {
     calls.push({ path: "service", table, method, query, body });
     if (table === "agent_tasks" && method === "PATCH") {
-      assert.match(query, /id=eq\\.00000000-0000-4000-8000-000000000052/);
-      assert.match(query, /user_id=eq\\.00000000-0000-4000-8000-000000000001/);
-      assert.match(query, /status=eq\\.WAITING_FOR_PERMISSION/);
+      assert.match(query, /id=eq\.00000000-0000-4000-8000-000000000052/);
+      assert.match(query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
+      assert.match(query, /status=eq\.WAITING_FOR_PERMISSION/);
       return [{ id: taskId, title: "Draft", input: body.input, status: "QUEUED" }];
     }
     if (table === "audit_events" && method === "POST") {
@@ -399,9 +399,9 @@ test("task cancellation uses the privileged conditional update and never writes 
   const privilegedRest = async (_req, table, method, query, body) => {
     calls.push({ path: "service", table, method, query, body });
     if (table === "agent_tasks" && method === "PATCH") {
-      assert.match(query, /id=eq\\.00000000-0000-4000-8000-000000000053/);
-      assert.match(query, /user_id=eq\\.00000000-0000-4000-8000-000000000001/);
-      assert.match(query, /status=in\\.\\(QUEUED,WAITING_FOR_PERMISSION\\)/);
+      assert.match(query, /id=eq\.00000000-0000-4000-8000-000000000053/);
+      assert.match(query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
+      assert.match(query, /status=in\.\(QUEUED,WAITING_FOR_PERMISSION\)/);
       return [{ id: taskId, status: "CANCELLED" }];
     }
     if (table === "audit_events" && method === "POST") {
@@ -421,9 +421,9 @@ test("task cancellation uses the privileged conditional update and never writes 
   }, { supabaseRest: regularRest, privilegedSupabaseRest: privilegedRest });
 });
 
-test("task approval requires explicit confirmation and preserves original task input", async () => {
+test("task approval requires confirmation but refuses to queue review-only task types", async () => {
   const writes = [];
-  const originalInput = { description: "Research a topic", risk: "medium", requiresApproval: true, approved: false };
+  const originalInput = { description: "Research a topic", taskType: "manual", executionMode: "planned_only", risk: "medium", requiresApproval: true, approved: false };
   const fakeSupabaseRest = async (_req, table, method, query, body) => {
     writes.push({ table, method, query, body });
     if (table === "agent_tasks" && method === "GET") return [{ id: "00000000-0000-4000-8000-000000000002", title: "Research", input: originalInput, status: "WAITING_FOR_PERMISSION" }];
@@ -438,11 +438,10 @@ test("task approval requires explicit confirmation and preserves original task i
     const approved = await fetch(base + "/api/tasks/00000000-0000-4000-8000-000000000002/approve", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true })
     });
-    assert.equal(approved.status, 200);
-    const body = await approved.json();
-    assert.equal(body.task.input.description, "Research a topic");
-    assert.equal(body.task.input.approved, true);
-    assert.match(body.notice, /worker is still required/i);
+    assert.equal(approved.status, 409);
+    assert.equal((await approved.json()).error.code, "TASK_TYPE_NOT_EXECUTABLE");
+    assert.equal(writes.some(write => write.method === "PATCH"), false, "review-only tasks must not be queued after confirmation");
+    assert.equal(writes.some(write => write.table === "audit_events"), false);
   }, { supabaseRest: fakeSupabaseRest });
 });
 
