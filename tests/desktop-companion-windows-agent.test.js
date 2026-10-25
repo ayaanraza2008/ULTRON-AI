@@ -5,7 +5,7 @@ import { executeDesktopAction, runWindowsCompanion, validateDesktopCompanionClie
 
 const BASE_ENV = {
   ULTRON_DESKTOP_SERVER_URL: "https://ultron.example.com",
-  ULTRON_DESKTOP_POLL_TOKEN: "synthetic-poll-token",
+  ULTRON_DESKTOP_POLL_TOKEN: "synthetic-desktop-poll-token-32bytes",
   ULTRON_DESKTOP_DEVICE_ID: "desktop-test-01",
   ULTRON_DESKTOP_AGENT_ENABLED: "true"
 };
@@ -126,7 +126,7 @@ test("companion polls with bearer token and reports only bounded allowlisted res
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       assert.equal(options.redirect, "error");
-      assert.equal(options.headers.Authorization, "Bearer synthetic-poll-token");
+      assert.equal(options.headers.Authorization, "Bearer synthetic-desktop-poll-token-32bytes");
       if (url.endsWith("/api/desktop-companion/poll")) {
         polls += 1;
         const body = polls === 1 ? { action: {
