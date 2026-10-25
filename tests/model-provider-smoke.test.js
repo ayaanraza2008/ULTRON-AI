@@ -32,7 +32,7 @@ test("smoke check falls back after a rate-limited primary provider", async () =>
       OPENROUTER_API_KEY: "primary-test-secret",
       OPENROUTER_DEFAULT_MODEL: "openrouter/free",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "fallback", baseUrl: "https://fallback.example/v1", apiKeyEnv: "FALLBACK_KEY", model: "free-model", priority: 10 }
+        { name: "fallback", baseUrl: "https://fallback.example.com/v1", apiKeyEnv: "FALLBACK_KEY", model: "free-model", priority: 10 }
       ]),
       FALLBACK_KEY: "fallback-test-secret"
     },
@@ -53,7 +53,7 @@ test("smoke check refuses unsafe provider URLs before networking", async () => {
   const report = await runModelProviderSmoke({
     env: {
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "unsafe", baseUrl: "http://provider.example/v1", apiKeyEnv: "UNSAFE_KEY", model: "test-model" }
+        { name: "unsafe", baseUrl: "http://provider.example.com/v1", apiKeyEnv: "UNSAFE_KEY", model: "test-model" }
       ]),
       UNSAFE_KEY: "test-secret"
     },
