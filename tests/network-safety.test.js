@@ -4,7 +4,7 @@ import { isPublicNetworkHost, safeServiceBase } from "../network-safety.js";
 
 test("public network host validator rejects private, local, metadata, and transition hosts", () => {
   for (const host of [
-    "localhost", "printer.local", "service.internal", "metadata.google.internal",
+    "localhost", "printer.local", "service.internal", "metadata.google.internal", "service.example",
     "10.0.0.1", "127.0.0.1", "169.254.169.254", "192.168.1.1", "172.20.0.2",
     "::1", "[::1]", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:7f00:1",
     "2001:db8::1", "2001:2::1", "2001:10::1", "2001:20::1", "2002:7f00:1::1",
