@@ -1,4 +1,5 @@
 import { inflateRawSync } from "node:zlib";
+import { isIP } from "node:net";
 import express from "express";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
@@ -1400,8 +1401,21 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 function safePublicUrl(value) {
   try {
     const url = new URL(String(value || ""));
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(url.hostname)) return null;
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    const ipHost = host.replace(/^\[|\]$/g, "");
+    const localSuffixes = [
+      ".localhost", ".local", ".localdomain", ".internal", ".intranet",
+      ".lan", ".home", ".test", ".invalid"
+    ];
+    if ((url.protocol !== "https:" && url.protocol !== "http:") ||
+        url.username || url.password ||
+        !host || !host.includes(".") ||
+        isIP(ipHost) !== 0 ||
+        host === "localhost" || host === "metadata.google" ||
+        host === "metadata.google.internal" ||
+        localSuffixes.some(suffix => host.endsWith(suffix))) {
+      return null;
+    }
     return url.toString();
   } catch { return null; }
 }
