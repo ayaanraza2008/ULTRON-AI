@@ -6,7 +6,7 @@ import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCapt
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
 import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "./autonomy-policy.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
-import { getRepositoryCapabilityStatus } from "./repository-capabilities.js";
+import { getRepositoryCapabilityStatus, matchRepositoryCapabilities } from "./repository-capabilities.js";
 import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWorkPackages, listCalDiyEventTypes, listCalDiySlots } from "./integrations/productivity-services.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 
@@ -365,6 +365,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search is off unless explicitly opted into.", parameters: { type: "object", properties: { includeReverseSearch: { type: "boolean", description: "Opt in to sending image-derived information to external reverse-image providers. Defaults to false." } }, additionalProperties: false } } },
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "check_repository_capabilities", description: "Inspect ULTRON readiness for the 28 registered upstream repositories. Use automatically before relying on a listed capability. Configuration-only; never exposes secret values.", parameters: { type: "object", properties: { task: { type: "string", maxLength: 1200 }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
@@ -526,6 +527,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       return runGeoSleuthInvestigation({ imageBase64, includeReverseSearch, env });
     }
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
+    if (name === "check_repository_capabilities") {
+      const task = bounded(args.task, 1200);
+      const limit = Number.isInteger(args.limit) ? Math.max(1, Math.min(args.limit, 12)) : 6;
+      const status = getRepositoryCapabilityStatus(env);
+      const taskMatches = task ? matchRepositoryCapabilities(task, { limit }).map(item => ({
+        ...item,
+        state: status.integrations.find(integration => integration.id === item.id)?.state || item.state
+      })) : [];
+      return { ...status, taskMatches, notice: "Readiness is configuration-only, not proof of live upstream connectivity. Never call a missing adapter or pretend that a separate application ran." };
+    }
     if (name === "chatwoot_list_conversations") return listChatwootConversations({ env, fetchImpl, userId: req.supabaseUser?.id, status: args.status, limit: args.limit });
     if (name === "openproject_list_projects") return listOpenProjectProjects({ env, fetchImpl, userId: req.supabaseUser?.id, limit: args.limit });
     if (name === "openproject_list_work_packages") return listOpenProjectWorkPackages({ env, fetchImpl, userId: req.supabaseUser?.id, projectId: args.projectId, limit: args.limit });
@@ -851,6 +862,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
         { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_28_repository_domains" },
         { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_28_requested_repositories; read configuration-only status at /api/agent/repositories" },
+        { name: "repository_readiness", available: true, execution: "non_secret task matched repository readiness" },
         { name: "chatwoot_list_conversations", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.CHATWOOT_BASE_URL && env.CHATWOOT_API_TOKEN && env.CHATWOOT_ACCOUNT_ID), execution: "owner_scoped_read_only_conversation_list_no_messages_or_contact_email" },
         { name: "openproject_list_projects", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.OPENPROJECT_BASE_URL && env.OPENPROJECT_API_TOKEN), execution: "owner_scoped_read_only_project_list" },
         { name: "openproject_list_work_packages", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.OPENPROJECT_BASE_URL && env.OPENPROJECT_API_TOKEN), execution: "owner_scoped_read_only_work_package_list" },
