@@ -333,14 +333,15 @@ export function modelSafeResult(value, depth = 0) {
   if (typeof value === "string") {
     return value
       .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
-      .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/g, "[redacted]")
+      .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/g, "[redacted]").replace(/\bxox[baprs]-[A-Za-z0-9-]{12,}\b/g, "[redacted]")
+      .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[redacted]")
       .replace(/\b(authorization)\s*([:=])\s*(?:Bearer\s+)?[^\s,;'" ]+/gi, "$1$2[redacted]")
       .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|credential)\s*([:=])\s*['"]?[^\s,;'" ]+/gi, "$1$2[redacted]");
   }
   if (!value || typeof value !== "object") return value;
   const out = {};
   for (const [key, item] of Object.entries(value)) {
-    if (/(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret|credential|cookie|private[_-]?key)/i.test(key)) {
+    if (/(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|credential|cookie|private[_-]?key|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|session[_-]?token|signing[_-]?key|jwt|connection[_-]?(?:string|uri)|database[_-]?url)/i.test(key)) {
       out[key] = "[redacted]";
     } else if (typeof item === "string" && /(base64|audio|video|image|binary|blob)/i.test(key) && item.length > 1000) {
       out[key] = "[binary payload omitted from model context; available in toolResults]";
