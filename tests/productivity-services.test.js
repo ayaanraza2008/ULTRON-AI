@@ -33,7 +33,7 @@ test("Chatwoot connector fetches bounded conversation summaries and omits direct
   let request;
   const result = await listChatwootConversations({
     env: {
-      ...ownerEnv, CHATWOOT_BASE_URL: "https://chat.example/",
+      ...ownerEnv, CHATWOOT_BASE_URL: "https://chat.example.com/",
       CHATWOOT_API_TOKEN: "chat-secret", CHATWOOT_ACCOUNT_ID: "12"
     },
     userId: ownerId, status: "open", limit: 5,
@@ -53,7 +53,7 @@ test("Chatwoot connector fetches bounded conversation summaries and omits direct
   assert.equal(result.conversations[0].id, "44");
   assert.equal(result.conversations[0].contactName, "Customer");
   assert.equal(result.conversations[0].inbox, "Support");
-  assert.equal(request.url, "https://chat.example/api/v1/accounts/12/conversations?status=open&page=1");
+  assert.equal(request.url, "https://chat.example.com/api/v1/accounts/12/conversations?status=open&page=1");
   assert.equal(request.options.headers.Authorization, "Bearer chat-secret");
   assert.equal(request.options.redirect, "error");
   assert.equal(JSON.stringify(result).includes("secret@example.com"), false);
@@ -98,7 +98,7 @@ test("OpenProject project list uses API-key Basic auth and returns bounded proje
   assert.equal(result.state, "completed");
   assert.equal(result.count, 2);
   assert.equal(result.projects[0].name, "ULTRON");
-  assert.equal(request.url, "https://projects.example/api/v3/projects?pageSize=2");
+  assert.equal(request.url, "https://projects.example.com/api/v3/projects?pageSize=2");
   assert.equal(request.options.headers.Authorization, "Basic " + Buffer.from("apikey:op-secret").toString("base64"));
   assert.equal(request.options.redirect, "error");
   assert.equal(JSON.stringify(result).includes("op-secret"), false);
@@ -140,7 +140,7 @@ test("Cal.diy event type listing sends API v2 auth/version headers and limits re
   assert.equal(result.state, "completed");
   assert.equal(result.count, 2);
   assert.equal(result.eventTypes[0].title, "15 minute chat");
-  assert.equal(request.url, "https://cal.example/v2/event-types?take=2");
+  assert.equal(request.url, "https://cal.example.com/v2/event-types?take=2");
   assert.equal(request.options.headers.Authorization, "Bearer cal-secret");
   assert.equal(request.options.headers["cal-api-version"], "2026-02-25");
   assert.equal(request.options.redirect, "error");
