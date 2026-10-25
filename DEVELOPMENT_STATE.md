@@ -104,3 +104,12 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Latest validation before this documentation-only update: GitHub Actions run #1208 passed `npm run check`, `npm test`, the existing API health smoke check, and the pinned world-intelligence build. This verifies CI on the branch; it does **not** verify live provider access, user flows, or successful production deployment.
 - Release constraints remain unchanged: no frontend changes, no merge to `main`, no Render deployment triggered, no paid build minutes enabled. PR #253 stays draft pending review and other live-verification blockers remain open.
 
+## 2026-10-25 Windows companion status milestone
+
+- PR #254 merged as `d444ec16798bab9e139d5365526ebe1995db19c6`. PR #254 CI run #1213 passed `npm run check`, the full automated test suite, the existing deployed API health smoke check, and the pinned world-intelligence bridge build on the exact PR head.
+- Added a versioned, owner-scoped Windows companion **status probe** at `GET /api/agent/desktop-companion/status` and an agent tool named `check_desktop_companion`.
+- The adapter uses `ULTRON_DESKTOP_AGENT_URL`, `ULTRON_DESKTOP_AGENT_TOKEN`, and `ULTRON_INTEGRATION_OWNER_USER_ID`; it rejects unsafe URLs/redirects, times out after 8 seconds, caps responses at 64 KiB, checks protocol v1, and filters reported capabilities to `status`/ `system_info`.
+- The companion protocol is documented in `docs/DESKTOP_COMPANION_PROTOCOL.md`. This is a client contract only: no matching Windows companion runtime or pairing implementation has been verified, and the adapter intentionally does not execute shell/PowerShell, read local files, capture screenshots, or control the PC.
+- Expanded `npm run check` to explicitly syntax-check `integrations/desktop-companion.js` and `tests/desktop-companion.test.js`; this explicit-check update is now on a follow-up branch and must pass its own CI before merge.
+- Render immediately attempted to deploy merge commit `d444ec16798bab9e139d5365526ebe1995db19c6` but failed with `pipeline_minutes_exhausted` at 2026-10-25 15:43:10Z. The new code is committed but not live-verified; paid pipeline minutes remain disabled.
+
