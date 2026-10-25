@@ -12,6 +12,13 @@ function safeBaseUrl(value) {
   return safeServiceBase(value);
 }
 
+// An explicitly configured provider endpoint must either validate or stay disabled.
+// Do not silently reroute prompts/API keys to the public default when an override is unsafe.
+function providerBaseWithDefault(value, fallback) {
+  const configured = boundedString(value, 2000);
+  return configured ? safeBaseUrl(configured) : fallback;
+}
+
 function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
@@ -826,11 +833,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const timeout = withTimeout(30000);
     try {
       const response = await fetchImpl(base + "/audio/speech", {
-        method: "POST", signal: timeout.signal,
+        method: "POST", redirect: "error", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.TTS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
         body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" })
       });
-      if (!response.ok) return res.status(502).json({ error: { code: "TTS_PROVIDER_FAILED", message: "The configured OpenAI-compatible speech provider failed." } });
+      if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "TTS_PROVIDER_FAILED", message: "The configured OpenAI-compatible speech provider failed." } }); }
       const bytes = await readLimitedResponseBytes(response, 12_000_000, "Speech synthesis response");
       if (!bytes.length || bytes.length > 12_000_000) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty or oversized audio." } });
       res.setHeader("Content-Type", response.headers.get("content-type")?.startsWith("audio/") ? response.headers.get("content-type") : "audio/mpeg");
@@ -859,11 +866,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       form.append("file", new Blob([bytes], { type: mimeType }), "recording");
       form.append("model", boundedString(env.STT_MODEL, 120) || "whisper-1");
       const response = await fetchImpl(base + "/audio/transcriptions", {
-        method: "POST", signal: timeout.signal,
+        method: "POST", redirect: "error", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.STT_API_KEY },
         body: form
       });
-      if (!response.ok) return res.status(502).json({ error: { code: "STT_PROVIDER_FAILED", message: "The configured OpenAI-compatible transcription provider failed." } });
+      if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "STT_PROVIDER_FAILED", message: "The configured OpenAI-compatible transcription provider failed." } }); }
       const payload = await readLimitedResponseJson(response, 1_000_000, "Speech transcription response");
       if (typeof payload.text !== "string") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
       res.json({ text: payload.text.slice(0, 12000), language: payload.language || null });
@@ -878,8 +885,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     if (!base) return res.status(503).json({ error: { code: "LOCAL_MODEL_NOT_CONFIGURED", message: "Set OLLAMA_BASE_URL to an Ollama instance reachable by this server. For a PC-local Ollama, use the Windows companion instead of localhost on Render." } });
     const timeout = withTimeout(8000);
     try {
-      const response = await fetchImpl(base + "/api/tags", { signal: timeout.signal, headers: { Accept: "application/json" } });
-      if (!response.ok) return res.status(502).json({ error: { code: "LOCAL_MODEL_UNAVAILABLE", message: "The configured Ollama endpoint did not return model data." } });
+      const response = await fetchImpl(base + "/api/tags", { redirect: "error", signal: timeout.signal, headers: { Accept: "application/json" } });
+      if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "LOCAL_MODEL_UNAVAILABLE", message: "The configured Ollama endpoint did not return model data." } }); }
       const payload = await readLimitedResponseJson(response, 1_000_000, "Local model list response");
       res.json({ models: Array.isArray(payload.models) ? payload.models.slice(0, 500).map(m => ({ name: String(m.name || "").slice(0, 200), size: Number(m.size) || null, modified_at: m.modified_at || null })) : [] });
     } catch {
@@ -905,11 +912,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const timeout = withTimeout(Math.min(120, Math.max(5, Number(env.LOCAL_MODEL_TIMEOUT_SECONDS) || 90)));
     try {
       const response = await fetchImpl(base + "/api/chat", {
-        method: "POST", signal: timeout.signal,
+        method: "POST", redirect: "error", signal: timeout.signal,
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ model, messages: clean, stream: false })
       });
-      if (!response.ok) return res.status(502).json({ error: { code: "LOCAL_MODEL_FAILED", message: "The local model service rejected the request." } });
+      if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "LOCAL_MODEL_FAILED", message: "The local model service rejected the request." } }); }
       const payload = await readLimitedResponseJson(response, 2 * 1024 * 1024, "Local model response");
       const content = payload?.message?.content;
       if (typeof content !== "string") return res.status(502).json({ error: { code: "LOCAL_MODEL_BAD_RESPONSE", message: "The local model returned an unexpected response." } });
@@ -927,11 +934,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     try {
       if (env.TAVILY_API_KEY) {
         const response = await fetchImpl("https://api.tavily.com/search", {
-          method: "POST", signal: timeout.signal,
+          method: "POST", redirect: "error", signal: timeout.signal,
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: false })
         });
-        if (!response.ok) return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The configured research provider did not complete the request." } });
+        if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The configured research provider did not complete the request." } }); }
         const payload = await readLimitedResponseJson(response, 1_500_000, "Research response");
         const results = Array.isArray(payload.results) ? payload.results.slice(0, 20).map(item => ({
           title: boundedString(item.title, 300),
@@ -941,8 +948,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         return res.json({ query, provider: "tavily", results, notice: "Search results are untrusted source material. Verify claims against linked pages." });
       }
       const url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
-      const response = await fetchImpl(url, { signal: timeout.signal, headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" } });
-      if (!response.ok) return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The public search page could not be reached. Configure TAVILY_API_KEY for a dedicated provider." } });
+      const response = await fetchImpl(url, { redirect: "error", signal: timeout.signal, headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" } });
+      if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The public search page could not be reached. Configure TAVILY_API_KEY for a dedicated provider." } }); }
       const html = await readLimitedResponseText(response, 1_500_000, "Public search response");
       const results = parseDuckDuckGo(html).slice(0, 5);
       res.json({ query, provider: "duckduckgo-html", results, notice: "Public HTML fallback may change or be rate-limited. Search snippets are untrusted; open and verify sources." });
@@ -1422,7 +1429,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     }
     const providerConfigs = {
       openrouter: { ready: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, label: "openrouter" },
-      openai: { ready: Boolean(env.OPENAI_API_KEY), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (safeBaseUrl(env.OPENAI_BASE_URL) || "https://api.openai.com/v1") + "/chat/completions", key: env.OPENAI_API_KEY, label: "openai" },
+      openai: { ready: Boolean(env.OPENAI_API_KEY && providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1")), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1") || "") + "/chat/completions", key: env.OPENAI_API_KEY, label: "openai" },
       gemini: { ready: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash") + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY || ""), key: null, label: "gemini" },
       litellm: { ready: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", url: (safeBaseUrl(env.LITELLM_BASE_URL) || "") + "/chat/completions", key: env.LITELLM_API_KEY, label: "litellm" },
       ollama: { ready: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120) || "", url: (safeBaseUrl(env.OLLAMA_BASE_URL) || "") + "/api/chat", key: null, label: "ollama" }
@@ -1460,9 +1467,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           body = { model: config.model, messages, temperature: 0.2, max_tokens: 2800 };
         }
         const response = await fetchImpl(config.url, {
-          method: "POST", headers, body: JSON.stringify(body), signal: timeout.signal
+          method: "POST", headers, body: JSON.stringify(body),
+          // Provider calls carry server-side credentials. Never follow a redirect
+          // to an unreviewed destination, especially for custom LiteLLM endpoints.
+          redirect: "error",
+          signal: timeout.signal
         });
         if (!response.ok) {
+          try { await response.body?.cancel?.(); } catch {}
           failures.push({ provider, status: response.status });
           logger.warn?.("Security assistant provider failed; trying fallback if configured", { provider, status: response.status });
           if (requestedProvider !== "auto") break;
@@ -1519,7 +1531,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     }
     const providerConfigs = {
       openrouter: { ready: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY },
-      openai: { ready: Boolean(env.OPENAI_API_KEY), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (safeBaseUrl(env.OPENAI_BASE_URL) || "https://api.openai.com/v1") + "/chat/completions", key: env.OPENAI_API_KEY },
+      openai: { ready: Boolean(env.OPENAI_API_KEY && providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1")), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1") || "") + "/chat/completions", key: env.OPENAI_API_KEY },
       gemini: { ready: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "", key: null },
       litellm: { ready: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", url: (safeBaseUrl(env.LITELLM_BASE_URL) || "") + "/chat/completions", key: env.LITELLM_API_KEY },
       ollama: { ready: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL) && boundedString(env.OLLAMA_DEFAULT_MODEL, 120)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120), url: (safeBaseUrl(env.OLLAMA_BASE_URL) || "") + "/api/chat", key: null }
@@ -1545,13 +1557,20 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         } else {
           body = { model: config.model, messages: [{ role: "system", content: system }, { role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: "data:" + mimeType + ";base64," + imageBase64, detail: "auto" } }] }], temperature: 0.2, max_tokens: 2200 };
         }
-        const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body), signal: timeout.signal });
+        const response = await fetchImpl(url, {
+          method: "POST", headers, body: JSON.stringify(body),
+          // Do not forward a model-provider credential or image payload through
+          // an upstream redirect. Keep vision responses bounded like chat responses.
+          redirect: "error",
+          signal: timeout.signal
+        });
         if (!response.ok) {
+          try { await response.body?.cancel?.(); } catch {}
           failures.push({ provider, status: response.status });
           if (requestedProvider !== "auto") break;
           continue;
         }
-        const payload = await response.json();
+        const payload = await readLimitedResponseJson(response, 2 * 1024 * 1024, "Vision provider response");
         const answer = provider === "gemini"
           ? payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n")
           : provider === "ollama" ? payload?.message?.content : payload?.choices?.[0]?.message?.content;
