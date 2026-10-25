@@ -125,3 +125,67 @@ test("worker smoke bounds polling and cancels only a still-queued timed-out task
   assert.equal(deleted, true);
   assert.equal(result.cleanup, "deleted");
 });
+
+test("worker smoke conditionally cancels and cleans up a timed-out RUNNING task", async () => {
+  let clock = 0;
+  let patchedUrl = "";
+  let deleted = false;
+  const result = await runWorkerSmoke({
+    env: serviceEnv,
+    nowMs: () => clock,
+    now: () => "fixed-time",
+    timeoutMs: 15_000,
+    pollIntervalMs: 5000,
+    sleepImpl: async ms => { clock += ms; },
+    fetchImpl: async (url, options = {}) => {
+      if (url.endsWith("/rest/v1/agent_tasks")) {
+        return response([{ id: UUID, status: "QUEUED" }], 201);
+      }
+      if (url.includes("/rest/v1/agent_tasks?select=")) {
+        return response([{ id: UUID, status: "RUNNING", attempts: 1 }]);
+      }
+      if (url.includes("&status=eq.RUNNING")) {
+        patchedUrl = url;
+        assert.equal(options.method, "PATCH");
+        assert.equal(JSON.parse(options.body).status, "CANCELLED");
+        return response([{ id: UUID, status: "CANCELLED" }]);
+      }
+      if (url.includes("/rest/v1/agent_tasks?id=eq.")) {
+        assert.equal(options.method, "DELETE");
+        deleted = true;
+        return response(null, 204);
+      }
+      throw new Error("Unexpected URL: " + url);
+    }
+  });
+  assert.equal(result.status, "timed_out");
+  assert.match(patchedUrl, /status=eq[.]RUNNING$/);
+  assert.equal(deleted, true);
+  assert.equal(result.cleanup, "deleted");
+});
+
+test("worker smoke never deletes a timed-out task when conditional cancellation loses a race", async () => {
+  let clock = 0;
+  let deleted = false;
+  const result = await runWorkerSmoke({
+    env: serviceEnv,
+    nowMs: () => clock,
+    now: () => "fixed-time",
+    timeoutMs: 15_000,
+    pollIntervalMs: 5000,
+    sleepImpl: async ms => { clock += ms; },
+    fetchImpl: async (url, options = {}) => {
+      if (url.endsWith("/rest/v1/agent_tasks")) return response([{ id: UUID, status: "QUEUED" }], 201);
+      if (url.includes("/rest/v1/agent_tasks?select=")) return response([{ id: UUID, status: "RUNNING", attempts: 1 }]);
+      if (url.includes("&status=eq.RUNNING")) return response([]);
+      if (url.includes("/rest/v1/agent_tasks?id=eq.")) {
+        deleted = true;
+        return response(null, 204);
+      }
+      throw new Error("Unexpected URL: " + url);
+    }
+  });
+  assert.equal(result.status, "timed_out");
+  assert.equal(result.cleanup, "state_changed_manual_cleanup_needed");
+  assert.equal(deleted, false, "a task that changed state concurrently must not be deleted");
+});
