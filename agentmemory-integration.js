@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { safeServiceBase } from "./network-safety.js";
 
 const MAX_QUERY = 1200;
 const MAX_MEMORY_TEXT = 2400;
@@ -22,14 +23,7 @@ function scopedProject(env, userId) {
 }
 
 function baseUrl(value) {
-  try {
-    const url = new URL(String(value || ""));
-    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return null;
-    if (url.protocol === "http:" && !["localhost", "127.0.0.1"].includes(url.hostname)) return null;
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  return safeServiceBase(String(value || ""));
 }
 
 export function agentMemoryReadiness(env = process.env) {
