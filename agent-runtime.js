@@ -841,13 +841,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       form.append("instruct", bounded(args.instruct, 1000));
       form.append("language", bounded(args.language || "Auto", 40) || "Auto");
       form.append("ref_audio", new Blob([audio], { type: mime }), "voice-reference." + ext);
-      const createResponse = await fetchImpl(voiceStudio.baseUrl + "/profiles", { method: "POST", headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" }, body: form, signal: AbortSignal.timeout(60000) });
+      const createResponse = await fetchImpl(voiceStudio.baseUrl + "/profiles", { method: "POST", headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" }, body: form, redirect: "error", signal: AbortSignal.timeout(60000) });
       const createRaw = await readModelResponseTextLimited(createResponse, 1_000_000);
       let profile; try { profile = JSON.parse(createRaw); } catch { profile = {}; }
       if (!createResponse.ok) throw Object.assign(new Error("VoiceStudio could not create the cloned voice profile."), { code: "VOICESTUDIO_PROFILE_CREATE_FAILED", status: createResponse.status === 429 ? 429 : 502 });
       const profileId = bounded(profile.id || profile.profile_id, 160);
       if (!/^[A-Za-z0-9_-]+$/.test(profileId)) throw Object.assign(new Error("VoiceStudio returned an invalid profile ID."), { code: "VOICESTUDIO_PROFILE_ID_INVALID", status: 502 });
-      const attestation = await fetchImpl(voiceStudio.baseUrl + "/profiles/" + encodeURIComponent(profileId) + "/attestation", { method: "POST", headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ basis }), signal: AbortSignal.timeout(15000) });
+      const attestation = await fetchImpl(voiceStudio.baseUrl + "/profiles/" + encodeURIComponent(profileId) + "/attestation", { method: "POST", headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ basis }), redirect: "error", signal: AbortSignal.timeout(15000) });
       if (!attestation.ok) return { provider: "voicestudio", state: "created_unverified", profileId, name: bounded(profile.name || name, 100), kind: "clone", blocker: "The profile was created, but VoiceStudio did not confirm the consent attestation. Verify the profile before using it." };
       return { provider: "voicestudio", state: "completed", profileId, name: bounded(profile.name || name, 100), kind: "clone", consentBasis: basis, consentRecorded: true, language: bounded(args.language || "Auto", 40) || "Auto" };
     }
@@ -862,6 +862,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         method: "POST",
         headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ description }),
+        redirect: "error",
         signal: AbortSignal.timeout(15000)
       });
       const describeRaw = await readModelResponseTextLimited(describeResponse, 1_000_000);
@@ -878,6 +879,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         method: "POST",
         headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" },
         body: form,
+        redirect: "error",
         signal: AbortSignal.timeout(45000)
       });
       const createRaw = await readModelResponseTextLimited(createResponse, 1_000_000);
@@ -894,6 +896,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         method: "POST",
         headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ description }),
+        redirect: "error",
         signal: AbortSignal.timeout(15000)
       });
       const raw = await readModelResponseTextLimited(response);
@@ -908,6 +911,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const response = await fetchImpl(voiceStudio.baseUrl + "/v1/audio/voices", {
         method: "GET",
         headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" },
+        redirect: "error",
         signal: AbortSignal.timeout(15000)
       });
       const raw = await readModelResponseTextLimited(response);
@@ -926,6 +930,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           method: "POST",
           headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), "Content-Type": "application/json", Accept: "audio/*" },
           body: JSON.stringify({ model: "tts-1", input: text, voice: bounded(args.voice, 160) || "default", response_format: "wav", ...(bounded(args.language, 40) && args.language !== "auto" ? { instructions: "Speak in " + bounded(args.language, 40) + "." } : {}) }),
+          redirect: "error",
           signal: AbortSignal.timeout(120000)
         });
         if (!response.ok) throw Object.assign(new Error("VoiceStudio speech synthesis failed."), { code: "VOICESTUDIO_SYNTHESIS_FAILED", status: response.status === 429 ? 429 : 502 });
@@ -937,7 +942,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const path = bounded(env.OMNIVOICE_SYNTHESIS_PATH, 200);
       const token = bounded(env.OMNIVOICE_API_KEY, 500);
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "speech", state: "blocked", blocker: "Configure VoiceStudio (VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY) or OmniVoice (OMNIVOICE_API_BASE_URL, OMNIVOICE_API_KEY, and OMNIVOICE_SYNTHESIS_PATH)." };
-      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), signal: AbortSignal.timeout(90000) });
+      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), redirect: "error", signal: AbortSignal.timeout(90000) });
       const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Speech provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Speech provider returned HTTP " + response.status), { code: "SPEECH_PROVIDER_FAILED", status: 502 });
@@ -953,7 +958,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const audioBase64 = bounded(media.audioBase64, 6500000);
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "heygem", state: "blocked", blocker: "Configure a reachable HEYGEM_API_BASE_URL, HEYGEM_API_KEY, and explicit HEYGEM_JOB_PATH." };
       if (!imageBase64 || !audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64) || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "heygem", state: "needs_input", requiredInputs: ["media.imageBase64", "media.audioBase64"], message: "Attach the user's source portrait and audio before creating a talking-avatar job." };
-      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ imageBase64, audioBase64, prompt: bounded(args.prompt, 1000) || undefined }), signal: AbortSignal.timeout(45000) });
+      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ imageBase64, audioBase64, prompt: bounded(args.prompt, 1000) || undefined }), redirect: "error", signal: AbortSignal.timeout(45000) });
       const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Avatar provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Avatar provider returned HTTP " + response.status), { code: "HEYGEM_PROVIDER_FAILED", status: 502 });
@@ -982,6 +987,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           method: "POST",
           headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}) },
           body: form,
+          redirect: "error",
           signal: AbortSignal.timeout(120000)
         });
         const raw = await readModelResponseTextLimited(response);
@@ -996,7 +1002,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const audioBase64 = bounded(requestBody.audioBase64, 10000000);
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "handy", state: "blocked", blocker: "Configure a reachable authenticated Windows Handy bridge and explicit transcription path." };
       if (!audioBase64 || !/^[A-Za-z0-9+/=]+$/.test(audioBase64)) return { provider: "handy", state: "needs_input", requiredInputs: ["audioBase64"], message: "Provide recorded audio to transcribe." };
-      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ audioBase64, language: bounded(args.language, 40) || undefined }), signal: AbortSignal.timeout(90000) });
+      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ audioBase64, language: bounded(args.language, 40) || undefined }), redirect: "error", signal: AbortSignal.timeout(90000) });
       const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Transcription response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Transcription bridge returned HTTP " + response.status), { code: "HANDY_PROVIDER_FAILED", status: 502 });
@@ -1011,7 +1017,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         return { provider: "comfyui", state: "needs_input", requiredInputs: ["workflow"], message: "Attach a valid ComfyUI API workflow JSON (under 1.5 MB). ULTRON will inspect the workflow before requesting confirmation." };
       }
       if (requestBody.confirmExternalAction !== true) return { provider: "comfyui", state: "needs_confirmation", message: "Review the exact workflow and expected compute use, then set confirmExternalAction=true to queue this generation job." }
-      const response = await fetchImpl(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), signal: AbortSignal.timeout(30000) });
+      const response = await fetchImpl(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), redirect: "error", signal: AbortSignal.timeout(30000) });
       if (!response.ok) throw Object.assign(new Error("ComfyUI returned HTTP " + response.status), { code: "COMFYUI_QUEUE_FAILED", status: 502 });
       const result = JSON.parse(await readModelResponseTextLimited(response));
       if (typeof result.prompt_id !== "string" || !result.prompt_id) throw Object.assign(new Error("ComfyUI returned no prompt ID."), { code: "COMFYUI_INVALID_RESPONSE", status: 502 });
@@ -1022,8 +1028,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!base) return { provider: "comfyui", reachable: false, state: "blocked", blocker: "COMFYUI_BASE_URL is not configured." };
       const headers = env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {};
       const [systemResponse, queueResponse] = await Promise.all([
-        fetchImpl(base + "/system_stats", { headers, signal: AbortSignal.timeout(10000) }),
-        fetchImpl(base + "/queue", { headers, signal: AbortSignal.timeout(10000) })
+        fetchImpl(base + "/system_stats", { headers, redirect: "error", signal: AbortSignal.timeout(10000) }),
+        fetchImpl(base + "/queue", { headers, redirect: "error", signal: AbortSignal.timeout(10000) })
       ]);
       if (!systemResponse.ok || !queueResponse.ok) return { provider: "comfyui", reachable: false, state: "unhealthy", status: systemResponse.status || queueResponse.status };
       const [system, queue] = await Promise.all([
