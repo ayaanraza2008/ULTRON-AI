@@ -1651,3 +1651,62 @@ test("worker cycle health resets consecutive failures after polling recovers", a
   assert.ok(worker.getStatus().lastCycleSuccessAt);
   assert.equal(worker.getStatus().state, "stopped");
 });
+
+
+test("worker exponentially backs off after repeated infrastructure poll failures", async () => {
+  let worker;
+  const delays = [];
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      ULTRON_WORKER_POLL_MS: "2000"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async delay => {
+      delays.push(delay);
+      if (delays.length === 3) worker.stop();
+    },
+    fetchImpl: async () => new Response("temporary outage", { status: 503 })
+  });
+
+  await worker.done;
+  assert.deepEqual(delays, [2000, 4000, 8000]);
+  assert.equal(worker.getStatus().consecutiveCycleFailures, 3);
+  assert.equal(worker.getStatus().state, "stopped");
+});
+
+
+test("worker stop interrupts idle polling sleep promptly", async () => {
+  let worker;
+  let signalReceived;
+  const sleepStarted = new Promise(resolve => { signalReceived = resolve; });
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      ULTRON_WORKER_POLL_MS: "30000"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: (_delay, _value, options = {}) => new Promise((resolve, reject) => {
+      if (options.signal?.aborted) {
+        const error = new Error("The operation was aborted");
+        error.name = "AbortError";
+        reject(error);
+        return;
+      }
+      options.signal?.addEventListener("abort", () => {
+        const error = new Error("The operation was aborted");
+        error.name = "AbortError";
+        reject(error);
+      }, { once: true });
+      signalReceived();
+    }),
+    fetchImpl: async () => new Response("[]", { status: 200 })
+  });
+
+  await sleepStarted;
+  worker.stop();
+  await worker.done;
+  assert.equal(worker.getStatus().state, "stopped");
+});
