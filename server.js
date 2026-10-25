@@ -10,6 +10,7 @@ import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
+import { resolveCactusProvider } from "./integrations/cactus.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -199,6 +200,7 @@ function normalizeBaseUrl(value) {
 }
 
 function hasConfiguredModelProvider(env) {
+  if (resolveCactusProvider(env)) return true;
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
@@ -229,6 +231,8 @@ function hasConfiguredModelProvider(env) {
 
 function configuredChatProviders(env, openRouterBaseUrl = null) {
   const providers = [];
+  const cactusProvider = resolveCactusProvider(env);
+  if (cactusProvider) providers.push({ ...cactusProvider, supportsVision: false, isOpenRouter: false, isCactus: true });
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   if (primaryKey && openRouterBaseUrl) {
     providers.push({
@@ -384,7 +388,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         upstream = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: {
-            Authorization: "Bearer " + provider.apiKey,
+            ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}),
             "Content-Type": "application/json",
             Accept: "application/json",
             ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
@@ -409,6 +413,19 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (upstream.ok) {
         let completion;
         try { completion = JSON.parse(raw); } catch { completion = null; }
+        if (provider.isCactus && completion && typeof completion === "object") {
+          const confidence = typeof completion.confidence === "number" && Number.isFinite(completion.confidence) ? completion.confidence : null;
+          if (completion.cloud_handoff === true && env.CACTUS_ALLOW_CLOUD_HANDOFF !== "true") {
+            lastStatus = 502;
+            if (index + 1 < attempts.length) continue;
+            break;
+          }
+          if (confidence !== null && confidence < (provider.confidenceThreshold ?? 0.72)) {
+            lastStatus = 502;
+            if (index + 1 < attempts.length) continue;
+            break;
+          }
+        }
         const message = completion?.choices?.[0]?.message;
         const hasText = typeof message?.content === "string" && message.content.trim().length > 0;
         const hasContentParts = Array.isArray(message?.content) && message.content.length > 0;
