@@ -98,6 +98,42 @@ test("research endpoint rejects an empty query before making network calls", asy
   }, { fetchImpl: async () => { called = true; throw new Error("must not be called"); } });
 });
 
+test("research results exclude unsafe URL schemes, IP literals, credentials, and local-only hostnames", async () => {
+  const env = { TAVILY_API_KEY: "test-only" };
+  const upstreamResults = [
+    { title: "public HTTPS", url: "https://docs.example.com/reference", content: "Useful public documentation." },
+    { title: "private IPv4", url: "https://10.1.2.3/admin", content: "Do not expose." },
+    { title: "loopback IPv4", url: "http://127.0.0.1:8080/", content: "Do not expose." },
+    { title: "public IPv6 literal", url: "https://[2606:4700:4700::1111]/", content: "IP literals are not trusted sources." },
+    { title: "URL credentials", url: "https://user:pass@docs.example.com/path", content: "Do not expose." },
+    { title: "local suffix", url: "https://printer.local/status", content: "Do not expose." },
+    { title: "internal suffix", url: "https://service.internal/secret", content: "Do not expose." },
+    { title: "metadata", url: "http://metadata.google.internal/latest/meta-data/", content: "Do not expose." },
+    { title: "invalid scheme", url: "javascript:alert(1)", content: "Do not expose." },
+    { title: "single-label host", url: "https://intranet/secret", content: "Do not expose." },
+    { title: "public HTTP", url: "http://example.org/manual", content: "Public HTTP source." }
+  ];
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/research", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: "public documentation references" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.results.map(item => item.title), ["public HTTPS", "public HTTP"]);
+    assert.ok(body.results.every(item => !item.url.includes("@")));
+    assert.equal(JSON.stringify(body).includes("10.1.2.3"), false);
+  }, {
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "https://api.tavily.com/search");
+      assert.equal(options.method, "POST");
+      return new Response(JSON.stringify({ results: upstreamResults }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      });
+    }
+  });
+});
+
 test("task creation records a queued plan and audit event, without claiming execution", async () => {
   const writes = [];
   const fakeSupabaseRest = async (_req, table, method, _query, body) => {
