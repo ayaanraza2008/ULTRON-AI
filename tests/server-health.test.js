@@ -196,3 +196,20 @@ test("Browser Use proxy retries free model candidates and keeps image requests o
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test("health does not report private HTTPS provider endpoints as configured", async () => {
+  const primary = await health({
+    OPENROUTER_API_KEY: "synthetic-test-key",
+    OPENROUTER_BASE_URL: "https://192.168.1.10/v1"
+  });
+  assert.equal(primary.providerConfigured, false);
+
+  const alternate = await health({
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "private-provider", baseUrl: "https://169.254.169.254/latest/meta-data", apiKeyEnv: "PRIVATE_KEY", model: "fake-model" }
+    ]),
+    PRIVATE_KEY: "synthetic-private-key"
+  });
+  assert.equal(alternate.providerConfigured, false);
+});
