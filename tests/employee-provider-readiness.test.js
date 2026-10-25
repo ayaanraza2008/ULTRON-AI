@@ -25,6 +25,24 @@ test("employee readiness rejects alternate providers with missing credentials or
   }), false);
 });
 
+test("employee/coding readiness accepts a configured Hermes Agent gateway", () => {
+  assert.equal(hasEmployeeModelProvider({
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "synthetic-hermes-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  }), true);
+});
+
+test("employee/coding readiness ignores Hermes when its explicit enable flag is off", () => {
+  assert.equal(hasEmployeeModelProvider({
+    HERMES_AGENT_ENABLED: "false",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "synthetic-hermes-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  }), false);
+});
+
 test("employee readiness accepts an already-running local Cactus model without an API key", () => {
   assert.equal(hasEmployeeModelProvider({
     CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
