@@ -1046,3 +1046,47 @@ test("feature model provider registry rejects private HTTPS hosts without making
     throw new Error("Private configured provider must not be called.");
   } });
 });
+
+
+test("TTS streaming response is rejected by its declared byte limit before buffering", async () => {
+  let upstreamCalled = false;
+  let bodyCancelled = false;
+  await withServer({
+    TTS_API_BASE_URL: "https://tts.example/v1",
+    TTS_API_KEY: "synthetic-tts-key"
+  }, async base => {
+    const response = await fetch(base + "/api/speech/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Speak safely" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "TTS_INVALID_AUDIO");
+    assert.equal(bodyCancelled, true);
+  }, { fetchImpl: async () => {
+    upstreamCalled = true;
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode("small chunk")); },
+      cancel() { bodyCancelled = true; }
+    }), { status: 200, headers: { "content-length": "12000001", "content-type": "audio/mpeg" } });
+  } });
+  assert.equal(upstreamCalled, true);
+});
+
+test("STT JSON response is bounded and cancelled when declared oversized", async () => {
+  let bodyCancelled = false;
+  await withServer({
+    STT_API_BASE_URL: "https://stt.example/v1",
+    STT_API_KEY: "synthetic-stt-key"
+  }, async base => {
+    const response = await fetch(base + "/api/speech/transcribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audioBase64: Buffer.from("RIFF").toString("base64"), mimeType: "audio/wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "STT_INVALID_RESPONSE");
+    assert.equal(bodyCancelled, true);
+  }, { fetchImpl: async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("{\"text\":\"tiny\"}")); },
+    cancel() { bodyCancelled = true; }
+  }), { status: 200, headers: { "content-length": "1000001", "content-type": "application/json" } }) });
+});
