@@ -174,3 +174,21 @@ test("Cal.diy availability validates a bounded ISO date window and never books",
   });
   assert.equal(tooLong.error.code, "CALDIY_DATE_RANGE_INVALID");
 });
+
+
+test("productivity connectors reject HTTPS private-network bases before forwarding tokens", async () => {
+  let called = false;
+  const env = {
+    ...ownerEnv,
+    CHATWOOT_BASE_URL: "https://192.168.1.10",
+    CHATWOOT_API_TOKEN: "synthetic-token",
+    CHATWOOT_ACCOUNT_ID: "12"
+  };
+  const result = await listChatwootConversations({
+    env, userId: ownerId,
+    fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+  });
+  assert.equal(result.state, "blocked");
+  assert.equal(result.error.code, "INTEGRATION_NOT_CONFIGURED");
+  assert.equal(called, false);
+});
