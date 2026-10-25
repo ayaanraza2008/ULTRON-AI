@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -22,6 +23,7 @@ test("Geo-Sleuth bootstrap reuses a complete pinned runtime without network call
   try {
     const result = await ensureGeoSleuthRuntime({
       env: { GEO_SLEUTH_ENABLED: "true", GEO_SLEUTH_ROOT: root },
+      uvInstallerSha256: createHash("sha256").update("# installer fixture").digest("hex"),
       runCommand: async () => { invoked = true; }
     });
     assert.equal(result.state, "source_present");
