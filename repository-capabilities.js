@@ -1,5 +1,8 @@
+import { getObscuraReadiness } from "./integrations/obscura-mcp.js";
+import { getCactusReadiness } from "./integrations/cactus.js";
+
 /**
- * Task-matched capability catalog for the user's 28 upstream repositories.
+ * Task-matched capability catalog for the user's 30 upstream repository domains.
  *
  * This is a routing/readiness manifest, not an installer or claim that the upstream
  * applications are embedded in ULTRON. It never executes repository scripts.
@@ -228,6 +231,22 @@ const REPOSITORIES = [
     abilities: ["MCP-driven reverse engineering across binaries/applications/runtime behavior", "feature tracing and architecture analysis"],
     limits: ["Use only on software the user owns or is authorized to inspect; sandbox local tools and never execute unknown binaries automatically."],
     envKeys: ["REA_MCP_URL"], license: "MIT per upstream README", source: "https://github.com/morluto/rea"
+  },
+  {
+    id: "obscura", repo: "h4ckf0r0day/obscura", domain: "browser_rendering",
+    match: /\b(obscura|capture a screenshot|browser screenshot|export (?:the )?page as pdf|page snapshot|scrape public page|rendered page capture|webpage screencast)\b/i,
+    integration: "owner_scoped_mcp_adapter", status: "adapter_present_unverified_live",
+    abilities: ["public HTTPS page navigation", "DOM/text snapshots", "page diagnostics through MCP", "Obscura MCP screenshot and PDF tools when exposed by the configured service", "lightweight JS-rendered browsing without Chromium when supported by the service"],
+    limits: ["ULTRON exposes only read-only public-page navigation/snapshots. Stealth mode, proxy rotation, login/CAPTCHA bypass, private-network targets and consequential page actions are not exposed. Remote MCP must be behind a gateway that validates OBSCURA_MCP_TOKEN."],
+    envKeys: ["OBSCURA_MCP_URL", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["OBSCURA_MCP_TOKEN"], license: "Apache-2.0", source: "https://github.com/h4ckf0r0day/obscura"
+  },
+  {
+    id: "cactus-compute", repo: "cactus-compute/cactus", domain: "local_inference",
+    match: /\b(cactus(?:-compute)?|cactus local model|cactus inference|needle(?: 3)?|whistle speech model|on.?device inference|local llm|local model server|local tool routing|confidence.?based model fallback)\b/i,
+    integration: "optional_local_model_provider", status: "adapter_present_unverified_live",
+    abilities: ["OpenAI-compatible local inference provider", "tool/function calling when supported by the configured model", "confidence-based fallback to the next provider", "Cactus Engine text/speech/vision/RAG features exposed by the installed server", "Needle small on-device tool routing and typed extraction; Whistle speech-to-text when served by the companion runtime"],
+    limits: ["Cactus and Needle are separate installed runtimes; ULTRON never downloads model weights. Render cannot reach a PC's loopback endpoint. Start Cactus with --no-cloud-handoff unless remote handoff is explicitly approved. The Cactus core license is limited to personal/non-commercial and specified small organizations; check before commercial deployment."],
+    envKeys: ["CACTUS_BASE_URL", "CACTUS_MODEL"], optionalEnv: ["CACTUS_API_KEY", "CACTUS_LOCAL_FIRST", "CACTUS_CONFIDENCE_THRESHOLD", "CACTUS_SUPPORTS_TOOLS"], license: "Cactus core: custom personal/non-commercial and qualifying-small-organization grant; companion Needle: Apache-2.0", source: "https://github.com/cactus-compute/cactus"
   }
 ];
 
@@ -247,6 +266,14 @@ function configured(record, env) {
 }
 
 function stateFor(record, env) {
+  if (record.id === "obscura") {
+    const readiness = getObscuraReadiness(env);
+    return readiness.configured ? "configured_unverified" : readiness.state;
+  }
+  if (record.id === "cactus-compute") {
+    const readiness = getCactusReadiness(env);
+    return readiness.configured ? "configured_unverified" : readiness.state;
+  }
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
   if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
   if (!record.envKeys.length && record.status === "bounded_security_routes_present") return record.status;

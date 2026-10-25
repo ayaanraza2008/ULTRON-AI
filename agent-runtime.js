@@ -8,6 +8,8 @@ import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { getRepositoryCapabilityStatus, matchRepositoryCapabilities } from "./repository-capabilities.js";
 import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWorkPackages, listCalDiyEventTypes, listCalDiySlots } from "./integrations/productivity-services.js";
+import { inspectPublicPageWithObscura, capturePublicPageWithObscura, getObscuraReadiness } from "./integrations/obscura-mcp.js";
+import { checkCactusService, resolveCactusProvider, getCactusReadiness } from "./integrations/cactus.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
@@ -188,6 +190,8 @@ export function normalizeHinglishForRouting(value) {
 
 function extractIntent(text) {
   const s = normalizeHinglishForRouting(text).toLowerCase();
+  if (/\b(cactus(?:-compute)?|needle(?: 3)?|whistle speech model|local inference server)\b/.test(s) && /\b(check|status|health|ready|reachable|connect|available|configured)\b/.test(s)) return "check_cactus";
+  if (/\b(obscura|take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|page snapshot|scrape public page|rendered page capture)\b/.test(s)) return "obscura_inspect_public_page";
   if (/\b(geolocate photo|where was this photo taken|photo geolocation|find (?:the )?location of (?:this|the) (?:photo|image|picture)|identify (?:the )?location of (?:this|the) (?:photo|image|picture)|locate this (?:photo|image|picture))\b/.test(s)) return "geo_sleuth_investigate";
   if (/\b(open|launch|show|hide|turn on|turn off|enable|disable|zoom|fly|track|stop tracking|set|change)\b/.test(s) && /\b(globe|god'?s eye|world intelligence|satellites|earthquakes|flights|vessels|thermal style|map workspace|weather radar)\b/.test(s)) return "world_intelligence_command";
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) return "transcribe_audio";
@@ -225,7 +229,16 @@ function buildFallbackCalls(text) {
   };
   const intent = extractIntent(text);
   const browserGuidance = buildBrowserUseGuidance(text);
-  if (browserGuidance.browserRequested) add("browser_use", { task: bounded(text, 2500), maxSteps: 8 });
+  const obscuraRequested = /\b(obscura|take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|page snapshot|scrape (?:this|the|a|public) page|rendered page capture)\b/i.test(text);
+  const captureRequested = /\b(take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|export.{0,80}\bpdf\b|save (?:the )?page as pdf|make (?:a )?pdf of|pdf export)\b/i.test(text);
+  const urlMatch = text.match(/https:\/\/[^\s<>"\x27)]+/i);
+  const targetUrl = urlMatch ? urlMatch[0].replace(/[.,;!?]+$/, "") : "";
+  if (browserGuidance.browserRequested && !(obscuraRequested && targetUrl)) add("browser_use", { task: bounded(text, 2500), maxSteps: 8 });
+  if (intent === "check_cactus") add("check_cactus");
+  if ((intent === "obscura_inspect_public_page" || obscuraRequested) && targetUrl) {
+    if (captureRequested) add("obscura_capture_public_page", { url: targetUrl, format: /\b(pdf|portable document|export as pdf|save as pdf)\b/i.test(text) ? "pdf" : "screenshot" });
+    else add("obscura_inspect_public_page", { url: targetUrl });
+  }
   // Multi-intent requests should not force the user to name each tool manually.
   if (/\b(all integrations|all tools|all services|integration status|check integrations)\b/.test(s)) {
     add("check_integrations");
@@ -366,7 +379,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search is off unless explicitly opted into.", parameters: { type: "object", properties: { includeReverseSearch: { type: "boolean", description: "Opt in to sending image-derived information to external reverse-image providers. Defaults to false." } }, additionalProperties: false } } },
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
-    { type: "function", function: { name: "check_repository_capabilities", description: "Inspect ULTRON readiness for the 28 registered upstream repositories. Use automatically before relying on a listed capability. Configuration-only; never exposes secret values.", parameters: { type: "object", properties: { task: { type: "string", maxLength: 1200 }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "check_cactus", description: "Read-only: check whether the configured local Cactus/Needle OpenAI-compatible model server is reachable and list its available model IDs. Does not download models or run inference.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "obscura_inspect_public_page", description: "Read-only: use the configured Obscura MCP browser to navigate to a public HTTPS URL and return a DOM/text snapshot. Private/local targets, authentication bypass, stealth flags, proxy rotation, form submission, purchases, and publishing are blocked.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 } }, required: ["url"], additionalProperties: false } } },
+    { type: "function", function: { name: "obscura_capture_public_page", description: "Read-only: use the configured Obscura MCP browser to capture a screenshot or PDF of a public HTTPS URL. Returns a bounded artifact payload/resource; large artifacts may require a separate artifact store. Does not click, fill, submit, upload, purchase, log in, bypass CAPTCHA, or publish.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 }, format: { type: "string", enum: ["screenshot", "pdf"] } }, required: ["url", "format"], additionalProperties: false } } },
+    { type: "function", function: { name: "check_repository_capabilities", description: "Inspect ULTRON readiness for the 30 registered upstream repositories. Use automatically before relying on a listed capability. Configuration-only; never exposes secret values.", parameters: { type: "object", properties: { task: { type: "string", maxLength: 1200 }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
@@ -384,6 +400,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
 
   function configuredModelProviders() {
     const providers = [];
+    const cactusProvider = resolveCactusProvider(env);
+    if (cactusProvider) providers.push(cactusProvider);
     const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
     if (primaryKey) {
       const baseUrl = safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
@@ -423,7 +441,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       try {
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
-          headers: { Authorization: "Bearer " + provider.apiKey, "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
+          headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
           redirect: "error",
           body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
           signal: AbortSignal.timeout(45000)
@@ -450,6 +468,19 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           // than returning an empty assistant answer to the user.
           lastError = Object.assign(new Error("AI provider returned an invalid completion."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
           continue;
+        }
+        if (provider.name === "cactus") {
+          const confidence = typeof data.confidence === "number" && Number.isFinite(data.confidence) ? data.confidence : null;
+          if (data.cloud_handoff === true && env.CACTUS_ALLOW_CLOUD_HANDOFF !== "true") {
+            lastError = Object.assign(new Error("Cactus reported a cloud handoff, which is disabled by ULTRON's free/local-first policy."), { status: 502, code: "CACTUS_CLOUD_HANDOFF_BLOCKED", retryable: true });
+            logger.warn?.("Cactus reported a cloud handoff while handoff is disabled", { provider: provider.name });
+            continue;
+          }
+          if (confidence !== null && confidence < provider.confidenceThreshold) {
+            lastError = Object.assign(new Error("Cactus confidence was below the configured threshold; trying the next provider."), { status: 502, code: "CACTUS_CONFIDENCE_LOW", retryable: true });
+            logger.info?.("Cactus confidence below threshold; trying next provider", { provider: provider.name, confidence: Number(confidence.toFixed(3)), threshold: provider.confidenceThreshold });
+            continue;
+          }
         }
         return data;
       } catch (error) {
@@ -538,6 +569,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       })) : [];
       return { ...status, taskMatches, notice: "Readiness is configuration-only, not proof of live upstream connectivity. Never call a missing adapter or pretend that a separate application ran." };
     }
+    if (name === "check_cactus") return checkCactusService({ env, fetchImpl, userId: req.supabaseUser?.id });
+    if (name === "obscura_inspect_public_page") return inspectPublicPageWithObscura({ env, fetchImpl, userId: req.supabaseUser?.id, url: args.url });
+    if (name === "obscura_capture_public_page") return capturePublicPageWithObscura({ env, fetchImpl, userId: req.supabaseUser?.id, url: args.url, format: args.format });
     if (name === "chatwoot_list_conversations") return listChatwootConversations({ env, fetchImpl, userId: req.supabaseUser?.id, status: args.status, limit: args.limit });
     if (name === "openproject_list_projects") return listOpenProjectProjects({ env, fetchImpl, userId: req.supabaseUser?.id, limit: args.limit });
     if (name === "openproject_list_work_packages") return listOpenProjectWorkPackages({ env, fetchImpl, userId: req.supabaseUser?.id, projectId: args.projectId, limit: args.limit });
@@ -903,6 +937,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_28_repository_domains" },
         { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_28_requested_repositories; read configuration-only status at /api/agent/repositories" },
         { name: "repository_readiness", available: true, execution: "non_secret task matched repository readiness" },
+        { name: "check_cactus", available: Boolean(getCactusReadiness(env).configured), execution: "read_only_health_and_model_list_no_download_or_inference" },
+        { name: "obscura_inspect_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_navigation_and_dom_snapshot_only" },
+        { name: "obscura_capture_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_screenshot_or_pdf_capture_bounded_artifact_payload" },
         { name: "chatwoot_list_conversations", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.CHATWOOT_BASE_URL && env.CHATWOOT_API_TOKEN && env.CHATWOOT_ACCOUNT_ID), execution: "owner_scoped_read_only_conversation_list_no_messages_or_contact_email" },
         { name: "openproject_list_projects", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.OPENPROJECT_BASE_URL && env.OPENPROJECT_API_TOKEN), execution: "owner_scoped_read_only_project_list" },
         { name: "openproject_list_work_packages", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.OPENPROJECT_BASE_URL && env.OPENPROJECT_API_TOKEN), execution: "owner_scoped_read_only_work_package_list" },

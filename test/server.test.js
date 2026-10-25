@@ -49,20 +49,26 @@ test("integration catalog reports readiness without exposing secret values", asy
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
     ULTRON_EMPLOYEES_ENABLED: "true",
     GEO_SLEUTH_ENABLED: "true",
-    GEO_SLEUTH_ROOT: ".runtime/geo-sleuth/skills/geo-sleuth"
+    GEO_SLEUTH_ROOT: ".runtime/geo-sleuth/skills/geo-sleuth",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    OBSCURA_MCP_URL: "http://127.0.0.1:8080/mcp",
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle"
   };
   await withServer(createApp({ env: configuredEnv, logger: { warn() {}, error() {} } }), async base => {
     const cookie = await login(base);
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 10);
+    assert.equal(payload.integrations.length, 12);
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "omnivoice").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "handy").state, "desktop_companion_required");
     assert.equal(payload.integrations.find(item => item.id === "ai-employees").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "geo-sleuth").configured, true);
+    assert.equal(payload.integrations.find(item => item.id === "obscura").state, "configured_unverified");
+    assert.equal(payload.integrations.find(item => item.id === "cactus-compute").state, "configured_unverified");
     const serialized = JSON.stringify(payload);
     assert.equal(serialized.includes("private-heygem-secret"), false);
     assert.equal(serialized.includes("private-voice-secret"), false);
@@ -132,6 +138,131 @@ test("chat calls OpenRouter with a server-side key and returns the mocked respon
     assert.equal(seen.url, "https://openrouter.ai/api/v1/chat/completions");
     assert.equal(seen.options.headers.Authorization, "Bearer test-key");
     assert.equal(JSON.parse(seen.options.body).model, "test-model");
+  });
+});
+
+test("Cactus can serve a normal streaming chat locally without an API key", async () => {
+  let seen;
+  const cactusEnv = {
+    ...env,
+    OPENROUTER_API_KEY: "",
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle",
+    CACTUS_CONFIDENCE_THRESHOLD: "0.72"
+  };
+  const app = createApp({
+    env: cactusEnv,
+    fetchImpl: async (url, options) => {
+      seen = { url, options };
+      return new Response(JSON.stringify({
+        model: "Cactus-Compute/needle",
+        confidence: 0.95,
+        cloud_handoff: false,
+        choices: [{ message: { role: "assistant", content: "Local Cactus response." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Hello" }], stream: true })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ultron-provider"), "cactus");
+    const body = await response.text();
+    assert.match(body, /Local Cactus response/);
+    assert.match(body, /event: done/);
+    assert.equal(seen.url, "http://127.0.0.1:8080/v1/chat/completions");
+    assert.equal(JSON.parse(seen.options.body).stream, false);
+    assert.equal(seen.options.headers.Authorization, undefined);
+  });
+});
+
+test("Cactus chat falls back to the configured cloud provider when confidence is low", async () => {
+  const attempts = [];
+  const cactusEnv = {
+    ...env,
+    OPENROUTER_API_KEY: "test-key",
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle",
+    CACTUS_CONFIDENCE_THRESHOLD: "0.72"
+  };
+  const app = createApp({
+    env: cactusEnv,
+    fetchImpl: async (url, options) => {
+      attempts.push(url);
+      if (url === "http://127.0.0.1:8080/v1/chat/completions") {
+        return new Response(JSON.stringify({
+          confidence: 0.2, cloud_handoff: false,
+          choices: [{ message: { role: "assistant", content: "Low confidence answer." } }]
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+      return new Response(JSON.stringify({
+        model: "test-model", choices: [{ message: { role: "assistant", content: "Fallback from OpenRouter." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Hello" }], stream: false })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Fallback from OpenRouter.");
+    assert.equal(response.headers.get("x-ultron-provider"), "openrouter");
+    assert.equal(response.headers.get("x-ultron-fallback"), "true");
+    assert.deepEqual(attempts, [
+      "http://127.0.0.1:8080/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions"
+    ]);
+  });
+});
+
+test("Cactus cloud handoff is blocked by default and falls back to the configured provider", async () => {
+  const attempts = [];
+  const cactusEnv = {
+    ...env,
+    OPENROUTER_API_KEY: "test-key",
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle"
+  };
+  const app = createApp({
+    env: cactusEnv,
+    fetchImpl: async url => {
+      attempts.push(url);
+      if (url.startsWith("http://127.0.0.1:8080/")) {
+        return new Response(JSON.stringify({
+          confidence: 0.99, cloud_handoff: true,
+          choices: [{ message: { role: "assistant", content: "Do not use this handoff answer." } }]
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        model: "test-model", choices: [{ message: { role: "assistant", content: "Fallback after handoff was blocked." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Hello" }], stream: false })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Fallback after handoff was blocked.");
+    assert.equal(response.headers.get("x-ultron-provider"), "openrouter");
+    assert.deepEqual(attempts, [
+      "http://127.0.0.1:8080/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions"
+    ]);
   });
 });
 

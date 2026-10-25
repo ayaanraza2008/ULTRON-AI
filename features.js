@@ -3,6 +3,7 @@ import express from "express";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
+import { resolveCactusProvider } from "./integrations/cactus.js";
 
 function safeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -148,6 +149,8 @@ function validateDocxArchive(bytes) {
 
 function configuredFeatureProviders(env = {}) {
   const providers = [];
+  const cactusProvider = resolveCactusProvider(env);
+  if (cactusProvider) providers.push(cactusProvider);
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   const primaryRaw = typeof env.OPENROUTER_BASE_URL === "string" && env.OPENROUTER_BASE_URL.trim()
     ? env.OPENROUTER_BASE_URL.trim()
@@ -274,7 +277,7 @@ async function requestFeatureCompletion({ env, fetchImpl, messages, temperature,
       const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: "Bearer " + provider.apiKey,
+          ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}),
           "Content-Type": "application/json",
           Accept: "application/json",
           ...(provider.name === "openrouter"
@@ -309,6 +312,17 @@ async function requestFeatureCompletion({ env, fetchImpl, messages, temperature,
           code: error?.code || "PROVIDER_RESPONSE_INVALID"
         });
         continue;
+      }
+      if (provider.name === "cactus") {
+        const confidence = typeof payload?.confidence === "number" && Number.isFinite(payload.confidence) ? payload.confidence : null;
+        if (payload?.cloud_handoff === true && env.CACTUS_ALLOW_CLOUD_HANDOFF !== "true") {
+          lastError = Object.assign(new Error("Cactus cloud handoff is disabled."), { code: "CACTUS_CLOUD_HANDOFF_BLOCKED" });
+          continue;
+        }
+        if (confidence !== null && confidence < (provider.confidenceThreshold ?? 0.72)) {
+          lastError = Object.assign(new Error("Cactus confidence was below threshold."), { code: "CACTUS_CONFIDENCE_LOW" });
+          continue;
+        }
       }
       const answer = payload?.choices?.[0]?.message?.content;
       if (typeof answer !== "string" || !answer.trim()) {

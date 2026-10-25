@@ -223,6 +223,139 @@ test("agent drafts a YouTube production package without pretending to render or 
   });
 });
 
+test("Cactus is tried before cloud models when the local-first provider is configured", async () => {
+  let calls = 0;
+  await withServer({
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle",
+    CACTUS_CONFIDENCE_THRESHOLD: "0.72",
+    OPENROUTER_API_KEY: "openrouter-test",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+  }, async (url, options) => {
+    calls++;
+    assert.equal(url, "http://127.0.0.1:8080/v1/chat/completions");
+    assert.equal(options.headers.Authorization, undefined);
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.model, "Cactus-Compute/needle");
+    return new Response(JSON.stringify({ confidence: 0.93, cloud_handoff: false, choices: [{ message: { role: "assistant", content: "Answered locally by Cactus." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Explain how a local model can help ULTRON." })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /Answered locally by Cactus/);
+    assert.equal(calls, 1);
+  });
+});
+
+test("Cactus low-confidence answers fall back to the next configured provider", async () => {
+  const attempts = [];
+  await withServer({
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle",
+    CACTUS_CONFIDENCE_THRESHOLD: "0.72",
+    OPENROUTER_API_KEY: "openrouter-test",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+  }, async (url, options) => {
+    attempts.push(url);
+    if (url === "http://127.0.0.1:8080/v1/chat/completions") {
+      return new Response(JSON.stringify({ confidence: 0.21, cloud_handoff: false, choices: [{ message: { role: "assistant", content: "Uncertain local answer." } }] }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    assert.equal(options.headers.Authorization, "Bearer openrouter-test");
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Verified through the configured fallback model." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Summarize why model confidence matters." })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /configured fallback model/);
+    assert.deepEqual(attempts, [
+      "http://127.0.0.1:8080/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions"
+    ]);
+  });
+});
+
+test("agent automatically routes explicit Obscura requests to a public-page snapshot", async () => {
+  const modelCalls = [];
+  const mcpCalls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    OBSCURA_MCP_URL: "http://127.0.0.1:8080/mcp"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      modelCalls.push(JSON.parse(options.body));
+      if (modelCalls.length === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I will inspect the public page." } }] }), { status: 200 });
+      assert.ok(modelCalls[1].messages.some(message => message.role === "tool" && String(message.content).includes("Public product page")));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Obscura read the public product page; no actions were submitted." } }] }), { status: 200 });
+    }
+    assert.equal(url, "http://127.0.0.1:8080/mcp");
+    const payload = JSON.parse(options.body);
+    mcpCalls.push(payload.method);
+    if (payload.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "obscura", version: "test" } } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-agent" } });
+    }
+    if (payload.method === "notifications/initialized") return new Response(null, { status: 202, headers: { "Mcp-Session-Id": "session-agent" } });
+    if (payload.params.name === "browser_navigate") return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { content: [{ type: "text", text: "Navigation complete" }] } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-agent" } });
+    if (payload.params.name === "browser_snapshot") return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { content: [{ type: "text", text: "Title: Sample\nBody: Public product page; no account information." }] } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-agent" } });
+    throw new Error("Unexpected Obscura MCP request");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Use Obscura to inspect https://example.com." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.toolsUsed.some(item => item.name === "obscura_inspect_public_page" && item.ok));
+    assert.match(body.content, /Obscura read the public product page/);
+    assert.deepEqual(mcpCalls, ["initialize", "notifications/initialized", "tools/call", "tools/call"]);
+    assert.equal(JSON.stringify(body).includes("openrouter-test"), false);
+  });
+});
+
+test("agent routes an explicit Obscura PDF request to the PDF capture MCP tool", async () => {
+  let modelCalls = 0;
+  let pdfCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    OBSCURA_MCP_URL: "http://127.0.0.1:8080/mcp"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      modelCalls++;
+      if (modelCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I will create the requested PDF capture." } }] }), { status: 200 });
+      assert.ok(JSON.parse(options.body).messages.some(message => message.role === "tool" && String(message.content).includes("application/pdf")));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The PDF capture was returned by Obscura; no website actions were submitted." } }] }), { status: 200 });
+    }
+    const payload = JSON.parse(options.body);
+    if (payload.method === "initialize") return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "obscura", version: "test" } } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-pdf" } });
+    if (payload.method === "notifications/initialized") return new Response(null, { status: 202, headers: { "Mcp-Session-Id": "session-pdf" } });
+    if (payload.method === "tools/call" && payload.params.name === "browser_navigate") return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { content: [{ type: "text", text: "Navigated" }] } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-pdf" } });
+    if (payload.method === "tools/call" && payload.params.name === "browser_pdf") {
+      pdfCalls++;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { content: [{ type: "resource", resource: { uri: "cactus://pdf/page.pdf", mimeType: "application/pdf", blob: Buffer.from("%PDF-test").toString("base64") } }] } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-pdf" } });
+    }
+    throw new Error("Unexpected Obscura MCP request");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Use Obscura to export https://example.com as PDF." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.toolsUsed.some(item => item.name === "obscura_capture_public_page" && item.ok));
+    assert.equal(body.toolResults.find(item => item.name === "obscura_capture_public_page").result.artifact.format, "pdf");
+    assert.equal(pdfCalls, 1);
+    assert.equal(JSON.stringify(body).includes("openrouter-test"), false);
+  });
+});
+
 test("agent automatically checks integration readiness when a free model omits tool calls", async () => {
   let providerCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
@@ -279,7 +412,7 @@ test("agent can inspect task-matched repository readiness without exposing crede
     assert.equal(body.toolsUsed[0].name, "check_repository_capabilities");
     assert.equal(body.toolsUsed[0].ok, true);
     const result = body.toolResults[0].result;
-    assert.equal(result.repositoryCount, 28);
+    assert.equal(result.repositoryCount, 30);
     assert.ok(result.taskMatches.some(item => item.id === "chatwoot"));
     assert.ok(result.taskMatches.some(item => item.id === "openproject"));
     assert.ok(result.taskMatches.every(item => item.state === "configured_unverified"));

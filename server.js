@@ -10,6 +10,7 @@ import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
+import { resolveCactusProvider } from "./integrations/cactus.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -199,6 +200,7 @@ function normalizeBaseUrl(value) {
 }
 
 function hasConfiguredModelProvider(env) {
+  if (resolveCactusProvider(env)) return true;
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
@@ -229,6 +231,8 @@ function hasConfiguredModelProvider(env) {
 
 function configuredChatProviders(env, openRouterBaseUrl = null) {
   const providers = [];
+  const cactusProvider = resolveCactusProvider(env);
+  if (cactusProvider) providers.push({ ...cactusProvider, supportsVision: false, isOpenRouter: false, isCactus: true });
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   if (primaryKey && openRouterBaseUrl) {
     providers.push({
@@ -279,6 +283,18 @@ function configuredChatProviders(env, openRouterBaseUrl = null) {
     });
   }
   return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
+}
+
+function cactusCompletionStream(completion) {
+  const id = "cactus-" + crypto.randomUUID();
+  const content = completion.choices[0].message.content;
+  const events = [
+    { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] },
+    { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: { content }, finish_reason: null }] },
+    { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }
+  ];
+  const body = events.map(event => "data: " + JSON.stringify(event) + "\n\n").join("") + "data: [DONE]\n\n";
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
 export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
@@ -384,7 +400,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         upstream = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: {
-            Authorization: "Bearer " + provider.apiKey,
+            ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}),
             "Content-Type": "application/json",
             Accept: "application/json",
             ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
@@ -409,6 +425,19 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (upstream.ok) {
         let completion;
         try { completion = JSON.parse(raw); } catch { completion = null; }
+        if (provider.isCactus && completion && typeof completion === "object") {
+          const confidence = typeof completion.confidence === "number" && Number.isFinite(completion.confidence) ? completion.confidence : null;
+          if (completion.cloud_handoff === true && env.CACTUS_ALLOW_CLOUD_HANDOFF !== "true") {
+            lastStatus = 502;
+            if (index + 1 < attempts.length) continue;
+            break;
+          }
+          if (confidence !== null && confidence < (provider.confidenceThreshold ?? 0.72)) {
+            lastStatus = 502;
+            if (index + 1 < attempts.length) continue;
+            break;
+          }
+        }
         const message = completion?.choices?.[0]?.message;
         const hasText = typeof message?.content === "string" && message.content.trim().length > 0;
         const hasContentParts = Array.isArray(message?.content) && message.content.length > 0;
@@ -1178,7 +1207,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           attempt = await fetchImpl(`${provider.baseUrl}/chat/completions`, {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${provider.apiKey}`,
+              ...(provider.apiKey ? { "Authorization": `Bearer ${provider.apiKey}` } : {}),
               "Content-Type": "application/json",
               "Accept": stream ? "text/event-stream, application/json" : "application/json",
               ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
@@ -1186,7 +1215,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             body: JSON.stringify({
               model: candidate,
               messages: cleanMessages,
-              stream: Boolean(stream),
+              stream: provider.isCactus ? false : Boolean(stream),
               temperature: 0.7
             }),
             signal: attemptController.signal,
@@ -1214,6 +1243,45 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         // The per-attempt timer bounds time-to-first-response only. The separate global
         // deadline continues to cover body parsing/streaming and disconnect cancellation.
         clearTimeout(attemptTimeout);
+
+        if (attempt.ok && provider.isCactus) {
+          let cactusData;
+          try { cactusData = await readResponseJsonLimited(attempt, 2_000_000); }
+          catch {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "INVALID_RESPONSE";
+            logger.warn?.("Cactus returned invalid JSON; trying the next model provider", { modelIndex: index });
+            continue;
+          }
+          const confidence = typeof cactusData?.confidence === "number" && Number.isFinite(cactusData.confidence)
+            ? cactusData.confidence : null;
+          if (cactusData?.cloud_handoff === true && env.CACTUS_ALLOW_CLOUD_HANDOFF !== "true") {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "CACTUS_CLOUD_HANDOFF_BLOCKED";
+            logger.warn?.("Cactus cloud handoff is disabled; trying the next model provider", { modelIndex: index });
+            continue;
+          }
+          if (confidence !== null && confidence < (provider.confidenceThreshold ?? 0.72)) {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "CACTUS_CONFIDENCE_LOW";
+            logger.info?.("Cactus confidence below threshold; trying the next model provider", { confidence: Number(confidence.toFixed(3)), threshold: provider.confidenceThreshold ?? 0.72 });
+            continue;
+          }
+          const cactusMessage = cactusData?.choices?.[0]?.message;
+          if (typeof cactusMessage?.content !== "string" || !cactusMessage.content.trim()) {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "INVALID_RESPONSE";
+            logger.warn?.("Cactus returned an empty completion; trying the next model provider", { modelIndex: index });
+            continue;
+          }
+          attempt = stream
+            ? cactusCompletionStream(cactusData)
+            : new Response(JSON.stringify(cactusData), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
 
         if (!attempt.ok) {
           upstream = attempt;
