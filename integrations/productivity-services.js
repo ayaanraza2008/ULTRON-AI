@@ -4,6 +4,8 @@
  * explicitly configured ULTRON_INTEGRATION_OWNER_USER_ID account. Never accept
  * upstream URLs, tokens, or arbitrary paths from model/user input.
  */
+import { safeServiceBase } from "../network-safety.js";
+
 const MAX_RESPONSE_BYTES = 1_500_000;
 
 function bounded(value, max = 500) {
@@ -11,14 +13,7 @@ function bounded(value, max = 500) {
 }
 
 function safeBase(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const url = new URL(value.trim());
-    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname.toLowerCase());
-    if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
-    return url.toString().replace(/\/+$/, "");
-  } catch { return null; }
+  return safeServiceBase(value);
 }
 
 function ownerAllowed(env, userId) {
