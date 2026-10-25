@@ -134,3 +134,30 @@ test("smoke check tries configured free model IDs after the OpenRouter router is
   assert.equal(JSON.stringify(report).includes(secret), false);
   assert.ok(!seen.some(item => item.model === "openai/gpt-4.1" || item.model.includes("bad.example")));
 });
+
+
+test("smoke check rejects HTTPS private, loopback, and metadata destinations before sending credentials", async () => {
+  const unsafeUrls = [
+    "https://localhost/v1",
+    "https://192.168.1.10/v1",
+    "https://10.0.0.4/v1",
+    "https://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal/computeMetadata/v1",
+    "https://[fd00::1]/v1",
+    "https://127.1/v1"
+  ];
+  for (const baseUrl of unsafeUrls) {
+    let called = false;
+    const report = await runModelProviderSmoke({
+      env: {
+        OPENROUTER_API_KEY: "private-target-test-secret",
+        OPENROUTER_BASE_URL: baseUrl,
+        OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+      },
+      fetchImpl: async () => { called = true; return success(); }
+    });
+    assert.equal(report.status, "blocked", baseUrl);
+    assert.equal(called, false, baseUrl);
+    assert.equal(JSON.stringify(report).includes("private-target-test-secret"), false);
+  }
+});
