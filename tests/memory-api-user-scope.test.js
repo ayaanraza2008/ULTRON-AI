@@ -78,6 +78,47 @@ test("memory expiry is validated on create and can be updated or cleared without
   }
 });
 
+test("memory expiry rejects normalized invalid calendar dates and invalid timezone offsets before writes", async () => {
+  let databaseWrites = 0;
+  const app = createApp({
+    env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_PUBLISHABLE_KEY: "test-publishable-key" },
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async (url, options = {}) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/auth/v1/user") return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      if (parsed.pathname === "/rest/v1/memory_items") {
+        databaseWrites += 1;
+        return new Response(JSON.stringify([{ id: "123e4567-e89b-12d3-a456-426614174000" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request.");
+    }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const base = "http://127.0.0.1:" + server.address().port;
+    const headers = { Cookie: "ultron_sb_access=test-access-token", "Content-Type": "application/json" };
+    const invalidValues = [
+      "2026-02-30T12:00:00Z",
+      "2026-13-01T12:00:00Z",
+      "2026-01-01T25:00:00Z",
+      "2026-01-01T12:00:00+14:30"
+    ];
+    for (const expires_at of invalidValues) {
+      const response = await fetch(base + "/api/memory", {
+        method: "POST", headers,
+        body: JSON.stringify({ kind: "project_fact", title: "Invalid expiry", content: "must not be saved", expires_at })
+      });
+      assert.equal(response.status, 400, expires_at);
+      assert.equal((await response.json()).error.code, "INVALID_MEMORY_EXPIRY");
+    }
+    assert.equal(databaseWrites, 0, "invalid timestamps must be rejected before touching Supabase");
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
 test("memory list, update, and delete queries are scoped to the authenticated user", async () => {
   const requests = [];
   const app = createApp({
