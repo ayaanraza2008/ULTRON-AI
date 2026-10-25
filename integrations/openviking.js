@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 const MAX_QUERY_CHARS = 1200;
 const MAX_RESPONSE_BYTES = 512 * 1024;
 const MAX_CONTEXTS = 10;
@@ -12,17 +14,22 @@ function normalizeBaseUrl(value) {
   try {
     const url = new URL(value.trim());
     const host = url.hostname.toLowerCase();
-    const loopback = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(host);
+    const normalizedHost = host.replace(/^\[|\]$/g, "");
+    const loopback = ["localhost", "127.0.0.1", "::1"].includes(normalizedHost);
+    const localHostname = host.endsWith(".localhost") || host.endsWith(".local") ||
+      host === "metadata.google.internal" || host === "metadata.google";
     if (url.username || url.password || url.search || url.hash) return null;
     if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return null;
-    if (url.protocol === "https:" && loopback) return null;
+    if (url.protocol === "https:" && (loopback || localHostname)) return null;
+    // Do not send a privileged integration token to a literal IP endpoint.
+    // Local development may use loopback over HTTP; remote services must use
+    // a hostname over HTTPS so obvious private/metadata IPs cannot be targeted.
+    if (isIP(normalizedHost) !== 0 && !loopback) return null;
     return url.toString().replace(/\/+$/, "");
   } catch {
     return null;
   }
-}
-
-function resolveSettings(env = process.env) {
+}function resolveSettings(env = process.env) {
   const baseUrl = normalizeBaseUrl(env.OPENVIKING_BASE_URL);
   const token = bounded(env.OPENVIKING_API_TOKEN, 2000);
   const ownerId = bounded(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
