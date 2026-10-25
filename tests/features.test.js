@@ -1162,4 +1162,4 @@ test("explicit approval requirement overrides low-risk auto-queue for employee d
     assert.equal(taskWrite.input.approved, false);
   }, { supabaseRest: fakeSupabaseRest });
 });
-\n
+
