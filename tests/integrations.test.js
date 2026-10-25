@@ -220,6 +220,32 @@ test("integration catalog reports readiness without exposing credentials or clai
   });
 });
 
+test("productivity connector readiness requires owner guard and omits credentials", async () => {
+  await withServer({
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    CHATWOOT_BASE_URL: "https://chat.example",
+    CHATWOOT_API_TOKEN: "chat-secret",
+    CHATWOOT_ACCOUNT_ID: "12",
+    OPENPROJECT_BASE_URL: "https://projects.example",
+    OPENPROJECT_API_TOKEN: "openproject-secret",
+    CALDIY_BASE_URL: "https://cal.example",
+    CALDIY_API_TOKEN: "cal-secret"
+  }, async () => { throw new Error("catalog must not call upstream services"); }, async base => {
+    const response = await fetch(base + "/api/integrations/catalog");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const chatwoot = body.integrations.find(item => item.id === "chatwoot");
+    const openproject = body.integrations.find(item => item.id === "openproject");
+    const caldiy = body.integrations.find(item => item.id === "caldiy");
+    assert.equal(chatwoot.state, "configured_unverified");
+    assert.equal(openproject.state, "configured_unverified");
+    assert.equal(caldiy.state, "configured_unverified");
+    assert.equal(JSON.stringify(body).includes("chat-secret"), false);
+    assert.equal(JSON.stringify(body).includes("openproject-secret"), false);
+    assert.equal(JSON.stringify(body).includes("cal-secret"), false);
+  });
+});
+
 test("integration catalog does not mark unsupported local URL schemes as configured", async () => {
   await withServer({
     COMFYUI_BASE_URL: "ftp://localhost:8188",

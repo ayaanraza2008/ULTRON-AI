@@ -24,26 +24,26 @@ const REPOSITORIES = [
   {
     id: "chatwoot", repo: "chatwoot/chatwoot", domain: "customer_support",
     match: /\b(chatwoot|customer support|support inbox|support ticket|customer conversation|helpdesk|live chat|customer reply|support agent)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["unified support inbox", "ticket triage", "support reply drafts", "conversation summaries", "customer-support analytics"],
-    limits: ["External support actions need a reachable Chatwoot instance, documented API credentials, user-scoped access, and approval before sending replies."],
-    envKeys: ["CHATWOOT_BASE_URL", "CHATWOOT_API_TOKEN"], license: "Review upstream LICENSE before reuse", source: "https://github.com/chatwoot/chatwoot"
+    integration: "owner_scoped_api", status: "adapter_present_unverified_live",
+    abilities: ["read-only conversation listing", "support triage", "bounded conversation summaries", "support-report drafting"],
+    limits: ["Read-only API connector exists; live auth/response compatibility is unverified. Owner UUID guard is required, and sending replies or changing conversation state is not exposed as an automatic action."],
+    envKeys: ["CHATWOOT_BASE_URL", "CHATWOOT_API_TOKEN", "CHATWOOT_ACCOUNT_ID", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "Review upstream LICENSE before reuse", source: "https://github.com/chatwoot/chatwoot"
   },
   {
     id: "cal-diy", repo: "calcom/cal.diy", domain: "scheduling",
     match: /\b(cal\.diy|calcom|schedule a meeting|book a meeting|calendar booking|availability calendar|appointment scheduling|meeting slots)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["availability lookup", "meeting/appointment scheduling", "calendar routing", "meeting links"],
-    limits: ["Requires an authorized calendar service and user-scoped API token; booking, canceling, and invite-sending are consequential actions."],
-    envKeys: ["CALDIY_BASE_URL", "CALDIY_API_TOKEN"], license: "MIT per repository README; verify exact source files", source: "https://github.com/calcom/cal.diy"
+    integration: "owner_scoped_api", status: "adapter_present_unverified_live",
+    abilities: ["read-only event-type listing", "read-only availability lookup", "meeting preparation"],
+    limits: ["Read-only Cal.com-compatible API connector exists; exact cal.diy endpoint/auth compatibility remains unverified. Booking, cancellation, and invitation sending are not exposed as automatic actions."],
+    envKeys: ["CALDIY_BASE_URL", "CALDIY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["CALDIY_API_VERSION"], license: "MIT per repository README; verify exact source files", source: "https://github.com/calcom/cal.diy"
   },
   {
     id: "openproject", repo: "opf/openproject", domain: "project_management",
     match: /\b(openproject|project board|kanban board|sprint|gantt|work package|project roadmap|project backlog|issue tracker|time tracking|project status)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["task and issue tracking", "Kanban/Scrum planning", "roadmap and Gantt planning", "project summaries", "time/cost reporting"],
-    limits: ["Read/write use requires an authorized OpenProject API endpoint and scoped credentials."],
-    envKeys: ["OPENPROJECT_BASE_URL", "OPENPROJECT_API_TOKEN"], license: "Review upstream license before reuse", source: "https://github.com/opf/openproject"
+    integration: "owner_scoped_api", status: "adapter_present_unverified_live",
+    abilities: ["read-only project listing", "read-only work-package listing", "project/task status summaries"],
+    limits: ["Read-only API connector exists; live auth and filter compatibility remain unverified. Owner UUID guard is required; creating/editing work packages is not exposed as an automatic action."],
+    envKeys: ["OPENPROJECT_BASE_URL", "OPENPROJECT_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "Review upstream license before reuse", source: "https://github.com/opf/openproject"
   },
   {
     id: "openwhispr", repo: "OpenWhispr/openwhispr", domain: "voice_dictation",

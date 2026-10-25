@@ -22,6 +22,10 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasVoiceStudio = safeBaseUrl(env.VOICESTUDIO_BASE_URL) && (Boolean(env.VOICESTUDIO_API_KEY) || ["localhost", "127.0.0.1", "::1"].includes(new URL(env.VOICESTUDIO_BASE_URL).hostname));
   const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const hasGeoSleuth = env.GEO_SLEUTH_ENABLED === "true";
+  const hasIntegrationOwner = Boolean(typeof env.ULTRON_INTEGRATION_OWNER_USER_ID === "string" && env.ULTRON_INTEGRATION_OWNER_USER_ID.trim());
+  const hasChatwoot = hasIntegrationOwner && safeBaseUrl(env.CHATWOOT_BASE_URL) && Boolean(env.CHATWOOT_API_TOKEN) && /^\d+$/.test(String(env.CHATWOOT_ACCOUNT_ID || ""));
+  const hasOpenProject = hasIntegrationOwner && safeBaseUrl(env.OPENPROJECT_BASE_URL) && Boolean(env.OPENPROJECT_API_TOKEN);
+  const hasCalDiy = hasIntegrationOwner && safeBaseUrl(env.CALDIY_BASE_URL) && Boolean(env.CALDIY_API_TOKEN);
 
   return [
     {
@@ -103,6 +107,46 @@ export function buildIntegrationCatalog(env = process.env) {
       note: hasVoiceStudio
         ? "Endpoint is configured; live model readiness must be verified through the status route."
         : "Install and run VoiceStudio separately. Cloud ULTRON cannot reach a user's PC localhost; remote endpoints require HTTPS and an API key."
+    },
+    {
+      id: "chatwoot",
+      name: "Chatwoot Support Inbox",
+      capability: "Read-only listing and triage context for conversations",
+      state: hasChatwoot ? "configured_unverified" : "blocked",
+      configured: Boolean(hasChatwoot),
+      mode: "owner_scoped_external_api",
+      requiredEnv: ["CHATWOOT_BASE_URL", "CHATWOOT_API_TOKEN", "CHATWOOT_ACCOUNT_ID", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tool: chatwoot_list_conversations"],
+      note: hasChatwoot
+        ? "Owner-scoped API credentials are present; live conversation listing is not yet verified. Replies and conversation state changes are not exposed as automatic actions."
+        : "Requires a secure Chatwoot API endpoint/token/account ID and an owner UUID guard; connector remains disabled otherwise."
+    },
+    {
+      id: "openproject",
+      name: "OpenProject",
+      capability: "Read-only project and work-package listing",
+      state: hasOpenProject ? "configured_unverified" : "blocked",
+      configured: Boolean(hasOpenProject),
+      mode: "owner_scoped_external_api",
+      requiredEnv: ["OPENPROJECT_BASE_URL", "OPENPROJECT_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tool: openproject_list_projects", "agent tool: openproject_list_work_packages"],
+      note: hasOpenProject
+        ? "Owner-scoped API credentials are present; live project/work-package reads are not yet verified. Writes are not exposed as automatic actions."
+        : "Requires a secure OpenProject API endpoint/token and an owner UUID guard; connector remains disabled otherwise."
+    },
+    {
+      id: "caldiy",
+      name: "Cal.diy / Cal.com-compatible Scheduling",
+      capability: "Read-only event-type listing and availability lookup",
+      state: hasCalDiy ? "configured_unverified" : "blocked",
+      configured: Boolean(hasCalDiy),
+      mode: "owner_scoped_external_api",
+      requiredEnv: ["CALDIY_BASE_URL", "CALDIY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["CALDIY_API_VERSION"],
+      apiRoutes: ["agent tool: caldiy_list_event_types", "agent tool: caldiy_check_availability"],
+      note: hasCalDiy
+        ? "Owner-scoped API credentials are present; event types/availability need live verification. Booking/cancellation is not exposed as automatic action."
+        : "Requires a secure compatible API endpoint/token and an owner UUID guard; connector remains disabled otherwise."
     },
     {
       id: "ai-employees",
