@@ -27,13 +27,13 @@ test("agent cancels oversized model responses and falls back to the next configu
     FIRST_KEY: "first-test-key",
     SECOND_KEY: "second-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/api/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
-      { name: "second", baseUrl: "https://second.example/api/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+      { name: "first", baseUrl: "https://first.example.com/api/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example.com/api/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
     ])
   };
   await withServer(env, async (url) => {
     providerCalls += 1;
-    if (url.startsWith("https://first.example/")) {
+    if (url.startsWith("https://first.example.com/")) {
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1));
@@ -42,7 +42,7 @@ test("agent cancels oversized model responses and falls back to the next configu
       });
       return new Response(stream, { status: 200 });
     }
-    assert.equal(url, "https://second.example/api/v1/chat/completions");
+    assert.equal(url, "https://second.example.com/api/v1/chat/completions");
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered through the fallback provider." } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
@@ -66,7 +66,7 @@ test("browser bridge requests reject redirects and keep the shared token on the 
     ULTRON_BROWSER_USE_URL: "https://browser.example",
     ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
   }, async (url, options) => {
-    if (url === "https://browser.example/run") {
+    if (url === "https://browser.example.com/run") {
       bridgeCalls += 1;
       assert.equal(options.redirect, "error");
       assert.equal(options.headers["X-ULTRON-BROWSER-TOKEN"], "bridge-test-token");
@@ -100,7 +100,7 @@ test("browser bridge requests reject redirects and keep the shared token on the 
 test("agent automatically injects relevant AgentMemory results for continuation tasks", async () => {
   let memoryCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
-    if (url === "https://memory.example/agentmemory/smart-search") {
+    if (url === "https://memory.example.com/agentmemory/smart-search") {
       memoryCalls += 1;
       assert.equal(JSON.parse(options.body).project, "ultron-ai-user-00000000-0000-4000-8000-000000000001");
       assert.equal(options.headers.Authorization, "Bearer memory-test-secret");
@@ -155,7 +155,7 @@ test("automatically stores high-signal decisions in the existing durable Supabas
 
 test("AgentMemory readiness is authenticated and does not return memory contents", async () => {
   await withServer({ AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
-    assert.equal(url, "https://memory.example/agentmemory/smart-search");
+    assert.equal(url, "https://memory.example.com/agentmemory/smart-search");
     assert.equal(options.headers.Authorization, "Bearer memory-test-secret");
     return new Response(JSON.stringify({ results: [{ content: "private memory text" }] }), { status: 200 });
   }, async base => {
@@ -595,7 +595,7 @@ test("ComfyUI workflow is not queued until explicit confirmation is supplied", a
   let providerCalls = 0;
   let queueCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
-    if (url === "https://comfy.example/prompt") {
+    if (url === "https://comfy.example.com/prompt") {
       queueCalls += 1;
       return new Response(JSON.stringify({ prompt_id: "prompt-abc" }), { status: 200 });
     }
@@ -667,7 +667,7 @@ test("agent keeps large speech payloads out of model context but returns them to
   let providerCalls = 0;
   const audioBase64 = "A".repeat(3000);
   await withServer({ OPENROUTER_API_KEY: "test-only", OMNIVOICE_API_BASE_URL: "https://voice.example", OMNIVOICE_API_KEY: "voice-test", OMNIVOICE_SYNTHESIS_PATH: "/synthesize" }, async (url, options) => {
-    if (url === "https://voice.example/synthesize") return new Response(JSON.stringify({ audioBase64, format: "wav" }), { status: 200 });
+    if (url === "https://voice.example.com/synthesize") return new Response(JSON.stringify({ audioBase64, format: "wav" }), { status: 200 });
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "voice-call", type: "function", function: { name: "synthesize_speech", arguments: JSON.stringify({ text: "Hello world" }) } }] } }] }), { status: 200 });
     const body = JSON.parse(options.body);
@@ -808,7 +808,7 @@ test("ComfyUI asks for the exact workflow before asking the user to confirm comp
   let providerCalls = 0;
   let comfyCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
-    if (url.startsWith("https://comfy.example/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
+    if (url.startsWith("https://comfy.example.com/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "comfy-call", type: "function", function: { name: "run_comfyui_workflow", arguments: JSON.stringify({ reason: "Generate an image" }) } }] } }] }), { status: 200 });
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Attach the workflow JSON first." } }] }), { status: 200 });
@@ -926,7 +926,7 @@ test("agent infers generic image-generation requests without requiring the user 
   let providerCalls = 0;
   let comfyCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
-    if (url.startsWith("https://comfy.example/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
+    if (url.startsWith("https://comfy.example.com/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I can help create that image." } }] }), { status: 200 });
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Attach a ComfyUI API workflow JSON so I can inspect it before asking for compute confirmation." } }] }), { status: 200 });
@@ -1247,7 +1247,7 @@ test("agent autonomously uses VoiceStudio for speech when configured", async () 
     VOICESTUDIO_BASE_URL: "https://voice.example",
     VOICESTUDIO_API_KEY: "voice-studio-test-token"
   }, async (url, options) => {
-    if (url === "https://voice.example/v1/audio/speech") {
+    if (url === "https://voice.example.com/v1/audio/speech") {
       const body = JSON.parse(options.body);
       assert.equal(options.headers.Authorization, "Bearer voice-studio-test-token");
       assert.equal(body.input, "hello ULTRON");
@@ -1400,13 +1400,13 @@ test("agent rejects provider responses that cannot be safely streamed and contin
     FIRST_KEY: "first-test-key",
     SECOND_KEY: "second-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/api/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
-      { name: "second", baseUrl: "https://second.example/api/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+      { name: "first", baseUrl: "https://first.example.com/api/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example.com/api/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
     ])
   };
   await withServer(env, async url => {
     providerCalls += 1;
-    if (url.startsWith("https://first.example/")) {
+    if (url.startsWith("https://first.example.com/")) {
       return {
         status: 200,
         ok: true,
@@ -1418,7 +1418,7 @@ test("agent rejects provider responses that cannot be safely streamed and contin
         }
       };
     }
-    assert.equal(url, "https://second.example/api/v1/chat/completions");
+    assert.equal(url, "https://second.example.com/api/v1/chat/completions");
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered safely." } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
@@ -1482,7 +1482,7 @@ test("background employee task queues with a configured alternate model provider
     SUPABASE_SERVICE_ROLE_KEY: "service-role-test-secret",
     ALTERNATE_MODEL_KEY: "alternate-model-test-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "alternate", baseUrl: "https://alternate.example/v1", apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model", priority: 10 }
+      { name: "alternate", baseUrl: "https://alternate.example.com/v1", apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model", priority: 10 }
     ])
   };
   const supabaseRest = async (_req, table, method, query, body) => {
@@ -1496,7 +1496,7 @@ test("background employee task queues with a configured alternate model provider
     throw new Error("Unexpected Supabase operation");
   };
   await withServer(env, async (url, options) => {
-    assert.equal(url, "https://alternate.example/v1/chat/completions");
+    assert.equal(url, "https://alternate.example.com/v1/chat/completions");
     assert.equal(options.headers.Authorization, "Bearer alternate-model-test-secret");
     assert.equal(options.redirect, "error");
     providerCalls += 1;
@@ -1552,7 +1552,7 @@ test("agent tool readiness advertises draft and background task features for alt
     SUPABASE_SERVICE_ROLE_KEY: "service-role-test-secret",
     ULTRON_EMPLOYEES_ENABLED: "true",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "alternate", baseUrl: "https://alternate.example/v1", apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model", priority: 10 }
+      { name: "alternate", baseUrl: "https://alternate.example.com/v1", apiKeyEnv: "ALTERNATE_MODEL_KEY", model: "free-model", priority: 10 }
     ])
   };
   await withServer(env, async () => {
@@ -1572,8 +1572,8 @@ test("agent tool readiness advertises draft and background task features for alt
 test("employee model readiness rejects alternate provider URLs with credentials, query, or fragments", async () => {
   for (const baseUrl of [
     "https://user:password@unsafe.example/v1",
-    "https://unsafe.example/v1?token=leaked",
-    "https://unsafe.example/v1#fragment"
+    "https://unsafe.example.com/v1?token=leaked",
+    "https://unsafe.example.com/v1#fragment"
   ]) {
     const env = {
       ALTERNATE_MODEL_KEY: "alternate-model-test-secret",
@@ -1766,12 +1766,12 @@ test("agent blocks a model-generated consequential Hermes subtask when the user 
     OPENROUTER_API_KEY: "openrouter-test-key",
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
     HERMES_AGENT_ENABLED: "true",
-    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
     HERMES_AGENT_API_KEY: "private-hermes-api-key",
     HERMES_AGENT_MODEL: "hermes-agent"
   };
   await withServer(env, async (url, options) => {
-    if (url === "https://hermes.example/v1/chat/completions") {
+    if (url === "https://hermes.example.com/v1/chat/completions") {
       hermesCalls++;
       throw new Error("Hermes must not be called for a destructive delegated task");
     }
@@ -1810,12 +1810,12 @@ test("agent rechecks model-generated Hermes tasks in the follow-up tool round", 
     OPENROUTER_API_KEY: "openrouter-test-key",
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
     HERMES_AGENT_ENABLED: "true",
-    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
     HERMES_AGENT_API_KEY: "private-hermes-api-key",
     HERMES_AGENT_MODEL: "hermes-agent"
   };
   await withServer(env, async (url, options) => {
-    if (url === "https://hermes.example/v1/chat/completions") {
+    if (url === "https://hermes.example.com/v1/chat/completions") {
       hermesCalls++;
       throw new Error("Hermes must not be called in the follow-up round");
     }
@@ -1861,7 +1861,7 @@ test("Hermes direct model provider is not exposed to non-owner agent requests", 
     OPENROUTER_API_KEY: "openrouter-test",
     HERMES_AGENT_ENABLED: "true",
     HERMES_AGENT_CHAT_PROVIDER: "true",
-    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
     HERMES_AGENT_API_KEY: "private-hermes-api-key",
     HERMES_AGENT_MODEL: "hermes-agent",
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId
