@@ -139,6 +139,7 @@ export function getHermesAgentReadiness(env = process.env) {
 }
 
 export function resolveHermesAgentProvider(env = process.env) {
+  if (env.HERMES_AGENT_CHAT_PROVIDER !== "true") return null;
   const config = getConfig(env);
   if (config.error) return null;
   return {
