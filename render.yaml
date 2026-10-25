@@ -7,7 +7,23 @@ services:
     buildCommand: npm install --ignore-scripts && mkdir -p .runtime && rm -rf .runtime/geo-sleuth && git clone --filter=blob:none https://github.com/Oldcircle/geo-sleuth.git .runtime/geo-sleuth && git -C .runtime/geo-sleuth checkout e01849f778afeb7c53ca79331313fbcfcb879486 && curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh
     startCommand: export PATH="$HOME/.local/bin:$PATH"; npm start
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "**/*.js"
+        - "**/*.mjs"
+        - "package.json"
+        - "supabase/migrations/**"
+      ignoredPaths:
+        - "tests/**"
+        - "test/**"
+        - "docs/**"
+        - ".github/**"
+        - "README.md"
+        - "DEVELOPMENT_STATE.md"
+        - ".env.example"
+        - ".gitignore"
+        - "public/world-intelligence-bridge.js"
     envVars:
       - key: NODE_ENV
         value: production
@@ -98,6 +114,21 @@ services:
       - key: GEO_SLEUTH_ROOT
         value: .runtime/geo-sleuth/skills/geo-sleuth
 
+ 
+  - type: web
+    name: ultron-browser-use
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r browser-use-bridge/requirements.txt
+    startCommand: cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "browser-use-bridge/main.py"
+        - "browser-use-bridge/navigation_policy.py"
+        - "browser-use-bridge/requirements.txt"
+
   - type: web
     name: ultron-world-intelligence
     runtime: node
@@ -105,7 +136,12 @@ services:
     region: singapore
     buildCommand: rm -rf .build-gods-eye-view && git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci --include=dev && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
     startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
-    autoDeploy: true
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "scripts/patch-world-intelligence-source.mjs"
+        - "scripts/inject-world-intelligence-bridge.mjs"
+        - "public/world-intelligence-bridge.js"
     envVars:
       - key: NODE_VERSION
         value: 24.14.0
@@ -115,3 +151,34 @@ services:
         value: "1"
       - key: GEV_EMBED_FRAME_ANCESTORS
         value: https://ultron-ai-zvd7.onrender.com
+
+  # Additional existing globe services are retained for backward compatibility.
+  # Restrict their automatic rebuilds to the actual bridge inputs so API/test/doc
+  # commits do not consume build minutes on identical external globe sources.
+  - type: web
+    name: ultron-world-intelligence-globe
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
+    startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "scripts/patch-world-intelligence-source.mjs"
+        - "scripts/inject-world-intelligence-bridge.mjs"
+        - "public/world-intelligence-bridge.js"
+
+  - type: web
+    name: ultron-world-intelligence-live
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: rm -rf .build-gods-eye-view && git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci --include=dev && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
+    startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "scripts/patch-world-intelligence-source.mjs"
+        - "scripts/inject-world-intelligence-bridge.mjs"
+        - "public/world-intelligence-bridge.js"
