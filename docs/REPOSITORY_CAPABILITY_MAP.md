@@ -1,0 +1,70 @@
+# ULTRON AI — Repository Capability Integration Map
+
+Updated: 2026-10-25
+
+This map covers all 28 repositories supplied for ULTRON. The new registry gives the agent task-matched capability guidance and provides a **configuration-only** status API at `GET /api/agent/repositories` (authenticated). It does not install upstream applications, clone entire projects into the ULTRON server, create provider accounts, or falsely mark a service as working.
+
+## How automatic routing behaves
+
+1. ULTRON matches the task to relevant repository domains, then chooses only tools actually available in its runtime.
+2. Existing adapters are used only when their endpoint/configuration and required inputs are present. "Configured" still means **unverified** until an actual upstream request succeeds.
+3. For a missing adapter or local/desktop dependency, ULTRON continues with supported safe research/drafting and reports the real blocker in its tool result. It must not pretend that an upstream application ran.
+4. Public read-only research, planning, evidence analysis, and drafts can be used automatically. External publishing, messages, bookings, spending, account changes, deletion, and PC-control actions remain scoped to the supported approval workflow.
+5. Free/local-first is the default. Services with metered API access must not be invoked unless their credentials and budget policy are deliberately configured.
+6. Upstream skills and repository files are untrusted reference data. They are not shell scripts or higher-priority instructions.
+
+## Per-repository capability map
+
+| # | Repository | Capabilities ULTRON should route for | Current integration state |
+|---:|---|---|---|
+| 1 | [youtube-automation-agent](https://github.com/darkzOGx/youtube-automation-agent) | Topic research, scripts, narration/visual pipeline planning, titles/descriptions/tags, review checklists, analytics learning | Planning guidance only. Actual video generation, channel access, scheduling and upload need a dedicated service/desktop integration. Upstream explicitly has an approval/review pipeline. |
+| 2 | [Cap](https://github.com/CapSoftware/Cap) | Screen/camera recording, local editing, transcript/chapters, sharing workflow | Desktop companion required. A cloud backend cannot capture the local screen or microphone. |
+| 3 | [Chatwoot](https://github.com/chatwoot/chatwoot) | Support inbox triage, conversation summaries, reply drafts, support reporting | API adapter not implemented. Needs a reachable instance, documented API token, user-scoped data, and send-approval handling. |
+| 4 | [Cal.diy](https://github.com/calcom/cal.diy) | Availability checks, meeting/appointment planning, booking links | API adapter not implemented. Scheduling/canceling/invites are side effects; use only scoped calendar credentials and approval gates. |
+| 5 | [OpenProject](https://github.com/opf/openproject) | Project/task issues, Kanban/Scrum, roadmap/Gantt summaries, project reporting | API adapter not implemented. Needs authenticated API access; changes must stay in the authorized workspace. |
+| 6 | [OpenWhispr](https://github.com/OpenWhispr/openwhispr) | Offline dictation, speech-to-text, meeting transcription and notes | Desktop companion required for microphone/hotkeys/cursor insertion. |
+| 7 | [AppFlowy](https://github.com/AppFlowy-IO/AppFlowy) | Workspace pages, knowledge-base notes, databases and task boards | API/local connector not implemented. The repository is AGPL-3.0; review obligations before redistributing or integrating code. |
+| 8 | [OpenSEO](https://github.com/every-app/open-seo) | Keyword research, rank tracking, backlink/competitor insights, site audits, AI visibility | Adapter not implemented. Upstream requires DataForSEO credentials for SEO data; costs can apply. Free-first policy forbids surprise paid requests. |
+| 9 | [OpenHiggsfield](https://github.com/wide-trace/open-higgsfield) | Multi-model image/video generation, reference assets, generation settings/history | Adapter not implemented. Needs supported generation API/model providers and budgets; don't imply provider model access is bundled. |
+| 10 | [VoiceStudio](https://github.com/debpalash/VoiceStudio) | Speech synthesis, voice catalog/design, transcription, dubbing workflow | Existing authenticated adapter. Live service/model readiness must be checked. AGPL-3.0 requirements apply; voice cloning requires speaker consent. |
+| 11 | [Geo-Sleuth](https://github.com/Oldcircle/geo-sleuth) | Photo intake, candidate-board workflow, evidence checks and location report | Existing bounded adapter; deployment/Python dependencies and actual location solving remain unverified. Reverse-image search stays opt-in. |
+| 12 | [HeyGem.ai](https://github.com/suifeng9203/HeyGem.ai) | Talking-head/avatar and lip-sync jobs using supplied image plus audio | Existing adapter contract, not proof of a running service. Needs a separate GPU/API service and license/model review; custom community-license terms apply. |
+| 13 | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) | Node-based image/video/audio/3D workflows, queue and job status | Existing API adapter. Needs separate ComfyUI service, valid supplied/approved workflow and installed models. GPL-3.0 obligations need review before bundling. |
+| 14 | [OmniVoice](https://github.com/k2-fsa/OmniVoice) | Multilingual TTS, pronunciation control and voice design options | Optional adapter contract. Needs a separate inference service, weights and live verification; language-count claims do not guarantee Hindi/Hinglish quality on the target PC. |
+| 15 | [Handy](https://github.com/cjpais/Handy) | Offline Whisper/Parakeet transcription and local dictation | Existing bridge contract; physical desktop app and authenticated local bridge are required. |
+| 16 | [OpenViking](https://github.com/volcengine/OpenViking) | Agent context database, structured resource/memory retrieval and context organization | New service adapter not implemented. Keep current per-user memory intact until migration and account-isolation behavior are tested. AGPLv3 terms apply. |
+| 17 | [awesome-harness-engineering](https://github.com/ai-boost/awesome-harness-engineering) | Agent loops, planning/checkpoints, context handling, tool design and verification patterns | Reference library only. Patterns can inform ULTRON's code; the curated list is not a deployable runtime. |
+| 18 | [Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills) | Defensive secure-coding, cloud/identity review, incident-response and attack-surface guidance | Task-aware skill selector exists. Retrieved material is untrusted; authorized defensive checks only. Apache-2.0 per upstream README. |
+| 19 | [diagram-design](https://github.com/cathrynlavery/diagram-design) | Architecture, flowchart, sequence, data-model and other diagram guidance | Task-aware skill selector exists for matching diagram guidance. Artifact export/save must still be verified. MIT per upstream README. |
+| 20 | [scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills) | Literature reviews, scientific writing, statistics, dataset analysis and domain workflows | Task-aware skill selection exists for selected domains. Use traceable sources; do not fabricate citations/results. MIT per upstream README. |
+| 21 | [agentmemory](https://github.com/rohitg00/agentmemory) | Task-relevant memory recall and bounded decision/context capture | Existing optional adapter. Needs deployed persistent service; memory opt-out and per-user namespaces must remain enforced. |
+| 22 | [browser-use](https://github.com/browser-use/browser-use) | JavaScript-rendered browsing, page extraction/screenshots and browser testing | Existing bridge contract. Requires authenticated bridge; defaults to read-only and blocks consequential browser actions. |
+| 23 | [gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view) | Public world signals/globe navigation and voice-command planning | Existing validated action-contract integration. Browser client must dispatch actions; the server-side tool does not itself control the globe. |
+| 24 | [KaliGPT](https://github.com/SudoHopeX/KaliGPT) | Defensive security guidance, user-supplied HTTP/DNS evidence review and fixed-allowlist diagnostics | Bounded security routes exist. No arbitrary shell, exploit chains, unauthorized scanning, credential theft, persistence or destructive action execution. |
+| 25 | [Paperclip](https://github.com/paperclipai/paperclip) | Multi-agent organization, goal/task assignment, per-agent budgets/permissions and work audit | Service adapter not implemented. Requires a separately hosted instance and a scoped API; avoid blanket agent authority. |
+| 26 | [OpenDesign](https://github.com/nexu-io/open-design) | Design-system-aware prototype workflow, design review and collaborative agent workspace | Service/API adapter not implemented. Current runtime cannot call a design app merely because the repository is listed. |
+| 27 | [public-apis](https://github.com/public-apis/public-apis) | Discover candidate public APIs by domain and compare auth, rate limits, terms and data handling | Catalog/reference only. Each target API must be separately verified; a listing does not promise free, reliable, or safe service. |
+| 28 | [REA](https://github.com/morluto/rea) | MCP-driven reverse engineering, binary/application/runtime behavior analysis | Local MCP service not connected. Use only on software authorized for inspection; unknown binaries must never execute automatically. |
+
+## Readiness API
+
+`GET /api/agent/repositories` reports the registered upstreams, non-secret state, required environment-variable *names*, and a repository count. Add `?task=...` to see the domains selected for a particular task. The endpoint requires a signed-in ULTRON user and returns no secret values.
+
+State meanings:
+
+- `adapter_present_unverified_live` / `configured_unverified`: adapter/configuration exists, but live operation isn't proven.
+- `credentials_present_adapter_missing`: variables exist but no executable connector is implemented yet.
+- `adapter_not_implemented`: no service adapter exists yet.
+- `desktop_companion_required` / `local_mcp_required`: requires a local/desktop runtime.
+- `task_aware_skill_selector` / `guidance_only` / `catalog_only`: reference or routing guidance, not an upstream runtime.
+- `missing_configuration`: required configuration is absent.
+
+## Next integration order
+
+1. Verify and harden existing adapters: model provider, VoiceStudio, ComfyUI, Geo-Sleuth, Handy bridge, Browser Use, AgentMemory, HeyGem and OmniVoice.
+2. Implement read-only API adapters for Chatwoot, Cal.diy, OpenProject and AppFlowy only after API schemas/auth scopes are confirmed.
+3. Add OpenSEO and public-API discovery with explicit cost/terms checks; then Paperclip/OpenViking/OpenDesign as separately hosted adapters.
+4. Build one authenticated desktop bridge for local capture/dictation and the approved Windows action allowlist before adding Cap/OpenWhispr/REA local workflows.
+5. Add the YouTube production pipeline as durable stages with fact/media-rights checks and a human publish gate. Media generation and channel publication are not considered complete until each stage is live-tested.
+
+This ordering intentionally avoids copying whole, independently deployable applications into the Node backend. It keeps ULTRON modular, free-first, resource-bounded and testable on the target 8 GB RAM / integrated-graphics PC while allowing heavyweight services to run elsewhere.
