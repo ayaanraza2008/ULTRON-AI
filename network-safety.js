@@ -38,7 +38,7 @@ export function isPublicNetworkHost(hostname) {
     if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
         || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")
         || host.startsWith("2001:0:") || host.startsWith("2001:2:")
-        || host.startsWith("2001:10:") || host.startsWith("2002:")
+        || host.startsWith("2001:10:") || host.startsWith("2001:20:") || host.startsWith("2002:")
         || host.startsWith("3fff:")) return false;
 
     const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
