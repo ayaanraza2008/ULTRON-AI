@@ -1166,6 +1166,50 @@ test("model provider registry falls back from OpenRouter rate limits to a config
   });
 });
 
+test("agent falls back across providers on auth, quota, and model endpoint errors", async () => {
+  for (const status of [401, 402, 403, 404]) {
+    const calls = [];
+    const env = {
+      OPENROUTER_API_KEY: "openrouter-test",
+      GROQ_API_KEY: "groq-test",
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+        name: "groq",
+        baseUrl: "https://api.groq.com/openai/v1",
+        apiKeyEnv: "GROQ_API_KEY",
+        model: "test-model",
+        priority: 1,
+        supportsTools: true
+      }])
+    };
+    await withServer(env, async (url, options) => {
+      calls.push({ url, auth: options.headers.Authorization });
+      if (url === "https://openrouter.ai/api/v1/chat/completions") {
+        return new Response(JSON.stringify({ error: { message: "Synthetic provider-specific failure." } }), { status });
+      }
+      assert.equal(url, "https://api.groq.com/openai/v1/chat/completions");
+      assert.equal(options.headers.Authorization, "Bearer groq-test");
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: "Alternate provider recovered the request." } }]
+      }), { status: 200 });
+    }, async base => {
+      const response = await fetch(base + "/api/agent/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Explain a simple concept without using tools." })
+      });
+      assert.equal(response.status, 200, "Fallback should recover from upstream status " + status);
+      assert.match((await response.json()).content, /Alternate provider recovered the request/);
+      assert.deepEqual(calls.map(call => call.url), [
+        "https://openrouter.ai/api/v1/chat/completions",
+        "https://api.groq.com/openai/v1/chat/completions"
+      ]);
+      assert.equal(calls[0].auth, "Bearer openrouter-test");
+      assert.equal(calls[1].auth, "Bearer groq-test");
+    });
+  }
+});
+
+
 test("model provider registry ignores providers with missing keys or insecure URLs", async () => {
   const calls = [];
   const env = {
