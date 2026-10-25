@@ -362,11 +362,12 @@ test("model discovery supports a configured alternate provider without OpenRoute
     const cookie = await login(base);
     const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
+    const payload = await response.json();
+    assert.deepEqual(payload, {
       models: ["ultron/groq/llama-3.3-70b-versatile"],
       defaultModel: "ultron/groq/llama-3.3-70b-versatile"
     });
-    assert.equal(JSON.stringify(await response.json()).includes("synthetic-groq-key"), false);
+    assert.equal(JSON.stringify(payload).includes("synthetic-groq-key"), false);
   });
 });
 
