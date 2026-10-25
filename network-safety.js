@@ -19,6 +19,10 @@ export function isPublicNetworkHost(hostname) {
       || host === "metadata.google.internal" || host === "metadata.google") return false;
 
   const ipVersion = isIP(host);
+  // Non-standard IPv4 forms such as 127.1, 0177.0.0.1, and 0x7f.0.0.1
+  // may be interpreted as IP literals by URL/DNS stacks despite net.isIP() rejecting them.
+  // Public service hostnames should not consist solely of numeric/hex-address-like labels.
+  if (ipVersion === 0 && host.split(".").every(label => /^(?:[0-9]+|0x[0-9a-f]+)$/i.test(label))) return false;
   if (ipVersion === 4) {
     const octets = host.split(".").map(Number);
     const [a, b, c] = octets;
