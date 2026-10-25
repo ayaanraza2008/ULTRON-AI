@@ -34,7 +34,7 @@ test("Obscura blocks unsafe URL types and private network targets before network
 test("Obscura remote MCP requires an authenticated gateway token", async () => {
   let calls = 0;
   const result = await inspectPublicPageWithObscura({
-    env: { ULTRON_INTEGRATION_OWNER_USER_ID: ownerId, OBSCURA_MCP_URL: "https://obscura.example/mcp" },
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: ownerId, OBSCURA_MCP_URL: "https://obscura.example.com/mcp" },
     userId: ownerId, url: "https://example.com",
     fetchImpl: async () => { calls++; throw new Error("should not call upstream"); }
   });
@@ -43,7 +43,7 @@ test("Obscura remote MCP requires an authenticated gateway token", async () => {
   assert.equal(calls, 0);
   assert.equal(getObscuraReadiness({
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    OBSCURA_MCP_URL: "https://obscura.example/mcp"
+    OBSCURA_MCP_URL: "https://obscura.example.com/mcp"
   }).configured, false);
 });
 
