@@ -1571,7 +1571,7 @@ test("agent tool readiness advertises draft and background task features for alt
 
 test("employee model readiness rejects alternate provider URLs with credentials, query, or fragments", async () => {
   for (const baseUrl of [
-    "https://user:password@unsafe.example/v1",
+    "https://user:password@unsafe.example.com/v1",
     "https://unsafe.example.com/v1?token=leaked",
     "https://unsafe.example.com/v1#fragment"
   ]) {
