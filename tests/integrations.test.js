@@ -316,7 +316,7 @@ test("productivity connector readiness requires owner guard and omits credential
 test("integration catalog does not mark unsupported local URL schemes as configured", async () => {
   await withServer({
     COMFYUI_BASE_URL: "ftp://localhost:8188",
-    HEYGEM_API_BASE_URL: "https://user:password@avatar.example",
+    HEYGEM_API_BASE_URL: "https://user:password@avatar.example.com",
     HEYGEM_API_KEY: "test-key",
     HEYGEM_JOB_PATH: "/jobs"
   }, async () => {
