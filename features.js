@@ -1060,23 +1060,93 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const title = boundedString(req.body?.title, 240);
     const description = boundedString(req.body?.description, 12000);
     if (!title || !description) return res.status(400).json({ error: { code: "INVALID_TASK", message: "Provide a task title and description." } });
-    const risk = req.body?.risk === "high" ? "high" : req.body?.risk === "medium" ? "medium" : "low";
+
+    const riskValue = req.body?.risk === undefined ? "low" : typeof req.body.risk === "string" ? req.body.risk.trim().toLowerCase() : "";
+    if (!["low", "medium", "high"].includes(riskValue)) {
+      return res.status(400).json({ error: { code: "INVALID_TASK_RISK", message: "Risk must be low, medium, or high." } });
+    }
+    const risk = riskValue;
     const taskType = boundedString(req.body?.taskType, 40).toLowerCase() || "manual";
-    if (!["research", "manual"].includes(taskType)) return res.status(400).json({ error: { code: "TASK_TYPE_NOT_ALLOWED", message: "Supported task types are research and manual." } });
+    if (!["research", "employee", "autonomous", "manual"].includes(taskType)) {
+      return res.status(400).json({ error: { code: "TASK_TYPE_NOT_ALLOWED", message: "Supported task types are research, employee, autonomous, and manual." } });
+    }
+
     const query = boundedString(req.body?.query, 400);
-    if (taskType === "research" && !query && !description) return res.status(400).json({ error: { code: "INVALID_RESEARCH_QUERY", message: "Provide a research query." } });
+    if (taskType === "research" && !query && !description) {
+      return res.status(400).json({ error: { code: "INVALID_RESEARCH_QUERY", message: "Provide a research query." } });
+    }
+
+    const allowedRoles = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
+    const allowedModes = new Set(["plan", "draft", "review", "report"]);
+    const needsDraftInputs = taskType === "employee" || taskType === "autonomous";
+    let draftInputs = {};
+    if (needsDraftInputs) {
+      const suppliedRole = boundedString(req.body?.role, 80).toLowerCase();
+      const role = suppliedRole || (taskType === "autonomous" ? "chief-of-staff" : "");
+      const goal = boundedString(req.body?.goal || description, 2000);
+      const mode = req.body?.mode === undefined
+        ? (taskType === "autonomous" ? "report" : "plan")
+        : boundedString(req.body?.mode, 40).toLowerCase();
+      const context = boundedString(req.body?.context, 4000);
+      const routineId = boundedString(req.body?.routineId, 80);
+
+      if (!allowedRoles.has(role) || !goal || !allowedModes.has(mode)) {
+        return res.status(400).json({ error: { code: "INVALID_DRAFT_TASK", message: "Employee and autonomous tasks require a supported role, goal, and mode (plan, draft, review, or report)." } });
+      }
+      if (routineId && !employeeRoutineCatalog.some(item => item.id === routineId && Array.isArray(item.roles) && item.roles.includes(role))) {
+        return res.status(400).json({ error: { code: "INVALID_EMPLOYEE_ROUTINE", message: "Choose a routine that belongs to the selected employee role." } });
+      }
+      draftInputs = {
+        goal, role, mode,
+        ...(context ? { context } : {}),
+        ...(routineId ? { routineId } : {})
+      };
+    }
+
     const requiresApproval = taskType !== "research" || risk !== "low" || req.body?.requiresApproval === true;
+    const executionMode = taskType === "research"
+      ? "allowlisted_worker"
+      : taskType === "employee" || taskType === "autonomous"
+        ? "employee_worker"
+        : "planned_only";
+    const taskInput = {
+      description,
+      taskType,
+      ...(["research", "autonomous"].includes(taskType) && query ? { query } : {}),
+      ...draftInputs,
+      risk,
+      requiresApproval,
+      approved: false,
+      executionMode,
+      createdBy: "user"
+    };
+
     try {
       const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", {
         user_id: req.supabaseUser.id,
         title,
-        input: { description, taskType, ...(query ? { query } : {}), risk, requiresApproval, approved: false, executionMode: taskType === "research" && !requiresApproval ? "allowlisted_worker" : "planned_only", createdBy: "user" },
+        input: taskInput,
         status: requiresApproval ? "WAITING_FOR_PERMISSION" : "QUEUED"
       });
       if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "TASK_CREATE_FAILED", message: "The task could not be saved." } });
-      await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created", target_type: "agent_task", target_id: rows[0].id, outcome: requiresApproval ? "recorded" : "allowed", metadata: { risk, requiresApproval } }, "return=minimal");
-      res.status(201).json({ task: rows[0], notice: taskType === "research" && !requiresApproval ? "Research task queued for the optional allowlisted worker. It runs only when that worker and its provider are configured." : "Task saved for review. It will not execute unless its type is supported by the allowlisted worker and required approvals are present." });
-    } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_CREATE_FAILED", message: error.message } }); }
+      await supabaseRest(req, "audit_events", "POST", "", {
+        user_id: req.supabaseUser.id,
+        action: "task.created",
+        target_type: "agent_task",
+        target_id: rows[0].id,
+        outcome: requiresApproval ? "recorded" : "allowed",
+        metadata: { risk, taskType, requiresApproval, executionMode }
+      }, "return=minimal");
+
+      const notice = taskType === "research" && !requiresApproval
+        ? "Research task queued for the optional allowlisted worker. It runs only when that worker and its provider are configured."
+        : taskType === "employee" || taskType === "autonomous"
+          ? "Task saved for explicit approval. After approval, the configured worker may create a bounded draft/report; external actions and PC commands remain disabled."
+          : "Task saved for review. This task is review-only and will not execute until an appropriate allowlisted worker exists.";
+      return res.status(201).json({ task: rows[0], notice });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "TASK_CREATE_FAILED", message: error.message } });
+    }
   });
 
   router.post("/tasks/:id/approve", requireSupabaseUser, async (req, res) => {
@@ -1091,7 +1161,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         { status: "QUEUED", input: { ...(existing[0].input || {}), approved: true, approvedAt: new Date().toISOString(), approvalScope: "task_record_only" } });
       if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task changed state before approval could be recorded." } });
       await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.approved", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { scope: "task_record_only" } }, "return=minimal");
-      res.json({ task: rows[0], notice: "Approval recorded. This does not execute PC commands; an approved task worker is still required." });
+      const executableTask = ["allowlisted_worker", "employee_worker"].includes(rows[0].input?.executionMode);
+      const notice = executableTask
+        ? "Approval recorded for this task. The configured worker may run its bounded research or draft/report workflow; external side effects remain blocked."
+        : "Approval recorded, but this task remains review-only because no allowlisted execution mode is configured.";
+      res.json({ task: rows[0], notice });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_APPROVAL_FAILED", message: error.message } }); }
   });
 
