@@ -625,7 +625,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   // Callers must still provide owner/status predicates; never expose this helper to HTTP input.
   async function supabasePrivilegedRest(req, table, method, query = "", body, prefer = "return=representation") {
     const allowed = table === "agent_tasks" && method === "PATCH" ||
-      table === "audit_events" && method === "POST";
+      table === "audit_events" && method === "POST" ||
+      table === "desktop_actions" && ["GET", "POST", "PATCH"].includes(method) ||
+      table === "rpc/ultron_claim_next_desktop_action" && method === "POST";
     if (!allowed || typeof query !== "string" || query.length > 4000) {
       throw Object.assign(new Error("Privileged database operation is not allowed."), { status: 400, code: "PRIVILEGED_OPERATION_NOT_ALLOWED" });
     }
