@@ -1022,7 +1022,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 
       const state = boundedString(task.status, 40).toUpperCase();
       const isComplete = state === "COMPLETED";
-      const isTerminalFailure = ["FAILED", "CANCELLED", "BLOCKED", "WAITING_FOR_PERMISSION"].includes(state);
+      const progressState = isComplete ? "completed"
+        : state === "RUNNING" ? "running"
+        : state === "QUEUED" ? "queued"
+        : state === "WAITING_FOR_PERMISSION" ? "waiting_for_permission"
+        : state === "BLOCKED" ? "blocked"
+        : state === "FAILED" ? "failed"
+        : state === "CANCELLED" ? "cancelled"
+        : "unknown";
       const lastCheckpoint = checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
       res.setHeader("Cache-Control", "no-store");
       return res.json({
@@ -1036,7 +1043,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           errorCode: boundedString(task.error_code, 80) || null
         },
         progress: {
-          state: isComplete ? "completed" : isTerminalFailure ? "stopped" : state === "RUNNING" ? "running" : "queued",
+          state: progressState,
           percent: isComplete ? 100 : null,
           latestStage: lastCheckpoint?.stage || lastCheckpoint?.action || null,
           lastCheckpointAt: lastCheckpoint?.timestamp || null,
