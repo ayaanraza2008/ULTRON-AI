@@ -1675,12 +1675,26 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const port = Number(process.env.PORT) || 10000;
   const app = createApp();
-  app.listen(port, "0.0.0.0", () => console.log(`ULTRON AI listening on port ${port}`));
+  const httpServer = app.listen(port, "0.0.0.0", () => console.log(`ULTRON AI listening on port ${port}`));
+  let worker = null;
   if (process.env.ULTRON_EMPLOYEES_ENABLED === "true") {
-    const worker = startWorker();
+    worker = startWorker();
     app.locals.workerRuntime = worker.getStatus;
-    const stopWorker = () => worker.stop();
-    process.once("SIGTERM", stopWorker);
-    process.once("SIGINT", stopWorker);
   }
+
+  let shutdownStarted = false;
+  const shutdown = signal => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
+    console.info(`ULTRON AI received ${signal}; draining HTTP connections and stopping background work.`);
+    worker?.stop();
+    httpServer.close(error => {
+      if (error) {
+        console.error("ULTRON HTTP server shutdown failed:", error.message);
+        process.exitCode = 1;
+      }
+    });
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
 }
