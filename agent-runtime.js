@@ -327,21 +327,44 @@ function redactInlineSecrets(value) {
     .replace(/\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\\s*([:=])\\s*(['"]?)[^\\s,;'"]+/gi, "$1$2[redacted]");
 }
 
-export function modelSafeResult(value, depth = 0) {
-  if (depth > 6) return "[nested result omitted]";
-  if (Array.isArray(value)) return value.slice(0, 20).map(item => modelSafeResult(item, depth + 1));
-  if (typeof value === "string") {
-    return value
-      .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
-      .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/g, "[redacted]").replace(/\bxox[baprs]-[A-Za-z0-9-]{12,}\b/g, "[redacted]")
-      .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[redacted]")
-      .replace(/\b(authorization)\s*([:=])\s*(?:Bearer\s+)?[^\s,;'" ]+/gi, "$1$2[redacted]")
-      .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|credential)\s*([:=])\s*['"]?[^\s,;'" ]+/gi, "$1$2[redacted]");
-  }
+const SENSITIVE_RESULT_KEY = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|credential|cookie|private[_-]?key|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|session[_-]?token|signing[_-]?key|jwt|connection[_-]?(?:string|uri)|database[_-]?url)/i;
+
+function redactSecretText(value) {
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\b/gi, "[redacted]")
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[redacted]")
+    .replace(/\b(authorization)\s*([:=])\s*(?:Bearer\s+)?[^\s,;'"]+/gi, "$1$2[redacted]")
+    .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?token|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|signing[_-]?key|connection[_-]?(?:string|uri)|database[_-]?url|password|passwd|secret|credential)\s*([:=])\s*['"]?[^\s,;'"]+/gi, "$1$2[redacted]");
+}
+
+/** Redact secrets recursively while preserving valid media payloads for the client UI. */
+export function sanitizeToolResultForClient(value, depth = 0) {
+  if (depth > 8) return "[nested result omitted]";
+  if (Array.isArray(value)) return value.slice(0, 50).map(item => sanitizeToolResultForClient(item, depth + 1));
+  if (typeof value === "string") return redactSecretText(value);
   if (!value || typeof value !== "object") return value;
   const out = {};
   for (const [key, item] of Object.entries(value)) {
-    if (/(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|credential|cookie|private[_-]?key|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|session[_-]?token|signing[_-]?key|jwt|connection[_-]?(?:string|uri)|database[_-]?url)/i.test(key)) {
+    if (SENSITIVE_RESULT_KEY.test(key)) {
+      out[key] = "[redacted]";
+    } else {
+      out[key] = sanitizeToolResultForClient(item, depth + 1);
+    }
+  }
+  return out;
+}
+
+/** Compact, bounded result representation used before sending tool output to a model. */
+export function modelSafeResult(value, depth = 0) {
+  if (depth > 6) return "[nested result omitted]";
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => modelSafeResult(item, depth + 1));
+  if (typeof value === "string") return redactSecretText(value);
+  if (!value || typeof value !== "object") return value;
+  const out = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (SENSITIVE_RESULT_KEY.test(key)) {
       out[key] = "[redacted]";
     } else if (typeof item === "string" && /(base64|audio|video|image|binary|blob)/i.test(key) && item.length > 1000) {
       out[key] = "[binary payload omitted from model context; available in toolResults]";
@@ -1243,7 +1266,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         try { await captureAgentMemory(userText, { env, fetchImpl, userId: req.supabaseUser?.id }); }
         catch (memoryError) { logger.warn?.("Optional AgentMemory capture failed", { code: memoryError.code || "AGENTMEMORY_CAPTURE_FAILED" }); }
       }
-      res.json({ content: content.slice(0, 18000), toolsUsed: used.map(item => ({ name: item.name, ok: item.ok })), toolResults: used, autonomy: autonomyPlan, model: first?.model || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" });
+      res.json({ content: redactSecretText(content.slice(0, 18000)), toolsUsed: used.map(item => ({ name: item.name, ok: item.ok })), toolResults: used.map(item => ({ ...item, result: sanitizeToolResultForClient(item.result) })), autonomy: autonomyPlan, model: first?.model || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" });
     } catch (error) {
       logger.warn?.("Agent run failed", { code: error.code || "AGENT_RUN_FAILED" });
       res.status(error.status || 502).json({ error: { code: error.code || "AGENT_RUN_FAILED", message: error.status === 503 ? error.message : "ULTRON could not complete this request. Check provider availability and retry." } });
