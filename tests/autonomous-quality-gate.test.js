@@ -44,7 +44,11 @@ test("quality gate excludes localhost, private IPs and cloud metadata URLs from 
     "http://[2002:7f00:1::]/6to4-loopback",
     "http://[fe80::1]/link-local",
     "http://[ff02::1]/multicast",
-    "http://[::192.168.1.10]/ipv4-compatible"
+    "http://[::192.168.1.10]/ipv4-compatible",
+    "http://192.88.99.10/6to4-relay-anycast",
+    "http://[2001:2::1]/benchmarking",
+    "http://[2001:10::1]/deprecated-orchid",
+    "http://[3fff::1]/documentation-prefix"
   ];
   const result = verifyAutonomousOutput({
     research: { sources: unsafeUrls.map(url => ({ url })) },
