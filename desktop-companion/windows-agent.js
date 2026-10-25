@@ -23,7 +23,7 @@ function readConfig(env) {
       baseUrl = parsed.toString().replace(/\/+$/, "");
     }
   } catch {}
-  if (!baseUrl || !token || token.length > 2000 || !DEVICE_ID_PATTERN.test(deviceId)) {
+  if (!baseUrl || token.length < 32 || token.length > 2000 || !DEVICE_ID_PATTERN.test(deviceId)) {
     throw Object.assign(new Error("Set a public HTTPS server URL, a private companion polling token, and a stable device ID."), {
       code: "DESKTOP_COMPANION_CONFIGURATION_INVALID"
     });
@@ -202,7 +202,11 @@ export async function runWindowsCompanion({
           await sleepImpl(boundedPollMs(pollIntervalMs), undefined, { signal });
           continue;
         }
-        outcome = await executeAction(action, { env });
+        try {
+          outcome = await executeAction(action, { env });
+        } catch {
+          outcome = { status: "failed", errorCode: "ACTION_NOT_SUPPORTED" };
+        }
         const status = outcome?.status === "completed" ? "completed" : "failed";
         const completionBody = status === "completed"
           ? { deviceId: config.deviceId, status, result: outcome.result }
@@ -223,7 +227,11 @@ export async function runWindowsCompanion({
         if (!completionResponse.ok) throw Object.assign(new Error("Desktop action completion was rejected."), {
           code: typeof completed.error?.code === "string" ? completed.error.code : "DESKTOP_COMPANION_COMPLETION_FAILED"
         });
-        logger.info?.("ULTRON desktop action finished.", { actionId: action.id, status });
+        const persistedStatus = completed.action?.status;
+        if (!["COMPLETED", "FAILED"].includes(persistedStatus)) {
+          throw Object.assign(new Error("Desktop action completion response was invalid."), { code: "DESKTOP_COMPANION_COMPLETION_INVALID" });
+        }
+        logger.info?.("ULTRON desktop action finished.", { actionId: action.id, status: persistedStatus.toLowerCase() });
       }
     } catch (error) {
       if (signal?.aborted) break;
