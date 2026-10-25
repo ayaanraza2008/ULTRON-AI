@@ -40,6 +40,10 @@ test("readiness reports key names/states without returning credential values", (
   const chatwoot = status.integrations.find(item => item.id === "chatwoot");
   const geo = status.integrations.find(item => item.id === "geo-sleuth");
   const openproject = status.integrations.find(item => item.id === "openproject");
+  const godsEye = status.integrations.find(item => item.id === "gods-eye-view");
+  const kaliGpt = status.integrations.find(item => item.id === "kaligpt");
+  assert.equal(godsEye.state, "adapter_present_unverified_live");
+  assert.equal(kaliGpt.state, "bounded_security_routes_present");
   assert.equal(chatwoot.state, "credentials_present_adapter_missing");
   assert.equal(geo.state, "configured_unverified");
   assert.equal(openproject.state, "missing_configuration");
