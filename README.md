@@ -71,6 +71,8 @@ A native role/routine planning layer inspired by [markfulton/ai-employees](https
 - `GET /api/employees/status`: reports whether scheduling and required credentials are configured without exposing secrets.
 - `GET/POST /api/employees/schedules`, `PATCH/DELETE /api/employees/schedules/:id`: manage per-user recurring routines (60 minutes to 7 days). Runs are recorded in the existing `agent_tasks` table and can be inspected with `GET /api/tasks`.
 
+**Autonomous research:** `TAVILY_API_KEY` is optional. Background research prefers Tavily when configured and falls back to free DuckDuckGo HTML search when the key is absent or Tavily fails. The fallback returns source snippets and URLs (not verified full-page content), validates each destination, and can be rate-limited or change layout; reports remain subject to the autonomous output quality gate and must not invent citations.
+
 **Important:** the runtime supports recurring plans/drafts/reviews/reports, not arbitrary external actions. It does not execute PC commands, send messages, publish posts, submit forms, or spend money. Apply `supabase/migrations/20261022160000_ai_employee_scheduler.sql` and configure the server-only `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, and `ULTRON_EMPLOYEES_ENABLED=true` in Render to enable the worker. Without these, schedule records can be managed but scheduled execution will not run.
 
 
