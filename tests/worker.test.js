@@ -1880,6 +1880,9 @@ test("autonomous worker completes a research-to-report run with free search and 
         const body = JSON.parse(options.body);
         const userMessage = body.messages.find(message => message.role === "user")?.content || "";
         assert.match(userMessage, /Research answer:/);
+        const employeeInput = JSON.parse(userMessage);
+        assert.match(employeeInput.context, /Research sources:\n1[.] Renewable energy outlook/);
+        assert.match(employeeInput.context, /Renewable energy outlook — https:\/\/example[.]com\/energy\nNew solar and wind capacity/);
         assert.match(userMessage, /https:\/\/example[.]com\/energy/);
         assert.match(userMessage, /solar and wind capacity/);
         return new Response(JSON.stringify({
