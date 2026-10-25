@@ -40,7 +40,7 @@ test("Paperclip connector performs only GET requests and returns sanitized roste
   const requests = [];
   const env = {
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    PAPERCLIP_BASE_URL: "https://paperclip.example/",
+    PAPERCLIP_BASE_URL: "https://paperclip.example.com/",
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
@@ -108,7 +108,7 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
-  for (const value of ["http://paperclip.example", "https://user:password@paperclip.example", "https://paperclip.example/?token=x"]) {
+  for (const value of ["http://paperclip.example", "https://user:password@paperclip.example", "https://paperclip.example.com/?token=x"]) {
     const result = await getPaperclipAgentDashboard({
       env: { ...baseEnv, PAPERCLIP_BASE_URL: value }, userId: ownerId, fetchImpl
     });
