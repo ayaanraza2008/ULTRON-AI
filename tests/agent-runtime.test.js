@@ -479,7 +479,7 @@ test("agent can inspect task-matched repository readiness without exposing crede
     assert.equal(body.toolsUsed[0].name, "check_repository_capabilities");
     assert.equal(body.toolsUsed[0].ok, true);
     const result = body.toolResults[0].result;
-    assert.equal(result.repositoryCount, 30);
+    assert.equal(result.repositoryCount, 31);
     assert.ok(result.taskMatches.some(item => item.id === "chatwoot"));
     assert.ok(result.taskMatches.some(item => item.id === "openproject"));
     assert.ok(result.taskMatches.every(item => item.state === "configured_unverified"));
