@@ -411,10 +411,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
 
-  function configuredModelProviders() {
+  function configuredModelProviders(userId = null) {
     const providers = [];
     const cactusProvider = resolveCactusProvider(env);
-    const hermesProvider = resolveHermesAgentProvider(env);
+    const hermesProvider = resolveHermesAgentProvider(env, userId);
     if (hermesProvider) providers.push(hermesProvider);
     if (cactusProvider) providers.push(cactusProvider);
     const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
@@ -448,8 +448,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
   }
 
-  async function requestModel(messages, { useTools = false } = {}) {
-    const providers = configuredModelProviders().filter(provider => !useTools || provider.supportsTools);
+  async function requestModel(messages, { useTools = false, userId = null } = {}) {
+    const providers = configuredModelProviders(userId).filter(provider => !useTools || provider.supportsTools);
     if (!providers.length) throw Object.assign(new Error("No configured AI provider is available. Add OPENROUTER_API_KEY or a valid provider entry with its server-side API key."), { status: 503, code: "PROVIDER_NOT_CONFIGURED" });
     let lastError;
     for (const provider of providers) {
@@ -615,7 +615,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const data = await requestModel([
         { role: "system", content: system },
         { role: "user", content: JSON.stringify({ topic, format, targetSeconds, sceneCount, language, audience, style }) }
-      ]);
+      ], { userId: req.supabaseUser?.id });
       const raw = data?.choices?.[0]?.message?.content;
       if (typeof raw !== "string" || !raw.trim()) throw Object.assign(new Error("YouTube planner returned no content."), { code: "YOUTUBE_PLAN_EMPTY_RESPONSE", status: 502 });
       let plan = null;
@@ -675,7 +675,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const mode = MODES.has(args.mode) ? args.mode : "plan";
       if (!ROLES.has(role) || goal.length < 2) throw Object.assign(new Error("Choose a valid role and goal."), { code: "INVALID_EMPLOYEE_TASK", status: 400 });
       const system = "You are a guarded ULTRON AI Employee. Create plans, drafts, reviews, or reports only. Do not claim work was executed. Never send, publish, submit, spend, alter external systems, delete data, or run commands. Clearly identify assumptions, blockers, and approval gates.";
-      const data = await requestModel([{ role: "system", content: system }, { role: "user", content: JSON.stringify({ role, goal, context, mode }) }]);
+      const data = await requestModel([{ role: "system", content: system }, { role: "user", content: JSON.stringify({ role, goal, context, mode }) }], { userId: req.supabaseUser?.id });
       const answer = data?.choices?.[0]?.message?.content;
       if (typeof answer !== "string" || !answer.trim()) throw Object.assign(new Error("AI Employee returned no content."), { code: "EMPLOYEE_EMPTY_RESPONSE", status: 502 });
       return { role, mode, answer: answer.slice(0, 12000), execution: "draft_only", requiresHumanApprovalForExternalActions: true };
@@ -689,7 +689,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const mode = ["plan", "review", "generate"].includes(args.mode) ? args.mode : "plan";
       if (task.length < 2) throw Object.assign(new Error("A coding task is required."), { code: "CODING_TASK_REQUIRED", status: 400 });
       const system = "You are ULTRON's coding assistant. Produce a practical code plan, generation, or review. Never claim to run code, access files, or apply changes. Do not include secrets or destructive commands.";
-      const data = await requestModel([{ role: "system", content: system }, { role: "user", content: JSON.stringify({ task, language, code, mode }) }]);
+      const data = await requestModel([{ role: "system", content: system }, { role: "user", content: JSON.stringify({ task, language, code, mode }) }], { userId: req.supabaseUser?.id });
       const answer = data?.choices?.[0]?.message?.content;
       if (typeof answer !== "string" || !answer.trim()) throw Object.assign(new Error("Coding assistant returned no content."), { code: "CODING_EMPTY_RESPONSE", status: 502 });
       return { mode, language, answer: answer.slice(0, 12000), execution: "draft_only" };
@@ -1114,12 +1114,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     try {
       let first;
       try {
-        first = await requestModel(messages, { useTools: true });
+        first = await requestModel(messages, { useTools: true, userId: req.supabaseUser?.id });
       } catch (toolModeError) {
         // Some free-model routes reject tool schemas. Retry plain chat first; if that
         // also fails, deterministic safe intents can still execute non-model tools.
         try {
-          first = await requestModel(messages);
+          first = await requestModel(messages, { userId: req.supabaseUser?.id });
         } catch (plainModeError) {
           if (!extractIntent(userText)) throw plainModeError;
           first = { choices: [{ message: { role: "assistant", content: "" } }] };
@@ -1191,9 +1191,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         // Tool execution remains allowlisted and capped at three calls per round.
         let final;
         try {
-          final = await requestModel(finalMessages, { useTools: true });
+          final = await requestModel(finalMessages, { useTools: true, userId: req.supabaseUser?.id });
         } catch (toolSynthesisError) {
-          final = await requestModel(finalMessages);
+          final = await requestModel(finalMessages, { userId: req.supabaseUser?.id });
         }
         const followCalls = Array.isArray(final?.choices?.[0]?.message?.tool_calls)
           ? final.choices[0].message.tool_calls.slice(0, 3)
@@ -1228,7 +1228,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             ...followToolMessages,
             { role: "system", content: "Summarize both tool rounds accurately. Cite source URLs when research results exist. State blockers plainly. Never claim a draft or proposed action was externally executed." }
           ];
-          final = await requestModel(followMessages);
+          final = await requestModel(followMessages, { userId: req.supabaseUser?.id });
         }
         content = typeof final?.choices?.[0]?.message?.content === "string" ? final.choices[0].message.content : "";
       } catch (error) {
