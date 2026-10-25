@@ -17,7 +17,7 @@ test("browser tool intent cannot add consequential actions to a routine request"
     requireSupabaseUser,
     logger: { warn() {} },
     fetchImpl: async (url, options) => {
-      if (url === "https://browser.example/execute") {
+      if (url === "https://browser.example.com/execute") {
         browserServiceCalled = true;
         throw new Error("Browser service must not be called without approval");
       }
