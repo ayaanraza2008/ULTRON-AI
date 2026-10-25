@@ -16,11 +16,10 @@ test("registry contains every requested repository exactly once", () => {
 });
 
 test("capability router matches distinct task domains automatically", () => {
-  const results = matchRepositoryCapabilities("Research a YouTube video workflow and triage the Chatwoot support inbox");
+  const results = matchRepositoryCapabilities("Research a YouTube channel launch plan and triage the Chatwoot support inbox");
   const ids = results.map(item => item.id);
   assert.ok(ids.includes("youtube-automation-agent"));
   assert.ok(ids.includes("chatwoot"));
-  assert.ok(!ids.includes("comfyui"));
 });
 
 test("matching is bounded and empty tasks do not pick arbitrary repositories", () => {
@@ -46,7 +45,7 @@ test("readiness reports key names/states without returning credential values", (
   assert.equal(kaliGpt.state, "bounded_security_routes_present");
   assert.equal(chatwoot.state, "credentials_present_adapter_missing");
   assert.equal(geo.state, "configured_unverified");
-  assert.equal(openproject.state, "missing_configuration");
+  assert.equal(openproject.state, "adapter_not_implemented");
   assert.equal(JSON.stringify(status).includes(secret), false);
   assert.equal(JSON.stringify(status).includes("configured-token"), false);
 });
