@@ -239,7 +239,7 @@ function normalizeBaseUrl(value) {
 
 function hasConfiguredModelProvider(env) {
   const hermes = getHermesAgentReadiness(env);
-  if (resolveCactusProvider(env) || (hermes.configured && hermes.ownerGuardConfigured)) return true;
+  if (resolveCactusProvider(env) || (hermes.configured && hermes.ownerGuardConfigured && hermes.directChatProviderEnabled)) return true;
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
