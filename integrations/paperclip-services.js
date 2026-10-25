@@ -3,6 +3,8 @@
  * This adapter never creates, wakes, pauses, terminates, hires, or changes agents.
  * Shared credentials are available only to ULTRON's explicitly configured owner UUID.
  */
+import { safeServiceBase } from "../network-safety.js";
+
 const MAX_RESPONSE_BYTES = 1_000_000;
 
 function bounded(value, max = 300) {
@@ -10,14 +12,12 @@ function bounded(value, max = 300) {
 }
 
 function safeBase(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
+  const base = safeServiceBase(value);
+  if (!base) return null;
   try {
-    const url = new URL(value.trim());
-    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname.toLowerCase());
-    if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
-    if (url.pathname !== "/" && url.pathname.replace(/\/+$/, "") !== "/api") return null;
-    return url.toString().replace(/\/+$/, "");
+    const url = new URL(base);
+    if (url.pathname !== "/" && url.pathname.replace(/\\/+$/, "") !== "/api") return null;
+    return base;
   } catch { return null; }
 }
 
