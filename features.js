@@ -1153,7 +1153,13 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       };
     }
 
-    const requiresApproval = taskType !== "research" || risk !== "low" || req.body?.requiresApproval === true;
+    // Research and AI Employee tasks are deliberately limited to allowlisted research or
+    // draft/report generation. A user's explicit request is enough for low-risk work in
+    // those bounded worker modes; medium/high-risk work, manual review tasks, and any
+    // request carrying requiresApproval=true remain behind the explicit approval gate.
+    const canQueueSafeTask = ["research", "employee", "autonomous"].includes(taskType) &&
+      risk === "low" && req.body?.requiresApproval !== true;
+    const requiresApproval = !canQueueSafeTask;
     const executionMode = taskType === "research"
       ? "allowlisted_worker"
       : taskType === "employee" || taskType === "autonomous"
@@ -1190,9 +1196,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 
       const notice = taskType === "research" && !requiresApproval
         ? "Research task queued for the optional allowlisted worker. It runs only when that worker and its provider are configured."
-        : taskType === "employee" || taskType === "autonomous"
-          ? "Task saved for explicit approval. After approval, the configured worker may create a bounded draft/report; external actions and PC commands remain disabled."
-          : "Task saved for review. It will not execute unless its type is supported by an allowlisted worker and the required approvals are present.";
+        : ["employee", "autonomous"].includes(taskType) && !requiresApproval
+          ? "Low-risk AI Employee task queued for the background worker to prepare a bounded plan/draft/report. It will not send, publish, spend, execute commands, or control devices."
+          : ["employee", "autonomous"].includes(taskType)
+            ? "Task saved for explicit approval. After approval, the configured worker may create a bounded draft/report; external actions and PC commands remain disabled."
+            : "Task saved for review. It will not execute unless its type is supported by an allowlisted worker and the required approvals are present.";
       return res.status(201).json({ task: rows[0], notice });
     } catch (error) {
       return res.status(error.status || 502).json({ error: { code: "TASK_CREATE_FAILED", message: error.message } });
