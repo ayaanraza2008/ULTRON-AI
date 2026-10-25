@@ -9,8 +9,8 @@ import {
 
 test("registry contains every requested repository exactly once", () => {
   const items = listRepositoryCapabilities();
-  assert.equal(items.length, 28);
-  assert.equal(new Set(items.map(item => item.id)).size, 28);
+  assert.equal(items.length, 30);
+  assert.equal(new Set(items.map(item => item.id)).size, 30);
   assert.ok(items.some(item => item.repo === "darkzOGx/youtube-automation-agent"));
   assert.ok(items.some(item => item.repo === "morluto/rea"));
 });
