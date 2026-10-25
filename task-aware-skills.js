@@ -49,6 +49,9 @@ export function buildTaskSkillsGuidance(task) {
   const scientificTask = scienceSkills.length>0 || /\b(science|scientific|experiment|laboratory|bioinformatics|chemistry|biology|physics|astronomy|genomics|scholarly)\b/i.test(text);
   const repositoryGuidance = buildRepositoryCapabilityGuidance(text);
   const rules = [...RULES];
+  if (repositoryGuidance.matches.some(item => item.id === "youtube-automation-agent")) {
+    rules.push("YouTube production task: use create_youtube_production_plan automatically to draft the content package. If the request relies on current factual claims, research and cite sources first. The planner does not render media, verify rights, schedule, upload, or publish; do not claim those stages ran.");
+  }
   if (categories.includes("software_change")) rules.push("Software task: inspect surrounding code, make a narrow coherent change, and run checks before claiming success.");
   if (categories.includes("research")) rules.push("Research task: prefer primary/current sources, retain URLs, compare evidence, and state uncertainty.");
   if (categories.includes("multi_step")) rules.push("Multi-step task: execute safe checkpoints automatically, use results to choose the next step, and report real blockers.");
