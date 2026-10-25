@@ -674,23 +674,34 @@ test("chat falls back to the next model when a streaming provider closes immedia
   });
 });
 
-test("Hermes Agent API is a first-class normal chat provider when explicitly enabled", async () => {
+test("Hermes Agent API is a first-class normal chat provider for its configured owner", async () => {
   let seen;
+  const supabaseUrl = "https://test-project.supabase.co";
+  const ownerId = "00000000-0000-4000-8000-000000000001";
   const configuredEnv = {
     ...env,
+    SUPABASE_URL: supabaseUrl,
+    SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
     HERMES_AGENT_ENABLED: "true",
     HERMES_AGENT_CHAT_PROVIDER: "true",
     HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
-    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_API_KEY: "private-hermes-test-key",
     HERMES_AGENT_MODEL: "hermes-agent",
     HERMES_AGENT_PRIORITY: "-5"
   };
   const app = createApp({
     env: configuredEnv,
-    fetchImpl: async (url, options) => {
+    fetchImpl: async (url, options = {}) => {
+      if (url === supabaseUrl + "/auth/v1/user") {
+        return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
+        return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       seen = { url, options, body: JSON.parse(options.body) };
       assert.equal(url, "https://hermes.example/v1/chat/completions");
-      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-test-key");
       return new Response(JSON.stringify({
         model: "hermes-agent",
         choices: [{ message: { role: "assistant", content: "Hermes completed the tool-enabled agent turn." } }]
@@ -702,7 +713,7 @@ test("Hermes Agent API is a first-class normal chat provider when explicitly ena
     const cookie = await login(base);
     const response = await fetch(base + "/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: cookie },
+      headers: { "Content-Type": "application/json", Cookie: cookie + "; ultron_sb_access=test-access-token" },
       body: JSON.stringify({ messages: [{ role: "user", content: "Research how the official API works." }], stream: false })
     });
     assert.equal(response.status, 200);
