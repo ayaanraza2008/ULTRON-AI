@@ -31,3 +31,50 @@ test("Geo-Sleuth bootstrap reuses a complete pinned runtime without network call
     await rm(base, { recursive: true, force: true });
   }
 });
+
+test("Geo-Sleuth bootstrap downloads a pinned uv release installer with HTTPS-only curl policy", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "ultron-geo-bootstrap-install-"));
+  const root = path.join(base, "repository", "skills", "geo-sleuth");
+  const calls = [];
+  try {
+    const result = await ensureGeoSleuthRuntime({
+      env: { GEO_SLEUTH_ENABLED: "true", GEO_SLEUTH_ROOT: root },
+      log() {},
+      runCommand: async (command, args) => {
+        calls.push({ command, args });
+        if (command === "git" && args[0] === "clone") {
+          const clonePath = args.at(-1);
+          const scripts = path.join(clonePath, "skills", "geo-sleuth", "scripts");
+          await mkdir(scripts, { recursive: true });
+          await writeFile(path.join(scripts, "intake.py"), "# pinned fixture");
+          await writeFile(path.join(scripts, "board.py"), "# pinned fixture");
+          return {};
+        }
+        if (command === "uv" || command.endsWith(path.join(".local", "bin", "uv"))) {
+          throw new Error("uv is not installed");
+        }
+        if (command === "curl") {
+          assert.deepEqual(args.slice(0, 5), ["--proto", "=https", "--proto-redir", "=https", "--tlsv1.2"]);
+          assert.match(args[5], /^-LsSf$/);
+          assert.equal(args[6], "https://releases.astral.sh/github/uv/releases/download/0.13.5/uv-installer.sh");
+          const outputIndex = args.indexOf("-o");
+          assert.ok(outputIndex > -1);
+          await writeFile(args[outputIndex + 1], "# installer fixture");
+          return {};
+        }
+        if (command === "sh") {
+          assert.match(args[0], /ultron-uv-installer-[^/]+[/\\]uv-installer\.sh$/);
+          return {};
+        }
+        if (command === "git") return {};
+        throw new Error("Unexpected command: " + command);
+      }
+    });
+    assert.equal(result.state, "source_present");
+    const curlCall = calls.find(call => call.command === "curl");
+    assert.ok(curlCall, "installer download should be attempted when uv is absent");
+    assert.ok(calls.some(call => call.command === "sh"), "downloaded installer should be invoked after download");
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
