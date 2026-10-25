@@ -203,7 +203,7 @@ test("AgentMemory refuses private, loopback HTTPS, and metadata endpoints", asyn
       env: settings, userId: "user-123",
       fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
     });
-    assert.notEqual(result.state, "completed", url);
+    assert.deepEqual(result, { state: "not_configured", memories: [] }, url);
     assert.equal(called, false, url);
   }
 });
