@@ -40,11 +40,11 @@ test("integration catalog requires an authenticated session", async () => {
 test("integration catalog reports readiness without exposing secret values", async () => {
   const configuredEnv = {
     ...env,
-    COMFYUI_BASE_URL: "https://comfy.example",
-    HEYGEM_API_BASE_URL: "https://avatar.example",
+    COMFYUI_BASE_URL: "https://comfy.example.com",
+    HEYGEM_API_BASE_URL: "https://avatar.example.com",
     HEYGEM_API_KEY: "private-heygem-secret",
     HEYGEM_JOB_PATH: "/api/generate",
-    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_BASE_URL: "https://voice.example.com",
     OMNIVOICE_API_KEY: "private-voice-secret",
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
     ULTRON_EMPLOYEES_ENABLED: "true",
@@ -54,7 +54,7 @@ test("integration catalog reports readiness without exposing secret values", asy
     OBSCURA_MCP_URL: "http://127.0.0.1:8080/mcp",
     CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
     CACTUS_MODEL: "Cactus-Compute/needle",
-    PAPERCLIP_BASE_URL: "https://paperclip.example",
+    PAPERCLIP_BASE_URL: "https://paperclip.example.com",
     PAPERCLIP_API_TOKEN: "private-paperclip-secret",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
