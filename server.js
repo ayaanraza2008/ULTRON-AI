@@ -285,6 +285,18 @@ function configuredChatProviders(env, openRouterBaseUrl = null) {
   return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
 }
 
+function cactusCompletionStream(completion) {
+  const id = "cactus-" + crypto.randomUUID();
+  const content = completion.choices[0].message.content;
+  const events = [
+    { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] },
+    { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: { content }, finish_reason: null }] },
+    { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }
+  ];
+  const body = events.map(event => "data: " + JSON.stringify(event) + "\\n\\n").join("") + "data: [DONE]\\n\\n";
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
+}
+
 export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
   const app = express();
   app.locals.workerRuntime = () => ({
