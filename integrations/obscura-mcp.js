@@ -141,7 +141,7 @@ function contentText(result) {
 
 function sanitizeError(error) {
   const code = bounded(error?.code, 80) || "OBSCURA_UNAVAILABLE";
-  const message = error?.status ? bounded(error.message, 220) : "The configured Obscura MCP service is unavailable or returned an invalid response.";
+  const message = "The configured Obscura MCP service is unavailable or returned an invalid response.";
   return { state: "failed", provider: "obscura", error: { code, message }, readOnly: true };
 }
 
