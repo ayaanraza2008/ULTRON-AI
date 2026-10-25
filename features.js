@@ -362,8 +362,21 @@ function withTimeout(ms, parentSignal) {
   return { signal: controller.signal, close: () => { clearTimeout(timer); parentSignal?.removeEventListener("abort", abort); } };
 }
 
-export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSession, requireSupabaseUser, supabaseRest, logger = console }) {
+export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
   const router = express.Router();
+  async function recordAuditEvent(req, event) {
+    try {
+      await privilegedSupabaseRest(req, "audit_events", "POST", "", event, "return=minimal");
+    } catch (error) {
+      // A successful state/data write must not be falsely reported as failed because
+      // the separate audit sink is unavailable. Never fall back to a client-authored
+      // audit INSERT; the database intentionally rejects that operation.
+      logger.warn?.("Server-authored audit write failed", {
+        action: boundedString(event?.action, 120),
+        code: boundedString(error?.code || error?.message, 120) || "AUDIT_WRITE_FAILED"
+      });
+    }
+  }
   // AI Employees-inspired role layer. These endpoints create plans/drafts only;
   // they do not schedule work or send, publish, submit, spend, or change external systems.
   const employeeRoles = [
@@ -451,10 +464,10 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       // user's PostgREST token cannot insert them. Audit failure must not misreport a
       // schedule that was already persisted as a failed creation.
       try {
-        await supabaseRest(req, "audit_events", "POST", "", {
+        await recordAuditEvent(req, {
           user_id: req.supabaseUser.id, action: "employee.schedule_created", target_type: "employee_schedule",
           target_id: rows[0].id, outcome: "recorded", metadata: { roleId, routineId, intervalMinutes }
-        }, "return=minimal");
+        });
       } catch (auditError) {
         logger.warn?.("Employee schedule creation audit write failed", { code: boundedString(auditError?.code || auditError?.message, 120) });
       }
@@ -498,14 +511,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const task = Array.isArray(taskRows) ? taskRows[0] : null;
       if (!task?.id) return res.status(502).json({ error: { code: "EMPLOYEE_TASK_QUEUE_FAILED", message: "The routine could not be queued." } });
       try {
-        await supabaseRest(req, "audit_events", "POST", "", {
+        await recordAuditEvent(req, {
           user_id: req.supabaseUser.id,
           action: "employee.schedule_run_requested",
           target_type: "employee_schedule",
           target_id: schedule.id,
           outcome: "allowed",
           metadata: { taskId: task.id, roleId: schedule.role_id, routineId: schedule.routine_id }
-        }, "return=minimal");
+        });
       } catch (error) {
         logger.warn?.("Employee run-now audit write failed", { code: boundedString(error?.code || error?.message, 120) });
       }
@@ -1129,14 +1142,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         status: requiresApproval ? "WAITING_FOR_PERMISSION" : "QUEUED"
       });
       if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "TASK_CREATE_FAILED", message: "The task could not be saved." } });
-      await supabaseRest(req, "audit_events", "POST", "", {
+      await recordAuditEvent(req, {
         user_id: req.supabaseUser.id,
         action: "task.created",
         target_type: "agent_task",
         target_id: rows[0].id,
         outcome: requiresApproval ? "recorded" : "allowed",
         metadata: { risk, taskType, requiresApproval, executionMode }
-      }, "return=minimal");
+      });
 
       const notice = taskType === "research" && !requiresApproval
         ? "Research task queued for the optional allowlisted worker. It runs only when that worker and its provider are configured."
@@ -1156,11 +1169,15 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const existing = await supabaseRest(req, "agent_tasks", "GET",
         "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status&limit=1");
       if (!Array.isArray(existing) || !existing[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task was not found or is not awaiting approval." } });
-      const rows = await supabaseRest(req, "agent_tasks", "PATCH",
+      if (!["allowlisted_worker", "employee_worker"].includes(existing[0].input?.executionMode) ||
+          !["research", "employee", "autonomous"].includes(existing[0].input?.taskType)) {
+        return res.status(409).json({ error: { code: "TASK_TYPE_NOT_EXECUTABLE", message: "This task is review-only and cannot be queued for execution." } });
+      }
+      const rows = await privilegedSupabaseRest(req, "agent_tasks", "PATCH",
         "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=eq.WAITING_FOR_PERMISSION&select=id,title,input,status",
         { status: "QUEUED", input: { ...(existing[0].input || {}), approved: true, approvedAt: new Date().toISOString(), approvalScope: "task_record_only" } });
       if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_AWAITING_APPROVAL", message: "Task changed state before approval could be recorded." } });
-      await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.approved", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { scope: "task_record_only" } }, "return=minimal");
+      await recordAuditEvent(req, { user_id: req.supabaseUser.id, action: "task.approved", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { scope: "task_record_only" } });
       const executableTask = ["allowlisted_worker", "employee_worker"].includes(rows[0].input?.executionMode);
       const notice = executableTask
         ? "Approval recorded for this task. The configured worker may run its bounded research or draft/report workflow; external side effects remain blocked."
@@ -1172,9 +1189,9 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
   router.post("/tasks/:id/cancel", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_TASK_ID", message: "Task ID is invalid." } });
     try {
-      const rows = await supabaseRest(req, "agent_tasks", "PATCH", "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=in.(QUEUED,WAITING_FOR_PERMISSION)&select=id,status", { status: "CANCELLED", finished_at: new Date().toISOString() });
+      const rows = await privilegedSupabaseRest(req, "agent_tasks", "PATCH", "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=in.(QUEUED,WAITING_FOR_PERMISSION)&select=id,status", { status: "CANCELLED", finished_at: new Date().toISOString() });
       if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "TASK_NOT_CANCELLABLE", message: "Task was not found or is already running/finished." } });
-      await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.cancelled", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: {} }, "return=minimal");
+      await recordAuditEvent(req, { user_id: req.supabaseUser.id, action: "task.cancelled", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: {} });
       res.json({ task: rows[0] });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_CANCEL_FAILED", message: error.message } }); }
   });
@@ -1196,10 +1213,10 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         status: "WAITING_FOR_PERMISSION"
       });
       if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "DIAGNOSTIC_RECORD_FAILED", message: "The diagnostic result could not be saved." } });
-      await supabaseRest(req, "audit_events", "POST", "", {
+      await recordAuditEvent(req, {
         user_id: req.supabaseUser.id, action: "desktop.diagnostic.recorded", target_type: "agent_task",
         target_id: rows[0].id, outcome: "recorded", metadata: { diagnostic, executionMode: "record_only" }
-      }, "return=minimal");
+      });
       return res.status(201).json({ task: rows[0], notice: "Saved for review only. The server did not run any local command or execute this task." });
     } catch (error) {
       logger.warn?.("Desktop diagnostic record failed", { name: error?.name || "Error" });
