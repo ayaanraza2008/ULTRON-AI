@@ -1195,7 +1195,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           attempt = await fetchImpl(`${provider.baseUrl}/chat/completions`, {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${provider.apiKey}`,
+              ...(provider.apiKey ? { "Authorization": `Bearer ${provider.apiKey}` } : {}),
               "Content-Type": "application/json",
               "Accept": stream ? "text/event-stream, application/json" : "application/json",
               ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
