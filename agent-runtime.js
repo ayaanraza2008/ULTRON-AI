@@ -91,7 +91,8 @@ function safeBase(value) {
 }
 function isPublicResearchHost(hostname) {
   const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
-  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")
+  const localSuffixes = [".localhost", ".local", ".localdomain", ".internal", ".intranet", ".lan", ".home", ".test", ".invalid"];
+  if (!host || host === "localhost" || localSuffixes.some(suffix => host.endsWith(suffix))
       || host === "metadata.google.internal" || host === "metadata.google") return false;
   const ipVersion = isIP(host);
   if (ipVersion === 4) {
