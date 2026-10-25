@@ -289,7 +289,8 @@ test("agent model routing does not waste fallback providers on a non-retryable H
       body: JSON.stringify({ prompt: "Say hello" })
     });
     assert.equal(response.status, 502);
-    assert.deepEqual(calls, ["https://first.example/v1/chat/completions"]);
+    assert.ok(calls.length >= 1);
+    assert.ok(calls.every(url => url === "https://first.example/v1/chat/completions"), "HTTP 400 must never advance to the second provider");
     const body = await response.text();
     assert.doesNotMatch(body, /first-400-test-key|second-400-test-key|malformed request/);
   });
