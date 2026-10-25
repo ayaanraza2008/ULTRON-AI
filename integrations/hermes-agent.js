@@ -108,6 +108,8 @@ export function getHermesAgentReadiness(env = process.env) {
     state: !enabled ? "disabled_by_config" : configured ? "configured_unverified" : "missing_configuration",
     enabled,
     configured,
+    directChatProviderEnabled: env.HERMES_AGENT_CHAT_PROVIDER === "true",
+    ownerGuardConfigured: Boolean(typeof env.ULTRON_INTEGRATION_OWNER_USER_ID === "string" && env.ULTRON_INTEGRATION_OWNER_USER_ID.trim()),
     baseConfigured: Boolean(parsed),
     localEndpoint: parsed?.local ?? null,
     apiKeyConfigured: tokenConfigured,
