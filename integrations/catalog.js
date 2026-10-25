@@ -1,6 +1,7 @@
 import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
+import { getHermesAgentReadiness } from "./hermes-agent.js";
 
 const safeBaseUrl = (value) => {
   if (typeof value !== "string" || !value.trim()) return false;
@@ -31,6 +32,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasOpenProject = hasIntegrationOwner && safeBaseUrl(env.OPENPROJECT_BASE_URL) && Boolean(env.OPENPROJECT_API_TOKEN);
   const hasCalDiy = hasIntegrationOwner && safeBaseUrl(env.CALDIY_BASE_URL) && Boolean(env.CALDIY_API_TOKEN);
   const paperclipReadiness = getPaperclipReadiness(env);
+  const hermesReadiness = getHermesAgentReadiness(env);
   const obscuraReadiness = getObscuraReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
 
@@ -182,6 +184,20 @@ export function buildIntegrationCatalog(env = process.env) {
       note: cactusReadiness.configured
         ? "Configured but not yet live-tested. The engine and Needle/Whistle must be installed and started separately; ULTRON never downloads model weights."
         : "Requires an already-running Cactus OpenAI-compatible server, an installed model ID, and an authenticated HTTPS gateway for remote endpoints. On the same machine, loopback HTTP is allowed."
+    },
+    {
+      id: "hermes-agent",
+      name: "Hermes Agent Runtime",
+      capability: "OpenAI-compatible delegated agent runtime with tools, memory, skills, subagents, scheduling, messaging, and terminal backend support according to its configuration",
+      state: hermesReadiness.state,
+      configured: Boolean(hermesReadiness.configured),
+      mode: "separate_authenticated_agent_service",
+      requiredEnv: ["HERMES_AGENT_ENABLED=true", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY"],
+      optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_PRIORITY", "HERMES_AGENT_SUPPORTS_VISION", "HERMES_AGENT_TIMEOUT_SECONDS"],
+      apiRoutes: ["agent tools: check_hermes_agent, hermes_agent_task", "model provider: /v1/chat/completions"],
+      note: hermesReadiness.configured
+        ? "Configured but not live-verified. The Hermes gateway must be running with API_SERVER_ENABLED/API_SERVER_KEY and least-privileged terminal/tool configuration."
+        : "Requires a separately installed/running Hermes Agent API server, HERMES_AGENT_ENABLED=true, its API_SERVER_KEY, and remote HTTPS. ULTRON does not install Hermes, enable all toolsets, or launch third-party messaging/cron services automatically."
     },
     {
       id: "paperclip",
