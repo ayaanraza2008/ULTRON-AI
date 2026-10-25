@@ -63,7 +63,7 @@ test("browser bridge requests reject redirects and keep the shared token on the 
   let providerCalls = 0;
   await withServer({
     OPENROUTER_API_KEY: "test-only",
-    ULTRON_BROWSER_USE_URL: "https://browser.example",
+    ULTRON_BROWSER_USE_URL: "https://browser.example.com",
     ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
   }, async (url, options) => {
     if (url === "https://browser.example.com/run") {
@@ -99,7 +99,7 @@ test("browser bridge requests reject redirects and keep the shared token on the 
 
 test("agent automatically injects relevant AgentMemory results for continuation tasks", async () => {
   let memoryCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
+  await withServer({ OPENROUTER_API_KEY: "test-only", AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
     if (url === "https://memory.example.com/agentmemory/smart-search") {
       memoryCalls += 1;
       assert.equal(JSON.parse(options.body).project, "ultron-ai-user-00000000-0000-4000-8000-000000000001");
@@ -154,7 +154,7 @@ test("automatically stores high-signal decisions in the existing durable Supabas
 });
 
 test("AgentMemory readiness is authenticated and does not return memory contents", async () => {
-  await withServer({ AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
+  await withServer({ AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "memory-test-secret" }, async (url, options) => {
     assert.equal(url, "https://memory.example.com/agentmemory/smart-search");
     assert.equal(options.headers.Authorization, "Bearer memory-test-secret");
     return new Response(JSON.stringify({ results: [{ content: "private memory text" }] }), { status: 200 });
@@ -367,7 +367,7 @@ test("agent automatically reads Paperclip agent governance and monthly costs", a
   const env = {
     OPENROUTER_API_KEY: "test-only",
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    PAPERCLIP_BASE_URL: "https://paperclip.example",
+    PAPERCLIP_BASE_URL: "https://paperclip.example.com",
     PAPERCLIP_API_TOKEN: "paperclip-test-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
@@ -429,7 +429,7 @@ test("agent automatically reads Paperclip agent governance and monthly costs", a
 
 test("agent automatically checks integration readiness when a free model omits tool calls", async () => {
   let providerCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
+  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free", COMFYUI_BASE_URL: "https://comfy.example.com" }, async (url, options) => {
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
     providerCalls += 1;
     if (providerCalls === 1) {
@@ -454,10 +454,10 @@ test("agent can inspect task-matched repository readiness without exposing crede
   let providerCalls = 0;
   const env = {
     OPENROUTER_API_KEY: "test-only",
-    CHATWOOT_BASE_URL: "https://chat.example",
+    CHATWOOT_BASE_URL: "https://chat.example.com",
     CHATWOOT_API_TOKEN: "private-chat-secret",
     CHATWOOT_ACCOUNT_ID: "12",
-    OPENPROJECT_BASE_URL: "https://projects.example",
+    OPENPROJECT_BASE_URL: "https://projects.example.com",
     OPENPROJECT_API_TOKEN: "private-project-secret",
     ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
   };
@@ -579,7 +579,7 @@ test("agent executes a model-selected research tool and passes results back for 
 
 
 test("agent tool discovery reports readiness without exposing credentials", async () => {
-  await withServer({ OPENROUTER_API_KEY: "secret-provider-value", COMFYUI_BASE_URL: "https://comfy.example", COMFYUI_API_KEY: "secret-comfy-value" }, async () => {
+  await withServer({ OPENROUTER_API_KEY: "secret-provider-value", COMFYUI_BASE_URL: "https://comfy.example.com", COMFYUI_API_KEY: "secret-comfy-value" }, async () => {
     throw new Error("tool discovery should not make provider calls");
   }, async base => {
     const response = await fetch(base + "/api/agent/tools");
@@ -594,7 +594,7 @@ test("agent tool discovery reports readiness without exposing credentials", asyn
 test("ComfyUI workflow is not queued until explicit confirmation is supplied", async () => {
   let providerCalls = 0;
   let queueCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
+  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example.com" }, async (url, options) => {
     if (url === "https://comfy.example.com/prompt") {
       queueCalls += 1;
       return new Response(JSON.stringify({ prompt_id: "prompt-abc" }), { status: 200 });
@@ -666,7 +666,7 @@ test("agent retries plain chat when the model rejects function-calling schemas",
 test("agent keeps large speech payloads out of model context but returns them to the client", async () => {
   let providerCalls = 0;
   const audioBase64 = "A".repeat(3000);
-  await withServer({ OPENROUTER_API_KEY: "test-only", OMNIVOICE_API_BASE_URL: "https://voice.example", OMNIVOICE_API_KEY: "voice-test", OMNIVOICE_SYNTHESIS_PATH: "/synthesize" }, async (url, options) => {
+  await withServer({ OPENROUTER_API_KEY: "test-only", OMNIVOICE_API_BASE_URL: "https://voice.example.com", OMNIVOICE_API_KEY: "voice-test", OMNIVOICE_SYNTHESIS_PATH: "/synthesize" }, async (url, options) => {
     if (url === "https://voice.example.com/synthesize") return new Response(JSON.stringify({ audioBase64, format: "wav" }), { status: 200 });
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "voice-call", type: "function", function: { name: "synthesize_speech", arguments: JSON.stringify({ text: "Hello world" }) } }] } }] }), { status: 200 });
@@ -807,7 +807,7 @@ test("background task intent fallback works when the free model does not support
 test("ComfyUI asks for the exact workflow before asking the user to confirm compute use", async () => {
   let providerCalls = 0;
   let comfyCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
+  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example.com" }, async (url, options) => {
     if (url.startsWith("https://comfy.example.com/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "comfy-call", type: "function", function: { name: "run_comfyui_workflow", arguments: JSON.stringify({ reason: "Generate an image" }) } }] } }] }), { status: 200 });
@@ -925,7 +925,7 @@ test("agent autonomously runs multiple safe tools when model function calling is
 test("agent infers generic image-generation requests without requiring the user to name ComfyUI", async () => {
   let providerCalls = 0;
   let comfyCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
+  await withServer({ OPENROUTER_API_KEY: "test-only", COMFYUI_BASE_URL: "https://comfy.example.com" }, async (url, options) => {
     if (url.startsWith("https://comfy.example.com/")) { comfyCalls += 1; throw new Error("must not queue without workflow"); }
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I can help create that image." } }] }), { status: 200 });
@@ -997,7 +997,7 @@ test("autonomous fallback dispatches multiple explicitly requested safe tools wi
 
 test("autonomous fallback combines research, image generation readiness, and code drafts", async () => {
   let tavilyCalls = 0;
-  await withServer({ TAVILY_API_KEY: "tavily-test", COMFYUI_BASE_URL: "https://comfy.example" }, async (url) => {
+  await withServer({ TAVILY_API_KEY: "tavily-test", COMFYUI_BASE_URL: "https://comfy.example.com" }, async (url) => {
     if (url === "https://api.tavily.com/search") {
       tavilyCalls += 1;
       return new Response(JSON.stringify({ answer: "Research summary", results: [{ title: "Source", url: "https://example.com", content: "Snippet" }] }), { status: 200 });
@@ -1244,7 +1244,7 @@ test("agent autonomously uses VoiceStudio for speech when configured", async () 
   const audioBytes = Buffer.from("test-wav-audio");
   await withServer({
     OPENROUTER_API_KEY: "test-only",
-    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_BASE_URL: "https://voice.example.com",
     VOICESTUDIO_API_KEY: "voice-studio-test-token"
   }, async (url, options) => {
     if (url === "https://voice.example.com/v1/audio/speech") {
@@ -1650,10 +1650,10 @@ test("browser bridge rejects a configured URL with query parameters before forwa
   const querySecret = "no-query-token-forwarding";
   await withServer({
     OPENROUTER_API_KEY: "test-only",
-    ULTRON_BROWSER_USE_URL: "https://browser.example?token=" + querySecret,
+    ULTRON_BROWSER_USE_URL: "https://browser.example.com?token=" + querySecret,
     ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
   }, async (url, options) => {
-    if (url.startsWith("https://browser.example")) {
+    if (url.startsWith("https://browser.example.com")) {
       bridgeCalls += 1;
       throw new Error("unsafe bridge URL must not be called");
     }
@@ -1891,7 +1891,7 @@ test("agent blocks ComfyUI access when the shared-integration owner is not confi
   const env = {
     OPENROUTER_API_KEY: "openrouter-test-key",
     ULTRON_INTEGRATION_OWNER_USER_ID: "",
-    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_BASE_URL: "https://comfy.example.com",
     COMFYUI_API_KEY: "synthetic-comfy-key"
   };
   await withServer(env, async (url, options) => {
@@ -1932,7 +1932,7 @@ test("agent denies VoiceStudio tools for authenticated non-owner accounts before
   const env = {
     OPENROUTER_API_KEY: "openrouter-test-key",
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_BASE_URL: "https://voice.example.com",
     VOICESTUDIO_API_KEY: "synthetic-voice-key"
   };
   await withServer(env, async (url, options) => {
