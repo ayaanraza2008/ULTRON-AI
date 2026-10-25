@@ -186,3 +186,24 @@ test("AgentMemory fails closed without an authenticated user ID", async () => {
   assert.deepEqual(captured, { state: "skipped" });
   assert.equal(calls, 0, "unauthenticated memory operations must not reach the upstream service");
 });
+
+
+test("AgentMemory refuses private, loopback HTTPS, and metadata endpoints", async () => {
+  for (const url of [
+    "https://192.168.1.10",
+    "https://10.1.2.3",
+    "https://169.254.169.254",
+    "https://metadata.google.internal",
+    "https://[::1]"
+  ]) {
+    const settings = { AGENTMEMORY_URL: url, AGENTMEMORY_SECRET: "synthetic-secret" };
+    assert.equal(agentMemoryReadiness(settings).configured, false, url);
+    let called = false;
+    const result = await recallAgentMemory("Continue the previous repository implementation", {
+      env: settings, userId: "user-123",
+      fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+    });
+    assert.notEqual(result.state, "completed", url);
+    assert.equal(called, false, url);
+  }
+});
