@@ -25,7 +25,7 @@ function configuredDesktopAutomation(env = process.env) {
   const token = boundedString(env.ULTRON_DESKTOP_POLL_TOKEN, 2000);
   const deviceId = boundedString(env.ULTRON_DESKTOP_DEVICE_ID, 120);
   const ownerId = boundedString(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
-  if (!token || !UUID_PATTERN.test(ownerId) || !DESKTOP_DEVICE_ID_PATTERN.test(deviceId)) return null;
+  if (token.length < 32 || token.length > 2000 || !UUID_PATTERN.test(ownerId) || !DESKTOP_DEVICE_ID_PATTERN.test(deviceId)) return null;
   return { token, deviceId, ownerId };
 }
 
