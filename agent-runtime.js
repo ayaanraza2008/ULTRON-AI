@@ -158,7 +158,14 @@ export function buildBrowserUseGuidance(task) {
 function safeBase(value) {
   try {
     const u = new URL(String(value || ""));
-    return (u.protocol === "https:" || ["localhost", "127.0.0.1"].includes(u.hostname)) && !u.username && !u.password && !u.search && !u.hash ? u.toString().replace(/\/+$/, "") : null;
+    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+    const loopback = ["localhost", "127.0.0.1", "::1"].includes(host);
+    if (u.username || u.password || u.search || u.hash) return null;
+    // Preserve local development, but never send a shared bridge token to a
+    // remote HTTP host or a private, link-local, metadata, or local HTTPS host.
+    if (u.protocol === "http:" && loopback) return u.toString().replace(/\/+$/, "");
+    if (u.protocol !== "https:" || !isPublicResearchHost(u.hostname)) return null;
+    return u.toString().replace(/\/+$/, "");
   } catch { return null; }
 }
 function isPublicResearchHost(hostname) {
