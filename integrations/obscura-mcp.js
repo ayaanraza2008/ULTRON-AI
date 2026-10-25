@@ -150,7 +150,8 @@ export function getObscuraReadiness(env = process.env) {
   const rawUrl = typeof env.OBSCURA_MCP_URL === "string" ? env.OBSCURA_MCP_URL.trim() : "";
   const hasOwner = typeof env.ULTRON_INTEGRATION_OWNER_USER_ID === "string" && Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID.trim());
   let url = null;
-  try { url = new URL(rawUrl); } catch {}
+  const safeUrl = safeServiceBase(rawUrl);
+  try { url = safeUrl ? new URL(safeUrl) : null; } catch {}
   const local = Boolean(url && loopbackHost(url.hostname));
   const valid = Boolean(url && !url.username && !url.password && !url.search && !url.hash &&
     (url.protocol === "https:" || (url.protocol === "http:" && local)) &&
