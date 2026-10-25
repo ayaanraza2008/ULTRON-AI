@@ -23,7 +23,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const hasGeoSleuth = env.GEO_SLEUTH_ENABLED === "true";
   const hasIntegrationOwner = Boolean(typeof env.ULTRON_INTEGRATION_OWNER_USER_ID === "string" && env.ULTRON_INTEGRATION_OWNER_USER_ID.trim());
-  const hasChatwoot = hasIntegrationOwner && safeBaseUrl(env.CHATWOOT_BASE_URL) && Boolean(env.CHATWOOT_API_TOKEN) && /^\\d+$/.test(String(env.CHATWOOT_ACCOUNT_ID || ""));
+  const hasChatwoot = hasIntegrationOwner && safeBaseUrl(env.CHATWOOT_BASE_URL) && Boolean(env.CHATWOOT_API_TOKEN) && /^\d+$/.test(String(env.CHATWOOT_ACCOUNT_ID || ""));
   const hasOpenProject = hasIntegrationOwner && safeBaseUrl(env.OPENPROJECT_BASE_URL) && Boolean(env.OPENPROJECT_API_TOKEN);
   const hasCalDiy = hasIntegrationOwner && safeBaseUrl(env.CALDIY_BASE_URL) && Boolean(env.CALDIY_API_TOKEN);
 
