@@ -11,7 +11,7 @@ import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWork
 import { inspectPublicPageWithObscura, capturePublicPageWithObscura, getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { checkCactusService, resolveCactusProvider, getCactusReadiness } from "./integrations/cactus.js";
 import { getPaperclipAgentDashboard } from "./integrations/paperclip-services.js";
-import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentProvider, runHermesAgentTask } from "./integrations/hermes-agent.js";
+import { checkHermesAgentService, getHermesAgentReadiness, runHermesAgentTask } from "./integrations/hermes-agent.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
@@ -411,8 +411,6 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
 
   function configuredModelProviders() {
     const providers = [];
-    const hermesProvider = resolveHermesAgentProvider(env);
-    if (hermesProvider) providers.push(hermesProvider);
     const cactusProvider = resolveCactusProvider(env);
     if (cactusProvider) providers.push(cactusProvider);
     const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
