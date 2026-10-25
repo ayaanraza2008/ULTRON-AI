@@ -310,11 +310,17 @@ function buildFallbackCalls(text) {
   if (intent === "paperclip_read_agent_governance") add("paperclip_read_agent_governance");
   if (intent === "check_hermes_agent") add("check_hermes_agent");
   if (intent === "hermes_agent_task") add("hermes_agent_task", { task: bounded(text, 8000) });
-  const openVikingRequested = /\\b(openviking|open viking)\\b/i.test(text);
-  if (openVikingRequested && /\\b(check|status|health|ready|reachable|configured|available)\\b/i.test(text)) {
+  const openVikingRequested = /\b(openviking|open viking)\b/i.test(text);
+  if (openVikingRequested && /\b(check|status|health|ready|reachable|configured|available)\b/i.test(text)) {
     add("check_openviking");
   } else if (openVikingRequested) {
-    const uriMatch = text.match(/viking:\/\/~\/[A-Za-z0-9._~!  if (intent === "hermes_agent_task") add("hermes_agent_task", { task: bounded(text, 8000) });
+    const uriMatch = text.match(/viking:\/\/~\/[A-Za-z0-9._~!$&'()+,;=:@/-]{1,590}/i);
+    if (uriMatch && /\b(read|open|fetch)\b/i.test(text)) {
+      add("openviking_read_context", { uri: uriMatch[0] });
+    } else if (/\b(search|find|retrieve|recall|read|open|look up|context|memory|knowledge)\b/i.test(text)) {
+      add("openviking_find_context", { query: bounded(text, 1000), limit: 5 });
+    }
+  }
   const obscuraRequested ='()+,;=:@/-]{1,590}/i);
     if (uriMatch && /\\b(read|open|fetch)\\b/i.test(text)) {
       add("openviking_read_context", { uri: uriMatch[0] });
