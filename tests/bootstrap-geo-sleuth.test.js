@@ -104,6 +104,7 @@ test("Geo-Sleuth bootstrap never executes an installer whose checksum does not m
           await writeFile(args[args.indexOf("-o") + 1], "# tampered installer");
           return {};
         }
+        if (command === "git") return {};
         throw new Error("Unexpected command: " + command);
       }
     });
