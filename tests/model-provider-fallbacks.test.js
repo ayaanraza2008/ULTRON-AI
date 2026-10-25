@@ -232,3 +232,37 @@ test("agent model routing falls back after an upstream HTTP 408 timeout response
     ]);
   });
 });
+
+
+test("agent fallback supports multiple free OpenRouter models on the same API endpoint", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "nemotron-lightning-free", baseUrl: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY", model: "nvidia/nemotron-3.5-lightning:free", priority: 10, supportsTools: true },
+      { name: "north-mini-code-free", baseUrl: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY", model: "cohere/north-mini-code:free", priority: 20, supportsTools: true }
+    ])
+  };
+  await withServer(env, async (url, options) => {
+    const request = JSON.parse(options.body);
+    calls.push({ url, model: request.model, authorization: options.headers.Authorization });
+    if (request.model === "openrouter/free") return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+    return new Response(JSON.stringify({
+      model: request.model,
+      choices: [{ message: { role: "assistant", content: "Recovered on a free fallback model." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Recovered on a free fallback model/);
+    assert.deepEqual(calls.map(call => call.model), ["openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
+    assert.ok(calls.every(call => call.url === "https://openrouter.ai/api/v1/chat/completions"));
+    assert.ok(calls.every(call => call.authorization === "Bearer openrouter-test-key"));
+  });
+});
