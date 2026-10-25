@@ -1142,7 +1142,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         ? "Research task queued for the optional allowlisted worker. It runs only when that worker and its provider are configured."
         : taskType === "employee" || taskType === "autonomous"
           ? "Task saved for explicit approval. After approval, the configured worker may create a bounded draft/report; external actions and PC commands remain disabled."
-          : "Task saved for review. This task is review-only and will not execute until an appropriate allowlisted worker exists.";
+          : "Task saved for review. It will not execute unless its type is supported by an allowlisted worker and the required approvals are present.";
       return res.status(201).json({ task: rows[0], notice });
     } catch (error) {
       return res.status(error.status || 502).json({ error: { code: "TASK_CREATE_FAILED", message: error.message } });
@@ -1164,7 +1164,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const executableTask = ["allowlisted_worker", "employee_worker"].includes(rows[0].input?.executionMode);
       const notice = executableTask
         ? "Approval recorded for this task. The configured worker may run its bounded research or draft/report workflow; external side effects remain blocked."
-        : "Approval recorded, but this task remains review-only because no allowlisted execution mode is configured.";
+        : "Approval recorded. An allowlisted worker is still required; this task remains review-only because no execution mode is configured.";
       res.json({ task: rows[0], notice });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_APPROVAL_FAILED", message: error.message } }); }
   });
