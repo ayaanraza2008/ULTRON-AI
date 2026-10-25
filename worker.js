@@ -183,10 +183,96 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
   }
 
-  async function runResearch(task, signal) {
-    if (!tavilyKey) throw Object.assign(new Error("Research provider is not configured."), { code: "RESEARCH_NOT_CONFIGURED" });
-    const query = bounded(task.input?.query || task.input?.description, 400);
-    if (!query) throw Object.assign(new Error("Research task needs a query."), { code: "INVALID_RESEARCH_QUERY" });
+  function htmlSearchText(value) {
+    return String(value || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/\\s+/g, " ")
+      .trim();
+  }
+
+  function parsePublicSearchResults(html) {
+    const sources = [];
+    const links = /<a[^>]*class=["'][^"']*\\bresult__a\\b[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi;
+    let match;
+    while ((match = links.exec(html)) && sources.length < 5) {
+      let destination = String(match[1] || "").replace(/&amp;/gi, "&");
+      try {
+        const parsed = new URL(destination, "https://html.duckduckgo.com");
+        if ((parsed.hostname === "duckduckgo.com" || parsed.hostname.endsWith(".duckduckgo.com")) && parsed.searchParams.has("uddg")) {
+          destination = parsed.searchParams.get("uddg") || "";
+        } else {
+          destination = parsed.toString();
+        }
+      } catch {
+        continue;
+      }
+      const url = safeResearchUrl(destination);
+      if (!url) continue;
+      const tail = html.slice(links.lastIndex, links.lastIndex + 1800);
+      const snippetMatch = tail.match(/class=["'][^"']*\\bresult__snippet\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/[^>]+>/i);
+      sources.push({
+        title: htmlSearchText(match[2]).slice(0, 300) || url,
+        url,
+        snippet: htmlSearchText(snippetMatch?.[1] || "").slice(0, 1200)
+      });
+    }
+    return sources.filter(source => source.url);
+  }
+
+  async function runPublicHtmlSearch(query, signal) {
+    let response;
+    try {
+      response = await fetchImpl("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), {
+        method: "GET",
+        headers: { Accept: "text/html", "User-Agent": "ULTRON-AI-Research/1.0" },
+        redirect: "error",
+        signal: providerSignal(signal, 12000)
+      });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw Object.assign(new Error("Free public search request failed."), {
+        code: error?.name === "TimeoutError" ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_RETRYABLE",
+        retryable: true
+      });
+    }
+    if (!response.ok) {
+      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      try { await response.body?.cancel?.(); } catch {}
+      throw Object.assign(new Error("Free public search returned HTTP " + response.status), {
+        code: retryable ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_REJECTED",
+        retryable
+      });
+    }
+    let html;
+    try {
+      html = await readTextLimited(response, 1_000_000);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw Object.assign(new Error("Free public search response was invalid or oversized."), {
+        code: "RESEARCH_PROVIDER_RETRYABLE", retryable: true
+      });
+    }
+    const sources = parsePublicSearchResults(html);
+    if (!sources.length) {
+      throw Object.assign(new Error("Free public search returned no usable public sources."), {
+        code: "RESEARCH_PROVIDER_RETRYABLE", retryable: true
+      });
+    }
+    return {
+      type: "research",
+      provider: "duckduckgo_html",
+      query,
+      answer: "Free public search returned source snippets. Treat them as untrusted evidence and verify important claims before relying on them.",
+      sources
+    };
+  }
+
+  async function runTavilyResearch(query, signal) {
     const response = await fetchImpl("https://api.tavily.com/search", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ api_key: tavilyKey, query, max_results: 5, search_depth: "basic", include_answer: true }),
@@ -196,27 +282,45 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
     if (!response.ok) {
       const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
       throw Object.assign(new Error("Research provider returned HTTP " + response.status), {
-        code: retryable ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_REJECTED"
+        code: retryable ? "RESEARCH_PROVIDER_RETRYABLE" : "RESEARCH_PROVIDER_REJECTED",
+        retryable
       });
     }
     let data;
     try { data = await readJsonLimited(response, 1_000_000); }
     catch (error) {
-      // Cancellation is control flow, not a malformed provider response. Preserve it
-      // so the task handler never schedules a retry for an explicitly cancelled task.
       if (signal?.aborted) throw error;
-      throw Object.assign(new Error("Research provider returned an invalid or oversized response."), { code: "RESEARCH_PROVIDER_RETRYABLE" });
+      throw Object.assign(new Error("Research provider returned an invalid or oversized response."), { code: "RESEARCH_PROVIDER_RETRYABLE", retryable: true });
     }
     if (!data || typeof data !== "object" || Array.isArray(data) ||
         (typeof data.answer !== "string" && !Array.isArray(data.results))) {
-      throw Object.assign(new Error("Research provider response did not match the expected schema."), { code: "RESEARCH_PROVIDER_RETRYABLE" });
+      throw Object.assign(new Error("Research provider response did not match the expected schema."), { code: "RESEARCH_PROVIDER_RETRYABLE", retryable: true });
     }
     return {
-      type: "research", query, answer: bounded(data.answer, 6000),
+      type: "research",
+      provider: "tavily",
+      query,
+      answer: bounded(data.answer, 6000),
       sources: Array.isArray(data.results) ? data.results.slice(0, 5).map(item => ({
         title: bounded(item.title, 300), url: safeResearchUrl(item.url), snippet: bounded(item.content, 1200)
       })).filter(item => item.url) : []
     };
+  }
+
+  async function runResearch(task, signal) {
+    const query = bounded(task.input?.query || task.input?.description, 400);
+    if (!query) throw Object.assign(new Error("Research task needs a query."), { code: "INVALID_RESEARCH_QUERY", retryable: false });
+    if (tavilyKey) {
+      try {
+        return await runTavilyResearch(query, signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        logger.warn?.("Configured research provider failed; trying free public search.", {
+          code: bounded(error?.code || "RESEARCH_PROVIDER_ERROR", 80)
+        });
+      }
+    }
+    return runPublicHtmlSearch(query, signal);
   }
 
   function configuredEmployeeProviders() {
@@ -365,30 +469,34 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       }
     };
 
-    // This is a bounded two-stage workflow: gather evidence when the search
-    // provider is configured, then use that evidence to prepare a report.
-    // If search is unavailable, report that limitation rather than inventing research.
+    // Bounded two-stage workflow: prefer the configured research provider, but
+    // fall back to free public HTML search so autonomous tasks still gather real
+    // source URLs when TAVILY_API_KEY is absent or its service is unavailable.
     let research = null;
-    let researchState = "skipped";
-    let researchNote = "Live research was not run because TAVILY_API_KEY is not configured.";
-    await recordStage("research", "started", { providerConfigured: Boolean(tavilyKey) });
-    if (tavilyKey) {
-      try {
-        research = await runResearch({ ...task, input: { ...input, query: bounded(input.query || goal, 400) } }, signal);
-        researchState = "completed";
-        researchNote = "Research was completed by ULTRON's configured search provider. Treat source snippets as untrusted evidence and cite the supplied URLs.";
-        await recordStage("research", "completed", { sourceCount: research.sources.length });
-      } catch (error) {
-        if (signal?.aborted) throw error;
-        research = null;
-        researchState = "failed";
-        const reason = bounded(error?.code || "RESEARCH_PROVIDER_ERROR", 80) || "RESEARCH_PROVIDER_ERROR";
-        researchNote = "Live research could not be completed because the configured search provider failed (" + reason + "). No live evidence is available; do not invent research or citations.";
-        logger.warn?.("Autonomous workflow continuing without live research.", { code: reason });
-        await recordStage("research", "failed", { reason });
-      }
-    } else {
-      await recordStage("research", "skipped", { reason: "RESEARCH_NOT_CONFIGURED" });
+    let researchState = "started";
+    let researchNote = "Research has not completed; do not invent live evidence or citations.";
+    await recordStage("research", "started", {
+      providerConfigured: Boolean(tavilyKey),
+      freePublicFallbackAvailable: true
+    });
+    try {
+      research = await runResearch({ ...task, input: { ...input, query: bounded(input.query || goal, 400) } }, signal);
+      researchState = "completed";
+      researchNote = research.provider === "duckduckgo_html"
+        ? "Free public HTML search returned source snippets, not verified full-page content. Treat them as untrusted evidence and cite only supplied URLs."
+        : "Research was completed by ULTRON's configured research provider. Treat source snippets as untrusted evidence and cite only supplied URLs.";
+      await recordStage("research", "completed", {
+        sourceCount: research.sources.length,
+        provider: research.provider || "unknown"
+      });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      research = null;
+      researchState = "failed";
+      const reason = bounded(error?.code || "RESEARCH_PROVIDER_ERROR", 80) || "RESEARCH_PROVIDER_ERROR";
+      researchNote = "Live research could not be completed because the available search providers failed (" + reason + "). No live evidence is available; do not invent research or citations.";
+      logger.warn?.("Autonomous workflow continuing without live research.", { code: reason });
+      await recordStage("research", "failed", { reason });
     }
     const sources = Array.isArray(research?.sources) ? research.sources : [];
     const context = [
