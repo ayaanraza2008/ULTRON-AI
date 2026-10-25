@@ -134,3 +134,20 @@ test("Paperclip readiness returns states only and never leaks API token values",
   assert.equal(readiness.configured, true);
   assert.equal(JSON.stringify(readiness).includes("private-paperclip-token"), false);
 });
+
+
+test("Paperclip readiness rejects HTTPS private and metadata service endpoints", () => {
+  for (const url of [
+    "https://192.168.1.10",
+    "https://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal"
+  ]) {
+    const readiness = getPaperclipReadiness({
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      PAPERCLIP_BASE_URL: url,
+      PAPERCLIP_API_TOKEN: "synthetic-token",
+      PAPERCLIP_COMPANY_ID: "company-123"
+    });
+    assert.equal(readiness.configured, false, url);
+  }
+});
