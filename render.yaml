@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm install --ignore-scripts && mkdir -p .runtime && git clone --filter=blob:none https://github.com/Oldcircle/geo-sleuth.git .runtime/geo-sleuth && git -C .runtime/geo-sleuth checkout e01849f778afeb7c53ca79331313fbcfcb879486 && curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh
+    buildCommand: npm install --ignore-scripts && mkdir -p .runtime && rm -rf .runtime/geo-sleuth && git clone --filter=blob:none https://github.com/Oldcircle/geo-sleuth.git .runtime/geo-sleuth && git -C .runtime/geo-sleuth checkout e01849f778afeb7c53ca79331313fbcfcb879486 && curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh
     startCommand: export PATH="$HOME/.local/bin:$PATH"; npm start
     healthCheckPath: /api/health
     autoDeploy: true
