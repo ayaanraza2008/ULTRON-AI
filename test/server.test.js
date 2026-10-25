@@ -495,12 +495,12 @@ test("task creation, approval, cancellation and audit use the correct Supabase r
         assert.equal(options.headers.apikey, serviceKey);
         assert.match(url.search, new RegExp("user_id=eq\\." + userId));
         if (url.search.includes(taskApproveId)) {
-          assert.match(url.search, /status=eq\\.WAITING_FOR_PERMISSION/);
+          assert.match(url.search, /status=eq\.WAITING_FOR_PERMISSION/);
           const updated = { ...pendingTask, ...calls.at(-1).body };
           return new Response(JSON.stringify([updated]), { status: 200, headers: { "Content-Type": "application/json" } });
         }
         if (url.search.includes(taskCancelId)) {
-          assert.match(url.search, /status=in\\.\\(QUEUED,WAITING_FOR_PERMISSION\\)/);
+          assert.match(url.search, /status=in\.\(QUEUED,WAITING_FOR_PERMISSION\)/);
           return new Response(JSON.stringify([{ id: taskCancelId, status: "CANCELLED" }]), { status: 200, headers: { "Content-Type": "application/json" } });
         }
         throw new Error("Unexpected privileged task update.");
