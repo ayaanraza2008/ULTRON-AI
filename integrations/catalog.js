@@ -1,3 +1,6 @@
+import { getObscuraReadiness } from "./obscura-mcp.js";
+import { getCactusReadiness } from "./cactus.js";
+
 const safeBaseUrl = (value) => {
   if (typeof value !== "string" || !value.trim()) return false;
   try {
@@ -26,6 +29,8 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasChatwoot = hasIntegrationOwner && safeBaseUrl(env.CHATWOOT_BASE_URL) && Boolean(env.CHATWOOT_API_TOKEN) && /^\d+$/.test(String(env.CHATWOOT_ACCOUNT_ID || ""));
   const hasOpenProject = hasIntegrationOwner && safeBaseUrl(env.OPENPROJECT_BASE_URL) && Boolean(env.OPENPROJECT_API_TOKEN);
   const hasCalDiy = hasIntegrationOwner && safeBaseUrl(env.CALDIY_BASE_URL) && Boolean(env.CALDIY_API_TOKEN);
+  const obscuraReadiness = getObscuraReadiness(env);
+  const cactusReadiness = getCactusReadiness(env);
 
   return [
     {
@@ -147,6 +152,34 @@ export function buildIntegrationCatalog(env = process.env) {
       note: hasCalDiy
         ? "Owner-scoped API credentials are present; event types/availability need live verification. Booking/cancellation is not exposed as automatic action."
         : "Requires a secure compatible API endpoint/token and an owner UUID guard; connector remains disabled otherwise."
+    },
+    {
+      id: "obscura",
+      name: "Obscura Read-only Browser",
+      capability: "Public HTTPS page navigation and DOM snapshot through the Obscura MCP service",
+      state: obscuraReadiness.state,
+      configured: Boolean(obscuraReadiness.configured),
+      mode: "owner_scoped_mcp",
+      requiredEnv: ["OBSCURA_MCP_URL", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["OBSCURA_MCP_TOKEN"],
+      apiRoutes: ["agent tool: obscura_inspect_public_page"],
+      note: obscuraReadiness.configured
+        ? "The MCP endpoint and owner guard are configured; live navigation has not been verified. Remote endpoints must be behind a gateway that validates the configured bearer token."
+        : "Requires a local Obscura MCP service or a remote HTTPS service behind an authenticated gateway. Public-page read-only use only; no stealth, proxy rotation, authentication/CAPTCHA bypass, or form submission."
+    },
+    {
+      id: "cactus-compute",
+      name: "Cactus Local Model Engine",
+      capability: "Optional OpenAI-compatible local model provider with tool calling and confidence-based fallback",
+      state: cactusReadiness.state,
+      configured: Boolean(cactusReadiness.configured),
+      mode: "local_or_authenticated_https_model_provider",
+      requiredEnv: ["CACTUS_BASE_URL", "CACTUS_MODEL"],
+      optionalEnv: ["CACTUS_API_KEY", "CACTUS_LOCAL_FIRST", "CACTUS_CONFIDENCE_THRESHOLD", "CACTUS_SUPPORTS_TOOLS"],
+      apiRoutes: ["agent tool: check_cactus", "model gateway: /chat/completions"],
+      note: cactusReadiness.configured
+        ? "Configured but not yet live-tested. The engine and Needle/Whistle must be installed and started separately; ULTRON never downloads model weights."
+        : "Requires an already-running Cactus OpenAI-compatible server, an installed model ID, and an authenticated HTTPS gateway for remote endpoints. On the same machine, loopback HTTP is allowed."
     },
     {
       id: "ai-employees",
