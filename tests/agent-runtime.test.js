@@ -318,6 +318,44 @@ test("agent automatically routes explicit Obscura requests to a public-page snap
   });
 });
 
+test("agent routes an explicit Obscura PDF request to the PDF capture MCP tool", async () => {
+  let modelCalls = 0;
+  let pdfCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    OBSCURA_MCP_URL: "http://127.0.0.1:8080/mcp"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      modelCalls++;
+      if (modelCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I will create the requested PDF capture." } }] }), { status: 200 });
+      assert.ok(JSON.parse(options.body).messages.some(message => message.role === "tool" && String(message.content).includes("application/pdf")));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The PDF capture was returned by Obscura; no website actions were submitted." } }] }), { status: 200 });
+    }
+    const payload = JSON.parse(options.body);
+    if (payload.method === "initialize") return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "obscura", version: "test" } } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-pdf" } });
+    if (payload.method === "notifications/initialized") return new Response(null, { status: 202, headers: { "Mcp-Session-Id": "session-pdf" } });
+    if (payload.method === "tools/call" && payload.params.name === "browser_navigate") return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { content: [{ type: "text", text: "Navigated" }] } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-pdf" } });
+    if (payload.method === "tools/call" && payload.params.name === "browser_pdf") {
+      pdfCalls++;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { content: [{ type: "resource", resource: { uri: "cactus://pdf/page.pdf", mimeType: "application/pdf", blob: Buffer.from("%PDF-test").toString("base64") } }] } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-pdf" } });
+    }
+    throw new Error("Unexpected Obscura MCP request");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Use Obscura to export https://example.com as PDF." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.toolsUsed.some(item => item.name === "obscura_capture_public_page" && item.ok));
+    assert.equal(body.toolResults.find(item => item.name === "obscura_capture_public_page").result.artifact.format, "pdf");
+    assert.equal(pdfCalls, 1);
+    assert.equal(JSON.stringify(body).includes("openrouter-test"), false);
+  });
+});
+
 test("agent automatically checks integration readiness when a free model omits tool calls", async () => {
   let providerCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
