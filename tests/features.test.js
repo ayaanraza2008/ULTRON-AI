@@ -128,6 +128,7 @@ test("research results exclude unsafe URL schemes, IP literals, credentials, and
     fetchImpl: async (url, options) => {
       assert.equal(url, "https://api.tavily.com/search");
       assert.equal(options.method, "POST");
+      assert.equal(options.redirect, "error");
       return new Response(JSON.stringify({ results: upstreamResults }), {
         status: 200, headers: { "Content-Type": "application/json" }
       });
@@ -1062,7 +1063,8 @@ test("TTS streaming response is rejected by its declared byte limit before buffe
     assert.equal(response.status, 502);
     assert.equal((await response.json()).error.code, "TTS_INVALID_AUDIO");
     assert.equal(bodyCancelled, true);
-  }, { fetchImpl: async () => {
+  }, { fetchImpl: async (_url, options) => {
+    assert.equal(options.redirect, "error");
     upstreamCalled = true;
     return new Response(new ReadableStream({
       start(controller) { controller.enqueue(new TextEncoder().encode("small chunk")); },
@@ -1089,4 +1091,32 @@ test("STT JSON response is bounded and cancelled when declared oversized", async
     start(controller) { controller.enqueue(new TextEncoder().encode("{\"text\":\"tiny\"}")); },
     cancel() { bodyCancelled = true; }
   }), { status: 200, headers: { "content-length": "1000001", "content-type": "application/json" } }) });
+});
+
+test("configured Ollama model listing rejects upstream redirects", async () => {
+  await withServer({ OLLAMA_BASE_URL: "https://ollama.example.com" }, async base => {
+    const response = await fetch(base + "/api/local/models");
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).models.map(model => model.name), ["tiny-test-model"]);
+  }, { fetchImpl: async (url, options) => {
+    assert.equal(url, "https://ollama.example.com/api/tags");
+    assert.equal(options.redirect, "error");
+    return new Response(JSON.stringify({ models: [{ name: "tiny-test-model", size: 1024 }] }), { status: 200, headers: { "content-type": "application/json" } });
+  } });
+});
+
+test("configured Ollama chat rejects upstream redirects before sending prompt context", async () => {
+  await withServer({ OLLAMA_BASE_URL: "https://ollama.example.com" }, async base => {
+    const response = await fetch(base + "/api/local/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "tiny-test-model", messages: [{ role: "user", content: "Hello" }] })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /local response/i);
+  }, { fetchImpl: async (url, options) => {
+    assert.equal(url, "https://ollama.example.com/api/chat");
+    assert.equal(options.redirect, "error");
+    return new Response(JSON.stringify({ model: "tiny-test-model", message: { content: "Local response ready." } }), { status: 200, headers: { "content-type": "application/json" } });
+  } });
 });
