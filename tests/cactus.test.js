@@ -98,3 +98,29 @@ test("Cactus provider is local-first by default and exposes confidence threshold
     CACTUS_MODEL: "needle"
   }), null);
 });
+
+
+test("Cactus refuses remote private and metadata endpoints before contacting them", async () => {
+  for (const url of [
+    "https://192.168.1.10/v1",
+    "https://10.1.2.3/v1",
+    "https://169.254.169.254/v1",
+    "https://metadata.google.internal/v1",
+    "https://[fd00::1]/v1"
+  ]) {
+    let called = false;
+    const env = {
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      CACTUS_BASE_URL: url,
+      CACTUS_MODEL: "needle",
+      CACTUS_API_KEY: "synthetic-token"
+    };
+    assert.equal(getCactusReadiness(env).configured, false, url);
+    const result = await checkCactusService({
+      env, userId: ownerId,
+      fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+    });
+    assert.equal(result.state, "blocked", url);
+    assert.equal(called, false, url);
+  }
+});
