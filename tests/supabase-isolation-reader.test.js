@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readJsonLimited } from "./supabase-isolation.e2e.test.js";
+import { readJsonLimited } from "../scripts/supabase-e2e-response.js";
 
 test("Supabase E2E JSON reader parses bounded streaming JSON and rejects oversized payloads", async () => {
   assert.deepEqual(await readJsonLimited(new Response(JSON.stringify({ ok: true })), 100), { ok: true });
