@@ -958,7 +958,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         const memoryEnabled = !Array.isArray(preferenceRows) || !preferenceRows[0] || preferenceRows[0].memory_enabled !== false;
         if (memoryEnabled) {
           const memoryRows = await supabaseRest(req, "memory_items", "GET",
-            "?select=kind,title,content&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + encodeURIComponent(new Date().toISOString()) + ")&order=updated_at.desc&limit=8");
+            "?select=kind,title,content&user_id=eq." + encodeURIComponent(memoryUser.id) + "&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + encodeURIComponent(new Date().toISOString()) + ")&order=updated_at.desc&limit=8");
           const safeMemories = (Array.isArray(memoryRows) ? memoryRows : []).slice(0, 8).map(item => ({
             kind: String(item.kind || "").slice(0, 40),
             title: String(item.title || "").slice(0, 160),
