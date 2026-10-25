@@ -4,6 +4,8 @@ import express from "express";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
+import { timingSafeEqual } from "node:crypto";
+import { normalizeDesktopActionResult, normalizeDesktopFailureCode, validateDesktopAction } from "./desktop-companion/action-policy.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
@@ -14,6 +16,58 @@ function safeBaseUrl(value) {
 
 function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+const DESKTOP_DEVICE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+
+function configuredDesktopAutomation(env = process.env) {
+  const token = boundedString(env.ULTRON_DESKTOP_POLL_TOKEN, 2000);
+  const deviceId = boundedString(env.ULTRON_DESKTOP_DEVICE_ID, 120);
+  const ownerId = boundedString(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
+  if (!token || !UUID_PATTERN.test(ownerId) || !DESKTOP_DEVICE_ID_PATTERN.test(deviceId)) return null;
+  return { token, deviceId, ownerId };
+}
+
+function constantTimeTokenMatch(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string" || !expected) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function authorizeDesktopCompanionPoll(req, env = process.env) {
+  const config = configuredDesktopAutomation(env);
+  if (!config) return { ok: false, status: 503, code: "DESKTOP_COMPANION_NOT_CONFIGURED" };
+  const match = /^Bearer ([^\\s]+)$/i.exec(String(req.headers?.authorization || ""));
+  if (!match || !constantTimeTokenMatch(match[1], config.token)) {
+    return { ok: false, status: 401, code: "DESKTOP_COMPANION_AUTH_FAILED" };
+  }
+  if (req.headers?.["x-ultron-protocol-version"] !== "1") {
+    return { ok: false, status: 400, code: "DESKTOP_COMPANION_PROTOCOL_MISMATCH" };
+  }
+  if (boundedString(req.body?.deviceId, 120) !== config.deviceId) {
+    return { ok: false, status: 403, code: "DESKTOP_COMPANION_DEVICE_MISMATCH" };
+  }
+  return { ok: true, ...config };
+}
+
+function desktopActionPublicView(row) {
+  return {
+    id: row.id,
+    deviceId: row.device_id,
+    actionType: row.action_type,
+    payload: row.payload && typeof row.payload === "object" && !Array.isArray(row.payload) ? row.payload : {},
+    status: row.status,
+    requiresApproval: row.requires_approval === true,
+    approvedAt: row.approved_at || null,
+    result: row.result && typeof row.result === "object" && !Array.isArray(row.result) ? row.result : null,
+    errorCode: boundedString(row.error_code, 80) || null,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+    startedAt: row.started_at || null,
+    finishedAt: row.finished_at || null
+  };
 }
 
 async function readLimitedResponseBytes(response, maxBytes, label = "Provider response") {
@@ -589,6 +643,255 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       res.status(204).end();
     } catch (error) {
       res.status(error.status || 502).json({ error: { code: "EMPLOYEE_SCHEDULE_DELETE_FAILED", message: "Could not delete schedule." } });
+    }
+  });
+
+
+  // Outbound-only Windows companion actions. The local agent polls this API over
+  // HTTPS; no public listener on the PC, shell execution, or arbitrary file access exists.
+  router.get("/desktop-companion/actions", requireSupabaseUser, async (req, res) => {
+    const config = configuredDesktopAutomation(env);
+    if (!config) return res.status(503).json({ error: { code: "DESKTOP_COMPANION_NOT_CONFIGURED", message: "Configure the owner's device ID and companion polling token first." } });
+    if (req.supabaseUser?.id !== config.ownerId) return res.status(403).json({ error: { code: "DESKTOP_COMPANION_OWNER_ONLY", message: "Desktop actions are restricted to the configured owner." } });
+    try {
+      const rows = await supabaseRest(req, "desktop_actions", "GET",
+        "?select=id,device_id,action_type,payload,status,requires_approval,approved_at,result,error_code,created_at,updated_at,started_at,finished_at&user_id=eq." +
+        encodeURIComponent(config.ownerId) + "&device_id=eq." + encodeURIComponent(config.deviceId) + "&order=created_at.desc&limit=50");
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ actions: (Array.isArray(rows) ? rows : []).map(desktopActionPublicView) });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "DESKTOP_ACTIONS_READ_FAILED", message: "Desktop action history is temporarily unavailable." } });
+    }
+  });
+
+  router.get("/desktop-companion/actions/:id", requireSupabaseUser, async (req, res) => {
+    if (!UUID_PATTERN.test(String(req.params.id || ""))) return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_ID", message: "Desktop action ID is invalid." } });
+    const config = configuredDesktopAutomation(env);
+    if (!config) return res.status(503).json({ error: { code: "DESKTOP_COMPANION_NOT_CONFIGURED", message: "Configure the owner's device ID and companion polling token first." } });
+    if (req.supabaseUser?.id !== config.ownerId) return res.status(403).json({ error: { code: "DESKTOP_COMPANION_OWNER_ONLY", message: "Desktop actions are restricted to the configured owner." } });
+    try {
+      const rows = await supabaseRest(req, "desktop_actions", "GET",
+        "?select=id,device_id,action_type,payload,status,requires_approval,approved_at,result,error_code,created_at,updated_at,started_at,finished_at&id=eq." +
+        encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(config.ownerId) +
+        "&device_id=eq." + encodeURIComponent(config.deviceId) + "&limit=1");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "DESKTOP_ACTION_NOT_FOUND", message: "Desktop action was not found." } });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ action: desktopActionPublicView(rows[0]) });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "DESKTOP_ACTION_READ_FAILED", message: "Desktop action status is temporarily unavailable." } });
+    }
+  });
+
+  router.post("/desktop-companion/actions", requireSupabaseUser, async (req, res) => {
+    const config = configuredDesktopAutomation(env);
+    if (!config) return res.status(503).json({ error: { code: "DESKTOP_COMPANION_NOT_CONFIGURED", message: "Configure the owner's device ID and companion polling token first." } });
+    if (req.supabaseUser?.id !== config.ownerId) return res.status(403).json({ error: { code: "DESKTOP_COMPANION_OWNER_ONLY", message: "Only the configured owner may request desktop actions." } });
+    if (req.body?.requiresApproval !== undefined && typeof req.body.requiresApproval !== "boolean") {
+      return res.status(400).json({ error: { code: "INVALID_APPROVAL_FLAG", message: "requiresApproval must be a boolean when provided." } });
+    }
+    const actionType = boundedString(req.body?.actionType, 60);
+    const validated = validateDesktopAction(actionType, req.body?.payload === undefined ? {} : req.body.payload);
+    if (!validated.ok) return res.status(400).json({ error: { code: validated.code || "ACTION_NOT_ALLOWED", message: "That local desktop action or its arguments are not allowlisted." } });
+    // Launching an application always needs approval. Read-only system information
+    // may be queued immediately when directly requested by the owner.
+    const requiresApproval = validated.actionType === "launch_app" || req.body?.requiresApproval === true;
+    try {
+      const rows = await privilegedSupabaseRest(req, "desktop_actions", "POST",
+        "?select=id,device_id,action_type,payload,status,requires_approval,approved_at,result,error_code,created_at,updated_at,started_at,finished_at", {
+          user_id: config.ownerId,
+          device_id: config.deviceId,
+          action_type: validated.actionType,
+          payload: validated.payload,
+          status: requiresApproval ? "WAITING_FOR_PERMISSION" : "QUEUED",
+          requires_approval: requiresApproval,
+          approved_at: null,
+          approved_by: null
+        });
+      if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "DESKTOP_ACTION_CREATE_FAILED", message: "The desktop action could not be saved." } });
+      const action = rows[0];
+      await recordAuditEvent(req, {
+        user_id: config.ownerId,
+        action: "desktop_action.requested",
+        target_type: "desktop_action",
+        target_id: action.id,
+        outcome: requiresApproval ? "recorded" : "allowed",
+        metadata: { actionType: validated.actionType, deviceId: config.deviceId, requiresApproval }
+      });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(201).json({
+        action: desktopActionPublicView(action),
+        notice: requiresApproval
+          ? "This local app launch is waiting for explicit approval. ULTRON will not run a shell or any arbitrary command."
+          : "Read-only system information was queued for the paired Windows companion."
+      });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "DESKTOP_ACTION_CREATE_FAILED", message: "Could not create the desktop action." } });
+    }
+  });
+
+  router.post("/desktop-companion/actions/:id/approve", requireSupabaseUser, async (req, res) => {
+    if (!UUID_PATTERN.test(String(req.params.id || ""))) return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_ID", message: "Desktop action ID is invalid." } });
+    if (req.body?.confirm !== true) return res.status(400).json({ error: { code: "EXPLICIT_CONFIRMATION_REQUIRED", message: "Review the exact application and explicitly send confirm: true to approve it." } });
+    const config = configuredDesktopAutomation(env);
+    if (!config) return res.status(503).json({ error: { code: "DESKTOP_COMPANION_NOT_CONFIGURED", message: "Configure the owner's device ID and companion polling token first." } });
+    if (req.supabaseUser?.id !== config.ownerId) return res.status(403).json({ error: { code: "DESKTOP_COMPANION_OWNER_ONLY", message: "Only the configured owner may approve desktop actions." } });
+    try {
+      const existing = await supabaseRest(req, "desktop_actions", "GET",
+        "?select=id,user_id,device_id,action_type,payload,status,requires_approval,approved_at&id=eq." +
+        encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(config.ownerId) +
+        "&device_id=eq." + encodeURIComponent(config.deviceId) + "&status=eq.WAITING_FOR_PERMISSION&limit=1");
+      const action = Array.isArray(existing) ? existing[0] : null;
+      if (!action) return res.status(409).json({ error: { code: "DESKTOP_ACTION_NOT_AWAITING_APPROVAL", message: "The desktop action was not found or is not awaiting approval." } });
+      const validated = validateDesktopAction(action.action_type, action.payload);
+      if (!validated.ok) return res.status(409).json({ error: { code: "DESKTOP_ACTION_INVALID", message: "The saved desktop action is no longer allowlisted." } });
+      const rows = await privilegedSupabaseRest(req, "desktop_actions", "PATCH",
+        "?id=eq." + encodeURIComponent(action.id) + "&user_id=eq." + encodeURIComponent(config.ownerId) +
+        "&device_id=eq." + encodeURIComponent(config.deviceId) + "&status=eq.WAITING_FOR_PERMISSION&select=id,device_id,action_type,payload,status,requires_approval,approved_at,approved_by,created_at,updated_at", {
+          status: "QUEUED",
+          approved_at: new Date().toISOString(),
+          approved_by: config.ownerId,
+          updated_at: new Date().toISOString()
+        });
+      if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "DESKTOP_ACTION_STATE_CHANGED", message: "The desktop action changed state before approval could be saved." } });
+      await recordAuditEvent(req, {
+        user_id: config.ownerId,
+        action: "desktop_action.approved",
+        target_type: "desktop_action",
+        target_id: action.id,
+        outcome: "allowed",
+        metadata: { actionType: validated.actionType, deviceId: config.deviceId }
+      });
+      return res.status(202).json({ action: desktopActionPublicView(rows[0]), notice: "Approval recorded. The paired companion can perform only the specified allowlisted action." });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "DESKTOP_ACTION_APPROVAL_FAILED", message: "Could not approve the desktop action." } });
+    }
+  });
+
+  router.post("/desktop-companion/actions/:id/cancel", requireSupabaseUser, async (req, res) => {
+    if (!UUID_PATTERN.test(String(req.params.id || ""))) return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_ID", message: "Desktop action ID is invalid." } });
+    const config = configuredDesktopAutomation(env);
+    if (!config) return res.status(503).json({ error: { code: "DESKTOP_COMPANION_NOT_CONFIGURED", message: "Configure the owner's device ID and companion polling token first." } });
+    if (req.supabaseUser?.id !== config.ownerId) return res.status(403).json({ error: { code: "DESKTOP_COMPANION_OWNER_ONLY", message: "Only the configured owner may cancel desktop actions." } });
+    try {
+      const rows = await privilegedSupabaseRest(req, "desktop_actions", "PATCH",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(config.ownerId) +
+        "&device_id=eq." + encodeURIComponent(config.deviceId) + "&status=in.(QUEUED,WAITING_FOR_PERMISSION)&select=id,status", {
+          status: "CANCELLED",
+          finished_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "DESKTOP_ACTION_NOT_CANCELLABLE", message: "The action was not found or has already started." } });
+      await recordAuditEvent(req, {
+        user_id: config.ownerId,
+        action: "desktop_action.cancelled",
+        target_type: "desktop_action",
+        target_id: req.params.id,
+        outcome: "allowed",
+        metadata: { deviceId: config.deviceId }
+      });
+      return res.json({ action: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "DESKTOP_ACTION_CANCEL_FAILED", message: "Could not cancel the desktop action." } });
+    }
+  });
+
+  router.post("/desktop-companion/poll", async (req, res) => {
+    const auth = authorizeDesktopCompanionPoll(req, env);
+    if (!auth.ok) return res.status(auth.status).json({ error: { code: auth.code, message: "The companion request was rejected." } });
+    try {
+      const claimed = await privilegedSupabaseRest(req, "rpc/ultron_claim_next_desktop_action", "POST", "", {
+        p_user_id: auth.ownerId,
+        p_device_id: auth.deviceId
+      });
+      const row = Array.isArray(claimed) ? claimed[0] : null;
+      if (!row) {
+        res.setHeader("Cache-Control", "no-store");
+        return res.json({ action: null, pollAfterMs: 5000 });
+      }
+      const validated = validateDesktopAction(row.action_type, row.payload);
+      if (!validated.ok || (row.requires_approval === true && !row.approved_at)) {
+        await privilegedSupabaseRest(req, "desktop_actions", "PATCH",
+          "?id=eq." + encodeURIComponent(row.id) + "&user_id=eq." + encodeURIComponent(auth.ownerId) +
+          "&device_id=eq." + encodeURIComponent(auth.deviceId) + "&status=eq.RUNNING", {
+            status: "FAILED",
+            error_code: validated.ok ? "ACTION_NOT_APPROVED" : "ACTION_NOT_SUPPORTED",
+            finished_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        await recordAuditEvent(req, {
+          user_id: auth.ownerId,
+          action: "desktop_action.blocked",
+          target_type: "desktop_action",
+          target_id: row.id,
+          outcome: "denied",
+          metadata: { deviceId: auth.deviceId }
+        });
+        return res.json({ action: null, pollAfterMs: 1000 });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({
+        action: {
+          id: row.id,
+          actionType: validated.actionType,
+          payload: validated.payload,
+          requiresApproval: row.requires_approval === true,
+          approvedAt: row.approved_at || null,
+          createdAt: row.created_at || null
+        }
+      });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "DESKTOP_COMPANION_POLL_FAILED", message: "The companion task queue is temporarily unavailable." } });
+    }
+  });
+
+  router.post("/desktop-companion/actions/:id/complete", async (req, res) => {
+    if (!UUID_PATTERN.test(String(req.params.id || ""))) return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_ID", message: "Desktop action ID is invalid." } });
+    const auth = authorizeDesktopCompanionPoll(req, env);
+    if (!auth.ok) return res.status(auth.status).json({ error: { code: auth.code, message: "The companion request was rejected." } });
+    const requestedStatus = req.body?.status;
+    if (!["completed", "failed"].includes(requestedStatus)) return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_RESULT", message: "Action completion status is invalid." } });
+    try {
+      const existing = await privilegedSupabaseRest(req, "desktop_actions", "GET",
+        "?select=id,user_id,device_id,action_type,payload,status,requires_approval,approved_at&id=eq." +
+        encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(auth.ownerId) +
+        "&device_id=eq." + encodeURIComponent(auth.deviceId) + "&status=eq.RUNNING&limit=1");
+      const action = Array.isArray(existing) ? existing[0] : null;
+      if (!action) return res.status(409).json({ error: { code: "DESKTOP_ACTION_NOT_RUNNING", message: "The desktop action was not found or is not running." } });
+
+      let status = requestedStatus === "completed" ? "COMPLETED" : "FAILED";
+      let errorCode = requestedStatus === "failed" ? normalizeDesktopFailureCode(req.body?.errorCode) : null;
+      let result = null;
+      if (requestedStatus === "completed") {
+        const normalized = normalizeDesktopActionResult(action.action_type, action.payload, req.body?.result);
+        if (!normalized.ok) {
+          status = "FAILED";
+          errorCode = "RESULT_INVALID";
+        } else {
+          result = normalized.result;
+        }
+      }
+      const now = new Date().toISOString();
+      const rows = await privilegedSupabaseRest(req, "desktop_actions", "PATCH",
+        "?id=eq." + encodeURIComponent(action.id) + "&user_id=eq." + encodeURIComponent(auth.ownerId) +
+        "&device_id=eq." + encodeURIComponent(auth.deviceId) + "&status=eq.RUNNING&select=id,status,result,error_code,finished_at", {
+          status,
+          result,
+          error_code: errorCode,
+          finished_at: now,
+          updated_at: now
+        });
+      if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ error: { code: "DESKTOP_ACTION_STATE_CHANGED", message: "The desktop action changed state before completion was saved." } });
+      await recordAuditEvent(req, {
+        user_id: auth.ownerId,
+        action: status === "COMPLETED" ? "desktop_action.completed" : status === "FAILED" ? "desktop_action.failed" : "desktop_action.blocked",
+        target_type: "desktop_action",
+        target_id: action.id,
+        outcome: status === "COMPLETED" ? "allowed" : "failed",
+        metadata: { actionType: action.action_type, deviceId: auth.deviceId, errorCode }
+      });
+      return res.json({ action: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "DESKTOP_ACTION_COMPLETION_FAILED", message: "Could not save the desktop action result." } });
     }
   });
 
