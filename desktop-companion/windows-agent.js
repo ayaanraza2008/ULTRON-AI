@@ -122,7 +122,15 @@ export async function executeDesktopAction(action, options = {}) {
   }
   const validated = validateDesktopAction(action.actionType, action.payload);
   if (!validated.ok) return { status: "failed", errorCode: normalizeDesktopFailureCode(validated.code) };
-  if (action.requiresApproval && (typeof action.approvedAt !== "string" || !action.approvedAt.trim())) {
+  // Enforce the risky-action policy locally instead of trusting a server-supplied
+  // flag: every app launch must explicitly carry approval plus a parseable timestamp.
+  const approvalRequired = validated.actionType === "launch_app" || action.requiresApproval;
+  if (approvalRequired && (
+    action.requiresApproval !== true ||
+    typeof action.approvedAt !== "string" ||
+    !action.approvedAt.trim() ||
+    !Number.isFinite(Date.parse(action.approvedAt))
+  )) {
     return { status: "failed", errorCode: "ACTION_NOT_APPROVED" };
   }
 
