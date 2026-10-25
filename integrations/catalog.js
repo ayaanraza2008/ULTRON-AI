@@ -193,10 +193,10 @@ export function buildIntegrationCatalog(env = process.env) {
       configured: Boolean(hermesReadiness.configured),
       mode: "separate_authenticated_agent_service",
       requiredEnv: ["HERMES_AGENT_ENABLED=true", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID for delegated tasks"],
-      optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_PRIORITY", "HERMES_AGENT_SUPPORTS_VISION", "HERMES_AGENT_TIMEOUT_SECONDS"],
+      optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_PRIORITY", "HERMES_AGENT_SUPPORTS_VISION", "HERMES_AGENT_TIMEOUT_SECONDS", "HERMES_AGENT_CHAT_PROVIDER=true for direct-chat routing"],
       apiRoutes: ["agent tools: check_hermes_agent, hermes_agent_task", "model provider: /v1/chat/completions"],
       note: hermesReadiness.configured
-        ? "Configured but not live-verified. The Hermes gateway must be running with API_SERVER_ENABLED/API_SERVER_KEY and least-privileged terminal/tool configuration."
+        ? "Configured but not live-verified. Delegated tasks still require the exact owner UUID; direct chat-provider routing stays off unless HERMES_AGENT_CHAT_PROVIDER=true. The Hermes gateway must run with API_SERVER_ENABLED/API_SERVER_KEY and least-privileged terminal/tool configuration."
         : "Requires a separately installed/running Hermes Agent API server, HERMES_AGENT_ENABLED=true, its API_SERVER_KEY, and remote HTTPS. ULTRON does not install Hermes, enable all toolsets, or launch third-party messaging/cron services automatically."
     },
     {
