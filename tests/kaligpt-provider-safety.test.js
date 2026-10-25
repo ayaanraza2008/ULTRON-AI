@@ -100,3 +100,32 @@ test("KaliGPT vision cancels a response declared larger than the provider-respon
     assert.equal(cancelled, true);
   });
 });
+
+test("KaliGPT refuses unsafe custom OpenAI URLs instead of silently using the public default", async () => {
+  let providerCalls = 0;
+  const unsafeOverride = {
+    OPENAI_API_KEY: "test-only-openai-secret",
+    OPENAI_BASE_URL: "http://169.254.169.254/v1",
+    OPENAI_DEFAULT_MODEL: "test-model"
+  };
+  await withServer(unsafeOverride, async () => {
+    providerCalls += 1;
+    throw new Error("A provider call must not occur for an unsafe configured endpoint.");
+  }, async base => {
+    const security = await fetch(base + "/api/kaligpt/security/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "openai", mode: "learn", task: "Explain secure input handling" })
+    });
+    assert.equal(security.status, 503);
+    assert.equal((await security.json()).error.code, "SECURITY_PROVIDER_NOT_CONFIGURED");
+    const vision = await fetch(base + "/api/kaligpt/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "openai", mimeType: "image/png", imageBase64: Buffer.from("hello").toString("base64"), prompt: "Describe the image" })
+    });
+    assert.equal(vision.status, 503);
+    assert.equal((await vision.json()).error.code, "VISION_PROVIDER_NOT_CONFIGURED");
+    assert.equal(providerCalls, 0);
+  });
+});
