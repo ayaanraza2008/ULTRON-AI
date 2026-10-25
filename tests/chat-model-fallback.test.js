@@ -210,3 +210,44 @@ test("chat memory retrieval explicitly scopes its query to the authenticated Sup
     SUPABASE_PUBLISHABLE_KEY: "test-publishable-key"
   });
 });
+
+
+test("chat does not use the integration owner's Hermes provider for another authenticated account", async () => {
+  const supabaseUrl = "https://test-project.supabase.co";
+  const calls = [];
+  const overrides = {
+    SUPABASE_URL: supabaseUrl,
+    SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_CHAT_PROVIDER: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-test-key",
+    HERMES_AGENT_MODEL: "hermes-agent",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  };
+  await withApp(async (url, options = {}) => {
+    if (url === supabaseUrl + "/auth/v1/user") {
+      return new Response(JSON.stringify({ id: "00000000-0000-4000-8000-000000000002" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
+      return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    calls.push({ url, authorization: options.headers?.Authorization, model: JSON.parse(options.body || "{}").model });
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    assert.equal(options.headers.Authorization, "Bearer test-provider-key");
+    return success("Fallback provider safely handled this account.");
+  }, async (base, cookie) => {
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookie + "; ultron_sb_access=test-access-token"
+      },
+      body: JSON.stringify({ stream: false, messages: [{ role: "user", content: "Say hello" }] })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Fallback provider safely handled this account/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://openrouter.ai/api/v1/chat/completions");
+  }, overrides);
+});
