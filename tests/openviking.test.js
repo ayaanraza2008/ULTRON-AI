@@ -122,3 +122,24 @@ test("OpenViking rejects insecure, private-IP, and HTTPS metadata endpoints befo
   assert.equal(local.state, "completed");
   assert.equal(localCalled, true);
 });
+
+
+test("OpenViking rejects newly covered reserved and private endpoints without network access", async () => {
+  for (const url of [
+    "https://192.88.99.1/openviking",
+    "https://192.168.1.10/openviking",
+    "https://169.254.169.254/openviking",
+    "https://[2001:2::1]/openviking",
+    "https://[3fff::1]/openviking"
+  ]) {
+    let called = false;
+    const settings = { ...env, OPENVIKING_BASE_URL: url };
+    assert.equal(getOpenVikingReadiness({ env: settings, userId: ownerId }).configured, false, url);
+    const result = await findOpenVikingContext({
+      env: settings, userId: ownerId, query: "memory",
+      fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+    });
+    assert.equal(result.error.code, "OPENVIKING_NOT_CONFIGURED", url);
+    assert.equal(called, false, url);
+  }
+});
