@@ -3,6 +3,7 @@ import hmac
 import os
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -25,9 +26,46 @@ def require_token(supplied: str | None) -> None:
 async def root() -> dict[str, Any]:
     return {"ok": True, "service": "ultron-browser-use-bridge", "health": "/health"}
 
+def model_gateway_settings() -> tuple[str, str] | None:
+    token = os.getenv("ULTRON_BROWSER_USE_TOKEN", "").strip()
+    if not token:
+        return None
+
+    gateway = os.getenv("ULTRON_MODEL_GATEWAY_BASE_URL", "").strip().rstrip("/")
+    if gateway:
+        try:
+            parsed = urlsplit(gateway)
+            local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+            if ((parsed.scheme != "https" and not local_http) or not parsed.hostname
+                    or parsed.username or parsed.password or parsed.query or parsed.fragment):
+                return None
+        except ValueError:
+            return None
+        return gateway, token
+
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        return None
+    base_url = (os.getenv("OPENROUTER_BASE_URL", "").strip() or "https://openrouter.ai/api/v1").rstrip("/")
+    try:
+        parsed = urlsplit(base_url)
+        local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if ((parsed.scheme != "https" and not local_http) or not parsed.hostname
+                or parsed.username or parsed.password or parsed.query or parsed.fragment):
+            return None
+    except ValueError:
+        return None
+    return base_url, api_key
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "service": "ultron-browser-use-bridge", "browserUseConfigured": bool(os.getenv("OPENROUTER_API_KEY") and os.getenv("ULTRON_BROWSER_USE_TOKEN"))}
+    return {
+        "ok": True,
+        "service": "ultron-browser-use-bridge",
+        "browserUseConfigured": model_gateway_settings() is not None,
+        "modelGateway": "ultron_proxy" if os.getenv("ULTRON_MODEL_GATEWAY_BASE_URL", "").strip() else "direct_provider"
+    }
 
 @app.post("/run")
 async def run_task(payload: BrowserTask, x_ultron_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
@@ -37,11 +75,14 @@ async def run_task(payload: BrowserTask, x_ultron_browser_token: str | None = He
         raise HTTPException(status_code=400, detail="Private and internal network targets are not allowed")
     if SIDE_EFFECTS.search(task):
         raise HTTPException(status_code=409, detail="Consequential browser actions are disabled until task-specific approval is implemented")
-    api_key = os.getenv("OPENROUTER_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Model provider is not configured")
+    model_settings = model_gateway_settings()
+    if model_settings is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Configure the ULTRON model gateway and shared token, or a direct provider key and shared token."
+        )
+    base_url, api_key = model_settings
     model = os.getenv("OPENROUTER_DEFAULT_MODEL", "openrouter/free")
-    base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     try:
         from browser_use import Agent, ChatOpenAI
         llm = ChatOpenAI(model=model, base_url=base_url, api_key=api_key)
