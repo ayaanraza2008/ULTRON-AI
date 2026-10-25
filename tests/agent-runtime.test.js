@@ -7,7 +7,7 @@ async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
   const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
-  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, logger: { warn() {} } }));
+  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, privilegedSupabaseRest: extras.privilegedSupabaseRest || extras.supabaseRest, logger: { warn() {} } }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
@@ -701,6 +701,52 @@ test("background employee task is blocked when worker configuration is missing",
     assert.equal(databaseWrites, 0);
   }, { supabaseRest });
 });
+test("agent-created employee tasks use the privileged audit writer, not the user-token writer", async () => {
+  let providerCalls = 0;
+  const userWrites = [];
+  const privilegedWrites = [];
+  const taskId = "00000000-0000-4000-8000-000000000124";
+  const env = { OPENROUTER_API_KEY: "test-only", ULTRON_EMPLOYEES_ENABLED: "true", SUPABASE_SERVICE_ROLE_KEY: "server-only-test" };
+  const supabaseRest = async (_req, table, method, _query, body) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    if (table === "memory_items") return [];
+    userWrites.push({ table, method, body });
+    if (table === "agent_tasks" && method === "POST") return [{ id: taskId, title: body.title, input: body.input, status: body.status, created_at: "2026-10-25T09:00:00Z" }];
+    if (table === "audit_events") throw Object.assign(new Error("Client-token audit inserts are denied by RLS."), { status: 403 });
+    throw new Error("Unexpected user-token database write.");
+  };
+  const privilegedSupabaseRest = async (_req, table, method, _query, body) => {
+    privilegedWrites.push({ table, method, body });
+    if (table === "audit_events" && method === "POST") return [];
+    throw new Error("Unexpected privileged write.");
+  };
+  await withServer(env, async (_url, options) => {
+    providerCalls += 1;
+    if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: {
+      role: "assistant", content: null, tool_calls: [{
+        id: "employee-call", type: "function",
+        function: { name: "enqueue_employee_task", arguments: JSON.stringify({ role: "web-dev", goal: "Review dependency risks", mode: "review" }) }
+      }]
+    } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The review task is queued." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Queue a web-dev review in the background", confirmBackgroundTask: true })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "queued");
+    assert.equal(body.toolResults[0].result.auditRecorded, true);
+    assert.equal(body.toolResults[0].result.task.id, taskId);
+    assert.deepEqual(userWrites.map(call => call.table), ["agent_tasks"]);
+    assert.deepEqual(privilegedWrites.map(call => call.table), ["audit_events"]);
+    assert.equal(privilegedWrites[0].body.action, "task.created_by_agent_tool");
+    assert.equal(privilegedWrites[0].body.user_id, "00000000-0000-4000-8000-000000000001");
+  }, { supabaseRest, privilegedSupabaseRest });
+  assert.equal(providerCalls, 2);
+});
+
 test("confirmed background employee task is stored as a guarded worker task", async () => {
   let providerCalls = 0;
   const databaseCalls = [];
