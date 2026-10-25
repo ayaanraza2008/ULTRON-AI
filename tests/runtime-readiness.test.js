@@ -147,3 +147,21 @@ test("an intentionally unavailable optional capability does not permanently bloc
   assert.equal(result.overallState, "ready_for_live_verification");
   assert.equal(result.summary.blockerCount, 0);
 });
+
+test("Windows local automation reports configured-but-unverified only with the full private config", () => {
+  const absent = buildRuntimeReadiness({ env: {} });
+  assert.equal(absent.components.find(item => item.id === "windows_local_automation").state, "optional");
+
+  const configured = buildRuntimeReadiness({
+    env: {
+      ULTRON_DESKTOP_POLL_TOKEN: "synthetic-poll-token",
+      ULTRON_DESKTOP_DEVICE_ID: "desktop-test-01",
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+    }
+  });
+  const component = configured.components.find(item => item.id === "windows_local_automation");
+  assert.equal(component.state, "configured_unverified");
+  assert.match(component.note, /allowlisted launching/i);
+  assert.equal(JSON.stringify(configured).includes("synthetic-poll-token"), false);
+});
+
