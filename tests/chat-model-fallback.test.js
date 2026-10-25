@@ -171,3 +171,42 @@ test("chat falls back when a provider times out before returning response header
     assert.deepEqual(calls, ["vendor/model-a", "vendor/model-b"]);
   }, { OPENROUTER_ATTEMPT_TIMEOUT_MS: "250" });
 });
+
+
+test("chat memory retrieval explicitly scopes its query to the authenticated Supabase user", async () => {
+  const supabaseUrl = "https://test-project.supabase.co";
+  const requestedMemoryUrls = [];
+  await withApp(async (url, options = {}) => {
+    if (url === supabaseUrl + "/auth/v1/user") {
+      return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
+      return new Response(JSON.stringify([{ memory_enabled: true }]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.startsWith(supabaseUrl + "/rest/v1/memory_items")) {
+      requestedMemoryUrls.push(url);
+      return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.startsWith("https://openrouter.ai/api/v1/chat/completions")) {
+      return success("Memory-scoped response.");
+    }
+    throw new Error("Unexpected upstream request: " + url);
+  }, async (base, cookie) => {
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookie + "; ultron_sb_access=test-access-token"
+      },
+      body: JSON.stringify({ stream: false, messages: [{ role: "user", content: "Say hello" }] })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Memory-scoped response/);
+    assert.equal(requestedMemoryUrls.length, 1);
+    const query = new URL(requestedMemoryUrls[0]).searchParams;
+    assert.equal(query.get("user_id"), "eq.user-123");
+  }, {
+    SUPABASE_URL: supabaseUrl,
+    SUPABASE_PUBLISHABLE_KEY: "test-publishable-key"
+  });
+});
