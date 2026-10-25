@@ -1603,10 +1603,16 @@ test("worker rejects query/fragment-bearing model provider base URLs before atte
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
         { name: "query-provider", baseUrl: "https://query.example.com/v1?token=secret", apiKeyEnv: "QUERY_PROVIDER_KEY", model: "test-model", priority: 0 },
         { name: "fragment-provider", baseUrl: "https://fragment.example.com/v1#secret", apiKeyEnv: "FRAGMENT_PROVIDER_KEY", model: "test-model", priority: 1 },
-        { name: "safe-provider", baseUrl: "https://safe.example.com/v1", apiKeyEnv: "SAFE_PROVIDER_KEY", model: "test-model", priority: 2 }
+        { name: "private-provider", baseUrl: "https://192.168.1.10/v1", apiKeyEnv: "PRIVATE_PROVIDER_KEY", model: "test-model", priority: 2 },
+        { name: "metadata-provider", baseUrl: "https://169.254.169.254/latest/meta-data", apiKeyEnv: "METADATA_PROVIDER_KEY", model: "test-model", priority: 3 },
+        { name: "orchid-v2-provider", baseUrl: "https://[2001:20::1]/v1", apiKeyEnv: "ORCHID_V2_PROVIDER_KEY", model: "test-model", priority: 4 },
+        { name: "safe-provider", baseUrl: "https://safe.example.com/v1", apiKeyEnv: "SAFE_PROVIDER_KEY", model: "test-model", priority: 5 }
       ]),
       QUERY_PROVIDER_KEY: "synthetic-query-secret",
       FRAGMENT_PROVIDER_KEY: "synthetic-fragment-secret",
+      PRIVATE_PROVIDER_KEY: "synthetic-private-secret",
+      METADATA_PROVIDER_KEY: "synthetic-metadata-secret",
+      ORCHID_V2_PROVIDER_KEY: "synthetic-orchid-secret",
       SAFE_PROVIDER_KEY: "synthetic-safe-secret"
     },
     logger: { info() {}, warn() {}, error() {} },
