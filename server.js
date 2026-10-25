@@ -293,7 +293,7 @@ function cactusCompletionStream(completion) {
     { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: { content }, finish_reason: null }] },
     { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }
   ];
-  const body = events.map(event => "data: " + JSON.stringify(event) + "\\n\\n").join("") + "data: [DONE]\\n\\n";
+  const body = events.map(event => "data: " + JSON.stringify(event) + "\n\n").join("") + "data: [DONE]\\n\\n";
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
@@ -1215,7 +1215,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             body: JSON.stringify({
               model: candidate,
               messages: cleanMessages,
-              stream: Boolean(stream),
+              stream: provider.isCactus ? false : Boolean(stream),
               temperature: 0.7
             }),
             signal: attemptController.signal,
@@ -1243,6 +1243,45 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         // The per-attempt timer bounds time-to-first-response only. The separate global
         // deadline continues to cover body parsing/streaming and disconnect cancellation.
         clearTimeout(attemptTimeout);
+
+        if (attempt.ok && provider.isCactus) {
+          let cactusData;
+          try { cactusData = await readResponseJsonLimited(attempt, 2_000_000); }
+          catch {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "INVALID_RESPONSE";
+            logger.warn?.("Cactus returned invalid JSON; trying the next model provider", { modelIndex: index });
+            continue;
+          }
+          const confidence = typeof cactusData?.confidence === "number" && Number.isFinite(cactusData.confidence)
+            ? cactusData.confidence : null;
+          if (cactusData?.cloud_handoff === true && env.CACTUS_ALLOW_CLOUD_HANDOFF !== "true") {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "CACTUS_CLOUD_HANDOFF_BLOCKED";
+            logger.warn?.("Cactus cloud handoff is disabled; trying the next model provider", { modelIndex: index });
+            continue;
+          }
+          if (confidence !== null && confidence < (provider.confidenceThreshold ?? 0.72)) {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "CACTUS_CONFIDENCE_LOW";
+            logger.info?.("Cactus confidence below threshold; trying the next model provider", { confidence: Number(confidence.toFixed(3)), threshold: provider.confidenceThreshold ?? 0.72 });
+            continue;
+          }
+          const cactusMessage = cactusData?.choices?.[0]?.message;
+          if (typeof cactusMessage?.content !== "string" || !cactusMessage.content.trim()) {
+            upstream = null;
+            lastStatus = 502;
+            lastProviderCode = "INVALID_RESPONSE";
+            logger.warn?.("Cactus returned an empty completion; trying the next model provider", { modelIndex: index });
+            continue;
+          }
+          attempt = stream
+            ? cactusCompletionStream(cactusData)
+            : new Response(JSON.stringify(cactusData), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
 
         if (!attempt.ok) {
           upstream = attempt;
