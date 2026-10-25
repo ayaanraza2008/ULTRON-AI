@@ -1,22 +1,4 @@
-imp
-test("app launch rejects stale and implausibly future approval timestamps", async () => {
-  let spawnCalls = 0;
-  const baseAction = { actionType: "launch_app", payload: { app: "notepad" }, requiresApproval: true };
-  for (const approvedAt of [
-    new Date(Date.now() - 11 * 60 * 1000).toISOString(),
-    new Date(Date.now() + 2 * 60 * 1000).toISOString()
-  ]) {
-    const result = await executeDesktopAction({ ...baseAction, approvedAt }, {
-      platform: "win32",
-      env: { SystemRoot: "C:\\\\Windows" },
-      existsImpl: () => true,
-      spawnImpl: () => { spawnCalls += 1; throw new Error("must not spawn"); }
-    });
-    assert.deepEqual(result, { status: "failed", errorCode: "ACTION_NOT_APPROVED" });
-  }
-  assert.equal(spawnCalls, 0);
-});
-ort test from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { executeDesktopAction, runWindowsCompanion, validateDesktopCompanionClientConfig } from "../desktop-companion/windows-agent.js";
@@ -161,3 +143,22 @@ test("companion polls with bearer token and reports only bounded allowlisted res
   assert.ok(calls[1].url.endsWith("/api/desktop-companion/actions/" + UUID + "/complete"));
   assert.equal(JSON.stringify(calls).includes("hostname"), false);
 });
+
+test("app launch rejects stale and implausibly future approval timestamps", async () => {
+  let spawnCalls = 0;
+  const baseAction = { actionType: "launch_app", payload: { app: "notepad" }, requiresApproval: true };
+  for (const approvedAt of [
+    new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+    new Date(Date.now() + 2 * 60 * 1000).toISOString()
+  ]) {
+    const result = await executeDesktopAction({ ...baseAction, approvedAt }, {
+      platform: "win32",
+      env: { SystemRoot: "C:\\Windows" },
+      existsImpl: () => true,
+      spawnImpl: () => { spawnCalls += 1; throw new Error("must not spawn"); }
+    });
+    assert.deepEqual(result, { status: "failed", errorCode: "ACTION_NOT_APPROVED" });
+  }
+  assert.equal(spawnCalls, 0);
+});
+
