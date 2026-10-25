@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult } from "../agent-runtime.js";
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
@@ -1202,4 +1202,18 @@ test("browser bridge rejects a configured URL with query parameters before forwa
     assert.equal(JSON.stringify(body).includes(querySecret), false);
     assert.ok(providerCalls >= 2);
   });
+});
+
+
+test("model tool results redact credentials before model context", () => {
+  const safe = modelSafeResult({
+    status: "completed",
+    apiKey: "credential-value",
+    nested: { access_token: "private-value", title: "safe output" },
+    message: "Authorization: Bearer abc.def.ghi and api_key=some-key-value"
+  });
+  assert.equal(safe.apiKey, "[redacted]");
+  assert.equal(safe.nested.access_token, "[redacted]");
+  assert.equal(safe.nested.title, "safe output");
+  assert.doesNotMatch(JSON.stringify(safe), /credential-value|private-value|abc\.def\.ghi|some-key-value/);
 });
