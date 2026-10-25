@@ -242,12 +242,14 @@ const ROUTING_RULES = [
 
 function configured(record, env) {
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
-  if (!keys.length) return record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only";
+  if (!keys.length) return null;
   return keys.every(key => typeof env[key] === "string" && env[key].trim().length > 0 && (!["GEO_SLEUTH_ENABLED"].includes(key) || env[key] === "true"));
 }
 
 function stateFor(record, env) {
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
+  if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
+  if (!record.envKeys.length && record.status === "bounded_security_routes_present") return record.status;
   if (record.status === "desktop_companion_required" || record.status === "local_mcp_required") {
     return configured(record, env) ? "configured_unverified" : record.status;
   }
