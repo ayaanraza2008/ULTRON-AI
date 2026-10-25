@@ -108,7 +108,7 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
-  for (const value of ["http://paperclip.example.com", "https://user:password@paperclip.example", "https://paperclip.example.com/?token=x"]) {
+  for (const value of ["http://paperclip.example.com", "https://user:password@paperclip.example.com", "https://paperclip.example.com/?token=x"]) {
     const result = await getPaperclipAgentDashboard({
       env: { ...baseEnv, PAPERCLIP_BASE_URL: value }, userId: ownerId, fetchImpl
     });
