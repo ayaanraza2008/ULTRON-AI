@@ -15,7 +15,7 @@ test("Cactus stays optional and does not trigger model downloads", () => {
 test("Cactus remote model endpoints require an API key", async () => {
   let calls = 0;
   const result = await checkCactusService({
-    env: { CACTUS_BASE_URL: "https://cactus.example/v1", CACTUS_MODEL: "needle" },
+    env: { CACTUS_BASE_URL: "https://cactus.example.com/v1", CACTUS_MODEL: "needle" },
     userId: ownerId,
     fetchImpl: async () => { calls++; throw new Error("should not call upstream"); }
   });
@@ -58,7 +58,7 @@ test("Cactus model-list health check is read-only, bounded and redacts authoriza
   const result = await checkCactusService({
     env: {
       ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-      CACTUS_BASE_URL: "https://cactus.example/v1",
+      CACTUS_BASE_URL: "https://cactus.example.com/v1",
       CACTUS_MODEL: "Cactus-Compute/needle",
       CACTUS_API_KEY: "private-cactus-secret"
     },
@@ -74,7 +74,7 @@ test("Cactus model-list health check is read-only, bounded and redacts authoriza
   assert.equal(result.endpointReachable, true);
   assert.equal(result.configuredModelListed, true);
   assert.equal(result.availableModels.length, 2);
-  assert.equal(request.url, "https://cactus.example/v1/models");
+  assert.equal(request.url, "https://cactus.example.com/v1/models");
   assert.equal(request.options.method, "GET");
   assert.equal(request.options.headers.Authorization, "Bearer private-cactus-secret");
   assert.equal(request.options.redirect, "error");
@@ -94,7 +94,7 @@ test("Cactus provider is local-first by default and exposes confidence threshold
   assert.equal(provider.confidenceThreshold, 0.8);
   assert.equal(provider.supportsTools, true);
   assert.equal(resolveCactusProvider({
-    CACTUS_BASE_URL: "https://cactus.example/v1",
+    CACTUS_BASE_URL: "https://cactus.example.com/v1",
     CACTUS_MODEL: "needle"
   }), null);
 });
