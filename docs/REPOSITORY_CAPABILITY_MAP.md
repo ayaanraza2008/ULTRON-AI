@@ -41,7 +41,7 @@ This map covers all 30 registered repository capabilities for ULTRON. The suppli
 | 22 | [browser-use](https://github.com/browser-use/browser-use) | JavaScript-rendered browsing, page extraction/screenshots and browser testing | Existing bridge contract. Requires authenticated bridge; defaults to read-only and blocks consequential browser actions. |
 | 23 | [gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view) | Public world signals/globe navigation and voice-command planning | Existing validated action-contract integration. Browser client must dispatch actions; the server-side tool does not itself control the globe. |
 | 24 | [KaliGPT](https://github.com/SudoHopeX/KaliGPT) | Defensive security guidance, user-supplied HTTP/DNS evidence review and fixed-allowlist diagnostics | Bounded security routes exist. No arbitrary shell, exploit chains, unauthorized scanning, credential theft, persistence or destructive action execution. |
-| 25 | [Paperclip](https://github.com/paperclipai/paperclip) | Multi-agent organization, goal/task assignment, per-agent budgets/permissions and work audit | Service adapter not implemented. Requires a separately hosted instance and a scoped API; avoid blanket agent authority. |
+| 25 | [Paperclip](https://github.com/paperclipai/paperclip) | Read-only agent roster, role/status/budget visibility, company dashboard and monthly cost/utilization summary | Owner-scoped read-only connector and automatic agent tool are implemented and mocked in CI against the documented GET endpoints. Requires `PAPERCLIP_BASE_URL`, `PAPERCLIP_API_TOKEN`, `PAPERCLIP_COMPANY_ID`, and `ULTRON_INTEGRATION_OWNER_USER_ID`; live compatibility is unverified. Agent creation/hiring/assignment/pause/termination, routines and budget writes are not exposed. MIT. |
 | 26 | [OpenDesign](https://github.com/nexu-io/open-design) | Design-system-aware prototype workflow, design review and collaborative agent workspace | Service/API adapter not implemented. Current runtime cannot call a design app merely because the repository is listed. |
 | 27 | [public-apis](https://github.com/public-apis/public-apis) | Discover candidate public APIs by domain and compare auth, rate limits, terms and data handling | Catalog/reference only. Each target API must be separately verified; a listing does not promise free, reliable, or safe service. |
 | 28 | [REA](https://github.com/morluto/rea) | MCP-driven reverse engineering, binary/application/runtime behavior analysis | Local MCP service not connected. Use only on software authorized for inspection; unknown binaries must never execute automatically. |
@@ -50,7 +50,7 @@ This map covers all 30 registered repository capabilities for ULTRON. The suppli
 
 ## Readiness API
 
-`GET /api/agent/repositories` reports the registered upstreams, non-secret state, required environment-variable *names*, and a repository count. Add `?task=...` to see the domains selected for a particular task. The endpoint requires a signed-in ULTRON user and returns no secret values. Shared Chatwoot/OpenProject/Cal.diy API credentials are additionally restricted to the exact signed-in UUID configured in `ULTRON_INTEGRATION_OWNER_USER_ID`; without that guard their agent tools remain blocked.
+`GET /api/agent/repositories` reports the registered upstreams, non-secret state, required environment-variable *names*, and a repository count. Add `?task=...` to see the domains selected for a particular task. The endpoint requires a signed-in ULTRON user and returns no secret values. Shared Chatwoot/OpenProject/Cal.diy API credentials are additionally restricted to the exact signed-in UUID configured in `ULTRON_INTEGRATION_OWNER_USER_ID`; without that guard their agent tools remain blocked. Paperclip read-only governance uses the same owner guard and its own separately hosted endpoint/company scope.
 
 State meanings:
 
@@ -65,7 +65,7 @@ State meanings:
 
 1. Verify and harden existing adapters: model provider, VoiceStudio, ComfyUI, Geo-Sleuth, Handy bridge, Browser Use, AgentMemory, HeyGem and OmniVoice.
 2. Live-test the owner-scoped Chatwoot, Cal.diy and OpenProject read-only adapters on dedicated test data; then implement further read-only adapters for AppFlowy only after API schemas/auth scopes are confirmed.
-3. Add OpenSEO and public-API discovery with explicit cost/terms checks; then Paperclip/OpenViking/OpenDesign as separately hosted adapters.
+3. Add OpenSEO and public-API discovery with explicit cost/terms checks; Paperclip read-only governance is now implemented but still needs live endpoint verification. OpenViking/OpenDesign remain separate service adapters.
 4. Build one authenticated desktop bridge for local capture/dictation and the approved Windows action allowlist before adding Cap/OpenWhispr/REA local workflows.
 5. Configure and live-test Obscura and Cactus/Needle on a local companion or authenticated private endpoint; benchmark on target hardware before enabling model downloads. Keep Cactus cloud handoff disabled unless separately approved.
 6. Add the YouTube production pipeline as durable stages with fact/media-rights checks and a human publish gate. Media generation and channel publication are not considered complete until each stage is live-tested.
