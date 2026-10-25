@@ -1234,6 +1234,48 @@ test("agent autonomously uses VoiceStudio for speech when configured", async () 
 });
 
 
+test("agent research filters unsafe top results before applying the five-source limit", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      return new Response(JSON.stringify({ results: [
+        { title: "Invalid scheme", url: "javascript:alert(1)", content: "reject" },
+        { title: "Loopback", url: "http://127.0.0.1/admin", content: "reject" },
+        { title: "Credentials", url: "https://user:pass@example.com/private", content: "reject" },
+        { title: "Local", url: "https://printer.local/status", content: "reject" },
+        { title: "Internal", url: "https://service.internal/secret", content: "reject" },
+        { title: "Valid source six", url: "https://docs.example.com/source-six", content: "valid six" },
+        { title: "Valid source seven", url: "https://news.example.org/source-seven", content: "valid seven" },
+        { title: "Valid source eight", url: "https://research.example.net/source-eight", content: "valid eight" }
+      ] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [
+        { id: "research-filter-limit", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "safe sources beyond invalid first results" }) } }
+      ] } }] }), { status: 200 });
+    }
+    const request = JSON.parse(options.body);
+    const tool = request.messages.find(message => message.role === "tool" && message.tool_call_id === "research-filter-limit");
+    assert.ok(tool);
+    const result = JSON.parse(tool.content);
+    assert.deepEqual(result.results.map(item => item.url), [
+      "https://docs.example.com/source-six",
+      "https://news.example.org/source-seven",
+      "https://research.example.net/source-eight"
+    ]);
+    assert.equal(result.results.length, 3);
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Returned all valid sources." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research safe sources beyond invalid links" })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(providerCalls, 2);
+  });
+});
+
 test("research tool filters local, private-network, and credential-bearing source URLs", async () => {
   let providerCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
