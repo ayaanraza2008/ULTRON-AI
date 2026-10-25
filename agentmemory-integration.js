@@ -122,6 +122,8 @@ export async function recallAgentMemory(task, options = {}) {
   if (!bounded(options.userId, 500)) return { state: "skipped", memories: [] };
   const project = scopedProject(options.env, options.userId);
   const data = await requestMemory("/agentmemory/smart-search", { query, project, limit: 5 }, options);
+  // Do not label a disabled or unsafe endpoint as a successful empty recall.
+  if (data?.state === "not_configured") return { state: "not_configured", memories: [] };
   const candidates = Array.isArray(data.results) ? data.results
     : Array.isArray(data.memories) ? data.memories
     : Array.isArray(data.items) ? data.items
