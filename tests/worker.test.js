@@ -460,6 +460,8 @@ test("autonomous task chains configured research into a report without another p
       if (url.includes("/chat/completions")) {
         const body = JSON.parse(options.body);
         assert.match(body.messages.find(message => message.role === "user").content, /Research answer/);
+        const systemContent = body.messages.find(message => message.role === "system").content;
+        assert.match(systemContent, /## Summary\\n## Deliverable\\n## Next Steps\\n## Blockers \/ Risks\\n## Verification Criteria/);
         const userContent = body.messages.find(message => message.role === "user").content;
         assert.match(userContent, /https:\/\/example.com\/energy/);
         assert.equal(userContent.includes("169.254.169.254"), false);
