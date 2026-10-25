@@ -92,7 +92,7 @@ test("quality gate rejects reports with headings but no useful section content",
     "# Next Steps",
     "# Blockers",
     "# Verification Criteria"
-  ].join("\\n");
+  ].join("\n");
   const result = verifyAutonomousOutput({ research: { sources: [{ url }] }, report: { answer } });
   const structure = result.checks.find(check => check.id === "deliverable_structure");
   assert.equal(structure.passed, false);
@@ -102,12 +102,12 @@ test("quality gate rejects reports with headings but no useful section content",
 test("quality gate rejects required report sections in the wrong order", () => {
   const url = "https://example.com/source";
   const answer = [
-    "# Summary\\nA useful summary of the findings.",
-    "# Next Steps\\nValidate the reported findings.",
-    "# Deliverable\\nThe report includes findings and a traceable source " + url,
-    "# Blockers\\nNo known blockers at present.",
-    "# Verification Criteria\\nConfirm each finding against the source."
-  ].join("\\n\\n");
+    "# Summary\nA useful summary of the findings.",
+    "# Next Steps\nValidate the reported findings.",
+    "# Deliverable\nThe report includes findings and a traceable source " + url,
+    "# Blockers\nNo known blockers at present.",
+    "# Verification Criteria\nConfirm each finding against the source."
+  ].join("\n\n");
   const result = verifyAutonomousOutput({ research: { sources: [{ url }] }, report: { answer } });
   const structure = result.checks.find(check => check.id === "deliverable_structure");
   assert.equal(structure.passed, false);
