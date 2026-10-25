@@ -1,4 +1,5 @@
 import express from "express";
+import { hasEmployeeModelProvider } from "./features.js";
 import { isIP } from "node:net";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
@@ -79,7 +80,7 @@ export function buildBrowserUseGuidance(task) {
 function safeBase(value) {
   try {
     const u = new URL(String(value || ""));
-    return (u.protocol === "https:" || ["localhost", "127.0.0.1"].includes(u.hostname)) && !u.username && !u.password ? u.toString().replace(/\/+$/, "") : null;
+    return (u.protocol === "https:" || ["localhost", "127.0.0.1"].includes(u.hostname)) && !u.username && !u.password && !u.search && !u.hash ? u.toString().replace(/\/+$/, "") : null;
   } catch { return null; }
 }
 function isPublicResearchHost(hostname) {
@@ -518,9 +519,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const role = bounded(args.role, 80), goal = bounded(args.goal, 2000), context = bounded(args.context, 4000);
       const mode = MODES.has(args.mode) ? args.mode : "plan";
       if (!ROLES.has(role) || goal.length < 2) throw Object.assign(new Error("Choose a valid role and goal."), { code: "INVALID_EMPLOYEE_TASK", status: 400 });
-      // User explicitly requested background work; this queue is limited to
-      // draft-only plan/review/report tasks, so do not interrupt with a second confirmation.
-      if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !env.OPENROUTER_API_KEY) return { state: "blocked", role, mode, blocker: "The background worker, server-side Supabase key, and model provider must all be configured." };
+      // Match the worker's real provider registry: OpenRouter is optional when a
+      // valid alternate OpenAI-compatible provider is configured server-side.
+      const modelProviderConfigured = hasEmployeeModelProvider(env);
+      if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !modelProviderConfigured) return { state: "blocked", role, mode, blocker: "The background worker, server-side Supabase key, and at least one supported server-side model provider must all be configured." };
       if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) throw Object.assign(new Error("Authenticated task storage is unavailable."), { code: "TASK_STORAGE_UNAVAILABLE", status: 503 });
       const autonomousWorkflow = /\b(research|investigate|look into|find sources)\b/i.test(goal) && /\b(report|summary|recommendations|brief)\b/i.test(goal);
       const input = { taskType: autonomousWorkflow ? "autonomous" : "employee", executionMode: "employee_worker", role, goal, context, mode: autonomousWorkflow ? "report" : mode, requiresApproval: false, approved: true, createdBy: "ultron_agent_tool" };
@@ -819,10 +821,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
         { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science" },
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
-        { name: "plan_employee", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
-        { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && env.OPENROUTER_API_KEY), execution: "background_draft_only_when_requested_no_second_confirmation" },
+        { name: "plan_employee", available: hasEmployeeModelProvider(env), execution: "draft_only" },
+        { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env)), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "create_spaceplanner_plan", available: true, execution: "automatic_spaceplanner_compatible_json_and_editor_link_no_external_save" },
-        { name: "coding_assist", available: Boolean(env.OPENROUTER_API_KEY), execution: "draft_only" },
+        { name: "coding_assist", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
         { name: "geo_sleuth_investigate", available: env.GEO_SLEUTH_ENABLED === "true", execution: "bounded_autonomous_photo_geolocation" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
