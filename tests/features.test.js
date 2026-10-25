@@ -1097,7 +1097,7 @@ const DESKTOP_ACTION_ID = "00000000-0000-4000-8000-000000000091";
 const DESKTOP_CONFIG = {
   ULTRON_INTEGRATION_OWNER_USER_ID: DESKTOP_OWNER,
   ULTRON_DESKTOP_DEVICE_ID: DESKTOP_DEVICE,
-  ULTRON_DESKTOP_POLL_TOKEN: "test-only-desktop-poll-token"
+  ULTRON_DESKTOP_POLL_TOKEN: "test-only-desktop-poll-token-0123456789-abcdefgh"
 };
 
 test("desktop companion queues read-only system information without a redundant approval gate", async () => {
@@ -1231,7 +1231,7 @@ test("desktop companion polling requires the private token and matching stable d
     assert.equal(rejected.status, 401);
     const wrongDevice = await fetch(base + "/api/desktop-companion/poll", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token-0123456789-abcdefgh", "X-ULTRON-Protocol-Version": "1" },
       body: JSON.stringify({ deviceId: "some-other-device" })
     });
     assert.equal(wrongDevice.status, 403);
@@ -1258,7 +1258,7 @@ test("desktop companion polling atomically returns only the claimed allowlisted 
   await withServer(DESKTOP_CONFIG, async base => {
     const response = await fetch(base + "/api/desktop-companion/poll", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token-0123456789-abcdefgh", "X-ULTRON-Protocol-Version": "1" },
       body: JSON.stringify({ deviceId: DESKTOP_DEVICE })
     });
     assert.equal(response.status, 200);
@@ -1289,7 +1289,7 @@ test("desktop companion completion sanitizes returned system information before 
   await withServer(DESKTOP_CONFIG, async base => {
     const response = await fetch(base + "/api/desktop-companion/actions/" + DESKTOP_ACTION_ID + "/complete", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token-0123456789-abcdefgh", "X-ULTRON-Protocol-Version": "1" },
       body: JSON.stringify({
         deviceId: DESKTOP_DEVICE,
         status: "completed",
@@ -1329,7 +1329,7 @@ test("desktop companion completion rejects a result for a different task and rec
   await withServer(DESKTOP_CONFIG, async base => {
     const response = await fetch(base + "/api/desktop-companion/actions/" + DESKTOP_ACTION_ID + "/complete", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token", "X-ULTRON-Protocol-Version": "1" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-only-desktop-poll-token-0123456789-abcdefgh", "X-ULTRON-Protocol-Version": "1" },
       body: JSON.stringify({ deviceId: DESKTOP_DEVICE, status: "completed", result: { app: "calculator", started: true } })
     });
     assert.equal(response.status, 200);
