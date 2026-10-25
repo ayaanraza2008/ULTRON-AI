@@ -133,10 +133,10 @@ const REPOSITORIES = [
   {
     id: "openviking", repo: "volcengine/OpenViking", domain: "agent_context",
     match: /\b(openviking|open viking|context database|agent context store|context compaction|agent filesystem|long.?term agent context)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["structured context database", "agent memory/resource organization", "context retrieval"],
-    limits: ["Requires a separate service and a storage/migration plan; don't replace current per-user memory automatically."],
-    envKeys: ["OPENVIKING_BASE_URL", "OPENVIKING_API_TOKEN"], license: "AGPLv3 shown upstream; review service/distribution obligations", source: "https://github.com/volcengine/OpenViking"
+    integration: "owner_scoped_read_only_context_adapter", status: "adapter_present_unverified_live",
+    abilities: ["bounded read-only context search", "bounded read-only document retrieval", "owner-scoped context reference for agent tasks"],
+    limits: ["Requires a separately hosted/configured OpenViking server and owner-scoped API token; does not replace ULTRON's existing per-user memory; writes and session commits are not exposed."],
+    envKeys: ["OPENVIKING_BASE_URL", "OPENVIKING_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "AGPLv3 shown upstream; review service/distribution obligations", source: "https://github.com/volcengine/OpenViking"
   },
   {
     id: "awesome-harness-engineering", repo: "ai-boost/awesome-harness-engineering", domain: "agent_reliability",
