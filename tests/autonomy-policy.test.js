@@ -229,3 +229,17 @@ test("specific destructive file, folder, and database changes require confirmati
     assert.equal(risk.requiresConfirmation, true, task);
   }
 });
+
+
+test("consequential and generic browser buttons require confirmation", () => {
+  for (const task of [
+    "Click the submit button.", "Tap confirm.", "Press the save button.",
+    "Click publish.", "Tap the checkout button.", "Click yes.",
+    "Tap the okay button.", "Press continue.", "Click accept.",
+    "Tap approve.", "Press authorize.", "Click finish to complete the workflow."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
