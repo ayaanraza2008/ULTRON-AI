@@ -25,6 +25,20 @@ test("employee readiness rejects alternate providers with missing credentials or
   }), false);
 });
 
+test("employee readiness accepts an already-running local Cactus model without an API key", () => {
+  assert.equal(hasEmployeeModelProvider({
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle"
+  }), true);
+});
+
+test("employee readiness rejects a remote Cactus endpoint without an API key", () => {
+  assert.equal(hasEmployeeModelProvider({
+    CACTUS_BASE_URL: "https://cactus.example/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle"
+  }), false);
+});
+
 test("employee readiness recognizes the OpenRouter runtime default model", () => {
   assert.equal(hasEmployeeModelProvider({ OPENROUTER_API_KEY: "synthetic-test-key" }), true);
 });
