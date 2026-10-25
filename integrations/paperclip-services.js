@@ -137,6 +137,28 @@ async function attempt(fetchImpl, url, token) {
   }
 }
 
+export function getPaperclipReadiness(env = process.env) {
+  const base = safeBase(env.PAPERCLIP_BASE_URL);
+  const token = bounded(env.PAPERCLIP_API_TOKEN, 3000);
+  const companyId = bounded(env.PAPERCLIP_COMPANY_ID, 120);
+  const ownerGuardConfigured = Boolean(
+    typeof env.ULTRON_INTEGRATION_OWNER_USER_ID === "string" &&
+    env.ULTRON_INTEGRATION_OWNER_USER_ID.trim()
+  );
+  const configured = Boolean(base && token && validCompanyId(companyId) && ownerGuardConfigured);
+  return {
+    state: configured ? "configured_unverified" : "separate_service_required",
+    configured,
+    baseConfigured: Boolean(base),
+    apiTokenConfigured: Boolean(token),
+    companyIdConfigured: validCompanyId(companyId),
+    ownerGuardConfigured,
+    source: "https://github.com/paperclipai/paperclip",
+    features: ["read-only agent roster", "company dashboard summary", "monthly costs/budget summary"],
+    limitations: ["Requires a separately hosted Paperclip server and scoped bearer API token.", "The connector never creates, wakes, hires, assigns, pauses, terminates, or changes agent budgets."]
+  };
+}
+
 export async function getPaperclipAgentDashboard({ env = process.env, fetchImpl = globalThis.fetch, userId } = {}) {
   if (!ownerAllowed(env, userId)) {
     return blocked("INTEGRATION_OWNER_NOT_CONFIGURED", "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner's exact Supabase auth UUID before exposing shared Paperclip credentials.");
