@@ -26,11 +26,13 @@ services:
       - key: ULTRON_BROWSER_USE_TOKEN
         sync: false
       - key: OPENROUTER_DEFAULT_MODEL
-        sync: false
-      - key: ULTRON_MODEL_PROVIDERS_JSON
-        sync: false
-      - key: ULTRON_AVAILABLE_MODELS
         value: "openrouter/free"
+      - key: ULTRON_MODEL_PROVIDERS_JSON
+        value: '[{"name":"nemotron-lightning-free","baseUrl":"https://openrouter.ai/api/v1","apiKeyEnv":"OPENROUTER_API_KEY","model":"nvidia/nemotron-3.5-lightning:free","priority":10,"supportsTools":true},{"name":"north-mini-code-free","baseUrl":"https://openrouter.ai/api/v1","apiKeyEnv":"OPENROUTER_API_KEY","model":"cohere/north-mini-code:free","priority":20,"supportsTools":true}]'
+      - key: ULTRON_AVAILABLE_MODELS
+        value: "openrouter/free,nvidia/nemotron-3.5-lightning:free,cohere/north-mini-code:free"
+      - key: ULTRON_VISION_MODELS
+        value: "openrouter/free,nvidia/nemotron-3.5-super-vl:free"
       - key: SUPABASE_URL
         value: https://opdjfhwepmcprbqojpat.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
