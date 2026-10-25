@@ -22,11 +22,11 @@ export function verifyAutonomousOutput({ research, report } = {}) {
   const sources = rawSources.filter(source => isPublicHttpUrl(source?.url));
   const citedSource = sources.find(source => answer.includes(source.url));
   const requiredSections = [
-    { id: "summary", pattern: /^#{1,4}\\s+(?:executive\\s+)?summary\\b/im },
-    { id: "deliverable", pattern: /^#{1,4}\\s+(?:deliverable|findings|recommendation|result)\\b/im },
-    { id: "next_steps", pattern: /^#{1,4}\\s+(?:next steps|action items|follow[- ]?up)\\b/im },
-    { id: "blockers", pattern: /^#{1,4}\\s+(?:blockers|risks|limitations)\\b/im },
-    { id: "verification", pattern: /^#{1,4}\\s+(?:verification criteria|verification|how to verify)\\b/im }
+    { id: "summary", pattern: /^#{1,4}\s+(?:executive\s+)?summary\b/im },
+    { id: "deliverable", pattern: /^#{1,4}\s+(?:deliverable|findings|recommendation|result)\b/im },
+    { id: "next_steps", pattern: /^#{1,4}\s+(?:next steps|action items|follow[- ]?up)\b/im },
+    { id: "blockers", pattern: /^#{1,4}\s+(?:blockers|risks|limitations)\b/im },
+    { id: "verification", pattern: /^#{1,4}\s+(?:verification criteria|verification|how to verify)\b/im }
   ];
   const missingSections = requiredSections.filter(section => !section.pattern.test(answer)).map(section => section.id);
   const checks = [
