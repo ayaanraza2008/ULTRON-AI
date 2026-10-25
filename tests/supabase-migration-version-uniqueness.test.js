@@ -35,11 +35,8 @@ test("task-worker migration keeps its attempts ALTER outside the SQL comment", a
     fileURLToPath(new URL("../supabase/migrations/202610220001_task_worker.sql", import.meta.url)),
     "utf8"
   );
-  assert.match(
-    sql,
-    /^-- Safe queue claim RPC[^\r\n]*\r?\n(?=alter table public\\.agent_tasks)/,
-    "the ALTER TABLE must start on a real SQL line, not inside the preceding comment"
-  );
-  assert.match(sql, /^alter table public\.agent_tasks add column if not exists attempts/m);
+  const lines = sql.split(/\r?\n/);
+  assert.equal(lines[0], "-- Safe queue claim RPC. Only the server-side service role may claim work.");
+  assert.match(lines[1], /^alter table public[.]agent_tasks add column if not exists attempts/);
 });
 
