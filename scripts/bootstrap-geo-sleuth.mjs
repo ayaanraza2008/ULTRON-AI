@@ -1,7 +1,8 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -9,9 +10,10 @@ const execFile = promisify(execFileCallback);
 const GEO_SLEUTH_REPOSITORY = "https://github.com/Oldcircle/geo-sleuth.git";
 const GEO_SLEUTH_COMMIT = "e01849f778afeb7c53ca79331313fbcfcb879486";
 const UV_VERSION = "0.13.5";
+const UV_INSTALLER_SHA256 = "1c6e7f025499664633ac2dce43a210800510e9ef0625c52e034a8afdf8bf177a";
 const UV_INSTALLER_URL = `https://releases.astral.sh/github/uv/releases/download/${UV_VERSION}/uv-installer.sh`;
 
-export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = execFile, log = console.warn } = {}) {
+export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = execFile, log = console.warn, uvInstallerSha256 = UV_INSTALLER_SHA256 } = {}) {
   if (env.GEO_SLEUTH_ENABLED !== "true") return { state: "disabled" };
   const root = path.resolve(env.GEO_SLEUTH_ROOT || path.join(process.cwd(), ".runtime", "geo-sleuth", "skills", "geo-sleuth"));
   const scriptsExist = () => existsSync(path.join(root, "scripts", "intake.py")) && existsSync(path.join(root, "scripts", "board.py"));
@@ -67,6 +69,10 @@ export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = e
         "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2",
         "-LsSf", UV_INSTALLER_URL, "-o", installer
       ], { timeout: 30000, maxBuffer: 256 * 1024, windowsHide: true });
+      const installerDigest = createHash("sha256").update(await readFile(installer)).digest("hex");
+      if (installerDigest !== uvInstallerSha256) {
+        throw new Error("uv installer SHA-256 verification failed.");
+      }
       await runCommand("sh", [installer], { timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true });
     } catch (error) {
       log("Geo-Sleuth source is present but uv could not be installed; integration remains unavailable: " + String(error?.message || error).slice(0, 300));
