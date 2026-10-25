@@ -32,7 +32,10 @@ function blocked(code, message) {
   return { state: "blocked", provider: "hermes-agent", error: { code, message } };
 }
 
-function getConfig(env = process.env, userId) {
+function getConfig(env = process.env, userId, requireOwner = false) {
+  if (requireOwner && (!env.ULTRON_INTEGRATION_OWNER_USER_ID || !userId || env.ULTRON_INTEGRATION_OWNER_USER_ID !== userId)) {
+    return { error: blocked("INTEGRATION_OWNER_NOT_CONFIGURED", "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner UUID before delegated Hermes tasks are enabled.") };
+  }
   if (env.ULTRON_INTEGRATION_OWNER_USER_ID && userId &&
       env.ULTRON_INTEGRATION_OWNER_USER_ID !== userId) {
     return { error: blocked("INTEGRATION_OWNER_NOT_CONFIGURED", "Hermes Agent integration is restricted to ULTRON's configured owner account.") };
@@ -151,7 +154,7 @@ export function resolveHermesAgentProvider(env = process.env) {
 }
 
 export async function checkHermesAgentService({ env = process.env, fetchImpl = globalThis.fetch, userId } = {}) {
-  const config = getConfig(env, userId);
+  const config = getConfig(env, userId, true);
   if (config.error) return config.error;
   const headers = { Accept: "application/json", Authorization: "Bearer " + config.token };
   const results = await Promise.all([
@@ -201,7 +204,7 @@ export async function checkHermesAgentService({ env = process.env, fetchImpl = g
 }
 
 export async function runHermesAgentTask({ env = process.env, fetchImpl = globalThis.fetch, userId, task, conversationId } = {}) {
-  const config = getConfig(env, userId);
+  const config = getConfig(env, userId, true);
   if (config.error) return config.error;
   if (typeof task !== "string" || !task.trim() || task.trim().length > config.maxPromptChars) {
     return blocked("HERMES_AGENT_TASK_INVALID", "Provide a non-empty task within HERMES_AGENT_MAX_PROMPT_CHARS.");
