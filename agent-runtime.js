@@ -1,6 +1,6 @@
 import express from "express";
 import { hasEmployeeModelProvider } from "./features.js";
-import { isIP } from "node:net";
+import { isPublicNetworkHost, safeServiceBase as safeBase } from "./network-safety.js";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
@@ -155,69 +155,11 @@ export function buildBrowserUseGuidance(task) {
   return { browserRequested, consequentialAction, rules: BROWSER_USE_RULES };
 }
 
-function safeBase(value) {
-  try {
-    const u = new URL(String(value || ""));
-    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
-    const loopback = ["localhost", "127.0.0.1", "::1"].includes(host);
-    if (u.username || u.password || u.search || u.hash) return null;
-    // Preserve local development, but never send a shared bridge token to a
-    // remote HTTP host or a private, link-local, metadata, or local HTTPS host.
-    if (u.protocol === "http:" && loopback) return u.toString().replace(/\/+$/, "");
-    if (u.protocol !== "https:" || !isPublicResearchHost(u.hostname)) return null;
-    return u.toString().replace(/\/+$/, "");
-  } catch { return null; }
-}
-function isPublicResearchHost(hostname) {
-  const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
-  const localSuffixes = [".localhost", ".local", ".localdomain", ".internal", ".intranet", ".lan", ".home", ".test", ".invalid"];
-  if (!host || host === "localhost" || localSuffixes.some(suffix => host.endsWith(suffix))
-      || host === "metadata.google.internal" || host === "metadata.google") return false;
-  const ipVersion = isIP(host);
-  if (ipVersion === 4) {
-    const octets = host.split(".").map(Number);
-    const [a, b] = octets;
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && (b === 0 || b === 168)) return false;
-    if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
-    if (a === 203 && b === 0) return false;
-    return true;
-  }
-  if (ipVersion === 6) {
-    // Only global-unicast IPv6 (2000::/3) is eligible as a public source.
-    // Reject reserved/transition ranges as well as local, link-local and documentation addresses.
-    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
-    if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
-        || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")
-        // Teredo and 6to4 tunnel IPv4 destinations inside IPv6; reject them rather than
-        // risk treating an embedded private/loopback destination as a public source.
-        || host.startsWith("2001:0:") || host.startsWith("2002:")) return false;
-    const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPublicResearchHost(mapped[1]);
-    // IPv4-mapped IPv6 also has a hexadecimal form, e.g. ::ffff:7f00:1 for 127.0.0.1.
-    const mappedHex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
-    if (mappedHex) {
-      const high = Number.parseInt(mappedHex[1], 16);
-      const low = Number.parseInt(mappedHex[2], 16);
-      const ipv4 = [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
-      return isPublicResearchHost(ipv4);
-    }
-    // Only global-unicast IPv6 (2000::/3) is eligible as a public source.
-    // IPv4-mapped IPv6 is handled above using the stricter IPv4 checks.
-    return firstHextet >= 0x2000 && firstHextet <= 0x3fff;
-  }
-  // Hostnames with no dot are generally machine-local names, not public sources.
-  return host.includes(".") && !host.startsWith(".") && !host.endsWith(".");
-}
-
 function safePublicUrl(value) {
   try {
     const u = new URL(String(value || ""));
     if (!["http:", "https:"].includes(u.protocol) || u.username || u.password) return null;
-    if (!isPublicResearchHost(u.hostname)) return null;
+    if (!isPublicNetworkHost(u.hostname)) return null;
     return u.toString();
   } catch { return null; }
 }
