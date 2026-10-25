@@ -304,3 +304,68 @@ test("agent model routing retries plain chat after HTTP 400 without switching pr
     assert.doesNotMatch(body, /first-400-test-key|second-400-test-key|malformed request/);
   });
 });
+
+
+test("agent automatically falls back through configured free OpenRouter models without a registry", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-auto-fallback-test-key",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    ULTRON_AVAILABLE_MODELS: "openrouter/free,nvidia/nemotron-3.5-lightning:free,cohere/north-mini-code:free,openai/gpt-4.1"
+  };
+  await withServer(env, async (url, options) => {
+    const request = JSON.parse(options.body);
+    calls.push({ url, model: request.model, hasTools: Array.isArray(request.tools), authorization: options.headers.Authorization });
+    if (request.model === "openrouter/free") return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+    assert.equal(request.model, "nvidia/nemotron-3.5-lightning:free");
+    return new Response(JSON.stringify({
+      model: request.model,
+      choices: [{ message: { role: "assistant", content: "Recovered through automatically configured free fallback." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /automatically configured free fallback/);
+    assert.equal(calls[0].model, "openrouter/free");
+    assert.equal(calls[0].hasTools, true);
+    assert.equal(calls[1].model, "openrouter/free");
+    assert.equal(calls[1].hasTools, false, "the router retries plain chat if tool-call mode is rejected");
+    assert.equal(calls[2].model, "nvidia/nemotron-3.5-lightning:free");
+    assert.equal(calls[2].hasTools, false, "unknown model tool support is not assumed");
+    assert.equal(calls.length, 3);
+    assert.ok(calls.every(call => call.url === "https://openrouter.ai/api/v1/chat/completions"));
+    assert.ok(calls.every(call => call.authorization === "Bearer openrouter-auto-fallback-test-key"));
+    assert.ok(!calls.some(call => call.model === "openai/gpt-4.1"), "non-free models must be excluded from the zero-cost fallback chain");
+  });
+});
+
+test("automatic OpenRouter fallback ignores invalid, paid, and duplicate model IDs", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-filter-test-key",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    ULTRON_AVAILABLE_MODELS: "openrouter/free,openai/gpt-4.1,nvidia/nemotron-3.5-lightning:free,https://evil.example/model:free, nvidia/nemotron-3.5-lightning:free"
+  };
+  await withServer(env, async (_url, options) => {
+    const request = JSON.parse(options.body);
+    calls.push(request.model);
+    if (request.model === "openrouter/free") return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+    assert.equal(request.model, "nvidia/nemotron-3.5-lightning:free");
+    return new Response(JSON.stringify({
+      model: request.model,
+      choices: [{ message: { role: "assistant", content: "Fallback is free and validated." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, ["openrouter/free", "openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
+  });
+});
