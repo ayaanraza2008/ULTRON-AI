@@ -4,7 +4,7 @@ import { findOpenVikingContext, getOpenVikingReadiness, isOpenVikingUri, readOpe
 
 const ownerId = "00000000-0000-4000-8000-000000000001";
 const env = {
-  OPENVIKING_BASE_URL: "https://openviking.example/openviking",
+  OPENVIKING_BASE_URL: "https://openviking.example.com/openviking",
   OPENVIKING_API_TOKEN: "synthetic-openviking-secret",
   ULTRON_INTEGRATION_OWNER_USER_ID: ownerId
 };
@@ -50,7 +50,7 @@ test("OpenViking find is read-only, owner-scoped, and returns bounded normalized
     "viking://~/memories/preference.md",
     "viking://~/resources/oauth.md"
   ]);
-  assert.equal(request.url, "https://openviking.example/openviking/api/v1/search/find");
+  assert.equal(request.url, "https://openviking.example.com/openviking/api/v1/search/find");
   assert.equal(request.options.headers["X-API-Key"], env.OPENVIKING_API_TOKEN);
   assert.deepEqual(JSON.parse(request.options.body), { query: "OAuth authentication", limit: 2, target_uri: "viking://~/", read_content: false });
   assert.equal(request.options.method, "POST");
