@@ -215,7 +215,7 @@ test("task creation records a queued plan and audit event, without claiming exec
   }, { supabaseRest: fakeSupabaseRest });
 });
 
-test("employee draft task creation requires approval and selects the bounded worker mode", async () => {
+test("medium-risk employee draft task requires approval and selects the bounded worker mode", async () => {
   const writes = [];
   const taskId = "00000000-0000-4000-8000-000000000041";
   const fakeSupabaseRest = async (_req, table, method, _query, body) => {
@@ -231,7 +231,7 @@ test("employee draft task creation requires approval and selects the bounded wor
       body: JSON.stringify({
         title: "Draft an SEO outline", description: "Prepare a source-backed outline for review",
         taskType: "employee", role: "seo-aeo", mode: "draft", goal: "Draft an outline for a topic cluster",
-        routineId: "seo-draft-run", context: "The audience is beginners.", risk: "low"
+        routineId: "seo-draft-run", context: "The audience is beginners.", risk: "medium"
       })
     });
     assert.equal(response.status, 201);
@@ -1090,3 +1090,76 @@ test("STT JSON response is bounded and cancelled when declared oversized", async
     cancel() { bodyCancelled = true; }
   }), { status: 200, headers: { "content-length": "1000001", "content-type": "application/json" } }) });
 });
+
+test("low-risk employee draft tasks queue automatically without enabling external actions", async () => {
+  const writes = [];
+  const taskId = "00000000-0000-4000-8000-000000000061";
+  const fakeSupabaseRest = async (_req, table, method, _query, body) => {
+    writes.push({ table, method, body });
+    if (table === "agent_tasks" && method === "POST") {
+      return [{ id: taskId, title: body.title, input: body.input, status: body.status, created_at: "2026-10-25T08:00:00Z" }];
+    }
+    return [];
+  };
+
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Draft an SEO outline",
+        description: "Prepare a source-aware outline",
+        taskType: "employee",
+        role: "seo-aeo",
+        mode: "draft",
+        goal: "Draft an outline for a topic cluster",
+        routineId: "seo-draft-run",
+        risk: "low"
+      })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.task.status, "QUEUED");
+    assert.equal(body.task.input.executionMode, "employee_worker");
+    assert.equal(body.task.input.requiresApproval, false);
+    assert.equal(body.task.input.approved, false, "no separate approval event should be fabricated");
+    assert.match(body.notice, /Low-risk AI Employee task queued/i);
+    assert.match(body.notice, /will not send, publish, spend, execute commands, or control devices/i);
+    assert.equal(writes.filter(item => item.table === "agent_tasks" && item.method === "POST").length, 1);
+    const audit = writes.find(item => item.table === "audit_events");
+    assert.equal(audit.body.outcome, "allowed");
+    assert.equal(audit.body.metadata.requiresApproval, false);
+  }, { supabaseRest: fakeSupabaseRest });
+});
+
+test("explicit approval requirement overrides low-risk auto-queue for employee drafts", async () => {
+  let taskWrite;
+  const fakeSupabaseRest = async (_req, table, method, _query, body) => {
+    if (table === "agent_tasks" && method === "POST") {
+      taskWrite = body;
+      return [{ id: "00000000-0000-4000-8000-000000000062", title: body.title, input: body.input, status: body.status }];
+    }
+    return [];
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Draft a report",
+        description: "Prepare a draft report",
+        taskType: "autonomous",
+        role: "chief-of-staff",
+        mode: "report",
+        goal: "Prepare a weekly report",
+        risk: "low",
+        requiresApproval: true
+      })
+    });
+    assert.equal(response.status, 201);
+    assert.equal(taskWrite.status, "WAITING_FOR_PERMISSION");
+    assert.equal(taskWrite.input.requiresApproval, true);
+    assert.equal(taskWrite.input.approved, false);
+  }, { supabaseRest: fakeSupabaseRest });
+});
+\n
