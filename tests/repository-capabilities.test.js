@@ -1,0 +1,55 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  listRepositoryCapabilities,
+  matchRepositoryCapabilities,
+  buildRepositoryCapabilityGuidance,
+  getRepositoryCapabilityStatus
+} from "../repository-capabilities.js";
+
+test("registry contains every requested repository exactly once", () => {
+  const items = listRepositoryCapabilities();
+  assert.equal(items.length, 28);
+  assert.equal(new Set(items.map(item => item.id)).size, 28);
+  assert.ok(items.some(item => item.repo === "darkzOGx/youtube-automation-agent"));
+  assert.ok(items.some(item => item.repo === "morluto/rea"));
+});
+
+test("capability router matches distinct task domains automatically", () => {
+  const results = matchRepositoryCapabilities("Research a YouTube video workflow and triage the Chatwoot support inbox");
+  const ids = results.map(item => item.id);
+  assert.ok(ids.includes("youtube-automation-agent"));
+  assert.ok(ids.includes("chatwoot"));
+  assert.ok(!ids.includes("comfyui"));
+});
+
+test("matching is bounded and empty tasks do not pick arbitrary repositories", () => {
+  assert.deepEqual(matchRepositoryCapabilities("   "), []);
+  assert.ok(matchRepositoryCapabilities("research paper statistics diagrams security audit", { limit: 2 }).length <= 2);
+});
+
+test("readiness reports key names/states without returning credential values", () => {
+  const secret = "do-not-return-this-secret";
+  const status = getRepositoryCapabilityStatus({
+    CHATWOOT_BASE_URL: "https://support.example.test",
+    CHATWOOT_API_TOKEN: secret,
+    GEO_SLEUTH_ENABLED: "true",
+    GEO_SLEUTH_ROOT: "/opt/geo-sleuth",
+    OPENPROJECT_API_TOKEN: "configured-token"
+  });
+  const chatwoot = status.integrations.find(item => item.id === "chatwoot");
+  const geo = status.integrations.find(item => item.id === "geo-sleuth");
+  const openproject = status.integrations.find(item => item.id === "openproject");
+  assert.equal(chatwoot.state, "credentials_present_adapter_missing");
+  assert.equal(geo.state, "configured_unverified");
+  assert.equal(openproject.state, "missing_configuration");
+  assert.equal(JSON.stringify(status).includes(secret), false);
+  assert.equal(JSON.stringify(status).includes("configured-token"), false);
+});
+
+test("task guidance states real limitations and selects matches", () => {
+  const guidance = buildRepositoryCapabilityGuidance("Please schedule a meeting using Cal.diy");
+  assert.ok(guidance.matches.some(item => item.id === "cal-diy"));
+  assert.ok(guidance.rules.some(rule => rule.includes("adapter_not_implemented")));
+  assert.ok(guidance.rules.some(rule => rule.includes("Do not invoke metered providers")));
+});
