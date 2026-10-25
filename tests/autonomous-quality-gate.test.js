@@ -81,3 +81,35 @@ test("quality gate requires an actionable, reviewable report structure", () => {
   assert.equal(result.checks.find(check => check.id === "deliverable_structure").passed, false);
   assert.match(result.checks.find(check => check.id === "deliverable_structure").detail, /Missing required sections/);
 });
+
+
+test("quality gate rejects reports with headings but no useful section content", () => {
+  const url = "https://example.com/source";
+  const answer = [
+    "padding content to exceed the minimum length and hide missing useful output " + url,
+    "# Summary",
+    "# Deliverable",
+    "# Next Steps",
+    "# Blockers",
+    "# Verification Criteria"
+  ].join("\\n");
+  const result = verifyAutonomousOutput({ research: { sources: [{ url }] }, report: { answer } });
+  const structure = result.checks.find(check => check.id === "deliverable_structure");
+  assert.equal(structure.passed, false);
+  assert.match(structure.detail, /Empty or too-short sections/);
+});
+
+test("quality gate rejects required report sections in the wrong order", () => {
+  const url = "https://example.com/source";
+  const answer = [
+    "# Summary\\nA useful summary of the findings.",
+    "# Next Steps\\nValidate the reported findings.",
+    "# Deliverable\\nThe report includes findings and a traceable source " + url,
+    "# Blockers\\nNo known blockers at present.",
+    "# Verification Criteria\\nConfirm each finding against the source."
+  ].join("\\n\\n");
+  const result = verifyAutonomousOutput({ research: { sources: [{ url }] }, report: { answer } });
+  const structure = result.checks.find(check => check.id === "deliverable_structure");
+  assert.equal(structure.passed, false);
+  assert.match(structure.detail, /not in the requested order/);
+});
