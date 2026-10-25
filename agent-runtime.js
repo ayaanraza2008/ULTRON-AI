@@ -899,7 +899,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         redirect: "error",
         signal: AbortSignal.timeout(15000)
       });
-      const raw = await readModelResponseTextLimited(response);
+      const raw = await readModelResponseTextLimited(response, 1_000_000);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice description response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice description failed."), { code: "VOICESTUDIO_DESCRIBE_FAILED", status: response.status === 429 ? 429 : 502 });
       let result; try { result = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice description JSON."), { code: "VOICESTUDIO_DESCRIBE_INVALID", status: 502 }); }
@@ -914,7 +914,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         redirect: "error",
         signal: AbortSignal.timeout(15000)
       });
-      const raw = await readModelResponseTextLimited(response);
+      const raw = await readModelResponseTextLimited(response, 1_000_000);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice catalog exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice listing failed."), { code: "VOICESTUDIO_VOICES_FAILED", status: response.status === 429 ? 429 : 502 });
       let data; try { data = JSON.parse(raw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid voice catalog JSON."), { code: "VOICESTUDIO_VOICES_INVALID", status: 502 }); }
@@ -990,7 +990,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           redirect: "error",
           signal: AbortSignal.timeout(120000)
         });
-        const raw = await readModelResponseTextLimited(response);
+        const raw = await readModelResponseTextLimited(response, 1_000_000);
         if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio transcription response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
         if (!response.ok) throw Object.assign(new Error("VoiceStudio transcription failed."), { code: "VOICESTUDIO_TRANSCRIPTION_FAILED", status: response.status === 429 ? 429 : 502 });
         let result; try { result = JSON.parse(raw); } catch { result = { text: raw.slice(0, 10000) }; }
