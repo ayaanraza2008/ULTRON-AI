@@ -23,7 +23,7 @@ async function withServer(env, userId, fetchImpl, run) {
 }
 
 test("agent tool catalog exposes configured OpenViking only to its owner and never returns API tokens", async () => {
-  const env = { OPENVIKING_BASE_URL: "https://openviking.example", OPENVIKING_API_TOKEN: token };
+  const env = { OPENVIKING_BASE_URL: "https://openviking.example.com", OPENVIKING_API_TOKEN: token };
   await withServer(env, ownerId, async () => { throw new Error("tool catalog must not call upstream services"); }, async base => {
     const response = await fetch(base + "/api/agent/tools");
     assert.equal(response.status, 200);
@@ -46,7 +46,7 @@ test("deterministic agent fallback routes OpenViking status requests without mod
     OPENROUTER_API_KEY: "provider-test-secret",
     OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
     OPENROUTER_DEFAULT_MODEL: "openrouter/free",
-    OPENVIKING_BASE_URL: "https://openviking.example",
+    OPENVIKING_BASE_URL: "https://openviking.example.com",
     OPENVIKING_API_TOKEN: token
   };
   await withServer(env, ownerId, async (url, options) => {
