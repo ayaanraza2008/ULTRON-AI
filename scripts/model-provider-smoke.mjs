@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { safeServiceBase } from "../network-safety.js";
 
 const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1";
 const MAX_PROVIDER_COUNT = 6;
@@ -15,16 +16,9 @@ function safeModel(value) {
 }
 
 function secureBaseUrl(value) {
-  if (typeof value !== "string" || !value.trim() || value.trim().length > 2048) return null;
-  try {
-    const url = new URL(value.trim());
-    const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname.toLowerCase());
-    if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return null;
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  // Use the same public-host policy as runtime routing before forwarding a key.
+  // HTTP remains limited to explicit loopback development endpoints.
+  return safeServiceBase(value);
 }
 
 function loadProviderCandidates(env) {
