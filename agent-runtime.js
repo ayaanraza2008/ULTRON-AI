@@ -399,7 +399,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
       if (!apiKey) continue;
       const baseUrl = safeBase(item.baseUrl);
-      if (!baseUrl || providers.some(p => p.baseUrl === baseUrl)) continue;
+      if (!baseUrl) continue;
       seen.add(name);
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100, supportsTools: item.supportsTools !== false });
     }
