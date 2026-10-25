@@ -252,7 +252,7 @@ const REPOSITORIES = [
   },
   {
     id: "hermes-agent", repo: "NousResearch/hermes-agent", domain: "agent_runtime",
-    match: /\\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime|self-improving agent|agent skills|delegate to subagents|agent cron|mcp agent tools)\\b/i,
+    match: /\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime|self-improving agent|agent skills|delegate to subagents|agent cron|mcp agent tools)\b/i,
     integration: "owner_scoped_agent_gateway", status: "adapter_present_unverified_live",
     abilities: ["tool-enabled delegated agent tasks", "persistent memory and session search", "self-improving skills and reusable procedural memory", "subagents and parallel work", "scheduled routines/cron", "MCP and plugin tools", "web/browser, terminal/files, vision/media and messaging when configured upstream"],
     limits: ["Hermes is a separately installed runtime. Each feature depends on Hermes-side provider, toolset, plugin, messaging and sandbox configuration. ULTRON only invokes its authenticated API; it does not automatically install Hermes, enable all tools, launch cron jobs or send messages."],
