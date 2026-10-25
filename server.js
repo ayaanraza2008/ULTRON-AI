@@ -609,6 +609,48 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     return payload;
   }
 
+  // This narrow server-role path exists only for task state transitions and audit inserts
+  // intentionally denied to authenticated PostgREST clients by database triggers/grants.
+  // Callers must still provide owner/status predicates; never expose this helper to HTTP input.
+  async function supabasePrivilegedRest(req, table, method, query = "", body, prefer = "return=representation") {
+    const allowed = table === "agent_tasks" && method === "PATCH" ||
+      table === "audit_events" && method === "POST";
+    if (!allowed || typeof query !== "string" || query.length > 4000) {
+      throw Object.assign(new Error("Privileged database operation is not allowed."), { status: 400, code: "PRIVILEGED_OPERATION_NOT_ALLOWED" });
+    }
+    const config = supabaseConfig();
+    const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+    if (!config || !serviceKey) {
+      throw Object.assign(new Error("Server-side task transitions are not configured."), { status: 503, code: "SERVICE_ROLE_NOT_CONFIGURED" });
+    }
+    const url = config.url + "/rest/v1/" + table + query;
+    let response;
+    try {
+      response = await fetchImpl(url, {
+        method,
+        headers: {
+          apikey: serviceKey,
+          Authorization: "Bearer " + serviceKey,
+          Accept: "application/json",
+          ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: prefer })
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        redirect: "error", signal: AbortSignal.timeout(15_000)
+      });
+    } catch {
+      throw Object.assign(new Error("Server-side task transition request failed."), { status: 502, code: "PRIVILEGED_DATABASE_UNAVAILABLE" });
+    }
+    let payload;
+    try { payload = await readResponseJsonLimited(response, 2_000_000); }
+    catch { throw Object.assign(new Error("Server-side database response was invalid or too large."), { status: 502, code: "PRIVILEGED_RESPONSE_INVALID" }); }
+    if (!response.ok) {
+      logger.warn?.("Privileged task database request failed", { table, status: response.status });
+      const status = response.status === 401 || response.status === 403 ? 503 : response.status === 404 ? 404 : 502;
+      throw Object.assign(new Error(status === 503 ? "Server-side database operation was denied or not configured." : "Could not complete the task database operation."), { status, code: "PRIVILEGED_DATABASE_REQUEST_FAILED" });
+    }
+    return payload;
+  }
+
   function sessionSecret() {
     return env.SESSION_SECRET || env.APP_ACCESS_PASSWORD || "";
   }
@@ -1548,7 +1590,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     });
   });
 
-  app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, logger }));
+  app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
