@@ -174,7 +174,7 @@ test("Cactus can serve a normal streaming chat locally without an API key", asyn
     assert.equal(response.headers.get("x-ultron-provider"), "cactus");
     const body = await response.text();
     assert.match(body, /Local Cactus response/);
-    assert.match(body, /data: \[DONE\]/);
+    assert.match(body, /event: done/);
     assert.equal(seen.url, "http://127.0.0.1:8080/v1/chat/completions");
     assert.equal(JSON.parse(seen.options.body).stream, false);
     assert.equal(seen.options.headers.Authorization, undefined);
