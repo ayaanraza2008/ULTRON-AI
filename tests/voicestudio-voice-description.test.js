@@ -18,8 +18,8 @@ async function withServer(env, fetchImpl, run) {
 test("ULTRON uses VoiceStudio to preview a requested voice description without saving a profile", async () => {
   let modelCalls = 0;
   let describeCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
-    if (url === "https://voice.example/design/describe") {
+  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+    if (url === "https://voice.example.com/design/describe") {
       describeCalls += 1;
       assert.equal(options.method, "POST");
       assert.equal(options.headers.Authorization, "Bearer private-token");

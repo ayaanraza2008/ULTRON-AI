@@ -473,7 +473,7 @@ test("coding assistance falls back to a configured provider after OpenRouter rat
     OPENROUTER_DEFAULT_MODEL: "openrouter/free",
     SECONDARY_API_KEY: "secondary-test-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "secondary", baseUrl: "https://api.secondary.example/v1", apiKeyEnv: "SECONDARY_API_KEY", model: "secondary-model", priority: 1 }
+      { name: "secondary", baseUrl: "https://api.secondary.example.com/v1", apiKeyEnv: "SECONDARY_API_KEY", model: "secondary-model", priority: 1 }
     ])
   };
   await withServer(env, async base => {
@@ -493,7 +493,7 @@ test("coding assistance falls back to a configured provider after OpenRouter rat
     if (url.startsWith("https://openrouter.ai/")) {
       return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
     }
-    assert.equal(url, "https://api.secondary.example/v1/chat/completions");
+    assert.equal(url, "https://api.secondary.example.com/v1/chat/completions");
     return new Response(JSON.stringify({
       model: "secondary-model",
       choices: [{ message: { content: "Recovered by fallback." } }]
@@ -501,7 +501,7 @@ test("coding assistance falls back to a configured provider after OpenRouter rat
   } });
   assert.deepEqual(calls.map(call => call.url), [
     "https://openrouter.ai/api/v1/chat/completions",
-    "https://api.secondary.example/v1/chat/completions"
+    "https://api.secondary.example.com/v1/chat/completions"
   ]);
   assert.deepEqual(calls.map(call => call.authorization), [
     "Bearer primary-test-secret",
@@ -515,8 +515,8 @@ test("coding assistance falls back when a provider returns an empty HTTP 200 com
     FIRST_API_KEY: "first-test-secret",
     SECOND_API_KEY: "second-test-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "first-model", priority: 1 },
-      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "second-model", priority: 2 }
+      { name: "first", baseUrl: "https://first.example.com/v1", apiKeyEnv: "FIRST_API_KEY", model: "first-model", priority: 1 },
+      { name: "second", baseUrl: "https://second.example.com/v1", apiKeyEnv: "SECOND_API_KEY", model: "second-model", priority: 2 }
     ])
   };
   await withServer(env, async base => {
@@ -531,7 +531,7 @@ test("coding assistance falls back when a provider returns an empty HTTP 200 com
     assert.equal(body.answer, "Recovered from an empty completion.");
   }, { fetchImpl: async url => {
     calls.push(url);
-    if (url.startsWith("https://first.example/")) {
+    if (url.startsWith("https://first.example.com/")) {
       return new Response(JSON.stringify({ choices: [{ message: { content: " " } }] }), { status: 200 });
     }
     return new Response(JSON.stringify({
@@ -540,8 +540,8 @@ test("coding assistance falls back when a provider returns an empty HTTP 200 com
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   } });
   assert.deepEqual(calls, [
-    "https://first.example/v1/chat/completions",
-    "https://second.example/v1/chat/completions"
+    "https://first.example.com/v1/chat/completions",
+    "https://second.example.com/v1/chat/completions"
   ]);
 });
 
@@ -550,7 +550,7 @@ test("AI Employee planning works with a configured secondary provider and no Ope
   const env = {
     EMPLOYEE_FALLBACK_KEY: "employee-fallback-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "employee-fallback", baseUrl: "https://employee.example/v1", apiKeyEnv: "EMPLOYEE_FALLBACK_KEY", model: "employee-model", priority: 1 }
+      { name: "employee-fallback", baseUrl: "https://employee.example.com/v1", apiKeyEnv: "EMPLOYEE_FALLBACK_KEY", model: "employee-model", priority: 1 }
     ])
   };
   await withServer(env, async base => {
@@ -566,7 +566,7 @@ test("AI Employee planning works with a configured secondary provider and no Ope
     assert.equal(body.execution, "not_executed");
     assert.equal(JSON.stringify(body).includes("employee-fallback-secret"), false);
   }, { fetchImpl: async (url, options) => {
-    assert.equal(url, "https://employee.example/v1/chat/completions");
+    assert.equal(url, "https://employee.example.com/v1/chat/completions");
     requestedModel = JSON.parse(options.body).model;
     return new Response(JSON.stringify({
       model: "employee-model",
@@ -808,7 +808,7 @@ test("capabilities accurately report alternate model providers, memory retrieval
   const env = {
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
       name: "secondary",
-      baseUrl: "https://provider.example/v1",
+      baseUrl: "https://provider.example.com/v1",
       apiKeyEnv: "SECONDARY_API_KEY",
       model: "example/free-model",
       priority: 10
@@ -836,7 +836,7 @@ test("capabilities report a configured fallback when the OpenRouter base URL is 
     OPENROUTER_BASE_URL: "http://public-provider.invalid/v1",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
       name: "secondary",
-      baseUrl: "https://provider.example/v1",
+      baseUrl: "https://provider.example.com/v1",
       apiKeyEnv: "SECONDARY_API_KEY",
       model: "example/free-model",
       priority: 10
@@ -894,8 +894,8 @@ test("coding assistance falls back after malformed provider JSON", async () => {
     FIRST_API_KEY: "first-malformed-secret",
     SECOND_API_KEY: "second-valid-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://malformed.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "malformed-model", priority: 1 },
-      { name: "second", baseUrl: "https://valid.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "valid-model", priority: 2 }
+      { name: "first", baseUrl: "https://malformed.example.com/v1", apiKeyEnv: "FIRST_API_KEY", model: "malformed-model", priority: 1 },
+      { name: "second", baseUrl: "https://valid.example.com/v1", apiKeyEnv: "SECOND_API_KEY", model: "valid-model", priority: 2 }
     ])
   };
   await withServer(env, async base => {
@@ -910,15 +910,15 @@ test("coding assistance falls back after malformed provider JSON", async () => {
     assert.equal(body.answer, "Recovered from malformed JSON.");
   }, { fetchImpl: async url => {
     calls.push(url);
-    if (url.startsWith("https://malformed.example/")) return new Response("{malformed-json", { status: 200 });
+    if (url.startsWith("https://malformed.example.com/")) return new Response("{malformed-json", { status: 200 });
     return new Response(JSON.stringify({
       model: "valid-model",
       choices: [{ message: { content: "Recovered from malformed JSON." } }]
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   } });
   assert.deepEqual(calls, [
-    "https://malformed.example/v1/chat/completions",
-    "https://valid.example/v1/chat/completions"
+    "https://malformed.example.com/v1/chat/completions",
+    "https://valid.example.com/v1/chat/completions"
   ]);
 });
 
@@ -928,8 +928,8 @@ test("coding assistance bounds oversized provider responses and tries the next p
     FIRST_API_KEY: "first-oversized-secret",
     SECOND_API_KEY: "second-small-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://oversized.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "large-model", priority: 1 },
-      { name: "second", baseUrl: "https://small.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "small-model", priority: 2 }
+      { name: "first", baseUrl: "https://oversized.example.com/v1", apiKeyEnv: "FIRST_API_KEY", model: "large-model", priority: 1 },
+      { name: "second", baseUrl: "https://small.example.com/v1", apiKeyEnv: "SECOND_API_KEY", model: "small-model", priority: 2 }
     ])
   };
   await withServer(env, async base => {
@@ -943,7 +943,7 @@ test("coding assistance bounds oversized provider responses and tries the next p
     assert.equal(body.answer, "Recovered from oversized output.");
   }, { fetchImpl: async url => {
     calls.push(url);
-    if (url.startsWith("https://oversized.example/")) {
+    if (url.startsWith("https://oversized.example.com/")) {
       return new Response(" ".repeat(2 * 1024 * 1024 + 128), { status: 200 });
     }
     return new Response(JSON.stringify({
@@ -952,8 +952,8 @@ test("coding assistance bounds oversized provider responses and tries the next p
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   } });
   assert.deepEqual(calls, [
-    "https://oversized.example/v1/chat/completions",
-    "https://small.example/v1/chat/completions"
+    "https://oversized.example.com/v1/chat/completions",
+    "https://small.example.com/v1/chat/completions"
   ]);
 });
 
@@ -964,8 +964,8 @@ test("coding assistance retries a provider timeout with the next eligible provid
     FIRST_API_KEY: "first-timeout-secret",
     SECOND_API_KEY: "second-timeout-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://timeout.example/v1", apiKeyEnv: "FIRST_API_KEY", model: "slow-model", priority: 1 },
-      { name: "second", baseUrl: "https://fast.example/v1", apiKeyEnv: "SECOND_API_KEY", model: "fast-model", priority: 2 }
+      { name: "first", baseUrl: "https://timeout.example.com/v1", apiKeyEnv: "FIRST_API_KEY", model: "slow-model", priority: 1 },
+      { name: "second", baseUrl: "https://fast.example.com/v1", apiKeyEnv: "SECOND_API_KEY", model: "fast-model", priority: 2 }
     ])
   };
   await withServer(env, async base => {
@@ -980,7 +980,7 @@ test("coding assistance retries a provider timeout with the next eligible provid
     assert.equal(body.answer, "Recovered after timeout.");
   }, { fetchImpl: async (url, options) => {
     calls.push(url);
-    if (url.startsWith("https://timeout.example/")) {
+    if (url.startsWith("https://timeout.example.com/")) {
       return new Promise((resolve, reject) => {
         const rejectOnAbort = () => reject(options.signal.reason || new DOMException("Timed out", "TimeoutError"));
         if (options.signal.aborted) rejectOnAbort();
@@ -993,8 +993,8 @@ test("coding assistance retries a provider timeout with the next eligible provid
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   } });
   assert.deepEqual(calls, [
-    "https://timeout.example/v1/chat/completions",
-    "https://fast.example/v1/chat/completions"
+    "https://timeout.example.com/v1/chat/completions",
+    "https://fast.example.com/v1/chat/completions"
   ]);
 });
 
@@ -1004,7 +1004,7 @@ test("feature endpoints reject unsafe fallback provider URLs without making netw
   const env = {
     UNSAFE_API_KEY: secret,
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "unsafe", baseUrl: "http://provider.example/v1", apiKeyEnv: "UNSAFE_API_KEY", model: "unsafe-model", priority: 1 }
+      { name: "unsafe", baseUrl: "http://provider.example.com/v1", apiKeyEnv: "UNSAFE_API_KEY", model: "unsafe-model", priority: 1 }
     ])
   };
   await withServer(env, async base => {
@@ -1023,3 +1023,70 @@ test("feature endpoints reject unsafe fallback provider URLs without making netw
   } });
 });
 
+
+
+test("feature model provider registry rejects private HTTPS hosts without making requests", async () => {
+  let called = false;
+  const env = {
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "private-https", baseUrl: "https://192.168.1.10/v1", apiKeyEnv: "PRIVATE_KEY", model: "fake-model", priority: 1 }
+    ]),
+    PRIVATE_KEY: "synthetic-secret"
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Check safe provider handling", mode: "review" })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "CODING_PROVIDER_NOT_CONFIGURED");
+    assert.equal(called, false);
+  }, { fetchImpl: async () => {
+    called = true;
+    throw new Error("Private configured provider must not be called.");
+  } });
+});
+
+
+test("TTS streaming response is rejected by its declared byte limit before buffering", async () => {
+  let upstreamCalled = false;
+  let bodyCancelled = false;
+  await withServer({
+    TTS_API_BASE_URL: "https://tts.example.com/v1",
+    TTS_API_KEY: "synthetic-tts-key"
+  }, async base => {
+    const response = await fetch(base + "/api/speech/synthesize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Speak safely" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "TTS_INVALID_AUDIO");
+    assert.equal(bodyCancelled, true);
+  }, { fetchImpl: async () => {
+    upstreamCalled = true;
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode("small chunk")); },
+      cancel() { bodyCancelled = true; }
+    }), { status: 200, headers: { "content-length": "12000001", "content-type": "audio/mpeg" } });
+  } });
+  assert.equal(upstreamCalled, true);
+});
+
+test("STT JSON response is bounded and cancelled when declared oversized", async () => {
+  let bodyCancelled = false;
+  await withServer({
+    STT_API_BASE_URL: "https://stt.example.com/v1",
+    STT_API_KEY: "synthetic-stt-key"
+  }, async base => {
+    const response = await fetch(base + "/api/speech/transcribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audioBase64: Buffer.from("RIFF").toString("base64"), mimeType: "audio/wav" })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "STT_INVALID_RESPONSE");
+    assert.equal(bodyCancelled, true);
+  }, { fetchImpl: async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("{\"text\":\"tiny\"}")); },
+    cancel() { bodyCancelled = true; }
+  }), { status: 200, headers: { "content-length": "1000001", "content-type": "application/json" } }) });
+});

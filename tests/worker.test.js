@@ -1,6 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner } from "../worker.js";
+import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner, safeResearchUrl } from "../worker.js";
+
+test("worker research URL validation shares reserved IPv4 and IPv6 host rules", () => {
+  for (const url of [
+    "http://127.0.0.1/admin",
+    "http://192.168.1.10/admin",
+    "http://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal/computeMetadata/v1",
+    "http://[::1]/private",
+    "http://[2002:7f00:1::]/loopback-tunnel",
+    "http://[2001:2::1]/benchmarking",
+    "http://[2001:10::1]/orchid",
+    "http://[2001:20::1]/orchid-v2",
+    "http://[3fff::1]/documentation-prefix",
+    "https://user:password@example.com/private"
+  ]) assert.equal(safeResearchUrl(url), "", url);
+  assert.equal(safeResearchUrl("https://www.example.com/article"), "https://www.example.com/article");
+});
 
 test("limited response readers reject non-streaming fallbacks before buffering", async () => {
   let textCalls = 0;
@@ -554,7 +571,7 @@ test("worker falls back to the next configured model after a permanent provider 
       OPENROUTER_API_KEY: "invalid-primary-key",
       OPENROUTER_DEFAULT_MODEL: "bad-model",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "fallback", baseUrl: "https://fallback.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
+        { name: "fallback", baseUrl: "https://fallback.example.com/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
       ]),
       FALLBACK_API_KEY: "fallback-test-key"
     },
@@ -822,7 +839,7 @@ test("background AI Employee falls back when a provider returns malformed JSON",
       OPENROUTER_API_KEY: "primary-test-key",
       OPENROUTER_DEFAULT_MODEL: "openrouter/free",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "backup", baseUrl: "https://backup.example/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
+        { name: "backup", baseUrl: "https://backup.example.com/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
       ]),
       BACKUP_API_KEY: "backup-test-key"
     },
@@ -847,7 +864,7 @@ test("background AI Employee falls back when a provider returns malformed JSON",
   await worker.done;
   assert.deepEqual(attempts, [
     "https://openrouter.ai/api/v1/chat/completions",
-    "https://backup.example/v1/chat/completions"
+    "https://backup.example.com/v1/chat/completions"
   ]);
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
@@ -872,7 +889,7 @@ test("background AI Employee falls back when a provider response exceeds the siz
       OPENROUTER_API_KEY: "primary-test-key",
       OPENROUTER_DEFAULT_MODEL: "openrouter/free",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "backup", baseUrl: "https://backup.example/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
+        { name: "backup", baseUrl: "https://backup.example.com/v1", apiKeyEnv: "BACKUP_API_KEY", model: "backup-model", priority: 1 }
       ]),
       BACKUP_API_KEY: "backup-test-key"
     },
@@ -897,7 +914,7 @@ test("background AI Employee falls back when a provider response exceeds the siz
   await worker.done;
   assert.deepEqual(attempts, [
     "https://openrouter.ai/api/v1/chat/completions",
-    "https://backup.example/v1/chat/completions"
+    "https://backup.example.com/v1/chat/completions"
   ]);
   assert.equal(worker.getStatus().tasksCompleted, 1);
   assert.equal(worker.getStatus().tasksFailed, 0);
@@ -1020,7 +1037,7 @@ test("worker falls back after a transient HTTP 408 provider timeout", async () =
       OPENROUTER_API_KEY: "invalid-primary-key",
       OPENROUTER_DEFAULT_MODEL: "bad-model",
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-        { name: "fallback", baseUrl: "https://fallback.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
+        { name: "fallback", baseUrl: "https://fallback.example.com/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "fallback-model", priority: 1 }
       ]),
       FALLBACK_API_KEY: "fallback-test-key"
     },
@@ -1586,10 +1603,16 @@ test("worker rejects query/fragment-bearing model provider base URLs before atte
       ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
         { name: "query-provider", baseUrl: "https://query.example.com/v1?token=secret", apiKeyEnv: "QUERY_PROVIDER_KEY", model: "test-model", priority: 0 },
         { name: "fragment-provider", baseUrl: "https://fragment.example.com/v1#secret", apiKeyEnv: "FRAGMENT_PROVIDER_KEY", model: "test-model", priority: 1 },
-        { name: "safe-provider", baseUrl: "https://safe.example.com/v1", apiKeyEnv: "SAFE_PROVIDER_KEY", model: "test-model", priority: 2 }
+        { name: "private-provider", baseUrl: "https://192.168.1.10/v1", apiKeyEnv: "PRIVATE_PROVIDER_KEY", model: "test-model", priority: 2 },
+        { name: "metadata-provider", baseUrl: "https://169.254.169.254/latest/meta-data", apiKeyEnv: "METADATA_PROVIDER_KEY", model: "test-model", priority: 3 },
+        { name: "orchid-v2-provider", baseUrl: "https://[2001:20::1]/v1", apiKeyEnv: "ORCHID_V2_PROVIDER_KEY", model: "test-model", priority: 4 },
+        { name: "safe-provider", baseUrl: "https://safe.example.com/v1", apiKeyEnv: "SAFE_PROVIDER_KEY", model: "test-model", priority: 5 }
       ]),
       QUERY_PROVIDER_KEY: "synthetic-query-secret",
       FRAGMENT_PROVIDER_KEY: "synthetic-fragment-secret",
+      PRIVATE_PROVIDER_KEY: "synthetic-private-secret",
+      METADATA_PROVIDER_KEY: "synthetic-metadata-secret",
+      ORCHID_V2_PROVIDER_KEY: "synthetic-orchid-secret",
       SAFE_PROVIDER_KEY: "synthetic-safe-secret"
     },
     logger: { info() {}, warn() {}, error() {} },

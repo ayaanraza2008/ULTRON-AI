@@ -1,16 +1,11 @@
 import express from "express";
 import { buildIntegrationCatalog } from "./catalog.js";
+import { safeServiceBase } from "../network-safety.js";
 
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024;
 
 function configuredUrl(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const url = new URL(value.trim());
-    if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(url.hostname)) return null;
-    return url.toString().replace(/\/+$/, "");
-  } catch { return null; }
+  return safeServiceBase(value);
 }
 
 function cleanPath(value) {

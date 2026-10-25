@@ -23,7 +23,7 @@ test("Paperclip blocks other ULTRON accounts before using a shared bearer token"
   const result = await getPaperclipAgentDashboard({
     env: {
       ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-      PAPERCLIP_BASE_URL: "https://paperclip.example",
+      PAPERCLIP_BASE_URL: "https://paperclip.example.com",
       PAPERCLIP_API_TOKEN: "private-paperclip-token",
       PAPERCLIP_COMPANY_ID: "company-123"
     },
@@ -40,7 +40,7 @@ test("Paperclip connector performs only GET requests and returns sanitized roste
   const requests = [];
   const env = {
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    PAPERCLIP_BASE_URL: "https://paperclip.example/",
+    PAPERCLIP_BASE_URL: "https://paperclip.example.com/",
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
@@ -108,7 +108,7 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
-  for (const value of ["http://paperclip.example", "https://user:password@paperclip.example", "https://paperclip.example/?token=x"]) {
+  for (const value of ["http://paperclip.example.com", "https://user:password@paperclip.example.com", "https://paperclip.example.com/?token=x"]) {
     const result = await getPaperclipAgentDashboard({
       env: { ...baseEnv, PAPERCLIP_BASE_URL: value }, userId: ownerId, fetchImpl
     });
@@ -116,7 +116,7 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
     assert.equal(result.error.code, "PAPERCLIP_NOT_CONFIGURED");
   }
   const invalidCompany = await getPaperclipAgentDashboard({
-    env: { ...baseEnv, PAPERCLIP_BASE_URL: "https://paperclip.example", PAPERCLIP_COMPANY_ID: "../other" },
+    env: { ...baseEnv, PAPERCLIP_BASE_URL: "https://paperclip.example.com", PAPERCLIP_COMPANY_ID: "../other" },
     userId: ownerId, fetchImpl
   });
   assert.equal(invalidCompany.error.code, "PAPERCLIP_NOT_CONFIGURED");
@@ -126,11 +126,28 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
 test("Paperclip readiness returns states only and never leaks API token values", () => {
   const readiness = getPaperclipReadiness({
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    PAPERCLIP_BASE_URL: "https://paperclip.example",
+    PAPERCLIP_BASE_URL: "https://paperclip.example.com",
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   });
   assert.equal(readiness.state, "configured_unverified");
   assert.equal(readiness.configured, true);
   assert.equal(JSON.stringify(readiness).includes("private-paperclip-token"), false);
+});
+
+
+test("Paperclip readiness rejects HTTPS private and metadata service endpoints", () => {
+  for (const url of [
+    "https://192.168.1.10",
+    "https://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal"
+  ]) {
+    const readiness = getPaperclipReadiness({
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      PAPERCLIP_BASE_URL: url,
+      PAPERCLIP_API_TOKEN: "synthetic-token",
+      PAPERCLIP_COMPANY_ID: "company-123"
+    });
+    assert.equal(readiness.configured, false, url);
+  }
 });

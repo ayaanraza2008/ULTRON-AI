@@ -34,7 +34,7 @@ test("Obscura blocks unsafe URL types and private network targets before network
 test("Obscura remote MCP requires an authenticated gateway token", async () => {
   let calls = 0;
   const result = await inspectPublicPageWithObscura({
-    env: { ULTRON_INTEGRATION_OWNER_USER_ID: ownerId, OBSCURA_MCP_URL: "https://obscura.example/mcp" },
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: ownerId, OBSCURA_MCP_URL: "https://obscura.example.com/mcp" },
     userId: ownerId, url: "https://example.com",
     fetchImpl: async () => { calls++; throw new Error("should not call upstream"); }
   });
@@ -43,7 +43,7 @@ test("Obscura remote MCP requires an authenticated gateway token", async () => {
   assert.equal(calls, 0);
   assert.equal(getObscuraReadiness({
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    OBSCURA_MCP_URL: "https://obscura.example/mcp"
+    OBSCURA_MCP_URL: "https://obscura.example.com/mcp"
   }).configured, false);
 });
 
@@ -163,4 +163,29 @@ test("Obscura fails safely on MCP errors without leaking response bodies", async
   assert.equal(result.provider, "obscura");
   assert.equal(JSON.stringify(result).includes("secret internal stack path"), false);
   assert.equal(calls, 3);
+});
+
+
+test("Obscura refuses private and metadata MCP service endpoints before sending the gateway token", async () => {
+  for (const url of [
+    "https://192.168.1.10/mcp",
+    "https://169.254.169.254/mcp",
+    "https://metadata.google.internal/mcp",
+    "https://[fd00::1]/mcp",
+    "https://[::1]/mcp"
+  ]) {
+    let called = false;
+    const env = {
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      OBSCURA_MCP_URL: url,
+      OBSCURA_MCP_TOKEN: "synthetic-token"
+    };
+    assert.equal(getObscuraReadiness(env).configured, false, url);
+    const result = await inspectPublicPageWithObscura({
+      env, userId: ownerId, url: "https://example.com",
+      fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+    });
+    assert.equal(result.state, "blocked", url);
+    assert.equal(called, false, url);
+  }
 });

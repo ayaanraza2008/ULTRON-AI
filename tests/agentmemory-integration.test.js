@@ -9,7 +9,7 @@ import {
 } from "../agentmemory-integration.js";
 
 test("AgentMemory readiness does not reveal credentials", () => {
-  const result = agentMemoryReadiness({ AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "private-test-secret" });
+  const result = agentMemoryReadiness({ AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "private-test-secret" });
   assert.equal(result.configured, true);
   assert.equal(result.automaticRecall, true);
   assert.equal(result.automaticCapture, true);
@@ -26,14 +26,14 @@ test("AgentMemory routing skips unrelated tasks and rejects secret-bearing captu
 test("relevant task recall uses the authenticated user's isolated project", async () => {
   let call;
   const result = await recallAgentMemory("Continue the previous repository implementation", {
-    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "private-test-secret", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
+    env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "private-test-secret", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
     userId: "user-123",
     fetchImpl: async (url, options) => {
       call = { url, options };
       return new Response(JSON.stringify({ results: [{ title: "Architecture", content: "Use an isolated worker." }, { text: "Tests run with node --test." }] }), { status: 200 });
     }
   });
-  assert.equal(call.url, "https://memory.example/agentmemory/smart-search");
+  assert.equal(call.url, "https://memory.example.com/agentmemory/smart-search");
   assert.equal(call.options.headers.Authorization, "Bearer private-test-secret");
   assert.deepEqual(JSON.parse(call.options.body), { query: "Continue the previous repository implementation", project: "ultron-ai-user-user-123", limit: 5 });
   assert.equal(result.memories.length, 2);
@@ -43,13 +43,13 @@ test("relevant task recall uses the authenticated user's isolated project", asyn
 test("durable capture uses supported remember API and can be disabled", async () => {
   let call;
   const disabled = await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", {
-    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret", ULTRON_AGENTMEMORY_CAPTURE: "false" },
+    env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "secret", ULTRON_AGENTMEMORY_CAPTURE: "false" },
     userId: "user-123",
     fetchImpl: async () => { throw new Error("must not call when capture disabled"); }
   });
   assert.equal(disabled.state, "disabled");
   const captured = await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", {
-    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
+    env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "secret", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
     userId: "user-123",
     fetchImpl: async (url, options) => {
       call = { url, options };
@@ -57,7 +57,7 @@ test("durable capture uses supported remember API and can be disabled", async ()
     }
   });
   assert.equal(captured.state, "captured");
-  assert.equal(call.url, "https://memory.example/agentmemory/remember");
+  assert.equal(call.url, "https://memory.example.com/agentmemory/remember");
   assert.equal(JSON.parse(call.options.body).project, "ultron-ai-user-user-123");
   assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
@@ -67,7 +67,7 @@ test("distinct user IDs that normalize similarly cannot share an AgentMemory pro
   const projects = [];
   for (const userId of ["a/b", "a-b"]) {
     await recallAgentMemory("Continue the previous repository implementation", {
-      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
+      env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "test-secret", ULTRON_AGENTMEMORY_PROJECT: "ultron-ai" },
       userId,
       fetchImpl: async (_url, options) => {
         projects.push(JSON.parse(options.body).project);
@@ -85,7 +85,7 @@ test("AgentMemory cancels oversized streamed responses before buffering the whol
   let cancelled = false;
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
-      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+      env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "test-secret" },
       userId: "user-123",
       fetchImpl: async (_url, options) => {
         assert.equal(options.redirect, "error");
@@ -104,7 +104,7 @@ test("AgentMemory rejects oversized declared response lengths without reading th
   let cancelled = false;
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
-      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+      env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "test-secret" },
       userId: "user-123",
       fetchImpl: async () => new Response(new ReadableStream({
         start() {},
@@ -120,7 +120,7 @@ test("AgentMemory rejects unstreamable response bodies without calling text()", 
   let textCalled = false;
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
-      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+      env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "test-secret" },
       userId: "user-123",
       fetchImpl: async () => ({
         ok: true,
@@ -138,7 +138,7 @@ test("AgentMemory rejects unstreamable response bodies without calling text()", 
 test("AgentMemory fails safely when the remote service is unavailable", async () => {
   await assert.rejects(
     recallAgentMemory("Continue the previous repository implementation", {
-      env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "secret" },
+      env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "secret" },
       userId: "user-123",
       fetchImpl: async () => new Response("unavailable", { status: 503 })
     }),
@@ -177,7 +177,7 @@ test("AgentMemory refuses to persist JWTs and GitHub access tokens", () => {
 test("AgentMemory fails closed without an authenticated user ID", async () => {
   let calls = 0;
   const options = {
-    env: { AGENTMEMORY_URL: "https://memory.example", AGENTMEMORY_SECRET: "test-secret" },
+    env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "test-secret" },
     fetchImpl: async () => { calls += 1; return new Response(JSON.stringify({ results: [] }), { status: 200 }); }
   };
   const recalled = await recallAgentMemory("Continue the previous repository implementation", options);
@@ -185,4 +185,25 @@ test("AgentMemory fails closed without an authenticated user ID", async () => {
   assert.deepEqual(recalled, { state: "skipped", memories: [] });
   assert.deepEqual(captured, { state: "skipped" });
   assert.equal(calls, 0, "unauthenticated memory operations must not reach the upstream service");
+});
+
+
+test("AgentMemory refuses private, loopback HTTPS, and metadata endpoints", async () => {
+  for (const url of [
+    "https://192.168.1.10",
+    "https://10.1.2.3",
+    "https://169.254.169.254",
+    "https://metadata.google.internal",
+    "https://[::1]"
+  ]) {
+    const settings = { AGENTMEMORY_URL: url, AGENTMEMORY_SECRET: "synthetic-secret" };
+    assert.equal(agentMemoryReadiness(settings).configured, false, url);
+    let called = false;
+    const result = await recallAgentMemory("Continue the previous repository implementation", {
+      env: settings, userId: "user-123",
+      fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+    });
+    assert.deepEqual(result, { state: "not_configured", memories: [] }, url);
+    assert.equal(called, false, url);
+  }
 });

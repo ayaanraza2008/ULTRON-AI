@@ -6,20 +6,55 @@ import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
+import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 
 function safeBaseUrl(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const url = new URL(value.trim());
-    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname.toLowerCase());
-    if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
-    return url.toString().replace(/\/+$/, "");
-  } catch { return null; }
+  return safeServiceBase(value);
 }
 
 function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+async function readLimitedResponseBytes(response, maxBytes, label = "Provider response") {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error(label + " exceeded the configured response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE" });
+  }
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    throw Object.assign(new Error(label + " cannot be safely size-limited."), { code: "PROVIDER_RESPONSE_UNBOUNDED" });
+  }
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error(label + " exceeded the configured response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE" });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, totalBytes);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
+async function readLimitedResponseText(response, maxBytes, label = "Provider response") {
+  return (await readLimitedResponseBytes(response, maxBytes, label)).toString("utf8");
+}
+
+async function readLimitedResponseJson(response, maxBytes = 2 * 1024 * 1024, label = "Provider response") {
+  const raw = await readLimitedResponseText(response, maxBytes, label);
+  try { return raw ? JSON.parse(raw) : {}; }
+  catch {
+    throw Object.assign(new Error(label + " returned malformed JSON."), { code: "PROVIDER_RESPONSE_INVALID" });
+  }
 }
 
 const DOCX_MAX_ENTRIES = 256;
@@ -796,14 +831,15 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" })
       });
       if (!response.ok) return res.status(502).json({ error: { code: "TTS_PROVIDER_FAILED", message: "The configured OpenAI-compatible speech provider failed." } });
-      const bytes = Buffer.from(await response.arrayBuffer());
+      const bytes = await readLimitedResponseBytes(response, 12_000_000, "Speech synthesis response");
       if (!bytes.length || bytes.length > 12_000_000) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty or oversized audio." } });
       res.setHeader("Content-Type", response.headers.get("content-type")?.startsWith("audio/") ? response.headers.get("content-type") : "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Content-Length", String(bytes.length));
       res.send(bytes);
     } catch (error) {
-      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "TTS_TIMEOUT" : "TTS_UNAVAILABLE", message: "Speech synthesis failed or timed out." } });
+      const tooLarge = error?.code === "PROVIDER_RESPONSE_TOO_LARGE";
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "TTS_TIMEOUT" : tooLarge ? "TTS_INVALID_AUDIO" : "TTS_UNAVAILABLE", message: tooLarge ? "The speech provider returned oversized audio." : "Speech synthesis failed or timed out." } });
     } finally { timeout.close(); }
   });
 
@@ -828,11 +864,12 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         body: form
       });
       if (!response.ok) return res.status(502).json({ error: { code: "STT_PROVIDER_FAILED", message: "The configured OpenAI-compatible transcription provider failed." } });
-      const payload = await response.json();
+      const payload = await readLimitedResponseJson(response, 1_000_000, "Speech transcription response");
       if (typeof payload.text !== "string") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
       res.json({ text: payload.text.slice(0, 12000), language: payload.language || null });
-    } catch {
-      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "STT_TIMEOUT" : "STT_UNAVAILABLE", message: "Transcription failed or timed out." } });
+    } catch (error) {
+      const unsafeResponse = error?.code === "PROVIDER_RESPONSE_TOO_LARGE" || error?.code === "PROVIDER_RESPONSE_UNBOUNDED";
+      res.status(timeout.signal.aborted ? 504 : 502).json({ error: { code: timeout.signal.aborted ? "STT_TIMEOUT" : unsafeResponse ? "STT_INVALID_RESPONSE" : "STT_UNAVAILABLE", message: unsafeResponse ? "The transcription provider returned an unsafe response." : "Transcription failed or timed out." } });
     } finally { timeout.close(); }
   });
 
@@ -843,8 +880,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     try {
       const response = await fetchImpl(base + "/api/tags", { signal: timeout.signal, headers: { Accept: "application/json" } });
       if (!response.ok) return res.status(502).json({ error: { code: "LOCAL_MODEL_UNAVAILABLE", message: "The configured Ollama endpoint did not return model data." } });
-      const payload = await response.json();
-      res.json({ models: Array.isArray(payload.models) ? payload.models.map(m => ({ name: String(m.name || "").slice(0, 200), size: Number(m.size) || null, modified_at: m.modified_at || null })) : [] });
+      const payload = await readLimitedResponseJson(response, 1_000_000, "Local model list response");
+      res.json({ models: Array.isArray(payload.models) ? payload.models.slice(0, 500).map(m => ({ name: String(m.name || "").slice(0, 200), size: Number(m.size) || null, modified_at: m.modified_at || null })) : [] });
     } catch {
       res.status(502).json({ error: { code: "LOCAL_MODEL_UNAVAILABLE", message: "Could not reach the configured local model endpoint." } });
     } finally { timeout.close(); }
@@ -873,7 +910,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         body: JSON.stringify({ model, messages: clean, stream: false })
       });
       if (!response.ok) return res.status(502).json({ error: { code: "LOCAL_MODEL_FAILED", message: "The local model service rejected the request." } });
-      const payload = await response.json();
+      const payload = await readLimitedResponseJson(response, 2 * 1024 * 1024, "Local model response");
       const content = payload?.message?.content;
       if (typeof content !== "string") return res.status(502).json({ error: { code: "LOCAL_MODEL_BAD_RESPONSE", message: "The local model returned an unexpected response." } });
       res.json({ content, model: payload.model || model, provider: "ollama" });
@@ -895,7 +932,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: false })
         });
         if (!response.ok) return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The configured research provider did not complete the request." } });
-        const payload = await response.json();
+        const payload = await readLimitedResponseJson(response, 1_500_000, "Research response");
         const results = Array.isArray(payload.results) ? payload.results.slice(0, 20).map(item => ({
           title: boundedString(item.title, 300),
           url: safePublicUrl(item.url),
@@ -906,7 +943,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
       const response = await fetchImpl(url, { signal: timeout.signal, headers: { "User-Agent": "ULTRON-AI/1.0 (research client)", Accept: "text/html" } });
       if (!response.ok) return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The public search page could not be reached. Configure TAVILY_API_KEY for a dedicated provider." } });
-      const html = (await response.text()).slice(0, 1_500_000);
+      const html = await readLimitedResponseText(response, 1_500_000, "Public search response");
       const results = parseDuckDuckGo(html).slice(0, 5);
       res.json({ query, provider: "duckduckgo-html", results, notice: "Public HTML fallback may change or be rate-limited. Search snippets are untrusted; open and verify sources." });
     } catch {
@@ -1431,7 +1468,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           if (requestedProvider !== "auto") break;
           continue;
         }
-        const payload = await response.json();
+        const payload = await readLimitedResponseJson(response, 2 * 1024 * 1024, "Security/vision provider response");
         const answer = provider === "gemini"
           ? payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n")
           : provider === "ollama" ? payload?.message?.content : payload?.choices?.[0]?.message?.content;
@@ -1582,7 +1619,7 @@ function safePublicUrl(value) {
     ];
     if ((url.protocol !== "https:" && url.protocol !== "http:") ||
         url.username || url.password ||
-        !host || !host.includes(".") ||
+        !host || !host.includes(".") || !isPublicNetworkHost(host) ||
         isIP(ipHost) !== 0 ||
         host === "localhost" || host === "metadata.google" ||
         host === "metadata.google.internal" ||

@@ -41,9 +41,9 @@ test("readiness reports key names/states without returning credential values", (
     CHATWOOT_ACCOUNT_ID: "12",
     GEO_SLEUTH_ENABLED: "true",
     GEO_SLEUTH_ROOT: "/opt/geo-sleuth",
-    OPENPROJECT_BASE_URL: "https://projects.example",
+    OPENPROJECT_BASE_URL: "https://projects.example.com",
     OPENPROJECT_API_TOKEN: "configured-token",
-    CALDIY_BASE_URL: "https://cal.example",
+    CALDIY_BASE_URL: "https://cal.example.com",
     CALDIY_API_TOKEN: "cal-secret"
   });
   const chatwoot = status.integrations.find(item => item.id === "chatwoot");
@@ -55,7 +55,7 @@ test("readiness reports key names/states without returning credential values", (
   const openViking = status.integrations.find(item => item.id === "openviking");
   assert.equal(openViking.state, "missing_configuration");
   const configuredOpenViking = getRepositoryCapabilityStatus({
-    OPENVIKING_BASE_URL: "https://openviking.example",
+    OPENVIKING_BASE_URL: "https://openviking.example.com",
     OPENVIKING_API_TOKEN: "openviking-synthetic-secret",
     ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
   }).integrations.find(item => item.id === "openviking");

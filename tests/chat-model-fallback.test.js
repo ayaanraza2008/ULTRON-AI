@@ -102,7 +102,7 @@ test("chat falls back from exhausted OpenRouter models to a configured alternate
   const overrides = {
     FALLBACK_API_KEY: "fallback-provider-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "secondary", baseUrl: "https://secondary.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "secondary-chat-model", priority: 1 }
+      { name: "secondary", baseUrl: "https://secondary.example.com/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "secondary-chat-model", priority: 1 }
     ])
   };
   await withApp(async (url, options) => {
@@ -111,7 +111,7 @@ test("chat falls back from exhausted OpenRouter models to a configured alternate
     if (url.startsWith("https://openrouter.ai/")) {
       return new Response(JSON.stringify({ error: { code: "rate_limit" } }), { status: 429 });
     }
-    assert.equal(url, "https://secondary.example/v1/chat/completions");
+    assert.equal(url, "https://secondary.example.com/v1/chat/completions");
     return success("Secondary provider recovered the chat.");
   }, async (base, cookie) => {
     const response = await chat(base, cookie);
@@ -130,7 +130,7 @@ test("chat works with a configured alternate provider even when OpenRouter is no
     OPENROUTER_API_KEY: "",
     FALLBACK_API_KEY: "fallback-only-secret",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "secondary", baseUrl: "https://secondary.example/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "secondary-chat-model", priority: 1 }
+      { name: "secondary", baseUrl: "https://secondary.example.com/v1", apiKeyEnv: "FALLBACK_API_KEY", model: "secondary-chat-model", priority: 1 }
     ])
   };
   await withApp(async (url, options) => {
@@ -220,7 +220,7 @@ test("chat does not use the integration owner's Hermes provider for another auth
     SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
     HERMES_AGENT_ENABLED: "true",
     HERMES_AGENT_CHAT_PROVIDER: "true",
-    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
     HERMES_AGENT_API_KEY: "private-hermes-test-key",
     HERMES_AGENT_MODEL: "hermes-agent",
     ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"

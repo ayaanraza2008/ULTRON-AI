@@ -1,4 +1,5 @@
 import express from "express";
+import { safeServiceBase } from "../network-safety.js";
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
@@ -17,16 +18,16 @@ function voiceStudioConfig(env = process.env) {
   const raw = bounded(env.VOICESTUDIO_BASE_URL, 500);
   const token = bounded(env.VOICESTUDIO_API_KEY, 2000);
   if (!raw) return { configured: false, reason: "not_configured" };
-  try {
-    const url = new URL(raw);
-    if (url.username || url.password || url.hash || url.search) return { configured: false, reason: "invalid_url" };
-    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return { configured: false, reason: "https_required" };
-    if (!local && !token) return { configured: false, reason: "remote_api_key_required" };
-    return { configured: true, baseUrl: url.toString().replace(/\/+$/, ""), token, local };
-  } catch {
-    return { configured: false, reason: "invalid_url" };
-  }
+  let url;
+  try { url = new URL(raw); } catch { return { configured: false, reason: "invalid_url" }; }
+  if (url.username || url.password || url.hash || url.search) return { configured: false, reason: "invalid_url" };
+  const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return { configured: false, reason: "https_required" };
+  // Shared tokens must not be forwarded to an HTTPS private/LAN/metadata target.
+  const baseUrl = safeServiceBase(raw);
+  if (!baseUrl) return { configured: false, reason: "unsafe_url" };
+  if (!local && !token) return { configured: false, reason: "remote_api_key_required" };
+  return { configured: true, baseUrl, token, local };
 }
 
 function providerHeaders(config, extra = {}) {

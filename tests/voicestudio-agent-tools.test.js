@@ -20,10 +20,10 @@ test("ULTRON autonomously lists VoiceStudio voices and passes the bounded catalo
   let voiceCalls = 0;
   await withServer({
     OPENROUTER_API_KEY: "test-only",
-    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_BASE_URL: "https://voice.example.com",
     VOICESTUDIO_API_KEY: "private-token"
   }, async (url, options) => {
-    if (url === "https://voice.example/v1/audio/voices") {
+    if (url === "https://voice.example.com/v1/audio/voices") {
       voiceCalls += 1;
       assert.equal(options.method, "GET");
       assert.equal(options.headers.Authorization, "Bearer private-token");

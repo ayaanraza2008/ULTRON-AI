@@ -18,8 +18,8 @@ async function withServer(env, fetchImpl, run) {
 test("VoiceStudio cloning fails closed without consent in the raw user prompt", async () => {
   let providerCalls = 0;
   let voiceCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
-    if (url === "https://voice.example/profiles") { voiceCalls += 1; throw new Error("must not clone without consent"); }
+  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+    if (url === "https://voice.example.com/profiles") { voiceCalls += 1; throw new Error("must not clone without consent"); }
     providerCalls += 1;
     if (providerCalls === 1) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [
       { id: "clone-call", type: "function", function: { name: "clone_speech_voice", arguments: JSON.stringify({ name: "Sample", consentBasis: "speaker_permission" }) } }
@@ -42,8 +42,8 @@ test("VoiceStudio cloning requires supplied audio, creates the profile, and reco
   let profileCalls = 0;
   let attestationCalls = 0;
   const audioBase64 = Buffer.alloc(1500, 7).toString("base64");
-  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
-    if (url === "https://voice.example/profiles") {
+  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+    if (url === "https://voice.example.com/profiles") {
       profileCalls += 1;
       assert.equal(options.method, "POST");
       assert.ok(options.body instanceof FormData);
@@ -54,7 +54,7 @@ test("VoiceStudio cloning requires supplied audio, creates the profile, and reco
       assert.equal((await options.body.get("ref_audio").arrayBuffer()).byteLength, 1500);
       return new Response(JSON.stringify({ id: "clone_123", name: "My Voice", kind: "clone" }));
     }
-    if (url === "https://voice.example/profiles/clone_123/attestation") {
+    if (url === "https://voice.example.com/profiles/clone_123/attestation") {
       attestationCalls += 1;
       assert.equal(options.method, "POST");
       assert.equal(options.headers.Authorization, "Bearer private-token");

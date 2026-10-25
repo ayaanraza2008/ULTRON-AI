@@ -1,4 +1,4 @@
-import { isIP } from "node:net";
+import { isPublicNetworkHost } from "./network-safety.js";
 
 /**
  * Deterministic quality gate for autonomous worker deliverables.
@@ -8,43 +8,9 @@ function isPublicHttpUrl(value) {
   if (typeof value !== "string" || value.length > 2048) return false;
   try {
     const url = new URL(value);
-    if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return false;
-    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
-    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-        host === "metadata.google.internal" || host === "metadata.google") return false;
-    if (isIP(host) === 4) {
-      const octets = host.split(".").map(Number);
-      const [a, b] = octets;
-      if (a === 0 || a === 10 || a === 127 || a >= 224 ||
-          (a === 100 && b >= 64 && b <= 127) ||
-          (a === 169 && b === 254) ||
-          (a === 172 && b >= 16 && b <= 31) ||
-          (a === 192 && (b === 0 || b === 168 || (b === 88 && octets[2] === 99))) ||
-          (a === 198 && (b === 18 || b === 19 || (b === 51 && octets[2] === 100))) ||
-          (a === 203 && b === 0 && octets[2] === 113)) return false;
-    } else if (isIP(host) === 6) {
-      const normalized = host.toLowerCase();
-      const firstHextet = Number.parseInt(normalized.split(":")[0] || "0", 16);
-      // Citation URLs may use only global-unicast IPv6, never local, multicast,
-      // IPv4-compatible, or mapped forms that could disguise private destinations.
-      if (firstHextet < 0x2000 || firstHextet > 0x3fff) return false;
-      if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") ||
-          normalized.startsWith("fd") || /^fe[89ab]/.test(normalized) ||
-          normalized.startsWith("2001:db8:") || normalized.startsWith("2001:0:") || normalized.startsWith("2002:")) return false;
-      const mapped = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-      if (mapped && !isPublicHttpUrl("https://" + mapped[1] + "/")) return false;
-      // Hex-encoded IPv4-mapped IPv6 must inherit IPv4 private/reserved checks too.
-      const mappedHex = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
-      if (mappedHex) {
-        const high = Number.parseInt(mappedHex[1], 16);
-        const low = Number.parseInt(mappedHex[2], 16);
-        const ipv4 = [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
-        if (!isPublicHttpUrl("https://" + ipv4 + "/")) return false;
-      }
-    } else if (!host.includes(".")) {
-      return false;
-    }
-    return true;
+    if (!["https:", "http:"].includes(url.protocol) || !url.hostname ||
+        url.username || url.password || url.port && !/^\d+$/.test(url.port)) return false;
+    return isPublicNetworkHost(url.hostname);
   } catch {
     return false;
   }

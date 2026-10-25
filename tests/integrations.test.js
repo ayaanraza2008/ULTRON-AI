@@ -23,7 +23,7 @@ test("shared ComfyUI credentials fail closed when the integration owner is not c
   let called = false;
   await withServer({
     ULTRON_INTEGRATION_OWNER_USER_ID: "",
-    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_BASE_URL: "https://comfy.example.com",
     COMFYUI_API_KEY: "synthetic-comfy-key"
   }, async () => {
     called = true;
@@ -44,12 +44,12 @@ test("non-owner accounts cannot consume or inspect shared integration credential
   let calls = 0;
   const env = {
     ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000002",
-    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_BASE_URL: "https://comfy.example.com",
     COMFYUI_API_KEY: "synthetic-comfy-key",
-    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_BASE_URL: "https://voice.example.com",
     OMNIVOICE_API_KEY: "synthetic-voice-key",
     OMNIVOICE_SYNTHESIS_PATH: "/v1/synthesize",
-    ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
+    ULTRON_HANDY_BRIDGE_URL: "https://handy.example.com",
     ULTRON_HANDY_BRIDGE_TOKEN: "synthetic-handy-token",
     ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
   };
@@ -84,7 +84,7 @@ test("non-owner accounts cannot consume or inspect shared integration credential
 
 test("ComfyUI queue forwards workflow to the configured API and returns prompt id", async () => {
   let request;
-  await withServer({ COMFYUI_BASE_URL: "https://comfy.example", COMFYUI_API_KEY: "test-token" }, async (url, options) => {
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example.com", COMFYUI_API_KEY: "test-token" }, async (url, options) => {
     request = { url, options };
     return new Response(JSON.stringify({ prompt_id: "prompt_123", node_errors: {} }), { status: 200 });
   }, async base => {
@@ -94,7 +94,7 @@ test("ComfyUI queue forwards workflow to the configured API and returns prompt i
     });
     assert.equal(response.status, 202);
     assert.equal((await response.json()).promptId, "prompt_123");
-    assert.equal(request.url, "https://comfy.example/prompt");
+    assert.equal(request.url, "https://comfy.example.com/prompt");
     assert.equal(request.options.headers.Authorization, "Bearer test-token");
     assert.equal(request.options.redirect, "error");
     assert.equal(JSON.parse(request.options.body).prompt["1"].class_type, "CheckpointLoaderSimple");
@@ -103,7 +103,7 @@ test("ComfyUI queue forwards workflow to the configured API and returns prompt i
 
 test("ComfyUI queue rejects malformed workflow before network call", async () => {
   let called = false;
-  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async () => {
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example.com" }, async () => {
     called = true;
     throw new Error("unexpected network call");
   }, async base => {
@@ -118,7 +118,7 @@ test("ComfyUI queue rejects malformed workflow before network call", async () =>
 
 test("OmniVoice requires an explicit configured API path and text", async () => {
   let called = false;
-  await withServer({ OMNIVOICE_API_BASE_URL: "https://voice.example", OMNIVOICE_API_KEY: "token" }, async () => {
+  await withServer({ OMNIVOICE_API_BASE_URL: "https://voice.example.com", OMNIVOICE_API_KEY: "token" }, async () => {
     called = true;
     return new Response("{}", { status: 200 });
   }, async base => {
@@ -134,7 +134,7 @@ test("OmniVoice requires an explicit configured API path and text", async () => 
 test("OmniVoice sends payload to the configured provider path", async () => {
   let request;
   await withServer({
-    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_BASE_URL: "https://voice.example.com",
     OMNIVOICE_API_KEY: "token",
     OMNIVOICE_SYNTHESIS_PATH: "/v1/synthesize"
   }, async (url, options) => {
@@ -145,7 +145,7 @@ test("OmniVoice sends payload to the configured provider path", async () => {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: { text: "hello", language: "en" } })
     });
     assert.equal(response.status, 200);
-    assert.equal(request.url, "https://voice.example/v1/synthesize");
+    assert.equal(request.url, "https://voice.example.com/v1/synthesize");
     assert.equal(request.options.headers.Authorization, "Bearer token");
     assert.equal(request.options.redirect, "error");
     assert.equal((await response.json()).result.audioBase64, "YXVkaW8=");
@@ -156,7 +156,7 @@ test("Handy rejects malformed or non-canonical base64 audio without calling the 
   for (const audioBase64 of ["not audio!", "Y===", "!!!!", "YQ"]) {
     let called = false;
     await withServer({
-      ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
+      ULTRON_HANDY_BRIDGE_URL: "https://handy.example.com",
       ULTRON_HANDY_BRIDGE_TOKEN: "token",
       ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
     }, async () => {
@@ -176,7 +176,7 @@ test("Handy rejects malformed or non-canonical base64 audio without calling the 
 test("Handy forwards valid canonical base64 audio to the configured bridge", async () => {
   let request;
   await withServer({
-    ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
+    ULTRON_HANDY_BRIDGE_URL: "https://handy.example.com",
     ULTRON_HANDY_BRIDGE_TOKEN: "token",
     ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
   }, async (url, options) => {
@@ -188,7 +188,7 @@ test("Handy forwards valid canonical base64 audio to the configured bridge", asy
       body: JSON.stringify({ payload: { audioBase64: "UklGRg==", language: "en" } })
     });
     assert.equal(response.status, 200);
-    assert.equal(request.url, "https://handy.example/transcribe");
+    assert.equal(request.url, "https://handy.example.com/transcribe");
     assert.equal(request.options.headers.Authorization, "Bearer token");
     assert.equal(request.options.redirect, "error");
     assert.equal(JSON.parse(request.options.body).audioBase64, "UklGRg==");
@@ -198,7 +198,7 @@ test("Handy forwards valid canonical base64 audio to the configured bridge", asy
 
 test("ComfyUI status reports device and queue counts", async () => {
   const urls = [];
-  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async url => {
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example.com" }, async url => {
     urls.push(url);
     if (url.endsWith("/system_stats")) return new Response(JSON.stringify({ devices: [{ name: "GPU 0", type: "cuda", vram_total: 8000, vram_free: 4000 }] }), { status: 200 });
     if (url.endsWith("/queue")) return new Response(JSON.stringify({ queue_running: [[1, "running_1"]], queue_pending: [[2, "pending_1"], [3, "pending_2"]] }), { status: 200 });
@@ -211,12 +211,12 @@ test("ComfyUI status reports device and queue counts", async () => {
     assert.equal(body.system.devices[0].name, "GPU 0");
     assert.deepEqual(body.queue, { running: 1, pending: 2 });
   });
-  assert.deepEqual(urls.sort(), ["https://comfy.example/queue", "https://comfy.example/system_stats"].sort());
+  assert.deepEqual(urls.sort(), ["https://comfy.example.com/queue", "https://comfy.example.com/system_stats"].sort());
 });
 
 test("ComfyUI queue inspection summarizes jobs without returning workflow payloads", async () => {
   let requestedUrl;
-  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async url => {
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example.com" }, async url => {
     requestedUrl = url;
     return new Response(JSON.stringify({
       queue_running: [[1, "active_123", { secret: "large workflow" }, { extra_pnginfo: { workflow: { name: "Test workflow" } } }]],
@@ -230,19 +230,19 @@ test("ComfyUI queue inspection summarizes jobs without returning workflow payloa
     assert.equal(body.running[0].workflowName, "Test workflow");
     assert.equal(body.pending[0].promptId, "waiting_456");
     assert.equal(JSON.stringify(body).includes("large workflow"), false);
-    assert.equal(requestedUrl, "https://comfy.example/queue");
+    assert.equal(requestedUrl, "https://comfy.example.com/queue");
   });
 });
 
 test("ComfyUI queued-job cancellation sends only the requested prompt id", async () => {
   let request;
-  await withServer({ COMFYUI_BASE_URL: "https://comfy.example", COMFYUI_API_KEY: "token" }, async (url, options) => {
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example.com", COMFYUI_API_KEY: "token" }, async (url, options) => {
     request = { url, options };
     return new Response(JSON.stringify({ }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/integrations/comfyui/jobs/queued_123", { method: "DELETE" });
     assert.equal(response.status, 200);
-    assert.equal(request.url, "https://comfy.example/queue");
+    assert.equal(request.url, "https://comfy.example.com/queue");
     assert.equal(request.options.method, "POST");
     assert.deepEqual(JSON.parse(request.options.body), { delete: ["queued_123"] });
     assert.equal(request.options.headers.Authorization, "Bearer token");
@@ -251,7 +251,7 @@ test("ComfyUI queued-job cancellation sends only the requested prompt id", async
 
 test("ComfyUI cancellation rejects unsafe prompt ids", async () => {
   let called = false;
-  await withServer({ COMFYUI_BASE_URL: "https://comfy.example" }, async () => {
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example.com" }, async () => {
     called = true;
     return new Response("{}", { status: 200 });
   }, async base => {
@@ -265,9 +265,9 @@ test("ComfyUI cancellation rejects unsafe prompt ids", async () => {
 test("integration catalog reports readiness without exposing credentials or claiming connectivity", async () => {
   await withServer({
     ULTRON_EMPLOYEES_ENABLED: "true",
-    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_BASE_URL: "https://comfy.example.com",
     COMFYUI_API_KEY: "secret-comfy-test",
-    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_BASE_URL: "https://voice.example.com",
     OMNIVOICE_API_KEY: "secret-voice-test",
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize"
   }, async () => { throw new Error("catalog must not call upstream services"); }, async base => {
@@ -290,12 +290,12 @@ test("integration catalog reports readiness without exposing credentials or clai
 test("productivity connector readiness requires owner guard and omits credentials", async () => {
   await withServer({
     ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
-    CHATWOOT_BASE_URL: "https://chat.example",
+    CHATWOOT_BASE_URL: "https://chat.example.com",
     CHATWOOT_API_TOKEN: "chat-secret",
     CHATWOOT_ACCOUNT_ID: "12",
-    OPENPROJECT_BASE_URL: "https://projects.example",
+    OPENPROJECT_BASE_URL: "https://projects.example.com",
     OPENPROJECT_API_TOKEN: "openproject-secret",
-    CALDIY_BASE_URL: "https://cal.example",
+    CALDIY_BASE_URL: "https://cal.example.com",
     CALDIY_API_TOKEN: "cal-secret"
   }, async () => { throw new Error("catalog must not call upstream services"); }, async base => {
     const response = await fetch(base + "/api/integrations/catalog");
@@ -316,7 +316,7 @@ test("productivity connector readiness requires owner guard and omits credential
 test("integration catalog does not mark unsupported local URL schemes as configured", async () => {
   await withServer({
     COMFYUI_BASE_URL: "ftp://localhost:8188",
-    HEYGEM_API_BASE_URL: "https://user:password@avatar.example",
+    HEYGEM_API_BASE_URL: "https://user:password@avatar.example.com",
     HEYGEM_API_KEY: "test-key",
     HEYGEM_JOB_PATH: "/jobs"
   }, async () => {
@@ -333,7 +333,7 @@ test("integration catalog does not mark unsupported local URL schemes as configu
 test("integration catalog accepts HTTPS and HTTP loopback development endpoints", async () => {
   await withServer({
     COMFYUI_BASE_URL: "http://127.0.0.1:8188",
-    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_BASE_URL: "https://voice.example.com",
     VOICESTUDIO_API_KEY: "test-key"
   }, async () => {
     throw new Error("catalog readiness must not make provider requests");
@@ -350,7 +350,7 @@ test("integration catalog accepts HTTPS and HTTP loopback development endpoints"
 test("integration adapter stops reading provider responses after the 2 MB limit", async () => {
   let responseBodyCancelled = false;
   await withServer({
-    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_BASE_URL: "https://voice.example.com",
     OMNIVOICE_API_KEY: "token",
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize"
   }, async () => {
@@ -375,7 +375,7 @@ test("integration adapter stops reading provider responses after the 2 MB limit"
 test("ComfyUI adapter rejects a base URL containing query parameters before network access", async () => {
   const secret = "query-secret-must-not-be-forwarded";
   let called = false;
-  await withServer({ COMFYUI_BASE_URL: "https://comfy.example?token=" + secret }, async () => {
+  await withServer({ COMFYUI_BASE_URL: "https://comfy.example.com?token=" + secret }, async () => {
     called = true;
     throw new Error("invalid base URL must not reach the ComfyUI provider");
   }, async base => {
@@ -384,6 +384,41 @@ test("ComfyUI adapter rejects a base URL containing query parameters before netw
     const body = await response.json();
     assert.equal(body.error.code, "COMFYUI_NOT_CONFIGURED");
     assert.equal(JSON.stringify(body).includes(secret), false);
+    assert.equal(called, false);
+  });
+});
+
+
+test("integration catalog and live adapters block private service URLs before any upstream request", async () => {
+  let called = false;
+  const env = {
+    COMFYUI_BASE_URL: "https://192.168.1.10",
+    COMFYUI_API_KEY: "synthetic-token",
+    HEYGEM_API_BASE_URL: "https://169.254.169.254/metadata",
+    HEYGEM_API_KEY: "synthetic-heygem-token",
+    HEYGEM_JOB_PATH: "/jobs"
+  };
+  const fetchImpl = async () => {
+    called = true;
+    throw new Error("Private provider endpoint must never be called.");
+  };
+  await withServer(env, fetchImpl, async base => {
+    const catalogResponse = await fetch(base + "/api/integrations/catalog");
+    assert.equal(catalogResponse.status, 200);
+    const catalog = await catalogResponse.json();
+    assert.equal(catalog.integrations.find(item => item.id === "comfyui").state, "blocked");
+    assert.equal(catalog.integrations.find(item => item.id === "heygem").state, "blocked");
+
+    const comfy = await fetch(base + "/api/integrations/comfyui/status");
+    assert.equal(comfy.status, 503);
+    assert.equal((await comfy.json()).error.code, "COMFYUI_NOT_CONFIGURED");
+
+    const heygem = await fetch(base + "/api/integrations/heygem/jobs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { text: "test" } })
+    });
+    assert.equal(heygem.status, 503);
+    assert.equal((await heygem.json()).error.code, "HEYGEM_NOT_CONFIGURED");
     assert.equal(called, false);
   });
 });

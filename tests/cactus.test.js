@@ -15,7 +15,7 @@ test("Cactus stays optional and does not trigger model downloads", () => {
 test("Cactus remote model endpoints require an API key", async () => {
   let calls = 0;
   const result = await checkCactusService({
-    env: { CACTUS_BASE_URL: "https://cactus.example/v1", CACTUS_MODEL: "needle" },
+    env: { CACTUS_BASE_URL: "https://cactus.example.com/v1", CACTUS_MODEL: "needle" },
     userId: ownerId,
     fetchImpl: async () => { calls++; throw new Error("should not call upstream"); }
   });
@@ -58,7 +58,7 @@ test("Cactus model-list health check is read-only, bounded and redacts authoriza
   const result = await checkCactusService({
     env: {
       ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-      CACTUS_BASE_URL: "https://cactus.example/v1",
+      CACTUS_BASE_URL: "https://cactus.example.com/v1",
       CACTUS_MODEL: "Cactus-Compute/needle",
       CACTUS_API_KEY: "private-cactus-secret"
     },
@@ -74,7 +74,7 @@ test("Cactus model-list health check is read-only, bounded and redacts authoriza
   assert.equal(result.endpointReachable, true);
   assert.equal(result.configuredModelListed, true);
   assert.equal(result.availableModels.length, 2);
-  assert.equal(request.url, "https://cactus.example/v1/models");
+  assert.equal(request.url, "https://cactus.example.com/v1/models");
   assert.equal(request.options.method, "GET");
   assert.equal(request.options.headers.Authorization, "Bearer private-cactus-secret");
   assert.equal(request.options.redirect, "error");
@@ -94,7 +94,33 @@ test("Cactus provider is local-first by default and exposes confidence threshold
   assert.equal(provider.confidenceThreshold, 0.8);
   assert.equal(provider.supportsTools, true);
   assert.equal(resolveCactusProvider({
-    CACTUS_BASE_URL: "https://cactus.example/v1",
+    CACTUS_BASE_URL: "https://cactus.example.com/v1",
     CACTUS_MODEL: "needle"
   }), null);
+});
+
+
+test("Cactus refuses remote private and metadata endpoints before contacting them", async () => {
+  for (const url of [
+    "https://192.168.1.10/v1",
+    "https://10.1.2.3/v1",
+    "https://169.254.169.254/v1",
+    "https://metadata.google.internal/v1",
+    "https://[fd00::1]/v1"
+  ]) {
+    let called = false;
+    const env = {
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      CACTUS_BASE_URL: url,
+      CACTUS_MODEL: "needle",
+      CACTUS_API_KEY: "synthetic-token"
+    };
+    assert.equal(getCactusReadiness(env).configured, false, url);
+    const result = await checkCactusService({
+      env, userId: ownerId,
+      fetchImpl: async () => { called = true; throw new Error("Unsafe URL must not be contacted."); }
+    });
+    assert.equal(result.state, "blocked", url);
+    assert.equal(called, false, url);
+  }
 });

@@ -40,11 +40,11 @@ test("integration catalog requires an authenticated session", async () => {
 test("integration catalog reports readiness without exposing secret values", async () => {
   const configuredEnv = {
     ...env,
-    COMFYUI_BASE_URL: "https://comfy.example.test",
-    HEYGEM_API_BASE_URL: "https://avatar.example.test",
+    COMFYUI_BASE_URL: "https://comfy.example.com",
+    HEYGEM_API_BASE_URL: "https://avatar.example.com",
     HEYGEM_API_KEY: "private-heygem-secret",
     HEYGEM_JOB_PATH: "/api/generate",
-    OMNIVOICE_API_BASE_URL: "https://voice.example.test",
+    OMNIVOICE_API_BASE_URL: "https://voice.example.com",
     OMNIVOICE_API_KEY: "private-voice-secret",
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
     ULTRON_EMPLOYEES_ENABLED: "true",
@@ -54,7 +54,7 @@ test("integration catalog reports readiness without exposing secret values", asy
     OBSCURA_MCP_URL: "http://127.0.0.1:8080/mcp",
     CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
     CACTUS_MODEL: "Cactus-Compute/needle",
-    PAPERCLIP_BASE_URL: "https://paperclip.example",
+    PAPERCLIP_BASE_URL: "https://paperclip.example.com",
     PAPERCLIP_API_TOKEN: "private-paperclip-secret",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
@@ -851,7 +851,7 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
     HERMES_AGENT_ENABLED: "true",
     HERMES_AGENT_CHAT_PROVIDER: "true",
-    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
     HERMES_AGENT_API_KEY: "private-hermes-test-key",
     HERMES_AGENT_MODEL: "hermes-agent",
     HERMES_AGENT_PRIORITY: "-5"
@@ -866,7 +866,7 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
         return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       seen = { url, options, body: JSON.parse(options.body) };
-      assert.equal(url, "https://hermes.example/v1/chat/completions");
+      assert.equal(url, "https://hermes.example.com/v1/chat/completions");
       assert.equal(options.headers.Authorization, "Bearer private-hermes-test-key");
       return new Response(JSON.stringify({
         model: "hermes-agent",
@@ -891,3 +891,52 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
   });
 });
 
+
+
+test("chat dispatcher rejects private HTTPS alternate providers before sending credentials", async () => {
+  let providerCalls = 0;
+  const configuredEnv = {
+    ...env,
+    OPENROUTER_API_KEY: "",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "private-upstream",
+        baseUrl: "https://192.168.1.10/v1",
+        apiKeyEnv: "PRIVATE_UPSTREAM_KEY",
+        model: "synthetic-model",
+        priority: 1
+      },
+      {
+        name: "metadata-upstream",
+        baseUrl: "https://169.254.169.254/latest/meta-data",
+        apiKeyEnv: "METADATA_UPSTREAM_KEY",
+        model: "synthetic-model",
+        priority: 2
+      }
+    ]),
+    PRIVATE_UPSTREAM_KEY: "synthetic-private-token",
+    METADATA_UPSTREAM_KEY: "synthetic-metadata-token"
+  };
+  const app = createApp({
+    env: configuredEnv,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      throw new Error("Unsafe configured provider must never be contacted.");
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "Hello" }]
+      })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "PROVIDER_NOT_CONFIGURED");
+    assert.equal(providerCalls, 0);
+  });
+});

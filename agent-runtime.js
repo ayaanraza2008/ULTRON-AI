@@ -87,19 +87,20 @@ function bounded(value, max = MAX_TEXT) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-function voiceStudioSettings(env = process.env) {
+export function voiceStudioSettings(env = process.env) {
   const raw = bounded(env.VOICESTUDIO_BASE_URL, 500);
   const token = bounded(env.VOICESTUDIO_API_KEY, 2000);
   if (!raw) return null;
+  const baseUrl = safeBase(raw);
+  if (!baseUrl) return null;
   try {
-    const url = new URL(raw);
+    const url = new URL(baseUrl);
     const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
-    if (url.username || url.password || url.hash || url.search) return null;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
     if (!local && !token) return null;
-    return { baseUrl: url.toString().replace(/\/+$/, ""), token };
+    return { baseUrl, token };
   } catch { return null; }
 }
+
 const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
   "browser_use",
   "check_comfyui",

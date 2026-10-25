@@ -13,7 +13,7 @@ function configuredEnv(overrides = {}) {
   return {
     HERMES_AGENT_ENABLED: "true",
     HERMES_AGENT_CHAT_PROVIDER: "true",
-    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
     HERMES_AGENT_API_KEY: "private-hermes-api-key",
     HERMES_AGENT_MODEL: "hermes-agent",
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
@@ -23,7 +23,7 @@ function configuredEnv(overrides = {}) {
 
 test("Hermes stays disabled until explicitly enabled and configured", async () => {
   let calls = 0;
-  assert.equal(resolveHermesAgentProvider({ HERMES_AGENT_BASE_URL: "https://hermes.example/v1", HERMES_AGENT_API_KEY: "key" }), null);
+  assert.equal(resolveHermesAgentProvider({ HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1", HERMES_AGENT_API_KEY: "key" }), null);
   assert.equal(getHermesAgentReadiness({}).state, "disabled_by_config");
   const result = await checkHermesAgentService({
     env: { ULTRON_INTEGRATION_OWNER_USER_ID: ownerId }, userId: ownerId,
@@ -37,9 +37,9 @@ test("Hermes stays disabled until explicitly enabled and configured", async () =
 test("Hermes direct chat provider is restricted to the configured owner", () => {
   assert.equal(resolveHermesAgentProvider(configuredEnv()), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv(), "00000000-0000-4000-8000-000000000002"), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "http://hermes.example/v1" }), ownerId), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://user:pass@hermes.example/v1" }), ownerId), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://hermes.example/v2" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "http://hermes.example.com/v1" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://user:pass@hermes.example.com/v1" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://hermes.example.com/v2" }), ownerId), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_CHAT_PROVIDER: "false" }), ownerId), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_API_KEY: "" }), ownerId), null);
   const local = resolveHermesAgentProvider(configuredEnv({
@@ -116,7 +116,7 @@ test("Hermes delegated task requires owner UUID, sends stable account-scoped mem
     task: "Research the public API documentation and return a concise summary.",
     fetchImpl: async (url, options) => {
       seen = { url, options, payload: JSON.parse(options.body) };
-      assert.equal(url, "https://hermes.example/v1/chat/completions");
+      assert.equal(url, "https://hermes.example.com/v1/chat/completions");
       assert.equal(options.method, "POST");
       assert.equal(options.redirect, "error");
       assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
@@ -149,4 +149,19 @@ test("Hermes delegated tasks reject empty/oversized prompts before networking", 
     assert.equal(result.error.code, "HERMES_AGENT_TASK_INVALID");
   }
   assert.equal(calls, 0);
+});
+
+
+test("Hermes rejects private, metadata, and loopback HTTPS endpoints", () => {
+  for (const url of [
+    "https://192.168.1.10/v1",
+    "https://10.1.2.3/v1",
+    "https://169.254.169.254/v1",
+    "https://metadata.google.internal/v1",
+    "https://[::1]/v1",
+    "https://[fd00::1]/v1"
+  ]) {
+    assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: url }), ownerId), null, url);
+    assert.equal(getHermesAgentReadiness(configuredEnv({ HERMES_AGENT_BASE_URL: url })).configured, false, url);
+  }
 });

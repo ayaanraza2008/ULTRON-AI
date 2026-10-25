@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { safeServiceBase } from "./network-safety.js";
 
 const MAX_QUERY = 1200;
 const MAX_MEMORY_TEXT = 2400;
@@ -22,14 +23,7 @@ function scopedProject(env, userId) {
 }
 
 function baseUrl(value) {
-  try {
-    const url = new URL(String(value || ""));
-    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return null;
-    if (url.protocol === "http:" && !["localhost", "127.0.0.1"].includes(url.hostname)) return null;
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  return safeServiceBase(String(value || ""));
 }
 
 export function agentMemoryReadiness(env = process.env) {
@@ -128,6 +122,8 @@ export async function recallAgentMemory(task, options = {}) {
   if (!bounded(options.userId, 500)) return { state: "skipped", memories: [] };
   const project = scopedProject(options.env, options.userId);
   const data = await requestMemory("/agentmemory/smart-search", { query, project, limit: 5 }, options);
+  // Do not label a disabled or unsafe endpoint as a successful empty recall.
+  if (data?.state === "not_configured") return { state: "not_configured", memories: [] };
   const candidates = Array.isArray(data.results) ? data.results
     : Array.isArray(data.memories) ? data.memories
     : Array.isArray(data.items) ? data.items

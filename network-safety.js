@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const LOCAL_SUFFIXES = [
   ".localhost", ".local", ".localdomain", ".internal", ".intranet",
-  ".lan", ".home", ".test", ".invalid"
+  ".lan", ".home", ".test", ".invalid", ".example"
 ];
 
 /**
@@ -19,6 +19,10 @@ export function isPublicNetworkHost(hostname) {
       || host === "metadata.google.internal" || host === "metadata.google") return false;
 
   const ipVersion = isIP(host);
+  // Non-standard IPv4 forms such as 127.1, 0177.0.0.1, and 0x7f.0.0.1
+  // may be interpreted as IP literals by URL/DNS stacks despite net.isIP() rejecting them.
+  // Public service hostnames should not consist solely of numeric/hex-address-like labels.
+  if (ipVersion === 0 && host.split(".").every(label => /^(?:[0-9]+|0x[0-9a-f]+)$/i.test(label))) return false;
   if (ipVersion === 4) {
     const octets = host.split(".").map(Number);
     const [a, b, c] = octets;
@@ -27,6 +31,7 @@ export function isPublicNetworkHost(hostname) {
     if (a === 169 && b === 254) return false;
     if (a === 172 && b >= 16 && b <= 31) return false;
     if (a === 192 && (b === 0 || b === 168)) return false;
+    if (a === 192 && b === 88 && c === 99) return false; // Deprecated 6to4 relay anycast.
     if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
     if (a === 203 && b === 0) return false;
     return true;
@@ -36,7 +41,9 @@ export function isPublicNetworkHost(hostname) {
     const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
     if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
         || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")
-        || host.startsWith("2001:0:") || host.startsWith("2002:")) return false;
+        || host.startsWith("2001:0:") || host.startsWith("2001:2:")
+        || host.startsWith("2001:10:") || host.startsWith("2001:20:") || host.startsWith("2002:")
+        || host.startsWith("3fff:")) return false;
 
     const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
     if (mapped) return isPublicNetworkHost(mapped[1]);

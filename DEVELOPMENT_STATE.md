@@ -92,3 +92,15 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 3. After builds resume, deploy the reviewed main commit, verify the active revision and health checks, then run the real model smoke check with server-side secrets, followed by an explicitly confirmed worker integration smoke test using a dedicated test user.
 4. Enable Supabase leaked-password protection in Auth settings and rerun security advisors.
 5. Keep the frontend and Windows UI deferred; do not claim PC control until an authenticated local companion is implemented, paired and verified.
+
+## 2026-10-25 backend hardening follow-up (draft PR #253)
+
+- Branch: `ultron/backend-network-policy-hardening-20261025`; draft PR: https://github.com/ayaanraza2008/ULTRON-AI/pull/253.
+- Extended the shared `network-safety.js` policy to VoiceStudio, Cactus, Hermes Agent, OpenViking, productivity/Paperclip connectors, AgentMemory, ComfyUI/HeyGem/OmniVoice/Handy routing, the main chat provider dispatcher, the background AI Employee worker, web-research URLs, and autonomous-report citations.
+- Rejected non-routable/reserved IPv4/IPv6 addresses and reserved `.example` hostnames, and aligned readiness with the actual dispatch validators. The chat fallback dispatcher and background worker now reject unsafe configured provider URLs before forwarding provider credentials.
+- AgentMemory recall now reports `not_configured` rather than falsely marking an unavailable upstream as completed.
+- Added streaming byte limits/cancellation for TTS, STT, research, local-model, security-assistant and vision responses to avoid unbounded buffering.
+- Added regression tests for unsafe endpoint no-call behavior, response size limits/cancellation, reserved source URLs, and worker-provider registry filtering.
+- Latest validation before this documentation-only update: GitHub Actions run #1208 passed `npm run check`, `npm test`, the existing API health smoke check, and the pinned world-intelligence build. This verifies CI on the branch; it does **not** verify live provider access, user flows, or successful production deployment.
+- Release constraints remain unchanged: no frontend changes, no merge to `main`, no Render deployment triggered, no paid build minutes enabled. PR #253 stays draft pending review and other live-verification blockers remain open.
+
