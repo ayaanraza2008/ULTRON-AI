@@ -40,11 +40,11 @@ test("integration catalog requires an authenticated session", async () => {
 test("integration catalog reports readiness without exposing secret values", async () => {
   const configuredEnv = {
     ...env,
-    COMFYUI_BASE_URL: "https://comfy.example.test",
-    HEYGEM_API_BASE_URL: "https://avatar.example.test",
+    COMFYUI_BASE_URL: "https://comfy.example",
+    HEYGEM_API_BASE_URL: "https://avatar.example",
     HEYGEM_API_KEY: "private-heygem-secret",
     HEYGEM_JOB_PATH: "/api/generate",
-    OMNIVOICE_API_BASE_URL: "https://voice.example.test",
+    OMNIVOICE_API_BASE_URL: "https://voice.example",
     OMNIVOICE_API_KEY: "private-voice-secret",
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
     ULTRON_EMPLOYEES_ENABLED: "true",
