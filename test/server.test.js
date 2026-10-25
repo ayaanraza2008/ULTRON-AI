@@ -281,6 +281,7 @@ test("Hermes Agent API is a first-class normal chat provider when explicitly ena
   const configuredEnv = {
     ...env,
     HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_CHAT_PROVIDER: "true",
     HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
     HERMES_AGENT_API_KEY: "private-hermes-api-key",
     HERMES_AGENT_MODEL: "hermes-agent",
