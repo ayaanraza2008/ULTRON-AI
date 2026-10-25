@@ -790,7 +790,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
 
   app.get("/api/memory", requireSupabaseUser, async (req, res) => {
     try {
-      const rows = await supabaseRest(req, "memory_items", "GET", "?select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at&order=updated_at.desc&limit=100");
+      const rows = await supabaseRest(req, "memory_items", "GET", "?select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&order=updated_at.desc&limit=100");
       res.json({ items: Array.isArray(rows) ? rows : [] });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_READ_FAILED", message: error.message } }); }
   });
@@ -828,7 +828,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
     if (!Object.keys(patch).length) return res.status(400).json({ error: { code: "EMPTY_MEMORY_UPDATE", message: "Provide a title, content, or active-state change." } });
     try {
-      const query = "?id=eq." + encodeURIComponent(req.params.id) + "&select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at";
+      const query = "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at";
       const rows = await supabaseRest(req, "memory_items", "PATCH", query, patch);
       if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "MEMORY_NOT_FOUND", message: "Memory item was not found or is not accessible." } });
       res.json({ item: rows[0] });
@@ -838,7 +838,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.delete("/api/memory/:id", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_MEMORY_ID", message: "Memory item ID is invalid." } });
     try {
-      await supabaseRest(req, "memory_items", "DELETE", "?id=eq." + encodeURIComponent(req.params.id));
+      await supabaseRest(req, "memory_items", "DELETE", "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id));
       res.json({ ok: true });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_DELETE_FAILED", message: error.message } }); }
   });
@@ -958,7 +958,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         const memoryEnabled = !Array.isArray(preferenceRows) || !preferenceRows[0] || preferenceRows[0].memory_enabled !== false;
         if (memoryEnabled) {
           const memoryRows = await supabaseRest(req, "memory_items", "GET",
-            "?select=kind,title,content&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + encodeURIComponent(new Date().toISOString()) + ")&order=updated_at.desc&limit=8");
+            "?select=kind,title,content&user_id=eq." + encodeURIComponent(memoryUser.id) + "&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + encodeURIComponent(new Date().toISOString()) + ")&order=updated_at.desc&limit=8");
           const safeMemories = (Array.isArray(memoryRows) ? memoryRows : []).slice(0, 8).map(item => ({
             kind: String(item.kind || "").slice(0, 40),
             title: String(item.title || "").slice(0, 160),
