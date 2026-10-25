@@ -214,6 +214,88 @@ test("task creation records a queued plan and audit event, without claiming exec
   }, { supabaseRest: fakeSupabaseRest });
 });
 
+test("employee draft task creation requires approval and selects the bounded worker mode", async () => {
+  const writes = [];
+  const taskId = "00000000-0000-4000-8000-000000000041";
+  const fakeSupabaseRest = async (_req, table, method, _query, body) => {
+    writes.push({ table, method, body });
+    if (table === "agent_tasks" && method === "POST") {
+      return [{ id: taskId, title: body.title, input: body.input, status: body.status, created_at: "2026-10-25T08:00:00Z" }];
+    }
+    return [];
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Draft an SEO outline", description: "Prepare a source-backed outline for review",
+        taskType: "employee", role: "seo-aeo", mode: "draft", goal: "Draft an outline for a topic cluster",
+        routineId: "seo-draft-run", context: "The audience is beginners.", risk: "low"
+      })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.task.status, "WAITING_FOR_PERMISSION");
+    assert.equal(body.task.input.taskType, "employee");
+    assert.equal(body.task.input.executionMode, "employee_worker");
+    assert.equal(body.task.input.requiresApproval, true);
+    assert.equal(body.task.input.approved, false);
+    assert.equal(body.task.input.role, "seo-aeo");
+    assert.equal(body.task.input.routineId, "seo-draft-run");
+    assert.match(body.notice, /explicit approval/i);
+    assert.equal(writes.filter(item => item.table === "agent_tasks").length, 1);
+    assert.equal(writes.find(item => item.table === "audit_events").body.metadata.executionMode, "employee_worker");
+  }, { supabaseRest: fakeSupabaseRest });
+});
+
+test("approved autonomous task is queued for the worker without granting external-action permissions", async () => {
+  const taskId = "00000000-0000-4000-8000-000000000042";
+  let saved = {
+    id: taskId, title: "Prepare a weekly report", status: "WAITING_FOR_PERMISSION",
+    input: { taskType: "autonomous", executionMode: "employee_worker", requiresApproval: true, approved: false, role: "chief-of-staff", mode: "report", goal: "Prepare a weekly report" }
+  };
+  const writes = [];
+  const fakeSupabaseRest = async (_req, table, method, query, body) => {
+    writes.push({ table, method, query, body });
+    if (table === "agent_tasks" && method === "GET") return [{ ...saved }];
+    if (table === "agent_tasks" && method === "PATCH") {
+      saved = { ...saved, ...body };
+      return [{ ...saved }];
+    }
+    return [];
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks/" + taskId + "/approve", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.task.status, "QUEUED");
+    assert.equal(body.task.input.approved, true);
+    assert.equal(body.task.input.executionMode, "employee_worker");
+    assert.equal(body.task.input.approvalScope, "task_record_only");
+    assert.match(body.notice, /external side effects remain blocked/i);
+    const statePatch = writes.find(item => item.table === "agent_tasks" && item.method === "PATCH");
+    assert.match(statePatch.query, /status=eq.WAITING_FOR_PERMISSION/);
+    assert.equal(statePatch.body.input.approved, true);
+    assert.equal(statePatch.body.input.executionMode, "employee_worker");
+  }, { supabaseRest: fakeSupabaseRest });
+});
+
+test("task creation rejects unknown risk values instead of downgrading them to low risk", async () => {
+  let databaseCalls = 0;
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Research", description: "Review a domain", taskType: "research", risk: "critical" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_TASK_RISK");
+    assert.equal(databaseCalls, 0);
+  }, { supabaseRest: async () => { databaseCalls += 1; return []; } });
+});
+
 test("document extraction parses JSON and marks extracted text as untrusted", async () => {
   await withServer({}, async base => {
     const response = await fetch(base + "/api/documents/extract", {
