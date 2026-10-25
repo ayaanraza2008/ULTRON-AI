@@ -1966,3 +1966,75 @@ test("agent denies VoiceStudio tools for authenticated non-owner accounts before
   }, { userId: "00000000-0000-4000-8000-000000000001" });
 });
 
+
+
+test("agent tool catalog exposes the Windows companion probe only to the configured owner", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const companionEnv = {
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    ULTRON_DESKTOP_AGENT_URL: "https://desktop.example.com",
+    ULTRON_DESKTOP_AGENT_TOKEN: "synthetic-desktop-token"
+  };
+  await withServer(companionEnv, async () => {
+    throw new Error("A tool catalog read must not call any upstream service.");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/tools");
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const tool = payload.tools.find(item => item.name === "check_desktop_companion");
+    assert.equal(tool.available, true);
+    assert.equal(tool.state, "configured_unverified");
+    assert.equal(tool.execution, "owner_scoped_read_only_device_status_no_command_execution");
+    assert.equal(JSON.stringify(payload).includes("synthetic-desktop-token"), false);
+  }, { userId: ownerId });
+
+  await withServer(companionEnv, async () => {
+    throw new Error("A non-owner tool catalog read must not call any upstream service.");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/tools");
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const tool = payload.tools.find(item => item.name === "check_desktop_companion");
+    assert.equal(tool.available, false);
+    assert.equal(tool.state, "blocked");
+  }, { userId: "00000000-0000-4000-8000-000000000002" });
+});
+
+
+test("authenticated desktop companion status endpoint returns bounded status without exposing its token", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  let calls = 0;
+  const companionEnv = {
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    ULTRON_DESKTOP_AGENT_URL: "https://desktop.example.com",
+    ULTRON_DESKTOP_AGENT_TOKEN: "synthetic-desktop-token"
+  };
+  await withServer(companionEnv, async (url, options) => {
+    calls += 1;
+    assert.equal(url, "https://desktop.example.com/v1/ultron/status");
+    assert.equal(options.redirect, "error");
+    return new Response(JSON.stringify({
+      protocolVersion: 1,
+      device: { id: "pc-1", name: "Test PC", platform: "windows", paired: true, online: true },
+      capabilities: ["status", "system_info", "run_shell"]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/desktop-companion/status");
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.state, "completed");
+    assert.deepEqual(payload.capabilities, ["status", "system_info"]);
+    assert.equal(JSON.stringify(payload).includes("synthetic-desktop-token"), false);
+  }, { userId: ownerId });
+  assert.equal(calls, 1);
+
+  await withServer(companionEnv, async () => {
+    throw new Error("A non-owner must not contact the Windows companion.");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/desktop-companion/status");
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.state, "blocked");
+    assert.equal(payload.code, "INTEGRATION_OWNER_ONLY");
+  }, { userId: "00000000-0000-4000-8000-000000000002" });
+});

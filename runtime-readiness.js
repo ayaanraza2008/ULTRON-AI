@@ -22,7 +22,7 @@ export function buildRuntimeReadiness({
   now = new Date()
 } = {}) {
   const browserConfigured = secureServiceUrl(env.ULTRON_BROWSER_USE_URL) && truthy(env.ULTRON_BROWSER_USE_TOKEN);
-  const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN);
+  const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN) && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
   const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
@@ -72,8 +72,8 @@ export function buildRuntimeReadiness({
         ? "Bridge settings are present; browser readiness and real browser actions are not tested here."
         : "A separately hosted, authenticated Browser Use bridge is required."),
     component("windows_companion", "Windows PC companion", desktopConfigured ? "configured_unverified" : "blocked",
-      ["ULTRON_DESKTOP_AGENT_URL", "ULTRON_DESKTOP_AGENT_TOKEN"], desktopConfigured
-        ? "Bridge settings are present; pairing, allowlisted actions, and Windows-machine execution are not verified."
+      ["ULTRON_DESKTOP_AGENT_URL", "ULTRON_DESKTOP_AGENT_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], desktopConfigured
+        ? "Bridge settings and the owner guard are present; live pairing is unverified. The current adapter only probes status and does not execute PC commands."
         : "A reachable, authenticated Windows companion is required. A cloud server cannot directly control the user's PC."),
     component("local_models", "Local model runtime", localModelConfigured ? "configured_unverified" : "optional",
       ["OLLAMA_BASE_URL"], localModelConfigured

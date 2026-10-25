@@ -22,6 +22,7 @@ test("readiness reports configured integrations as unverified and never exposes 
       ULTRON_BROWSER_USE_TOKEN: secret,
       ULTRON_DESKTOP_AGENT_URL: "https://desktop.example.com",
       ULTRON_DESKTOP_AGENT_TOKEN: secret,
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
       TAVILY_API_KEY: secret,
       ULTRON_EMPLOYEES_ENABLED: "true"
     },
@@ -86,6 +87,7 @@ test("readiness accepts HTTPS services and plain HTTP loopback development servi
       ULTRON_BROWSER_USE_TOKEN: "test-token",
       ULTRON_DESKTOP_AGENT_URL: "http://127.0.0.1:8787",
       ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
       OLLAMA_BASE_URL: "http://localhost:11434"
     }
   });
@@ -132,6 +134,7 @@ test("an intentionally unavailable optional capability does not permanently bloc
       ULTRON_BROWSER_USE_TOKEN: "test-token",
       ULTRON_DESKTOP_AGENT_URL: "https://desktop.example.com",
       ULTRON_DESKTOP_AGENT_TOKEN: "test-token",
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
       TAVILY_API_KEY: "test-key",
       ULTRON_AUTH_CALLBACK_URL: "https://ultron.example.com/api/auth/google/callback"
     },
