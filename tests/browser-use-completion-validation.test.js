@@ -12,7 +12,8 @@ async function runBrowserTask(bridgePayload) {
     env: {
       OPENROUTER_API_KEY: "test-only",
       ULTRON_BROWSER_USE_URL: "https://browser.example.com",
-      ULTRON_BROWSER_USE_TOKEN: "browser-test-token"
+      ULTRON_BROWSER_USE_TOKEN: "browser-test-token",
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
     },
     requireSupabaseUser: (req, _res, next) => {
       req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" };
