@@ -6,6 +6,7 @@ import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCapt
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
 import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "./autonomy-policy.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
+import { getRepositoryCapabilityStatus } from "./repository-capabilities.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
@@ -837,7 +838,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       tools: [
         { name: "agentmemory", available: agentMemoryReadiness(env).configured, execution: "automatic_task_relevant_recall_and_bounded_durable_capture" },
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
-        { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science" },
+        { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_28_repository_domains" },
+        { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_28_requested_repositories; read configuration-only status at /api/agent/repositories" },
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
         { name: "plan_employee", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env)), execution: "background_draft_only_when_requested_no_second_confirmation" },
@@ -858,6 +860,14 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       ],
       notice: "Configured does not mean live-verified. PC automation, external publishing, spending, account changes, and destructive actions are not exposed as automatic tools."
     });
+  });
+
+  router.get("/agent/repositories", requireSupabaseUser, (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const status = getRepositoryCapabilityStatus(env);
+    const task = bounded(req.query?.task, 1200);
+    const taskMatched = task ? buildTaskSkillsGuidance(task).repositoryCapabilities : [];
+    res.json({ ...status, taskMatched });
   });
 
   router.get("/agent/agentmemory", requireSupabaseUser, async (req, res) => {
