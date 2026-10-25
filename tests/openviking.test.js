@@ -46,8 +46,10 @@ test("OpenViking find is read-only, owner-scoped, and returns bounded normalized
   assert.equal(result.state, "completed");
   assert.equal(result.count, 2);
   assert.equal(result.total, 3);
-  assert.equal(result.contexts[0].uri, "viking://~/resources/oauth.md");
-  assert.equal(result.contexts[1].uri, "viking://~/resources/login.md");
+  assert.deepEqual(result.contexts.map(context => context.uri), [
+    "viking://~/memories/preference.md",
+    "viking://~/resources/oauth.md"
+  ]);
   assert.equal(request.url, "https://openviking.example/openviking/api/v1/search/find");
   assert.equal(request.options.headers["X-API-Key"], env.OPENVIKING_API_TOKEN);
   assert.deepEqual(JSON.parse(request.options.body), { query: "OAuth authentication", limit: 2, target_uri: "viking://~/", read_content: false });
