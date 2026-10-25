@@ -181,6 +181,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   }
 
   let stopping = false;
+  const sleepAbortController = new AbortController();
   async function rest(endpoint, options = {}) {
     const response = await fetchImpl(supabaseUrl + "/rest/v1/" + endpoint, {
       ...options,
@@ -639,12 +640,20 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         ? 2 ** Math.min(status.consecutiveCycleFailures - 1, 4)
         : 1;
       const cycleDelayMs = Math.min(60_000, pollMs * retryMultiplier);
-      if (!stopping) await sleepImpl(cycleDelayMs);
+      if (!stopping) {
+        try {
+          // The native timers/promises sleep supports AbortSignal; stop() can
+          // wake an idle worker immediately instead of waiting for the poll interval.
+          await sleepImpl(cycleDelayMs, undefined, { signal: sleepAbortController.signal });
+        } catch (error) {
+          if (!stopping) throw error;
+        }
+      }
     }
     status.state = "stopped";
     logger.info?.("ULTRON task worker stopped.");
   })();
-  return { stop() { stopping = true; status.state = "stopping"; }, done, getStatus: () => ({ ...status }) };
+  return { stop() { if (stopping) return; stopping = true; status.state = "stopping"; sleepAbortController.abort(); }, done, getStatus: () => ({ ...status }) };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
