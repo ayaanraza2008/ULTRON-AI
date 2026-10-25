@@ -23,7 +23,7 @@ test("Paperclip blocks other ULTRON accounts before using a shared bearer token"
   const result = await getPaperclipAgentDashboard({
     env: {
       ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-      PAPERCLIP_BASE_URL: "https://paperclip.example",
+      PAPERCLIP_BASE_URL: "https://paperclip.example.com",
       PAPERCLIP_API_TOKEN: "private-paperclip-token",
       PAPERCLIP_COMPANY_ID: "company-123"
     },
@@ -108,7 +108,7 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   };
-  for (const value of ["http://paperclip.example", "https://user:password@paperclip.example", "https://paperclip.example.com/?token=x"]) {
+  for (const value of ["http://paperclip.example.com", "https://user:password@paperclip.example", "https://paperclip.example.com/?token=x"]) {
     const result = await getPaperclipAgentDashboard({
       env: { ...baseEnv, PAPERCLIP_BASE_URL: value }, userId: ownerId, fetchImpl
     });
@@ -116,7 +116,7 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
     assert.equal(result.error.code, "PAPERCLIP_NOT_CONFIGURED");
   }
   const invalidCompany = await getPaperclipAgentDashboard({
-    env: { ...baseEnv, PAPERCLIP_BASE_URL: "https://paperclip.example", PAPERCLIP_COMPANY_ID: "../other" },
+    env: { ...baseEnv, PAPERCLIP_BASE_URL: "https://paperclip.example.com", PAPERCLIP_COMPANY_ID: "../other" },
     userId: ownerId, fetchImpl
   });
   assert.equal(invalidCompany.error.code, "PAPERCLIP_NOT_CONFIGURED");
@@ -126,7 +126,7 @@ test("Paperclip rejects unsafe base URLs and malformed company IDs before networ
 test("Paperclip readiness returns states only and never leaks API token values", () => {
   const readiness = getPaperclipReadiness({
     ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
-    PAPERCLIP_BASE_URL: "https://paperclip.example",
+    PAPERCLIP_BASE_URL: "https://paperclip.example.com",
     PAPERCLIP_API_TOKEN: "private-paperclip-token",
     PAPERCLIP_COMPANY_ID: "company-123"
   });
