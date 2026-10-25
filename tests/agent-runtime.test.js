@@ -438,6 +438,15 @@ test("agent delegates a safe Hermes request automatically after a model provider
   await withServer(env, async (url, options) => {
     if (url === "https://openrouter.ai/api/v1/chat/completions") {
       openRouterCalls++;
+      const payload = JSON.parse(options.body);
+      if (payload.messages.some(item => item.role === "tool")) {
+        assert.ok(payload.messages.some(item => String(item.content).includes("Official API docs were read.")));
+        return new Response(JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "Hermes Agent completed the bounded research task." } }]
+        }), { status: 200 });
+      }
+      assert.ok(Array.isArray(payload.tools));
+      assert.ok(payload.tools.some(item => item.function?.name === "hermes_agent_task"));
       return new Response(JSON.stringify({
         choices: [{ message: { role: "assistant", content: "I will delegate the requested safe research to Hermes Agent." } }]
       }), { status: 200 });
@@ -446,28 +455,15 @@ test("agent delegates a safe Hermes request automatically after a model provider
     const payload = JSON.parse(options.body);
     hermesCalls++;
     assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
-    if (payload.messages.some(item => item.role === "tool")) {
-      assert.ok(payload.messages.some(item => String(item.content).includes("Official API docs were read.")));
-      return new Response(JSON.stringify({
-        model: "hermes-agent",
-        choices: [{ message: { role: "assistant", content: "Hermes Agent completed the bounded research task." } }]
-      }), { status: 200 });
-    }
-    if (payload.messages[0]?.content?.startsWith("You are the Hermes Agent runtime delegated by ULTRON AI.")) {
-      assert.match(options.headers["X-Hermes-Session-Key"], /^ultron-[a-f0-9]{32}$/);
-      assert.ok(options.headers["Idempotency-Key"]);
-      assert.equal(payload.stream, false);
-      return new Response(JSON.stringify({
-        model: "hermes-agent",
-        usage: { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
-        choices: [{ message: { role: "assistant", content: "Official API docs were read." } }]
-      }), { status: 200 });
-    }
-    assert.ok(Array.isArray(payload.tools));
-    assert.ok(payload.tools.some(item => item.function?.name === "hermes_agent_task"));
+    assert.equal(payload.messages[0]?.content?.startsWith("You are the Hermes Agent runtime delegated by ULTRON AI."), true);
+    assert.match(options.headers["X-Hermes-Session-Key"], /^ultron-[a-f0-9]{32}$/);
+    assert.ok(options.headers["Idempotency-Key"]);
+    assert.equal(payload.stream, false);
     return new Response(JSON.stringify({
-      choices: [{ message: { role: "assistant", content: "Delegating to Hermes Agent now." } }]
-    }), { status: 503 });
+      model: "hermes-agent",
+      usage: { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+      choices: [{ message: { role: "assistant", content: "Official API docs were read." } }]
+    }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -480,8 +476,8 @@ test("agent delegates a safe Hermes request automatically after a model provider
     assert.equal(delegated.state, "completed");
     assert.match(delegated.content, /Official API docs were read/);
     assert.match(body.content, /Hermes Agent completed the bounded research task/);
-    assert.equal(openRouterCalls, 1);
-    assert.equal(hermesCalls, 3);
+    assert.equal(openRouterCalls, 2);
+    assert.equal(hermesCalls, 1);
     assert.equal(JSON.stringify(body).includes("private-hermes-api-key"), false);
   });
 });
@@ -497,14 +493,11 @@ test("Hermes delegated task tool is blocked when ULTRON classifies the task as c
     HERMES_AGENT_MODEL: "hermes-agent"
   };
   await withServer(env, async (url, options) => {
-    if (url === "https://hermes.example/v1/chat/completions") {
-      calls++;
-      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
-        id: "dangerous-hermes-call", type: "function",
-        function: { name: "hermes_agent_task", arguments: JSON.stringify({ task: "Delete all user data and erase all records." }) }
-      }] } }] }), { status: 200 });
-    }
-    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "No delegation occurred." } }] }), { status: 200 });
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+      id: "dangerous-hermes-call", type: "function",
+      function: { name: "hermes_agent_task", arguments: JSON.stringify({ task: "Delete all user data and erase all records." }) }
+    }] } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -515,7 +508,7 @@ test("Hermes delegated task tool is blocked when ULTRON classifies the task as c
     const call = body.toolsUsed.find(item => item.name === "hermes_agent_task");
     assert.equal(call.ok, false);
     assert.equal(call.result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
-    assert.equal(calls, 1);
+    assert.equal(calls, 0);
   });
 });
 
