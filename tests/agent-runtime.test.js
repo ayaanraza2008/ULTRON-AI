@@ -476,7 +476,7 @@ test("agent delegates a safe Hermes request automatically after a model provider
     assert.equal(delegated.state, "completed");
     assert.match(delegated.content, /Official API docs were read/);
     assert.match(body.content, /Hermes Agent completed the bounded research task/);
-    assert.equal(openRouterCalls, 2);
+    assert.equal(openRouterCalls, 3);
     assert.equal(hermesCalls, 1);
     assert.equal(JSON.stringify(body).includes("private-hermes-api-key"), false);
   });
