@@ -66,7 +66,7 @@ test("VoiceStudio JSON response reader stops at the byte limit instead of buffer
     VOICESTUDIO_BASE_URL: "https://voice.example",
     VOICESTUDIO_API_KEY: "synthetic-voice-key"
   }, async url => {
-    assert.equal(url, "https://voice.example/v1/audio/voices");
+    assert.equal(url, "https://voice.example.com/v1/audio/voices");
     return new Response("x".repeat(1_000_001), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/integrations/voicestudio/voices");
@@ -116,7 +116,7 @@ test("VoiceStudio synthesis forwards validated options and returns bounded audio
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.audioBase64, Buffer.from("fake-wav").toString("base64"));
-    assert.equal(request.url, "https://voice.example/v1/audio/speech");
+    assert.equal(request.url, "https://voice.example.com/v1/audio/speech");
     assert.equal(request.options.headers.Authorization, "Bearer private-token");
     assert.equal(request.options.redirect, "error");
     assert.deepEqual(JSON.parse(request.options.body), {
@@ -157,7 +157,7 @@ test("VoiceStudio transcription sends multipart audio and returns recognized tex
     });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { provider: "voicestudio", text: "Namaste ULTRON", language: "hi" });
-    assert.equal(request.url, "https://voice.example/v1/audio/transcriptions");
+    assert.equal(request.url, "https://voice.example.com/v1/audio/transcriptions");
     assert.equal(request.options.headers.Authorization, "Bearer private-token");
     assert.equal(request.options.redirect, "error");
   });
