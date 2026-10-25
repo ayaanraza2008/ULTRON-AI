@@ -266,3 +266,31 @@ test("agent fallback supports multiple free OpenRouter models on the same API en
     assert.ok(calls.every(call => call.authorization === "Bearer openrouter-test-key"));
   });
 });
+
+
+test("agent model routing does not waste fallback providers on a non-retryable HTTP 400", async () => {
+  const calls = [];
+  const env = {
+    FIRST_KEY: "first-400-test-key",
+    SECOND_KEY: "second-400-test-key",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+    ])
+  };
+
+  await withServer(env, async url => {
+    calls.push(url);
+    return new Response(JSON.stringify({ error: { message: "malformed request" } }), { status: 400 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 502);
+    assert.deepEqual(calls, ["https://first.example/v1/chat/completions"]);
+    const body = await response.text();
+    assert.doesNotMatch(body, /first-400-test-key|second-400-test-key|malformed request/);
+  });
+});
