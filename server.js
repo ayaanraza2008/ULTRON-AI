@@ -89,10 +89,30 @@ const MEMORY_EXPIRY_MAX_FUTURE_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
 function normalizeMemoryExpiry(value, now = Date.now()) {
   if (value === null || value === "") return { ok: true, value: null };
-  if (typeof value !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+  if (typeof value !== "string") return { ok: false, value: null };
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|([+-])(\d{2}):(\d{2}))$/i.exec(value);
+  if (!match) return { ok: false, value: null };
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText = "00", , zone, , offsetHourText = "00", offsetMinuteText = "00"] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const offsetHour = Number(offsetHourText);
+  const offsetMinute = Number(offsetMinuteText);
+
+  // Date.parse normalizes invalid calendar days such as February 30. Reject them
+  // before parsing so the user’s expiry is never silently shifted to another date.
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day ||
+      hour > 23 || minute > 59 || second > 59 ||
+      offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
     return { ok: false, value: null };
   }
+
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp) || timestamp <= now || timestamp > now + MEMORY_EXPIRY_MAX_FUTURE_MS) {
     return { ok: false, value: null };
