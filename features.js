@@ -1468,7 +1468,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           if (requestedProvider !== "auto") break;
           continue;
         }
-        const payload = await response.json();
+        const payload = await readLimitedResponseJson(response, 2 * 1024 * 1024, "Security/vision provider response");
         const answer = provider === "gemini"
           ? payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n")
           : provider === "ollama" ? payload?.message?.content : payload?.choices?.[0]?.message?.content;
