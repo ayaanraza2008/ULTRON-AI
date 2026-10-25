@@ -19,8 +19,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Verify Browser Use bridge Python syntax
-        run: python -m py_compile browser-use-bridge/main.py
+      - name: Verify Browser Use bridge policy and Python syntax
+        run: |
+          python -m py_compile browser-use-bridge/main.py browser-use-bridge/navigation_policy.py browser-use-bridge/test_navigation_policy.py
+          python browser-use-bridge/test_navigation_policy.py
       - run: npm install --ignore-scripts
       - name: Report high-severity runtime dependency advisories
         run: |
