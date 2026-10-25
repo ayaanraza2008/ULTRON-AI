@@ -102,3 +102,37 @@ test("OpenViking rejects insecure endpoints before calling upstream", async () =
   assert.equal(result.error.code, "OPENVIKING_NOT_CONFIGURED");
   assert.equal(called, false);
 });
+
+test("OpenViking timeout errors are bounded and never expose upstream exception details", async () => {
+  const result = await findOpenVikingContext({
+    env, userId: ownerId, query: "private memory",
+    fetchImpl: async () => {
+      const error = new Error("internal endpoint and token " + env.OPENVIKING_API_TOKEN);
+      error.name = "TimeoutError";
+      throw error;
+    }
+  });
+  assert.equal(result.state, "failed");
+  assert.equal(result.error.code, "OPENVIKING_TIMEOUT");
+  assert.equal(result.error.message, "OpenViking context search timed out.");
+  assert.equal(JSON.stringify(result).includes(env.OPENVIKING_API_TOKEN), false);
+  assert.equal(JSON.stringify(result).includes("internal endpoint"), false);
+});
+
+test("OpenViking refuses oversized upstream bodies before parsing", async () => {
+  let cancelled = false;
+  const body = new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("{}")); },
+    cancel() { cancelled = true; }
+  });
+  const result = await findOpenVikingContext({
+    env, userId: ownerId, query: "private memory",
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Content-Length": String(600 * 1024) }
+    })
+  });
+  assert.equal(result.state, "failed");
+  assert.equal(result.error.code, "OPENVIKING_RESPONSE_TOO_LARGE");
+  assert.equal(JSON.stringify(result).includes(env.OPENVIKING_API_TOKEN), false);
+});
