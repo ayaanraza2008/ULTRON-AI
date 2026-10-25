@@ -138,3 +138,50 @@ test("health rejects alternate providers with empty or oversized model IDs", asy
   assert.equal(result.providerConfigured, false);
 });
 
+
+
+test("Browser Use proxy retries free model candidates and keeps image requests on vision models", async () => {
+  const calls = [];
+  const app = createApp({
+    env: {
+      OPENROUTER_API_KEY: "proxy-test-key",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+      ULTRON_AVAILABLE_MODELS: "openrouter/free,nvidia/nemotron-3.5-lightning:free,cohere/north-mini-code:free",
+      ULTRON_VISION_MODELS: "openrouter/free,nvidia/nemotron-3.5-super-vl:free",
+      ULTRON_BROWSER_USE_TOKEN: "proxy-shared-test-token"
+    },
+    fetchImpl: async (url, options) => {
+      const model = JSON.parse(options.body).model;
+      calls.push({ url, model });
+      if (calls.length % 2 === 1) return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+      return new Response(JSON.stringify({ model, choices: [{ message: { role: "assistant", content: "Fallback succeeded." } }] }), { status: 200 });
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const base = "http://127.0.0.1:" + server.address().port;
+    const request = (messages) => fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer proxy-shared-test-token" },
+      body: JSON.stringify({ model: "openrouter/free", messages })
+    });
+    let response = await request([{ role: "user", content: "Say hello" }]);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.map(call => call.model), ["openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
+    calls.length = 0;
+    response = await request([{ role: "user", content: [
+      { type: "text", text: "Describe the image" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } }
+    ] }]);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.map(call => call.model), ["openrouter/free", "nvidia/nemotron-3.5-super-vl:free"]);
+    assert.ok(!calls.some(call => call.model === "nvidia/nemotron-3.5-lightning:free" || call.model === "cohere/north-mini-code:free"));
+    assert.ok(calls.every(call => call.url === "https://openrouter.ai/api/v1/chat/completions"));
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
