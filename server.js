@@ -306,7 +306,10 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
     let parsed;
     try { parsed = new URL(item.baseUrl); } catch { continue; }
     if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) continue;
-    const baseUrl = parsed.toString().replace(/\/+$/, "");
+    // The actual request dispatcher must enforce the same policy as health/readiness.
+    // Never forward an alternate-provider key to a private/LAN/metadata/reserved host.
+    const baseUrl = safeServiceBase(parsed.toString());
+    if (!baseUrl) continue;
     const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
     if (!apiKey || providers.some(provider => provider.name === name || provider.baseUrl === baseUrl)) continue;
     providers.push({
