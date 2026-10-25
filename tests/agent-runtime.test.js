@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult, sanitizeToolResultForClient } from "../agent-runtime.js";
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
@@ -1584,6 +1584,30 @@ test("browser bridge rejects a configured URL with query parameters before forwa
   });
 });
 
+
+test("client-facing agent tool results redact secrets but retain valid media payloads", () => {
+  const slackToken = "xo" + "xb-123456789012-abcdefghijklmnop";
+  const jwt = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTYifQ", "signaturepayload123"].join(".");
+  const safe = sanitizeToolResultForClient({
+    status: "completed",
+    service_role_key: "supabase-service-role-secret",
+    client_secret: "oauth-client-secret",
+    nested: {
+      connectionString: "postgres://admin:database-secret@db.example",
+      refresh_token: "private-refresh-token"
+    },
+    message: "Authorization: Bearer abc.def.ghi api_key=some-key-value " + slackToken + " " + jwt,
+    audioBase64: "A".repeat(1201)
+  });
+  assert.equal(safe.service_role_key, "[redacted]");
+  assert.equal(safe.client_secret, "[redacted]");
+  assert.equal(safe.nested.connectionString, "[redacted]");
+  assert.equal(safe.nested.refresh_token, "[redacted]");
+  assert.equal(safe.audioBase64, "A".repeat(1201));
+  assert.equal(JSON.stringify(safe).includes(slackToken), false);
+  assert.equal(JSON.stringify(safe).includes(jwt), false);
+  assert.doesNotMatch(JSON.stringify(safe), /supabase-service-role-secret|oauth-client-secret|database-secret|private-refresh-token|abc\.def\.ghi|some-key-value/);
+});
 
 test("model tool results redact credentials before model context", () => {
   const slackToken = "xo" + "xb-123456789012-abcdefghijklmnop";
