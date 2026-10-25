@@ -3,8 +3,9 @@ import hmac
 import os
 import re
 from typing import Any
+from urllib.parse import urlsplit
+
 from fastapi import FastAPI, Header, HTTPException
-from model_gateway_config import model_gateway_settings
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="ULTRON Browser Use Bridge", docs_url=None, redoc_url=None)
@@ -24,6 +25,38 @@ def require_token(supplied: str | None) -> None:
 @app.get("/")
 async def root() -> dict[str, Any]:
     return {"ok": True, "service": "ultron-browser-use-bridge", "health": "/health"}
+
+def model_gateway_settings() -> tuple[str, str] | None:
+    token = os.getenv("ULTRON_BROWSER_USE_TOKEN", "").strip()
+    if not token:
+        return None
+
+    gateway = os.getenv("ULTRON_MODEL_GATEWAY_BASE_URL", "").strip().rstrip("/")
+    if gateway:
+        try:
+            parsed = urlsplit(gateway)
+            local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+            if ((parsed.scheme != "https" and not local_http) or not parsed.hostname
+                    or parsed.username or parsed.password or parsed.query or parsed.fragment):
+                return None
+        except ValueError:
+            return None
+        return gateway, token
+
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        return None
+    base_url = (os.getenv("OPENROUTER_BASE_URL", "").strip() or "https://openrouter.ai/api/v1").rstrip("/")
+    try:
+        parsed = urlsplit(base_url)
+        local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if ((parsed.scheme != "https" and not local_http) or not parsed.hostname
+                or parsed.username or parsed.password or parsed.query or parsed.fragment):
+            return None
+    except ValueError:
+        return None
+    return base_url, api_key
+
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
