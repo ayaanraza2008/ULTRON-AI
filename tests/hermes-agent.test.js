@@ -150,3 +150,18 @@ test("Hermes delegated tasks reject empty/oversized prompts before networking", 
   }
   assert.equal(calls, 0);
 });
+
+
+test("Hermes rejects private, metadata, and loopback HTTPS endpoints", () => {
+  for (const url of [
+    "https://192.168.1.10/v1",
+    "https://10.1.2.3/v1",
+    "https://169.254.169.254/v1",
+    "https://metadata.google.internal/v1",
+    "https://[::1]/v1",
+    "https://[fd00::1]/v1"
+  ]) {
+    assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: url }), ownerId), null, url);
+    assert.equal(getHermesAgentReadiness(configuredEnv({ HERMES_AGENT_BASE_URL: url })).configured, false, url);
+  }
+});
