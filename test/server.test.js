@@ -49,20 +49,26 @@ test("integration catalog reports readiness without exposing secret values", asy
     OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
     ULTRON_EMPLOYEES_ENABLED: "true",
     GEO_SLEUTH_ENABLED: "true",
-    GEO_SLEUTH_ROOT: ".runtime/geo-sleuth/skills/geo-sleuth"
+    GEO_SLEUTH_ROOT: ".runtime/geo-sleuth/skills/geo-sleuth",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    OBSCURA_MCP_URL: "http://127.0.0.1:8080/mcp",
+    CACTUS_BASE_URL: "http://127.0.0.1:8080/v1",
+    CACTUS_MODEL: "Cactus-Compute/needle"
   };
   await withServer(createApp({ env: configuredEnv, logger: { warn() {}, error() {} } }), async base => {
     const cookie = await login(base);
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 10);
+    assert.equal(payload.integrations.length, 12);
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "omnivoice").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "handy").state, "desktop_companion_required");
     assert.equal(payload.integrations.find(item => item.id === "ai-employees").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "geo-sleuth").configured, true);
+    assert.equal(payload.integrations.find(item => item.id === "obscura").state, "configured_unverified");
+    assert.equal(payload.integrations.find(item => item.id === "cactus-compute").state, "configured_unverified");
     const serialized = JSON.stringify(payload);
     assert.equal(serialized.includes("private-heygem-secret"), false);
     assert.equal(serialized.includes("private-voice-secret"), false);
