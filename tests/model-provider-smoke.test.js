@@ -103,3 +103,34 @@ test("smoke check verifies the challenge token despite harmless surrounding text
   assert.equal(report.challengeVerified, true);
   assert.equal(JSON.stringify(report).includes("ULTRON_SMOKE_OK"), false);
 });
+
+
+test("smoke check tries configured free model IDs after the OpenRouter router is rate limited", async () => {
+  const secret = "smoke-free-fallback-test-secret";
+  const seen = [];
+  const report = await runModelProviderSmoke({
+    env: {
+      OPENROUTER_API_KEY: secret,
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+      ULTRON_AVAILABLE_MODELS: "openrouter/free,nvidia/nemotron-3.5-lightning:free,openai/gpt-4.1,https://bad.example/model:free,nvidia/nemotron-3.5-lightning:free"
+    },
+    fetchImpl: async (url, options) => {
+      const request = JSON.parse(options.body);
+      seen.push({ url, model: request.model, authorization: options.headers.Authorization });
+      if (request.model === "openrouter/free") return new Response("{}", { status: 429 });
+      assert.equal(request.model, "nvidia/nemotron-3.5-lightning:free");
+      return success(request.model);
+    }
+  });
+
+  assert.equal(report.status, "passed");
+  assert.equal(report.provider, "openrouter-free-fallback-1");
+  assert.equal(report.model, "nvidia/nemotron-3.5-lightning:free");
+  assert.equal(report.challengeVerified, true);
+  assert.equal(report.attempts[0].code, "RATE_LIMITED");
+  assert.equal(report.successfulAttempt, 2);
+  assert.deepEqual(seen.map(item => item.model), ["openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
+  assert.ok(seen.every(item => item.authorization === "Bearer " + secret));
+  assert.equal(JSON.stringify(report).includes(secret), false);
+  assert.ok(!seen.some(item => item.model === "openai/gpt-4.1" || item.model.includes("bad.example")));
+});
