@@ -842,7 +842,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     });
   });
 
-  router.get("/agent/tools", requireSupabaseUser, (_req, res) => {
+  router.get("/agent/tools", requireSupabaseUser, (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
       mode: "autonomous_multi_tool_with_safe_intent_fallback",
@@ -851,6 +851,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
         { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_28_repository_domains" },
         { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_28_requested_repositories; read configuration-only status at /api/agent/repositories" },
+        { name: "chatwoot_list_conversations", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.CHATWOOT_BASE_URL && env.CHATWOOT_API_TOKEN && env.CHATWOOT_ACCOUNT_ID), execution: "owner_scoped_read_only_conversation_list_no_messages_or_contact_email" },
+        { name: "openproject_list_projects", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.OPENPROJECT_BASE_URL && env.OPENPROJECT_API_TOKEN), execution: "owner_scoped_read_only_project_list" },
+        { name: "openproject_list_work_packages", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.OPENPROJECT_BASE_URL && env.OPENPROJECT_API_TOKEN), execution: "owner_scoped_read_only_work_package_list" },
+        { name: "caldiy_list_event_types", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.CALDIY_BASE_URL && env.CALDIY_API_TOKEN), execution: "owner_scoped_read_only_event_type_list" },
+        { name: "caldiy_check_availability", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.CALDIY_BASE_URL && env.CALDIY_API_TOKEN), execution: "owner_scoped_read_only_availability_check_never_books" },
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
         { name: "plan_employee", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env)), execution: "background_draft_only_when_requested_no_second_confirmation" },
