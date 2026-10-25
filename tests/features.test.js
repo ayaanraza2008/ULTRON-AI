@@ -12,6 +12,7 @@ async function withServer(env, run, extras = {}) {
   const supabaseRest = extras.supabaseRest || (async () => []);
   app.use("/api", createFeatureRouter({
     env, requireSession, requireSupabaseUser, supabaseRest,
+    privilegedSupabaseRest: extras.privilegedSupabaseRest || supabaseRest,
     fetchImpl: extras.fetchImpl || globalThis.fetch,
     logger: { warn() {} }
   }));
@@ -345,9 +346,84 @@ test("preferences reject unsupported values and save supported voice/memory choi
   }, { supabaseRest: fakeSupabaseRest });
 });
 
-test("task approval requires explicit confirmation and preserves original task input", async () => {
+test("task approval uses privileged state transition and audit writes after owner-scoped read", async () => {
+  const calls = [];
+  const originalInput = { taskType: "employee", executionMode: "employee_worker", role: "seo-aeo", goal: "Draft an article", mode: "draft", requiresApproval: true, approved: false };
+  const taskId = "00000000-0000-4000-8000-000000000052";
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const regularRest = async (_req, table, method, query, body) => {
+    calls.push({ path: "user", table, method, query, body });
+    if (table === "agent_tasks" && method === "GET") return [{ id: taskId, user_id: userId, title: "Draft", input: originalInput, status: "WAITING_FOR_PERMISSION" }];
+    throw Object.assign(new Error("Authenticated client update is denied by database security trigger."), { status: 403 });
+  };
+  const privilegedRest = async (_req, table, method, query, body) => {
+    calls.push({ path: "service", table, method, query, body });
+    if (table === "agent_tasks" && method === "PATCH") {
+      assert.match(query, /id=eq\.00000000-0000-4000-8000-000000000052/);
+      assert.match(query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
+      assert.match(query, /status=eq\.WAITING_FOR_PERMISSION/);
+      return [{ id: taskId, title: "Draft", input: body.input, status: "QUEUED" }];
+    }
+    if (table === "audit_events" && method === "POST") {
+      assert.equal(body.user_id, userId);
+      assert.equal(body.action, "task.approved");
+      assert.equal(body.target_id, taskId);
+      return [];
+    }
+    throw new Error("Unexpected privileged operation");
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks/" + taskId + "/approve", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.task.status, "QUEUED");
+    assert.equal(body.task.input.approved, true);
+    assert.equal(body.task.input.approvalScope, "task_record_only");
+    assert.match(body.notice, /external side effects remain blocked/i);
+    assert.equal(calls.filter(call => call.path === "user" && call.table === "agent_tasks" && call.method === "PATCH").length, 0);
+    assert.equal(calls.filter(call => call.path === "service" && call.table === "agent_tasks" && call.method === "PATCH").length, 1);
+    assert.equal(calls.filter(call => call.path === "service" && call.table === "audit_events" && call.method === "POST").length, 1);
+  }, { supabaseRest: regularRest, privilegedSupabaseRest: privilegedRest });
+});
+
+test("task cancellation uses the privileged conditional update and never writes audit with user credentials", async () => {
+  const calls = [];
+  const taskId = "00000000-0000-4000-8000-000000000053";
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const regularRest = async (_req, table, method, query) => {
+    calls.push({ path: "user", table, method, query });
+    throw Object.assign(new Error("Authenticated state changes are denied."), { status: 403 });
+  };
+  const privilegedRest = async (_req, table, method, query, body) => {
+    calls.push({ path: "service", table, method, query, body });
+    if (table === "agent_tasks" && method === "PATCH") {
+      assert.match(query, /id=eq\.00000000-0000-4000-8000-000000000053/);
+      assert.match(query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
+      assert.match(query, /status=in\.\(QUEUED,WAITING_FOR_PERMISSION\)/);
+      return [{ id: taskId, status: "CANCELLED" }];
+    }
+    if (table === "audit_events" && method === "POST") {
+      assert.equal(body.user_id, userId);
+      assert.equal(body.action, "task.cancelled");
+      return [];
+    }
+    throw new Error("Unexpected privileged operation");
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks/" + taskId + "/cancel", { method: "POST" });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.task.status, "CANCELLED");
+    assert.equal(calls.some(call => call.path === "user"), false);
+    assert.equal(calls.filter(call => call.path === "service" && call.table === "audit_events").length, 1);
+  }, { supabaseRest: regularRest, privilegedSupabaseRest: privilegedRest });
+});
+
+test("task approval requires confirmation but refuses to queue review-only task types", async () => {
   const writes = [];
-  const originalInput = { description: "Research a topic", risk: "medium", requiresApproval: true, approved: false };
+  const originalInput = { description: "Research a topic", taskType: "manual", executionMode: "planned_only", risk: "medium", requiresApproval: true, approved: false };
   const fakeSupabaseRest = async (_req, table, method, query, body) => {
     writes.push({ table, method, query, body });
     if (table === "agent_tasks" && method === "GET") return [{ id: "00000000-0000-4000-8000-000000000002", title: "Research", input: originalInput, status: "WAITING_FOR_PERMISSION" }];
@@ -362,11 +438,10 @@ test("task approval requires explicit confirmation and preserves original task i
     const approved = await fetch(base + "/api/tasks/00000000-0000-4000-8000-000000000002/approve", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true })
     });
-    assert.equal(approved.status, 200);
-    const body = await approved.json();
-    assert.equal(body.task.input.description, "Research a topic");
-    assert.equal(body.task.input.approved, true);
-    assert.match(body.notice, /worker is still required/i);
+    assert.equal(approved.status, 409);
+    assert.equal((await approved.json()).error.code, "TASK_TYPE_NOT_EXECUTABLE");
+    assert.equal(writes.some(write => write.method === "PATCH"), false, "review-only tasks must not be queued after confirmation");
+    assert.equal(writes.some(write => write.table === "audit_events"), false);
   }, { supabaseRest: fakeSupabaseRest });
 });
 
