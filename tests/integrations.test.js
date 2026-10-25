@@ -3,17 +3,84 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createIntegrationRouter } from "../integrations/router.js";
 
-async function withServer(env, fetchImpl, run) {
+async function withServer(env, fetchImpl, run, { userId = "00000000-0000-4000-8000-000000000001" } = {}) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
-  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
-  app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
+  const configuredEnv = { ...env };
+  if (!Object.hasOwn(configuredEnv, "ULTRON_INTEGRATION_OWNER_USER_ID")) {
+    configuredEnv.ULTRON_INTEGRATION_OWNER_USER_ID = "00000000-0000-4000-8000-000000000001";
+  }
+  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: userId }; next(); };
+  app.use("/api", createIntegrationRouter({ env: configuredEnv, fetchImpl, requireSupabaseUser }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
   try { await run("http://127.0.0.1:" + server.address().port); }
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
+
+test("shared ComfyUI credentials fail closed when the integration owner is not configured", async () => {
+  let called = false;
+  await withServer({
+    ULTRON_INTEGRATION_OWNER_USER_ID: "",
+    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_API_KEY: "synthetic-comfy-key"
+  }, async () => {
+    called = true;
+    throw new Error("Unconfigured owner must never reach the upstream provider.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/comfyui/queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflow: { "1": { class_type: "CheckpointLoaderSimple", inputs: {} } } })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "INTEGRATION_OWNER_NOT_CONFIGURED");
+    assert.equal(called, false);
+  });
+});
+
+test("non-owner accounts cannot consume or inspect shared integration credentials", async () => {
+  let calls = 0;
+  const env = {
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000002",
+    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_API_KEY: "synthetic-comfy-key",
+    OMNIVOICE_API_BASE_URL: "https://voice.example",
+    OMNIVOICE_API_KEY: "synthetic-voice-key",
+    OMNIVOICE_SYNTHESIS_PATH: "/v1/synthesize",
+    ULTRON_HANDY_BRIDGE_URL: "https://handy.example",
+    ULTRON_HANDY_BRIDGE_TOKEN: "synthetic-handy-token",
+    ULTRON_HANDY_TRANSCRIBE_PATH: "/transcribe"
+  };
+  const fetchImpl = async () => {
+    calls++;
+    throw new Error("A non-owner must not invoke configured shared services.");
+  };
+  await withServer(env, fetchImpl, async base => {
+    const comfy = await fetch(base + "/api/integrations/comfyui/status");
+    assert.equal(comfy.status, 403);
+    assert.equal((await comfy.json()).error.code, "INTEGRATION_OWNER_ONLY");
+
+    const voice = await fetch(base + "/api/integrations/omnivoice/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { text: "hello" } })
+    });
+    assert.equal(voice.status, 403);
+    assert.equal((await voice.json()).error.code, "INTEGRATION_OWNER_ONLY");
+
+    const handy = await fetch(base + "/api/integrations/handy/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: { audioBase64: "YXVkaW8=" } })
+    });
+    assert.equal(handy.status, 403);
+    assert.equal((await handy.json()).error.code, "INTEGRATION_OWNER_ONLY");
+    assert.equal(calls, 0);
+  });
+});
+
 
 test("ComfyUI queue forwards workflow to the configured API and returns prompt id", async () => {
   let request;
