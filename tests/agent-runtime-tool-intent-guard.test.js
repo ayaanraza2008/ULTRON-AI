@@ -13,7 +13,7 @@ test("browser tool intent cannot add consequential actions to a routine request"
     next();
   };
   app.use("/api", createAgentRouter({
-    env: { OPENROUTER_API_KEY: "test-only", BROWSER_USE_BASE_URL: "https://browser.example" },
+    env: { OPENROUTER_API_KEY: "test-only", BROWSER_USE_BASE_URL: "https://browser.example.com" },
     requireSupabaseUser,
     logger: { warn() {} },
     fetchImpl: async (url, options) => {
