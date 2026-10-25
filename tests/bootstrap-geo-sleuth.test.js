@@ -56,9 +56,12 @@ test("Geo-Sleuth bootstrap downloads a pinned uv release installer with HTTPS-on
           throw new Error("uv is not installed");
         }
         if (command === "curl") {
-          assert.deepEqual(args.slice(0, 5), ["--proto", "=https", "--proto-redir", "=https", "--tlsv1.2"]);
-          assert.match(args[5], /^-LsSf$/);
-          assert.equal(args[6], "https://releases.astral.sh/github/uv/releases/download/0.13.5/uv-installer.sh");
+          assert.deepEqual(args.slice(0, 7), ["--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--max-time", "30"]);
+          assert.equal(args[7], "--max-filesize");
+          assert.equal(args[8], "1048576");
+          const urlIndex = args.indexOf("https://releases.astral.sh/github/uv/releases/download/0.13.5/uv-installer.sh");
+          assert.ok(urlIndex > 0);
+          assert.equal(args[urlIndex - 1], "-LsSf");
           const outputIndex = args.indexOf("-o");
           assert.ok(outputIndex > -1);
           await writeFile(args[outputIndex + 1], "# installer fixture");
