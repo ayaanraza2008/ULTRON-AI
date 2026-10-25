@@ -1243,6 +1243,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       } catch (toolModeError) {
         // Some free-model routes reject tool schemas. Retry plain chat first; if that
         // also fails, deterministic safe intents can still execute non-model tools.
+        // An exhausted total deadline is different: a second request would restart
+        // the budget and defeat the request bound.
+        if (toolModeError?.code === "PROVIDER_TOTAL_TIMEOUT") throw toolModeError;
         try {
           first = await requestModel(messages, { userId: req.supabaseUser?.id });
         } catch (plainModeError) {
@@ -1319,6 +1322,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         try {
           final = await requestModel(finalMessages, { useTools: true, userId: req.supabaseUser?.id });
         } catch (toolSynthesisError) {
+          if (toolSynthesisError?.code === "PROVIDER_TOTAL_TIMEOUT") throw toolSynthesisError;
           final = await requestModel(finalMessages, { userId: req.supabaseUser?.id });
         }
         const followCalls = Array.isArray(final?.choices?.[0]?.message?.tool_calls)
