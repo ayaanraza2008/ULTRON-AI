@@ -573,3 +573,44 @@ test("chat falls back to the next model when a streaming provider closes immedia
     assert.deepEqual(calls, ["first-model", "second-model"]);
   });
 });
+
+test("Hermes Agent API is a first-class normal chat provider when explicitly enabled", async () => {
+  let seen;
+  const configuredEnv = {
+    ...env,
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_CHAT_PROVIDER: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent",
+    HERMES_AGENT_PRIORITY: "-5"
+  };
+  const app = createApp({
+    env: configuredEnv,
+    fetchImpl: async (url, options) => {
+      seen = { url, options, body: JSON.parse(options.body) };
+      assert.equal(url, "https://hermes.example/v1/chat/completions");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      return new Response(JSON.stringify({
+        model: "hermes-agent",
+        choices: [{ message: { role: "assistant", content: "Hermes completed the tool-enabled agent turn." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Research how the official API works." }], stream: false })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ultron-provider"), "hermes-agent");
+    assert.equal((await response.json()).content, "Hermes completed the tool-enabled agent turn.");
+    assert.equal(seen.body.model, "hermes-agent");
+    assert.equal(seen.body.stream, false);
+    assert.equal(seen.body.messages.some(message => message.role === "system"), true);
+  });
+});
+
