@@ -1,5 +1,6 @@
 import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
+import { getPaperclipReadiness } from "./paperclip-services.js";
 
 const safeBaseUrl = (value) => {
   if (typeof value !== "string" || !value.trim()) return false;
@@ -29,6 +30,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasChatwoot = hasIntegrationOwner && safeBaseUrl(env.CHATWOOT_BASE_URL) && Boolean(env.CHATWOOT_API_TOKEN) && /^\d+$/.test(String(env.CHATWOOT_ACCOUNT_ID || ""));
   const hasOpenProject = hasIntegrationOwner && safeBaseUrl(env.OPENPROJECT_BASE_URL) && Boolean(env.OPENPROJECT_API_TOKEN);
   const hasCalDiy = hasIntegrationOwner && safeBaseUrl(env.CALDIY_BASE_URL) && Boolean(env.CALDIY_API_TOKEN);
+  const paperclipReadiness = getPaperclipReadiness(env);
   const obscuraReadiness = getObscuraReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
 
@@ -180,6 +182,19 @@ export function buildIntegrationCatalog(env = process.env) {
       note: cactusReadiness.configured
         ? "Configured but not yet live-tested. The engine and Needle/Whistle must be installed and started separately; ULTRON never downloads model weights."
         : "Requires an already-running Cactus OpenAI-compatible server, an installed model ID, and an authenticated HTTPS gateway for remote endpoints. On the same machine, loopback HTTP is allowed."
+    },
+    {
+      id: "paperclip",
+      name: "Paperclip Agent Governance",
+      capability: "Read-only agent roster, company dashboard, and monthly cost summary",
+      state: paperclipReadiness.state,
+      configured: Boolean(paperclipReadiness.configured),
+      mode: "owner_scoped_external_api",
+      requiredEnv: ["PAPERCLIP_BASE_URL", "PAPERCLIP_API_TOKEN", "PAPERCLIP_COMPANY_ID", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tool: paperclip_read_agent_governance"],
+      note: paperclipReadiness.configured
+        ? "Endpoint/token/company and owner guard are present; live roster, dashboard, and cost compatibility remain unverified. Read-only tool only."
+        : "Requires a separately hosted Paperclip service, bearer API token, company ID, and exact owner UUID guard. It cannot create, hire, assign, pause, terminate, or change budgets."
     },
     {
       id: "ai-employees",

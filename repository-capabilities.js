@@ -1,5 +1,6 @@
 import { getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { getCactusReadiness } from "./integrations/cactus.js";
+import { getPaperclipReadiness } from "./integrations/paperclip-services.js";
 
 /**
  * Task-matched capability catalog for the user's 30 upstream repository domains.
@@ -203,10 +204,10 @@ const REPOSITORIES = [
   {
     id: "paperclip", repo: "paperclipai/paperclip", domain: "agent_management",
     match: /\b(paperclip|agent org chart|manage ai employees|agent budget|agent governance|multi.?agent company|agent cost tracking|business agent team)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["multi-agent team organization", "goal/task assignment", "permissions and budget governance", "agent run history/cost tracking"],
-    limits: ["Requires a separately hosted Paperclip server and authenticated API. Keep per-agent scopes, budgets and audit logs; don't launch agents with blanket authority."],
-    envKeys: ["PAPERCLIP_BASE_URL", "PAPERCLIP_API_TOKEN"], license: "MIT per upstream README", source: "https://github.com/paperclipai/paperclip"
+    integration: "owner_scoped_api", status: "adapter_present_unverified_live",
+    abilities: ["read-only agent roster with roles/status/budget summary", "company dashboard summary", "monthly cost/budget overview", "agent organization and governance visibility"],
+    limits: ["Read-only connector exists, but the Paperclip service and credentials must be configured and live-tested. Owner UUID guard is required. Agent creation, hiring, assignments, pauses, termination, budget changes and routine triggers are not exposed."],
+    envKeys: ["PAPERCLIP_BASE_URL", "PAPERCLIP_API_TOKEN", "PAPERCLIP_COMPANY_ID", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "MIT per upstream README", source: "https://github.com/paperclipai/paperclip"
   },
   {
     id: "open-design", repo: "nexu-io/open-design", domain: "design_workspace",
@@ -274,6 +275,7 @@ function stateFor(record, env) {
     const readiness = getCactusReadiness(env);
     return readiness.configured ? "configured_unverified" : readiness.state;
   }
+  if (record.id === "paperclip") return getPaperclipReadiness(env).state;
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
   if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
   if (!record.envKeys.length && record.status === "bounded_security_routes_present") return record.status;

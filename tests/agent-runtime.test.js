@@ -356,6 +356,73 @@ test("agent routes an explicit Obscura PDF request to the PDF capture MCP tool",
   });
 });
 
+test("agent automatically reads Paperclip agent governance and monthly costs", async () => {
+  let providerCalls = 0;
+  const paperclipRequests = [];
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const env = {
+    OPENROUTER_API_KEY: "test-only",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    PAPERCLIP_BASE_URL: "https://paperclip.example",
+    PAPERCLIP_API_TOKEN: "paperclip-test-token",
+    PAPERCLIP_COMPANY_ID: "company-123"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      providerCalls++;
+      const payload = JSON.parse(options.body);
+      if (providerCalls === 1) {
+        assert.ok(payload.tools.some(item => item.function?.name === "paperclip_read_agent_governance"));
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+          id: "paperclip-call", type: "function",
+          function: { name: "paperclip_read_agent_governance", arguments: "{}" }
+        }] } }] }), { status: 200 });
+      }
+      assert.ok(payload.messages.some(item => item.role === "tool" && String(item.content).includes("Paperclip")));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Paperclip agent governance is read-only; the roster and cost summary are available." } }] }), { status: 200 });
+    }
+    paperclipRequests.push({ url, options });
+    assert.equal(options.method, "GET");
+    assert.equal(options.redirect, "error");
+    assert.equal(options.headers.Authorization, "Bearer paperclip-test-token");
+    if (url.endsWith("/companies/company-123/agents")) {
+      return new Response(JSON.stringify([{ id: "agent-1", name: "ULTRON", role: "ceo", status: "running", budgetMonthlyCents: 1000, spentMonthlyCents: 250 }]), { status: 200 });
+    }
+    if (url.endsWith("/companies/company-123/dashboard")) {
+      return new Response(JSON.stringify({
+        agents: { active: 1, running: 1, paused: 0, error: 0 },
+        tasks: { open: 2, inProgress: 1, blocked: 0, done: 5 },
+        costs: { monthSpendCents: 250, monthBudgetCents: 1000, monthUtilizationPercent: 25 },
+        budgets: { activeIncidents: 0, pendingApprovals: 0, pausedAgents: 0, pausedProjects: 0 },
+        pendingApprovals: 0
+      }), { status: 200 });
+    }
+    if (url.endsWith("/companies/company-123/costs/summary")) {
+      return new Response(JSON.stringify({ eventCount: 4, spendCents: 250, budgetCents: 1000, utilizationPercent: 25, pricingComplete: true }), { status: 200 });
+    }
+    throw new Error("Unexpected Paperclip URL");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Show Paperclip agent roster, dashboard, and budget cost status." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.toolsUsed.some(item => item.name === "paperclip_read_agent_governance" && item.ok));
+    const result = body.toolResults.find(item => item.name === "paperclip_read_agent_governance").result;
+    assert.equal(result.state, "completed");
+    assert.equal(result.agentCount, 1);
+    assert.equal(result.agents[0].name, "ULTRON");
+    assert.equal(result.dashboard.tasks.open, 2);
+    assert.equal(result.costs.spendCents, 250);
+    assert.equal(result.mode, "read_only");
+    assert.ok(result.actionsNotExposed.includes("terminate_agent"));
+    assert.equal(paperclipRequests.length, 3);
+    assert.equal(providerCalls, 2);
+    assert.equal(JSON.stringify(body).includes("paperclip-test-token"), false);
+  });
+});
+
 test("agent automatically checks integration readiness when a free model omits tool calls", async () => {
   let providerCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {
