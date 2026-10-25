@@ -9,7 +9,9 @@ import { normalizeDesktopFailureCode, normalizeDesktopActionResult, validateDesk
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const DEFAULT_POLL_MS = 5000;
 const MAX_POLL_MS = 30000;
-const DEVICE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;\nconst APPROVAL_MAX_AGE_MS = 10 * 60 * 1000;\nconst APPROVAL_FUTURE_SKEW_MS = 60 * 1000;
+const DEVICE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+const APPROVAL_MAX_AGE_MS = 10 * 60 * 1000;
+const APPROVAL_FUTURE_SKEW_MS = 60 * 1000;
 
 function readConfig(env) {
   const rawBase = typeof env.ULTRON_DESKTOP_SERVER_URL === "string" ? env.ULTRON_DESKTOP_SERVER_URL.trim() : "";
