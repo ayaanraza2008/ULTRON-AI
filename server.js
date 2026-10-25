@@ -326,6 +326,17 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
   return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
 }
 
+function configuredModelPickerOptions(env, userId = null) {
+  return configuredChatProviders(env, null, userId)
+    .filter(provider => !provider.isOpenRouter)
+    .map(provider => ({
+      id: "ultron/" + provider.name + "/" + provider.model,
+      name: provider.name,
+      model: provider.model,
+      supportsVision: provider.supportsVision === true
+    }));
+}
+
 function cactusCompletionStream(completion) {
   const id = "cactus-" + crypto.randomUUID();
   const content = completion.choices[0].message.content;
@@ -703,21 +714,43 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     });
   });
 
-  app.get("/api/models", requireSession, async (_req, res) => {
-    if (!env.OPENROUTER_API_KEY) return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "Add your OpenRouter API key in Render as OPENROUTER_API_KEY." } });
-    let baseUrl;
-    try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
-    catch { return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL is invalid." } }); }
+  app.get("/api/models", requireSession, async (req, res) => {
+    const providerOptions = configuredModelPickerOptions(env, req.supabaseUser?.id);
+    const alternateModelIds = providerOptions.map(provider => provider.id);
+    const openRouterKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
+    let baseUrl = null;
+    if (openRouterKey) {
+      try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
+      catch {
+        if (alternateModelIds.length) return res.json({ models: alternateModelIds, defaultModel: alternateModelIds[0] });
+        return res.status(500).json({ error: { code: "PROVIDER_CONFIG_INVALID", message: "OpenRouter base URL is invalid." } });
+      }
+    }
+    if (!openRouterKey || !baseUrl) {
+      if (alternateModelIds.length) return res.json({ models: alternateModelIds, defaultModel: alternateModelIds[0] });
+      return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "Configure OpenRouter or another supported server-side model provider." } });
+    }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + env.OPENROUTER_API_KEY }, redirect: "error", signal: AbortSignal.timeout(15_000) });
-      if (!upstream.ok) return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load free models from OpenRouter." } });
+      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + openRouterKey }, redirect: "error", signal: AbortSignal.timeout(15_000) });
+      if (!upstream.ok) {
+        try { await upstream.body?.cancel?.(); } catch {}
+        if (alternateModelIds.length) return res.json({ models: alternateModelIds, defaultModel: alternateModelIds[0] });
+        return res.status(502).json({ error: { code: "MODEL_DISCOVERY_FAILED", message: "Could not load free models from OpenRouter." } });
+      }
       const payload = await readResponseJsonLimited(upstream, 2_000_000);
       const models = Array.isArray(payload?.data)
         ? payload.data.filter(item => item?.id && (String(item.id).endsWith(":free") || (Number(item?.pricing?.prompt) === 0 && Number(item?.pricing?.completion) === 0))).map(item => item.id)
         : [];
       if (!models.includes("openrouter/free")) models.unshift("openrouter/free");
-      return res.json({ models: [...new Set(models)], defaultModel: env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" });
+      return res.json({
+        models: [...new Set([...models, ...alternateModelIds])],
+        defaultModel: env.OPENROUTER_DEFAULT_MODEL || "openrouter/free"
+      });
     } catch {
+      if (alternateModelIds.length) return res.json({
+        models: [...new Set(["openrouter/free", ...alternateModelIds])],
+        defaultModel: env.OPENROUTER_DEFAULT_MODEL || "openrouter/free"
+      });
       return res.status(502).json({ error: { code: "MODEL_DISCOVERY_UNAVAILABLE", message: "Could not connect to OpenRouter." } });
     }
   });
@@ -1134,15 +1167,21 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const knownModels = ["openrouter/free"];
     const configuredModels = [...new Set(String(env.ULTRON_AVAILABLE_MODELS || "openrouter/free").split(",").map(value => value.trim()).filter(Boolean))].slice(0, 12);
     const visionModels = [...new Set(String(env.ULTRON_VISION_MODELS || env.OPENROUTER_VISION_MODEL || "").split(",").map(value => value.trim()).filter(value => /^[a-zA-Z0-9._/-]{1,154}(?::free)?$/.test(value)))].slice(0, 8);
-    const allowedModels = [...new Set([...knownModels, ...configuredModels, visionModels, env.OPENROUTER_DEFAULT_MODEL].flat().filter(Boolean))];
+    const providerModelOptions = configuredModelPickerOptions(env, req.supabaseUser?.id);
+    const allowedModels = [...new Set([...knownModels, ...configuredModels, visionModels, env.OPENROUTER_DEFAULT_MODEL, ...providerModelOptions.map(option => option.id)].flat().filter(Boolean))];
+    const requestedProviderOption = typeof requestedModel === "string"
+      ? providerModelOptions.find(option => option.id === requestedModel)
+      : null;
     if (requestedModel !== undefined && (typeof requestedModel !== "string" || (!allowedModels.includes(requestedModel) && requestedModel !== "openrouter/free" && !/^[a-zA-Z0-9._/-]+:free$/.test(requestedModel)))) {
       return res.status(400).json({ error: { code: "MODEL_NOT_ALLOWED", message: "Choose a model configured for ULTRON." } });
     }
     const hasImageAttachments = Array.isArray(attachments) && attachments.length > 0;
-    // Image messages prefer explicitly configured vision models rather than the normal text model.
-    let selectedModel = hasImageAttachments && visionModels.length
-      ? (requestedModel && visionModels.includes(requestedModel) ? requestedModel : visionModels[0])
-      : (requestedModel || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
+    // Image messages prefer explicitly configured vision models unless an explicitly selected alternate provider supports vision.
+    let selectedModel = requestedProviderOption
+      ? requestedProviderOption.model
+      : hasImageAttachments && visionModels.length
+        ? (requestedModel && visionModels.includes(requestedModel) ? requestedModel : visionModels[0])
+        : (requestedModel || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free");
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
       return res.status(400).json({ error: { code: "INVALID_MESSAGES", message: "Send between 1 and 40 messages." } });
     }
@@ -1220,7 +1259,13 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
       catch { primaryProviderConfigInvalid = true; }
     }
-    const chatProviders = configuredChatProviders(env, baseUrl, req.supabaseUser?.id);
+    const configuredProviders = configuredChatProviders(env, baseUrl, req.supabaseUser?.id);
+    const chatProviders = requestedProviderOption
+      ? [
+          ...configuredProviders.filter(provider => provider.name === requestedProviderOption.name && provider.model === requestedProviderOption.model),
+          ...configuredProviders.filter(provider => !(provider.name === requestedProviderOption.name && provider.model === requestedProviderOption.model))
+        ]
+      : configuredProviders;
     if (!chatProviders.length) {
       return res.status(primaryProviderConfigInvalid ? 500 : 503).json({
         error: {

@@ -343,6 +343,112 @@ test("model discovery returns only model identifiers from the configured provide
   });
 });
 
+test("model discovery supports a configured alternate provider without OpenRouter", async () => {
+  const alternateEnv = {
+    ...env,
+    OPENROUTER_API_KEY: "",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKeyEnv: "GROQ_API_KEY",
+      model: "llama-3.3-70b-versatile",
+      priority: 1,
+      supportsVision: false
+    }]),
+    GROQ_API_KEY: "synthetic-groq-key"
+  };
+  const app = createApp({ env: alternateEnv, fetchImpl: async () => { throw new Error("No upstream discovery should be needed"); }, logger: { warn() {}, error() {} } });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload, {
+      models: ["ultron/groq/llama-3.3-70b-versatile"],
+      defaultModel: "ultron/groq/llama-3.3-70b-versatile"
+    });
+    assert.equal(JSON.stringify(payload).includes("synthetic-groq-key"), false);
+  });
+});
+
+test("model discovery includes configured alternate model options alongside free OpenRouter models", async () => {
+  const alternateEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKeyEnv: "GROQ_API_KEY",
+      model: "llama-3.3-70b-versatile",
+      priority: 1
+    }]),
+    GROQ_API_KEY: "synthetic-groq-key"
+  };
+  const app = createApp({
+    env: alternateEnv,
+    fetchImpl: async url => {
+      assert.equal(url, "https://openrouter.ai/api/v1/models");
+      return new Response(JSON.stringify({ data: [{ id: "test-free-model:free" }] }), { status: 200 });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      models: ["openrouter/free", "test-free-model:free", "ultron/groq/llama-3.3-70b-versatile"],
+      defaultModel: "test-model"
+    });
+  });
+});
+
+test("chat honors a selected alternate provider model before trying fallbacks", async () => {
+  const calls = [];
+  const alternateEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKeyEnv: "GROQ_API_KEY",
+      model: "llama-3.3-70b-versatile",
+      priority: 1
+    }]),
+    GROQ_API_KEY: "synthetic-groq-key"
+  };
+  const app = createApp({
+    env: alternateEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, authorization: options.headers?.Authorization, model: JSON.parse(options.body || "{}").model });
+      assert.equal(url, "https://api.groq.com/openai/v1/chat/completions");
+      assert.equal(options.headers.Authorization, "Bearer synthetic-groq-key");
+      assert.equal(JSON.parse(options.body).model, "llama-3.3-70b-versatile");
+      return new Response(JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        choices: [{ message: { role: "assistant", content: "Selected alternate provider responded." } }]
+      }), { status: 200 });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        model: "ultron/groq/llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: "Say hello." }]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Selected alternate provider responded.");
+    assert.equal(response.headers.get("x-ultron-provider"), "groq");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://api.groq.com/openai/v1/chat/completions");
+  });
+});
+
+
 test("missing access password fails closed", async () => {
   const app = createApp({ env: { ...env, APP_ACCESS_PASSWORD: "" }, logger: { warn() {}, error() {} } });
   await withServer(app, async base => {
