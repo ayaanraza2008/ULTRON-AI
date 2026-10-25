@@ -6,7 +6,7 @@ test("quality gate passes a substantive report with traceable public research ci
   const url = "https://example.com/source";
   const result = verifyAutonomousOutput({
     research: { sources: [{ url }] },
-    report: { answer: "A sufficiently substantive report with a conclusion, evidence and next steps. Source: " + url }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n\n# Deliverable\nA conclusion and evidence. Source: " + url + "\n\n# Next Steps\nValidate the result.\n\n# Blockers\nNo known blockers.\n\n# Verification Criteria\nConfirm the source and outcome." }
   });
   assert.equal(result.state, "passed");
   assert.ok(result.checks.every(check => check.passed));
@@ -16,7 +16,7 @@ test("quality gate rejects unsafe or malformed source URLs even when they appear
   const unsafe = "javascript:alert(1)";
   const result = verifyAutonomousOutput({
     research: { sources: [{ url: unsafe }, { url: "https://user:pass@example.com/private" }, { url: "not a url" }] },
-    report: { answer: "A sufficiently substantive report with a conclusion, evidence and next steps. Source: " + unsafe }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n\n# Deliverable\nA conclusion and evidence. Source: " + unsafe + "\n\n# Next Steps\nValidate the result.\n\n# Blockers\nNo known blockers.\n\n# Verification Criteria\nConfirm the source and outcome." }
   });
   assert.equal(result.state, "needs_review");
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
@@ -52,7 +52,7 @@ test("quality gate excludes localhost, private IPs and cloud metadata URLs from 
   ];
   const result = verifyAutonomousOutput({
     research: { sources: unsafeUrls.map(url => ({ url })) },
-    report: { answer: "A sufficiently substantive report with a conclusion, evidence and next steps. " + unsafeUrls.join(" ") }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n# Deliverable\nEvidence and result.\n# Next Steps\nValidate.\n# Blockers\nNone known.\n# Verification Criteria\nConfirm sources. " + unsafeUrls.join(" ") }
   });
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
   assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
@@ -67,8 +67,49 @@ test("quality gate rejects hex-encoded IPv4-mapped private and loopback IPv6 URL
   ];
   const result = verifyAutonomousOutput({
     research: { sources: unsafeUrls.map(url => ({ url })) },
-    report: { answer: "A sufficiently substantive report with a conclusion, evidence and next steps. " + unsafeUrls.join(" ") }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n# Deliverable\nEvidence and result.\n# Next Steps\nValidate.\n# Blockers\nNone known.\n# Verification Criteria\nConfirm sources. " + unsafeUrls.join(" ") }
   });
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
   assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
+});
+
+test("quality gate requires an actionable, reviewable report structure", () => {
+  const result = verifyAutonomousOutput({
+    research: { sources: [{ url: "https://example.com/source" }] },
+    report: { answer: "A long but unstructured response that includes a source https://example.com/source and enough characters to look substantive, but lacks named sections." }
+  });
+  assert.equal(result.checks.find(check => check.id === "deliverable_structure").passed, false);
+  assert.match(result.checks.find(check => check.id === "deliverable_structure").detail, /Missing required sections/);
+});
+
+
+test("quality gate rejects reports with headings but no useful section content", () => {
+  const url = "https://example.com/source";
+  const answer = [
+    "padding content to exceed the minimum length and hide missing useful output " + url,
+    "# Summary",
+    "# Deliverable",
+    "# Next Steps",
+    "# Blockers",
+    "# Verification Criteria"
+  ].join("\n");
+  const result = verifyAutonomousOutput({ research: { sources: [{ url }] }, report: { answer } });
+  const structure = result.checks.find(check => check.id === "deliverable_structure");
+  assert.equal(structure.passed, false);
+  assert.match(structure.detail, /Empty or too-short sections/);
+});
+
+test("quality gate rejects required report sections in the wrong order", () => {
+  const url = "https://example.com/source";
+  const answer = [
+    "# Summary\nA useful summary of the findings.",
+    "# Next Steps\nValidate the reported findings.",
+    "# Deliverable\nThe report includes findings and a traceable source " + url,
+    "# Blockers\nNo known blockers at present.",
+    "# Verification Criteria\nConfirm each finding against the source."
+  ].join("\n\n");
+  const result = verifyAutonomousOutput({ research: { sources: [{ url }] }, report: { answer } });
+  const structure = result.checks.find(check => check.id === "deliverable_structure");
+  assert.equal(structure.passed, false);
+  assert.match(structure.detail, /not in the requested order/);
 });
