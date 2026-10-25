@@ -27,7 +27,7 @@ const REPOSITORIES = [
     integration: "external_service", status: "adapter_not_implemented",
     abilities: ["unified support inbox", "ticket triage", "support reply drafts", "conversation summaries", "customer-support analytics"],
     limits: ["External support actions need a reachable Chatwoot instance, documented API credentials, user-scoped access, and approval before sending replies."],
-    envKeys: ["CHATWOOT_BASE_URL", "CHATWOOT_API_TOKEN"], license: "Review upstream LICENSE before reuse", source: "https://github.com/chatwoot/chatwoot"
+    envKeys: ["CHATWOOT_BASE_URL", "CHATWOOT_API_TOKEN", "CHATWOOT_ACCOUNT_ID", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "Review upstream LICENSE before reuse", source: "https://github.com/chatwoot/chatwoot"
   },
   {
     id: "cal-diy", repo: "calcom/cal.diy", domain: "scheduling",
@@ -35,7 +35,7 @@ const REPOSITORIES = [
     integration: "external_service", status: "adapter_not_implemented",
     abilities: ["availability lookup", "meeting/appointment scheduling", "calendar routing", "meeting links"],
     limits: ["Requires an authorized calendar service and user-scoped API token; booking, canceling, and invite-sending are consequential actions."],
-    envKeys: ["CALDIY_BASE_URL", "CALDIY_API_TOKEN"], license: "MIT per repository README; verify exact source files", source: "https://github.com/calcom/cal.diy"
+    envKeys: ["CALDIY_BASE_URL", "CALDIY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "MIT per repository README; verify exact source files", source: "https://github.com/calcom/cal.diy"
   },
   {
     id: "openproject", repo: "opf/openproject", domain: "project_management",
@@ -43,7 +43,7 @@ const REPOSITORIES = [
     integration: "external_service", status: "adapter_not_implemented",
     abilities: ["task and issue tracking", "Kanban/Scrum planning", "roadmap and Gantt planning", "project summaries", "time/cost reporting"],
     limits: ["Read/write use requires an authorized OpenProject API endpoint and scoped credentials."],
-    envKeys: ["OPENPROJECT_BASE_URL", "OPENPROJECT_API_TOKEN"], license: "Review upstream license before reuse", source: "https://github.com/opf/openproject"
+    envKeys: ["OPENPROJECT_BASE_URL", "OPENPROJECT_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "Review upstream license before reuse", source: "https://github.com/opf/openproject"
   },
   {
     id: "openwhispr", repo: "OpenWhispr/openwhispr", domain: "voice_dictation",
