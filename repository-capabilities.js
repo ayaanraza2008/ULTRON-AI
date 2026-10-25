@@ -1,6 +1,7 @@
 import { getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { getCactusReadiness } from "./integrations/cactus.js";
 import { getPaperclipReadiness } from "./integrations/paperclip-services.js";
+import { getHermesAgentReadiness } from "./integrations/hermes-agent.js";
 
 /**
  * Task-matched capability catalog for the user's 30 upstream repository domains.
@@ -202,6 +203,14 @@ const REPOSITORIES = [
     envKeys: [], license: "Review repository LICENSE; source has ethical security scope", source: "https://github.com/SudoHopeX/KaliGPT"
   },
   {
+    id: "hermes-agent", repo: "NousResearch/hermes-agent", domain: "autonomous_agent_runtime",
+    match: /\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime|self-improving agent|agent skill learning|parallel subagents|agent memory loop|hermes cron)\b/i,
+    integration: "authenticated_openai_compatible_agent_provider", status: "adapter_present_unverified_live",
+    abilities: ["full tool-enabled Hermes agent turns through its OpenAI-compatible API", "40+ configurable tools/toolsets, web search/extraction and coding/terminal/file workflows when enabled upstream", "persistent memory, session search, profile/user modeling and self-improving skills when configured", "parallel subagents", "built-in cron scheduling and platform delivery", "MCP servers and plugins", "local, Docker, SSH, Modal, Daytona, Vercel Sandbox and registered terminal backends", "vision, text-to-speech, image-generation, and 20+ messaging platform integrations when separately configured"],
+    limits: ["Requires a separately installed/running Hermes API server configured with API_SERVER_ENABLED=true and API_SERVER_KEY; service URL, tool permissions, model provider, skills, cron delivery, messaging, and terminal backends remain controlled by Hermes itself. No upstream runtime is installed or started by ULTRON.", "Use an authenticated HTTPS endpoint and least-privileged sandboxed terminal backends. The bridge blocks tasks ULTRON classifies as consequential, but local Hermes tool permissions must also be restricted."],
+    envKeys: ["HERMES_AGENT_ENABLED=true", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY"], optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_PRIORITY", "HERMES_AGENT_SUPPORTS_VISION"], license: "MIT per upstream LICENSE", source: "https://github.com/NousResearch/hermes-agent"
+  },
+  {
     id: "paperclip", repo: "paperclipai/paperclip", domain: "agent_management",
     match: /\b(paperclip|agent org chart|manage ai employees|agent budget|agent governance|multi.?agent company|agent cost tracking|business agent team)\b/i,
     integration: "owner_scoped_api", status: "adapter_present_unverified_live",
@@ -275,6 +284,7 @@ function stateFor(record, env) {
     const readiness = getCactusReadiness(env);
     return readiness.configured ? "configured_unverified" : readiness.state;
   }
+  if (record.id === "hermes-agent") return getHermesAgentReadiness(env).state;
   if (record.id === "paperclip") return getPaperclipReadiness(env).state;
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
   if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
