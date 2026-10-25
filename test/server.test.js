@@ -449,6 +449,66 @@ test("chat honors a selected alternate provider model before trying fallbacks", 
 });
 
 
+test("model discovery falls back to configured alternate models when OpenRouter denies discovery", async () => {
+  const alternateEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKeyEnv: "GROQ_API_KEY",
+      model: "llama-3.3-70b-versatile",
+      priority: 1
+    }]),
+    GROQ_API_KEY: "synthetic-groq-key"
+  };
+  const app = createApp({
+    env: alternateEnv,
+    fetchImpl: async url => {
+      assert.equal(url, "https://openrouter.ai/api/v1/models");
+      return new Response(JSON.stringify({ error: { message: "Synthetic model-list denial." } }), { status: 403 });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      models: ["ultron/groq/llama-3.3-70b-versatile"],
+      defaultModel: "ultron/groq/llama-3.3-70b-versatile"
+    });
+  });
+});
+
+test("model discovery preserves usable options when OpenRouter model listing is unreachable", async () => {
+  const alternateEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKeyEnv: "GROQ_API_KEY",
+      model: "llama-3.3-70b-versatile",
+      priority: 1
+    }]),
+    GROQ_API_KEY: "synthetic-groq-key"
+  };
+  const app = createApp({
+    env: alternateEnv,
+    fetchImpl: async () => { throw new TypeError("Synthetic connection failure"); },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      models: ["openrouter/free", "ultron/groq/llama-3.3-70b-versatile"],
+      defaultModel: "test-model"
+    });
+  });
+});
+
+
 test("missing access password fails closed", async () => {
   const app = createApp({ env: { ...env, APP_ACCESS_PASSWORD: "" }, logger: { warn() {}, error() {} } });
   await withServer(app, async base => {
