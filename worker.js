@@ -172,7 +172,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
   const leaseHeartbeatMs = Math.max(10000, Math.min(120000, Number(env.ULTRON_WORKER_LEASE_HEARTBEAT_MS) || 60000));
-  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksNeedingReview: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, taskStateUpdateFailures: 0, taskLeaseRenewalFailures: 0 };
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksNeedingReview: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, taskStateUpdateFailures: 0, taskLeaseRenewalFailures: 0, consecutiveCycleFailures: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl) || !safeResearchUrl(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
@@ -625,7 +625,9 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         status.lastCycleAt = new Date().toISOString();
         await tick();
         status.lastCycleSuccessAt = new Date().toISOString();
+        status.consecutiveCycleFailures = 0;
       } catch (error) {
+        status.consecutiveCycleFailures += 1;
         status.lastErrorAt = new Date().toISOString();
         status.lastErrorCode = bounded(error?.code, 80) || "WORKER_CYCLE_FAILED";
         logger.error?.("Worker cycle failed:", status.lastErrorCode, error.message);
