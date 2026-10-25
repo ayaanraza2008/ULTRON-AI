@@ -1023,3 +1023,26 @@ test("feature endpoints reject unsafe fallback provider URLs without making netw
   } });
 });
 
+
+
+test("feature model provider registry rejects private HTTPS hosts without making requests", async () => {
+  let called = false;
+  const env = {
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      { name: "private-https", baseUrl: "https://192.168.1.10/v1", apiKeyEnv: "PRIVATE_KEY", model: "fake-model", priority: 1 }
+    ]),
+    PRIVATE_KEY: "synthetic-secret"
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/coding/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Check safe provider handling", mode: "review" })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "CODING_PROVIDER_NOT_CONFIGURED");
+    assert.equal(called, false);
+  }, { fetchImpl: async () => {
+    called = true;
+    throw new Error("Private configured provider must not be called.");
+  } });
+});
