@@ -69,6 +69,44 @@ function voiceStudioSettings(env = process.env) {
     return { baseUrl: url.toString().replace(/\/+$/, ""), token };
   } catch { return null; }
 }
+const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
+  "browser_use",
+  "check_comfyui",
+  "run_comfyui_workflow",
+  "create_talking_avatar",
+  "clone_speech_voice",
+  "design_speech_voice",
+  "describe_speech_voice",
+  "list_speech_voices",
+  "synthesize_speech",
+  "transcribe_audio"
+]);
+
+function sharedIntegrationOwnerDenial(env, userId) {
+  const expectedOwnerId = bounded(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
+  if (!expectedOwnerId) {
+    return {
+      state: "blocked",
+      blocker: "ULTRON_INTEGRATION_OWNER_USER_ID is not configured.",
+      error: {
+        code: "INTEGRATION_OWNER_NOT_CONFIGURED",
+        message: "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner account UUID before using shared integration credentials."
+      }
+    };
+  }
+  if (!userId || expectedOwnerId !== userId) {
+    return {
+      state: "blocked",
+      blocker: "This shared integration is restricted to the configured ULTRON owner account.",
+      error: {
+        code: "INTEGRATION_OWNER_ONLY",
+        message: "This shared integration is restricted to the configured ULTRON owner account."
+      }
+    };
+  }
+  return null;
+}
+
 const BROWSER_USE_RULES = [
   "Use browser automation only for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, or browser tests; use web search for plain research.",
   "Default to read-only. Consequential actions (sending, publishing, purchasing, booking, deleting, changing account settings) are disabled until task-specific approval is implemented.",
@@ -558,6 +596,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
   }
 
   async function executeTool(name, args, requestBody = {}, req = {}) {
+    if (OWNER_SCOPED_SHARED_INTEGRATION_TOOLS.has(name)) {
+      const denied = sharedIntegrationOwnerDenial(env, req.supabaseUser?.id);
+      if (denied) return denied;
+    }
     if (name === "world_intelligence_command") {
       const command = bounded(args.command, 1000);
       const s = command.toLowerCase();
