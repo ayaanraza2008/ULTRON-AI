@@ -1055,7 +1055,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         local: { configured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)), provider: "Ollama", baseUrlConfigured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)) },
         speech: { browserSpeechAvailable: true, premiumTtsConfigured: Boolean(env.TTS_API_BASE_URL && env.TTS_API_KEY), premiumSttConfigured: Boolean(env.STT_API_BASE_URL && env.STT_API_KEY) },
         research: { configured: Boolean(env.TAVILY_API_KEY), mode: env.TAVILY_API_KEY ? "tavily" : "public-html-fallback" },
-        desktop: { localAgentConfigured: Boolean(env.ULTRON_DESKTOP_AGENT_URL && env.ULTRON_DESKTOP_AGENT_TOKEN), requiresLocalCompanion: true }
+        desktop: {
+          statusProbeConfigured: Boolean(env.ULTRON_DESKTOP_AGENT_URL && env.ULTRON_DESKTOP_AGENT_TOKEN),
+          localAutomationConfigured: Boolean(env.ULTRON_DESKTOP_POLL_TOKEN && env.ULTRON_DESKTOP_DEVICE_ID && env.ULTRON_INTEGRATION_OWNER_USER_ID),
+          requiresLocalCompanion: true,
+          allowedActions: ["system_info", "launch_app"],
+          appLaunchNeedsApproval: true,
+          arbitraryShellEnabled: false
+        }
       },
       modules: {
         chat: "available_when_provider_configured",
@@ -1065,7 +1072,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         research: "search_endpoint_available",
         tasks: "authenticated task queue plus optional allowlisted research worker",
         documents: "authenticated_txt_md_csv_json_html_pdf_docx_extraction; transient_only",
-        desktopAutomation: "local_companion_required",
+        desktopAutomation: "outbound_allowlisted_companion; system_info_and_approval_gated_app_launch",
         voice: "browser_native_available; premium_services_optional",
         integrations: "configuration_readiness_only"
       }
