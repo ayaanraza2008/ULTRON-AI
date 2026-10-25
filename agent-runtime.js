@@ -303,15 +303,15 @@ function redactInlineSecrets(value) {
     .replace(/\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\\s*([:=])\\s*(['"]?)[^\\s,;'"]+/gi, "$1$2[redacted]");
 }
 
-export export function modelSafeResult(value, depth = 0) {
+export function modelSafeResult(value, depth = 0) {
   if (depth > 6) return "[nested result omitted]";
   if (Array.isArray(value)) return value.slice(0, 20).map(item => modelSafeResult(item, depth + 1));
   if (typeof value === "string") {
     return value
-      .replace(/\\bBearer\\s+[A-Za-z0-9._~+\\/-]+=*/gi, "Bearer [redacted]")
-      .replace(/\\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\\b/g, "[redacted]")
-      .replace(/\\b(authorization)\\s*([:=])\\s*(?:Bearer\\s+)?[^\\s,;'"\\"]+/gi, "$1$2[redacted]")
-      .replace(/\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|credential)\\s*([:=])\\s*[^\\s,;'"\\"]+/gi, "$1$2[redacted]");
+      .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
+      .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/g, "[redacted]")
+      .replace(/\b(authorization)\s*([:=])\s*(?:Bearer\s+)?[^\s,;'" ]+/gi, "$1$2[redacted]")
+      .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|credential)\s*([:=])\s*['"]?[^\s,;'" ]+/gi, "$1$2[redacted]");
   }
   if (!value || typeof value !== "object") return value;
   const out = {};
