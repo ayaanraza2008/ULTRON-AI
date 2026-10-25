@@ -85,6 +85,23 @@ function safeEqual(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
+const MEMORY_EXPIRY_MAX_FUTURE_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+
+function normalizeMemoryExpiry(value, now = Date.now()) {
+  if (value === null || value === "") return { ok: true, value: null };
+  if (typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+    return { ok: false, value: null };
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp) || timestamp <= now || timestamp > now + MEMORY_EXPIRY_MAX_FUTURE_MS) {
+    return { ok: false, value: null };
+  }
+  return { ok: true, value: new Date(timestamp).toISOString() };
+}
+
+
+
 function signSession(secret, issuedAt) {
   const payload = String(issuedAt);
   const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
@@ -926,9 +943,13 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     if (!allowedKinds.includes(kind) || !title || title.length > 240 || !content || content.length > 20000) {
       return res.status(400).json({ error: { code: "INVALID_MEMORY_ITEM", message: "Choose a valid memory type, enter a title up to 240 characters, and content up to 20,000 characters." } });
     }
+    const expiry = req.body?.expires_at === undefined ? { ok: true, value: null } : normalizeMemoryExpiry(req.body.expires_at);
+    if (!expiry.ok) {
+      return res.status(400).json({ error: { code: "INVALID_MEMORY_EXPIRY", message: "Expiry must be a future ISO 8601 timestamp no more than ten years away, or null for no expiry." } });
+    }
     try {
       const rows = await supabaseRest(req, "memory_items", "POST", "?select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at", {
-        user_id: req.supabaseUser.id, kind, title, content, source: "user_approved", is_active: true
+        user_id: req.supabaseUser.id, kind, title, content, source: "user_approved", is_active: true, expires_at: expiry.value
       });
       if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "MEMORY_WRITE_FAILED", message: "Supabase did not return the saved memory item." } });
       res.status(201).json({ item: rows[0] });
@@ -949,7 +970,14 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (!content || content.length > 20000) return res.status(400).json({ error: { code: "INVALID_MEMORY_ITEM", message: "Content must contain 1 to 20,000 characters." } });
       patch.content = content;
     }
-    if (!Object.keys(patch).length) return res.status(400).json({ error: { code: "EMPTY_MEMORY_UPDATE", message: "Provide a title, content, or active-state change." } });
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "expires_at")) {
+      const expiry = normalizeMemoryExpiry(req.body.expires_at);
+      if (!expiry.ok) {
+        return res.status(400).json({ error: { code: "INVALID_MEMORY_EXPIRY", message: "Expiry must be a future ISO 8601 timestamp no more than ten years away, or null to clear expiry." } });
+      }
+      patch.expires_at = expiry.value;
+    }
+    if (!Object.keys(patch).length) return res.status(400).json({ error: { code: "EMPTY_MEMORY_UPDATE", message: "Provide a title, content, active-state, or expiry change." } });
     try {
       const query = "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at";
       const rows = await supabaseRest(req, "memory_items", "PATCH", query, patch);
