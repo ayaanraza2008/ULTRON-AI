@@ -52,6 +52,14 @@ test("readiness reports key names/states without returning credential values", (
   const caldiy = status.integrations.find(item => item.id === "cal-diy");
   const godsEye = status.integrations.find(item => item.id === "gods-eye-view");
   const kaliGpt = status.integrations.find(item => item.id === "kaligpt");
+  const openViking = status.integrations.find(item => item.id === "openviking");
+  assert.equal(openViking.state, "missing_configuration");
+  const configuredOpenViking = getRepositoryCapabilityStatus({
+    OPENVIKING_BASE_URL: "https://openviking.example",
+    OPENVIKING_API_TOKEN: "openviking-synthetic-secret",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "openviking");
+  assert.equal(configuredOpenViking.state, "configured_unverified");
   assert.equal(godsEye.state, "adapter_present_unverified_live");
   assert.equal(kaliGpt.state, "bounded_security_routes_present");
   assert.equal(chatwoot.state, "configured_unverified");

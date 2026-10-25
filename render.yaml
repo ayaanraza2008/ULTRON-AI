@@ -37,6 +37,10 @@ services:
         value: "60"
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: OPENVIKING_BASE_URL
+        sync: false
+      - key: OPENVIKING_API_TOKEN
+        sync: false
       - key: ULTRON_BROWSER_USE_URL
         value: https://ultron-browser-use.onrender.com
       - key: ULTRON_BROWSER_USE_TOKEN
