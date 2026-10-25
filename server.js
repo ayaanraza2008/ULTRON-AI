@@ -257,7 +257,7 @@ function hasConfiguredModelProvider(env) {
         !/^[A-Z][A-Z0-9_]{1,79}$/.test(provider.apiKeyEnv.trim())) return false;
     try {
       const url = new URL(provider.baseUrl);
-      return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash &&
+      return Boolean(safeServiceBase(url.toString())) &&
         provider.model.trim().length > 0 && provider.model.trim().length <= 160 &&
         typeof env[provider.apiKeyEnv.trim()] === "string" && Boolean(env[provider.apiKeyEnv.trim()].trim());
     } catch { return false; }
