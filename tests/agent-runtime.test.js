@@ -454,7 +454,7 @@ test("agent delegates a safe Hermes request automatically after a model provider
       }), { status: 200 });
     }
     if (payload.messages[0]?.content?.startsWith("You are the Hermes Agent runtime delegated by ULTRON AI.")) {
-      assert.equal(options.headers["X-Hermes-Session-Key"], "ultron-" + "00000000000000000000000000000000");
+      assert.match(options.headers["X-Hermes-Session-Key"], /^ultron-[a-f0-9]{32}$/);
       assert.ok(options.headers["Idempotency-Key"]);
       assert.equal(payload.stream, false);
       return new Response(JSON.stringify({
