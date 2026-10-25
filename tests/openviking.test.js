@@ -93,12 +93,32 @@ test("OpenViking upstream errors are sanitized and credentials never enter retur
   assert.equal(JSON.stringify(result).includes("secret echoed"), false);
 });
 
-test("OpenViking rejects insecure endpoints before calling upstream", async () => {
-  let called = false;
-  const result = await findOpenVikingContext({
-    env: { ...env, OPENVIKING_BASE_URL: "http://metadata.google.internal/latest/meta-data" },
-    userId: ownerId, query: "memory", fetchImpl: async () => { called = true; }
+test("OpenViking rejects insecure, private-IP, and HTTPS metadata endpoints before calling upstream", async () => {
+  const unsafeUrls = [
+    "http://metadata.google.internal/latest/meta-data",
+    "https://169.254.169.254/latest/meta-data",
+    "https://192.168.1.10/openviking",
+    "https://10.0.0.8/openviking",
+    "https://metadata.google.internal/openviking",
+    "https://openviking.local/openviking"
+  ];
+  for (const url of unsafeUrls) {
+    let called = false;
+    const result = await findOpenVikingContext({
+      env: { ...env, OPENVIKING_BASE_URL: url },
+      userId: ownerId, query: "memory", fetchImpl: async () => { called = true; }
+    });
+    assert.equal(result.error.code, "OPENVIKING_NOT_CONFIGURED", url);
+    assert.equal(called, false, url);
+  }
+  let localCalled = false;
+  const local = await findOpenVikingContext({
+    env: { ...env, OPENVIKING_BASE_URL: "http://127.0.0.1:8100" },
+    userId: ownerId, query: "memory", fetchImpl: async () => {
+      localCalled = true;
+      return new Response(JSON.stringify({ result: { resources: [] } }), { status: 200 });
+    }
   });
-  assert.equal(result.error.code, "OPENVIKING_NOT_CONFIGURED");
-  assert.equal(called, false);
+  assert.equal(local.state, "completed");
+  assert.equal(localCalled, true);
 });
