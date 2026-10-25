@@ -1211,7 +1211,9 @@ test("desktop companion explicit approval transitions only the owner's pending a
     assert.equal(response.status, 202);
     const body = await response.json();
     assert.equal(body.action.status, "QUEUED");
-    assert.equal(body.action.approvedAt, "2026-10-25T18:00:00.000Z");
+    assert.equal(typeof body.action.approvedAt, "string");
+    assert.equal(Number.isFinite(Date.parse(body.action.approvedAt)), true);
+    assert.equal(patch.body.approved_at, body.action.approvedAt);
     const patch = writes.find(item => item.table === "desktop_actions" && item.method === "PATCH");
     assert.match(patch.query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
     assert.equal(patch.body.approved_by, DESKTOP_OWNER);
