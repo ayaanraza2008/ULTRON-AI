@@ -321,13 +321,6 @@ function buildFallbackCalls(text) {
       add("openviking_find_context", { query: bounded(text, 1000), limit: 5 });
     }
   }
-  const obscuraRequested ='()+,;=:@/-]{1,590}/i);
-    if (uriMatch && /\\b(read|open|fetch)\\b/i.test(text)) {
-      add("openviking_read_context", { uri: uriMatch[0] });
-    } else if (/\\b(search|find|retrieve|recall|read|open|look up|context|memory|knowledge)\\b/i.test(text)) {
-      add("openviking_find_context", { query: bounded(text, 1000), limit: 5 });
-    }
-  }
   const obscuraRequested = /\b(obscura|take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|page snapshot|scrape (?:this|the|a|public) page|rendered page capture)\b/i.test(text);
   const captureRequested = /\b(take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|export.{0,80}\bpdf\b|save (?:the )?page as pdf|make (?:a )?pdf of|pdf export)\b/i.test(text);
   const urlMatch = text.match(/https:\/\/[^\s<>"\x27)]+/i);
