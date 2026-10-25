@@ -891,3 +891,52 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
   });
 });
 
+
+
+test("chat dispatcher rejects private HTTPS alternate providers before sending credentials", async () => {
+  let providerCalls = 0;
+  const configuredEnv = {
+    ...env,
+    OPENROUTER_API_KEY: "",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "private-upstream",
+        baseUrl: "https://192.168.1.10/v1",
+        apiKeyEnv: "PRIVATE_UPSTREAM_KEY",
+        model: "synthetic-model",
+        priority: 1
+      },
+      {
+        name: "metadata-upstream",
+        baseUrl: "https://169.254.169.254/latest/meta-data",
+        apiKeyEnv: "METADATA_UPSTREAM_KEY",
+        model: "synthetic-model",
+        priority: 2
+      }
+    ]),
+    PRIVATE_UPSTREAM_KEY: "synthetic-private-token",
+    METADATA_UPSTREAM_KEY: "synthetic-metadata-token"
+  };
+  const app = createApp({
+    env: configuredEnv,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      throw new Error("Unsafe configured provider must never be contacted.");
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "Hello" }]
+      })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "PROVIDER_NOT_CONFIGURED");
+    assert.equal(providerCalls, 0);
+  });
+});
