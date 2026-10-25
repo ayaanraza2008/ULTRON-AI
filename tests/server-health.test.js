@@ -16,6 +16,17 @@ async function health(env) {
   }
 }
 
+test("health exposes only a validated deployed commit identifier", async () => {
+  const result = await health({ RENDER_GIT_COMMIT: "a1b2c3d4e5f60718293a4b5c6d7e8f901234abcd" });
+  assert.equal(result.build.commit, "a1b2c3d4e5f60718293a4b5c6d7e8f901234abcd");
+
+  const invalid = "main?token=must-not-be-exposed";
+  const rejected = await health({ RENDER_GIT_COMMIT: invalid });
+  assert.equal(rejected.build.commit, null);
+  assert.equal(JSON.stringify(rejected).includes(invalid), false);
+});
+
+
 test("health reports a configured alternate provider without exposing credentials", async () => {
   const result = await health({
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([

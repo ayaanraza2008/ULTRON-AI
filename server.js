@@ -690,9 +690,12 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   });
 
   app.get("/api/health", (_req, res) => {
+    const rawCommit = typeof env.RENDER_GIT_COMMIT === "string" ? env.RENDER_GIT_COMMIT.trim() : "";
+    const deployedCommit = /^[a-f0-9]{7,40}$/i.test(rawCommit) ? rawCommit : null;
     res.json({
       status: "ok",
       app: "ULTRON AI",
+      build: { commit: deployedCommit },
       providerConfigured: hasConfiguredModelProvider(env),
       accessConfigured: Boolean(env.APP_ACCESS_PASSWORD || supabaseConfig()),
       supabaseConfigured: Boolean(supabaseConfig()),
