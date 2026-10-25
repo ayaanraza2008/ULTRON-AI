@@ -161,7 +161,7 @@ test("Windows local automation reports configured-but-unverified only with the f
   });
   const component = configured.components.find(item => item.id === "windows_local_automation");
   assert.equal(component.state, "configured_unverified");
-  assert.match(component.note, /allowlisted launching/i);
+  assert.match(component.note, /approval-gated launching/i);
   assert.equal(JSON.stringify(configured).includes("synthetic-poll-token"), false);
 });
 
