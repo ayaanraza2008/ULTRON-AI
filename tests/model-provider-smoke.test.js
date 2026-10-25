@@ -80,3 +80,26 @@ test("smoke check clearly blocks when no provider is configured", async () => {
   assert.equal(report.status, "blocked");
   assert.equal(report.reason, "NO_ELIGIBLE_PROVIDER");
 });
+
+test("smoke check rejects non-empty completions that do not satisfy the challenge", async () => {
+  const privateResponseText = "Provider said it cannot complete this request.";
+  const report = await runModelProviderSmoke({
+    env: { OPENROUTER_API_KEY: "test-secret", OPENROUTER_DEFAULT_MODEL: "openrouter/free" },
+    fetchImpl: async () => success("openrouter/free", privateResponseText)
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(report.reason, "ALL_CONFIGURED_PROVIDERS_FAILED");
+  assert.equal(report.attempts[0].code, "UNEXPECTED_COMPLETION");
+  assert.equal(JSON.stringify(report).includes(privateResponseText), false);
+  assert.equal(JSON.stringify(report).includes("test-secret"), false);
+});
+
+test("smoke check verifies the challenge token despite harmless surrounding text", async () => {
+  const report = await runModelProviderSmoke({
+    env: { OPENROUTER_API_KEY: "test-secret", OPENROUTER_DEFAULT_MODEL: "openrouter/free" },
+    fetchImpl: async () => success("openrouter/free", "ULTRON_SMOKE_OK.")
+  });
+  assert.equal(report.status, "passed");
+  assert.equal(report.challengeVerified, true);
+  assert.equal(JSON.stringify(report).includes("ULTRON_SMOKE_OK"), false);
+});
