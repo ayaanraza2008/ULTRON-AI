@@ -1203,7 +1203,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             body: JSON.stringify({
               model: candidate,
               messages: cleanMessages,
-              stream: provider.isCactus ? false : Boolean(stream),
+              stream: Boolean(stream),
               temperature: 0.7
             }),
             signal: attemptController.signal,
