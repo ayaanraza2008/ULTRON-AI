@@ -6,8 +6,12 @@ import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
+  const configuredEnv = { ...env };
+  if (!Object.hasOwn(configuredEnv, "ULTRON_INTEGRATION_OWNER_USER_ID")) {
+    configuredEnv.ULTRON_INTEGRATION_OWNER_USER_ID = "00000000-0000-4000-8000-000000000001";
+  }
   const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: extras.userId || "00000000-0000-4000-8000-000000000001" }; next(); };
-  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, privilegedSupabaseRest: extras.privilegedSupabaseRest || extras.supabaseRest, logger: { warn() {} } }));
+  app.use("/api", createAgentRouter({ env: configuredEnv, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, privilegedSupabaseRest: extras.privilegedSupabaseRest || extras.supabaseRest, logger: { warn() {} } }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
@@ -1829,3 +1833,86 @@ test("Hermes direct model provider is not exposed to non-owner agent requests", 
     assert.deepEqual(urls, ["https://openrouter.ai/api/v1/chat/completions"]);
   }, { userId: otherUserId });
 });
+
+
+test("agent blocks ComfyUI access when the shared-integration owner is not configured", async () => {
+  let providerCalls = 0;
+  let comfyCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "",
+    COMFYUI_BASE_URL: "https://comfy.example",
+    COMFYUI_API_KEY: "synthetic-comfy-key"
+  };
+  await withServer(env, async (url, options) => {
+    if (url !== "https://openrouter.ai/api/v1/chat/completions") {
+      comfyCalls++;
+      throw new Error("The ComfyUI upstream must not be called without an integration owner.");
+    }
+    providerCalls++;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "check-comfy-owner", type: "function",
+        function: { name: "check_comfyui", arguments: "{}" }
+      }] } }] }), { status: 200 });
+    }
+    const payload = JSON.parse(options.body);
+    assert.ok(payload.messages.some(message => message.role === "tool" && String(message.content).includes("INTEGRATION_OWNER_NOT_CONFIGURED")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "ComfyUI access remains blocked until owner configuration is present." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Check ComfyUI status." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const toolResult = body.toolResults.find(item => item.name === "check_comfyui");
+    assert.equal(toolResult.ok, false);
+    assert.equal(toolResult.result.error.code, "INTEGRATION_OWNER_NOT_CONFIGURED");
+    assert.equal(providerCalls, 2);
+    assert.equal(comfyCalls, 0);
+  });
+});
+
+test("agent denies VoiceStudio tools for authenticated non-owner accounts before upstream requests", async () => {
+  let providerCalls = 0;
+  let voiceCalls = 0;
+  const ownerId = "00000000-0000-4000-8000-000000000002";
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    VOICESTUDIO_BASE_URL: "https://voice.example",
+    VOICESTUDIO_API_KEY: "synthetic-voice-key"
+  };
+  await withServer(env, async (url, options) => {
+    if (url !== "https://openrouter.ai/api/v1/chat/completions") {
+      voiceCalls++;
+      throw new Error("The VoiceStudio upstream must not be called by a non-owner.");
+    }
+    providerCalls++;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "list-voices-non-owner", type: "function",
+        function: { name: "list_speech_voices", arguments: "{}" }
+      }] } }] }), { status: 200 });
+    }
+    const payload = JSON.parse(options.body);
+    assert.ok(payload.messages.some(message => message.role === "tool" && String(message.content).includes("INTEGRATION_OWNER_ONLY")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "VoiceStudio access is restricted to the owner account." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "List the available speech voices." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const toolResult = body.toolResults.find(item => item.name === "list_speech_voices");
+    assert.equal(toolResult.ok, false);
+    assert.equal(toolResult.result.error.code, "INTEGRATION_OWNER_ONLY");
+    assert.equal(providerCalls, 2);
+    assert.equal(voiceCalls, 0);
+  }, { userId: "00000000-0000-4000-8000-000000000001" });
+});
+
