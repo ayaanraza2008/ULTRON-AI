@@ -11,6 +11,7 @@ import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWork
 import { inspectPublicPageWithObscura, capturePublicPageWithObscura, getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { checkCactusService, resolveCactusProvider, getCactusReadiness } from "./integrations/cactus.js";
 import { getPaperclipAgentDashboard } from "./integrations/paperclip-services.js";
+import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentProvider, runHermesAgentTask } from "./integrations/hermes-agent.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
@@ -192,6 +193,8 @@ export function normalizeHinglishForRouting(value) {
 function extractIntent(text) {
   const s = normalizeHinglishForRouting(text).toLowerCase();
   if (/\b(paperclip|agent governance|agent roster|agent budget overview|agent cost summary|company agents dashboard|ai agent company)\b/.test(s) && /\b(check|status|show|list|review|cost|budget|roster|governance|dashboard|overview|how are|what is)\b/.test(s)) return "paperclip_read_agent_governance";
+  if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(check|status|health|ready|reachable|connect|available|configured|models)\b/.test(s)) return "check_hermes_agent";
+  if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(use|ask|delegate|run|execute|research|build|create|implement|review|inspect|analy[sz]e|fix|debug|write|plan)\b/.test(s)) return "hermes_agent_task";
   if (/\b(cactus(?:-compute)?|needle(?: 3)?|whistle speech model|local inference server)\b/.test(s) && /\b(check|status|health|ready|reachable|connect|available|configured)\b/.test(s)) return "check_cactus";
   if (/\b(obscura|take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|page snapshot|scrape public page|rendered page capture)\b/.test(s)) return "obscura_inspect_public_page";
   if (/\b(geolocate photo|where was this photo taken|photo geolocation|find (?:the )?location of (?:this|the) (?:photo|image|picture)|identify (?:the )?location of (?:this|the) (?:photo|image|picture)|locate this (?:photo|image|picture))\b/.test(s)) return "geo_sleuth_investigate";
@@ -232,6 +235,8 @@ function buildFallbackCalls(text) {
   const intent = extractIntent(text);
   const browserGuidance = buildBrowserUseGuidance(text);
   if (intent === "paperclip_read_agent_governance") add("paperclip_read_agent_governance");
+  if (intent === "check_hermes_agent") add("check_hermes_agent");
+  if (intent === "hermes_agent_task") add("hermes_agent_task", { task: bounded(text, 8000) });
   const obscuraRequested = /\b(obscura|take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|page snapshot|scrape (?:this|the|a|public) page|rendered page capture)\b/i.test(text);
   const captureRequested = /\b(take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|export.{0,80}\bpdf\b|save (?:the )?page as pdf|make (?:a )?pdf of|pdf export)\b/i.test(text);
   const urlMatch = text.match(/https:\/\/[^\s<>"\x27)]+/i);
@@ -387,6 +392,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "obscura_capture_public_page", description: "Read-only: use the configured Obscura MCP browser to capture a screenshot or PDF of a public HTTPS URL. Returns a bounded artifact payload/resource; large artifacts may require a separate artifact store. Does not click, fill, submit, upload, purchase, log in, bypass CAPTCHA, or publish.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 }, format: { type: "string", enum: ["screenshot", "pdf"] } }, required: ["url", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "check_repository_capabilities", description: "Inspect ULTRON readiness for the 30 registered upstream repositories. Use automatically before relying on a listed capability. Configuration-only; never exposes secret values.", parameters: { type: "object", properties: { task: { type: "string", maxLength: 1200 }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
     { type: "function", function: { name: "paperclip_read_agent_governance", description: "Read-only: inspect the configured Paperclip company agent roster, dashboard summary, and cost summary. Requires a running Paperclip service and owner guard. Never starts, hires, assigns, pauses, terminates, or changes budgets for agents.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "check_hermes_agent", description: "Read-only: check the configured Hermes Agent API server model list and capability endpoint. Does not execute an agent task.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "hermes_agent_task", description: "Delegate a bounded task to the configured Hermes Agent runtime. Hermes has its own toolset, memory, skills, subagents and terminal backend depending on its deployment. Use only for safe research, analysis, drafting, and authorized workspace coding. ULTRON blocks tasks classified as consequential; Hermes must run behind an authenticated API key with least-privileged/sandboxed toolsets.", parameters: { type: "object", properties: { task: { type: "string", minLength: 5, maxLength: 8000 }, conversationId: { type: "string", maxLength: 100 } }, required: ["task"], additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
@@ -404,6 +411,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
 
   function configuredModelProviders() {
     const providers = [];
+    const hermesProvider = resolveHermesAgentProvider(env);
+    if (hermesProvider) providers.push(hermesProvider);
     const cactusProvider = resolveCactusProvider(env);
     if (cactusProvider) providers.push(cactusProvider);
     const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
