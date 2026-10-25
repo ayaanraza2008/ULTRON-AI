@@ -67,10 +67,44 @@ test("app launcher refuses to run off Windows and refuses unapproved actions", a
   const unapproved = await executeDesktopAction(action, { platform: "win32", spawnImpl: () => { spawnCalls += 1; } });
   assert.equal(unapproved.status, "failed");
   assert.equal(unapproved.errorCode, "ACTION_NOT_APPROVED");
-  const wrongPlatform = await executeDesktopAction({ ...action, approvedAt: "approved" }, {
+  const wrongPlatform = await executeDesktopAction({ ...action, approvedAt: "not-a-timestamp" }, {
     platform: "linux", spawnImpl: () => { spawnCalls += 1; }
   });
   assert.equal(wrongPlatform.status, "failed");
+  assert.equal(spawnCalls, 0);
+});
+
+test("local PC refuses an app launch even when a server omits the approval-required flag", async () => {
+  let spawnCalls = 0;
+  const result = await executeDesktopAction({
+    actionType: "launch_app",
+    payload: { app: "notepad" },
+    requiresApproval: false,
+    approvedAt: null
+  }, {
+    platform: "win32",
+    env: { SystemRoot: "C:\\\\Windows" },
+    existsImpl: () => true,
+    spawnImpl: () => { spawnCalls += 1; throw new Error("must not spawn"); }
+  });
+  assert.deepEqual(result, { status: "failed", errorCode: "ACTION_NOT_APPROVED" });
+  assert.equal(spawnCalls, 0);
+});
+
+test("app launch approval metadata must contain a parseable timestamp", async () => {
+  let spawnCalls = 0;
+  const result = await executeDesktopAction({
+    actionType: "launch_app",
+    payload: { app: "notepad" },
+    requiresApproval: true,
+    approvedAt: "approved"
+  }, {
+    platform: "win32",
+    env: { SystemRoot: "C:\\\\Windows" },
+    existsImpl: () => true,
+    spawnImpl: () => { spawnCalls += 1; throw new Error("must not spawn"); }
+  });
+  assert.deepEqual(result, { status: "failed", errorCode: "ACTION_NOT_APPROVED" });
   assert.equal(spawnCalls, 0);
 });
 
