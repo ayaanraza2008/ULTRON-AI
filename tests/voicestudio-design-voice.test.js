@@ -19,8 +19,8 @@ test("ULTRON designs a synthetic VoiceStudio profile after an explicit request",
   let modelCalls = 0;
   let describeCalls = 0;
   let createCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
-    if (url === "https://voice.example/design/describe") {
+  await withServer({ OPENROUTER_API_KEY: "test-only", VOICESTUDIO_BASE_URL: "https://voice.example.com", VOICESTUDIO_API_KEY: "private-token" }, async (url, options) => {
+    if (url === "https://voice.example.com/design/describe") {
       describeCalls += 1;
       assert.equal(options.headers.Authorization, "Bearer private-token");
       assert.deepEqual(JSON.parse(options.body), { description: "deep male voice with Indian accent" });
@@ -31,7 +31,7 @@ test("ULTRON designs a synthetic VoiceStudio profile after an explicit request",
         unmatched: []
       }));
     }
-    if (url === "https://voice.example/profiles") {
+    if (url === "https://voice.example.com/profiles") {
       createCalls += 1;
       assert.equal(options.method, "POST");
       assert.ok(options.body instanceof FormData);
