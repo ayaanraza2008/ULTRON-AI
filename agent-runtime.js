@@ -526,6 +526,39 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       seen.add(name);
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100, supportsTools: item.supportsTools !== false });
     }
+
+    // When a shared OpenRouter key and a model list already exist, derive a
+    // bounded free-only fallback chain from that same list. These candidates
+    // are plain-chat only unless separately declared in the provider registry,
+    // because model IDs alone do not prove tool-call compatibility.
+    const openRouter = providers.find(provider => provider.name === "openrouter");
+    if (openRouter) {
+      const knownModels = new Set(
+        providers.filter(provider => provider.baseUrl === openRouter.baseUrl).map(provider => provider.model)
+      );
+      const listedModels = bounded(env.ULTRON_AVAILABLE_MODELS, 3000)
+        .split(",")
+        .map(model => model.trim())
+        .filter(model => model === "openrouter/free" ||
+          /^[a-z0-9][a-z0-9._-]{0,79}\\/[a-z0-9][a-z0-9._-]{0,119}:free$/i.test(model))
+        .slice(0, 12);
+      let fallbackIndex = 0;
+      for (const model of listedModels) {
+        if (knownModels.has(model) || fallbackIndex >= 6) continue;
+        const name = "openrouter-free-fallback-" + (++fallbackIndex);
+        if (seen.has(name)) continue;
+        seen.add(name);
+        knownModels.add(model);
+        providers.push({
+          name,
+          baseUrl: openRouter.baseUrl,
+          apiKey: openRouter.apiKey,
+          model,
+          priority: 10 + fallbackIndex,
+          supportsTools: false
+        });
+      }
+    }
     return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
   }
 
