@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { createVoiceStudioRouter, voiceStudioReadiness } from "../integrations/voicestudio.js";
+import { voiceStudioSettings } from "../agent-runtime.js";
 
 async function withServer(env, fetchImpl, run, { userId = "00000000-0000-4000-8000-000000000001" } = {}) {
   const app = express();
@@ -176,4 +177,37 @@ test("VoiceStudio transcription rejects invalid audio before network call", asyn
     assert.equal((await response.json()).error.code, "VOICESTUDIO_AUDIO_INVALID");
     assert.equal(called, false);
   });
+});
+
+
+test("VoiceStudio blocks private, link-local, metadata, and local HTTPS endpoints before forwarding credentials", async () => {
+  const unsafeUrls = [
+    "https://192.168.1.10",
+    "https://10.2.3.4",
+    "https://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal",
+    "https://[::1]",
+    "https://[fd00::1]"
+  ];
+  for (const url of unsafeUrls) {
+    assert.equal(voiceStudioReadiness({ VOICESTUDIO_BASE_URL: url, VOICESTUDIO_API_KEY: "synthetic-token" }).configured, false, url);
+    assert.equal(voiceStudioSettings({ VOICESTUDIO_BASE_URL: url, VOICESTUDIO_API_KEY: "synthetic-token" }), null, url);
+    let called = false;
+    await withServer({
+      VOICESTUDIO_BASE_URL: url,
+      VOICESTUDIO_API_KEY: "synthetic-token"
+    }, async () => {
+      called = true;
+      throw new Error("Unsafe VoiceStudio URL must never be contacted.");
+    }, async base => {
+      const response = await fetch(base + "/api/integrations/voicestudio/voices");
+      assert.equal(response.status, 503, url);
+      assert.equal(called, false, url);
+    });
+  }
+});
+
+test("VoiceStudio still allows local loopback development and secure public remote services", () => {
+  assert.equal(voiceStudioSettings({ VOICESTUDIO_BASE_URL: "http://localhost:3900" }).baseUrl, "http://localhost:3900");
+  assert.equal(voiceStudioSettings({ VOICESTUDIO_BASE_URL: "https://voice.example", VOICESTUDIO_API_KEY: "synthetic-token" }).baseUrl, "https://voice.example");
 });
