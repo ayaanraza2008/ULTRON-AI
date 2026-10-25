@@ -173,7 +173,6 @@ test("task progress returns owner-scoped lifecycle and a sanitized checkpoint ti
     assert.equal(serialized.includes("private user goal"), false);
     assert.equal(serialized.includes("must not leak"), false);
     assert.equal(serialized.includes("unrelated.secret.event"), false);
-    assert.equal(serialized.includes("must not leak"), false);
     assert.equal(calls.map(call => call.table).join(","), "agent_tasks,audit_events");
   }, { supabaseRest: fakeSupabaseRest });
 });
@@ -191,7 +190,7 @@ test("task progress hides a task and skips audit reads when the owner-scoped loo
     assert.equal((await response.json()).error.code, "TASK_NOT_FOUND");
     assert.equal(calls.length, 1);
     assert.equal(calls[0].table, "agent_tasks");
-    assert.match(calls[0].query, /user_id=eq\\.00000000-0000-4000-8000-000000000001/);
+    assert.match(calls[0].query, /user_id=eq\.00000000-0000-4000-8000-000000000001/);
   }, { supabaseRest: fakeSupabaseRest });
 });
 
