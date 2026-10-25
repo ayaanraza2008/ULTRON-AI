@@ -9,7 +9,7 @@ import { normalizeDesktopFailureCode, normalizeDesktopActionResult, validateDesk
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const DEFAULT_POLL_MS = 5000;
 const MAX_POLL_MS = 30000;
-const DEVICE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+const DEVICE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;\nconst APPROVAL_MAX_AGE_MS = 10 * 60 * 1000;\nconst APPROVAL_FUTURE_SKEW_MS = 60 * 1000;
 
 function readConfig(env) {
   const rawBase = typeof env.ULTRON_DESKTOP_SERVER_URL === "string" ? env.ULTRON_DESKTOP_SERVER_URL.trim() : "";
@@ -125,11 +125,13 @@ export async function executeDesktopAction(action, options = {}) {
   // Enforce the risky-action policy locally instead of trusting a server-supplied
   // flag: every app launch must explicitly carry approval plus a parseable timestamp.
   const approvalRequired = validated.actionType === "launch_app" || action.requiresApproval;
+  const approvedAtMs = typeof action.approvedAt === "string" ? Date.parse(action.approvedAt) : NaN;
+  const approvalAgeMs = Date.now() - approvedAtMs;
   if (approvalRequired && (
     action.requiresApproval !== true ||
-    typeof action.approvedAt !== "string" ||
-    !action.approvedAt.trim() ||
-    !Number.isFinite(Date.parse(action.approvedAt))
+    !Number.isFinite(approvedAtMs) ||
+    approvalAgeMs > APPROVAL_MAX_AGE_MS ||
+    approvalAgeMs < -APPROVAL_FUTURE_SKEW_MS
   )) {
     return { status: "failed", errorCode: "ACTION_NOT_APPROVED" };
   }
