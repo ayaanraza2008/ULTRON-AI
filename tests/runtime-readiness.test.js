@@ -154,7 +154,7 @@ test("Windows local automation reports configured-but-unverified only with the f
 
   const configured = buildRuntimeReadiness({
     env: {
-      ULTRON_DESKTOP_POLL_TOKEN: "synthetic-poll-token",
+      ULTRON_DESKTOP_POLL_TOKEN: "synthetic-desktop-poll-token-32bytes",
       ULTRON_DESKTOP_DEVICE_ID: "desktop-test-01",
       ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
     }
@@ -162,6 +162,6 @@ test("Windows local automation reports configured-but-unverified only with the f
   const component = configured.components.find(item => item.id === "windows_local_automation");
   assert.equal(component.state, "configured_unverified");
   assert.match(component.note, /approval-gated launching/i);
-  assert.equal(JSON.stringify(configured).includes("synthetic-poll-token"), false);
+  assert.equal(JSON.stringify(configured).includes("synthetic-desktop-poll-token-32bytes"), false);
 });
 
