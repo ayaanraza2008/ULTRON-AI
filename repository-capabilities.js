@@ -35,7 +35,7 @@ const REPOSITORIES = [
     integration: "owner_scoped_api", status: "adapter_present_unverified_live",
     abilities: ["read-only event-type listing", "read-only availability lookup", "meeting preparation"],
     limits: ["Read-only Cal.com-compatible API connector exists; exact cal.diy endpoint/auth compatibility remains unverified. Booking, cancellation, and invitation sending are not exposed as automatic actions."],
-    envKeys: ["CALDIY_BASE_URL", "CALDIY_API_TOKEN", "CALDIY_API_VERSION", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "MIT per repository README; verify exact source files", source: "https://github.com/calcom/cal.diy"
+    envKeys: ["CALDIY_BASE_URL", "CALDIY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["CALDIY_API_VERSION"], license: "MIT per repository README; verify exact source files", source: "https://github.com/calcom/cal.diy"
   },
   {
     id: "openproject", repo: "opf/openproject", domain: "project_management",
