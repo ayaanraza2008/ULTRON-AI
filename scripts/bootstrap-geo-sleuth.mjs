@@ -1,15 +1,20 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 const execFile = promisify(execFileCallback);
 const GEO_SLEUTH_REPOSITORY = "https://github.com/Oldcircle/geo-sleuth.git";
 const GEO_SLEUTH_COMMIT = "e01849f778afeb7c53ca79331313fbcfcb879486";
+const UV_VERSION = "0.13.5";
+const UV_INSTALLER_SHA256 = "1c6e7f025499664633ac2dce43a210800510e9ef0625c52e034a8afdf8bf177a";
+const UV_INSTALLER_MAX_BYTES = 1_048_576;
+const UV_INSTALLER_URL = `https://releases.astral.sh/github/uv/releases/download/${UV_VERSION}/uv-installer.sh`;
 
-export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = execFile, log = console.warn } = {}) {
+export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = execFile, log = console.warn, uvInstallerSha256 = UV_INSTALLER_SHA256 } = {}) {
   if (env.GEO_SLEUTH_ENABLED !== "true") return { state: "disabled" };
   const root = path.resolve(env.GEO_SLEUTH_ROOT || path.join(process.cwd(), ".runtime", "geo-sleuth", "skills", "geo-sleuth"));
   const scriptsExist = () => existsSync(path.join(root, "scripts", "intake.py")) && existsSync(path.join(root, "scripts", "board.py"));
@@ -54,16 +59,32 @@ export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = e
       await runCommand("uv", ["--version"], { timeout: 10000, maxBuffer: 256 * 1024, windowsHide: true });
     }
   } catch {
+    let installerDirectory;
     let installer;
     try {
-      installer = path.join(os.tmpdir(), "ultron-install-uv.sh");
-      await runCommand("curl", ["-LsSf", "https://astral.sh/uv/0.7.13/install.sh", "-o", installer], { timeout: 30000, maxBuffer: 256 * 1024, windowsHide: true });
+      // Use a unique temporary directory rather than a predictable shared /tmp path,
+      // and download a versioned release asset over HTTPS before executing it.
+      installerDirectory = await mkdtemp(path.join(os.tmpdir(), "ultron-uv-installer-"));
+      installer = path.join(installerDirectory, "uv-installer.sh");
+      await runCommand("curl", [
+        "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2",
+        "--max-time", "30", "--max-filesize", "1048576",
+        "-LsSf", UV_INSTALLER_URL, "-o", installer
+      ], { timeout: 30000, maxBuffer: 256 * 1024, windowsHide: true });
+      const installerInfo = await stat(installer);
+      if (!installerInfo.isFile() || installerInfo.size > UV_INSTALLER_MAX_BYTES) {
+        throw new Error("uv installer exceeded the configured file-size limit.");
+      }
+      const installerDigest = createHash("sha256").update(await readFile(installer)).digest("hex");
+      if (installerDigest !== uvInstallerSha256) {
+        throw new Error("uv installer SHA-256 verification failed.");
+      }
       await runCommand("sh", [installer], { timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true });
     } catch (error) {
       log("Geo-Sleuth source is present but uv could not be installed; integration remains unavailable: " + String(error?.message || error).slice(0, 300));
       return { state: "source_present_uv_missing", root };
     } finally {
-      if (installer) await rm(installer, { force: true }).catch(() => {});
+      if (installerDirectory) await rm(installerDirectory, { recursive: true, force: true }).catch(() => {});
     }
   }
 
