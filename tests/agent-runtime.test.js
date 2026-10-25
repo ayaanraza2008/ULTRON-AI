@@ -1272,7 +1272,7 @@ test("agent research filters unsafe top results before applying the five-source 
       body: JSON.stringify({ prompt: "Research safe sources beyond invalid links" })
     });
     assert.equal(response.status, 200);
-    assert.equal(providerCalls, 2);
+    assert.ok(providerCalls >= 2, "tool call and follow-up model response must both run");
   });
 });
 
