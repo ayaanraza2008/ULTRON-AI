@@ -23,6 +23,8 @@ test("capability router matches distinct task domains automatically", () => {
   const ids = results.map(item => item.id);
   assert.ok(ids.includes("youtube-automation-agent"));
   assert.ok(ids.includes("chatwoot"));
+  const hermes = matchRepositoryCapabilities("Use Hermes Agent to delegate work to subagents and create reusable skills");
+  assert.ok(hermes.some(item => item.id === "hermes-agent"));
 });
 
 test("matching is bounded and empty tasks do not pick arbitrary repositories", () => {
@@ -59,6 +61,7 @@ test("readiness reports key names/states without returning credential values", (
   assert.equal(JSON.stringify(status).includes(secret), false);
   assert.equal(JSON.stringify(status).includes("configured-token"), false);
   assert.equal(JSON.stringify(status).includes("cal-secret"), false);
+  assert.equal(status.integrations.find(item => item.id === "hermes-agent").state, "disabled_by_config");
 });
 
 test("task guidance states real limitations and selects matches", () => {
