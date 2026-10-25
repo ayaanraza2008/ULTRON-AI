@@ -2,6 +2,7 @@ import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
+import { getOpenVikingReadiness } from "./openviking.js";
 
 const safeBaseUrl = (value) => {
   if (typeof value !== "string" || !value.trim()) return false;
@@ -21,6 +22,7 @@ const safeBaseUrl = (value) => {
  */
 export function buildIntegrationCatalog(env = process.env) {
   const hermesReadiness = getHermesAgentReadiness(env);
+  const openVikingReadiness = getOpenVikingReadiness({ env });
   const hasComfy = safeBaseUrl(env.COMFYUI_BASE_URL);
   const hasHeyGem = safeBaseUrl(env.HEYGEM_API_BASE_URL) && Boolean(env.HEYGEM_API_KEY) && typeof env.HEYGEM_JOB_PATH === "string" && env.HEYGEM_JOB_PATH.startsWith("/");
   const hasOmniVoice = safeBaseUrl(env.OMNIVOICE_API_BASE_URL) && Boolean(env.OMNIVOICE_API_KEY) && typeof env.OMNIVOICE_SYNTHESIS_PATH === "string" && env.OMNIVOICE_SYNTHESIS_PATH.startsWith("/");
@@ -198,6 +200,19 @@ export function buildIntegrationCatalog(env = process.env) {
       note: hermesReadiness.configured
         ? "Configured but not live-verified; Hermes-side toolsets, model provider, skills, memory, terminal sandbox and integrations must be configured separately."
         : "Requires a separately installed and authenticated Hermes Agent API server. ULTRON does not install the runtime or enable external messaging/cron actions automatically."
+    },
+  {
+      id: "openviking",
+      name: "OpenViking Context Store",
+      capability: "Owner-scoped read-only search and retrieval of agent context",
+      state: openVikingReadiness.state,
+      configured: Boolean(openVikingReadiness.configured && openVikingReadiness.ownerGuardConfigured),
+      mode: "owner_scoped_external_context",
+      requiredEnv: ["OPENVIKING_BASE_URL", "OPENVIKING_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tools: check_openviking, openviking_find_context, openviking_read_context"],
+      note: openVikingReadiness.configured && openVikingReadiness.ownerGuardConfigured
+        ? "Owner-scoped service settings are present; live search/read and upstream compatibility still need verification. The adapter is read-only and does not replace ULTRON per-user memory."
+        : "Requires a valid HTTPS OpenViking endpoint, server-side API token, and exact ULTRON owner UUID guard. Remains blocked otherwise."
     },
   {
       id: "paperclip",
