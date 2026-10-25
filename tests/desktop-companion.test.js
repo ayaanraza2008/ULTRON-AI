@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "../integrations/desktop-companion.js";
+import { buildIntegrationCatalog } from "../integrations/catalog.js";
 
 const OWNER = "00000000-0000-4000-8000-000000000001";
 const env = {
@@ -137,4 +138,48 @@ test("desktop companion reports unauthenticated upstream errors without exposing
   assert.equal(result.code, "DESKTOP_COMPANION_AUTH_FAILED");
   assert.equal(JSON.stringify(result).includes("synthetic-desktop-token"), false);
   assert.equal(JSON.stringify(result).includes("private error details"), false);
+});
+
+
+test("integration catalogue reports the companion as configured-but-unverified, never live-ready", () => {
+  const configured = buildIntegrationCatalog(env).find(item => item.id === "windows-desktop-companion");
+  assert.equal(configured.configured, true);
+  assert.equal(configured.state, "configured_unverified");
+  assert.match(configured.note, /status/i);
+  assert.match(configured.note, /cannot run commands/i);
+
+  const missing = buildIntegrationCatalog({}).find(item => item.id === "windows-desktop-companion");
+  assert.equal(missing.configured, false);
+  assert.equal(missing.state, "desktop_companion_required");
+});
+
+test("desktop companion rejects malformed JSON and reports a device that needs pairing", async () => {
+  const malformed = await checkDesktopCompanion({
+    env, userId: OWNER,
+    fetchImpl: async () => new Response("{not-json", { status: 200 })
+  });
+  assert.equal(malformed.state, "failed");
+  assert.equal(malformed.code, "DESKTOP_COMPANION_INVALID_RESPONSE");
+
+  const needsPairing = await checkDesktopCompanion({
+    env, userId: OWNER,
+    fetchImpl: async () => new Response(JSON.stringify(statusPayload({
+      device: { id: "windows-device-02", name: "Unpaired PC", platform: "windows", paired: false, online: true }
+    })), { status: 200 })
+  });
+  assert.equal(needsPairing.state, "needs_pairing");
+  assert.equal(needsPairing.device.paired, false);
+  assert.deepEqual(needsPairing.actionsExecuted, []);
+});
+
+test("desktop companion refuses local/private HTTPS endpoints before calling fetch", async () => {
+  let calls = 0;
+  const result = await checkDesktopCompanion({
+    env: { ...env, ULTRON_DESKTOP_AGENT_URL: "https://169.254.169.254/latest/meta-data" },
+    userId: OWNER,
+    fetchImpl: async () => { calls += 1; throw new Error("Unsafe companion URL must not be contacted."); }
+  });
+  assert.equal(result.state, "blocked");
+  assert.equal(result.code, "DESKTOP_COMPANION_NOT_CONFIGURED");
+  assert.equal(calls, 0);
 });
