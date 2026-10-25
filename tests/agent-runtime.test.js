@@ -1594,6 +1594,56 @@ test("employee model readiness rejects alternate provider URLs with credentials,
   }
 });
 
+test("browser bridge refuses private, link-local, metadata, and local HTTPS endpoints before forwarding its token", async () => {
+  const unsafeUrls = [
+    "https://169.254.169.254",
+    "https://192.168.1.10",
+    "https://10.1.2.3",
+    "https://metadata.google.internal",
+    "https://printer.local",
+    "https://[::1]",
+    "https://[fd00::1]"
+  ];
+  for (const bridgeUrl of unsafeUrls) {
+    let bridgeCalls = 0;
+    let providerCalls = 0;
+    await withServer({
+      OPENROUTER_API_KEY: "test-only",
+      ULTRON_BROWSER_USE_URL: bridgeUrl,
+      ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
+    }, async (url, options) => {
+      if (url.startsWith(bridgeUrl)) {
+        bridgeCalls += 1;
+        throw new Error("unsafe bridge endpoint must never be called");
+      }
+      assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+      providerCalls += 1;
+      const payload = JSON.parse(options.body);
+      if (providerCalls === 1) {
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+          id: "browser-private-endpoint", type: "function",
+          function: { name: "browser_use", arguments: JSON.stringify({ task: "Open the website and inspect the pricing page" }) }
+        }] } }] }), { status: 200 });
+      }
+      assert.ok(payload.messages.some(message =>
+        message.role === "tool" && String(message.content).includes("not configured")
+      ), "unsafe bridge configuration should fail closed");
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Browser bridge was safely blocked." } }] }), { status: 200 });
+    }, async base => {
+      const response = await fetch(base + "/api/agent/run", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Open the website and inspect the pricing page" })
+      });
+      assert.equal(response.status, 200, bridgeUrl);
+      const body = await response.json();
+      assert.match(body.content, /safely blocked/i, bridgeUrl);
+      assert.equal(bridgeCalls, 0, bridgeUrl);
+      assert.ok(providerCalls >= 2, bridgeUrl);
+      assert.equal(JSON.stringify(body).includes("bridge-test-token"), false);
+    });
+  }
+});
+
 test("browser bridge rejects a configured URL with query parameters before forwarding its token", async () => {
   let bridgeCalls = 0;
   let providerCalls = 0;
