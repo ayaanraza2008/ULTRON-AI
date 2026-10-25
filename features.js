@@ -39,7 +39,7 @@ function constantTimeTokenMatch(provided, expected) {
 function authorizeDesktopCompanionPoll(req, env = process.env) {
   const config = configuredDesktopAutomation(env);
   if (!config) return { ok: false, status: 503, code: "DESKTOP_COMPANION_NOT_CONFIGURED" };
-  const match = /^Bearer ([^\\s]+)$/i.exec(String(req.headers?.authorization || ""));
+  const match = /^Bearer ([^\s]+)$/i.exec(String(req.headers?.authorization || ""));
   if (!match || !constantTimeTokenMatch(match[1], config.token)) {
     return { ok: false, status: 401, code: "DESKTOP_COMPANION_AUTH_FAILED" };
   }
