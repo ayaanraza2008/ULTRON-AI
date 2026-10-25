@@ -6,7 +6,7 @@ import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
-import { safeServiceBase } from "./network-safety.js";
+import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 
 function safeBaseUrl(value) {
   return safeServiceBase(value);
@@ -1619,7 +1619,7 @@ function safePublicUrl(value) {
     ];
     if ((url.protocol !== "https:" && url.protocol !== "http:") ||
         url.username || url.password ||
-        !host || !host.includes(".") ||
+        !host || !host.includes(".") || !isPublicNetworkHost(host) ||
         isIP(ipHost) !== 0 ||
         host === "localhost" || host === "metadata.google" ||
         host === "metadata.google.internal" ||
