@@ -1733,3 +1733,57 @@ test("worker stop interrupts idle polling sleep promptly", async () => {
   await worker.done;
   assert.equal(worker.getStatus().state, "stopped");
 });
+
+
+test("background AI Employee automatically falls back through configured free OpenRouter models", async () => {
+  let worker;
+  let taskPatch;
+  const modelCalls = [];
+  const task = {
+    id: "employee-free-model-fallback",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a concise project plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "openrouter-worker-fallback-test-key",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+      ULTRON_AVAILABLE_MODELS: "openrouter/free,nvidia/nemotron-3.5-lightning:free,openai/gpt-4.1,https://evil.example/model:free,nvidia/nemotron-3.5-lightning:free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) {
+        const request = JSON.parse(options.body);
+        modelCalls.push({ model: request.model, authorization: options.headers.Authorization });
+        if (request.model === "openrouter/free") return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+        assert.equal(request.model, "nvidia/nemotron-3.5-lightning:free");
+        return new Response(JSON.stringify({
+          model: request.model,
+          choices: [{ message: { content: "A concise plan is ready for review. No external action was executed." } }]
+        }), { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        taskPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, ...taskPatch }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(taskPatch.status, "COMPLETED");
+  assert.equal(taskPatch.result.type, "employee_output");
+  assert.equal(taskPatch.result.provider, "openrouter-free-fallback-1");
+  assert.equal(taskPatch.result.model, "nvidia/nemotron-3.5-lightning:free");
+  assert.deepEqual(modelCalls.map(call => call.model), ["openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
+  assert.ok(modelCalls.every(call => call.authorization === "Bearer openrouter-worker-fallback-test-key"));
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+});
