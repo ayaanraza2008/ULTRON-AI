@@ -1617,3 +1617,37 @@ test("worker rejects query/fragment-bearing model provider base URLs before atte
   assert.equal(worker.getStatus().tasksFailed, 0);
 });
 
+
+
+test("worker cycle health resets consecutive failures after polling recovers", async () => {
+  let worker;
+  let pollAttempts = 0;
+  let sleeps = 0;
+  const failureCounts = [];
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {
+      failureCounts.push(worker.getStatus().consecutiveCycleFailures);
+      sleeps += 1;
+      if (sleeps === 2) worker.stop();
+    },
+    fetchImpl: async (url) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) {
+        pollAttempts += 1;
+        if (pollAttempts === 1) throw new Error("temporary database outage");
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.deepEqual(failureCounts, [1, 0]);
+  assert.equal(worker.getStatus().consecutiveCycleFailures, 0);
+  assert.ok(worker.getStatus().lastCycleSuccessAt);
+  assert.equal(worker.getStatus().state, "stopped");
+});
