@@ -191,13 +191,13 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       .replace(/&#39;|&apos;/gi, "'")
       .replace(/&lt;/gi, "<")
       .replace(/&gt;/gi, ">")
-      .replace(/\\s+/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
   }
 
   function parsePublicSearchResults(html) {
     const sources = [];
-    const links = /<a[^>]*class=["'][^"']*\\bresult__a\\b[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi;
+    const links = /<a[^>]*class=["'][^"']*\bresult__a\b[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
     let match;
     while ((match = links.exec(html)) && sources.length < 5) {
       let destination = String(match[1] || "").replace(/&amp;/gi, "&");
@@ -214,7 +214,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       const url = safeResearchUrl(destination);
       if (!url) continue;
       const tail = html.slice(links.lastIndex, links.lastIndex + 1800);
-      const snippetMatch = tail.match(/class=["'][^"']*\\bresult__snippet\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/[^>]+>/i);
+      const snippetMatch = tail.match(/class=["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
       sources.push({
         title: htmlSearchText(match[2]).slice(0, 300) || url,
         url,
