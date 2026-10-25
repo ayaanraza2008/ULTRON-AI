@@ -2,7 +2,7 @@ import { getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { getCactusReadiness } from "./integrations/cactus.js";
 
 /**
- * Task-matched capability catalog for the user's 28 upstream repositories.
+ * Task-matched capability catalog for the user's 30 upstream repository domains.
  *
  * This is a routing/readiness manifest, not an installer or claim that the upstream
  * applications are embedded in ULTRON. It never executes repository scripts.
