@@ -1460,9 +1460,14 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
           body = { model: config.model, messages, temperature: 0.2, max_tokens: 2800 };
         }
         const response = await fetchImpl(config.url, {
-          method: "POST", headers, body: JSON.stringify(body), signal: timeout.signal
+          method: "POST", headers, body: JSON.stringify(body),
+          // Provider calls carry server-side credentials. Never follow a redirect
+          // to an unreviewed destination, especially for custom LiteLLM endpoints.
+          redirect: "error",
+          signal: timeout.signal
         });
         if (!response.ok) {
+          try { await response.body?.cancel?.(); } catch {}
           failures.push({ provider, status: response.status });
           logger.warn?.("Security assistant provider failed; trying fallback if configured", { provider, status: response.status });
           if (requestedProvider !== "auto") break;
@@ -1545,13 +1550,20 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         } else {
           body = { model: config.model, messages: [{ role: "system", content: system }, { role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: "data:" + mimeType + ";base64," + imageBase64, detail: "auto" } }] }], temperature: 0.2, max_tokens: 2200 };
         }
-        const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body), signal: timeout.signal });
+        const response = await fetchImpl(url, {
+          method: "POST", headers, body: JSON.stringify(body),
+          // Do not forward a model-provider credential or image payload through
+          // an upstream redirect. Keep vision responses bounded like chat responses.
+          redirect: "error",
+          signal: timeout.signal
+        });
         if (!response.ok) {
+          try { await response.body?.cancel?.(); } catch {}
           failures.push({ provider, status: response.status });
           if (requestedProvider !== "auto") break;
           continue;
         }
-        const payload = await response.json();
+        const payload = await readLimitedResponseJson(response, 2 * 1024 * 1024, "Vision provider response");
         const answer = provider === "gemini"
           ? payload?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n")
           : provider === "ollama" ? payload?.message?.content : payload?.choices?.[0]?.message?.content;
