@@ -10,7 +10,7 @@ ULTRON AI is currently in a backend-only implementation phase. Frontend and Wind
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** intentionally deferred. No web UI or Windows desktop app is built in this phase; focus is backend APIs, tools, integrations, worker reliability, and automated tests.
+- **Frontend status:** full frontend redesign and Windows PC-control UI are intentionally deferred. Existing UI/companion scaffolding is not treated as production-ready solely because source files exist; current focus is backend APIs, integrations, worker reliability, and verification.
 
 ## Backend-only capability integration phase
 
@@ -19,14 +19,14 @@ Backend additions on the feature branch:
 - `GET /api/capabilities`: reports configuration readiness without returning secret values.
 - `GET /api/local/models` and `POST /api/local/chat`: optional Ollama-compatible local inference adapter. A cloud-hosted server cannot reach a user's PC-local `localhost`; use a future authenticated desktop bridge for that case.
 - `POST /api/research`: uses Tavily when configured, otherwise a best-effort public DuckDuckGo HTML fallback. Public HTML search can break or be rate-limited; results are untrusted and need source verification.
-- `GET /api/tasks`, `POST /api/tasks`, `POST /api/tasks/:id/approve`, and `POST /api/tasks/:id/cancel`: per-user task records, explicit confirmation gates, and audit events using Supabase RLS. Approval only records permission; it does **not** execute PC commands. A durable worker and scoped tools are still required.
+- `GET /api/tasks`, `POST /api/tasks`, `POST /api/tasks/:id/approve`, and `POST /api/tasks/:id/cancel`: per-user task records, explicit confirmation gates, and audit events using Supabase RLS. The database-polled worker handles only allowlisted research and AI Employee draft/review/report workflows; approval does **not** execute PC commands or arbitrary external actions.
 - Cloud chat now attempts opt-in retrieval of a small set of active, user-owned memory items when account preferences permit it. Memory text is treated as untrusted context.
 - `GET /api/preferences` and `PUT /api/preferences`: persist supported language, voice, memory, personality, model-provider, and voice-selection preferences per account.
 - `POST /api/speech/synthesize` and `POST /api/speech/transcribe`: optional OpenAI-compatible TTS/STT adapters using server-only keys; browser-native speech remains the free fallback. Premium routes require a compatible provider and are not enabled until configured.
-- `POST /api/documents/extract`: bounded text extraction for TXT, Markdown, CSV, JSON, and HTML. PDF/DOCX parsers and persistent uploads are not yet available.
+- `POST /api/documents/extract`: bounded, transient-only text extraction for TXT, Markdown, CSV, JSON, HTML, PDF, and DOCX. DOCX ZIP metadata and expansion are bounded; persistent uploads/document storage are not implemented.
 - `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
 
-These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. Frontend build/deploy and the Windows UI are deliberately excluded from the current phase. PDF/DOCX parsing, a real background worker, coding sandbox, a Windows PC-control agent, live external-account integrations, and real provider/database end-to-end tests still require separate implementation. Premium speech endpoints need a compatible provider configuration. The frontend is intentionally deferred to the final phase. The standalone God’s Eye frontend service has been removed from the Render Blueprint; the existing Render service, if already provisioned separately, must be suspended separately to stop its running instance.
+These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. Persistent document uploads, a hardened coding sandbox, a Windows PC-control action runner, live external-account integrations, and real provider/database end-to-end tests remain incomplete. Premium speech endpoints need a compatible provider configuration. The frontend and full Windows PC-control UI remain deferred. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.
 
 ## Configuration
 
