@@ -11,6 +11,7 @@ import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
+import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -200,7 +201,7 @@ function normalizeBaseUrl(value) {
 }
 
 function hasConfiguredModelProvider(env) {
-  if (resolveCactusProvider(env)) return true;
+  if (resolveCactusProvider(env) || resolveHermesAgentProvider(env)) return true;
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
@@ -233,6 +234,8 @@ function configuredChatProviders(env, openRouterBaseUrl = null) {
   const providers = [];
   const cactusProvider = resolveCactusProvider(env);
   if (cactusProvider) providers.push({ ...cactusProvider, supportsVision: false, isOpenRouter: false, isCactus: true });
+  const hermesProvider = resolveHermesAgentProvider(env);
+  if (hermesProvider) providers.push({ ...hermesProvider, isOpenRouter: false, isHermesAgent: true });
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   if (primaryKey && openRouterBaseUrl) {
     providers.push({
