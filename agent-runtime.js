@@ -352,20 +352,12 @@ function buildFallbackCalls(text) {
   return calls.slice(0, 3);
 }
 
-function redactInlineSecrets(value) {
-  if (typeof value !== "string") return value;
-  return value
-    .replace(/\\bBearer\\s+[A-Za-z0-9._~+\\/-]+=*/gi, "Bearer [redacted]")
-    .replace(/\\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\\b/g, "[redacted]")
-    .replace(/\\b(authorization)\\s*([:=])\\s*(?:Bearer\\s+)?[^\\s,;'"]+/gi, "$1$2[redacted]")
-    .replace(/\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\\s*([:=])\\s*(['"]?)[^\\s,;'"]+/gi, "$1$2[redacted]");
-}
-
 const SENSITIVE_RESULT_KEY = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|credential|cookie|private[_-]?key|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|session[_-]?token|signing[_-]?key|jwt|connection[_-]?(?:string|uri)|database[_-]?url)/i;
 
 function redactSecretText(value) {
   if (typeof value !== "string") return value;
   return value
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^/@\s:]+:[^/@\s]+@/gi, "$1[redacted]@")
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
     .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\b/gi, "[redacted]")
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[redacted]")
