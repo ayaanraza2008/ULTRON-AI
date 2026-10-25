@@ -111,6 +111,10 @@ services:
         sync: false
       - key: ULTRON_DESKTOP_AGENT_TOKEN
         sync: false
+      - key: ULTRON_DESKTOP_POLL_TOKEN
+        sync: false
+      - key: ULTRON_DESKTOP_DEVICE_ID
+        sync: false
       - key: ULTRON_EMPLOYEES_ENABLED
         value: "true"
       - key: GEO_SLEUTH_ENABLED
