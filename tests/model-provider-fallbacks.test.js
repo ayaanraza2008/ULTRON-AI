@@ -268,7 +268,7 @@ test("agent fallback supports multiple free OpenRouter models on the same API en
 });
 
 
-test("agent model routing does not waste fallback providers on a non-retryable HTTP 400", async () => {
+test("agent model routing retries plain chat after HTTP 400 without switching providers", async () => {
   const calls = [];
   const env = {
     FIRST_KEY: "first-400-test-key",
@@ -279,8 +279,8 @@ test("agent model routing does not waste fallback providers on a non-retryable H
     ])
   };
 
-  await withServer(env, async url => {
-    calls.push(url);
+  await withServer(env, async (url, options) => {
+    calls.push({ url, request: JSON.parse(options.body), authorization: options.headers.Authorization });
     return new Response(JSON.stringify({ error: { message: "malformed request" } }), { status: 400 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
@@ -289,8 +289,17 @@ test("agent model routing does not waste fallback providers on a non-retryable H
       body: JSON.stringify({ prompt: "Say hello" })
     });
     assert.equal(response.status, 502);
-    assert.ok(calls.length >= 1);
-    assert.ok(calls.every(url => url === "https://first.example/v1/chat/completions"), "HTTP 400 must never advance to the second provider");
+    assert.equal(calls.length, 2, "tool-mode 400 should trigger one plain-chat retry");
+    assert.deepEqual(calls.map(call => call.url), [
+      "https://first.example/v1/chat/completions",
+      "https://first.example/v1/chat/completions"
+    ], "HTTP 400 must not advance to the second provider");
+    assert.ok(Array.isArray(calls[0].request.tools) && calls[0].request.tools.length > 0, "first call includes tool schemas");
+    assert.equal(calls[1].request.tools, undefined, "retry omits unsupported tool schemas");
+    assert.deepEqual(calls.map(call => call.authorization), [
+      "Bearer first-400-test-key",
+      "Bearer first-400-test-key"
+    ]);
     const body = await response.text();
     assert.doesNotMatch(body, /first-400-test-key|second-400-test-key|malformed request/);
   });
