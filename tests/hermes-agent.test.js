@@ -34,16 +34,18 @@ test("Hermes stays disabled until explicitly enabled and configured", async () =
   assert.equal(calls, 0);
 });
 
-test("Hermes provider rejects unsafe/malformed endpoints and missing API_SERVER_KEY", () => {
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "http://hermes.example/v1" })), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://user:pass@hermes.example/v1" })), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://hermes.example/v2" })), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_CHAT_PROVIDER: "false" })), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_API_KEY: "" })), null);
+test("Hermes direct chat provider is restricted to the configured owner", () => {
+  assert.equal(resolveHermesAgentProvider(configuredEnv()), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv(), "00000000-0000-4000-8000-000000000002"), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "http://hermes.example/v1" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://user:pass@hermes.example/v1" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://hermes.example/v2" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_CHAT_PROVIDER: "false" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_API_KEY: "" }), ownerId), null);
   const local = resolveHermesAgentProvider(configuredEnv({
     HERMES_AGENT_BASE_URL: "http://127.0.0.1:8642/v1",
     HERMES_AGENT_API_KEY: "local-key"
-  }));
+  }), ownerId);
   assert.equal(local.name, "hermes-agent");
   assert.equal(local.baseUrl, "http://127.0.0.1:8642/v1");
   assert.equal(local.priority, -5);
