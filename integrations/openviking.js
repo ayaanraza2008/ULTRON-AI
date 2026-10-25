@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { safeServiceBase } from "../network-safety.js";
 
 const MAX_QUERY_CHARS = 1200;
 const MAX_RESPONSE_BYTES = 512 * 1024;
@@ -12,7 +13,9 @@ function bounded(value, max = MAX_QUERY_CHARS) {
 function normalizeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim() || value.length > 1000) return null;
   try {
-    const url = new URL(value.trim());
+    const normalized = safeServiceBase(value.trim());
+    if (!normalized) return null;
+    const url = new URL(normalized);
     const host = url.hostname.toLowerCase();
     const normalizedHost = host.replace(/^\[|\]$/g, "");
     const loopback = ["localhost", "127.0.0.1", "::1"].includes(normalizedHost);
