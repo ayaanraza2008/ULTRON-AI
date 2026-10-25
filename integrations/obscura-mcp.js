@@ -168,66 +168,6 @@ export function getObscuraReadiness(env = process.env) {
   };
 }
 
-/**
- * Captures a public page using Obscura's documented MCP screenshot/PDF tools.
- * Binary image/PDF content is not persisted here; return only metadata to avoid
- * claiming a downloadable artifact exists when no artifact store is configured.
- */
-export async function capturePublicPageWithObscura({
-  env = process.env, fetchImpl = globalThis.fetch, userId, url: rawTarget, format
-} = {}) {
-  if (format !== "screenshot" && format !== "pdf") {
-    return blocked("OBSCURA_CAPTURE_FORMAT_INVALID", "Capture format must be screenshot or pdf.");
-  }
-  const config = endpointConfig(env, userId);
-  if (config.error) return config.error;
-  const target = validatePublicTarget(rawTarget);
-  if (!target) return blocked("OBSCURA_TARGET_NOT_PUBLIC_HTTPS", "Obscura may only capture public HTTPS website URLs. Local/private targets, raw IP addresses, and non-HTTPS URLs are blocked.");
-  let sessionId = null;
-  let requestId = 0;
-  const call = async (method, params = {}) => {
-    const response = await mcpPost(fetchImpl, config.url, config.token, sessionId, {
-      jsonrpc: "2.0", id: ++requestId, method, params
-    });
-    sessionId = response.sessionId;
-    return response.result;
-  };
-  try {
-    const initialized = await call("initialize", {
-      protocolVersion: "2025-03-26", capabilities: {},
-      clientInfo: { name: "ultron-ai", version: "0.1.0" }
-    });
-    if (!initialized || typeof initialized !== "object") throw Object.assign(new Error("Obscura MCP initialization returned no result."), { code: "OBSCURA_INITIALIZE_FAILED", status: 502 });
-    const notification = await mcpPost(fetchImpl, config.url, config.token, sessionId, {
-      jsonrpc: "2.0", method: "notifications/initialized", params: {}
-    });
-    sessionId = notification.sessionId;
-    const nav = await call("tools/call", { name: "browser_navigate", arguments: { url: target, waitUntil: "domcontentloaded" } });
-    contentText(nav);
-    const result = await call("tools/call", {
-      name: format === "screenshot" ? "browser_screenshot" : "browser_pdf",
-      arguments: format === "screenshot" ? {} : { print_background: true }
-    });
-    if (result?.isError) throw Object.assign(new Error("Obscura capture tool failed."), { code: "OBSCURA_CAPTURE_FAILED", status: 502 });
-    const parts = Array.isArray(result?.content) ? result.content : [];
-    const mediaType = format === "screenshot" ? "image/png" : "application/pdf";
-    const artifact = parts.find(item => item?.type === "image" || item?.type === "resource" ||
-      (typeof item?.mimeType === "string" && item.mimeType === mediaType));
-    const textOutput = parts.filter(item => item?.type === "text" && typeof item.text === "string")
-      .map(item => bounded(item.text, 2000)).join("\n");
-    if (!artifact && !textOutput) throw Object.assign(new Error("Obscura returned no capture artifact."), { code: "OBSCURA_CAPTURE_EMPTY", status: 502 });
-    return {
-      state: "completed", provider: "obscura", url: target, format,
-      captured: true, artifactReturned: Boolean(artifact),
-      artifactPersisted: false,
-      mediaType: artifact?.mimeType || artifact?.mime_type || (artifact?.type === "image" ? "image/png" : artifact?.type === "resource" ? "application/pdf" : null),
-      details: textOutput || undefined,
-      contentUntrusted: true,
-      notice: "Obscura capture ran, but ULTRON has not saved a downloadable file. A separate authorized artifact store is needed for persistence."
-    };
-  } catch (error) { return sanitizeError(error); }
-}
-
 export async function inspectPublicPageWithObscura({
   env = process.env, fetchImpl = globalThis.fetch, userId, url: rawTarget
 } = {}) {
