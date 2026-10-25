@@ -175,6 +175,54 @@ test("agent route rejects an empty prompt without calling a provider", async () 
   });
 });
 
+test("agent drafts a YouTube production package without pretending to render or publish media", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      assert.ok(payload.tools.some(tool => tool.function?.name === "create_youtube_production_plan"));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "youtube-plan-call", type: "function",
+        function: { name: "create_youtube_production_plan", arguments: JSON.stringify({
+          topic: "A mysterious abandoned lighthouse with an original story",
+          format: "cinematic_mystery", targetSeconds: 120, sceneCount: 12, language: "English"
+        }) }
+      }] } }] }), { status: 200 });
+    }
+    if (providerCalls === 2) {
+      assert.ok(payload.messages.some(message => message.role === "system" && String(message.content).includes("YouTube production planner")));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: JSON.stringify({
+        topic: "An abandoned lighthouse", format: "cinematic_mystery", durationSeconds: 120,
+        titleOptions: ["The Lighthouse That Blinked", "The Keeper Never Left", "A Signal Below the Sea"],
+        scenes: Array.from({ length: 12 }, (_, i) => ({ sceneNumber: i + 1, startSeconds: i * 10, durationSeconds: 10, location: "Lighthouse", characters: [], items: ["Lantern"], visualPrompt: "Original cinematic lighthouse shot", narration: "", audioCue: "Wind", transition: "Cut", continuity: "Keep lantern in right hand" })),
+        factCheckRequired: false, factCheckItems: [], mediaRightsChecklist: ["Verify all footage rights"],
+        publishingGate: "Creator review required before upload"
+      }) } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Draft production package prepared. No media was rendered or published." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Create a 2-minute cinematic mystery YouTube video plan about an abandoned lighthouse, with 12 scenes." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.toolsUsed.some(item => item.name === "create_youtube_production_plan" && item.ok));
+    const result = body.toolResults.find(item => item.name === "create_youtube_production_plan").result;
+    assert.equal(result.state, "draft_ready");
+    assert.equal(result.structured, true);
+    assert.equal(result.plan.scenes.length, 12);
+    assert.equal(result.requiresHumanReview, true);
+    assert.equal(result.published, false);
+    assert.ok(result.stagesNotExecuted.includes("video_assembly"));
+    assert.ok(result.stagesNotExecuted.includes("publish"));
+    assert.equal(JSON.stringify(body).includes("test-only"), false);
+    assert.equal(providerCalls, 3);
+  });
+});
+
 test("agent automatically checks integration readiness when a free model omits tool calls", async () => {
   let providerCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free", COMFYUI_BASE_URL: "https://comfy.example" }, async (url, options) => {

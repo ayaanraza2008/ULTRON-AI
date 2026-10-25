@@ -9,8 +9,8 @@ const REPOSITORIES = [
     id: "youtube-automation-agent", repo: "darkzOGx/youtube-automation-agent", domain: "youtube_creation",
     match: /\b(youtube|youtube channel|video channel|youtube short|youtube shorts|video script|video narration|video pipeline|video upload|video analytics|youtube analytics|channel growth)\b/i,
     integration: "workflow_patterns", status: "planning_only",
-    abilities: ["topic research", "script and metadata drafts", "narration and visual pipeline planning", "video assembly workflow planning", "analytics-based learning proposals"],
-    limits: ["No direct channel upload, scheduling, or media generation unless a dedicated authorized adapter is configured."],
+    abilities: ["draft production package with title options, original script, scene-by-scene visual and narration direction, SEO metadata, thumbnail prompt, factual checks and media-rights checklist", "narration and visual pipeline planning", "video assembly workflow planning", "analytics-based learning proposals"],
+    limits: ["Native ULTRON tool creates a production-plan draft only. It does not render media, verify facts/rights, access channel analytics, schedule, upload, or publish without separately configured services and the required review gate."],
     envKeys: [], license: "MIT", source: "https://github.com/darkzOGx/youtube-automation-agent"
   },
   {
