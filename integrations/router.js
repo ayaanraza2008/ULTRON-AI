@@ -107,6 +107,32 @@ function providerHeaders(apiKey) {
 export function createIntegrationRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser }) {
   const router = express.Router();
 
+  // Integrations use server-side shared credentials. Require the configured
+  // owner identity before allowing any request to spend quota, read private
+  // service state, synthesize media, queue work, or cancel an external job.
+  function requireIntegrationOwner(req, res, next) {
+    const expectedOwnerId = bounded(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
+    if (!expectedOwnerId) {
+      return res.status(503).json({
+        error: {
+          code: "INTEGRATION_OWNER_NOT_CONFIGURED",
+          message: "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner account UUID before exposing shared integration credentials."
+        }
+      });
+    }
+    const userId = typeof req.supabaseUser?.id === "string" ? req.supabaseUser.id : "";
+    if (!userId) return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Sign in to use this integration." } });
+    if (userId !== expectedOwnerId) {
+      return res.status(403).json({
+        error: {
+          code: "INTEGRATION_OWNER_ONLY",
+          message: "This connected service is restricted to the configured ULTRON owner account."
+        }
+      });
+    }
+    return next();
+  }
+
   // Authenticated, machine-readable readiness for the future UI and agent tools.
   // This reports configuration state only; it never claims an upstream is reachable.
   router.get("/integrations/catalog", requireSupabaseUser, (_req, res) => {
@@ -121,7 +147,7 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
 
   // ComfyUI has a documented queue/history API. The workflow remains server-side
   // validated JSON and never accepts a caller-supplied upstream URL.
-  router.post("/integrations/comfyui/queue", requireSupabaseUser, async (req, res) => {
+  router.post("/integrations/comfyui/queue", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
     const base = configuredUrl(env.COMFYUI_BASE_URL);
     const workflow = req.body?.workflow;
     if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL with a reachable ComfyUI API endpoint." } });
@@ -142,7 +168,7 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { safeError(res, error, "ComfyUI queue"); }
   });
 
-  router.get("/integrations/comfyui/jobs/:promptId", requireSupabaseUser, async (req, res) => {
+  router.get("/integrations/comfyui/jobs/:promptId", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
     const base = configuredUrl(env.COMFYUI_BASE_URL);
     const promptId = bounded(req.params.promptId, 160);
     if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL first." } });
@@ -156,7 +182,7 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { safeError(res, error, "ComfyUI job lookup"); }
   });
 
-  router.get("/integrations/comfyui/status", requireSupabaseUser, async (_req, res) => {
+  router.get("/integrations/comfyui/status", requireSupabaseUser, requireIntegrationOwner, async (_req, res) => {
     const base = configuredUrl(env.COMFYUI_BASE_URL);
     if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL first." } });
     try {
@@ -182,7 +208,7 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { safeError(res, error, "ComfyUI status check"); }
   });
 
-  router.get("/integrations/comfyui/queue", requireSupabaseUser, async (_req, res) => {
+  router.get("/integrations/comfyui/queue", requireSupabaseUser, requireIntegrationOwner, async (_req, res) => {
     const base = configuredUrl(env.COMFYUI_BASE_URL);
     if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL first." } });
     try {
@@ -201,7 +227,7 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
     } catch (error) { safeError(res, error, "ComfyUI queue lookup"); }
   });
 
-  router.delete("/integrations/comfyui/jobs/:promptId", requireSupabaseUser, async (req, res) => {
+  router.delete("/integrations/comfyui/jobs/:promptId", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
     const base = configuredUrl(env.COMFYUI_BASE_URL);
     const promptId = bounded(req.params.promptId, 160);
     if (!base) return res.status(503).json({ error: { code: "COMFYUI_NOT_CONFIGURED", message: "Configure COMFYUI_BASE_URL first." } });
@@ -226,7 +252,7 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = globalT
   ];
 
   for (const adapter of genericAdapters) {
-    router.post(adapter.route, requireSupabaseUser, async (req, res) => {
+    router.post(adapter.route, requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
       const base = configuredUrl(env[adapter.baseKey]);
       const path = cleanPath(env[adapter.pathKey]);
       const token = String(env[adapter.tokenKey] || "").trim();
