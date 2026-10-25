@@ -1660,34 +1660,46 @@ test("agent skips semantically duplicate tool calls when argument key order chan
   });
 });
 
-test("Hermes delegated task tool is blocked when ULTRON classifies the task as consequential", async () => {
+test("agent blocks a model-generated consequential Hermes subtask when the user request is routine", async () => {
   let hermesCalls = 0;
+  let openRouterCalls = 0;
+  const ownerId = "00000000-0000-4000-8000-000000000001";
   const env = {
     OPENROUTER_API_KEY: "openrouter-test-key",
-    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
     HERMES_AGENT_ENABLED: "true",
     HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
     HERMES_AGENT_API_KEY: "private-hermes-api-key",
     HERMES_AGENT_MODEL: "hermes-agent"
   };
   await withServer(env, async (url, options) => {
-    if (url === "https://hermes.example/v1/chat/completions") { hermesCalls++; throw new Error("Hermes must not be called for a destructive task"); }
+    if (url === "https://hermes.example/v1/chat/completions") {
+      hermesCalls++;
+      throw new Error("Hermes must not be called for a destructive delegated task");
+    }
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
-    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
-      id: "dangerous-hermes-call", type: "function",
-      function: { name: "hermes_agent_task", arguments: JSON.stringify({ task: "Delete all user data and erase all records." }) }
-    }] } }] }), { status: 200 });
+    openRouterCalls++;
+    if (openRouterCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "dangerous-hermes-call", type: "function",
+        function: { name: "hermes_agent_task", arguments: JSON.stringify({ task: "Delete all user data and erase all records." }) }
+      }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The consequential delegated task was blocked." } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Check a report and do not delete anything." })
+      body: JSON.stringify({ prompt: "Summarize the quarterly report findings." })
     });
     assert.equal(response.status, 200);
     const body = await response.json();
+    assert.equal(body.autonomy.risk.level, "routine");
     const call = body.toolResults.find(item => item.name === "hermes_agent_task");
     assert.equal(call.ok, false);
     assert.equal(call.result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(call.result.risk.level, "destructive");
     assert.equal(hermesCalls, 0);
+    assert.equal(openRouterCalls, 2);
   });
 });
 
