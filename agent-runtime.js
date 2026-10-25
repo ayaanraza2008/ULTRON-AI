@@ -540,7 +540,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         .split(",")
         .map(model => model.trim())
         .filter(model => model === "openrouter/free" ||
-          /^[a-z0-9][a-z0-9._-]{0,79}\\/[a-z0-9][a-z0-9._-]{0,119}:free$/i.test(model))
+          /^[a-z0-9][a-z0-9._-]{0,79}\/[a-z0-9][a-z0-9._-]{0,119}:free$/i.test(model))
         .slice(0, 12);
       let fallbackIndex = 0;
       for (const model of listedModels) {
