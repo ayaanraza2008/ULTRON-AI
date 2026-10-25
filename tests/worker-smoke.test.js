@@ -75,6 +75,29 @@ test("worker smoke blocks unsafe Supabase URL and missing user ID before network
   assert.equal(called, false);
 });
 
+test("worker smoke rejects HTTPS private, loopback, and metadata Supabase targets before sending the service key", async () => {
+  const unsafeUrls = [
+    "https://localhost",
+    "https://192.168.1.10",
+    "https://10.0.0.4",
+    "https://169.254.169.254",
+    "https://metadata.google.internal",
+    "https://[fd00::1]",
+    "https://127.1"
+  ];
+  for (const url of unsafeUrls) {
+    let calls = 0;
+    const result = await runWorkerSmoke({
+      env: { ...serviceEnv, SUPABASE_URL: url },
+      fetchImpl: async () => { calls += 1; throw new Error("must not send service-role credential"); }
+    });
+    assert.equal(result.status, "blocked", url);
+    assert.equal(result.reason, "SUPABASE_URL_SERVICE_KEY_AND_VALID_SMOKE_USER_REQUIRED", url);
+    assert.equal(calls, 0, url);
+    assert.equal(JSON.stringify(result).includes(serviceEnv.SUPABASE_SERVICE_ROLE_KEY), false);
+  }
+});
+
 test("worker smoke reports a terminal failure without printing database result content", async () => {
   const result = await runWorkerSmoke({
     env: serviceEnv,
