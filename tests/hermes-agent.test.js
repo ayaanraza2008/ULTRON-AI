@@ -38,6 +38,7 @@ test("Hermes provider rejects unsafe/malformed endpoints and missing API_SERVER_
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "http://hermes.example/v1" })), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://user:pass@hermes.example/v1" })), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://hermes.example/v2" })), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_CHAT_PROVIDER: "false" })), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_API_KEY: "" })), null);
   const local = resolveHermesAgentProvider(configuredEnv({
     HERMES_AGENT_BASE_URL: "http://127.0.0.1:8642/v1",
