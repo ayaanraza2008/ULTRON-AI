@@ -19,9 +19,9 @@ This map covers all 28 repositories supplied for ULTRON. The new registry gives 
 |---:|---|---|---|
 | 1 | [youtube-automation-agent](https://github.com/darkzOGx/youtube-automation-agent) | Topic research, scripts, narration/visual pipeline planning, titles/descriptions/tags, review checklists, analytics learning | Planning guidance only. Actual video generation, channel access, scheduling and upload need a dedicated service/desktop integration. Upstream explicitly has an approval/review pipeline. |
 | 2 | [Cap](https://github.com/CapSoftware/Cap) | Screen/camera recording, local editing, transcript/chapters, sharing workflow | Desktop companion required. A cloud backend cannot capture the local screen or microphone. |
-| 3 | [Chatwoot](https://github.com/chatwoot/chatwoot) | Support inbox triage, conversation summaries, reply drafts, support reporting | API adapter not implemented. Needs a reachable instance, documented API token, user-scoped data, and send-approval handling. |
-| 4 | [Cal.diy](https://github.com/calcom/cal.diy) | Availability checks, meeting/appointment planning, booking links | API adapter not implemented. Scheduling/canceling/invites are side effects; use only scoped calendar credentials and approval gates. |
-| 5 | [OpenProject](https://github.com/opf/openproject) | Project/task issues, Kanban/Scrum, roadmap/Gantt summaries, project reporting | API adapter not implemented. Needs authenticated API access; changes must stay in the authorized workspace. |
+| 3 | [Chatwoot](https://github.com/chatwoot/chatwoot) | Read-only conversation listing, triage context, bounded summaries and support-report drafting | Owner-scoped read-only agent tool is implemented. Requires `CHATWOOT_BASE_URL`, `CHATWOOT_API_TOKEN`, `CHATWOOT_ACCOUNT_ID`, and `ULTRON_INTEGRATION_OWNER_USER_ID`; live endpoint/auth compatibility is unverified. Sending replies and state changes are not exposed as automatic actions. |
+| 4 | [Cal.diy](https://github.com/calcom/cal.diy) | Read-only event-type listing, time-slot availability checks and meeting preparation | Owner-scoped read-only agent tools are implemented against the Cal.com-compatible v2 API contract. Requires `CALDIY_BASE_URL`, `CALDIY_API_TOKEN`, and `ULTRON_INTEGRATION_OWNER_USER_ID`; exact cal.diy compatibility is unverified. Booking/cancellation/invites are not exposed as automatic actions. |
+| 5 | [OpenProject](https://github.com/opf/openproject) | Read-only project listing, work-package listing and task-status summaries | Owner-scoped read-only agent tools are implemented. Requires `OPENPROJECT_BASE_URL`, `OPENPROJECT_API_TOKEN`, and `ULTRON_INTEGRATION_OWNER_USER_ID`; live auth/filter compatibility is unverified. Creating/editing work packages is not exposed as an automatic action. |
 | 6 | [OpenWhispr](https://github.com/OpenWhispr/openwhispr) | Offline dictation, speech-to-text, meeting transcription and notes | Desktop companion required for microphone/hotkeys/cursor insertion. |
 | 7 | [AppFlowy](https://github.com/AppFlowy-IO/AppFlowy) | Workspace pages, knowledge-base notes, databases and task boards | API/local connector not implemented. The repository is AGPL-3.0; review obligations before redistributing or integrating code. |
 | 8 | [OpenSEO](https://github.com/every-app/open-seo) | Keyword research, rank tracking, backlink/competitor insights, site audits, AI visibility | Adapter not implemented. Upstream requires DataForSEO credentials for SEO data; costs can apply. Free-first policy forbids surprise paid requests. |
@@ -48,7 +48,7 @@ This map covers all 28 repositories supplied for ULTRON. The new registry gives 
 
 ## Readiness API
 
-`GET /api/agent/repositories` reports the registered upstreams, non-secret state, required environment-variable *names*, and a repository count. Add `?task=...` to see the domains selected for a particular task. The endpoint requires a signed-in ULTRON user and returns no secret values.
+`GET /api/agent/repositories` reports the registered upstreams, non-secret state, required environment-variable *names*, and a repository count. Add `?task=...` to see the domains selected for a particular task. The endpoint requires a signed-in ULTRON user and returns no secret values. Shared Chatwoot/OpenProject/Cal.diy API credentials are additionally restricted to the exact signed-in UUID configured in `ULTRON_INTEGRATION_OWNER_USER_ID`; without that guard their agent tools remain blocked.
 
 State meanings:
 
@@ -62,7 +62,7 @@ State meanings:
 ## Next integration order
 
 1. Verify and harden existing adapters: model provider, VoiceStudio, ComfyUI, Geo-Sleuth, Handy bridge, Browser Use, AgentMemory, HeyGem and OmniVoice.
-2. Implement read-only API adapters for Chatwoot, Cal.diy, OpenProject and AppFlowy only after API schemas/auth scopes are confirmed.
+2. Live-test the owner-scoped Chatwoot, Cal.diy and OpenProject read-only adapters on dedicated test data; then implement further read-only adapters for AppFlowy only after API schemas/auth scopes are confirmed.
 3. Add OpenSEO and public-API discovery with explicit cost/terms checks; then Paperclip/OpenViking/OpenDesign as separately hosted adapters.
 4. Build one authenticated desktop bridge for local capture/dictation and the approved Windows action allowlist before adding Cap/OpenWhispr/REA local workflows.
 5. Add the YouTube production pipeline as durable stages with fact/media-rights checks and a human publish gate. Media generation and channel publication are not considered complete until each stage is live-tested.
