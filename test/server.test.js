@@ -444,6 +444,106 @@ test("expired Supabase access tokens refresh before database requests", async ()
   });
 });
 
+test("task creation, approval, cancellation and audit use the correct Supabase role", async () => {
+  const userId = "123e4567-e89b-12d3-a456-426614174000";
+  const taskCreateId = "123e4567-e89b-12d3-a456-426614174010";
+  const taskApproveId = "123e4567-e89b-12d3-a456-426614174011";
+  const taskCancelId = "123e4567-e89b-12d3-a456-426614174012";
+  const serviceKey = "test-only-server-role-key";
+  const clientToken = "test-only-user-token";
+  const calls = [];
+  const pendingTask = {
+    id: taskApproveId, user_id: userId, title: "Draft brief",
+    input: { taskType: "employee", executionMode: "employee_worker", role: "seo-aeo", goal: "Draft a brief", mode: "draft", requiresApproval: true, approved: false },
+    status: "WAITING_FOR_PERMISSION"
+  };
+  const app = createApp({
+    env: {
+      ...env,
+      SUPABASE_URL: "https://ultron-test.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
+      SUPABASE_SERVICE_ROLE_KEY: serviceKey
+    },
+    fetchImpl: async (rawUrl, options = {}) => {
+      const url = new URL(rawUrl);
+      const method = options.method || "GET";
+      const authorization = options.headers?.Authorization || "";
+      calls.push({ path: url.pathname, method, query: url.search, authorization, apikey: options.headers?.apikey, body: options.body ? JSON.parse(options.body) : undefined });
+
+      if (url.pathname === "/auth/v1/user" && method === "GET") {
+        assert.equal(authorization, "Bearer " + clientToken);
+        assert.equal(options.headers.apikey, "sb_publishable_test");
+        return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/rest/v1/agent_tasks" && method === "POST") {
+        assert.equal(authorization, "Bearer " + clientToken, "task insertion remains user-scoped");
+        assert.equal(url.searchParams.get("select"), "id,title,input,status,created_at");
+        assert.equal(calls.at(-1).body.user_id, userId);
+        return new Response(JSON.stringify([{
+          id: taskCreateId, title: calls.at(-1).body.title, input: calls.at(-1).body.input,
+          status: calls.at(-1).body.status, created_at: "2026-10-25T09:00:00Z"
+        }]), { status: 201, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/rest/v1/agent_tasks" && method === "GET") {
+        assert.equal(authorization, "Bearer " + clientToken, "task approval lookup stays owner-authenticated");
+        assert.match(url.search, new RegExp("user_id=eq\\." + userId));
+        assert.match(url.search, new RegExp("id=eq\\." + taskApproveId));
+        return new Response(JSON.stringify([pendingTask]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/rest/v1/agent_tasks" && method === "PATCH") {
+        assert.equal(authorization, "Bearer " + serviceKey, "guarded state transitions must use server role");
+        assert.equal(options.headers.apikey, serviceKey);
+        assert.match(url.search, new RegExp("user_id=eq\\." + userId));
+        if (url.search.includes(taskApproveId)) {
+          assert.match(url.search, /status=eq\.WAITING_FOR_PERMISSION/);
+          const updated = { ...pendingTask, ...calls.at(-1).body };
+          return new Response(JSON.stringify([updated]), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+        if (url.search.includes(taskCancelId)) {
+          assert.match(url.search, /status=in\.\(QUEUED,WAITING_FOR_PERMISSION\)/);
+          return new Response(JSON.stringify([{ id: taskCancelId, status: "CANCELLED" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+        throw new Error("Unexpected privileged task update.");
+      }
+      if (url.pathname === "/rest/v1/audit_events" && method === "POST") {
+        assert.equal(authorization, "Bearer " + serviceKey, "audit events must be server-authored");
+        assert.equal(options.headers.apikey, serviceKey);
+        assert.equal(calls.at(-1).body.user_id, userId);
+        return new Response(null, { status: 204 });
+      }
+      throw new Error("Unexpected mocked Supabase request: " + method + " " + rawUrl);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = "ultron_sb_access=" + clientToken;
+    const created = await fetch(base + "/api/tasks", {
+      method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Research a public topic", description: "Collect a concise source-backed overview", taskType: "research", query: "public documentation" })
+    });
+    assert.equal(created.status, 201);
+    assert.equal((await created.json()).task.id, taskCreateId);
+
+    const approved = await fetch(base + "/api/tasks/" + taskApproveId + "/approve", {
+      method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true })
+    });
+    assert.equal(approved.status, 200);
+    const approvedBody = await approved.json();
+    assert.equal(approvedBody.task.status, "QUEUED");
+    assert.equal(approvedBody.task.input.approved, true);
+
+    const cancelled = await fetch(base + "/api/tasks/" + taskCancelId + "/cancel", {
+      method: "POST", headers: { Cookie: cookie }
+    });
+    assert.equal(cancelled.status, 200);
+    assert.equal((await cancelled.json()).task.status, "CANCELLED");
+
+    const auditCalls = calls.filter(call => call.path === "/rest/v1/audit_events");
+    assert.deepEqual(auditCalls.map(call => call.body.action), ["task.created", "task.approved", "task.cancelled"]);
+    assert.equal(calls.some(call => call.authorization === "Bearer " + serviceKey && call.path === "/rest/v1/agent_tasks" && call.method === "POST"), false);
+  });
+});
+
 test("memory API refuses requests without a Supabase account", async () => {
   let calls = 0;
   const app = createApp({
