@@ -56,14 +56,17 @@ test("integration catalog reports readiness without exposing secret values", asy
     CACTUS_MODEL: "Cactus-Compute/needle",
     PAPERCLIP_BASE_URL: "https://paperclip.example",
     PAPERCLIP_API_TOKEN: "private-paperclip-secret",
-    PAPERCLIP_COMPANY_ID: "company-123"
+    PAPERCLIP_COMPANY_ID: "company-123",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-secret"
   };
   await withServer(createApp({ env: configuredEnv, logger: { warn() {}, error() {} } }), async base => {
     const cookie = await login(base);
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 13);
+    assert.equal(payload.integrations.length, 14);
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "omnivoice").configured, true);
@@ -73,10 +76,12 @@ test("integration catalog reports readiness without exposing secret values", asy
     assert.equal(payload.integrations.find(item => item.id === "obscura").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "cactus-compute").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "paperclip").state, "configured_unverified");
+    assert.equal(payload.integrations.find(item => item.id === "hermes-agent").state, "configured_unverified");
     const serialized = JSON.stringify(payload);
     assert.equal(serialized.includes("private-heygem-secret"), false);
     assert.equal(serialized.includes("private-voice-secret"), false);
     assert.equal(serialized.includes("private-paperclip-secret"), false);
+    assert.equal(serialized.includes("private-hermes-secret"), false);
   });
 });
 
