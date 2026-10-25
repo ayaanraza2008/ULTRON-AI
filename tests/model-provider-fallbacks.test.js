@@ -59,8 +59,8 @@ test("agent model routing rejects insecure provider URLs and skips providers wit
     OPENROUTER_API_KEY: "primary-test-secret",
     OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "unsafe", baseUrl: "http://evil.example/v1", apiKeyEnv: "EVIL_API_KEY", model: "x" },
-      { name: "missing-key", baseUrl: "https://missing.example/v1", apiKeyEnv: "MISSING_PROVIDER_KEY", model: "x" }
+      { name: "unsafe", baseUrl: "http://evil.example.com/v1", apiKeyEnv: "EVIL_API_KEY", model: "x" },
+      { name: "missing-key", baseUrl: "https://missing.example.com/v1", apiKeyEnv: "MISSING_PROVIDER_KEY", model: "x" }
     ])
   };
   await withServer(env, async url => {
@@ -84,13 +84,13 @@ test("agent model routing fails over when a provider returns HTTP 200 with an em
     FIRST_KEY: "first-test-key",
     SECOND_KEY: "second-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
-      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+      { name: "first", baseUrl: "https://first.example.com/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example.com/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
     ])
   };
   await withServer(env, async url => {
     calls.push(url);
-    if (url.startsWith("https://first.example/")) {
+    if (url.startsWith("https://first.example.com/")) {
       return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "" } }] }), { status: 200 });
     }
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered from an empty completion." } }] }), { status: 200 });
@@ -103,8 +103,8 @@ test("agent model routing fails over when a provider returns HTTP 200 with an em
     assert.equal(response.status, 200);
     assert.match((await response.text()), /Recovered from an empty completion/);
     assert.deepEqual(calls, [
-      "https://first.example/v1/chat/completions",
-      "https://second.example/v1/chat/completions"
+      "https://first.example.com/v1/chat/completions",
+      "https://second.example.com/v1/chat/completions"
     ]);
   });
 });
@@ -116,13 +116,13 @@ test("agent model routing falls back after malformed JSON from an HTTP 200 provi
     FIRST_KEY: "first-test-key",
     SECOND_KEY: "second-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
-      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+      { name: "first", baseUrl: "https://first.example.com/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example.com/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
     ])
   };
   await withServer(env, async url => {
     calls.push(url);
-    if (url.startsWith("https://first.example/")) return new Response("{malformed-json", { status: 200 });
+    if (url.startsWith("https://first.example.com/")) return new Response("{malformed-json", { status: 200 });
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Recovered from malformed JSON." } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
@@ -133,8 +133,8 @@ test("agent model routing falls back after malformed JSON from an HTTP 200 provi
     assert.equal(response.status, 200);
     assert.match(await response.text(), /Recovered from malformed JSON/);
     assert.deepEqual(calls, [
-      "https://first.example/v1/chat/completions",
-      "https://second.example/v1/chat/completions"
+      "https://first.example.com/v1/chat/completions",
+      "https://second.example.com/v1/chat/completions"
     ]);
   });
 });
@@ -143,7 +143,7 @@ test("agent model routing returns a bounded failure when every provider returns 
   const env = {
     ONLY_KEY: "only-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "only", baseUrl: "https://only.example/v1", apiKeyEnv: "ONLY_KEY", model: "model-a", priority: 0 }
+      { name: "only", baseUrl: "https://only.example.com/v1", apiKeyEnv: "ONLY_KEY", model: "model-a", priority: 0 }
     ])
   };
   await withServer(env, async () => new Response("{not-json", { status: 200 }), async base => {
@@ -166,13 +166,13 @@ test("agent model routing fails over after a provider timeout without exposing p
     FIRST_KEY: "first-timeout-test-key",
     SECOND_KEY: "second-timeout-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
-      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+      { name: "first", baseUrl: "https://first.example.com/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example.com/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
     ])
   };
   await withServer(env, async url => {
     calls.push(url);
-    if (url.startsWith("https://first.example/")) {
+    if (url.startsWith("https://first.example.com/")) {
       const timeout = new Error("synthetic timeout detail");
       timeout.name = "TimeoutError";
       throw timeout;
@@ -192,8 +192,8 @@ test("agent model routing fails over after a provider timeout without exposing p
     assert.match(body, /Recovered after provider timeout/);
     assert.doesNotMatch(body, /first-timeout-test-key|second-timeout-test-key|synthetic timeout detail/);
     assert.deepEqual(calls, [
-      "https://first.example/v1/chat/completions",
-      "https://second.example/v1/chat/completions"
+      "https://first.example.com/v1/chat/completions",
+      "https://second.example.com/v1/chat/completions"
     ]);
   });
 });
@@ -205,13 +205,13 @@ test("agent model routing falls back after an upstream HTTP 408 timeout response
     FIRST_KEY: "first-408-test-key",
     SECOND_KEY: "second-408-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
-      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+      { name: "first", baseUrl: "https://first.example.com/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example.com/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
     ])
   };
   await withServer(env, async url => {
     calls.push(url);
-    if (url.startsWith("https://first.example/")) {
+    if (url.startsWith("https://first.example.com/")) {
       return new Response(JSON.stringify({ error: { message: "upstream timeout" } }), { status: 408 });
     }
     return new Response(JSON.stringify({
@@ -227,8 +227,8 @@ test("agent model routing falls back after an upstream HTTP 408 timeout response
     assert.equal(response.status, 200);
     assert.match(await response.text(), /Recovered after HTTP 408/);
     assert.deepEqual(calls, [
-      "https://first.example/v1/chat/completions",
-      "https://second.example/v1/chat/completions"
+      "https://first.example.com/v1/chat/completions",
+      "https://second.example.com/v1/chat/completions"
     ]);
   });
 });
@@ -274,8 +274,8 @@ test("agent model routing retries plain chat after HTTP 400 without switching pr
     FIRST_KEY: "first-400-test-key",
     SECOND_KEY: "second-400-test-key",
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
-      { name: "first", baseUrl: "https://first.example/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
-      { name: "second", baseUrl: "https://second.example/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
+      { name: "first", baseUrl: "https://first.example.com/v1", apiKeyEnv: "FIRST_KEY", model: "model-a", priority: 0 },
+      { name: "second", baseUrl: "https://second.example.com/v1", apiKeyEnv: "SECOND_KEY", model: "model-b", priority: 1 }
     ])
   };
 
@@ -291,8 +291,8 @@ test("agent model routing retries plain chat after HTTP 400 without switching pr
     assert.equal(response.status, 502);
     assert.equal(calls.length, 2, "tool-mode 400 should trigger one plain-chat retry");
     assert.deepEqual(calls.map(call => call.url), [
-      "https://first.example/v1/chat/completions",
-      "https://first.example/v1/chat/completions"
+      "https://first.example.com/v1/chat/completions",
+      "https://first.example.com/v1/chat/completions"
     ], "HTTP 400 must not advance to the second provider");
     assert.ok(Array.isArray(calls[0].request.tools) && calls[0].request.tools.length > 0, "first call includes tool schemas");
     assert.equal(calls[1].request.tools, undefined, "retry omits unsupported tool schemas");
