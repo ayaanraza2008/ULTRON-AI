@@ -1,16 +1,9 @@
+import { safeServiceBase } from "./network-safety.js";
+
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
 
 function secureServiceUrl(value) {
-  if (!truthy(value)) return false;
-  try {
-    const url = new URL(value.trim());
-    const localHosts = ["localhost", "127.0.0.1", "[::1]", "::1"];
-    if (url.username || url.password || url.search || url.hash) return false;
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && localHosts.includes(url.hostname);
-  } catch {
-    return false;
-  }
+  return safeServiceBase(value) !== null;
 }
 
 function component(id, label, state, requiredEnv, note) {
