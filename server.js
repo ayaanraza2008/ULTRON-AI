@@ -620,9 +620,9 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     return payload;
   }
 
-  // This narrow server-role path exists only for task state transitions and audit inserts
-  // intentionally denied to authenticated PostgREST clients by database triggers/grants.
-  // Callers must still provide owner/status predicates; never expose this helper to HTTP input.
+  // This narrow server-role path supports only explicit task transitions, owner-scoped
+  // desktop-action queue operations/one fixed atomic claim RPC, and server-authored audit inserts.
+  // It is never exposed to HTTP input; callers must hard-code operation names and owner/status predicates.
   async function supabasePrivilegedRest(req, table, method, query = "", body, prefer = "return=representation") {
     const allowed = table === "agent_tasks" && method === "PATCH" ||
       table === "audit_events" && method === "POST" ||
