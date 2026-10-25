@@ -36,7 +36,7 @@ test("confirmation resend uses signup type, configured redirect, and a generic n
     const response = await fetch(base + "/api/auth/resend-confirmation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "user@example.com", redirectTo: "https://attacker.example/steal" })
+      body: JSON.stringify({ email: "user@example.com", redirectTo: "https://attacker.example.com/steal" })
     });
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store");
@@ -106,7 +106,7 @@ test("confirmation resend returns sanitized throttling for HTTP 429", async () =
 test("confirmation resend fails closed for unsafe configured redirect URLs", async () => {
   let called = false;
   await withServer({
-    ULTRON_AUTH_REDIRECT_URL: "https://trusted.example/confirm?token=unexpected"
+    ULTRON_AUTH_REDIRECT_URL: "https://trusted.example.com/confirm?token=unexpected"
   }, async () => {
     called = true;
     return json({});
