@@ -134,6 +134,67 @@ test("research results exclude unsafe URL schemes, IP literals, credentials, and
   });
 });
 
+test("task progress returns owner-scoped lifecycle and a sanitized checkpoint timeline", async () => {
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const taskId = "00000000-0000-4000-8000-000000000009";
+  const calls = [];
+  const fakeSupabaseRest = async (_req, table, method, query) => {
+    calls.push({ table, method, query });
+    if (table === "agent_tasks") {
+      assert.match(query, new RegExp("user_id=eq\\." + userId));
+      assert.match(query, new RegExp("id=eq\\." + taskId));
+      return [{ id: taskId, status: "RUNNING", started_at: "2026-10-25T08:00:00Z", finished_at: null, created_at: "2026-10-25T07:59:00Z", updated_at: "2026-10-25T08:00:00Z", error_code: null }];
+    }
+    if (table === "audit_events") {
+      assert.match(query, new RegExp("user_id=eq\\." + userId));
+      assert.match(query, new RegExp("target_id=eq\\." + taskId));
+      return [
+        { action: "task.created", outcome: "allowed", metadata: { prompt: "must not leak" }, created_at: "2026-10-25T07:59:00Z" },
+        { action: "autonomous.stage", outcome: "completed", metadata: { stage: "research", goal: "private user goal", sourceCount: 4 }, created_at: "2026-10-25T08:00:00Z" },
+        { action: "unrelated.secret.event", outcome: "allowed", metadata: { token: "must not leak" }, created_at: "2026-10-25T08:00:01Z" }
+      ];
+    }
+    throw new Error("Unexpected table " + table);
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks/" + taskId + "/progress");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("cache-control") || "", /no-store/i);
+    const body = await response.json();
+    assert.equal(body.task.id, taskId);
+    assert.equal(body.task.status, "RUNNING");
+    assert.equal(body.progress.state, "running");
+    assert.equal(body.progress.percent, null, "do not invent percentage estimates for unknown running work");
+    assert.equal(body.progress.latestStage, "research");
+    assert.equal(body.progress.checkpointCount, 2);
+    assert.deepEqual(body.checkpoints.map(item => item.action), ["task.created", "autonomous.stage"]);
+    assert.equal(body.checkpoints[1].stage, "research");
+    const serialized = JSON.stringify(body);
+    assert.equal(serialized.includes("private user goal"), false);
+    assert.equal(serialized.includes("must not leak"), false);
+    assert.equal(serialized.includes("unrelated.secret.event"), false);
+    assert.equal(serialized.includes("must not leak"), false);
+    assert.equal(calls.map(call => call.table).join(","), "agent_tasks,audit_events");
+  }, { supabaseRest: fakeSupabaseRest });
+});
+
+test("task progress hides a task and skips audit reads when the owner-scoped lookup is empty", async () => {
+  const calls = [];
+  const fakeSupabaseRest = async (_req, table, method, query) => {
+    calls.push({ table, method, query });
+    if (table === "agent_tasks") return [];
+    throw new Error("Audit events must not be queried when task ownership lookup fails.");
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks/00000000-0000-4000-8000-000000000099/progress");
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).error.code, "TASK_NOT_FOUND");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].table, "agent_tasks");
+    assert.match(calls[0].query, /user_id=eq\\.00000000-0000-4000-8000-000000000001/);
+  }, { supabaseRest: fakeSupabaseRest });
+});
+
 test("task creation records a queued plan and audit event, without claiming execution", async () => {
   const writes = [];
   const fakeSupabaseRest = async (_req, table, method, _query, body) => {
