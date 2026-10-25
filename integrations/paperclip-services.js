@@ -186,13 +186,20 @@ export async function getPaperclipAgentDashboard({ env = process.env, fetchImpl 
   const costRaw = costResult.ok && costResult.data && typeof costResult.data === "object"
     ? (costResult.data.summary && typeof costResult.data.summary === "object" ? costResult.data.summary : costResult.data)
     : {};
-  const dashboard = scalarSummary(dashboardRaw, [
-    "status", "health", "agentCount", "activeAgents", "openIssues", "pendingApprovals",
-    "blockedIssues", "completedTasks", "failedTasks", "monthlySpendCents", "budgetMonthlyCents"
-  ]);
+  const dashboard = {
+    agents: scalarSummary(dashboardRaw?.agents, ["active", "running", "paused", "error"]),
+    tasks: scalarSummary(dashboardRaw?.tasks, ["open", "inProgress", "blocked", "done"]),
+    costs: scalarSummary(dashboardRaw?.costs, ["monthSpendCents", "monthBudgetCents", "monthUtilizationPercent"]),
+    budgets: scalarSummary(dashboardRaw?.budgets, ["activeIncidents", "pendingApprovals", "pausedAgents", "pausedProjects"]),
+    pendingApprovals: numberOrUndefined(dashboardRaw?.pendingApprovals),
+    activeAgents: numberOrUndefined(dashboardRaw?.activeAgents),
+    openIssues: numberOrUndefined(dashboardRaw?.openIssues),
+    blockedIssues: numberOrUndefined(dashboardRaw?.blockedIssues)
+  };
   const costs = scalarSummary(costRaw, [
-    "period", "currency", "totalCents", "monthToDateCents", "monthlySpendCents",
-    "budgetMonthlyCents", "spentMonthlyCents", "remainingCents", "total", "budget", "spent", "updatedAt"
+    "eventCount", "unpricedEventCount", "unknownBillingEventCount", "estimatedEventCount",
+    "pendingRunCount", "pricingComplete", "spendCents", "spendCentsExact",
+    "budgetCents", "utilizationPercent", "currency", "period", "updatedAt"
   ]);
   const successes = results.filter(result => result.ok).length;
   const state = successes === 3 ? "completed" : successes > 0 ? "partial" : "failed";
