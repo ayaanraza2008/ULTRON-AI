@@ -88,3 +88,7 @@ export function normalizeDesktopFailureCode(value) {
 export function allowedDesktopApps() {
   return Object.keys(ALLOWED_APPS);
 }
+
+export function windowsExecutableName(app) {
+  return Object.hasOwn(ALLOWED_APPS, app) ? ALLOWED_APPS[app] : null;
+}
