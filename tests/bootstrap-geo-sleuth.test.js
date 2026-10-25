@@ -117,3 +117,37 @@ test("Geo-Sleuth bootstrap never executes an installer whose checksum does not m
     await rm(base, { recursive: true, force: true });
   }
 });
+
+test("Geo-Sleuth bootstrap rejects an installer above the size cap before checksum loading or execution", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "ultron-geo-bootstrap-oversize-"));
+  const root = path.join(base, "repository", "skills", "geo-sleuth");
+  const commands = [];
+  try {
+    const result = await ensureGeoSleuthRuntime({
+      env: { GEO_SLEUTH_ENABLED: "true", GEO_SLEUTH_ROOT: root },
+      log() {},
+      runCommand: async (command, args) => {
+        commands.push({ command, args });
+        if (command === "git" && args[0] === "clone") {
+          const clonePath = args.at(-1);
+          const scripts = path.join(clonePath, "skills", "geo-sleuth", "scripts");
+          await mkdir(scripts, { recursive: true });
+          await writeFile(path.join(scripts, "intake.py"), "# fixture");
+          await writeFile(path.join(scripts, "board.py"), "# fixture");
+          return {};
+        }
+        if (command === "uv" || command.endsWith(path.join(".local", "bin", "uv"))) throw new Error("not installed");
+        if (command === "curl") {
+          await writeFile(args[args.indexOf("-o") + 1], "x".repeat(1_048_577));
+          return {};
+        }
+        if (command === "git") return {};
+        throw new Error("Unexpected command: " + command);
+      }
+    });
+    assert.equal(result.state, "source_present_uv_missing");
+    assert.equal(commands.some(call => call.command === "sh"), false);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
