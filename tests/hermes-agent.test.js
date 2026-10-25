@@ -38,7 +38,7 @@ test("Hermes direct chat provider is restricted to the configured owner", () => 
   assert.equal(resolveHermesAgentProvider(configuredEnv()), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv(), "00000000-0000-4000-8000-000000000002"), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "http://hermes.example.com/v1" }), ownerId), null);
-  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://user:pass@hermes.example/v1" }), ownerId), null);
+  assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://user:pass@hermes.example.com/v1" }), ownerId), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: "https://hermes.example.com/v2" }), ownerId), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_CHAT_PROVIDER: "false" }), ownerId), null);
   assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_API_KEY: "" }), ownerId), null);
