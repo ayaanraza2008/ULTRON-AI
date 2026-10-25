@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const LOCAL_SUFFIXES = [
   ".localhost", ".local", ".localdomain", ".internal", ".intranet",
-  ".lan", ".home", ".test", ".invalid"
+  ".lan", ".home", ".test", ".invalid", ".example"
 ];
 
 /**
