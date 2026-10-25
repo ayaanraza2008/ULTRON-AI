@@ -26,7 +26,7 @@ test("Hermes stays disabled until explicitly enabled and configured", async () =
   assert.equal(resolveHermesAgentProvider({ HERMES_AGENT_BASE_URL: "https://hermes.example/v1", HERMES_AGENT_API_KEY: "key" }), null);
   assert.equal(getHermesAgentReadiness({}).state, "disabled_by_config");
   const result = await checkHermesAgentService({
-    env: {}, userId: ownerId,
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: ownerId }, userId: ownerId,
     fetchImpl: async () => { calls++; throw new Error("should not call upstream"); }
   });
   assert.equal(result.state, "blocked");
