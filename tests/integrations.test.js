@@ -269,7 +269,9 @@ test("integration catalog reports readiness without exposing credentials or clai
     COMFYUI_API_KEY: "secret-comfy-test",
     OMNIVOICE_API_BASE_URL: "https://voice.example",
     OMNIVOICE_API_KEY: "secret-voice-test",
-    OMNIVOICE_SYNTHESIS_PATH: "/synthesize"
+    OMNIVOICE_SYNTHESIS_PATH: "/synthesize",
+    OPENVIKING_BASE_URL: "https://openviking.example",
+    OPENVIKING_API_TOKEN: "secret-openviking-test"
   }, async () => { throw new Error("catalog must not call upstream services"); }, async base => {
     const response = await fetch(base + "/api/integrations/catalog");
     assert.equal(response.status, 200);
@@ -279,11 +281,17 @@ test("integration catalog reports readiness without exposing credentials or clai
     const comfy = body.integrations.find(item => item.id === "comfyui");
     const voice = body.integrations.find(item => item.id === "omnivoice");
     const employees = body.integrations.find(item => item.id === "ai-employees");
+    const openViking = body.integrations.find(item => item.id === "openviking");
     assert.equal(comfy.state, "configured_unverified");
     assert.equal(voice.configured, true);
     assert.equal(employees.state, "enabled_guarded_templates");
+    assert.equal(openViking.state, "configured_unverified");
+    assert.equal(openViking.configured, true);
+    assert.deepEqual(openViking.requiredEnv, ["OPENVIKING_BASE_URL", "OPENVIKING_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"]);
+    assert.match(openViking.note, /live search\/read.*verification/i);
     assert.equal(JSON.stringify(body).includes("secret-comfy-test"), false);
     assert.equal(JSON.stringify(body).includes("secret-voice-test"), false);
+    assert.equal(JSON.stringify(body).includes("secret-openviking-test"), false);
   });
 });
 
