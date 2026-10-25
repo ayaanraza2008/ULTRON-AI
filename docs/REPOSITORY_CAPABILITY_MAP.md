@@ -2,7 +2,7 @@
 
 Updated: 2026-10-25
 
-This map covers all 28 repositories supplied for ULTRON. The new registry gives the agent task-matched capability guidance and provides a **configuration-only** status API at `GET /api/agent/repositories` (authenticated). It does not install upstream applications, clone entire projects into the ULTRON server, create provider accounts, or falsely mark a service as working.
+This map covers all 30 registered repository capabilities for ULTRON. The supplied Cactus organization URL resolves to multiple projects; this integration uses `cactus-compute/cactus` as the inference engine plus its related `cactus-compute/needle` micro-model and Whistle speech component. The new registry gives the agent task-matched capability guidance and provides a **configuration-only** status API at `GET /api/agent/repositories` (authenticated). It does not install upstream applications, clone entire projects into the ULTRON server, create provider accounts, or falsely mark a service as working.
 
 ## How automatic routing behaves
 
@@ -45,6 +45,8 @@ This map covers all 28 repositories supplied for ULTRON. The new registry gives 
 | 26 | [OpenDesign](https://github.com/nexu-io/open-design) | Design-system-aware prototype workflow, design review and collaborative agent workspace | Service/API adapter not implemented. Current runtime cannot call a design app merely because the repository is listed. |
 | 27 | [public-apis](https://github.com/public-apis/public-apis) | Discover candidate public APIs by domain and compare auth, rate limits, terms and data handling | Catalog/reference only. Each target API must be separately verified; a listing does not promise free, reliable, or safe service. |
 | 28 | [REA](https://github.com/morluto/rea) | MCP-driven reverse engineering, binary/application/runtime behavior analysis | Local MCP service not connected. Use only on software authorized for inspection; unknown binaries must never execute automatically. |
+| 29 | [Obscura](https://github.com/h4ckf0r0day/obscura) | Headless JS-rendering browser, DOM/text snapshots, public page inspection, MCP browser tools, optional screenshots/PDFs | Owner-scoped Obscura MCP adapter and automatic task routing are implemented and mocked in CI. Requires `OBSCURA_MCP_URL` ending in `/mcp` and `ULTRON_INTEGRATION_OWNER_USER_ID`; remote services must use an HTTPS gateway that validates `OBSCURA_MCP_TOKEN`. Live endpoint is unverified. Adapter permits only public HTTPS page reads and does not expose stealth, proxy rotation, authentication bypass, or form actions. Apache-2.0. |
+| 30 | [Cactus Engine](https://github.com/cactus-compute/cactus) + [Needle](https://github.com/cactus-compute/needle) | Local model inference, tool/function calling, confidence-based fallback, small on-device tool routing, structured extraction, embeddings, Whistle speech-to-text | Optional local-first model provider, health check and confidence threshold fallback are implemented and mocked in CI. Requires an already-running OpenAI-compatible `cactus serve` endpoint (`CACTUS_BASE_URL`, `CACTUS_MODEL`); `CACTUS_API_KEY` is required for remote endpoints. No weights are downloaded by ULTRON. Start with `--no-cloud-handoff` for free/local-first privacy. Cactus core license has custom non-commercial/small-organization restrictions; Needle is Apache-2.0. |
 
 ## Readiness API
 
@@ -65,6 +67,7 @@ State meanings:
 2. Live-test the owner-scoped Chatwoot, Cal.diy and OpenProject read-only adapters on dedicated test data; then implement further read-only adapters for AppFlowy only after API schemas/auth scopes are confirmed.
 3. Add OpenSEO and public-API discovery with explicit cost/terms checks; then Paperclip/OpenViking/OpenDesign as separately hosted adapters.
 4. Build one authenticated desktop bridge for local capture/dictation and the approved Windows action allowlist before adding Cap/OpenWhispr/REA local workflows.
-5. Add the YouTube production pipeline as durable stages with fact/media-rights checks and a human publish gate. Media generation and channel publication are not considered complete until each stage is live-tested.
+5. Configure and live-test Obscura and Cactus/Needle on a local companion or authenticated private endpoint; benchmark on target hardware before enabling model downloads. Keep Cactus cloud handoff disabled unless separately approved.
+6. Add the YouTube production pipeline as durable stages with fact/media-rights checks and a human publish gate. Media generation and channel publication are not considered complete until each stage is live-tested.
 
 This ordering intentionally avoids copying whole, independently deployable applications into the Node backend. It keeps ULTRON modular, free-first, resource-bounded and testable on the target 8 GB RAM / integrated-graphics PC while allowing heavyweight services to run elsewhere.
