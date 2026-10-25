@@ -1733,3 +1733,105 @@ test("worker stop interrupts idle polling sleep promptly", async () => {
   await worker.done;
   assert.equal(worker.getStatus().state, "stopped");
 });
+
+
+test("worker research uses free public HTML search when Tavily is not configured and filters unsafe sources", async () => {
+  let worker;
+  let taskPatch;
+  const task = {
+    id: "task-free-public-research",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "research", query: "solar energy market trends" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.startsWith("https://html.duckduckgo.com/html/?q=")) {
+        assert.equal(options.method, "GET");
+        assert.equal(options.redirect, "error");
+        assert.match(options.headers.Accept, /text\/html/);
+        return new Response(`
+          <div class="result">
+            <a class="result__a" href="http://127.0.0.1/private">Unsafe destination</a>
+            <a class="result__snippet">must not be returned</a>
+          </div>
+          <div class="result">
+            <a class="result__a" href="https://example.com/solar">Solar outlook</a>
+            <a class="result__snippet">Capacity grew &amp; investment increased.</a>
+          </div>`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        taskPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, ...taskPatch }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(taskPatch.status, "COMPLETED");
+  assert.equal(taskPatch.result.provider, "duckduckgo_html");
+  assert.equal(taskPatch.result.sources.length, 1);
+  assert.equal(taskPatch.result.sources[0].title, "Solar outlook");
+  assert.equal(taskPatch.result.sources[0].url, "https://example.com/solar");
+  assert.match(taskPatch.result.sources[0].snippet, /Capacity grew & investment increased/);
+  assert.equal(JSON.stringify(taskPatch).includes("127.0.0.1"), false);
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+});
+
+test("worker falls back to free public search when configured Tavily returns an error", async () => {
+  let worker;
+  let taskPatch;
+  let tavilyCalls = 0;
+  const task = {
+    id: "task-research-free-fallback",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "research", query: "battery storage trends" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      TAVILY_API_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("api.tavily.com/search")) {
+        tavilyCalls += 1;
+        assert.equal(options.redirect, "error");
+        return new Response("temporarily unavailable", { status: 503 });
+      }
+      if (url.startsWith("https://html.duckduckgo.com/html/?q=")) {
+        return new Response('<a class="result__a" href="https://example.com/battery">Battery storage outlook</a><a class="result__snippet">Long-duration storage expanded.</a>', { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        taskPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, ...taskPatch }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(tavilyCalls, 1);
+  assert.equal(taskPatch.status, "COMPLETED");
+  assert.equal(taskPatch.result.provider, "duckduckgo_html");
+  assert.equal(taskPatch.result.sources[0].url, "https://example.com/battery");
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+});
