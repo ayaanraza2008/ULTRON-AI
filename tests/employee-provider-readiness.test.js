@@ -34,7 +34,7 @@ test("employee readiness accepts an already-running local Cactus model without a
 
 test("employee readiness rejects a remote Cactus endpoint without an API key", () => {
   assert.equal(hasEmployeeModelProvider({
-    CACTUS_BASE_URL: "https://cactus.example/v1",
+    CACTUS_BASE_URL: "https://cactus.example.com/v1",
     CACTUS_MODEL: "Cactus-Compute/needle"
   }), false);
 });
