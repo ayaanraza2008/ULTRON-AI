@@ -52,6 +52,36 @@ async function readModelResponseTextLimited(response, maxBytes = MAX_MODEL_RESPO
   }
 }
 
+
+async function readModelResponseBytesLimited(response, maxBytes = MAX_MODEL_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+  }
+  if (!response.body?.getReader) {
+    throw Object.assign(new Error("AI provider response cannot be safely size-limited."), { code: "PROVIDER_RESPONSE_UNBOUNDED", retryable: true });
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("AI provider response exceeded the size limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", retryable: true });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, totalBytes);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 function bounded(value, max = MAX_TEXT) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
@@ -812,8 +842,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       form.append("language", bounded(args.language || "Auto", 40) || "Auto");
       form.append("ref_audio", new Blob([audio], { type: mime }), "voice-reference." + ext);
       const createResponse = await fetchImpl(voiceStudio.baseUrl + "/profiles", { method: "POST", headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" }, body: form, signal: AbortSignal.timeout(60000) });
-      const createRaw = await createResponse.text();
-      if (createRaw.length > 1000000) throw Object.assign(new Error("VoiceStudio profile response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
+      const createRaw = await readModelResponseTextLimited(createResponse, 1_000_000);
       let profile; try { profile = JSON.parse(createRaw); } catch { profile = {}; }
       if (!createResponse.ok) throw Object.assign(new Error("VoiceStudio could not create the cloned voice profile."), { code: "VOICESTUDIO_PROFILE_CREATE_FAILED", status: createResponse.status === 429 ? 429 : 502 });
       const profileId = bounded(profile.id || profile.profile_id, 160);
@@ -835,8 +864,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         body: JSON.stringify({ description }),
         signal: AbortSignal.timeout(15000)
       });
-      const describeRaw = await describeResponse.text();
-      if (describeRaw.length > 1000000) throw Object.assign(new Error("VoiceStudio description response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
+      const describeRaw = await readModelResponseTextLimited(describeResponse, 1_000_000);
       if (!describeResponse.ok) throw Object.assign(new Error("VoiceStudio could not interpret the voice description."), { code: "VOICESTUDIO_DESCRIBE_FAILED", status: describeResponse.status === 429 ? 429 : 502 });
       let design; try { design = JSON.parse(describeRaw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid description JSON."), { code: "VOICESTUDIO_DESCRIBE_INVALID", status: 502 }); }
       if (!Array.isArray(design.matched) || design.matched.length === 0 || !design.attrs || typeof design.attrs !== "object") return { provider: "voicestudio", state: "needs_input", blocker: "Voice description did not match supported design attributes. Try specifying gender, age, pitch, whisper style, or a supported accent.", unmatched: Array.isArray(design.unmatched) ? design.unmatched.slice(0, 20) : [] };
@@ -852,8 +880,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         body: form,
         signal: AbortSignal.timeout(45000)
       });
-      const createRaw = await createResponse.text();
-      if (createRaw.length > 1000000) throw Object.assign(new Error("VoiceStudio profile response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
+      const createRaw = await readModelResponseTextLimited(createResponse, 1_000_000);
       let profile; try { profile = JSON.parse(createRaw); } catch { profile = {}; }
       if (!createResponse.ok) throw Object.assign(new Error("VoiceStudio could not save the voice profile."), { code: "VOICESTUDIO_PROFILE_CREATE_FAILED", status: createResponse.status === 429 ? 429 : 502 });
       return { provider: "voicestudio", state: "completed", profileId: bounded(profile.id || profile.profile_id, 160), name: bounded(profile.name || profileName, 100), kind: "design", language, attrs: design.attrs, unmatched: Array.isArray(design.unmatched) ? design.unmatched.slice(0, 20) : [], sampleReady: Boolean(profile.ref_audio_path || profile.locked_audio_path) };
@@ -902,7 +929,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           signal: AbortSignal.timeout(120000)
         });
         if (!response.ok) throw Object.assign(new Error("VoiceStudio speech synthesis failed."), { code: "VOICESTUDIO_SYNTHESIS_FAILED", status: response.status === 429 ? 429 : 502 });
-        const audio = Buffer.from(await response.arrayBuffer());
+        const audio = await readModelResponseBytesLimited(response, 12 * 1024 * 1024);
         if (!audio.length || audio.byteLength > 12 * 1024 * 1024) throw Object.assign(new Error("VoiceStudio audio was empty or exceeded the 12 MB limit."), { code: "VOICESTUDIO_AUDIO_SIZE_INVALID", status: 502 });
         return { provider: "voicestudio", state: "completed", format: "wav", contentType: response.headers.get("content-type") || "audio/wav", audioBase64: audio.toString("base64"), bytes: audio.byteLength, note: "Audio generated; a client audio player is required to play it." };
       }
