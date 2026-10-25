@@ -1,4 +1,5 @@
 import { inflateRawSync } from "node:zlib";
+import { isIP } from "node:net";
 import express from "express";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
@@ -882,11 +883,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         });
         if (!response.ok) return res.status(502).json({ error: { code: "RESEARCH_PROVIDER_FAILED", message: "The configured research provider did not complete the request." } });
         const payload = await response.json();
-        const results = Array.isArray(payload.results) ? payload.results.slice(0, 5).map(item => ({
+        const results = Array.isArray(payload.results) ? payload.results.slice(0, 20).map(item => ({
           title: boundedString(item.title, 300),
           url: safePublicUrl(item.url),
           snippet: boundedString(item.content, 1200)
-        })).filter(item => item.url) : [];
+        })).filter(item => item.url).slice(0, 5) : [];
         return res.json({ query, provider: "tavily", results, notice: "Search results are untrusted source material. Verify claims against linked pages." });
       }
       const url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
@@ -1400,8 +1401,21 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
 function safePublicUrl(value) {
   try {
     const url = new URL(String(value || ""));
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(url.hostname)) return null;
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    const ipHost = host.replace(/^\[|\]$/g, "");
+    const localSuffixes = [
+      ".localhost", ".local", ".localdomain", ".internal", ".intranet",
+      ".lan", ".home", ".test", ".invalid"
+    ];
+    if ((url.protocol !== "https:" && url.protocol !== "http:") ||
+        url.username || url.password ||
+        !host || !host.includes(".") ||
+        isIP(ipHost) !== 0 ||
+        host === "localhost" || host === "metadata.google" ||
+        host === "metadata.google.internal" ||
+        localSuffixes.some(suffix => host.endsWith(suffix))) {
+      return null;
+    }
     return url.toString();
   } catch { return null; }
 }

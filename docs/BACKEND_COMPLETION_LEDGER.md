@@ -1,6 +1,6 @@
 # ULTRON AI Backend-Only Completion Ledger
 
-Last reviewed: 2026-10-23  
+Last reviewed: 2026-10-25  
 Scope: backend, intelligence/runtime, integrations, security, tests, deployment verification. Frontend work is explicitly frozen.
 
 This ledger distinguishes repository code from live, end-to-end proof. A module or environment variable being present is not proof that its external service works.
@@ -8,9 +8,10 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 ## Verified repository and workflow state
 
 - Repository: `ayaanraza2008/ULTRON-AI`
-- Active engineering branch: `autonomy/guard-production-operations`
-- Changes are not merged to `main`; production deployment has not been triggered by this work.
-- Latest verified CI run checked during this review: [run 39997308408](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/39997308408). The `test` job passed `npm install --ignore-scripts`, `npm run check`, `npm test`, and the deployed health smoke test; `world-intelligence-build` passed the pinned God’s Eye build and injected ULTRON bridge verification. These results apply to the commit tested by that run only, not to later commits.
+- Latest merged `main` commit at review: `4f45c8d6589592435fe785ebc199d1cb31a543a9` — Hermes Agent adapter, task routing, owner-scoped readiness, opt-in chat-provider support, docs and tests.
+- CI for that exact merged commit passed in [run 40176109419](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40176109419): syntax checks, `npm test`, deployed health smoke, pinned God’s Eye build, and injected ULTRON bridge verification. The deployed health smoke checks configuration/readiness flags only; it does not prove live model inference or authenticated user workflows.
+- Security follow-up [PR #214](https://github.com/ayaanraza2008/ULTRON-AI/pull/214) hardens public search-result URLs and corrects stale capability records. Its CI must pass on its exact latest commit before merge.
+- Render service `ultron-ai` is on the free plan and auto-deploys from `main`. The deploy for `4f45c8d` failed because Render reported `pipeline_minutes_exhausted`; the latest Hermes code has therefore **not** been verified as deployed. Do not trigger another deploy or upgrade the plan to bypass the quota.
 - Existing backend modules include Express APIs, model-provider routing, task worker, Supabase task persistence, integration adapters, research/quality gates, memory adapters, and secret-free runtime readiness reporting.
 - Frontend source remains out of scope for this phase.
 
@@ -36,7 +37,7 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 | Scheduling and employee routines | Implemented partially; live queue unverified | Schedule-claim path exists. Live database last showed zero schedules and zero tasks; run controlled E2E after a test schedule is created. |
 | Security and operational audit | Partially implemented; live RLS inspected | All seven public application tables have RLS enabled; observed policies scope ordinary authenticated reads/writes to `auth.uid()`. Supabase advisor warns leaked-password protection is disabled. Some own-row task policies allow clients to update task state directly; assess a controlled transition API before narrowing grants because current server routes use user-scoped access. Five indexes are reported unused while the queue tables are empty; do not remove them without workload evidence. Rate limits, log redaction, and backup/recovery settings still need review. |
 | Production worker health | Unverified | Requires authorized Render logs/runtime configuration inspection and a real task execution. No deployment or configuration change is part of this ledger update. |
-| Automated tests and CI | Latest observed run passed; exact candidate must stay current | CI run 39997308408 passed syntax checks, tests, deployed health smoke test, and the pinned God’s Eye bridge build. Re-check CI after every subsequent code or documentation commit before merging. |
+| Automated tests and CI | Latest merged candidate passed; newer PR in validation | CI run 40176109419 passed syntax checks, tests, deployed health smoke test, and the pinned God’s Eye bridge build for main commit 4f45c8d. Security PR #214 requires a green run for its latest head SHA before merge. |
 | Frontend | Frozen by directive | No frontend work until backend acceptance review; keep UI unchanged. |
 
 ## Acceptance gates before backend completion review
