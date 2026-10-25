@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readJsonLimited } from "../scripts/supabase-e2e-response.js";
 
 const EXPECTED_PROJECT_REF = "opdjfhwepmcprbqojpat";
 const CONFIRM_WRITES_VALUE = "CONFIRM_ULTRON_E2E_WRITES";
@@ -33,15 +34,6 @@ function readConfig(env = process.env) {
 
 const config = readConfig();
 
-async function readJson(response) {
-  const raw = await response.text();
-  if (Buffer.byteLength(raw, "utf8") > 1_000_000) {
-    throw new Error("Supabase E2E response exceeded the 1 MB safety limit.");
-  }
-  try { return raw ? JSON.parse(raw) : null; }
-  catch { throw new Error("Supabase E2E endpoint returned malformed JSON."); }
-}
-
 async function request(url, { apiKey, accessToken, method = "GET", body, prefer } = {}) {
   const response = await fetch(url, {
     method,
@@ -56,7 +48,7 @@ async function request(url, { apiKey, accessToken, method = "GET", body, prefer 
     redirect: "error",
     signal: AbortSignal.timeout(TIMEOUT_MS)
   });
-  const payload = response.status === 204 ? null : await readJson(response);
+  const payload = response.status === 204 ? null : await readJsonLimited(response);
   return { response, payload };
 }
 
