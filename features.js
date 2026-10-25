@@ -974,6 +974,81 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     } catch (error) { res.status(error.status || 502).json({ error: { code: "TASK_READ_FAILED", message: error.message } }); }
   });
 
+  // Return task lifecycle plus a bounded, user-scoped checkpoint timeline.
+  // Never expose raw audit metadata, prompt text, credentials, or unrelated user events.
+  router.get("/tasks/:id/progress", requireSupabaseUser, async (req, res) => {
+    const taskId = String(req.params.id || "");
+    if (!/^[0-9a-f-]{36}$/i.test(taskId)) {
+      return res.status(400).json({ error: { code: "INVALID_TASK_ID", message: "Task ID is invalid." } });
+    }
+    const userId = String(req.supabaseUser?.id || "");
+    if (!/^[0-9a-f-]{36}$/i.test(userId)) {
+      return res.status(401).json({ error: { code: "SESSION_USER_INVALID", message: "A valid authenticated user is required." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "GET",
+        "?id=eq." + encodeURIComponent(taskId) + "&user_id=eq." + encodeURIComponent(userId) +
+        "&select=id,status,started_at,finished_at,created_at,updated_at,error_code&limit=1");
+      const task = Array.isArray(rows) ? rows[0] : null;
+      if (!task) return res.status(404).json({ error: { code: "TASK_NOT_FOUND", message: "Task was not found." } });
+
+      const events = await supabaseRest(req, "audit_events", "GET",
+        "?user_id=eq." + encodeURIComponent(userId) + "&target_type=eq.agent_task&target_id=eq." +
+        encodeURIComponent(taskId) + "&select=action,outcome,metadata,created_at&order=created_at.asc&limit=100");
+      const checkpoints = (Array.isArray(events) ? events : [])
+        .filter(event => event && (
+          event.action === "task.created" ||
+          event.action === "task.started" ||
+          event.action === "task.completed" ||
+          event.action === "task.failed" ||
+          event.action === "task.blocked" ||
+          event.action === "task.retry_scheduled" ||
+          event.action === "task.retry_discarded" ||
+          event.action === "autonomous.stage"
+        ))
+        .map(event => {
+          const meta = event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+            ? event.metadata : {};
+          const stage = event.action === "autonomous.stage" &&
+            typeof meta.stage === "string" && /^[a-z0-9_-]{1,80}$/i.test(meta.stage)
+            ? meta.stage : undefined;
+          return {
+            action: boundedString(event.action, 120),
+            outcome: boundedString(event.outcome, 40),
+            ...(stage ? { stage } : {}),
+            timestamp: boundedString(event.created_at, 40)
+          };
+        });
+
+      const state = boundedString(task.status, 40).toUpperCase();
+      const isComplete = state === "COMPLETED";
+      const isTerminalFailure = ["FAILED", "CANCELLED", "BLOCKED", "WAITING_FOR_PERMISSION"].includes(state);
+      const lastCheckpoint = checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({
+        task: {
+          id: task.id,
+          status: state,
+          startedAt: task.started_at || null,
+          finishedAt: task.finished_at || null,
+          createdAt: task.created_at || null,
+          updatedAt: task.updated_at || null,
+          errorCode: boundedString(task.error_code, 80) || null
+        },
+        progress: {
+          state: isComplete ? "completed" : isTerminalFailure ? "stopped" : state === "RUNNING" ? "running" : "queued",
+          percent: isComplete ? 100 : null,
+          latestStage: lastCheckpoint?.stage || lastCheckpoint?.action || null,
+          lastCheckpointAt: lastCheckpoint?.timestamp || null,
+          checkpointCount: checkpoints.length
+        },
+        checkpoints
+      });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "TASK_PROGRESS_READ_FAILED", message: "Task progress is temporarily unavailable." } });
+    }
+  });
+
   router.post("/tasks", requireSupabaseUser, async (req, res) => {
     const title = boundedString(req.body?.title, 240);
     const description = boundedString(req.body?.description, 12000);
