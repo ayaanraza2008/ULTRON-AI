@@ -656,7 +656,32 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         if (error?.code === "PROVIDER_RESPONSE_TOO_LARGE") throw error;
       }
       if (!response.ok) return { state: "failed", execution: "browser_bridge", status: response.status, error: bounded(body.detail || body.error || "Browser bridge request failed.", 500) };
-      return { state: body.status === "completed" ? "completed" : "unknown", execution: "browser_use", result: bounded(body.result, 12000), steps: body.steps, model: body.model };
+      const bridgeStatus = bounded(body.status, 40).toLowerCase();
+      const bridgeResult = bounded(body.result, 12000);
+      const bridgeSteps = Array.isArray(body.steps) ? body.steps.slice(0, 30) : undefined;
+      const bridgeModel = bounded(body.model, 120);
+      if (bridgeStatus === "failed") {
+        return {
+          state: "failed", execution: "browser_use",
+          error: { code: "BROWSER_TASK_FAILED", message: bounded(body.error || body.detail, 500) || "The browser bridge reported that the task failed." },
+          ...(bridgeResult ? { result: bridgeResult } : {}),
+          steps: bridgeSteps, model: bridgeModel || undefined
+        };
+      }
+      if (bridgeStatus !== "completed" || !bridgeResult) {
+        return {
+          state: "unknown", execution: "browser_use",
+          error: {
+            code: "BROWSER_RESULT_UNVERIFIED",
+            message: bridgeStatus === "completed"
+              ? "The browser bridge reported completion but returned no result text; the outcome is unverified."
+              : "The browser bridge did not confirm a completed task."
+          },
+          ...(bridgeResult ? { result: bridgeResult } : {}),
+          steps: bridgeSteps, model: bridgeModel || undefined
+        };
+      }
+      return { state: "completed", execution: "browser_use", result: bridgeResult, steps: bridgeSteps, model: bridgeModel || undefined };
     }
     if (name === "geo_sleuth_investigate") {
       const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};
