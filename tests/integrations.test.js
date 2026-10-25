@@ -94,7 +94,7 @@ test("ComfyUI queue forwards workflow to the configured API and returns prompt i
     });
     assert.equal(response.status, 202);
     assert.equal((await response.json()).promptId, "prompt_123");
-    assert.equal(request.url, "https://comfy.example/prompt");
+    assert.equal(request.url, "https://comfy.example.com/prompt");
     assert.equal(request.options.headers.Authorization, "Bearer test-token");
     assert.equal(request.options.redirect, "error");
     assert.equal(JSON.parse(request.options.body).prompt["1"].class_type, "CheckpointLoaderSimple");
@@ -145,7 +145,7 @@ test("OmniVoice sends payload to the configured provider path", async () => {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: { text: "hello", language: "en" } })
     });
     assert.equal(response.status, 200);
-    assert.equal(request.url, "https://voice.example/v1/synthesize");
+    assert.equal(request.url, "https://voice.example.com/v1/synthesize");
     assert.equal(request.options.headers.Authorization, "Bearer token");
     assert.equal(request.options.redirect, "error");
     assert.equal((await response.json()).result.audioBase64, "YXVkaW8=");
@@ -188,7 +188,7 @@ test("Handy forwards valid canonical base64 audio to the configured bridge", asy
       body: JSON.stringify({ payload: { audioBase64: "UklGRg==", language: "en" } })
     });
     assert.equal(response.status, 200);
-    assert.equal(request.url, "https://handy.example/transcribe");
+    assert.equal(request.url, "https://handy.example.com/transcribe");
     assert.equal(request.options.headers.Authorization, "Bearer token");
     assert.equal(request.options.redirect, "error");
     assert.equal(JSON.parse(request.options.body).audioBase64, "UklGRg==");
@@ -211,7 +211,7 @@ test("ComfyUI status reports device and queue counts", async () => {
     assert.equal(body.system.devices[0].name, "GPU 0");
     assert.deepEqual(body.queue, { running: 1, pending: 2 });
   });
-  assert.deepEqual(urls.sort(), ["https://comfy.example/queue", "https://comfy.example/system_stats"].sort());
+  assert.deepEqual(urls.sort(), ["https://comfy.example.com/queue", "https://comfy.example.com/system_stats"].sort());
 });
 
 test("ComfyUI queue inspection summarizes jobs without returning workflow payloads", async () => {
@@ -230,7 +230,7 @@ test("ComfyUI queue inspection summarizes jobs without returning workflow payloa
     assert.equal(body.running[0].workflowName, "Test workflow");
     assert.equal(body.pending[0].promptId, "waiting_456");
     assert.equal(JSON.stringify(body).includes("large workflow"), false);
-    assert.equal(requestedUrl, "https://comfy.example/queue");
+    assert.equal(requestedUrl, "https://comfy.example.com/queue");
   });
 });
 
@@ -242,7 +242,7 @@ test("ComfyUI queued-job cancellation sends only the requested prompt id", async
   }, async base => {
     const response = await fetch(base + "/api/integrations/comfyui/jobs/queued_123", { method: "DELETE" });
     assert.equal(response.status, 200);
-    assert.equal(request.url, "https://comfy.example/queue");
+    assert.equal(request.url, "https://comfy.example.com/queue");
     assert.equal(request.options.method, "POST");
     assert.deepEqual(JSON.parse(request.options.body), { delete: ["queued_123"] });
     assert.equal(request.options.headers.Authorization, "Bearer token");
