@@ -230,7 +230,7 @@ function buildFallbackCalls(text) {
   const intent = extractIntent(text);
   const browserGuidance = buildBrowserUseGuidance(text);
   const obscuraRequested = /\b(obscura|take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|page snapshot|scrape (?:this|the|a|public) page|rendered page capture)\b/i.test(text);
-  const captureRequested = /\b(take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|pdf export)\b/i.test(text);
+  const captureRequested = /\b(take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|export.{0,80}\bpdf\b|save (?:the )?page as pdf|make (?:a )?pdf of|pdf export)\b/i.test(text);
   const urlMatch = text.match(/https:\/\/[^\s<>"\x27)]+/i);
   const targetUrl = urlMatch ? urlMatch[0].replace(/[.,;!?]+$/, "") : "";
   if (browserGuidance.browserRequested && !(obscuraRequested && targetUrl)) add("browser_use", { task: bounded(text, 2500), maxSteps: 8 });
