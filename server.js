@@ -293,7 +293,7 @@ function cactusCompletionStream(completion) {
     { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: { content }, finish_reason: null }] },
     { id, object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }
   ];
-  const body = events.map(event => "data: " + JSON.stringify(event) + "\n\n").join("") + "data: [DONE]\\n\\n";
+  const body = events.map(event => "data: " + JSON.stringify(event) + "\n\n").join("") + "data: [DONE]\n\n";
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
