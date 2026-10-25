@@ -30,24 +30,32 @@ test("matching is bounded and empty tasks do not pick arbitrary repositories", (
 test("readiness reports key names/states without returning credential values", () => {
   const secret = "do-not-return-this-secret";
   const status = getRepositoryCapabilityStatus({
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
     CHATWOOT_BASE_URL: "https://support.example.test",
     CHATWOOT_API_TOKEN: secret,
+    CHATWOOT_ACCOUNT_ID: "12",
     GEO_SLEUTH_ENABLED: "true",
     GEO_SLEUTH_ROOT: "/opt/geo-sleuth",
-    OPENPROJECT_API_TOKEN: "configured-token"
+    OPENPROJECT_BASE_URL: "https://projects.example",
+    OPENPROJECT_API_TOKEN: "configured-token",
+    CALDIY_BASE_URL: "https://cal.example",
+    CALDIY_API_TOKEN: "cal-secret"
   });
   const chatwoot = status.integrations.find(item => item.id === "chatwoot");
   const geo = status.integrations.find(item => item.id === "geo-sleuth");
   const openproject = status.integrations.find(item => item.id === "openproject");
+  const caldiy = status.integrations.find(item => item.id === "cal-diy");
   const godsEye = status.integrations.find(item => item.id === "gods-eye-view");
   const kaliGpt = status.integrations.find(item => item.id === "kaligpt");
   assert.equal(godsEye.state, "adapter_present_unverified_live");
   assert.equal(kaliGpt.state, "bounded_security_routes_present");
-  assert.equal(chatwoot.state, "credentials_present_adapter_missing");
+  assert.equal(chatwoot.state, "configured_unverified");
   assert.equal(geo.state, "configured_unverified");
-  assert.equal(openproject.state, "adapter_not_implemented");
+  assert.equal(openproject.state, "configured_unverified");
+  assert.equal(caldiy.state, "configured_unverified");
   assert.equal(JSON.stringify(status).includes(secret), false);
   assert.equal(JSON.stringify(status).includes("configured-token"), false);
+  assert.equal(JSON.stringify(status).includes("cal-secret"), false);
 });
 
 test("task guidance states real limitations and selects matches", () => {
