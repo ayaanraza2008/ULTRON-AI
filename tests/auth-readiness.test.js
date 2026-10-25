@@ -24,7 +24,7 @@ test("readiness blocks Google OAuth without a secure callback and blocks phone O
     env: {
       SUPABASE_URL: "https://project.example.supabase.co",
       SUPABASE_PUBLISHABLE_KEY: "synthetic-publishable-key",
-      ULTRON_AUTH_CALLBACK_URL: "http://untrusted.example/api/auth/google/callback"
+      ULTRON_AUTH_CALLBACK_URL: "http://untrusted.example.com/api/auth/google/callback"
     },
     supabaseConfigured: false
   });
