@@ -33,10 +33,33 @@ function readConfig(env = process.env) {
 
 const config = readConfig();
 
-async function readJson(response) {
-  const raw = await response.text();
-  if (Buffer.byteLength(raw, "utf8") > 1_000_000) {
-    throw new Error("Supabase E2E response exceeded the 1 MB safety limit.");
+export async function readJsonLimited(response, maxBytes = 1_000_000) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw new Error("Supabase E2E response exceeded the configured size limit.");
+  }
+  if (!response.body?.getReader) {
+    throw new Error("Supabase E2E response cannot be size-limited without a streaming body.");
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw new Error("Supabase E2E response exceeded the configured size limit.");
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+  } finally {
+    try { reader.releaseLock(); } catch {}
   }
   try { return raw ? JSON.parse(raw) : null; }
   catch { throw new Error("Supabase E2E endpoint returned malformed JSON."); }
@@ -56,7 +79,7 @@ async function request(url, { apiKey, accessToken, method = "GET", body, prefer 
     redirect: "error",
     signal: AbortSignal.timeout(TIMEOUT_MS)
   });
-  const payload = response.status === 204 ? null : await readJson(response);
+  const payload = response.status === 204 ? null : await readJsonLimited(response);
   return { response, payload };
 }
 
