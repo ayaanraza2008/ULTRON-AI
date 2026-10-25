@@ -20,6 +20,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const employeesEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const hasGeoSleuth = env.GEO_SLEUTH_ENABLED === "true";
   const hasIntegrationOwner = Boolean(typeof env.ULTRON_INTEGRATION_OWNER_USER_ID === "string" && env.ULTRON_INTEGRATION_OWNER_USER_ID.trim());
+  const hasDesktopCompanion = hasIntegrationOwner && safeBaseUrl(env.ULTRON_DESKTOP_AGENT_URL) && Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN);
   const hasChatwoot = hasIntegrationOwner && safeBaseUrl(env.CHATWOOT_BASE_URL) && Boolean(env.CHATWOOT_API_TOKEN) && /^\d+$/.test(String(env.CHATWOOT_ACCOUNT_ID || ""));
   const hasOpenProject = hasIntegrationOwner && safeBaseUrl(env.OPENPROJECT_BASE_URL) && Boolean(env.OPENPROJECT_API_TOKEN);
   const hasCalDiy = hasIntegrationOwner && safeBaseUrl(env.CALDIY_BASE_URL) && Boolean(env.CALDIY_API_TOKEN);
@@ -214,6 +215,19 @@ export function buildIntegrationCatalog(env = process.env) {
       note: employeesEnabled
         ? "Routine templates are enabled in guarded mode; external accounts, schedules, and consequential actions still require explicit setup and confirmation."
         : "Routine orchestration is disabled by default. Enable only after task storage, audit logging, and approval gates are verified."
+    },
+    {
+      id: "windows-desktop-companion",
+      name: "Windows Desktop Companion",
+      capability: "Owner-scoped read-only device pairing and status check; no command execution yet",
+      state: hasDesktopCompanion ? "configured_unverified" : "desktop_companion_required",
+      configured: Boolean(hasDesktopCompanion),
+      mode: "owner_scoped_read_only_status_probe",
+      requiredEnv: ["ULTRON_DESKTOP_AGENT_URL", "ULTRON_DESKTOP_AGENT_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tool: check_desktop_companion"],
+      note: hasDesktopCompanion
+        ? "Bridge settings are present; the protocol must return a paired Windows-device status. This adapter is read-only and cannot run commands or control the PC."
+        : "Requires a separately installed Windows companion reachable through HTTPS and an owner-scoped server token. Shell/keyboard/mouse actions are not exposed by this status adapter."
     }
   ];
 }
