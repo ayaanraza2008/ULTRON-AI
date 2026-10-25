@@ -28,6 +28,7 @@ test("employee readiness rejects alternate providers with missing credentials or
 test("employee/coding readiness accepts a configured Hermes Agent gateway", () => {
   assert.equal(hasEmployeeModelProvider({
     HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_CHAT_PROVIDER: "true",
     HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
     HERMES_AGENT_API_KEY: "synthetic-hermes-key",
     HERMES_AGENT_MODEL: "hermes-agent"
