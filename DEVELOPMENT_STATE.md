@@ -1,6 +1,6 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-24 UTC
+Last verified: 2026-10-25 UTC
 
 ## Operating constraints
 - Backend-first. Do not redesign, rebuild, or delete frontend source until explicitly authorized.
@@ -72,3 +72,23 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Included provider fallback and unsafe URL regression work previously developed in drafts #185–#191: feature provider fallback, Browser Use alternate-provider proxy, worker URL validation, unbounded integration response protection, query/fragment rejection, and opt-in two-account Supabase isolation coverage.
 - The Supabase two-account test remains opt-in and is not considered live-verified until it runs with dedicated accounts and explicit write confirmation.
 - Production main remains untouched in this branch; all runtime credentials and provider delivery checks remain operator-controlled.
+
+
+## 2026-10-25 live deployment and safety checkpoint
+
+- PR #250 (OpenViking upstream URL validation) was merged to `main`. Its GitHub CI test and pinned world-intelligence build passed. Render could not deploy the new commit because the workspace exhausted its monthly build-pipeline minutes.
+- PR #251 (shared upstream URL hardening for model-provider and Browser Use dispatch) was merged to `main`. Its GitHub CI test and pinned world-intelligence build passed. The code is committed, but its Render deployment is not live-verified.
+- PR #252 consolidates upstream URL checks into `network-safety.js`, aligns runtime readiness with the actual dispatch policy, and adds regression tests. At this checkpoint, CI passed (458 tests passed, 0 failed, 1 skipped) before this status-note update. The PR remains open and the code is not deployed.
+- Render event history for `ultron-ai`, `ultron-browser-use`, `ultron-world-intelligence`, `ultron-world-intelligence-live`, and `ultron-world-intelligence-globe` records `pipeline_minutes_exhausted` for each latest build. This is a workspace quota blocker, not evidence that five application builds independently failed compilation.
+- The live `/api/health` endpoint returned `status: ok` and reported provider/access/Supabase configuration present, but did not report a deployed revision. Treat that as an older/unattributed process-health response only; do not infer successful current-code deployment or real model inference from it.
+- The repository `render.yaml` defines build filters, but the active services still retriggered together on recent commits. The current Render service metadata did not expose those filters as active settings, so the Blueprint/build-filter configuration still requires Dashboard sync or direct per-service configuration after build quota is restored.
+- Supabase `opdjfhwepmcprbqojpat` reports `ACTIVE_HEALTHY`. Read-only inspection showed all seven public tables have RLS enabled and anonymous SELECT denied. The live task table was empty during this check, so real worker task completion has not been demonstrated.
+- Supabase Security Advisor still reports `Leaked Password Protection Disabled`. Two-account authenticated isolation, real model inference, real background worker completion, confirmation email delivery, Google/phone sign-in and desktop pairing remain unverified.
+
+## Current release blockers
+
+1. Free-first deployment: do not increase spend limits or add paid pipeline minutes automatically. Render's included build-pipeline allowance is monthly; if spend/payment safeguards stop supplementary minutes, builds remain blocked until the next monthly reset or an owner-approved billing change.
+2. Configure/sync the existing Render build filters so unrelated backend commits do not rebuild Browser Use and all duplicate world-intelligence services.
+3. After builds resume, deploy the reviewed main commit, verify the active revision and health checks, then run the real model smoke check with server-side secrets, followed by an explicitly confirmed worker integration smoke test using a dedicated test user.
+4. Enable Supabase leaked-password protection in Auth settings and rerun security advisors.
+5. Keep the frontend and Windows UI deferred; do not claim PC control until an authenticated local companion is implemented, paired and verified.
