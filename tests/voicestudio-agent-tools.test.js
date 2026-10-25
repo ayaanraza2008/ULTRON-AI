@@ -7,7 +7,7 @@ async function withServer(env, fetchImpl, run) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
   const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
-  app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, logger: { warn() {} } }));
+  app.use("/api", createAgentRouter({ env: { ...env, ULTRON_INTEGRATION_OWNER_USER_ID: env.ULTRON_INTEGRATION_OWNER_USER_ID ?? "00000000-0000-4000-8000-000000000001" }, fetchImpl, requireSupabaseUser, logger: { warn() {} } }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
