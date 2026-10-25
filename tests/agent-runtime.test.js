@@ -198,6 +198,50 @@ test("agent automatically checks integration readiness when a free model omits t
   });
 });
 
+test("agent can inspect task-matched repository readiness without exposing credentials", async () => {
+  let providerCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "test-only",
+    CHATWOOT_BASE_URL: "https://chat.example",
+    CHATWOOT_API_TOKEN: "private-chat-secret",
+    CHATWOOT_ACCOUNT_ID: "12",
+    OPENPROJECT_BASE_URL: "https://projects.example",
+    OPENPROJECT_API_TOKEN: "private-project-secret",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  };
+  await withServer(env, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      const payload = JSON.parse(options.body);
+      assert.ok(payload.tools.some(tool => tool.function?.name === "check_repository_capabilities"));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "capability-status-call", type: "function",
+        function: { name: "check_repository_capabilities", arguments: JSON.stringify({ task: "Review the Chatwoot support inbox and OpenProject task board" }) }
+      }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The readiness map identified the relevant connectors; live API verification is still needed." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Check which tools are available for Chatwoot support and OpenProject tasks" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolsUsed[0].name, "check_repository_capabilities");
+    assert.equal(body.toolsUsed[0].ok, true);
+    const result = body.toolResults[0].result;
+    assert.equal(result.repositoryCount, 28);
+    assert.ok(result.taskMatches.some(item => item.id === "chatwoot"));
+    assert.ok(result.taskMatches.some(item => item.id === "openproject"));
+    assert.ok(result.taskMatches.every(item => item.state === "configured_unverified"));
+    const serialized = JSON.stringify(result);
+    assert.equal(serialized.includes("private-chat-secret"), false);
+    assert.equal(serialized.includes("private-project-secret"), false);
+    assert.equal(providerCalls, 2);
+  });
+});
+
 test("agent tool execution fails closed for invalid employee roles", async () => {
   let providerCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only" }, async (_url, options) => {
