@@ -201,18 +201,21 @@ export async function runWorkerSmoke({
     await sleepImpl(Math.max(1, Math.min(5000, Number(pollIntervalMs) || 5000)));
   }
 
-  // If the worker never claimed the task, cancel only while it is still QUEUED.
-  // A concurrently running task is deliberately left intact to avoid a state race.
+  // A timed-out smoke task can still be running. Cancel it with a conditional
+  // state transition so the worker's own conditional completion write cannot
+  // overwrite cancellation. If completion wins the race, do not delete that row.
+  const cancellableState = ["QUEUED", "RUNNING"].includes(observedState) ? observedState : "";
   let cleanupState = "manual_cleanup_needed";
-  if (observedState === "QUEUED") {
+  if (cancellableState) {
     try {
-      const cancelled = await requestJson(fetchImpl, baseUrl + "/rest/v1/agent_tasks?id=eq." + taskId + "&status=eq.QUEUED", headers, {
+      const cancelled = await requestJson(fetchImpl, baseUrl + "/rest/v1/agent_tasks?id=eq." + taskId + "&status=eq." + cancellableState, headers, {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
         body: JSON.stringify({ status: "CANCELLED", error_code: "SMOKE_TIMEOUT", finished_at: now(), updated_at: now() })
       });
       const updated = Array.isArray(cancelled) ? cancelled[0] : null;
       if (updated?.status === "CANCELLED") cleanupState = await cleanup();
+      else cleanupState = "state_changed_manual_cleanup_needed";
     } catch {
       cleanupState = "manual_cleanup_needed";
     }
