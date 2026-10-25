@@ -28,7 +28,7 @@ export function verifyAutonomousOutput({ research, report } = {}) {
     { id: "blockers", pattern: /^#{1,4}\s+(?:blockers|risks|limitations)\b/im },
     { id: "verification", pattern: /^#{1,4}\s+(?:verification criteria|verification|how to verify)\b/im }
   ];
-  const headings = [...answer.matchAll(/^#{1,4}\\s+([^\\r\\n]+?)\\s*$/gm)];
+  const headings = [...answer.matchAll(/^#{1,4}\s+([^\r\n]+?)\s*$/gm)];
   const sectionDetails = requiredSections.map(section => {
     const headingIndex = headings.findIndex(heading => section.pattern.test(heading[0]));
     const heading = headingIndex >= 0 ? headings[headingIndex] : null;
