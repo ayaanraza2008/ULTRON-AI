@@ -76,6 +76,9 @@ A native role/routine planning layer inspired by [markfulton/ai-employees](https
 
 ## Automatic tool routing
 
+A task-matched capability registry covers the 28 user-supplied upstream repositories. ULTRON adds relevant repository-domain guidance automatically and exposes authenticated, configuration-only readiness at `GET /api/agent/repositories` (optional `?task=...` shows matches). This is not a claim that all upstream apps are installed: missing connectors, desktop companions, licenses, model weights, and external credentials remain explicitly marked. See [the repository capability map](docs/REPOSITORY_CAPABILITY_MAP.md).
+
+
 The authenticated `POST /api/agent/run` endpoint lets ULTRON select bounded tools from the user's request. `GET /api/agent/tools` lists readiness without exposing credentials. Available tools include public web research, AI Employee planning/drafting, coding assistance, integration readiness, live ComfyUI status, optional OmniVoice speech, optional HeyGem talking-avatar jobs, optional Handy desktop transcription, and explicitly confirmed ComfyUI workflow submission.
 
 Example request body:
