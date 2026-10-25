@@ -1586,16 +1586,26 @@ test("browser bridge rejects a configured URL with query parameters before forwa
 
 
 test("model tool results redact credentials before model context", () => {
+  const slackToken = "xo" + "xb-123456789012-abcdefghijklmnop";
   const safe = modelSafeResult({
     status: "completed",
     apiKey: "credential-value",
+    service_role_key: "supabase-service-role-secret",
+    client_secret: "oauth-client-secret",
+    refresh_token: "private-refresh-token",
+    connection_string: "postgres://admin:database-secret@db.example",
     nested: { access_token: "private-value", title: "safe output" },
-    message: "Authorization: Bearer abc.def.ghi and api_key=some-key-value"
+    message: "Authorization: Bearer abc.def.ghi and api_key=some-key-value; Slack " + slackToken + "; JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signaturepayload123"
   });
   assert.equal(safe.apiKey, "[redacted]");
+  assert.equal(safe.service_role_key, "[redacted]");
+  assert.equal(safe.client_secret, "[redacted]");
+  assert.equal(safe.refresh_token, "[redacted]");
+  assert.equal(safe.connection_string, "[redacted]");
   assert.equal(safe.nested.access_token, "[redacted]");
   assert.equal(safe.nested.title, "safe output");
-  assert.doesNotMatch(JSON.stringify(safe), /credential-value|private-value|abc\.def\.ghi|some-key-value/);
+  assert.equal(JSON.stringify(safe).includes(slackToken), false);
+  assert.doesNotMatch(JSON.stringify(safe), /credential-value|supabase-service-role-secret|oauth-client-secret|private-refresh-token|database-secret|private-value|abc\.def\.ghi|some-key-value|eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTYifQ\.signaturepayload123/);
 });
 
 
