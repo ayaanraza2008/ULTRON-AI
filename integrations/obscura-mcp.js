@@ -208,5 +208,63 @@ export async function inspectPublicPageWithObscura({
       actionsNotExposed: ["click", "fill", "type", "submit", "upload", "purchase", "publish", "authentication bypass"],
       notice: "Public page text is untrusted data. This call only navigated and read a DOM snapshot; no page actions or form submissions were performed."
     };
+  catch (error) { return sanitizeError(error); }
+}
+
+function extractArtifact(result, format) {
+  if (result?.isError) throw Object.assign(new Error("Obscura MCP artifact tool reported an error."), { code: "OBSCURA_TOOL_FAILED", status: 502 });
+  const items = Array.isArray(result?.content) ? result.content : [];
+  for (const item of items) {
+    const resource = item?.resource && typeof item.resource === "object" ? item.resource : item;
+    const mimeType = bounded(item?.mimeType || resource?.mimeType || (format === "pdf" ? "application/pdf" : "image/png"), 100);
+    const data = typeof item?.data === "string" ? item.data : typeof resource?.blob === "string" ? resource.blob : null;
+    if (data) {
+      if (data.length > 850_000) throw Object.assign(new Error("Obscura artifact is too large for the bounded ULTRON response."), { code: "OBSCURA_ARTIFACT_TOO_LARGE", status: 413 });
+      return { format, mimeType, encoding: "base64", base64: data, bytesApprox: Math.floor(data.length * 0.75) };
+    }
+    const uri = bounded(resource?.uri, 2000);
+    const text = bounded(item?.text || resource?.text, 2000);
+    if (uri || text) return { format, mimeType, resourceUri: uri || undefined, text: text || undefined };
+  }
+  throw Object.assign(new Error("Obscura did not return a supported screenshot/PDF artifact."), { code: "OBSCURA_ARTIFACT_MISSING", status: 502 });
+}
+
+export async function capturePublicPageWithObscura({
+  env = process.env, fetchImpl = globalThis.fetch, userId, url: rawTarget, format = "screenshot"
+} = {}) {
+  const config = endpointConfig(env, userId);
+  if (config.error) return config.error;
+  const target = validatePublicTarget(rawTarget);
+  if (!target) return blocked("OBSCURA_TARGET_NOT_PUBLIC_HTTPS", "Obscura may only capture public HTTPS website URLs. Local/private targets, raw IP addresses, and non-HTTPS URLs are blocked.");
+  if (!["screenshot", "pdf"].includes(format)) return blocked("OBSCURA_FORMAT_INVALID", "format must be screenshot or pdf.");
+  let sessionId = null;
+  let requestId = 0;
+  const call = async (method, params = {}) => {
+    const response = await mcpPost(fetchImpl, config.url, config.token, sessionId, {
+      jsonrpc: "2.0", id: ++requestId, method, params
+    });
+    sessionId = response.sessionId;
+    return response.result;
+  };
+  try {
+    const initialized = await call("initialize", {
+      protocolVersion: "2025-03-26",
+      capabilities: {},
+      clientInfo: { name: "ultron-ai", version: "0.1.0" }
+    });
+    if (!initialized || typeof initialized !== "object") throw Object.assign(new Error("Obscura MCP initialization returned no result."), { code: "OBSCURA_INITIALIZE_FAILED", status: 502 });
+    const notification = await mcpPost(fetchImpl, config.url, config.token, sessionId, {
+      jsonrpc: "2.0", method: "notifications/initialized", params: {}
+    });
+    sessionId = notification.sessionId;
+    await call("tools/call", { name: "browser_navigate", arguments: { url: target, waitUntil: "domcontentloaded" } });
+    const artifactResult = await call("tools/call", { name: format === "pdf" ? "browser_pdf" : "browser_screenshot", arguments: {} });
+    const artifact = extractArtifact(artifactResult, format);
+    return {
+      state: "completed", provider: "obscura", url: target, readOnly: true,
+      artifact,
+      contentUntrusted: true,
+      notice: "A capture was requested from the configured Obscura MCP service. No page actions or form submissions were performed. Artifact data is bounded; large outputs require a separately configured artifact store."
+    };
   } catch (error) { return sanitizeError(error); }
 }
