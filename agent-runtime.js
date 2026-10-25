@@ -420,7 +420,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           signal: AbortSignal.timeout(45000)
         });
         if (!response.ok) {
-          const retryable = response.status === 429 || response.status >= 500;
+          const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
           const error = Object.assign(new Error("AI provider request failed."), { status: response.status === 429 ? 429 : 502, code: "PROVIDER_REQUEST_FAILED", retryable });
           if (!retryable) throw error;
           lastError = error;
