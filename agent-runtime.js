@@ -350,7 +350,7 @@ export function modelSafeResult(value, depth = 0) {
   return out;
 }
 
-export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, supabaseRest, logger = console } = {}) {
+export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
   const router = express.Router();
 
   // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
@@ -661,7 +661,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       if (!Array.isArray(rows) || !rows[0]?.id) throw Object.assign(new Error("Task queue did not return a task ID."), { code: "TASK_CREATE_FAILED", status: 502 });
       let auditRecorded = true;
       try {
-        await supabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created_by_agent_tool", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { role, mode: autonomousWorkflow ? "autonomous_report" : mode, taskType: input.taskType, executionMode: "employee_worker" } }, "return=minimal");
+        await privilegedSupabaseRest(req, "audit_events", "POST", "", { user_id: req.supabaseUser.id, action: "task.created_by_agent_tool", target_type: "agent_task", target_id: rows[0].id, outcome: "allowed", metadata: { role, mode: autonomousWorkflow ? "autonomous_report" : mode, taskType: input.taskType, executionMode: "employee_worker" } }, "return=minimal");
       } catch (error) {
         auditRecorded = false;
         logger.warn?.("Agent employee task audit write failed", { name: error?.name || "Error" });
