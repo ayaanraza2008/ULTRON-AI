@@ -25,10 +25,10 @@ function parseHermesBase(value) {
   // The shared URL policy blocks private/LAN/metadata and reserved IP ranges.
   // Hermes additionally requires a hostname rather than a remote IP literal.
   if (!local && isIP(host) !== 0) return null;
-  const path = url.pathname.replace(/\\/+$/, "");
+  const path = url.pathname.replace(/\/+$/, "");
   if (path && path !== "/v1") return null;
   url.pathname = "/v1";
-  return { baseUrl: url.toString().replace(/\\/+$/, ""), local };
+  return { baseUrl: url.toString().replace(/\/+$/, ""), local };
 }
 
 function blocked(code, message) {
