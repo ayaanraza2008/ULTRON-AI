@@ -80,3 +80,27 @@ test("smoke check clearly blocks when no provider is configured", async () => {
   assert.equal(report.status, "blocked");
   assert.equal(report.reason, "NO_ELIGIBLE_PROVIDER");
 });
+test("provider smoke blocks private, loopback, metadata, and unusual numeric upstream hosts before networking", async () => {
+  const unsafeBases = [
+    "https://127.0.0.1/v1",
+    "https://192.168.1.10/v1",
+    "https://127.1/v1",
+    "https://localhost/v1",
+    "https://[::1]/v1",
+    "https://metadata.google.internal/v1"
+  ];
+  for (const baseUrl of unsafeBases) {
+    let called = false;
+    const report = await runModelProviderSmoke({
+      env: {
+        ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+          { name: "unsafe", baseUrl, apiKeyEnv: "UNSAFE_KEY", model: "fixture-model" }
+        ]),
+        UNSAFE_KEY: "must-not-be-forwarded"
+      },
+      fetchImpl: async () => { called = true; return success(); }
+    });
+    assert.equal(report.status, "blocked", baseUrl);
+    assert.equal(called, false, baseUrl);
+  }
+});

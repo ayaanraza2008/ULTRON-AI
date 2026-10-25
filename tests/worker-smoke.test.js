@@ -125,3 +125,21 @@ test("worker smoke bounds polling and cancels only a still-queued timed-out task
   assert.equal(deleted, true);
   assert.equal(result.cleanup, "deleted");
 });
+test("worker smoke refuses private or non-Supabase endpoints before sending the service-role key", async () => {
+  for (const SUPABASE_URL of [
+    "https://127.0.0.1",
+    "https://192.168.1.10",
+    "https://127.1",
+    "https://metadata.google.internal",
+    "https://attacker.example.com",
+    "https://not-supabase.com"
+  ]) {
+    let called = false;
+    const result = await runWorkerSmoke({
+      env: { ...serviceEnv, SUPABASE_URL },
+      fetchImpl: async () => { called = true; return response([]); }
+    });
+    assert.equal(result.status, "blocked", SUPABASE_URL);
+    assert.equal(called, false, SUPABASE_URL);
+  }
+});
