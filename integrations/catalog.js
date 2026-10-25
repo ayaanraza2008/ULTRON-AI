@@ -2,18 +2,9 @@ import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
+import { safeServiceBase } from "../network-safety.js";
 
-const safeBaseUrl = (value) => {
-  if (typeof value !== "string" || !value.trim()) return false;
-  try {
-    const url = new URL(value.trim());
-    if (url.username || url.password || url.search || url.hash) return false;
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
-  } catch {
-    return false;
-  }
-};
+const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
 /**
  * Returns configuration readiness only. It does not claim that an external
