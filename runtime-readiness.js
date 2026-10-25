@@ -23,7 +23,7 @@ export function buildRuntimeReadiness({
 } = {}) {
   const browserConfigured = secureServiceUrl(env.ULTRON_BROWSER_USE_URL) && truthy(env.ULTRON_BROWSER_USE_TOKEN);
   const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN) && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
-  const desktopAutomationConfigured = truthy(env.ULTRON_DESKTOP_POLL_TOKEN) && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(String(env.ULTRON_DESKTOP_DEVICE_ID || "")) && /^[0-9a-f-]{36}$/i.test(String(env.ULTRON_INTEGRATION_OWNER_USER_ID || ""));
+  const desktopAutomationConfigured = typeof env.ULTRON_DESKTOP_POLL_TOKEN === "string" && env.ULTRON_DESKTOP_POLL_TOKEN.trim().length >= 32 && env.ULTRON_DESKTOP_POLL_TOKEN.trim().length <= 2000 && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(String(env.ULTRON_DESKTOP_DEVICE_ID || "")) && /^[0-9a-f-]{36}$/i.test(String(env.ULTRON_INTEGRATION_OWNER_USER_ID || ""));
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
   const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
