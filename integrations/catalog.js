@@ -192,7 +192,7 @@ export function buildIntegrationCatalog(env = process.env) {
       state: hermesReadiness.state,
       configured: Boolean(hermesReadiness.configured),
       mode: "separate_authenticated_agent_service",
-      requiredEnv: ["HERMES_AGENT_ENABLED=true", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY"],
+      requiredEnv: ["HERMES_AGENT_ENABLED=true", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID for delegated tasks"],
       optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_PRIORITY", "HERMES_AGENT_SUPPORTS_VISION", "HERMES_AGENT_TIMEOUT_SECONDS"],
       apiRoutes: ["agent tools: check_hermes_agent, hermes_agent_task", "model provider: /v1/chat/completions"],
       note: hermesReadiness.configured
