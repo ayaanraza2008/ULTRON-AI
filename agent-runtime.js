@@ -21,6 +21,15 @@ const MODES = new Set(["plan", "draft", "review", "report"]);
 const MAX_TEXT = 6000;
 const MAX_MODEL_RESPONSE_BYTES = 2 * 1024 * 1024;
 
+// Bound the complete provider fallback chain, not just each individual attempt.
+// This keeps a long list of unavailable free providers from holding one request
+// open for several minutes. Operators may tune the budget within safe bounds.
+export function modelRoutingTimeoutMs(env = process.env) {
+  const configured = Number(env.ULTRON_MODEL_TOTAL_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) return 90_000;
+  return Math.max(15_000, Math.min(120_000, Math.trunc(configured)));
+}
+
 async function readModelResponseTextLimited(response, maxBytes = MAX_MODEL_RESPONSE_BYTES) {
   const declaredLength = Number(response.headers?.get?.("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
@@ -429,7 +438,7 @@ function classifyToolDispatchRisk(name, args, requestRisk) {
   };
 }
 
-export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
+export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
   const router = express.Router();
 
   // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
@@ -533,6 +542,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     const providers = configuredModelProviders(userId).filter(provider => !useTools || provider.supportsTools);
     if (!providers.length) throw Object.assign(new Error("No configured AI provider is available. Add OPENROUTER_API_KEY or a valid provider entry with its server-side API key."), { status: 503, code: "PROVIDER_NOT_CONFIGURED" });
     let lastError;
+    const totalTimeoutSignal = createTimeoutSignal(modelRoutingTimeoutMs(env));
     for (const provider of providers) {
       try {
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
@@ -540,7 +550,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
           redirect: "error",
           body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
-          signal: AbortSignal.timeout(45000)
+          signal: AbortSignal.any([createTimeoutSignal(45000), totalTimeoutSignal])
         });
         if (!response.ok) {
           // This loop attempts each configured provider at most once. Provider-specific
@@ -587,6 +597,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         }
         return data;
       } catch (error) {
+        if (totalTimeoutSignal.aborted) {
+          // The total budget is exhausted; do not cascade through already-aborted
+          // fallback requests or report a generic provider failure.
+          throw Object.assign(new Error("AI provider routing exceeded its overall time budget."), {
+            status: 504, code: "PROVIDER_TOTAL_TIMEOUT", retryable: false
+          });
+        }
         if (error?.retryable === false || (error?.status && error.status !== 429 && error.status < 500)) throw error;
         lastError = error;
         logger.warn?.("AI provider network/timeout failure; trying fallback", { provider: provider.name, code: error?.name === "TimeoutError" ? "PROVIDER_TIMEOUT" : error?.code || "PROVIDER_NETWORK_ERROR" });
