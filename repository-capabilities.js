@@ -1,6 +1,7 @@
 import { getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { getCactusReadiness } from "./integrations/cactus.js";
 import { getPaperclipReadiness } from "./integrations/paperclip-services.js";
+import { getHermesAgentReadiness } from "./integrations/hermes-agent.js";
 
 /**
  * Task-matched capability catalog for the user's 30 upstream repository domains.
@@ -248,6 +249,14 @@ const REPOSITORIES = [
     abilities: ["OpenAI-compatible local inference provider", "tool/function calling when supported by the configured model", "confidence-based fallback to the next provider", "Cactus Engine text/speech/vision/RAG features exposed by the installed server", "Needle small on-device tool routing and typed extraction; Whistle speech-to-text when served by the companion runtime"],
     limits: ["Cactus and Needle are separate installed runtimes; ULTRON never downloads model weights. Render cannot reach a PC's loopback endpoint. Start Cactus with --no-cloud-handoff unless remote handoff is explicitly approved. The Cactus core license is limited to personal/non-commercial and specified small organizations; check before commercial deployment."],
     envKeys: ["CACTUS_BASE_URL", "CACTUS_MODEL"], optionalEnv: ["CACTUS_API_KEY", "CACTUS_LOCAL_FIRST", "CACTUS_CONFIDENCE_THRESHOLD", "CACTUS_SUPPORTS_TOOLS"], license: "Cactus core: custom personal/non-commercial and qualifying-small-organization grant; companion Needle: Apache-2.0", source: "https://github.com/cactus-compute/cactus"
+  },
+  {
+    id: "hermes-agent", repo: "NousResearch/hermes-agent", domain: "agent_runtime",
+    match: /\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime|self-improving agent|agent skills|delegate to subagents|agent cron|mcp agent tools)\b/i,
+    integration: "owner_scoped_agent_gateway", status: "adapter_present_unverified_live",
+    abilities: ["tool-enabled delegated agent tasks", "persistent memory and session search", "self-improving skills and reusable procedural memory", "subagents and parallel work", "scheduled routines/cron", "MCP and plugin tools", "web/browser, terminal/files, vision/media and messaging when configured upstream"],
+    limits: ["Hermes is a separately installed runtime. Each feature depends on Hermes-side provider, toolset, plugin, messaging and sandbox configuration. ULTRON only invokes its authenticated API; it does not automatically install Hermes, enable all tools, launch cron jobs or send messages."],
+    envKeys: ["HERMES_AGENT_ENABLED", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_CHAT_PROVIDER"], license: "MIT", source: "https://github.com/NousResearch/hermes-agent"
   }
 ];
 
@@ -276,6 +285,7 @@ function stateFor(record, env) {
     return readiness.configured ? "configured_unverified" : readiness.state;
   }
   if (record.id === "paperclip") return getPaperclipReadiness(env).state;
+  if (record.id === "hermes-agent") return getHermesAgentReadiness(env).state;
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
   if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
   if (!record.envKeys.length && record.status === "bounded_security_routes_present") return record.status;

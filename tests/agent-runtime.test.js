@@ -479,7 +479,7 @@ test("agent can inspect task-matched repository readiness without exposing crede
     assert.equal(body.toolsUsed[0].name, "check_repository_capabilities");
     assert.equal(body.toolsUsed[0].ok, true);
     const result = body.toolResults[0].result;
-    assert.equal(result.repositoryCount, 30);
+    assert.equal(result.repositoryCount, 31);
     assert.ok(result.taskMatches.some(item => item.id === "chatwoot"));
     assert.ok(result.taskMatches.some(item => item.id === "openproject"));
     assert.ok(result.taskMatches.every(item => item.state === "configured_unverified"));
@@ -1537,3 +1537,35 @@ test("agent skips semantically duplicate tool calls when argument key order chan
     assert.equal(providerCalls, 3);
   });
 });
+
+test("Hermes delegated task tool is blocked when ULTRON classifies the task as consequential", async () => {
+  let hermesCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://hermes.example/v1/chat/completions") { hermesCalls++; throw new Error("Hermes must not be called for a destructive task"); }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+      id: "dangerous-hermes-call", type: "function",
+      function: { name: "hermes_agent_task", arguments: JSON.stringify({ task: "Delete all user data and erase all records." }) }
+    }] } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Check a report and do not delete anything." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const call = body.toolResults.find(item => item.name === "hermes_agent_task");
+    assert.equal(call.ok, false);
+    assert.equal(call.result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(hermesCalls, 0);
+  });
+});
+
