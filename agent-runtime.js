@@ -1015,6 +1015,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     throw Object.assign(new Error("Tool is not allowlisted."), { code: "TOOL_NOT_ALLOWED", status: 400 });
   }
 
+  router.get("/agent/desktop-companion/status", requireSupabaseUser, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const result = await checkDesktopCompanion({ env, fetchImpl, userId: req.supabaseUser?.id });
+    res.json(result);
+  });
+
   router.get("/agent/browser-use", requireSupabaseUser, (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const guidance = buildBrowserUseGuidance(bounded(req.query?.task, 2000));
