@@ -390,7 +390,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "check_cactus", description: "Read-only: check whether the configured local Cactus/Needle OpenAI-compatible model server is reachable and list its available model IDs. Does not download models or run inference.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "obscura_inspect_public_page", description: "Read-only: use the configured Obscura MCP browser to navigate to a public HTTPS URL and return a DOM/text snapshot. Private/local targets, authentication bypass, stealth flags, proxy rotation, form submission, purchases, and publishing are blocked.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 } }, required: ["url"], additionalProperties: false } } },
     { type: "function", function: { name: "obscura_capture_public_page", description: "Read-only: use the configured Obscura MCP browser to capture a screenshot or PDF of a public HTTPS URL. Returns a bounded artifact payload/resource; large artifacts may require a separate artifact store. Does not click, fill, submit, upload, purchase, log in, bypass CAPTCHA, or publish.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 }, format: { type: "string", enum: ["screenshot", "pdf"] } }, required: ["url", "format"], additionalProperties: false } } },
-    { type: "function", function: { name: "check_repository_capabilities", description: "Inspect ULTRON readiness for the 30 registered upstream repositories. Use automatically before relying on a listed capability. Configuration-only; never exposes secret values.", parameters: { type: "object", properties: { task: { type: "string", maxLength: 1200 }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "check_repository_capabilities", description: "Inspect ULTRON readiness for the 31 registered upstream repositories. Use automatically before relying on a listed capability. Configuration-only; never exposes secret values.", parameters: { type: "object", properties: { task: { type: "string", maxLength: 1200 }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
     { type: "function", function: { name: "paperclip_read_agent_governance", description: "Read-only: inspect the configured Paperclip company agent roster, dashboard summary, and cost summary. Requires a running Paperclip service and owner guard. Never starts, hires, assigns, pauses, terminates, or changes budgets for agents.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_hermes_agent", description: "Read-only: check the configured Hermes Agent API server model list and capability endpoint. Does not execute an agent task.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "hermes_agent_task", description: "Delegate a bounded task to the configured Hermes Agent runtime. Hermes has its own toolset, memory, skills, subagents and terminal backend depending on its deployment. Use only for safe research, analysis, drafting, and authorized workspace coding. ULTRON blocks tasks classified as consequential; Hermes must run behind an authenticated API key with least-privileged/sandboxed toolsets.", parameters: { type: "object", properties: { task: { type: "string", minLength: 5, maxLength: 8000 }, conversationId: { type: "string", maxLength: 100 } }, required: ["task"], additionalProperties: false } } },
@@ -573,6 +573,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     }
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
     if (name === "paperclip_read_agent_governance") return getPaperclipAgentDashboard({ env, fetchImpl, userId: req.supabaseUser?.id });
+    if (name === "check_hermes_agent") return checkHermesAgentService({ env, fetchImpl, userId: req.supabaseUser?.id });
+    if (name === "hermes_agent_task") return runHermesAgentTask({ env, fetchImpl, userId: req.supabaseUser?.id, task: args.task, conversationId: args.conversationId });
     if (name === "check_repository_capabilities") {
       const task = bounded(args.task, 1200);
       const limit = Number.isInteger(args.limit) ? Math.max(1, Math.min(args.limit, 12)) : 6;
@@ -948,10 +950,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       tools: [
         { name: "agentmemory", available: agentMemoryReadiness(env).configured, execution: "automatic_task_relevant_recall_and_bounded_durable_capture" },
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
-        { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_28_repository_domains" },
-        { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_28_requested_repositories; read configuration-only status at /api/agent/repositories" },
+        { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_31_repository_domains" },
+        { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_31_requested_repositories; read configuration-only status at /api/agent/repositories" },
         { name: "repository_readiness", available: true, execution: "non_secret task matched repository readiness" },
         { name: "paperclip_read_agent_governance", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.PAPERCLIP_BASE_URL && env.PAPERCLIP_API_TOKEN && env.PAPERCLIP_COMPANY_ID), execution: "owner_scoped_read_only_agent_roster_dashboard_and_cost_summary_no_mutations" },
+        { name: "check_hermes_agent", available: Boolean(getHermesAgentReadiness(env).configured), execution: "read_only_models_and_capabilities_no_agent_execution" },
+        { name: "hermes_agent_task", available: Boolean(getHermesAgentReadiness(env).configured), execution: "delegated_bounded_task_to_configured_hermes_runtime_with_ultron_risk_gate" },
         { name: "check_cactus", available: Boolean(getCactusReadiness(env).configured), execution: "read_only_health_and_model_list_no_download_or_inference" },
         { name: "obscura_inspect_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_navigation_and_dom_snapshot_only" },
         { name: "obscura_capture_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_screenshot_or_pdf_capture_bounded_artifact_payload" },
@@ -1163,7 +1167,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           // Enforce the autonomy policy at the dispatch boundary, not just in
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
-          if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
+          if (autonomyPlan.risk.requiresConfirmation || ((name === "browser_use" || name === "hermes_agent_task") && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
           } else {
             result = await executeTool(name, args, req.body || {}, req);
@@ -1207,7 +1211,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             executedToolCalls.add(dedupeKey);
             let result;
             try {
-              if (autonomyPlan.risk.requiresConfirmation || (name === "browser_use" && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
+              if (autonomyPlan.risk.requiresConfirmation || ((name === "browser_use" || name === "hermes_agent_task") && classifyAutonomyRisk(args.task || "").requiresConfirmation)) {
                 result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request includes a consequential action. ULTRON has not executed any tools; a task-specific approval flow is required first." }, approvalRequired: true, risk: autonomyPlan.risk };
               } else {
                 result = await executeTool(name, args, req.body || {}, req);
