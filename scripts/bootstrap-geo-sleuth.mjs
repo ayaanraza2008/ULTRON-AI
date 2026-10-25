@@ -67,6 +67,7 @@ export async function ensureGeoSleuthRuntime({ env = process.env, runCommand = e
       installer = path.join(installerDirectory, "uv-installer.sh");
       await runCommand("curl", [
         "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2",
+        "--max-time", "30", "--max-filesize", "1048576",
         "-LsSf", UV_INSTALLER_URL, "-o", installer
       ], { timeout: 30000, maxBuffer: 256 * 1024, windowsHide: true });
       const installerDigest = createHash("sha256").update(await readFile(installer)).digest("hex");
