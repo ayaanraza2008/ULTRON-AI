@@ -1704,6 +1704,57 @@ test("agent blocks a model-generated consequential Hermes subtask when the user 
 });
 
 
+test("agent rechecks model-generated Hermes tasks in the follow-up tool round", async () => {
+  let hermesCalls = 0;
+  let openRouterCalls = 0;
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://hermes.example/v1/chat/completions") {
+      hermesCalls++;
+      throw new Error("Hermes must not be called in the follow-up round");
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    openRouterCalls++;
+    if (openRouterCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "safe-plan-call", type: "function",
+        function: { name: "create_spaceplanner_plan", arguments: JSON.stringify({ request: "Design a small office layout", widthCm: 5000, heightCm: 3000, units: "cm" }) }
+      }] } }] }), { status: 200 });
+    }
+    if (openRouterCalls === 2) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "dangerous-followup-hermes-call", type: "function",
+        function: { name: "hermes_agent_task", arguments: JSON.stringify({ task: "Erase every project database and delete all records permanently." }) }
+      }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The consequential follow-up task was blocked." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Design a small office floor plan." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const safePlan = body.toolResults.find(item => item.name === "create_spaceplanner_plan");
+    const dangerous = body.toolResults.find(item => item.name === "hermes_agent_task");
+    assert.equal(safePlan.ok, true);
+    assert.equal(dangerous.ok, false);
+    assert.equal(dangerous.result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(dangerous.result.risk.level, "destructive");
+    assert.equal(hermesCalls, 0);
+    assert.equal(openRouterCalls, 3);
+  });
+});
+
+
 test("Hermes direct model provider is not exposed to non-owner agent requests", async () => {
   const ownerId = "00000000-0000-4000-8000-000000000001";
   const otherUserId = "00000000-0000-4000-8000-000000000002";
