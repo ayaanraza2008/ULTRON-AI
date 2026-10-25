@@ -6,7 +6,7 @@ test("quality gate passes a substantive report with traceable public research ci
   const url = "https://example.com/source";
   const result = verifyAutonomousOutput({
     research: { sources: [{ url }] },
-    report: { answer: "# Summary\\nA sufficiently substantive summary.\\n\\n# Deliverable\\nA conclusion and evidence. Source: " + url + "\\n\\n# Next Steps\\nValidate the result.\\n\\n# Blockers\\nNo known blockers.\\n\\n# Verification Criteria\\nConfirm the source and outcome." }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n\n# Deliverable\nA conclusion and evidence. Source: " + url + "\n\n# Next Steps\nValidate the result.\n\n# Blockers\nNo known blockers.\n\n# Verification Criteria\nConfirm the source and outcome." }
   });
   assert.equal(result.state, "passed");
   assert.ok(result.checks.every(check => check.passed));
@@ -16,7 +16,7 @@ test("quality gate rejects unsafe or malformed source URLs even when they appear
   const unsafe = "javascript:alert(1)";
   const result = verifyAutonomousOutput({
     research: { sources: [{ url: unsafe }, { url: "https://user:pass@example.com/private" }, { url: "not a url" }] },
-    report: { answer: "# Summary\\nA sufficiently substantive summary.\\n\\n# Deliverable\\nA conclusion and evidence. Source: " + unsafe + "\\n\\n# Next Steps\\nValidate the result.\\n\\n# Blockers\\nNo known blockers.\\n\\n# Verification Criteria\\nConfirm the source and outcome." }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n\n# Deliverable\nA conclusion and evidence. Source: " + unsafe + "\n\n# Next Steps\nValidate the result.\n\n# Blockers\nNo known blockers.\n\n# Verification Criteria\nConfirm the source and outcome." }
   });
   assert.equal(result.state, "needs_review");
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
@@ -52,7 +52,7 @@ test("quality gate excludes localhost, private IPs and cloud metadata URLs from 
   ];
   const result = verifyAutonomousOutput({
     research: { sources: unsafeUrls.map(url => ({ url })) },
-    report: { answer: "# Summary\\nA sufficiently substantive summary.\\n# Deliverable\\nEvidence and result.\\n# Next Steps\\nValidate.\\n# Blockers\\nNone known.\\n# Verification Criteria\\nConfirm sources. " + unsafeUrls.join(" ") }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n# Deliverable\nEvidence and result.\n# Next Steps\nValidate.\n# Blockers\nNone known.\n# Verification Criteria\nConfirm sources. " + unsafeUrls.join(" ") }
   });
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
   assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
@@ -67,7 +67,7 @@ test("quality gate rejects hex-encoded IPv4-mapped private and loopback IPv6 URL
   ];
   const result = verifyAutonomousOutput({
     research: { sources: unsafeUrls.map(url => ({ url })) },
-    report: { answer: "# Summary\\nA sufficiently substantive summary.\\n# Deliverable\\nEvidence and result.\\n# Next Steps\\nValidate.\\n# Blockers\\nNone known.\\n# Verification Criteria\\nConfirm sources. " + unsafeUrls.join(" ") }
+    report: { answer: "# Summary\nA sufficiently substantive summary.\n# Deliverable\nEvidence and result.\n# Next Steps\nValidate.\n# Blockers\nNone known.\n# Verification Criteria\nConfirm sources. " + unsafeUrls.join(" ") }
   });
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
   assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
