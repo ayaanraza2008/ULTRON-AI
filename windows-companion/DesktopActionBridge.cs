@@ -36,6 +36,17 @@ internal sealed class DesktopActionBridge : IDisposable
             (IPAddress.TryParse(normalized, out var address) && IPAddress.IsLoopback(address));
     }
 
+    private static bool AreAllowedResolvedAddresses(string host, IPAddress[] addresses)
+    {
+        if (addresses.Length == 0) return false;
+        var allowLoopback = IsExplicitLoopbackHost(host);
+        // Reject mixed answer sets: no private/reserved address may be available
+        // for a second connection attempt after a public address fails.
+        return addresses.All(address => allowLoopback
+            ? IPAddress.IsLoopback(address)
+            : IsPublicAddress(address));
+    }
+
     private static async ValueTask<Stream> ConnectPinnedAsync(
         SocketsHttpConnectionContext context,
         CancellationToken cancellationToken)
@@ -55,8 +66,7 @@ internal sealed class DesktopActionBridge : IDisposable
             throw new HttpRequestException("Could not safely resolve the Windows bridge API host.");
         }
 
-        if (addresses.Length == 0 ||
-            addresses.Any(address => allowLoopback ? !IPAddress.IsLoopback(address) : !IsPublicAddress(address)))
+        if (!AreAllowedResolvedAddresses(host, addresses))
         {
             throw new HttpRequestException("The Windows bridge API host resolved to a disallowed address.");
         }
@@ -364,6 +374,14 @@ internal sealed class DesktopActionBridge : IDisposable
                 IsPublicAddress(address) != item.Expected)
                 return 1;
         }
+
+        var publicAddress = IPAddress.Parse("93.184.216.34");
+        var privateAddress = IPAddress.Parse("127.0.0.1");
+        if (!AreAllowedResolvedAddresses("api.example.com", new[] { publicAddress }) ||
+            AreAllowedResolvedAddresses("api.example.com", new[] { publicAddress, privateAddress }) ||
+            AreAllowedResolvedAddresses("localhost", new[] { privateAddress, publicAddress }) ||
+            !AreAllowedResolvedAddresses("localhost", new[] { privateAddress, IPAddress.IPv6Loopback }))
+            return 1;
         return 0;
     }
 
