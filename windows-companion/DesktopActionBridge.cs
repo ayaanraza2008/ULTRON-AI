@@ -124,6 +124,15 @@ internal sealed class DesktopActionBridge : IDisposable
             state = "failed";
             errorCode = "ACTION_NOT_SUPPORTED";
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            result = new { ok = false, summary = "The local bridge was stopped before the approved action completed.", platform = "windows" };
+            state = "failed";
+            errorCode = "ACTION_FAILED";
+            // Do not leave the claim running only because the local Stop toggle was used.
+            await AcknowledgeAsync(baseUrl, token, id, attemptNumber, state, result, errorCode, CancellationToken.None);
+            return (true, "The in-progress action was marked failed after the bridge stopped.");
+        }
         catch (Exception)
         {
             result = new { ok = false, summary = "The approved action could not be completed.", platform = "windows" };
@@ -131,12 +140,13 @@ internal sealed class DesktopActionBridge : IDisposable
             errorCode = actionType == "launch_app" ? "APP_LAUNCH_FAILED" : "ACTION_FAILED";
         }
 
-        await AcknowledgeAsync(baseUrl, token, id, attemptNumber, state, result, errorCode, cancellationToken);
+        await AcknowledgeAsync(baseUrl, token, id, attemptNumber, state, result, errorCode, CancellationToken.None);
         return (true, "An approved PC action was processed. Waiting for the next approved action.");
     }
 
     private async Task<object> ExecuteAllowedActionAsync(string actionType, JsonElement action, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var payload = action.TryGetProperty("payload", out var rawPayload) && rawPayload.ValueKind == JsonValueKind.Object
             ? rawPayload
             : throw new NotSupportedException("Missing action payload.");
@@ -153,6 +163,7 @@ internal sealed class DesktopActionBridge : IDisposable
                     "explorer" => "explorer.exe",
                     _ => throw new NotSupportedException("Application is not allow-listed.")
                 };
+                cancellationToken.ThrowIfCancellationRequested();
                 Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true });
                 return new { ok = true, summary = "The approved application was launched.", platform = "windows", app };
             }
@@ -160,6 +171,7 @@ internal sealed class DesktopActionBridge : IDisposable
             {
                 var value = ReadString(payload, "url", 1200);
                 var uri = await ValidatePublicHttpsUriAsync(value, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
                 return new { ok = true, summary = "The approved HTTPS destination was opened in the default browser.", platform = "windows", host = uri.Host.ToLowerInvariant() };
             }
