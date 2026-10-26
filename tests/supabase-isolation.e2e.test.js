@@ -69,11 +69,17 @@ async function signIn(label, email, password) {
     method: "POST",
     body: { email, password }
   });
-  if (!response.ok || typeof payload?.access_token !== "string" || typeof payload?.user?.id !== "string") {
+  if (!response.ok || typeof payload?.access_token !== "string" ||
+      typeof payload?.refresh_token !== "string" || typeof payload?.user?.id !== "string") {
     // Do not include auth response bodies, which can contain sensitive details.
     throw new Error(`Test user ${label} could not sign in (HTTP ${response.status}). Check test-account confirmation and credentials.`);
   }
-  return { label, token: payload.access_token, userId: payload.user.id };
+  return {
+    label,
+    token: payload.access_token,
+    refreshToken: payload.refresh_token,
+    userId: payload.user.id
+  };
 }
 
 function tableUrl(table, params = {}) {
@@ -124,12 +130,14 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
   const nonce = randomUUID();
   const created = [];
   let primaryError = null;
+  let testSessions = [];
 
   try {
     const [userA, userB] = await Promise.all([
       signIn("A", config.emailA, config.passwordA),
       signIn("B", config.emailB, config.passwordB)
     ]);
+    testSessions = [userA, userB];
     assert.notEqual(userA.userId, userB.userId, "E2E test accounts must be distinct users.");
 
     const conversationA = await insertRecord("conversations", userA, {
@@ -341,5 +349,38 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
   if (cleanupFailures.length) {
     throw new Error("Supabase E2E cleanup failed for " + cleanupFailures.length + " temporary record(s); inspect the dedicated test accounts before rerunning.");
   }
+
+  // Revoke each disposable test session after all temporary rows have been cleaned.
+  // A fresh refresh attempt must not be accepted after the Auth logout succeeds.
+  const sessionRevocationFailures = [];
+  for (const session of testSessions) {
+    try {
+      const logout = await request(new URL("/auth/v1/logout", config.url), {
+        apiKey: config.publishableKey,
+        accessToken: session.token,
+        method: "POST"
+      });
+      if (!logout.response.ok) {
+        throw new Error("Sign-out returned HTTP " + logout.response.status + ".");
+      }
+
+      const refreshEndpoint = new URL("/auth/v1/token", config.url);
+      refreshEndpoint.searchParams.set("grant_type", "refresh_token");
+      const refreshed = await request(refreshEndpoint, {
+        apiKey: config.publishableKey,
+        method: "POST",
+        body: { refresh_token: session.refreshToken }
+      });
+      if (refreshed.response.ok) {
+        throw new Error("Supabase accepted a refresh token after sign-out.");
+      }
+    } catch {
+      sessionRevocationFailures.push(session.label);
+    }
+  }
+
   if (primaryError) throw primaryError;
+  if (sessionRevocationFailures.length) {
+    throw new Error("Could not verify sign-out/refresh-token revocation for disposable test session(s): " + sessionRevocationFailures.join(", ") + ".");
+  }
 });
