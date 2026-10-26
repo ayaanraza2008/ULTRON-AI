@@ -97,8 +97,22 @@ test("safeFetch blocks mixed public/private DNS answers rather than selecting a 
   assert.equal(fake.seen.calls, 0);
 });
 
-test("safeFetch limits streaming request bodies before oversized chunks are written", async () => {
+test("safeFetch limits streaming request bodies before oversized chunks are written and cancels the source", async () => {
   const chunks = [];
+  let sent = false;
+  let sourceDestroyed = false;
+  const source = new Readable({
+    read() {
+      if (!sent) {
+        sent = true;
+        this.push(Buffer.from("123456789"));
+      }
+    },
+    destroy(error, callback) {
+      sourceDestroyed = true;
+      callback(error);
+    }
+  });
   const fake = fakeRequest(200, ["content-type", "application/json"], chunk => chunks.push(Buffer.from(chunk)));
   const fetch = createSafeFetch({
     lookupImpl: async () => [{ address: "127.0.0.1", family: 4 }],
@@ -108,12 +122,13 @@ test("safeFetch limits streaming request bodies before oversized chunks are writ
   await assert.rejects(
     fetch("http://localhost:8787/upload", {
       method: "POST",
-      body: Readable.from([Buffer.from("123456789")])
+      body: source
     }),
     error => error.code === "OUTBOUND_BODY_TOO_LARGE"
   );
   assert.equal(fake.seen.writtenBytes, 0);
   assert.deepEqual(chunks, []);
+  assert.equal(sourceDestroyed, true);
 });
 
 test("safeFetch fails closed on redirects by default", async () => {
