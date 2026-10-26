@@ -8,6 +8,8 @@ import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 
 const MAX_URL_LENGTH = 8192;
 const MAX_REQUEST_BODY_BYTES = 32 * 1024 * 1024;
+const MAX_RESPONSE_BODY_BYTES = 8 * 1024 * 1024;
+const DEFAULT_TIMEOUT_MS = 20_000;
 const DNS_TIMEOUT_MS = 5000;
 const NO_BODY_STATUSES = new Set([204, 205, 304]);
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -181,7 +183,17 @@ async function encodeBody(body, headers, maxBytes = MAX_REQUEST_BODY_BYTES) {
   throw safeError("Outbound request body type is not supported.", "OUTBOUND_BODY_UNSUPPORTED");
 }
 
-function toResponse(response) {
+function responseHeader(response, wantedName) {
+  const direct = response.headers?.[wantedName];
+  if (direct !== undefined) return Array.isArray(direct) ? direct[0] : direct;
+  const raw = response.rawHeaders || [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    if (String(raw[i]).toLowerCase() === wantedName) return raw[i + 1];
+  }
+  return undefined;
+}
+
+function toResponse(response, { maxResponseBodyBytes = MAX_RESPONSE_BODY_BYTES, onBodyDone = () => {} } = {}) {
   const status = Number(response.statusCode) || 502;
   const headers = new Headers();
   const raw = response.rawHeaders || [];
@@ -194,9 +206,38 @@ function toResponse(response) {
   }
   let body = null;
   if (NO_BODY_STATUSES.has(status)) {
+    response.once?.("end", onBodyDone);
+    response.once?.("close", onBodyDone);
     response.resume?.();
   } else {
-    body = Readable.toWeb(response);
+    const declaredLength = Number(responseHeader(response, "content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > maxResponseBodyBytes) {
+      response.destroy?.();
+      onBodyDone();
+      throw safeError("Outbound response body exceeded the size limit.", "OUTBOUND_RESPONSE_TOO_LARGE");
+    }
+
+    let totalBytes = 0;
+    const limiter = new Transform({
+      transform(chunk, encoding, callback) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
+        totalBytes += buffer.byteLength;
+        if (totalBytes > maxResponseBodyBytes) {
+          callback(safeError("Outbound response body exceeded the size limit.", "OUTBOUND_RESPONSE_TOO_LARGE"));
+          return;
+        }
+        callback(null, buffer);
+      }
+    });
+    const finish = () => onBodyDone();
+    limiter.once("end", finish);
+    limiter.once("close", finish);
+    limiter.once("error", () => {
+      response.destroy?.();
+      finish();
+    });
+    response.pipe(limiter);
+    body = Readable.toWeb(limiter);
   }
   return new Response(body, { status, statusText: String(response.statusMessage || ""), headers });
 }
@@ -211,11 +252,19 @@ export function createSafeFetch({
   lookupImpl = dnsLookup,
   httpRequest = http.request,
   httpsRequest = https.request,
-  maxRequestBodyBytes = MAX_REQUEST_BODY_BYTES
+  maxRequestBodyBytes = MAX_REQUEST_BODY_BYTES,
+  maxResponseBodyBytes = MAX_RESPONSE_BODY_BYTES,
+  timeoutMs = DEFAULT_TIMEOUT_MS
 } = {}) {
   const bodyLimit = Number.isFinite(Number(maxRequestBodyBytes)) && Number(maxRequestBodyBytes) > 0
     ? Math.min(MAX_REQUEST_BODY_BYTES, Math.trunc(Number(maxRequestBodyBytes)))
     : MAX_REQUEST_BODY_BYTES;
+  const responseBodyLimit = Number.isFinite(Number(maxResponseBodyBytes)) && Number(maxResponseBodyBytes) > 0
+    ? Math.min(32 * 1024 * 1024, Math.trunc(Number(maxResponseBodyBytes)))
+    : MAX_RESPONSE_BODY_BYTES;
+  const requestTimeoutMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
+    ? Math.min(120_000, Math.max(1000, Math.trunc(Number(timeoutMs))))
+    : DEFAULT_TIMEOUT_MS;
   return async function safeFetch(input, init = {}) {
     let rawUrl;
     let requestInit = { ...init };
@@ -250,8 +299,29 @@ export function createSafeFetch({
     const method = String(requestInit.method || "GET").toUpperCase();
     const headers = buildHeaders(requestInit.headers);
     const encoded = await encodeBody(requestInit.body, headers, bodyLimit);
+    if (requestInit.signal?.aborted) {
+      if (encoded.stream && !encoded.stream.destroyed) encoded.stream.destroy();
+      throw requestInit.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
+    }
+
+    const timeoutController = new AbortController();
+    const timeoutTimer = setTimeout(() => {
+      timeoutController.abort(safeError("Outbound request timed out.", "OUTBOUND_TIMEOUT"));
+    }, requestTimeoutMs);
+    let timeoutCleaned = false;
+    const cleanupTimeout = () => {
+      if (timeoutCleaned) return;
+      timeoutCleaned = true;
+      clearTimeout(timeoutTimer);
+    };
+    const signal = requestInit.signal
+      ? AbortSignal.any([requestInit.signal, timeoutController.signal])
+      : timeoutController.signal;
+
     const outboundHeaders = {};
     for (const [key, value] of headers) outboundHeaders[key] = value;
+    // Never accept upstream compression: byte caps should reflect the response users parse.
+    outboundHeaders["accept-encoding"] = "identity";
     // Preserve the original hostname for Host/SNI while pinning socket resolution.
     outboundHeaders.host = url.host;
     if (encoded.buffer) {
@@ -263,13 +333,14 @@ export function createSafeFetch({
       const fail = error => {
         if (settled) return;
         settled = true;
+        cleanupTimeout();
         reject(error);
       };
       const requestOptions = {
         method,
         headers: outboundHeaders,
         lookup: pinnedLookup(url.hostname, pinned),
-        signal: requestInit.signal
+        signal
       };
       const transportRequest = url.protocol === "https:" ? httpsRequest : httpRequest;
       let req;
@@ -283,8 +354,12 @@ export function createSafeFetch({
           }
           settled = true;
           try {
-            resolve(toResponse(response));
+            resolve(toResponse(response, {
+              maxResponseBodyBytes: responseBodyLimit,
+              onBodyDone: cleanupTimeout
+            }));
           } catch (error) {
+            cleanupTimeout();
             reject(error);
           }
         });

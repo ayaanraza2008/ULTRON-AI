@@ -156,3 +156,64 @@ test("safeFetch permits explicit local Ollama-style loopback HTTP and pins loopb
   assert.equal(response.status, 200);
   assert.deepEqual(fake.seen.pinnedAddress, { address: "127.0.0.1", family: 4 });
 });
+
+
+test("safeFetch enforces a byte cap on streamed responses and stops reading oversized bodies", async () => {
+  const fake = fakeRequest();
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    httpsRequest: fake.request,
+    maxResponseBodyBytes: 4
+  });
+  const response = await fetch("https://api.example.com/large-response");
+  await assert.rejects(response.text(), error => error.code === "OUTBOUND_RESPONSE_TOO_LARGE");
+});
+
+test("safeFetch rejects a response with an oversized declared content length before returning it", async () => {
+  const fake = fakeRequest(200, ["content-type", "application/json", "content-length", "9999"]);
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    httpsRequest: fake.request,
+    maxResponseBodyBytes: 32
+  });
+  await assert.rejects(
+    fetch("https://api.example.com/declared-large-response"),
+    error => error.code === "OUTBOUND_RESPONSE_TOO_LARGE"
+  );
+});
+
+test("safeFetch overrides caller compression preferences so response caps apply to parsed bytes", async () => {
+  const fake = fakeRequest();
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    httpsRequest: fake.request
+  });
+  const response = await fetch("https://api.example.com/compression", {
+    headers: { "accept-encoding": "gzip" }
+  });
+  assert.equal(fake.seen.options.headers["accept-encoding"], "identity");
+  await response.text();
+});
+
+test("safeFetch applies a default network deadline to requests that never receive a response", async () => {
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    timeoutMs: 1000,
+    httpsRequest: (_url, options) => {
+      const req = new EventEmitter();
+      req.end = () => {};
+      req.destroy = error => {
+        if (error) req.emit("error", error);
+        return req;
+      };
+      options.signal.addEventListener("abort", () => {
+        req.emit("error", options.signal.reason || Object.assign(new Error("Aborted"), { code: "ABORT_ERR" }));
+      }, { once: true });
+      return req;
+    }
+  });
+  await assert.rejects(
+    fetch("https://api.example.com/hangs"),
+    error => error.code === "OUTBOUND_TIMEOUT"
+  );
+});
