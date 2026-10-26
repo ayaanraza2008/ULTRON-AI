@@ -80,3 +80,84 @@ test("smoke check clearly blocks when no provider is configured", async () => {
   assert.equal(report.status, "blocked");
   assert.equal(report.reason, "NO_ELIGIBLE_PROVIDER");
 });
+
+test("smoke check rejects non-empty completions that do not satisfy the challenge", async () => {
+  const privateResponseText = "Provider said it cannot complete this request.";
+  const report = await runModelProviderSmoke({
+    env: { OPENROUTER_API_KEY: "test-secret", OPENROUTER_DEFAULT_MODEL: "openrouter/free" },
+    fetchImpl: async () => success("openrouter/free", privateResponseText)
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(report.reason, "ALL_CONFIGURED_PROVIDERS_FAILED");
+  assert.equal(report.attempts[0].code, "UNEXPECTED_COMPLETION");
+  assert.equal(JSON.stringify(report).includes(privateResponseText), false);
+  assert.equal(JSON.stringify(report).includes("test-secret"), false);
+});
+
+test("smoke check verifies the challenge token despite harmless surrounding text", async () => {
+  const report = await runModelProviderSmoke({
+    env: { OPENROUTER_API_KEY: "test-secret", OPENROUTER_DEFAULT_MODEL: "openrouter/free" },
+    fetchImpl: async () => success("openrouter/free", "ULTRON_SMOKE_OK.")
+  });
+  assert.equal(report.status, "passed");
+  assert.equal(report.challengeVerified, true);
+  assert.equal(JSON.stringify(report).includes("ULTRON_SMOKE_OK"), false);
+});
+
+
+test("smoke check tries configured free model IDs after the OpenRouter router is rate limited", async () => {
+  const secret = "smoke-free-fallback-test-secret";
+  const seen = [];
+  const report = await runModelProviderSmoke({
+    env: {
+      OPENROUTER_API_KEY: secret,
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+      ULTRON_AVAILABLE_MODELS: "openrouter/free,nvidia/nemotron-3.5-lightning:free,openai/gpt-4.1,https://bad.example/model:free,nvidia/nemotron-3.5-lightning:free"
+    },
+    fetchImpl: async (url, options) => {
+      const request = JSON.parse(options.body);
+      seen.push({ url, model: request.model, authorization: options.headers.Authorization });
+      if (request.model === "openrouter/free") return new Response("{}", { status: 429 });
+      assert.equal(request.model, "nvidia/nemotron-3.5-lightning:free");
+      return success(request.model);
+    }
+  });
+
+  assert.equal(report.status, "passed");
+  assert.equal(report.provider, "openrouter-free-fallback-1");
+  assert.equal(report.model, "nvidia/nemotron-3.5-lightning:free");
+  assert.equal(report.challengeVerified, true);
+  assert.equal(report.attempts[0].code, "RATE_LIMITED");
+  assert.equal(report.successfulAttempt, 2);
+  assert.deepEqual(seen.map(item => item.model), ["openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
+  assert.ok(seen.every(item => item.authorization === "Bearer " + secret));
+  assert.equal(JSON.stringify(report).includes(secret), false);
+  assert.ok(!seen.some(item => item.model === "openai/gpt-4.1" || item.model.includes("bad.example")));
+});
+
+
+test("smoke check rejects HTTPS private, loopback, and metadata destinations before sending credentials", async () => {
+  const unsafeUrls = [
+    "https://localhost/v1",
+    "https://192.168.1.10/v1",
+    "https://10.0.0.4/v1",
+    "https://169.254.169.254/latest/meta-data",
+    "https://metadata.google.internal/computeMetadata/v1",
+    "https://[fd00::1]/v1",
+    "https://127.1/v1"
+  ];
+  for (const baseUrl of unsafeUrls) {
+    let called = false;
+    const report = await runModelProviderSmoke({
+      env: {
+        OPENROUTER_API_KEY: "private-target-test-secret",
+        OPENROUTER_BASE_URL: baseUrl,
+        OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+      },
+      fetchImpl: async () => { called = true; return success(); }
+    });
+    assert.equal(report.status, "blocked", baseUrl);
+    assert.equal(called, false, baseUrl);
+    assert.equal(JSON.stringify(report).includes("private-target-test-secret"), false);
+  }
+});

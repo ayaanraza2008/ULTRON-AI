@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { safeServiceBase } from "../network-safety.js";
 
 const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1";
 const MAX_PROVIDER_COUNT = 6;
@@ -15,16 +16,9 @@ function safeModel(value) {
 }
 
 function secureBaseUrl(value) {
-  if (typeof value !== "string" || !value.trim() || value.trim().length > 2048) return null;
-  try {
-    const url = new URL(value.trim());
-    const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname.toLowerCase());
-    if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return null;
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  // Use the same public-host policy as runtime routing before forwarding a key.
+  // HTTP remains limited to explicit loopback development endpoints.
+  return safeServiceBase(value);
 }
 
 function loadProviderCandidates(env) {
@@ -66,6 +60,34 @@ function loadProviderCandidates(env) {
       continue;
     }
     candidates.push({ name, baseUrl, apiKey, model, priority: Number.isFinite(Number(entry.priority)) ? Number(entry.priority) : 100 });
+  }
+
+  // Keep the explicit smoke diagnostic aligned with runtime routing: after a
+  // primary OpenRouter failure, it may try other free IDs from the same model list.
+  const openRouter = candidates.find(candidate => candidate.name === "openrouter");
+  if (openRouter) {
+    const knownModels = new Set(
+      candidates.filter(candidate => candidate.baseUrl === openRouter.baseUrl).map(candidate => candidate.model)
+    );
+    const freeModels = String(env.ULTRON_AVAILABLE_MODELS || "")
+      .slice(0, 3000)
+      .split(",")
+      .map(model => model.trim())
+      .filter(model => model === "openrouter/free" ||
+        /^[a-z0-9][a-z0-9._-]{0,79}\/[a-z0-9][a-z0-9._-]{0,119}:free$/i.test(model))
+      .slice(0, 12);
+    let fallbackIndex = 0;
+    for (const model of freeModels) {
+      if (knownModels.has(model) || fallbackIndex >= 5) continue;
+      candidates.push({
+        name: "openrouter-free-fallback-" + (++fallbackIndex),
+        baseUrl: openRouter.baseUrl,
+        apiKey: openRouter.apiKey,
+        model,
+        priority: 10 + fallbackIndex
+      });
+      knownModels.add(model);
+    }
   }
 
   return { candidates: candidates.slice(0, MAX_PROVIDER_COUNT + 1).sort((a, b) => a.priority - b.priority), errors };
@@ -156,11 +178,18 @@ export async function runModelProviderSmoke({ env = process.env, fetchImpl = glo
         attempts.push({ provider: provider.name, model: provider.model, code: "EMPTY_COMPLETION", httpStatus: response.status });
         continue;
       }
+      // HTTP 200 plus arbitrary text is not enough to prove the expected model
+      // completion contract. Verify the challenge token without exposing output.
+      if (!completion.toUpperCase().includes("ULTRON_SMOKE_OK")) {
+        attempts.push({ provider: provider.name, model: provider.model, code: "UNEXPECTED_COMPLETION", httpStatus: response.status });
+        continue;
+      }
       return {
         status: "passed",
         provider: provider.name,
         model: safeModel(data?.model) || provider.model,
         completionReceived: true,
+        challengeVerified: true,
         attempts,
         successfulAttempt: attempts.length + 1,
         generatedAt: now()
