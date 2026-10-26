@@ -52,7 +52,6 @@ internal sealed class DesktopActionBridge : IDisposable
         CancellationToken cancellationToken)
     {
         var host = context.DnsEndPoint.Host.Trim().Trim('[', ']').TrimEnd('.');
-        var allowLoopback = IsExplicitLoopbackHost(host);
         IPAddress[] addresses;
         try
         {
