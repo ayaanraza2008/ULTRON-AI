@@ -54,13 +54,14 @@ test("safeFetch pins the HTTPS connection to the address it validated", async ()
   });
   const response = await fetch("https://api.example.com/v1/chat/completions", {
     method: "POST",
-    headers: { authorization: "Bearer test" },
+    headers: { authorization: "Bearer test", "content-length": "999999" },
     body: "{\"test\":true}"
   });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
   assert.deepEqual(fake.seen.pinnedAddress, { address: "93.184.216.34", family: 4 });
   assert.equal(fake.seen.options.headers.host, "api.example.com");
+  assert.equal(fake.seen.options.headers["content-length"], String(Buffer.byteLength("{\"test\":true}")));
 });
 
 test("safeFetch blocks private DNS answers before making an upstream request", async () => {
