@@ -4,6 +4,7 @@
  * Shared credentials are available only to ULTRON's explicitly configured owner UUID.
  */
 import { safeServiceBase } from "../network-safety.js";
+import { safeFetch } from "../outbound-transport.js";
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 
@@ -159,7 +160,7 @@ export function getPaperclipReadiness(env = process.env) {
   };
 }
 
-export async function getPaperclipAgentDashboard({ env = process.env, fetchImpl = globalThis.fetch, userId } = {}) {
+export async function getPaperclipAgentDashboard({ env = process.env, fetchImpl = safeFetch, userId } = {}) {
   if (!ownerAllowed(env, userId)) {
     return blocked("INTEGRATION_OWNER_NOT_CONFIGURED", "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner's exact Supabase auth UUID before exposing shared Paperclip credentials.");
   }
