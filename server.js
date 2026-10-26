@@ -1103,6 +1103,78 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
   });
 
+  // Verify the one-time recovery OTP server-side so credentials remain in HttpOnly cookies.
+  // The frontend can present this step later; the API does not return Supabase tokens to JavaScript.
+  app.post("/api/auth/recovery/verify", authRateLimiter, async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    res.setHeader("Cache-Control", "no-store");
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^[A-Za-z0-9]{6,12}$/.test(token)) {
+      return res.status(400).json({ error: { code: "INVALID_RECOVERY_CODE", message: "Enter the account email and the one-time recovery code from the email." } });
+    }
+    try {
+      const payload = await supabaseAuthRequest("/auth/v1/verify", { email, token, type: "recovery" });
+      if (!payload.user?.id || !setSupabaseCookies(res, payload)) {
+        return res.status(502).json({ error: { code: "RECOVERY_SESSION_INVALID", message: "The recovery session could not be established. Request a new recovery email." } });
+      }
+      return res.json({ authenticated: true, recoveryVerified: true, email: payload.user.email || email, message: "Recovery code verified. Submit a new password to finish resetting your account." });
+    } catch (error) {
+      if (error.status === 429) {
+        return res.status(429).json({ error: { code: "RECOVERY_RATE_LIMITED", message: "Too many verification attempts. Wait before requesting another code." } });
+      }
+      if (error.status >= 500 || !Number.isFinite(error.status)) {
+        return res.status(502).json({ error: { code: "RECOVERY_VERIFY_UNAVAILABLE", message: "Recovery verification is temporarily unavailable. Please try again later." } });
+      }
+      return res.status(400).json({ error: { code: "RECOVERY_CODE_INVALID", message: "The recovery code is invalid or expired. Request a new recovery email and try again." } });
+    }
+  });
+
+  // Update a password using the signed-in user's access token; never accept a user ID or admin key from the caller.
+  app.post("/api/auth/password/update", authRateLimiter, async (req, res) => {
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    res.setHeader("Cache-Control", "no-store");
+    if (password.length < 8 || password.length > 256) {
+      return res.status(400).json({ error: { code: "INVALID_PASSWORD", message: "Choose a password between 8 and 256 characters." } });
+    }
+    const user = await getSupabaseUser(req, res);
+    const config = supabaseConfig();
+    const accessToken = String(req.supabaseAccessToken || "");
+    if (!user || !accessToken || !config) {
+      return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Verify the recovery code or sign in before updating your password." } });
+    }
+    try {
+      let compromised;
+      try {
+        compromised = await isCompromisedPassword(password, fetchImpl);
+      } catch (error) {
+        logger.warn?.("Password update screening unavailable; update rejected safely", { code: error?.code || "PASSWORD_SCREENING_UNAVAILABLE" });
+        return res.status(503).json({ error: { code: "PASSWORD_SCREENING_UNAVAILABLE", message: "Password safety screening is temporarily unavailable. Please retry shortly." } });
+      }
+      if (compromised) {
+        return res.status(400).json({ error: { code: "COMPROMISED_PASSWORD", message: "Choose a different password that has not appeared in known data breaches." } });
+      }
+      const response = await fetchImpl(config.url + "/auth/v1/user", {
+        method: "PUT",
+        headers: { apikey: config.key, Authorization: "Bearer " + accessToken, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ password }),
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000)
+      });
+      if (!response.ok) {
+        try { await response.body?.cancel?.(); } catch {}
+        if (response.status === 429) return res.status(429).json({ error: { code: "PASSWORD_UPDATE_RATE_LIMITED", message: "Too many password updates. Wait and try again." } });
+        if (response.status >= 500) return res.status(502).json({ error: { code: "PASSWORD_UPDATE_UNAVAILABLE", message: "Password update is temporarily unavailable." } });
+        return res.status(400).json({ error: { code: "PASSWORD_UPDATE_REJECTED", message: "The password was not accepted. Use a different password and try again." } });
+      }
+      try { await readResponseJsonLimited(response, 512_000); }
+      catch { return res.status(502).json({ error: { code: "PASSWORD_UPDATE_UNCONFIRMED", message: "The password update could not be confirmed." } }); }
+      return res.json({ updated: true, message: "Password updated successfully." });
+    } catch (error) {
+      logger.warn?.("Password update failed", { code: error?.code || "PASSWORD_UPDATE_FAILED" });
+      return res.status(502).json({ error: { code: "PASSWORD_UPDATE_UNAVAILABLE", message: "Password update is temporarily unavailable." } });
+    }
+  });
+
   app.post("/api/auth/signout", (_req, res) => {
     res.append("Set-Cookie", `ultron_sb_access=; ${cookieOptions(0)}`);
     res.append("Set-Cookie", `ultron_sb_refresh=; ${cookieOptions(0)}`);
