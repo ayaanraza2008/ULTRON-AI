@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const migrationPath = new URL("../supabase/migrations/20261023130000_guard_agent_task_client_updates.sql", import.meta.url);
+const migrationPath = new URL("../supabase/migrations/20261023140000_guard_agent_task_client_updates.sql", import.meta.url);
 
 test("agent task client-update guard permits cancellation only and protects worker-owned fields", async () => {
   const sql = await readFile(migrationPath, "utf8");
