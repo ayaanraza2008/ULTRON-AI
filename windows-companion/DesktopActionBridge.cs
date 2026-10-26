@@ -28,7 +28,7 @@ internal sealed class DesktopActionBridge : IDisposable
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
             return false;
         if (uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
-            uri.AbsolutePath != "/" || !string.IsNullOrEmpty(uri.Port.ToString()) && uri.Port != 443 && uri.Scheme == Uri.UriSchemeHttps)
+            uri.AbsolutePath != "/" || (uri.Scheme == Uri.UriSchemeHttps && uri.Port != 443))
             return false;
 
         var loopbackHttp = uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback;
@@ -195,8 +195,7 @@ internal sealed class DesktopActionBridge : IDisposable
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Fragment) ||
-            !string.IsNullOrEmpty(uri.Port.ToString()) && uri.Port != 443 && !uri.IsDefaultPort ||
-            !IsPublicHost(uri.Host))
+            uri.Port != 443 || !IsPublicHost(uri.Host))
             throw new UnsafeDesktopActionException();
 
         if (IPAddress.TryParse(uri.Host, out var literal))
