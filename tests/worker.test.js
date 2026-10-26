@@ -1787,3 +1787,189 @@ test("background AI Employee automatically falls back through configured free Op
   assert.ok(modelCalls.every(call => call.authorization === "Bearer openrouter-worker-fallback-test-key"));
   assert.equal(worker.getStatus().tasksCompleted, 1);
 });
+
+
+test("worker research uses free public HTML search when Tavily is not configured and filters unsafe sources", async () => {
+  let worker;
+  let taskPatch;
+  const task = {
+    id: "task-free-public-research",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "research", query: "solar energy market trends" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.startsWith("https://html.duckduckgo.com/html/?q=")) {
+        assert.equal(options.method, "GET");
+        assert.equal(options.redirect, "error");
+        assert.match(options.headers.Accept, /text\/html/);
+        return new Response(`
+          <div class="result">
+            <a class="result__a" href="http://127.0.0.1/private">Unsafe destination</a>
+            <a class="result__snippet">must not be returned</a>
+          </div>
+          <div class="result">
+            <a class="result__a" href="https://example.com/solar">Solar outlook</a>
+            <a class="result__snippet">Capacity grew &amp; investment increased.</a>
+          </div>`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        taskPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, ...taskPatch }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(taskPatch.status, "COMPLETED");
+  assert.equal(taskPatch.result.provider, "duckduckgo_html");
+  assert.equal(taskPatch.result.sources.length, 1);
+  assert.equal(taskPatch.result.sources[0].title, "Solar outlook");
+  assert.equal(taskPatch.result.sources[0].url, "https://example.com/solar");
+  assert.match(taskPatch.result.sources[0].snippet, /Capacity grew & investment increased/);
+  assert.equal(JSON.stringify(taskPatch).includes("127.0.0.1"), false);
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+});
+
+test("worker falls back to free public search when configured Tavily returns an error", async () => {
+  let worker;
+  let taskPatch;
+  let tavilyCalls = 0;
+  const task = {
+    id: "task-research-free-fallback",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "research", query: "battery storage trends" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      TAVILY_API_KEY: "test-only"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("api.tavily.com/search")) {
+        tavilyCalls += 1;
+        assert.equal(options.redirect, "error");
+        return new Response("temporarily unavailable", { status: 503 });
+      }
+      if (url.startsWith("https://html.duckduckgo.com/html/?q=")) {
+        return new Response('<a class="result__a" href="https://example.com/battery">Battery storage outlook</a><a class="result__snippet">Long-duration storage expanded.</a>', { status: 200 });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        taskPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, ...taskPatch }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(tavilyCalls, 1);
+  assert.equal(taskPatch.status, "COMPLETED");
+  assert.equal(taskPatch.result.provider, "duckduckgo_html");
+  assert.equal(taskPatch.result.sources[0].url, "https://example.com/battery");
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+});
+ 
+
+test("autonomous worker completes a research-to-report run with free search and no Tavily key", async () => {
+  let worker;
+  let taskPatch;
+  let modelCalls = 0;
+  let searchCalls = 0;
+  const task = {
+    id: "autonomous-free-search-e2e",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: {
+      taskType: "autonomous",
+      goal: "Research renewable energy trends and prepare a concise report",
+      role: "chief-of-staff",
+      mode: "report"
+    }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.startsWith("https://html.duckduckgo.com/html/?q=")) {
+        searchCalls += 1;
+        return new Response(
+          '<a class="result__a" href="https://example.com/energy">Renewable energy outlook</a>' +
+          '<a class="result__snippet">New solar and wind capacity is expanding across several markets.</a>',
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
+      if (url.includes("/chat/completions")) {
+        modelCalls += 1;
+        assert.equal(options.redirect, "error");
+        const body = JSON.parse(options.body);
+        const userMessage = body.messages.find(message => message.role === "user")?.content || "";
+        assert.match(userMessage, /Research answer:/);
+        const employeeInput = JSON.parse(userMessage);
+        assert.match(employeeInput.context, /Research sources:\n1[.] Renewable energy outlook/);
+        assert.match(employeeInput.context, /Renewable energy outlook — https:\/\/example[.]com\/energy\nNew solar and wind capacity/);
+        assert.match(userMessage, /https:\/\/example[.]com\/energy/);
+        assert.match(userMessage, /solar and wind capacity/);
+        return new Response(JSON.stringify({
+          model: "test-free-model",
+          choices: [{
+            message: {
+              content: "## Summary\nPublic search returned a relevant renewable energy source.\n\n" +
+                "## Deliverable\nSolar and wind capacity is expanding in several markets, based on the supplied search snippet. Source: https://example.com/energy\n\n" +
+                "## Next Steps\nOpen the source and verify its publication date and figures.\n\n" +
+                "## Blockers / Risks\nSearch snippets are incomplete and not independently verified.\n\n" +
+                "## Verification Criteria\nConfirm the source URL, publication date, and underlying figures directly on the page."
+            }
+          }]
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        taskPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, ...taskPatch }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.equal(searchCalls, 1);
+  assert.equal(modelCalls, 1);
+  assert.equal(taskPatch.status, "COMPLETED");
+  assert.equal(taskPatch.result.type, "autonomous_workflow");
+  assert.equal(taskPatch.result.research.provider, "duckduckgo_html");
+  assert.equal(taskPatch.result.research.sources.length, 1);
+  assert.equal(taskPatch.result.research.sources[0].url, "https://example.com/energy");
+  assert.equal(taskPatch.result.stages[0].state, "completed");
+  assert.equal(taskPatch.result.report.answer.includes("https://example.com/energy"), true);
+  assert.equal(worker.getStatus().tasksCompleted, 1);
+});
