@@ -525,6 +525,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
       if (!fallbackEligible || index + 1 >= attempts.length) break;
     }
+    if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
     return res.status(lastStatus === 429 ? 429 : 502).json({
       error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" }
     });
