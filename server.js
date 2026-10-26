@@ -450,7 +450,7 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
       const { provider, model } = attempts[index];
       let upstream;
       try {
-        upstream = await fetchImpl(provider.baseUrl + "/chat/completions", {
+        upstream = await fetchAdapter(provider.baseUrl, provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: {
             ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}),
