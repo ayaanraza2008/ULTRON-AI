@@ -23,6 +23,11 @@ STABLE
 AS $ SELECT coalesce(NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), ''), current_user::text) $;
 GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
 
+-- Approximate Supabase's default table grants for objects created by postgres;
+-- each security migration must explicitly revoke any narrower privileges it needs.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
+
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   GRANT ALL PRIVILEGES ON TABLES TO anon, authenticated, service_role;
