@@ -327,11 +327,11 @@ test("live outbound HTTPS pins a validated public destination and verifies the r
 });
 
 
-test("per-call local adapter permission cannot be used for another local origin", async () => {
+test("per-call local adapter permission cannot be used for another local origin", () => {
   let requests = 0;
   const fakeFetch = async () => { requests += 1; return response("ok"); };
-  await assert.rejects(
-    fetchConfiguredOutbound(
+  assert.throws(
+    () => fetchConfiguredOutbound(
       "http://127.0.0.1:11434",
       "http://127.0.0.1:11435/admin",
       {},
