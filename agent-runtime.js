@@ -820,7 +820,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           approvedAt: row.approved_at || null, startedAt: row.started_at || null,
           finishedAt: row.finished_at || null, result: row.result || null, errorCode: row.error_code || null
         })),
-        execution: "read_only"
+        execution: "read_only",
+        bridgeConfigured: String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim().length >= 32 &&
+          !/\s/.test(String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim())
       };
     }
     if (name === "request_desktop_action") {
