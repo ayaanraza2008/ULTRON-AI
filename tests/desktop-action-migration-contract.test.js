@@ -35,3 +35,11 @@ test("desktop action audit entries are written by a database trigger", () => {
   assert.match(migration, /insert into public\.audit_events/i);
   assert.match(migration, /after insert or update on public\.desktop_actions/i);
 });
+
+
+test("desktop action acknowledgements must satisfy the database lease deadline", () => {
+  assert.match(migration, /old\.status = 'RUNNING' and new\.status = 'COMPLETED'[\s\S]*?old\.lease_expires_at is null or old\.lease_expires_at <= now\(\)/i);
+  assert.match(migration, /Expired desktop action leases cannot be acknowledged/i);
+  assert.match(migration, /new\.error_code is distinct from 'DESKTOP_ACTION_RETRY_EXHAUSTED'/i);
+  assert.match(migration, /lease_expires_at <= now\(\)[\s\S]*?attempts >= 3/i);
+});
