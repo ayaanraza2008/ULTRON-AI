@@ -35,7 +35,7 @@ test("Supabase migration filenames have valid, unique version prefixes", async (
 
   const seenVersions = new Map();
   for (const filename of files) {
-    const match = /^(\\d+)_([a-z0-9][a-z0-9_-]*)\\.sql$/i.exec(filename);
+    const match = /^(\d+)_([a-z0-9][a-z0-9_-]*)\.sql$/i.exec(filename);
     assert.ok(match, `Invalid Supabase migration filename: ${filename}`);
 
     const version = match[1];
