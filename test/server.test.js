@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { createApp } from "../server.js";
+import { createApp, chatProxyRoutingTimeoutMs } from "../server.js";
 
 async function withServer(app, fn) {
   const server = createServer(app);
@@ -938,5 +938,62 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(response.status, 503);
     assert.equal((await response.json()).error.code, "PROVIDER_NOT_CONFIGURED");
     assert.equal(providerCalls, 0);
+  });
+});
+
+
+test("browser-use model proxy has a bounded overall routing deadline", () => {
+  assert.equal(chatProxyRoutingTimeoutMs({}), 90_000);
+  assert.equal(chatProxyRoutingTimeoutMs({ ULTRON_CHAT_TOTAL_TIMEOUT_MS: "15000" }), 15_000);
+  assert.equal(chatProxyRoutingTimeoutMs({ ULTRON_CHAT_TOTAL_TIMEOUT_MS: "1000" }), 15_000);
+  assert.equal(chatProxyRoutingTimeoutMs({ ULTRON_CHAT_TOTAL_TIMEOUT_MS: "500000" }), 120_000);
+  assert.equal(chatProxyRoutingTimeoutMs({ ULTRON_CHAT_TOTAL_TIMEOUT_MS: "invalid" }), 90_000);
+});
+
+test("browser-use model proxy stops fallback when the overall deadline expires in flight", async () => {
+  const totalController = new AbortController();
+  let timeoutSignalCalls = 0;
+  const providerCalls = [];
+  const configuredEnv = {
+    NODE_ENV: "test",
+    ULTRON_BROWSER_USE_TOKEN: "test-browser-bridge-token",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_API_KEY: "test-provider-key",
+    OPENROUTER_DEFAULT_MODEL: "demo/model-a:free",
+    ULTRON_AVAILABLE_MODELS: "demo/model-a:free,demo/model-b:free",
+    ULTRON_CHAT_TOTAL_TIMEOUT_MS: "15000"
+  };
+  const app = createApp({
+    env: configuredEnv,
+    logger: { info() {}, warn() {}, error() {} },
+    createTimeoutSignal: ms => {
+      timeoutSignalCalls += 1;
+      return timeoutSignalCalls === 1 ? totalController.signal : AbortSignal.timeout(ms);
+    },
+    fetchImpl: async (url, options = {}) => {
+      providerCalls.push(url);
+      assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+      assert.equal(options.redirect, "error");
+      totalController.abort(new DOMException("Overall model budget expired", "TimeoutError"));
+      assert.equal(options.signal.aborted, true);
+      throw options.signal.reason;
+    }
+  });
+
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-browser-bridge-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "demo/model-a:free",
+        messages: [{ role: "user", content: "Return a short answer." }]
+      })
+    });
+    assert.equal(response.status, 504);
+    assert.equal((await response.json()).error.type, "model_routing_timeout");
+    assert.equal(providerCalls.length, 1, "must not start another model after the overall deadline");
   });
 });
