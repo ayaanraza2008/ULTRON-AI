@@ -139,7 +139,7 @@ function failureCode(error, status) {
  */
 export async function runModelProviderSmoke({ env = process.env, fetchImpl = safeOutboundFetch, timeoutMs = DEFAULT_TIMEOUT_MS, now = () => new Date().toISOString() } = {}) {
   fetchImpl = createConfiguredOutboundFetch({ env, fetchImpl, baseUrlEnvNames: ["OPENROUTER_BASE_URL"], includeModelProviderRegistry: true });
-  if (typeof fetchImpl !== "function" return { status: "blocked", reason: "FETCH_UNAVAILABLE", attempts: [], generatedAt: now() };
+  if (typeof fetchImpl !== "function") return { status: "blocked", reason: "FETCH_UNAVAILABLE", attempts: [], generatedAt: now() };
   const { candidates, errors } = loadProviderCandidates(env);
   if (!candidates.length) {
     return { status: "blocked", reason: "NO_ELIGIBLE_PROVIDER", configurationErrors: errors, attempts: [], generatedAt: now() };
