@@ -1,6 +1,7 @@
 import express from "express";
 import { hasEmployeeModelProvider } from "./features.js";
 import { isPublicNetworkHost, safeServiceBase as safeBase } from "./network-safety.js";
+import { safeFetch } from "./outbound-transport.js";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
@@ -438,7 +439,7 @@ function classifyToolDispatchRisk(name, args, requestRisk) {
   };
 }
 
-export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
+export function createAgentRouter({ env = process.env, fetchImpl = safeFetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
   const router = express.Router();
 
   // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
