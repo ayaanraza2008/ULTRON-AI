@@ -99,7 +99,7 @@ function pinnedLookup(expectedHost, pinned) {
 
 function buildHeaders(input) {
   const source = new Headers(input || {});
-  for (const key of ["host", "connection", "transfer-encoding"]) source.delete(key);
+  for (const key of ["host", "connection", "transfer-encoding", "content-length"]) source.delete(key);
   // Do not request transport compression; expose upstream bytes as a Fetch Response.
   if (!source.has("accept-encoding")) source.set("accept-encoding", "identity");
   return source;
@@ -250,7 +250,7 @@ export function createSafeFetch({
     for (const [key, value] of headers) outboundHeaders[key] = value;
     // Preserve the original hostname for Host/SNI while pinning socket resolution.
     outboundHeaders.host = url.host;
-    if (encoded.buffer && !headers.has("content-length")) {
+    if (encoded.buffer) {
       outboundHeaders["content-length"] = String(encoded.buffer.byteLength);
     }
 
