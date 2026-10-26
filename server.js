@@ -395,7 +395,32 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       return res.status(401).json({ error: { message: "Unauthorized", type: "authentication_error" } });
     }
     const payload = req.body;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Array.isArray(payload.messages) || payload.messages.length > 80 || JSON.stringify(payload).length > 1_000_000) {
+    let serializedBytes = Infinity;
+    try { serializedBytes = Buffer.byteLength(JSON.stringify(payload), "utf8"); } catch { /* reject invalid request shape below */ }
+    const supportedRoles = new Set(["system", "developer", "user", "assistant", "tool"]);
+    const validContentPart = part => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) return false;
+      if (part.type === "text") return typeof part.text === "string" && part.text.length <= 500_000;
+      if (part.type === "image_url") {
+        const imageUrl = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
+        return typeof imageUrl === "string" && imageUrl.length <= 900_000;
+      }
+      return false;
+    };
+    const validMessages = Array.isArray(payload?.messages) &&
+      payload.messages.length >= 1 && payload.messages.length <= 80 &&
+      payload.messages.every(message => {
+        if (!message || typeof message !== "object" || Array.isArray(message) || !supportedRoles.has(message.role)) return false;
+        if (typeof message.content === "string") return message.content.length <= 500_000;
+        if (Array.isArray(message.content)) return message.content.length >= 1 && message.content.length <= 64 && message.content.every(validContentPart);
+        if (message.content === null || message.content === undefined) {
+          return message.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length <= 64;
+        }
+        return false;
+      });
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+        !validMessages || serializedBytes > 1_000_000 ||
+        (payload.tools !== undefined && (!Array.isArray(payload.tools) || payload.tools.length > 64))) {
       return res.status(400).json({ error: { message: "Invalid or oversized chat completion request", type: "invalid_request_error" } });
     }
 
