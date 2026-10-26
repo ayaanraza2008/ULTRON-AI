@@ -85,6 +85,20 @@ The main-branch raw **test execution pass ratio is 506/507 = 99.8%**; the harden
 
 Calculation: `(83.3 + 58.3 + 50.0 + 50.0) / 4 = 60.4%`. The decrease is intentional: the starting dashboard figures had no visible denominator, while this score gives no verified credit to blocked or failed live acceptance checks. It does not imply the code is only 60.4% implemented; it means that strict evidence for all in-scope acceptance clusters is not yet available.
 
+### Candidate branch score after this turn's verified code changes
+
+The unmerged candidate branch passed [run 40352157134](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40352157134), including the worker result-validation implementation and regression tests. On that candidate branch only, the persisted-result acceptance cluster moves from **PARTIALLY VERIFIED** to **VERIFIED** because deterministic tests now reject missing, empty, or role/mode-mismatched results.
+
+| Area | Main score | Candidate branch score |
+|---|---:|---:|
+| Backend automated tests | 83.3% | 83.3% |
+| AI providers & integrations | 58.3% | 58.3% |
+| Authentication & security | 50.0% | 50.0% |
+| Live task execution | 50.0% | 58.3% |
+| **Overall backend verification** | **60.4%** | **62.5%** |
+
+Calculation for the candidate branch: `(83.3 + 58.3 + 50.0 + 58.3) / 4 = 62.5%`. This measures the candidate source plus deterministic CI evidence; it does **not** turn live provider, Auth, queue execution, or production verification into verified capabilities. It remains unmerged, so the main-branch score stays 60.4%.
+
 ## Remaining blockers and next action
 
 1. **Provider / vision live tests:** run `npm run smoke:model` only from a trusted test environment with confirmed free-only provider credentials and explicit authorization; then do a separate image request against a model that actually advertises vision support. Do not place keys in source control or chat.
