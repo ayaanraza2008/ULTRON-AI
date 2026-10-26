@@ -10,9 +10,10 @@ import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
+import { createDesktopActionRouter } from "./desktop-action-bridge.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
-import { safeServiceBase } from "./network-safety.js";
+import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 import { safeOutboundFetch, fetchConfiguredOutbound } from "./safe-outbound-fetch.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -370,7 +371,59 @@ function cactusCompletionStream(completion) {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
-export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, logger = console } = {}) {
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isAllowedBrowserGatewayToolCall(value) {
+  if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim() || value.id.length > 200 ||
+      value.type !== "function" || !isRecord(value.function)) return false;
+  return typeof value.function.name === "string" &&
+    /^[A-Za-z0-9_-]{1,64}$/.test(value.function.name) &&
+    typeof value.function.arguments === "string" && value.function.arguments.length <= 40_000;
+}
+
+function isAllowedBrowserGatewayTool(value) {
+  if (!isRecord(value) || value.type !== "function" || !isRecord(value.function)) return false;
+  const fn = value.function;
+  if (typeof fn.name !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(fn.name)) return false;
+  if (fn.description !== undefined && (typeof fn.description !== "string" || fn.description.length > 4000)) return false;
+  if (fn.parameters !== undefined && !isRecord(fn.parameters)) return false;
+  if (fn.strict !== undefined && typeof fn.strict !== "boolean") return false;
+  return true;
+}
+
+function isAllowedBrowserGatewayImageUrl(value) {
+  if (typeof value !== "string" || !value.trim() || value.length > 900_000) return false;
+  const candidate = value.trim();
+  const dataImage = candidate.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/i);
+  if (dataImage) {
+    const encoded = dataImage[2];
+    if (encoded.length % 4 !== 0) return false;
+    const bytes = Buffer.from(encoded, "base64");
+    if (!bytes.length || bytes.length > 675_000 || bytes.toString("base64") !== encoded) return false;
+    const mime = dataImage[1].toLowerCase();
+    if (mime === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    if (mime === "image/png") return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    if (mime === "image/gif") return bytes.length >= 6 && ["GIF87a", "GIF89a"].includes(bytes.toString("ascii", 0, 6));
+    return mime === "image/webp" && bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+  }
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" && !url.username && !url.password &&
+      isPublicNetworkHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function chatProxyRoutingTimeoutMs(env = process.env) {
+  const configured = Number(env.ULTRON_CHAT_TOTAL_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) return 90_000;
+  return Math.max(15_000, Math.min(120_000, Math.trunc(configured)));
+}
+
+export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, logger = console, createTimeoutSignal = ms => AbortSignal.timeout(ms) } = {}) {
   const fetchAdapter = (baseUrl, input, init) => fetchConfiguredOutbound(baseUrl, input, init, fetchImpl);
   const app = express();
   app.locals.workerRuntime = () => ({
@@ -411,7 +464,39 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
       return res.status(401).json({ error: { message: "Unauthorized", type: "authentication_error" } });
     }
     const payload = req.body;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Array.isArray(payload.messages) || payload.messages.length > 80 || JSON.stringify(payload).length > 1_000_000) {
+    let serializedBytes = Infinity;
+    try { serializedBytes = Buffer.byteLength(JSON.stringify(payload), "utf8"); } catch { /* reject invalid request shape below */ }
+    const supportedRoles = new Set(["system", "developer", "user", "assistant", "tool"]);
+    const validContentPart = part => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) return false;
+      if (part.type === "text") return typeof part.text === "string" && part.text.length <= 500_000;
+      if (part.type === "image_url") {
+        const imageUrl = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
+        return isAllowedBrowserGatewayImageUrl(imageUrl);
+      }
+      return false;
+    };
+    const validMessages = Array.isArray(payload?.messages) &&
+      payload.messages.length >= 1 && payload.messages.length <= 80 &&
+      payload.messages.every(message => {
+        if (!isRecord(message) || !supportedRoles.has(message.role)) return false;
+        if (message.tool_calls !== undefined &&
+            (message.role !== "assistant" || !Array.isArray(message.tool_calls) ||
+             message.tool_calls.length > 64 || !message.tool_calls.every(isAllowedBrowserGatewayToolCall))) return false;
+        if (message.role === "tool" && (typeof message.tool_call_id !== "string" ||
+            !message.tool_call_id.trim() || message.tool_call_id.length > 200)) return false;
+        if (typeof message.content === "string") return message.content.length <= 500_000;
+        if (Array.isArray(message.content)) return message.content.length >= 1 && message.content.length <= 64 && message.content.every(validContentPart);
+        if (message.content === null || message.content === undefined) {
+          return message.role === "assistant" && Array.isArray(message.tool_calls) &&
+            message.tool_calls.length >= 1 && message.tool_calls.length <= 64;
+        }
+        return false;
+      });
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+        !validMessages || serializedBytes > 1_000_000 ||
+        (payload.tools !== undefined && (!Array.isArray(payload.tools) || payload.tools.length > 64 ||
+          !payload.tools.every(isAllowedBrowserGatewayTool)))) {
       return res.status(400).json({ error: { message: "Invalid or oversized chat completion request", type: "invalid_request_error" } });
     }
 
@@ -466,8 +551,25 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
     }
 
     const timeoutMs = Math.max(5000, Math.min(120000, Number(env.OPENROUTER_TIMEOUT_SECONDS || 60) * 1000));
+    const routingBudgetMs = chatProxyRoutingTimeoutMs(env);
+    const routingDeadline = Date.now() + routingBudgetMs;
+    const totalTimeoutSignal = createTimeoutSignal(routingBudgetMs);
+    const clientAbortController = new AbortController();
+    const markClientDisconnected = () => {
+      if (!res.writableEnded && !clientAbortController.signal.aborted) {
+        clientAbortController.abort(new DOMException("Client disconnected", "AbortError"));
+      }
+    };
+    req.once("aborted", markClientDisconnected);
+    res.once("close", markClientDisconnected);
+    const timedOutResponse = () => res.status(504).json({
+      error: { message: "Model provider fallback exceeded the overall time budget.", type: "model_routing_timeout" }
+    });
     let lastStatus = 502;
     for (let index = 0; index < attempts.length; index += 1) {
+      if (clientAbortController.signal.aborted || res.destroyed) return;
+      const remainingMs = routingDeadline - Date.now();
+      if (totalTimeoutSignal.aborted || remainingMs <= 0) return timedOutResponse();
       const { provider, model } = attempts[index];
       let upstream;
       try {
@@ -481,9 +583,11 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
           },
           body: JSON.stringify({ ...payload, model, stream: false }),
           redirect: "error",
-          signal: AbortSignal.timeout(timeoutMs)
+          signal: AbortSignal.any([createTimeoutSignal(Math.max(1, Math.min(timeoutMs, remainingMs))), totalTimeoutSignal, clientAbortController.signal])
         }, fetchImpl);
       } catch (error) {
+        if (clientAbortController.signal.aborted || res.destroyed) return;
+        if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
         if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
           lastStatus = 502;
           if (index + 1 < attempts.length) continue;
@@ -494,6 +598,8 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
       let raw;
       try { raw = await readResponseTextLimited(upstream, 2_000_000); }
       catch {
+        if (clientAbortController.signal.aborted || res.destroyed) return;
+        if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
         return res.status(502).json({ error: { message: "Model provider response exceeded the size limit or was not safely streamable", type: "provider_response_too_large" } });
       }
       if (upstream.ok) {
@@ -531,6 +637,8 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
       const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
       if (!fallbackEligible || index + 1 >= attempts.length) break;
     }
+    if (clientAbortController.signal.aborted || res.destroyed) return;
+    if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
     return res.status(lastStatus === 429 ? 429 : 502).json({
       error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" }
     });
@@ -647,8 +755,10 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
   // intentionally denied to authenticated PostgREST clients by database triggers/grants.
   // Callers must still provide owner/status predicates; never expose this helper to HTTP input.
   async function supabasePrivilegedRest(req, table, method, query = "", body, prefer = "return=representation") {
-    const allowed = table === "agent_tasks" && method === "PATCH" ||
-      table === "audit_events" && method === "POST";
+    const allowed = (table === "agent_tasks" && method === "PATCH") ||
+      (table === "audit_events" && method === "POST") ||
+      (table === "desktop_actions" && ["GET", "POST", "PATCH"].includes(method)) ||
+      (table === "rpc/ultron_claim_next_desktop_action" && method === "POST");
     if (!allowed || typeof query !== "string" || query.length > 4000) {
       throw Object.assign(new Error("Privileged database operation is not allowed."), { status: 400, code: "PRIVILEGED_OPERATION_NOT_ALLOWED" });
     }
@@ -1013,6 +1123,78 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
         return res.status(error.status).json({ error: { code: "RECOVERY_UNAVAILABLE", message: "Password recovery is temporarily unavailable. Please try again later." } });
       }
       return res.json({ ok: true, message: "If an account exists for that email, recovery instructions will be sent." });
+    }
+  });
+
+  // Verify the one-time recovery OTP server-side so credentials remain in HttpOnly cookies.
+  // The frontend can present this step later; the API does not return Supabase tokens to JavaScript.
+  app.post("/api/auth/recovery/verify", authRateLimiter, async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    res.setHeader("Cache-Control", "no-store");
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^[A-Za-z0-9]{6,12}$/.test(token)) {
+      return res.status(400).json({ error: { code: "INVALID_RECOVERY_CODE", message: "Enter the account email and the one-time recovery code from the email." } });
+    }
+    try {
+      const payload = await supabaseAuthRequest("/auth/v1/verify", { email, token, type: "recovery" });
+      if (!payload.user?.id || !setSupabaseCookies(res, payload)) {
+        return res.status(502).json({ error: { code: "RECOVERY_SESSION_INVALID", message: "The recovery session could not be established. Request a new recovery email." } });
+      }
+      return res.json({ authenticated: true, recoveryVerified: true, email: payload.user.email || email, message: "Recovery code verified. Submit a new password to finish resetting your account." });
+    } catch (error) {
+      if (error.status === 429) {
+        return res.status(429).json({ error: { code: "RECOVERY_RATE_LIMITED", message: "Too many verification attempts. Wait before requesting another code." } });
+      }
+      if (error.status >= 500 || !Number.isFinite(error.status)) {
+        return res.status(502).json({ error: { code: "RECOVERY_VERIFY_UNAVAILABLE", message: "Recovery verification is temporarily unavailable. Please try again later." } });
+      }
+      return res.status(400).json({ error: { code: "RECOVERY_CODE_INVALID", message: "The recovery code is invalid or expired. Request a new recovery email and try again." } });
+    }
+  });
+
+  // Update a password using the signed-in user's access token; never accept a user ID or admin key from the caller.
+  app.post("/api/auth/password/update", authRateLimiter, async (req, res) => {
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    res.setHeader("Cache-Control", "no-store");
+    if (password.length < 8 || password.length > 256) {
+      return res.status(400).json({ error: { code: "INVALID_PASSWORD", message: "Choose a password between 8 and 256 characters." } });
+    }
+    const user = await getSupabaseUser(req, res);
+    const config = supabaseConfig();
+    const accessToken = String(req.supabaseAccessToken || "");
+    if (!user || !accessToken || !config) {
+      return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Verify the recovery code or sign in before updating your password." } });
+    }
+    try {
+      let compromised;
+      try {
+        compromised = await isCompromisedPassword(password, fetchImpl);
+      } catch (error) {
+        logger.warn?.("Password update screening unavailable; update rejected safely", { code: error?.code || "PASSWORD_SCREENING_UNAVAILABLE" });
+        return res.status(503).json({ error: { code: "PASSWORD_SCREENING_UNAVAILABLE", message: "Password safety screening is temporarily unavailable. Please retry shortly." } });
+      }
+      if (compromised) {
+        return res.status(400).json({ error: { code: "COMPROMISED_PASSWORD", message: "Choose a different password that has not appeared in known data breaches." } });
+      }
+      const response = await fetchImpl(config.url + "/auth/v1/user", {
+        method: "PUT",
+        headers: { apikey: config.key, Authorization: "Bearer " + accessToken, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ password }),
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000)
+      });
+      if (!response.ok) {
+        try { await response.body?.cancel?.(); } catch {}
+        if (response.status === 429) return res.status(429).json({ error: { code: "PASSWORD_UPDATE_RATE_LIMITED", message: "Too many password updates. Wait and try again." } });
+        if (response.status >= 500) return res.status(502).json({ error: { code: "PASSWORD_UPDATE_UNAVAILABLE", message: "Password update is temporarily unavailable." } });
+        return res.status(400).json({ error: { code: "PASSWORD_UPDATE_REJECTED", message: "The password was not accepted. Use a different password and try again." } });
+      }
+      try { await readResponseJsonLimited(response, 512_000); }
+      catch { return res.status(502).json({ error: { code: "PASSWORD_UPDATE_UNCONFIRMED", message: "The password update could not be confirmed." } }); }
+      return res.json({ updated: true, message: "Password updated successfully." });
+    } catch (error) {
+      logger.warn?.("Password update failed", { code: error?.code || "PASSWORD_UPDATE_FAILED" });
+      return res.status(502).json({ error: { code: "PASSWORD_UPDATE_UNAVAILABLE", message: "Password update is temporarily unavailable." } });
     }
   });
 
@@ -1666,6 +1848,7 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createDesktopActionRouter({ env, requireSupabaseUser, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.

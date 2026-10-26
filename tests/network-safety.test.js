@@ -8,7 +8,7 @@ test("public network host validator rejects private, local, metadata, and transi
     "127.1", "0177.0.0.1", "0x7f.0.0.1", "2130706433",
     "10.0.0.1", "127.0.0.1", "169.254.169.254", "192.168.1.1", "172.20.0.2",
     "::1", "[::1]", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:7f00:1",
-    "2001:db8::1", "2001:2::1", "2001:10::1", "2001:20::1", "2002:7f00:1::1",
+    "2001:db8::1", "2001:1::1", "2001:100::1", "2001:1ff::1", "2001:2::1", "2001:10::1", "2001:20::1", "2002:7f00:1::1",
     "3fff::1", "192.88.99.1", "192.88.99.254"
   ]) assert.equal(isPublicNetworkHost(host), false, host);
   for (const host of ["openrouter.ai", "api.example.com", "8.8.8.8", "2606:4700:4700::1111"]) {
@@ -28,6 +28,6 @@ test("service URL validator accepts HTTPS public services and local HTTP develop
     "https://user:password@api.example.com", "https://api.example.com?token=secret",
     "https://api.example.com#fragment", "https://single-label",
     "https://127.1", "https://0177.0.0.1", "https://0x7f.0.0.1", "https://2130706433",
-    "https://192.88.99.1", "https://[2001:2::1]", "https://[2001:10::1]", "https://[2001:20::1]", "https://[3fff::1]"
+    "https://192.88.99.1", "https://[2001:1::1]", "https://[2001:100::1]", "https://[2001:1ff::1]", "https://[2001:2::1]", "https://[2001:10::1]", "https://[2001:20::1]", "https://[3fff::1]"
   ]) assert.equal(safeServiceBase(url), null, url);
 });
