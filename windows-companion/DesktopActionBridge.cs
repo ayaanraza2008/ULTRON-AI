@@ -98,6 +98,11 @@ internal sealed class DesktopActionBridge : IDisposable
         var actionType = ReadString(action, "actionType", 40);
         if (!Guid.TryParse(id, out _))
             return (false, "The desktop action queue returned an invalid item; no PC action was run.");
+        if (!action.TryGetProperty("attempts", out var attemptValue) ||
+            attemptValue.ValueKind != JsonValueKind.Number ||
+            !attemptValue.TryGetInt32(out var attemptNumber) ||
+            attemptNumber < 1 || attemptNumber > 3)
+            return (false, "The desktop action queue returned an invalid claim attempt; no PC action was run.");
 
         object result;
         string state;
@@ -126,7 +131,7 @@ internal sealed class DesktopActionBridge : IDisposable
             errorCode = actionType == "launch_app" ? "APP_LAUNCH_FAILED" : "ACTION_FAILED";
         }
 
-        await AcknowledgeAsync(baseUrl, token, id, state, result, errorCode, cancellationToken);
+        await AcknowledgeAsync(baseUrl, token, id, attemptNumber, state, result, errorCode, cancellationToken);
         return (true, "An approved PC action was processed. Waiting for the next approved action.");
     }
 
@@ -176,9 +181,9 @@ internal sealed class DesktopActionBridge : IDisposable
     }
 
     private async Task AcknowledgeAsync(
-        string baseUrl, string token, string actionId, string state, object result, string? errorCode, CancellationToken cancellationToken)
+        string baseUrl, string token, string actionId, int attempts, string state, object result, string? errorCode, CancellationToken cancellationToken)
     {
-        var payload = JsonSerializer.Serialize(new { actionId, state, result, errorCode });
+        var payload = JsonSerializer.Serialize(new { actionId, attempts, state, result, errorCode });
         using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/api/desktop/bridge/ack")
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
