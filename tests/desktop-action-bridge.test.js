@@ -40,9 +40,11 @@ function makeHarness({ env = API_ENV, authUserId = OWNER } = {}) {
       const id = params.get("id") || "";
       const userId = params.get("user_id") || "";
       const status = params.get("status") || "";
+      const attempts = params.get("attempts") || "";
       if (id.startsWith("eq.") && row.id !== id.slice(3)) return false;
       if (userId.startsWith("eq.") && row.user_id !== userId.slice(3)) return false;
       if (status.startsWith("eq.") && row.status !== status.slice(3)) return false;
+      if (attempts.startsWith("eq.") && Number(row.attempts) !== Number(attempts.slice(3))) return false;
       if (status.startsWith("in.(")) {
         const allowed = status.slice(4, -1).split(",");
         if (!allowed.includes(row.status)) return false;
@@ -84,7 +86,7 @@ function makeHarness({ env = API_ENV, authUserId = OWNER } = {}) {
   app.use(express.json());
   app.use("/api", createDesktopActionRouter({
     env,
-    now: () => new Date("2026-10-26T08:00:00.000Z"),
+    now: () => new Date(),
     logger: { warn() {} },
     requireSupabaseUser: (req, _res, next) => {
       req.supabaseUser = { id: authUserId };
@@ -182,14 +184,14 @@ test("bridge result is bounded and must match the approved action", async t => {
 
   const mismatch = await h.request("POST", "/api/desktop/bridge/ack", {
     token: TOKEN,
-    body: { actionId: ACTION_ID, state: "completed", result: { ok: true, summary: "Opened URL", host: "evil.example", platform: "windows" } }
+    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Opened URL", host: "evil.example", platform: "windows" } }
   });
   assert.equal(mismatch.status, 400);
   assert.equal(h.store.get(ACTION_ID).status, "RUNNING");
 
   const acknowledged = await h.request("POST", "/api/desktop/bridge/ack", {
     token: TOKEN,
-    body: { actionId: ACTION_ID, state: "completed", result: { ok: true, summary: "Opened destination", host: "example.com", platform: "windows" } }
+    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Opened destination", host: "example.com", platform: "windows" } }
   });
   assert.equal(acknowledged.status, 200);
   assert.equal(acknowledged.payload.action.status, "COMPLETED");
@@ -207,3 +209,31 @@ test("queued desktop action may be cancelled before the bridge claims it", async
   const next = await h.request("POST", "/api/desktop/bridge/next", { token: TOKEN, body: {} });
   assert.equal(next.payload.action, null);
 });
+
+test("stale bridge attempts and expired leases cannot acknowledge a newer or expired claim", async t => {
+  const h = makeHarness();
+  t.after(() => h.close());
+  await h.request("POST", "/api/desktop/actions", { body: { actionType: "launch_app", payload: { app: "calculator" } } });
+  await h.request("POST", "/api/desktop/actions/" + ACTION_ID + "/approve");
+  await h.request("POST", "/api/desktop/bridge/next", { token: TOKEN, body: {} });
+
+  const row = h.store.get(ACTION_ID);
+  row.attempts = 2;
+  row.lease_expires_at = new Date(Date.now() + 90_000).toISOString();
+  const stale = await h.request("POST", "/api/desktop/bridge/ack", {
+    token: TOKEN,
+    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Launched", app: "calculator" } }
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.payload.error.code, "DESKTOP_ACTION_STALE_ATTEMPT");
+  assert.equal(row.status, "RUNNING");
+
+  const currentAttemptExpired = await h.request("POST", "/api/desktop/bridge/ack", {
+    token: TOKEN,
+    body: { actionId: ACTION_ID, attempts: 2, state: "completed", result: { ok: true, summary: "Launched", app: "calculator" } }
+  });
+  // The active lease in the mock is still live, so the same attempt is eligible.
+  assert.equal(currentAttemptExpired.status, 200);
+  assert.equal(row.status, "COMPLETED");
+});
+
