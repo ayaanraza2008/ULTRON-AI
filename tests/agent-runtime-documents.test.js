@@ -43,15 +43,14 @@ function makeHarness({ toolCall, userId = OWNER, documents = [] } = {}) {
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
     providerCalls += 1;
     if (providerCalls === 1) {
-      return new Response(JSON.stringify({
-        choices: [{ message: {
-          role: "assistant", content: null,
-          tool_calls: [{
-            id: "saved-document-call", type: "function",
-            function: { name: toolCall.name, arguments: JSON.stringify(toolCall.args || {}) }
-          }]
-        } }]
-      }), { status: 200 });
+      const message = toolCall ? {
+        role: "assistant", content: null,
+        tool_calls: [{
+          id: "saved-document-call", type: "function",
+          function: { name: toolCall.name, arguments: JSON.stringify(toolCall.args || {}) }
+        }]
+      } : { role: "assistant", content: "I will look up the saved document." };
+      return new Response(JSON.stringify({ choices: [{ message }] }), { status: 200 });
     }
     const body = JSON.parse(options.body);
     const message = body.messages.find(item => item.role === "tool");
@@ -156,13 +155,14 @@ test("agent refuses saved-document access without a valid signed-in user ID", as
   assert.equal(h.databaseCalls.length, 0);
 });
 
-test("agent search fallback recognizes saved document requests without tool-call support", async t => {
-  const h = makeHarness({ toolCall: { name: "list_saved_documents" }, documents: rows });
+test("agent search fallback recognizes saved document requests when the model omits tool calls", async t => {
+  const h = makeHarness({ toolCall: null, documents: rows });
   t.after(() => h.close());
   const response = await h.run("Find my saved documents about quantum physics.");
   assert.equal(response.status, 200);
   const result = response.result.toolResults[0].result;
-  // The model tool call is the test's predetermined response; deterministic no-tool
-  // fallback is exercised by the dedicated provider behavior in the runtime tests.
-  assert.equal(result.documents.length, 1);
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0].id, DOC_ID);
+  assert.equal(h.databaseCalls[0].table, "rpc/ultron_search_user_documents");
+  assert.deepEqual(h.databaseCalls[0].body, { p_query: "quantum physics", p_limit: 5 });
 });
