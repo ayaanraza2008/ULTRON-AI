@@ -81,7 +81,7 @@ test("mixed public/private DNS answers fail closed before any socket connection"
     lookupImpl: async () => [publicAddress, { address: "10.0.0.2", family: 4 }],
     requestImpl: async () => { connected = true; return response(); }
   });
-  await assert.rejects(safeFetch("https://mixed.example"), { code: "OUTBOUND_ADDRESS_BLOCKED" });
+  await assert.rejects(safeFetch("https://mixed.example.com"), { code: "OUTBOUND_ADDRESS_BLOCKED" });
   assert.equal(connected, false);
 });
 
@@ -95,7 +95,7 @@ test("DNS rebinding between validation and connect cannot replace the pinned add
     },
     requestImpl: async options => { connectedAddresses.push(options.address); return response(); }
   });
-  const result = await safeFetch("https://rebind.example/resource");
+  const result = await safeFetch("https://rebind.example.com/resource");
   assert.equal(result.status, 200);
   assert.equal(lookupCalls, 1, "the transport must not perform a second DNS lookup");
   assert.deepEqual(connectedAddresses, [publicAddress.address]);
@@ -110,7 +110,7 @@ test("redirects to loopback/private addresses are rejected without a second requ
       return response(null, 302, { location: "https://127.0.0.1/admin" });
     }
   });
-  await assert.rejects(safeFetch("https://public.example/start"), { code: "OUTBOUND_ADDRESS_BLOCKED" });
+  await assert.rejects(safeFetch("https://public.example.com/start"), { code: "OUTBOUND_ADDRESS_BLOCKED" });
   assert.equal(requests, 1);
 });
 
@@ -120,15 +120,15 @@ test("each public redirect is resolved anew and credentials are stripped across 
   const safeFetch = createSafeOutboundFetch({
     lookupImpl: async host => {
       resolutions.push(host);
-      return [{ address: host === "first.example" ? "93.184.216.34" : "8.8.8.8", family: 4 }];
+      return [{ address: host === "first.example.com" ? "93.184.216.34" : "8.8.8.8", family: 4 }];
     },
     requestImpl: async options => {
       requests.push(options);
-      if (requests.length === 1) return response(null, 302, { location: "https://second.example/final" });
+      if (requests.length === 1) return response(null, 302, { location: "https://second.example.com/final" });
       return response("finished");
     }
   });
-  const result = await safeFetch("https://first.example/start", {
+  const result = await safeFetch("https://first.example.com/start", {
     headers: {
       Authorization: "Bearer do-not-forward",
       "X-API-Key": "do-not-forward",
@@ -137,7 +137,7 @@ test("each public redirect is resolved anew and credentials are stripped across 
     }
   });
   assert.equal(await result.text(), "finished");
-  assert.deepEqual(resolutions, ["first.example", "second.example"]);
+  assert.deepEqual(resolutions, ["first.example.com", "second.example.com"]);
   assert.equal(requests.length, 2);
   assert.equal(requests[1].headers.get("authorization"), null);
   assert.equal(requests[1].headers.get("x-api-key"), null);
@@ -155,7 +155,7 @@ test("FormData requests are bounded and encoded before the pinned transport", as
   const form = new FormData();
   form.append("language", "hi");
   form.append("file", new Blob(["small audio"], { type: "audio/wav" }), "sample.wav");
-  const result = await safeFetch("https://audio.example/upload", { method: "POST", body: form });
+  const result = await safeFetch("https://audio.example.com/upload", { method: "POST", body: form });
   assert.equal(await result.text(), "ok");
   assert.match(captured.headers.get("content-type"), /^multipart\/form-data; boundary=/);
   assert.match(captured.body.toString(), /name="language"/);
@@ -185,14 +185,14 @@ test("DNS failures and HTTP redirects cannot fall back to global fetch or a seco
     lookupImpl: async () => { throw new Error("private resolver detail"); },
     requestImpl: async () => { calls += 1; return response(); }
   });
-  await assert.rejects(failedDns("https://dns-failure.example"), { code: "OUTBOUND_DNS_FAILED" });
+  await assert.rejects(failedDns("https://dns-failure.example.com"), { code: "OUTBOUND_DNS_FAILED" });
   assert.equal(calls, 0);
 
   const redirectError = createSafeOutboundFetch({
     lookupImpl: async () => [publicAddress],
-    requestImpl: async () => { calls += 1; return response(null, 302, { location: "https://second.example/" }); }
+    requestImpl: async () => { calls += 1; return response(null, 302, { location: "https://second.example.com/" }); }
   });
-  await assert.rejects(redirectError("https://first.example/", { redirect: "error" }), { code: "OUTBOUND_REDIRECT_BLOCKED" });
+  await assert.rejects(redirectError("https://first.example.com/", { redirect: "error" }), { code: "OUTBOUND_REDIRECT_BLOCKED" });
   assert.equal(calls, 1);
 });
 
@@ -241,7 +241,7 @@ test("bad URL percent escapes are rejected before DNS", async () => {
     lookupImpl: async () => { dnsCalls += 1; return [publicAddress]; },
     requestImpl: async () => response()
   });
-  await assert.rejects(safeFetch("https://public.example/%ZZ"), { code: "OUTBOUND_URL_INVALID" });
+  await assert.rejects(safeFetch("https://public.example.com/%ZZ"), { code: "OUTBOUND_URL_INVALID" });
   assert.equal(dnsCalls, 0);
 });
 
@@ -252,7 +252,7 @@ test("oversized outbound request bodies fail before DNS resolution", async () =>
     lookupImpl: async () => { dnsCalls += 1; return [publicAddress]; },
     requestImpl: async () => response()
   });
-  await assert.rejects(safeFetch("https://public.example/upload", {
+  await assert.rejects(safeFetch("https://public.example.com/upload", {
     method: "POST",
     body: "123456",
     ultronMaxRequestBytes: 5
@@ -268,7 +268,7 @@ test("pre-aborted outbound requests fail without DNS or connection attempts", as
     lookupImpl: async () => { calls += 1; return [publicAddress]; },
     requestImpl: async () => { calls += 1; return response(); }
   });
-  await assert.rejects(safeFetch("https://public.example/", { signal: controller.signal }), { code: "OUTBOUND_ABORTED" });
+  await assert.rejects(safeFetch("https://public.example.com/", { signal: controller.signal }), { code: "OUTBOUND_ABORTED" });
   assert.equal(calls, 0);
 });
 
@@ -277,5 +277,5 @@ test("upstream compressed responses are rejected instead of bypassing response b
     lookupImpl: async () => [publicAddress],
     requestImpl: async () => response("not really gzip", 200, { "content-encoding": "gzip" })
   });
-  await assert.rejects(safeFetch("https://public.example/", { redirect: "error" }), { code: "OUTBOUND_COMPRESSION_UNSUPPORTED" });
+  await assert.rejects(safeFetch("https://public.example.com/", { redirect: "error" }), { code: "OUTBOUND_COMPRESSION_UNSUPPORTED" });
 });
