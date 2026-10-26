@@ -514,7 +514,6 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
           taskController.abort(timeoutError);
           reject(timeoutError);
         }, taskTimeoutMs);
-        taskDeadlineTimer.unref?.();
       });
       const result = await Promise.race([execute(task, taskController.signal), deadline]);
       clearTimeout(taskDeadlineTimer);
