@@ -111,6 +111,7 @@ export function buildRuntimeReadiness({
       tasksFailed: Number(workerStatus.tasksFailed) || 0,
       tasksBlocked: Number(workerStatus.tasksBlocked) || 0,
       tasksDiscarded: Number(workerStatus.tasksDiscarded) || 0,
+      tasksTimedOut: Number(workerStatus.tasksTimedOut) || 0,
       taskStateUpdateFailures: Number(workerStatus.taskStateUpdateFailures) || 0,
       taskLeaseRenewalFailures: Number(workerStatus.taskLeaseRenewalFailures) || 0
     } : { state: workerEnabled ? "not_started" : "disabled" },

@@ -39,6 +39,27 @@ test("natural-language external actions are classified as guarded", () => {
   }
 });
 
+test("file and message forwarding to other people or shared locations is guarded", () => {
+  for (const task of [
+    "Send this file to my colleague.",
+    "Forward the invoice to the supplier.",
+    "Deliver the report to the customer.",
+    "Transmit the document to the client.",
+    "Send the file.",
+    "Copy this report to the shared folder."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("sending a summary to the current chat is not misclassified as an external side effect", () => {
+  const risk = classifyAutonomyRisk("Send me a short summary in this chat.");
+  assert.equal(risk.level, "routine");
+  assert.equal(risk.requiresConfirmation, false);
+});
+
 test("common UI actions with external consequences are guarded", () => {
   for (const task of [
     "Click submit to send this application.",
