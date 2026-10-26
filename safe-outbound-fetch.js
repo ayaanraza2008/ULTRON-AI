@@ -429,6 +429,16 @@ export function createSafeOutboundFetch({
         if (signal?.aborted) throw outboundError("OUTBOUND_ABORTED", "Outbound request was cancelled or timed out.");
         throw outboundError("OUTBOUND_REQUEST_FAILED", "Outbound request failed.");
       }
+      const responseEncoding = String(response.headers?.get?.("content-encoding") || "").trim().toLowerCase();
+      if (responseEncoding && responseEncoding !== "identity") {
+        try { await response.body?.cancel?.(); } catch {}
+        throw outboundError("OUTBOUND_COMPRESSION_UNSUPPORTED", "Compressed upstream responses are not accepted by this bounded transport.");
+      }
+      const declaredResponseLength = Number(response.headers?.get?.("content-length"));
+      if (Number.isFinite(declaredResponseLength) && declaredResponseLength > responseLimit) {
+        try { await response.body?.cancel?.(); } catch {}
+        throw outboundError("OUTBOUND_RESPONSE_TOO_LARGE", "Outbound response exceeds the configured size limit.");
+      }
       if (!REDIRECT_STATUSES.has(response.status)) return response;
       const location = response.headers?.get?.("location");
       if (!location || redirectMode === "manual") return response;
