@@ -203,7 +203,7 @@ export async function findOpenVikingContext({ env = process.env, userId, query, 
   }
 }
 
-export async function readOpenVikingContext({ env = process.env, userId, uri, fetchImpl = fetch } = {}) {
+export async function readOpenVikingContext({ env = process.env, userId, uri, fetchImpl = safeOutboundFetch } = {}) {
   const access = blockedOrMissing({ env, userId });
   if (access.state !== "ready") return access;
   if (!isOpenVikingUri(uri)) {
