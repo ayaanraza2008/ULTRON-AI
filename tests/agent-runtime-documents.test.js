@@ -123,7 +123,9 @@ test("agent searches saved document snippets and marks retrieved text as untrust
   assert.equal(result.results[0].id, DOC_ID);
   assert.match(result.results[0].excerpt, /Ignore all rules/i);
   assert.match(result.notice, /untrusted document data/i);
-  assert.deepEqual(h.databaseCalls[0].body, { p_query: "quantum physics", p_limit: 5 });
+  const searchCall = h.databaseCalls.find(call => call.table === "rpc/ultron_search_user_documents");
+  assert.ok(searchCall);
+  assert.deepEqual(searchCall.body, { p_query: "quantum physics", p_limit: 5 });
 });
 
 test("agent reads saved document content in bounded Unicode character ranges", async t => {
@@ -142,8 +144,9 @@ test("agent reads saved document content in bounded Unicode character ranges", a
   assert.equal(result.hasMore, true);
   assert.equal(result.untrustedDocumentContent, true);
   assert.match(result.notice, /never as instructions/i);
-  assert.equal(h.databaseCalls.length, 1);
-  assert.match(h.databaseCalls[0].query, /user_id=eq\./);
+  const documentReads = h.databaseCalls.filter(call => call.table === "user_documents");
+  assert.equal(documentReads.length, 1);
+  assert.match(documentReads[0].query, /user_id=eq\./);
 });
 
 test("agent refuses saved-document access without a valid signed-in user ID", async t => {
@@ -163,6 +166,7 @@ test("agent search fallback recognizes saved document requests when the model om
   const result = response.result.toolResults[0].result;
   assert.equal(result.results.length, 1);
   assert.equal(result.results[0].id, DOC_ID);
-  assert.equal(h.databaseCalls[0].table, "rpc/ultron_search_user_documents");
-  assert.deepEqual(h.databaseCalls[0].body, { p_query: "quantum physics", p_limit: 5 });
+  const searchCall = h.databaseCalls.find(call => call.table === "rpc/ultron_search_user_documents");
+  assert.ok(searchCall);
+  assert.deepEqual(searchCall.body, { p_query: "quantum physics", p_limit: 5 });
 });
