@@ -20,6 +20,12 @@ CREATE OR REPLACE FUNCTION auth.role()
 RETURNS text
 LANGUAGE sql
 STABLE
-AS $$ SELECT NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), '')::text $$;
+AS $ SELECT coalesce(NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), ''), current_user::text) $;
 GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT ALL PRIVILEGES ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT ALL PRIVILEGES ON SEQUENCES TO anon, authenticated, service_role;
 
