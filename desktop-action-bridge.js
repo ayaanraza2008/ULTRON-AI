@@ -42,6 +42,11 @@ function safeBearerMatches(header, expected) {
   return crypto.timingSafeEqual(suppliedDigest, expectedDigest);
 }
 
+function bridgeTokenConfigured(env) {
+  const token = String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim();
+  return token.length >= 32 && !/\s/.test(token);
+}
+
 function getBridgeOwner(env, res) {
   const ownerId = normalizeUuid(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   if (!ownerId) {
@@ -203,7 +208,10 @@ export function createDesktopActionRouter({
     try {
       const rows = await db(req, "desktop_actions", "GET",
         "?select=" + ACTION_SELECT + "&user_id=eq." + req.desktopOwnerId + "&order=created_at.desc&limit=20");
-      return res.json({ actions: (Array.isArray(rows) ? rows : []).map(publicAction) });
+      return res.json({
+        actions: (Array.isArray(rows) ? rows : []).map(publicAction),
+        bridgeReady: bridgeTokenConfigured(env)
+      });
     } catch (error) {
       return handleFailure(res, error, "Could not load desktop action history.");
     }
@@ -224,7 +232,12 @@ export function createDesktopActionRouter({
       });
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row?.id) return apiError(res, 502, "DESKTOP_ACTION_CREATE_FAILED", "The desktop action could not be recorded.");
-      return res.status(201).json({ action: publicAction(row), requiresApproval: true });
+      return res.status(201).json({
+        action: publicAction(row),
+        requiresApproval: true,
+        execution: "not_executed",
+        bridgeReady: bridgeTokenConfigured(env)
+      });
     } catch (error) {
       return handleFailure(res, error, "Could not request the desktop action.");
     }
