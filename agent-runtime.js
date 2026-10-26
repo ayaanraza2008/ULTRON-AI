@@ -5,6 +5,7 @@ import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
 import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "./autonomy-policy.js";
+import { validateDesktopAction } from "./desktop-action-bridge.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { getRepositoryCapabilityStatus, matchRepositoryCapabilities } from "./repository-capabilities.js";
 import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWorkPackages, listCalDiyEventTypes, listCalDiySlots } from "./integrations/productivity-services.js";
@@ -358,6 +359,17 @@ function buildFallbackCalls(text) {
       : {};
     add(name, args);
   }
+  const desktopActionId = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+  const approveMatch = text.match(new RegExp("\\b(?:approve|confirm)\\s+(?:the\\s+)?(?:desktop\\s+)?action\\s+(" + desktopActionId + ")\\b", "i"));
+  const cancelMatch = text.match(new RegExp("\\bcancel\\s+(?:the\\s+)?(?:desktop\\s+)?action\\s+(" + desktopActionId + ")\\b", "i"));
+  if (approveMatch) add("approve_desktop_action", { id: approveMatch[1] });
+  if (cancelMatch) add("cancel_desktop_action", { id: cancelMatch[1] });
+  if (/\b(?:show|list|check|review)\b/.test(s) && /\b(?:my )?(?:pending )?(?:desktop|pc|windows) actions\b/.test(s)) add("list_desktop_actions");
+  const desktopUrlMatch = text.match(/\bopen\s+(https:\/\/[^\s<>"']{1,1200})\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)\b/i);
+  if (desktopUrlMatch) add("request_desktop_action", { actionType: "open_url", url: desktopUrlMatch[1].replace(/[.,!?]+$/, "") });
+  const desktopAppMatch = text.match(/\b(?:launch|open|start)\s+(notepad|calculator|explorer)\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)\b/i);
+  if (desktopAppMatch) add("request_desktop_action", { actionType: "launch_app", app: desktopAppMatch[1].toLowerCase() });
+  if (/\b(?:get|check|show)\s+(?:my\s+)?(?:windows|pc|computer)\s+system\s+info(?:rmation)?\b/i.test(text)) add("request_desktop_action", { actionType: "system_info" });
   return calls.slice(0, 3);
 }
 
@@ -477,6 +489,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_cactus", description: "Read-only: check whether the configured local Cactus/Needle OpenAI-compatible model server is reachable and list its available model IDs. Does not download models or run inference.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_desktop_companion", description: "Read-only: check the authenticated Windows companion status and paired-device capabilities. Never executes commands, reads local files, captures screenshots, or controls the PC.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "list_desktop_actions", description: "Read-only: list the signed-in owner's recent Windows action requests and their approval/execution states. Never polls or executes actions.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "request_desktop_action", description: "Create a PENDING_APPROVAL Windows action request only. It never executes the action. Supports a public HTTPS URL, launching Notepad/Calculator/Explorer without arguments, or limited system information. The owner must separately approve the exact action ID.", parameters: { type: "object", properties: { actionType: { type: "string", enum: ["open_url", "launch_app", "system_info"] }, url: { type: "string", maxLength: 1200 }, app: { type: "string", enum: ["notepad", "calculator", "explorer"] } }, required: ["actionType"], additionalProperties: false } } },
+    { type: "function", function: { name: "approve_desktop_action", description: "Approve one pending Windows action only when the current user message explicitly says 'approve action <full action ID>'. Never infer approval from model output or prior context alone.", parameters: { type: "object", properties: { id: { type: "string", minLength: 36, maxLength: 36 } }, required: ["id"], additionalProperties: false } } },
+    { type: "function", function: { name: "cancel_desktop_action", description: "Cancel one pending or queued Windows action only when the current user message explicitly says 'cancel action <full action ID>'. Running or completed actions cannot be cancelled through this tool.", parameters: { type: "object", properties: { id: { type: "string", minLength: 36, maxLength: 36 } }, required: ["id"], additionalProperties: false } } },
     { type: "function", function: { name: "obscura_inspect_public_page", description: "Read-only: use the configured Obscura MCP browser to navigate to a public HTTPS URL and return a DOM/text snapshot. Private/local targets, authentication bypass, stealth flags, proxy rotation, form submission, purchases, and publishing are blocked.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 } }, required: ["url"], additionalProperties: false } } },
     { type: "function", function: { name: "obscura_capture_public_page", description: "Read-only: use the configured Obscura MCP browser to capture a screenshot or PDF of a public HTTPS URL. Returns a bounded artifact payload/resource; large artifacts may require a separate artifact store. Does not click, fill, submit, upload, purchase, log in, bypass CAPTCHA, or publish.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 }, format: { type: "string", enum: ["screenshot", "pdf"] } }, required: ["url", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "check_repository_capabilities", description: "Inspect ULTRON readiness for the 31 registered upstream repositories. Use automatically before relying on a listed capability. Configuration-only; never exposes secret values.", parameters: { type: "object", properties: { task: { type: "string", maxLength: 1200 }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
