@@ -5,7 +5,7 @@
  * upstream URLs, tokens, or arbitrary paths from model/user input.
  */
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_RESPONSE_BYTES = 1_500_000;
 
@@ -69,12 +69,12 @@ async function readJsonLimited(response) {
 }
 
 async function getJson(fetchImpl, url, headers, timeoutMs = 12000) {
-  const response = await fetchImpl(url, {
+  const response = await fetchConfiguredOutbound(new URL(url).origin, url, {
     method: "GET",
     headers: { Accept: "application/json", ...headers },
     redirect: "error",
     signal: AbortSignal.timeout(timeoutMs)
-  });
+  }, fetchImpl);
   const data = await readJsonLimited(response);
   if (!response.ok) {
     throw Object.assign(new Error("Connected service returned HTTP " + response.status + "."), {
