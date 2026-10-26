@@ -93,3 +93,10 @@ Use a dedicated test account and verify a real model response, one queued employ
 
 
 - The Windows action bridge PR now also exposes the pending-action queue through the agent runtime: ULTRON can request/list actions, but a separate current-prompt command with the exact UUID is required to approve or cancel. Approval only moves a row to the queue; the Windows companion must claim and acknowledge it before ULTRON can say the PC action completed. Regression tests cover owner denial, unsafe URLs, approval intent, and pending-only action requests.
+
+
+## Saved extracted-document library — 2026-10-26
+
+- The backend feature branch adds POST /api/documents to explicitly save extracted text (not original binaries), metadata-only listing, full-text search, bounded 20,000-Unicode-character reads, and deletion. The migration uses owner-scoped RLS, authenticated-only read/insert/delete grants, a GIN full-text index, and a caller-scoped search RPC with bounded result count.
+- The agent runtime has list/search/read tools using caller-scoped Supabase access (not the service-role helper) and treats retrieved text/snippets as untrusted data. Tests cover Unicode counts, paging, query limits, cross-account denial, and migration security contracts.
+- Not production-ready until latest branch CI passes, the document migration and API code are reviewed and deployed together in the later rollout, and authenticated two-account live tests succeed. Source binaries are not stored and malware scanning is not included.
