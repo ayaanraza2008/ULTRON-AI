@@ -25,3 +25,6 @@
 - Auth signup, sign-in, and recovery now share a bounded in-process per-IP limiter (10 attempts per 15-minute window). Multi-instance deployments should add shared edge/store throttling as well.
 - Do not paste credentials into chat or source control. Use Render's private environment settings.
 - Frontend implementation is deliberately deferred until backend capabilities and live verification are addressed.
+
+| BLK-015 | Proposed saved-document and Windows-action migrations are not applied | The new APIs depend on database objects absent from the live schema; PC actions additionally require a paired opted-in Windows companion | Keep features explicitly unavailable until schema/API rollout is authorized; test on dedicated accounts and isolated Windows hardware first | Yes: PR #285 source code/tests are not production availability proof |
+| BLK-016 | Free vision/model diagnostics are not live-verified | CI uses mocked provider responses; real credentials, quota and a compatible live vision model are required | Use the opt-in bounded smoke commands only in a trusted backend environment; never put keys in chat or commits | Yes: no live provider result is claimed |
