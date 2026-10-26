@@ -138,6 +138,8 @@ test("owner must explicitly approve a desktop action before the Windows bridge c
   });
   assert.equal(requested.status, 201);
   assert.equal(requested.payload.requiresApproval, true);
+  assert.equal(requested.payload.execution, "not_executed");
+  assert.equal(requested.payload.bridgeConfigured, true);
   assert.equal(requested.payload.action.status, "PENDING_APPROVAL");
 
   const beforeApproval = await h.request("POST", "/api/desktop/bridge/next", { token: TOKEN, body: {} });
@@ -236,5 +238,20 @@ test("stale bridge attempts and expired leases cannot acknowledge an action", as
   assert.equal(expired.status, 409);
   assert.equal(expired.payload.error.code, "DESKTOP_ACTION_LEASE_EXPIRED");
   assert.equal(row.status, "RUNNING");
+});
+
+test("action requests disclose missing bridge configuration without exposing secrets", async t => {
+  const h = makeHarness({ env: { ULTRON_INTEGRATION_OWNER_USER_ID: OWNER } });
+  t.after(() => h.close());
+  const created = await h.request("POST", "/api/desktop/actions", {
+    body: { actionType: "system_info", payload: {} }
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.payload.bridgeConfigured, false);
+  assert.equal(created.payload.action.status, "PENDING_APPROVAL");
+  assert.equal(JSON.stringify(created.payload).includes(TOKEN), false);
+  const listed = await h.request("GET", "/api/desktop/actions");
+  assert.equal(listed.status, 200);
+  assert.equal(listed.payload.bridgeConfigured, false);
 });
 
