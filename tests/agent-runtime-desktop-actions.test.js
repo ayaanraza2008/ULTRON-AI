@@ -135,6 +135,7 @@ test("agent can only request a pending PC action, never execute it during the re
   assert.deepEqual(created.payload, { app: "calculator" });
   assert.equal(response.result.toolResults[0].result.execution, "not_executed");
   assert.equal(response.result.toolResults[0].result.requiresApproval, true);
+  assert.equal(response.result.toolResults[0].result.bridgeConfigured, false);
   assert.equal(h.privilegedCalls.some(call => call.method === "PATCH"), false);
 });
 
