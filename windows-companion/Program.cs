@@ -10,6 +10,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Any(arg => arg.Equals("--verify-network-policy", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = DesktopActionBridge.RunNetworkAddressPolicySelfTest();
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
         var backgroundLaunch = args.Any(arg => arg.Equals("--background-listen", StringComparison.OrdinalIgnoreCase));
         Application.Run(new CompanionContext(backgroundLaunch));

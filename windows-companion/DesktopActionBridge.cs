@@ -265,6 +265,37 @@ internal sealed class DesktopActionBridge : IDisposable
         return !IPAddress.TryParse(name, out var address) || IsPublicAddress(address);
     }
 
+    internal static int RunNetworkAddressPolicySelfTest()
+    {
+        var cases = new (string Address, bool Expected)[]
+        {
+            ("8.8.8.8", true),
+            ("2606:4700:4700::1111", true),
+            ("2001:4860:4860::8888", true),
+            ("127.0.0.1", false),
+            ("10.0.0.1", false),
+            ("169.254.169.254", false),
+            ("::1", false),
+            ("fd00::1", false),
+            ("fe80::1", false),
+            ("::ffff:127.0.0.1", false),
+            ("2001:1::1", false),
+            ("2001:1ff::1", false),
+            ("2001:db8::1", false),
+            ("2002:7f00:1::1", false),
+            ("3fff::1", false),
+            ("ff02::1", false)
+        };
+
+        foreach (var item in cases)
+        {
+            if (!IPAddress.TryParse(item.Address, out var address) ||
+                IsPublicAddress(address) != item.Expected)
+                return 1;
+        }
+        return 0;
+    }
+
     private static bool IsPublicAddress(IPAddress address)
     {
         if (IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any) ||
