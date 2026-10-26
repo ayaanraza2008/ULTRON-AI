@@ -49,11 +49,8 @@ internal sealed class DesktopActionBridge : IDisposable
         {
             try
             {
-                var didWork = await PollOnceAsync(baseUrl.TrimEnd('/'), token, ReportOnce, cancellationToken);
-                if (didWork)
-                    ReportOnce("An approved PC action was processed. Waiting for the next approved action.");
-                else
-                    ReportOnce("PC action bridge connected; waiting for owner-approved actions.");
+                var poll = await PollOnceAsync(baseUrl.TrimEnd('/'), token, cancellationToken);
+                ReportOnce(poll.Status);
                 await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -69,7 +66,7 @@ internal sealed class DesktopActionBridge : IDisposable
         }
     }
 
-    private async Task<bool> PollOnceAsync(string baseUrl, string token, Action<string> reportStatus, CancellationToken cancellationToken)
+    private async Task<(bool DidWork, string Status)> PollOnceAsync(string baseUrl, string token, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/api/desktop/bridge/next")
         {
@@ -81,27 +78,26 @@ internal sealed class DesktopActionBridge : IDisposable
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
         {
-            reportStatus("PC action bridge authentication failed. Check the server/local bridge token.");
             await CancelBodyAsync(response);
-            return false;
+            return (false, "PC action bridge authentication failed. Check the server/local bridge token.");
         }
         if (!response.IsSuccessStatusCode)
         {
-            reportStatus(response.StatusCode == HttpStatusCode.TooManyRequests
+            var status = response.StatusCode == HttpStatusCode.TooManyRequests
                 ? "PC action bridge is rate-limited; retrying safely."
-                : "PC action queue is not available yet. No action was executed.");
+                : "PC action queue is not available yet. No action was executed.";
             await CancelBodyAsync(response);
-            return false;
+            return (false, status);
         }
 
         using var document = JsonDocument.Parse(await ReadLimitedAsync(response.Content, MaxResponseBytes, cancellationToken));
         if (!document.RootElement.TryGetProperty("action", out var action) || action.ValueKind != JsonValueKind.Object)
-            return false;
+            return (false, "PC action bridge connected; waiting for owner-approved actions.");
 
         var id = ReadString(action, "id", 60);
         var actionType = ReadString(action, "actionType", 40);
         if (!Guid.TryParse(id, out _))
-            return false;
+            return (false, "The desktop action queue returned an invalid item; no PC action was run.");
 
         object result;
         string state;
@@ -131,7 +127,7 @@ internal sealed class DesktopActionBridge : IDisposable
         }
 
         await AcknowledgeAsync(baseUrl, token, id, state, result, errorCode, cancellationToken);
-        return true;
+        return (true, "An approved PC action was processed. Waiting for the next approved action.");
     }
 
     private async Task<object> ExecuteAllowedActionAsync(string actionType, JsonElement action, CancellationToken cancellationToken)
@@ -304,7 +300,9 @@ internal sealed class DesktopActionBridge : IDisposable
         try
         {
             if (response.Content is not null)
-                await response.Content.ReadAsStreamAsync().ContinueWith(async task => await task.Result.DisposeAsync()).Unwrap();
+            {
+                await using var stream = await response.Content.ReadAsStreamAsync();
+            }
         }
         catch { /* Ignore cleanup failures on already bounded responses. */ }
     }
@@ -316,5 +314,5 @@ internal sealed class DesktopActionBridge : IDisposable
         _http.Dispose();
     }
 
-    private sealed class UnsafeDesktopActionException : Exception;
+    private sealed class UnsafeDesktopActionException : Exception { }
 }
