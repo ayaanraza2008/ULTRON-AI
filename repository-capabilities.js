@@ -4,7 +4,7 @@ import { getPaperclipReadiness } from "./integrations/paperclip-services.js";
 import { getHermesAgentReadiness } from "./integrations/hermes-agent.js";
 
 /**
- * Task-matched capability catalog for the user's 30 upstream repository domains.
+ * Task-matched capability catalog for the user's 31 upstream repository domains.
  *
  * This is a routing/readiness manifest, not an installer or claim that the upstream
  * applications are embedded in ULTRON. It never executes repository scripts.
