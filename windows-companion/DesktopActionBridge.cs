@@ -307,10 +307,10 @@ internal sealed class DesktopActionBridge : IDisposable
             if (first == 0x2001)
             {
                 var second = (bytes[2] << 8) | bytes[3];
-                if (second == 0x0DB8 || second == 0x0000 || second == 0x0002 ||
-                    (second >= 0x0010 && second <= 0x001F) ||
-                    (second >= 0x0020 && second <= 0x003F))
-                    return false; // Documentation, special-use, benchmark, or ORCHID ranges.
+                // Reject the complete 2001:0000::/23 IETF protocol-assignment block,
+                // including entries beyond the individually named benchmark/ORCHID ranges.
+                if (second <= 0x01FF || second == 0x0DB8)
+                    return false;
             }
             return true;
         }

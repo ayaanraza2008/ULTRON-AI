@@ -126,6 +126,13 @@ test("desktop action validator accepts only the narrow allowlist", () => {
   assert.throws(() => validateDesktopAction("open_url", { url: "file:///C:/Windows/win.ini" }), { code: "DESKTOP_ACTION_UNSAFE_URL" });
   assert.throws(() => validateDesktopAction("open_url", { url: "http://127.0.0.1:8080/" }), { code: "DESKTOP_ACTION_UNSAFE_URL" });
   assert.throws(() => validateDesktopAction("open_url", { url: "https://user:password@example.com/" }), { code: "DESKTOP_ACTION_UNSAFE_URL" });
+  for (const url of [
+    "https://[2001:1::1]/",
+    "https://[2001:1ff::1]/",
+    "https://[2001:db8::1]/"
+  ]) {
+    assert.throws(() => validateDesktopAction("open_url", { url }), { code: "DESKTOP_ACTION_UNSAFE_URL" }, url);
+  }
   assert.throws(() => validateDesktopAction("system_info", { includeEnvironment: true }), { code: "DESKTOP_ACTION_PAYLOAD_INVALID" });
 });
 
