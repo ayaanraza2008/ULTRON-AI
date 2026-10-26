@@ -2,8 +2,8 @@
 **Snapshot date:** 2026-10-26  
 **Repository:** `ayaanraza2008/ULTRON-AI`  
 **Candidate branch:** `ultron/source-ci-split-20261026`  
-**Verified application-source commit:** `9e8820cc80637c89b1e1227b7076ea7b0da68720` (the subsequent audit refresh is documentation-only)  
-**CI evidence:** [Run 40371051698](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40371051698) — succeeded.
+**Verified application-source commit:** `ead0e1d016f4e7b7baf2298081a4bc0ee5c8016f` (the subsequent audit refresh is documentation-only)  
+**CI evidence:** [Run 40371903311](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40371903311) — succeeded.
 
 ## Scope and scoring rules
 
@@ -32,11 +32,24 @@ Calculation: (35.5 / 54 \times 100 = 65.7407\ldots\), rounded to **65.7%**. This
 
 - Candidate PR: [#279 — Harden worker smoke verification and separate source CI](https://github.com/ayaanraza2008/ULTRON-AI/pull/279). It is **open and unmerged**. Do not treat the branch changes as present on `main`.
 - Tested SHA: `e86f83e613d549126b156c0e1ba359f2cc66b1d2`.
-- Candidate workflow [40371051698](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40371051698) on application-source commit `9e8820cc80637c89b1e1227b7076ea7b0da68720` concluded **success**. The test job passed the Python browser-policy/syntax checks, dependency audit (`npm audit --omit=dev --audit-level=high`), `npm run check`, and `npm test`. The Node test summary was **524 total, 523 passed, 0 failed, 1 skipped**. The pinned God’s Eye/world-intelligence build and bridge injection validation also passed. Production revision verification was intentionally skipped on the pull-request event.
-- New `safe-outbound-fetch.js` implements DNS A/AAAA resolution, rejection of non-public and mixed DNS answers, exact validated-address pinning at the connection boundary, original-host TLS verification, redirect-by-redirect validation, connection-pool avoidance, URL/port validation, request and response caps, deadline/cancellation handling, and safe cross-origin header stripping. Explicit local HTTP is opt-in only for exact loopback origins found in owner-configured service settings.
+- Candidate workflow [40371903311](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40371903311) on application-source commit `ead0e1d016f4e7b7baf2298081a4bc0ee5c8016f` concluded **success**. The test job passed the Python browser-policy/syntax checks, dependency audit (`npm audit --omit=dev --audit-level=high`), `npm run check`, and `npm test`. The Node test summary was **525 total, 524 passed, 0 failed, 1 skipped**. The pinned God’s Eye/world-intelligence build and bridge injection validation also passed. Production revision verification was intentionally skipped on the pull-request event.
+- New `safe-outbound-fetch.js` implements DNS A/AAAA resolution, rejection of non-public and mixed DNS answers, exact validated-address pinning at the connection boundary, original-host TLS verification, redirect-by-redirect validation, connection-pool avoidance, URL/port validation, request and response caps, deadline/cancellation handling, and safe cross-origin header stripping. Explicit local HTTP is opt-in only for exact loopback origins found in owner-configured service settings. The internal permission uses a module-private symbol; a caller-supplied `ultronAllowLoopbackHttp: true` field alone is ignored, and a nested-wrapper regression test proves trusted configuration survives without making the public option authoritative.
 - Added `tests/safe-outbound-fetch.test.js` for private/reserved/mapped addresses, mixed DNS results, pinned destination despite subsequent rebind answers, unsafe redirects, re-resolving allowed redirects, credential stripping, multipart requests, response-size limits, malformed escapes, oversized requests, cancellation, unsupported compressed responses and narrowly configured loopback exceptions.
 - Runtime defaults were switched to the safe transport in `server.js`, `agent-runtime.js`, `worker.js`, the provider/worker/auth smoke scripts and the existing network-backed integration adapters. The Python Browser Use bridge separately pins validated public destinations through Chromium resolver rules and passed its policy tests. These are deterministic/source-CI findings; no live arbitrary URL or provider request was used to claim SSRF protection.
 - The successful workflow does not prove a real provider, account, background task, voice service, document store, or Windows device is live and correctly configured.
+
+## Open pull-request reconciliation
+
+The repository already has overlapping candidate work; no PR was merged or closed during this pass.
+
+- [PR #279](https://github.com/ayaanraza2008/ULTRON-AI/pull/279) — this pass: DNS-pinned outbound transport, route/adapter wiring, loopback capability hardening, regression tests, source CI separation, and worker-smoke result verification. CI run 40371903311 passed on application-source SHA `ead0e1d016f4e7b7baf2298081a4bc0ee5c8016f`.
+- [PR #278](https://github.com/ayaanraza2008/ULTRON-AI/pull/278) — worker-smoke result validation overlaps with #279 and has been carried into #279's candidate. Review/merge only one copy of those overlapping changes.
+- [PR #261](https://github.com/ayaanraza2008/ULTRON-AI/pull/261) — migration version/content repair with passing CI [40362052573](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40362052573). Kept separate because it changes migration history and must be reviewed against the live migration ledger; no schema change was applied.
+- [PR #276](https://github.com/ayaanraza2008/ULTRON-AI/pull/276) — candidate persistent document-library migration plus a permission-bounded Windows action queue/bridge, with CI [40325922878](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40325922878) passing on its then-current candidate SHA. It overlaps `features.js`, `agent-runtime.js`, `server.js`, `package.json` and migration files changed here/elsewhere, so its feature code was not copied wholesale into #279 and its new migrations are not applied.
+- [PR #277](https://github.com/ayaanraza2008/ULTRON-AI/pull/277) — free vision-provider smoke diagnostic, CI [40332444447](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40332444447) passing on its candidate. It is stacked on #276 rather than the #279 branch; that diagnostic is not evidence of a successful live vision request without configured test credentials.
+- [PR #260](https://github.com/ayaanraza2008/ULTRON-AI/pull/260) — earlier source/production-verification split overlaps in intent with #279. Keep review focused on one agreed workflow change rather than merging competing workflow edits blindly.
+
+The above are separate, unmerged source proposals, not deployed capabilities. CI success on their branches does not prove runtime service credentials or live external behavior.
 
 ## Blocker-by-blocker results
 
@@ -102,7 +115,7 @@ The live database history shows 14 recorded migrations. Source migration naming/
 
 ## Change record
 
-The changes for this pass are on the review branch `ultron/source-ci-split-20261026` in PR #279. The verified application-source commit is `9e8820cc80637c89b1e1227b7076ea7b0da68720`; the report refresh that follows is documentation-only. Main implementation changes add the shared outbound transport and tests, wire it into core API/orchestration/worker/feature/smoke/integration request paths, correct provider-smoke syntax, and update package preflight checks. PR #279 is **not merged**. No frontend files were changed on that review branch; no database migration was applied; no production Supabase Auth setting or Render setting was modified by the intended source work. The candidate CI run’s production verification job was skipped as designed.
+The changes for this pass are on the review branch `ultron/source-ci-split-20261026` in PR #279. The verified application-source commit is `ead0e1d016f4e7b7baf2298081a4bc0ee5c8016f`; the report refresh that follows is documentation-only. Main implementation changes add the shared outbound transport and tests, wire it into core API/orchestration/worker/feature/smoke/integration request paths, correct provider-smoke syntax, and update package preflight checks. PR #279 is **not merged**. No frontend files were changed on that review branch; no database migration was applied; no production Supabase Auth setting or Render setting was modified by the intended source work. The candidate CI run’s production verification job was skipped as designed.
 
 ### Source file changes in this pass
 
