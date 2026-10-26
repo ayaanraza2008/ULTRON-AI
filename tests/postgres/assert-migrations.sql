@@ -154,3 +154,140 @@ BEGIN
 END;
 $$;
 RESET ROLE;
+
+-- Verify real RLS behavior across two synthetic accounts for the existing application tables.
+-- These rows exist only in the disposable PostgreSQL CI database.
+INSERT INTO public.conversations (id, user_id, title) VALUES
+  ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000001', 'owner A test conversation'),
+  ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000002', 'owner B test conversation');
+
+INSERT INTO public.messages (id, conversation_id, user_id, role, content) VALUES
+  ('00000000-0000-4000-8000-000000000211', '00000000-0000-4000-8000-000000000201',
+   '00000000-0000-4000-8000-000000000001', 'user', 'owner A private message'),
+  ('00000000-0000-4000-8000-000000000212', '00000000-0000-4000-8000-000000000202',
+   '00000000-0000-4000-8000-000000000002', 'user', 'owner B private message');
+
+INSERT INTO public.user_preferences (user_id, language) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'en'),
+  ('00000000-0000-4000-8000-000000000002', 'hi');
+
+INSERT INTO public.memory_items (user_id, kind, title, content) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'project_fact', 'A private memory', 'owner A memory sentinel'),
+  ('00000000-0000-4000-8000-000000000002', 'project_fact', 'B private memory', 'owner B memory sentinel');
+
+INSERT INTO public.agent_tasks (user_id, title, input, status) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'owner A task', '{}'::jsonb, 'QUEUED'),
+  ('00000000-0000-4000-8000-000000000002', 'owner B task', '{}'::jsonb, 'QUEUED');
+
+INSERT INTO public.employee_schedules (user_id, role_id, routine_id, goal) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'web-dev', 'isolation-a', 'synthetic owner A schedule'),
+  ('00000000-0000-4000-8000-000000000002', 'web-dev', 'isolation-b', 'synthetic owner B schedule');
+
+INSERT INTO public.audit_events (user_id, action, outcome) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'isolation_fixture', 'recorded'),
+  ('00000000-0000-4000-8000-000000000002', 'isolation_fixture', 'recorded');
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', false);
+DO $$
+DECLARE
+  row_count integer;
+  cross_owner_insert_rejected boolean := false;
+  cross_owner_reassign_rejected boolean := false;
+  forged_completion_rejected boolean := false;
+BEGIN
+  SELECT count(*) INTO row_count FROM public.conversations;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.conversations WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Conversation RLS failed to isolate owner A';
+  END IF;
+
+  SELECT count(*) INTO row_count FROM public.messages;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.messages WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Message RLS failed to isolate owner A and their conversation';
+  END IF;
+
+  SELECT count(*) INTO row_count FROM public.user_preferences;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.user_preferences WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Preference RLS failed to isolate owner A';
+  END IF;
+
+  SELECT count(*) INTO row_count FROM public.memory_items;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.memory_items WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Memory RLS failed to isolate owner A';
+  END IF;
+
+  SELECT count(*) INTO row_count FROM public.agent_tasks;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.agent_tasks WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Task RLS failed to isolate owner A';
+  END IF;
+
+  SELECT count(*) INTO row_count FROM public.employee_schedules;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.employee_schedules WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Employee schedule RLS failed to isolate owner A';
+  END IF;
+
+  SELECT count(*) INTO row_count FROM public.audit_events WHERE action = 'isolation_fixture';
+  IF row_count <> 1 OR EXISTS (
+    SELECT 1 FROM public.audit_events
+    WHERE action = 'isolation_fixture' AND user_id <> auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'Audit-log RLS failed to isolate owner A';
+  END IF;
+
+  BEGIN
+    INSERT INTO public.conversations (user_id, title)
+    VALUES ('00000000-0000-4000-8000-000000000002', 'forbidden cross-owner insert');
+  EXCEPTION WHEN insufficient_privilege THEN
+    cross_owner_insert_rejected := true;
+  END;
+  IF NOT cross_owner_insert_rejected THEN
+    RAISE EXCEPTION 'Conversation RLS allowed creating a row for owner B';
+  END IF;
+
+  BEGIN
+    UPDATE public.memory_items
+       SET user_id = '00000000-0000-4000-8000-000000000002'
+     WHERE title = 'A private memory';
+  EXCEPTION WHEN insufficient_privilege THEN
+    cross_owner_reassign_rejected := true;
+  END;
+  IF NOT cross_owner_reassign_rejected THEN
+    RAISE EXCEPTION 'Memory RLS allowed reassigning owner A data to owner B';
+  END IF;
+
+  BEGIN
+    UPDATE public.agent_tasks
+       SET status = 'COMPLETED', result = '{"forged":true}'::jsonb
+     WHERE title = 'owner A task';
+  EXCEPTION WHEN insufficient_privilege THEN
+    forged_completion_rejected := true;
+  END;
+  IF NOT forged_completion_rejected THEN
+    RAISE EXCEPTION 'Authenticated client could forge worker-owned task completion';
+  END IF;
+END;
+$$;
+RESET ROLE;
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', false);
+DO $$
+DECLARE
+  row_count integer;
+BEGIN
+  SELECT count(*) INTO row_count FROM public.conversations;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.conversations WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Conversation RLS failed to isolate owner B';
+  END IF;
+  SELECT count(*) INTO row_count FROM public.messages;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.messages WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Message RLS failed to isolate owner B';
+  END IF;
+  SELECT count(*) INTO row_count FROM public.memory_items;
+  IF row_count <> 1 OR EXISTS (SELECT 1 FROM public.memory_items WHERE user_id <> auth.uid()) THEN
+    RAISE EXCEPTION 'Memory RLS failed to isolate owner B';
+  END IF;
+END;
+$$;
+RESET ROLE;
+
