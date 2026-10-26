@@ -1,5 +1,6 @@
 import express from "express";
 import { safeServiceBase } from "../network-safety.js";
+import { safeOutboundFetch } from "../safe-outbound-fetch.js";
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
@@ -113,7 +114,7 @@ export function voiceStudioReadiness(env = process.env) {
   };
 }
 
-export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser }) {
+export function createVoiceStudioRouter({ env = process.env, fetchImpl = safeOutboundFetch, requireSupabaseUser }) {
   const router = express.Router();
 
   function requireIntegrationOwner(req, res, next) {
