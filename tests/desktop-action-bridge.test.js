@@ -169,12 +169,25 @@ test("bridge token is required and a failed approval cannot claim work", async t
   assert.equal(h.store.get(ACTION_ID).status, "PENDING_APPROVAL");
 });
 
-test("only the configured owner may request or approve local PC actions", async t => {
+test("only the configured owner may list, request, approve, or cancel local PC actions", async t => {
   const h = makeHarness({ authUserId: OTHER });
   t.after(() => h.close());
+  h.store.set(ACTION_ID, {
+    id: ACTION_ID, user_id: OWNER, action_type: "system_info", payload: {},
+    status: "PENDING_APPROVAL", attempts: 0, approved_at: null, started_at: null,
+    lease_expires_at: null, finished_at: null, result: null, error_code: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  });
+  const listed = await h.request("GET", "/api/desktop/actions");
+  assert.equal(listed.status, 403);
   const requested = await h.request("POST", "/api/desktop/actions", { body: { actionType: "system_info", payload: {} } });
   assert.equal(requested.status, 403);
-  assert.equal(h.store.size, 0);
+  const approved = await h.request("POST", "/api/desktop/actions/" + ACTION_ID + "/approve");
+  assert.equal(approved.status, 403);
+  const cancelled = await h.request("POST", "/api/desktop/actions/" + ACTION_ID + "/cancel");
+  assert.equal(cancelled.status, 403);
+  assert.equal(h.store.get(ACTION_ID).status, "PENDING_APPROVAL");
+  assert.equal(h.store.size, 1);
 });
 
 test("bridge result is bounded and must match the approved action", async t => {
