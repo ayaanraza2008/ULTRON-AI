@@ -1,4 +1,5 @@
--- Minimal Supabase-compatible schema for isolated migration integration tests.
+-- Minimal Supabase-compatible roles and auth helper for isolated migration integration tests.
+-- Application tables and triggers are created by the actual migrations under test.
 -- This database is temporary CI infrastructure and contains no production data.
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
@@ -13,28 +14,5 @@ RETURNS uuid
 LANGUAGE sql
 STABLE
 AS $$ SELECT NULLIF(pg_catalog.current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
-
-CREATE TABLE public.audit_events (
-  id bigserial PRIMARY KEY,
-  user_id uuid,
-  action text NOT NULL,
-  target_type text,
-  target_id text,
-  outcome text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE OR REPLACE FUNCTION public.ultron_set_updated_at()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.updated_at := pg_catalog.now();
-  RETURN NEW;
-END;
-$$;
