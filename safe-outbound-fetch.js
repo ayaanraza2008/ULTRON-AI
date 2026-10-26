@@ -290,8 +290,12 @@ function stripSensitiveHeaders(headers) {
 
 function parseAndValidateUrl(value, { allowLoopbackHttp, allowedPorts }) {
   let url;
+  const rawValue = value instanceof URL ? value.href : String(value);
+  if (/%(?![0-9a-f]{2})/i.test(rawValue)) {
+    throw outboundError("OUTBOUND_URL_INVALID", "Outbound URL contains malformed percent encoding.");
+  }
   try {
-    url = value instanceof URL ? new URL(value.href) : new URL(String(value));
+    url = value instanceof URL ? new URL(value.href) : new URL(rawValue);
   } catch {
     throw outboundError("OUTBOUND_URL_INVALID", "Outbound URL is malformed.");
   }
