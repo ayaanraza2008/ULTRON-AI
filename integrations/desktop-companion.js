@@ -1,5 +1,5 @@
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const TOKEN_MAX_LENGTH = 2000;
@@ -188,7 +188,7 @@ export async function checkDesktopCompanion({
   }
 
   try {
-    const response = await fetchImpl(baseUrl + "/v1/ultron/status", {
+    const response = await fetchConfiguredOutbound(baseUrl, baseUrl + "/v1/ultron/status", {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -197,7 +197,7 @@ export async function checkDesktopCompanion({
       },
       redirect: "error",
       signal: AbortSignal.timeout(8000)
-    });
+    }, fetchImpl);
     if (!response.ok) {
       try { await response.body?.cancel?.(); } catch {}
       return {
