@@ -210,7 +210,7 @@ export function createDesktopActionRouter({
         "?select=" + ACTION_SELECT + "&user_id=eq." + req.desktopOwnerId + "&order=created_at.desc&limit=20");
       return res.json({
         actions: (Array.isArray(rows) ? rows : []).map(publicAction),
-        bridgeReady: bridgeTokenConfigured(env)
+        bridgeConfigured: bridgeTokenConfigured(env)
       });
     } catch (error) {
       return handleFailure(res, error, "Could not load desktop action history.");
@@ -236,7 +236,7 @@ export function createDesktopActionRouter({
         action: publicAction(row),
         requiresApproval: true,
         execution: "not_executed",
-        bridgeReady: bridgeTokenConfigured(env)
+        bridgeConfigured: bridgeTokenConfigured(env)
       });
     } catch (error) {
       return handleFailure(res, error, "Could not request the desktop action.");
