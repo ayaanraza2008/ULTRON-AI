@@ -34,7 +34,7 @@ The authenticated API can persist only the extracted text from a supported TXT, 
 
 - Extracted text is capped at 100,000 Unicode characters; reads are paged in chunks of up to 20,000 characters.
 - Search uses PostgreSQL full-text search and returns short excerpts, not an unbounded document dump.
-- Listing, reading, search, and delete are account-scoped through Supabase Auth and RLS. The agent has matching list/search/read tools and treats retrieved document text as untrusted content.
+- Listing, reading, search, and delete are account-scoped through Supabase Auth and RLS. The agent has list/search/read tools and an explicit-save tool that only stores text when the current user message directly asks to save/store the document; retrieved document text is untrusted and cannot authorize writes.
 - The migration supabase/migrations/20261026110000_user_document_library.sql must be applied before the new routes can work. This PR is not merged or deployed, and the live database has not been modified by this feature branch.
 - The library stores extracted text and metadata only. It is not a binary upload service and does not scan source files for malware.
 ## Configuration
