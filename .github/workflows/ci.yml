@@ -28,7 +28,10 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=high
       - run: npm run check
-      - run: npm test
+      - name: Run tests including the public HTTPS transport smoke test
+        env:
+          ULTRON_SAFE_OUTBOUND_TRANSPORT_LIVE_TEST: "YES"
+        run: npm test
       - name: Smoke test deployed health endpoint
         run: |
           for i in $(seq 1 18); do

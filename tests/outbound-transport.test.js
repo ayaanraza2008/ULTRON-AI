@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
-import { createSafeFetch } from "../outbound-transport.js";
+import { createSafeFetch, safeFetch } from "../outbound-transport.js";
 
 function fakeRequest(status = 200, headers = ["content-type", "application/json"], onWrite = () => {}) {
   const seen = { calls: 0, options: null, pinnedAddress: null, writtenBytes: 0 };
@@ -282,4 +282,23 @@ test("safeFetch propagates caller cancellation through a composed AbortControlle
   controller.abort(Object.assign(new Error("Caller aborted"), { code: "CALLER_CANCELLED" }));
   await assert.rejects(pending, error => error.code === "CALLER_CANCELLED");
   assert.equal(transportStarted, true);
+});
+
+
+test("safeFetch completes a bounded real HTTPS request through the DNS-pinned transport", {
+  skip: process.env.ULTRON_SAFE_OUTBOUND_TRANSPORT_LIVE_TEST !== "YES"
+    ? "Set ULTRON_SAFE_OUTBOUND_TRANSPORT_LIVE_TEST=YES in an authorized CI/test environment."
+    : false
+}, async () => {
+  const response = await safeFetch("https://www.iana.org/", {
+    method: "GET",
+    headers: { Accept: "text/html" },
+    redirect: "error",
+    signal: AbortSignal.timeout(12_000)
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") || "", /text\/html/i);
+  const body = await response.text();
+  assert.ok(Buffer.byteLength(body, "utf8") > 0);
+  assert.match(body.toLowerCase(), /<html\b/);
 });
