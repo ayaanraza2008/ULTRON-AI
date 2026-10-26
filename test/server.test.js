@@ -1185,3 +1185,56 @@ test("browser-use model proxy rejects private, insecure and non-image URLs befor
   });
   assert.equal(providerCalls, 0, "unsafe image URLs must be rejected before credentials are sent upstream");
 });
+
+
+test("browser-use model proxy rejects malformed tool definitions and assistant tool calls", async () => {
+  let providerCalls = 0;
+  const app = createApp({
+    env: {
+      NODE_ENV: "test",
+      ULTRON_BROWSER_USE_TOKEN: "test-browser-bridge-token",
+      OPENROUTER_API_KEY: "test-provider-key",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async () => {
+      providerCalls += 1;
+      return new Response(JSON.stringify({ choices: [{ message: { content: "should not execute" } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  });
+  await withServer(app, async base => {
+    const send = body => fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-browser-bridge-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    const cases = [
+      {
+        messages: [{ role: "user", content: "hello" }],
+        tools: [{ type: "shell", function: { name: "run", parameters: { type: "object" } } }]
+      },
+      {
+        messages: [{ role: "user", content: "hello" }],
+        tools: [{ type: "function", function: { name: "bad name", parameters: { type: "object" } } }]
+      },
+      {
+        messages: [{ role: "assistant", content: null, tool_calls: [{ id: "call-1", type: "shell", function: { name: "run", arguments: "{}" } }] }]
+      },
+      {
+        messages: [{ role: "tool", content: "result" }]
+      }
+    ];
+    for (const body of cases) {
+      const response = await send({ model: "openrouter/free", ...body });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.type, "invalid_request_error");
+    }
+  });
+  assert.equal(providerCalls, 0, "malformed tool schemas must not reach the model provider");
+});
