@@ -11,6 +11,7 @@ const DEFAULT_MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
 const DEFAULT_MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_REDIRECTS = 5;
+const INTERNAL_ALLOW_LOOPBACK = Symbol("ultronSafeConfiguredLoopback");
 
 function outboundError(code, message) {
   return Object.assign(new Error(message), { code });
@@ -357,10 +358,10 @@ async function resolvePinnedAddress(url, { lookupImpl, signal, allowLoopbackHttp
  * chosen validated address into the actual socket lookup, disables connection
  * pooling, verifies TLS against the original hostname, and revalidates redirects.
  *
- * Loopback HTTP is available only through the explicit ultronAllowLoopbackHttp
- * opt-in for a configured local adapter. Nonstandard HTTPS ports require the
- * explicit ultronAllowedPorts option. The transport intentionally rejects
- * compressed upstream bodies so a decompression bomb cannot bypass its byte cap.
+ * Loopback HTTP requires a module-private capability set only by the configured-origin
+ * wrapper. The similarly named public option is ignored. Nonstandard HTTPS ports
+ * require the explicit ultronAllowedPorts option. Compressed upstream bodies are
+ * rejected so decompression cannot bypass the response byte cap.
  */
 export function createSafeOutboundFetch({
   lookupImpl = resolveAllDnsAddresses,
@@ -384,7 +385,7 @@ export function createSafeOutboundFetch({
     const allowedPorts = Array.isArray(init.ultronAllowedPorts)
       ? init.ultronAllowedPorts.filter(port => Number.isInteger(port) && port >= 1 && port <= 65535)
       : [];
-    const allowLoopbackHttp = init.ultronAllowLoopbackHttp === true;
+    const allowLoopbackHttp = init[INTERNAL_ALLOW_LOOPBACK] === true;
     const responseLimit = Number.isInteger(init.ultronMaxResponseBytes) && init.ultronMaxResponseBytes > 0
       ? Math.min(init.ultronMaxResponseBytes, 50 * 1024 * 1024) : maxResponseBytes;
     const requestLimit = Number.isInteger(init.ultronMaxRequestBytes) && init.ultronMaxRequestBytes > 0
@@ -392,7 +393,7 @@ export function createSafeOutboundFetch({
     const maxHops = Number.isInteger(init.ultronMaxRedirects) && init.ultronMaxRedirects >= 0
       ? Math.min(init.ultronMaxRedirects, MAX_REDIRECTS) : Math.min(maxRedirects, MAX_REDIRECTS);
     const requestInit = { ...init };
-    for (const key of ["ultronTimeoutMs", "ultronAllowedPorts", "ultronAllowLoopbackHttp", "ultronMaxResponseBytes", "ultronMaxRequestBytes", "ultronMaxRedirects"]) delete requestInit[key];
+    for (const key of ["ultronTimeoutMs", "ultronAllowedPorts", "ultronAllowLoopbackHttp", "ultronMaxResponseBytes", "ultronMaxRequestBytes", "ultronMaxRedirects", INTERNAL_ALLOW_LOOPBACK]) delete requestInit[key];
     requestInit.signal = signal;
     requestInit.redirect = "manual";
 
@@ -518,13 +519,16 @@ export function createConfiguredOutboundFetch({
       url = new URL(raw);
     } catch { /* The underlying transport returns a consistent safe URL error. */ }
     const host = url ? normalizedHostname(url.hostname) : "";
+    const localHttpRequest = Boolean(url && url.protocol === "http:" && LOCAL_HOSTS.has(host));
+    const inheritedTrustedLoopback = localHttpRequest && init[INTERNAL_ALLOW_LOOPBACK] === true;
     const allowConfiguredLoopback = Boolean(
-      url && url.protocol === "http:" && LOCAL_HOSTS.has(host) &&
-      approvedLoopbackOrigins.has(url.origin)
+      localHttpRequest && (approvedLoopbackOrigins.has(url.origin) || inheritedTrustedLoopback)
     );
     return fetchImpl(input, {
       ...init,
-      ...(allowConfiguredLoopback ? { ultronAllowLoopbackHttp: true } : {})
+      // Diagnostic-only option for injected adapters; the transport never trusts it.
+      ultronAllowLoopbackHttp: allowConfiguredLoopback,
+      [INTERNAL_ALLOW_LOOPBACK]: allowConfiguredLoopback
     });
   };
 }
