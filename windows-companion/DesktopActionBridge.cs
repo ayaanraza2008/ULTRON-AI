@@ -15,11 +15,82 @@ namespace Ultron.Companion;
 internal sealed class DesktopActionBridge : IDisposable
 {
     private const int MaxResponseBytes = 64 * 1024;
-    private readonly HttpClient _http = new(new HttpClientHandler { AllowAutoRedirect = false })
+    private readonly HttpClient _http = new(new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        // Avoid an unpinned system proxy path: this client carries the bridge bearer secret.
+        UseProxy = false,
+        ConnectTimeout = TimeSpan.FromSeconds(4),
+        PooledConnectionLifetime = TimeSpan.FromMinutes(1),
+        ConnectCallback = ConnectPinnedAsync
+    })
     {
         Timeout = TimeSpan.FromSeconds(10)
     };
     private bool _disposed;
+
+    private static bool IsExplicitLoopbackHost(string host)
+    {
+        var normalized = host.Trim().Trim('[', ']').TrimEnd('.').ToLowerInvariant();
+        return normalized == "localhost" ||
+            (IPAddress.TryParse(normalized, out var address) && IPAddress.IsLoopback(address));
+    }
+
+    private static async ValueTask<Stream> ConnectPinnedAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        var host = context.DnsEndPoint.Host.Trim().Trim('[', ']').TrimEnd('.');
+        var allowLoopback = IsExplicitLoopbackHost(host);
+        IPAddress[] addresses;
+        try
+        {
+            addresses = IPAddress.TryParse(host, out var literal)
+                ? new[] { literal }
+                : await Dns.GetHostAddressesAsync(host, cancellationToken);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch
+        {
+            throw new HttpRequestException("Could not safely resolve the Windows bridge API host.");
+        }
+
+        if (addresses.Length == 0 ||
+            addresses.Any(address => allowLoopback ? !IPAddress.IsLoopback(address) : !IsPublicAddress(address)))
+        {
+            throw new HttpRequestException("The Windows bridge API host resolved to a disallowed address.");
+        }
+
+        Exception? lastError = null;
+        foreach (var address in addresses)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            try
+            {
+                // Connect directly to the address just validated. SocketsHttpHandler
+                // performs TLS afterwards using the original request hostname for SNI
+                // and certificate verification.
+                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellationToken);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (OperationCanceledException)
+            {
+                socket.Dispose();
+                throw;
+            }
+            catch (Exception error)
+            {
+                socket.Dispose();
+                lastError = error;
+            }
+        }
+
+        throw new HttpRequestException("Could not connect to the validated Windows bridge API address.", lastError);
+    }
 
     public static bool HasValidConfiguration(string baseUrl, string token)
     {
