@@ -223,22 +223,29 @@ async function isCompromisedPassword(password, fetchImpl) {
     redirect: "error",
     signal: AbortSignal.timeout(5000)
   });
+  const unavailable = () => Object.assign(new Error("Password safety check unavailable."), {
+    code: "PASSWORD_SCREENING_UNAVAILABLE",
+    status: 503
+  });
   if (!response.ok) {
     try { await response.body?.cancel?.(); } catch { /* body may already be closed */ }
-    throw Object.assign(new Error("Password safety check unavailable."), {
-      code: "PASSWORD_SCREENING_UNAVAILABLE",
-      status: 503
-    });
+    throw unavailable();
   }
+
   const text = await readResponseTextLimited(response, 1_000_000);
-  for (const line of text.split(/\r?\n/)) {
-    const separator = line.indexOf(":");
-    if (separator < 1) continue;
-    const suffix = line.slice(0, separator).trim().toUpperCase();
-    if (suffix !== targetSuffix) continue;
-    const count = Number(line.slice(separator + 1).trim());
-    if (Number.isFinite(count) && count > 0) return true;
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (!lines.length) throw unavailable();
+
+  let validRecords = 0;
+  for (const line of lines) {
+    const record = /^([0-9A-F]{35}):([0-9]+)$/i.exec(line);
+    if (!record) throw unavailable();
+    const count = Number(record[2]);
+    if (!Number.isSafeInteger(count) || count < 0) throw unavailable();
+    validRecords += 1;
+    if (record[1].toUpperCase() === targetSuffix && count > 0) return true;
   }
+  if (!validRecords) throw unavailable();
   return false;
 }
 
