@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_PROMPT_CHARS = 12_000;
@@ -168,18 +168,18 @@ export async function checkHermesAgentService({ env = process.env, fetchImpl = s
   const headers = { Accept: "application/json", Authorization: "Bearer " + config.token };
   const results = await Promise.all([
     (async () => {
-      const response = await fetchImpl(config.baseUrl + "/models", {
+      const response = await fetchConfiguredOutbound(config.baseUrl, config.baseUrl + "/models", {
         method: "GET", headers, redirect: "error", signal: AbortSignal.timeout(10_000)
-      });
+      }, fetchImpl);
       const data = await readJsonLimited(response);
       if (!response.ok) throw Object.assign(new Error("Hermes model discovery failed."), { code: response.status === 429 ? "HERMES_AGENT_RATE_LIMITED" : "HERMES_AGENT_MODELS_FAILED", status: response.status });
       const rows = Array.isArray(data?.data) ? data.data : Array.isArray(data?.models) ? data.models : [];
       return { ok: true, models: rows.slice(0, 100).map(item => bounded(item?.id ?? item?.name, 180)).filter(Boolean) };
     })(),
     (async () => {
-      const response = await fetchImpl(config.baseUrl + "/capabilities", {
+      const response = await fetchConfiguredOutbound(config.baseUrl, config.baseUrl + "/capabilities", {
         method: "GET", headers, redirect: "error", signal: AbortSignal.timeout(10_000)
-      });
+      }, fetchImpl);
       const data = await readJsonLimited(response);
       if (!response.ok) throw Object.assign(new Error("Hermes capability discovery failed."), { code: "HERMES_AGENT_CAPABILITIES_FAILED", status: response.status });
       return { ok: true, capabilities: data && typeof data === "object" ? {
@@ -245,13 +245,13 @@ export async function runHermesAgentTask({ env = process.env, fetchImpl = safeOu
       ? { "X-Hermes-Session-Id": conversationId } : {})
   };
   try {
-    const response = await fetchImpl(config.baseUrl + "/chat/completions", {
+    const response = await fetchConfiguredOutbound(config.baseUrl, config.baseUrl + "/chat/completions", {
       method: "POST",
       headers,
       body: JSON.stringify({ model: config.model, messages, stream: false }),
       redirect: "error",
       signal: AbortSignal.timeout(Math.max(15_000, Math.min(120_000, Number(env.HERMES_AGENT_TIMEOUT_SECONDS || 90) * 1000)))
-    });
+    }, fetchImpl);
     const data = await readJsonLimited(response, 2_000_000);
     if (!response.ok) {
       return {
