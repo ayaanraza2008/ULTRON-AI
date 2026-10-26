@@ -89,7 +89,7 @@ function safeEqual(a, b) {
 
 function isValidChatImageDataUrl(value) {
   if (typeof value !== "string" || value.length > 5_600_000) return false;
-  const match = /^data:image\\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
+  const match = /^data:image[/](jpeg|png|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
   if (!match) return false;
   const encoded = match[2];
   if (encoded.length % 4 !== 0) return false;
