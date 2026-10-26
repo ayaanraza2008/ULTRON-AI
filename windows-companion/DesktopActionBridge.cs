@@ -49,7 +49,7 @@ internal sealed class DesktopActionBridge : IDisposable
         {
             try
             {
-                var poll = await PollOnceAsync(baseUrl.TrimEnd('/'), token, cancellationToken);
+                var poll = await PollOnceAsync(baseUrl.TrimEnd('/'), token, ReportOnce, cancellationToken);
                 ReportOnce(poll.Status);
                 await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
@@ -66,7 +66,7 @@ internal sealed class DesktopActionBridge : IDisposable
         }
     }
 
-    private async Task<(bool DidWork, string Status)> PollOnceAsync(string baseUrl, string token, CancellationToken cancellationToken)
+    private async Task<(bool DidWork, string Status)> PollOnceAsync(string baseUrl, string token, Action<string> reportStatus, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/api/desktop/bridge/next")
         {
@@ -104,6 +104,7 @@ internal sealed class DesktopActionBridge : IDisposable
             attemptNumber < 1 || attemptNumber > 3)
             return (false, "The desktop action queue returned an invalid claim attempt; no PC action was run.");
 
+        reportStatus(DescribeApprovedAction(actionType, action));
         object result;
         string state;
         string? errorCode = null;
@@ -142,6 +143,26 @@ internal sealed class DesktopActionBridge : IDisposable
 
         await AcknowledgeAsync(baseUrl, token, id, attemptNumber, state, result, errorCode, CancellationToken.None);
         return (true, "An approved PC action was processed. Waiting for the next approved action.");
+    }
+
+    private static string DescribeApprovedAction(string actionType, JsonElement action)
+    {
+        try
+        {
+            var payload = action.TryGetProperty("payload", out var raw) && raw.ValueKind == JsonValueKind.Object ? raw : default;
+            return actionType switch
+            {
+                "launch_app" => "Executing owner-approved PC action: launching " + ReadString(payload, "app", 30) + ".",
+                "open_url" => "Executing owner-approved PC action: opening public website " +
+                    new Uri(ReadString(payload, "url", 1200)).Host + " in the default browser.",
+                "system_info" => "Executing owner-approved PC action: reading limited Windows system information.",
+                _ => "Executing an owner-approved PC action from the restricted allowlist."
+            };
+        }
+        catch
+        {
+            return "Executing an owner-approved PC action; checking the local allowlist.";
+        }
     }
 
     private async Task<object> ExecuteAllowedActionAsync(string actionType, JsonElement action, CancellationToken cancellationToken)
