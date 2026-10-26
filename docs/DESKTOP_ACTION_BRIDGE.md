@@ -73,6 +73,14 @@ Read limited system information:
 
 Approval is a separate request to **POST /api/desktop/actions/<action-id>/approve**. An action stays pending until that request succeeds. The bridge token never replaces user authentication for requesting or approving actions.
 
+## Windows companion outbound API security
+
+The companion's API client uses a custom `SocketsHttpHandler.ConnectCallback` rather than allowing a second system DNS lookup to choose the socket destination. Before connecting, it resolves all A/AAAA addresses for the configured ULTRON API host and rejects empty, mixed, private, loopback, link-local, or reserved answer sets. It then opens a TCP socket to one of the exact validated addresses. The HTTP request still uses the original URL hostname, so the handler's normal TLS certificate validation and SNI continue to use that hostname.
+
+Automatic redirects are disabled, the client does not use a system proxy that could bypass its pinning policy, TCP connection timeouts are bounded, and HTTP is permitted only for explicit local loopback development. Corporate environments that require an outbound proxy may therefore fail closed rather than silently fall back to a less controlled route.
+
+The Windows CI workflow runs `--verify-network-policy` after compiling the app. This offline self-test covers public/reserved IPv4 and IPv6 classification plus mixed DNS answer rejection. It proves the deterministic policy checks run on Windows CI; it does **not** prove that this companion has been paired or executed on the user's own Windows device.
+
 ## Important deployment boundary
 
 This branch only adds source code and a Supabase migration file. The migration has **not** been applied to the live Supabase project and the backend has **not** been deployed from this branch. The endpoints will not work on the currently deployed API until the migration and application revision are deployed together. Do not enable the companion bridge before that rollout and a test on a non-sensitive Windows session.
