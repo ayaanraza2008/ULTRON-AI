@@ -128,9 +128,14 @@ Use a dedicated test account and verify a real model response, one queued employ
 
 ## Latest blocker fixes and verification — 2026-10-26
 
-- CI run [#1502](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40327937195) passed on exact source commit `0555343844b57d34d82f63f1fbd6e15e884e1c90`: Node.js 20 tests (558 passed, 0 failed, 1 skipped), Node.js 24 test job passed, full PostgreSQL 16 replay of all checked-in migrations and synthetic two-account RLS/security assertions passed, and the pinned world-intelligence build passed. The skipped Node test remains the opt-in **live** Supabase two-account E2E case; do not count it as a live pass.
+- CI run [#1506](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40328790698) passed on exact source commit `c5875090599f029fa9bba20082a125ead663aaa4`: Node.js 20 tests (558 passed, 0 failed, 1 skipped), Node.js 24 test job passed, full PostgreSQL 16 replay of all checked-in migrations and synthetic two-account RLS/security assertions passed, and the pinned world-intelligence build passed. The skipped Node test remains the opt-in **live** Supabase two-account E2E case; do not count it as a live pass.
 - Read-only hosted Supabase checks reconfirmed project status `ACTIVE_HEALTHY`, the 14 recorded migrations, RLS and owner-scoped policies across the seven existing public application tables, no `anon` SELECT/INSERT/UPDATE/DELETE table grants on those tables, no browser TRUNCATE/TRIGGER privileges, and an empty `search_path` on both worker claim RPCs.
 - The current security advisor still flags Supabase's built-in leaked-password protection as disabled. Its current guide says this hosted feature is available on Pro and above; the ₹0 budget is unchanged, and ULTRON's independent password screening does not clear the hosted warning.
 - The Render free service continues to fail builds due to `pipeline_minutes_exhausted`. The source branch is not claimed deployed. No Render settings, production environment variables, live database schema or frontend files were modified.
 - Still requires real credentials/test identities/device: live OpenRouter text+vision call and authenticated image routing; signup/confirmation/recovery/Google/phone flows; hosted two-user data isolation; a real plan-only worker smoke test and persisted result; optional third-party service health/quality; and installing/pairing/testing the Windows companion on physical hardware. Actual deployment and frontend are intentionally deferred.
+
+## Live worker evidence — read-only aggregate check (2026-10-26)
+
+- Supabase edge-log aggregation for the prior 24-hour window showed 6,808 HTTP 200 responses for `/rest/v1/rpc/ultron_claim_next_task` and 6,807 HTTP 200 responses for `/rest/v1/rpc/ultron_claim_due_employee_schedule`.
+- A read-only table count returned zero `public.agent_tasks` rows and zero `public.employee_schedules` rows. Therefore queue polling is operating at the HTTP/RPC layer, but there is no real queued task or schedule execution in this dataset to verify. No test task or schedule was inserted because no dedicated live test identity/credentials were available; no production rows were written.
 
