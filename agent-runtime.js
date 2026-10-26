@@ -365,6 +365,14 @@ function buildFallbackCalls(text) {
   if (approveMatch) add("approve_desktop_action", { id: approveMatch[1] });
   if (cancelMatch) add("cancel_desktop_action", { id: cancelMatch[1] });
   if (/\b(?:show|list|check|review)\b/.test(s) && /\b(?:my )?(?:pending )?(?:desktop|pc|windows) actions\b/.test(s)) add("list_desktop_actions");
+  if (/\b(?:list|show|browse|review)\b/i.test(text) && /\b(?:saved|stored|uploaded|library)\b/i.test(text) && /\b(?:documents?|files?|notes?)\b/i.test(text)) {
+    add("list_saved_documents");
+  }
+  const savedSearchMatch = text.match(/\b(?:search|find|look\s+up|retrieve|locate)\b.*\b(?:saved|stored|uploaded|library)\s+(?:documents?|files?|notes?)\b(?:\s+(?:about|for|containing|named|called|on)\s+(.+))?/i);
+  if (savedSearchMatch && savedSearchMatch[1]?.trim().length >= 2) {
+    const query = savedSearchMatch[1].trim().replace(/[.!?]+$/, "").slice(0, 200);
+    add("search_saved_documents", { query, limit: 5 });
+  }
   const desktopUrlMatch = text.match(/\bopen\s+(https:\/\/[^\s<>"']{1,1200})\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)\b/i);
   if (desktopUrlMatch) add("request_desktop_action", { actionType: "open_url", url: desktopUrlMatch[1].replace(/[.,!?]+$/, "") });
   const desktopAppMatch = text.match(/\b(?:launch|open|start)\s+(notepad|calculator|explorer)\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)\b/i);
