@@ -533,3 +533,33 @@ export function createConfiguredOutboundFetch({
   };
 }
 
+
+
+/**
+ * Perform one request for a trusted, owner-configured adapter endpoint.
+ * Keep this wrapper at the call site: do not apply it to a router-wide fetch
+ * implementation because that can authorize unrelated user-supplied URLs.
+ * The request must target the configured base's exact origin.
+ */
+export function fetchConfiguredOutbound(baseUrl, input, init = {}, fetchImpl = safeOutboundFetch) {
+  const normalizedBase = safeServiceBase(typeof baseUrl === "string" ? baseUrl : "");
+  if (!normalizedBase) throw outboundError("OUTBOUND_CONFIG_INVALID", "Configured outbound adapter URL is invalid.");
+  let base;
+  let target;
+  try {
+    base = new URL(normalizedBase);
+    const rawTarget = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input);
+    target = new URL(rawTarget);
+  } catch {
+    throw outboundError("OUTBOUND_URL_INVALID", "Outbound URL is malformed.");
+  }
+  if (target.origin !== base.origin) {
+    throw outboundError("OUTBOUND_CONFIG_ORIGIN_MISMATCH", "Outbound request does not match the configured adapter origin.");
+  }
+  const scopedFetch = createConfiguredOutboundFetch({
+    env: { ULTRON_TRUSTED_ADAPTER_BASE_URL: normalizedBase },
+    baseUrlEnvNames: ["ULTRON_TRUSTED_ADAPTER_BASE_URL"],
+    fetchImpl
+  });
+  return scopedFetch(input, init);
+}
