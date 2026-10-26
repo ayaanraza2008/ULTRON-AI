@@ -1,7 +1,7 @@
 import { lookup as dnsLookup } from "node:dns/promises";
 import http from "node:http";
 import https from "node:https";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
@@ -109,23 +109,40 @@ function escapeQuoted(value) {
   return String(value).replace(/[\r\n"]/g, ch => ch === "\"" ? "%22" : " ");
 }
 
-function boundedBuffer(buffer) {
-  if (buffer.byteLength > MAX_REQUEST_BODY_BYTES) {
+function boundedBuffer(buffer, maxBytes = MAX_REQUEST_BODY_BYTES) {
+  if (buffer.byteLength > maxBytes) {
     throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
   }
   return { buffer, stream: null };
 }
 
-async function encodeBody(body, headers) {
+function boundedStream(stream, maxBytes = MAX_REQUEST_BODY_BYTES) {
+  let totalBytes = 0;
+  const limiter = new Transform({
+    transform(chunk, encoding, callback) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
+      totalBytes += buffer.byteLength;
+      if (totalBytes > maxBytes) {
+        callback(safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE"));
+        return;
+      }
+      callback(null, buffer);
+    }
+  });
+  stream.once("error", error => limiter.destroy(error));
+  return stream.pipe(limiter);
+}
+
+async function encodeBody(body, headers, maxBytes = MAX_REQUEST_BODY_BYTES) {
   if (body === undefined || body === null) return { buffer: null, stream: null };
-  if (typeof body === "string") return boundedBuffer(Buffer.from(body));
+  if (typeof body === "string") return boundedBuffer(Buffer.from(body), maxBytes);
   if (body instanceof URLSearchParams) {
     if (!headers.has("content-type")) headers.set("content-type", "application/x-www-form-urlencoded;charset=UTF-8");
-    return boundedBuffer(Buffer.from(body.toString()));
+    return boundedBuffer(Buffer.from(body.toString()), maxBytes);
   }
-  if (body instanceof ArrayBuffer) return boundedBuffer(Buffer.from(body));
-  if (ArrayBuffer.isView(body)) return boundedBuffer(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
-  if (typeof Blob !== "undefined" && body instanceof Blob) return boundedBuffer(Buffer.from(await body.arrayBuffer()));
+  if (body instanceof ArrayBuffer) return boundedBuffer(Buffer.from(body), maxBytes);
+  if (ArrayBuffer.isView(body)) return boundedBuffer(Buffer.from(body.buffer, body.byteOffset, body.byteLength), maxBytes);
+  if (typeof Blob !== "undefined" && body instanceof Blob) return boundedBuffer(Buffer.from(await body.arrayBuffer()), maxBytes);
   if (typeof FormData !== "undefined" && body instanceof FormData) {
     const boundary = "----ultron-" + randomBytes(18).toString("hex");
     headers.set("content-type", "multipart/form-data; boundary=" + boundary);
@@ -134,7 +151,7 @@ async function encodeBody(body, headers) {
     const add = value => {
       const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
       total += chunk.byteLength;
-      if (total > MAX_REQUEST_BODY_BYTES) {
+      if (total > maxBytes) {
         throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
       }
       chunks.push(chunk);
@@ -150,13 +167,13 @@ async function encodeBody(body, headers) {
       add("\r\n");
     }
     add("--" + boundary + "--\r\n");
-    return { buffer: Buffer.concat(chunks), stream: null };
+    return boundedBuffer(Buffer.concat(chunks), maxBytes);
   }
   if (typeof ReadableStream !== "undefined" && body instanceof ReadableStream) {
-    return { buffer: null, stream: Readable.fromWeb(body) };
+    return { buffer: null, stream: boundedStream(Readable.fromWeb(body), maxBytes) };
   }
-  if (body instanceof Readable) return { buffer: null, stream: body };
-  if (typeof body?.pipe === "function") return { buffer: null, stream: body };
+  if (body instanceof Readable) return { buffer: null, stream: boundedStream(body, maxBytes) };
+  if (typeof body?.pipe === "function") return { buffer: null, stream: boundedStream(body, maxBytes) };
   throw safeError("Outbound request body type is not supported.", "OUTBOUND_BODY_UNSUPPORTED");
 }
 
@@ -189,8 +206,12 @@ function toResponse(response) {
 export function createSafeFetch({
   lookupImpl = dnsLookup,
   httpRequest = http.request,
-  httpsRequest = https.request
+  httpsRequest = https.request,
+  maxRequestBodyBytes = MAX_REQUEST_BODY_BYTES
 } = {}) {
+  const bodyLimit = Number.isFinite(Number(maxRequestBodyBytes)) && Number(maxRequestBodyBytes) > 0
+    ? Math.min(MAX_REQUEST_BODY_BYTES, Math.trunc(Number(maxRequestBodyBytes)))
+    : MAX_REQUEST_BODY_BYTES;
   return async function safeFetch(input, init = {}) {
     let rawUrl;
     let requestInit = { ...init };
@@ -224,7 +245,7 @@ export function createSafeFetch({
 
     const method = String(requestInit.method || "GET").toUpperCase();
     const headers = buildHeaders(requestInit.headers);
-    const encoded = await encodeBody(requestInit.body, headers);
+    const encoded = await encodeBody(requestInit.body, headers, bodyLimit);
     const outboundHeaders = {};
     for (const [key, value] of headers) outboundHeaders[key] = value;
     // Preserve the original hostname for Host/SNI while pinning socket resolution.
