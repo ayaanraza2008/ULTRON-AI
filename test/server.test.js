@@ -997,3 +997,57 @@ test("browser-use model proxy stops fallback when the overall deadline expires i
     assert.equal(providerCalls.length, 1, "must not start another model after the overall deadline");
   });
 });
+
+
+test("browser-use model proxy cancels provider work when the client disconnects", async () => {
+  let providerStartedResolve;
+  let providerAbortedResolve;
+  const providerStarted = new Promise(resolve => { providerStartedResolve = resolve; });
+  const providerAborted = new Promise(resolve => { providerAbortedResolve = resolve; });
+  let providerCalls = 0;
+  const configuredEnv = {
+    NODE_ENV: "test",
+    ULTRON_BROWSER_USE_TOKEN: "test-browser-bridge-token",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_API_KEY: "test-provider-key",
+    OPENROUTER_DEFAULT_MODEL: "demo/model-a:free",
+    ULTRON_AVAILABLE_MODELS: "demo/model-a:free,demo/model-b:free",
+    ULTRON_CHAT_TOTAL_TIMEOUT_MS: "15000",
+    OPENROUTER_TIMEOUT_SECONDS: "10"
+  };
+  const app = createApp({
+    env: configuredEnv,
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async (_url, options = {}) => {
+      providerCalls += 1;
+      providerStartedResolve();
+      const onAbort = () => providerAbortedResolve();
+      if (options.signal.aborted) onAbort();
+      else options.signal.addEventListener("abort", onAbort, { once: true });
+      await providerAborted;
+      throw options.signal.reason || new DOMException("Request aborted", "AbortError");
+    }
+  });
+
+  await withServer(app, async base => {
+    const controller = new AbortController();
+    const request = fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: "Bearer test-browser-bridge-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "demo/model-a:free",
+        messages: [{ role: "user", content: "Return a short answer." }]
+      })
+    }).catch(() => null);
+
+    await providerStarted;
+    controller.abort();
+    await providerAborted;
+    await request;
+    assert.equal(providerCalls, 1, "must not fall back after the calling client disconnects");
+  });
+});
