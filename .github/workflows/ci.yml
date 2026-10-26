@@ -28,7 +28,10 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=high
       - run: npm run check
-      - run: npm test
+      - name: Run tests with live pinned HTTPS smoke enabled
+        env:
+          ULTRON_SAFE_OUTBOUND_LIVE_TEST: "YES"
+        run: npm test
   production-verification:
     # Keep production state separate from source correctness. This read-only
     # check runs only when an operator manually dispatches the workflow on main.
