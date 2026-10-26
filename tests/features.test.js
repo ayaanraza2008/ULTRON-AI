@@ -1186,7 +1186,7 @@ test("saved document library persists only extracted text and supports list/sear
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         filename: "C:\\private\\semester-notes.md", format: "md",
-        sourceBytes: 42, extractedText: "Quantum physics: particle in a one-dimensional box."
+        sourceBytes: 42, extractedText: "Quantum physics 🧬: particle in a one-dimensional box."
       })
     });
     assert.equal(save.status, 201);
@@ -1194,7 +1194,7 @@ test("saved document library persists only extracted text and supports list/sear
     assert.equal(saved.document.id, SAVED_DOCUMENT_ID);
     assert.equal(saved.document.filename, "semester-notes.md");
     assert.equal(saved.document.format, "md");
-    assert.equal(saved.document.character_count, "Quantum physics: particle in a one-dimensional box.".length);
+    assert.equal(saved.document.character_count, Array.from("Quantum physics 🧬: particle in a one-dimensional box.").length);
     assert.match(saved.document.content_sha256, /^[0-9a-f]{64}$/);
     assert.equal(Object.hasOwn(saved.document, "extracted_text"), false);
     assert.match(saved.notice, /original source file is not stored/i);
