@@ -1,7 +1,7 @@
 import express from "express";
 import { hasEmployeeModelProvider } from "./features.js";
 import { isPublicNetworkHost, safeServiceBase as safeBase } from "./network-safety.js";
-import { safeOutboundFetch } from "./safe-outbound-fetch.js";
+import { safeOutboundFetch, createConfiguredOutboundFetch } from "./safe-outbound-fetch.js";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
@@ -440,6 +440,17 @@ function classifyToolDispatchRisk(name, args, requestRisk) {
 }
 
 export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundFetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
+  fetchImpl = createConfiguredOutboundFetch({
+    env, fetchImpl,
+    baseUrlEnvNames: [
+      "SUPABASE_URL", "OPENROUTER_BASE_URL", "ULTRON_BROWSER_USE_URL", "VOICESTUDIO_BASE_URL",
+      "COMFYUI_BASE_URL", "HEYGEM_API_BASE_URL", "OMNIVOICE_API_BASE_URL", "ULTRON_HANDY_BRIDGE_URL",
+      "PAPERCLIP_BASE_URL", "CHATWOOT_BASE_URL", "OPENPROJECT_BASE_URL", "CALDIY_BASE_URL",
+      "OPENVIKING_BASE_URL", "OBSCURA_MCP_URL", "CACTUS_BASE_URL", "HERMES_AGENT_BASE_URL",
+      "AGENTMEMORY_URL", "ULTRON_MODEL_GATEWAY_BASE_URL", "OLLAMA_BASE_URL", "TTS_API_BASE_URL", "STT_API_BASE_URL"
+    ],
+    includeModelProviderRegistry: true
+  });
   const router = express.Router();
 
   // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
