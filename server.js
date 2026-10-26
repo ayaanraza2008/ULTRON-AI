@@ -10,6 +10,7 @@ import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
+import { createDesktopActionRouter } from "./desktop-action-bridge.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safeServiceBase } from "./network-safety.js";
@@ -624,8 +625,10 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   // intentionally denied to authenticated PostgREST clients by database triggers/grants.
   // Callers must still provide owner/status predicates; never expose this helper to HTTP input.
   async function supabasePrivilegedRest(req, table, method, query = "", body, prefer = "return=representation") {
-    const allowed = table === "agent_tasks" && method === "PATCH" ||
-      table === "audit_events" && method === "POST";
+    const allowed = (table === "agent_tasks" && method === "PATCH") ||
+      (table === "audit_events" && method === "POST") ||
+      (table === "desktop_actions" && ["GET", "POST", "PATCH"].includes(method)) ||
+      (table === "rpc/ultron_claim_next_desktop_action" && method === "POST");
     if (!allowed || typeof query !== "string" || query.length > 4000) {
       throw Object.assign(new Error("Privileged database operation is not allowed."), { status: 400, code: "PRIVILEGED_OPERATION_NOT_ALLOWED" });
     }
@@ -1643,6 +1646,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createDesktopActionRouter({ env, requireSupabaseUser, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
