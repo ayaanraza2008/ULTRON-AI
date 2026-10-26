@@ -32,6 +32,7 @@ Then run `npm test`. All other tests remain safe for normal CI; this live test s
 4. User A cannot read User B's conversations, messages, memories, tasks, schedules, preferences, or audit records.
 5. Cross-user update/delete attempts against conversations, messages, memories, tasks, and schedules do not modify User B's rows; preferences are also probed for cross-user update denial.
 6. User A cannot insert a conversation claiming User B's user ID.
-7. Temporary rows are deleted after the test. A cleanup failure is reported explicitly; inspect the dedicated test accounts before rerunning.
+7. Each successfully signed-in disposable session is signed out after cleanup; the test verifies that its refresh token is rejected afterward. Access-token revocation semantics remain subject to Supabase JWT expiry/session-validation configuration.
+8. Temporary rows are deleted after the test. A cleanup failure is reported explicitly; inspect the dedicated test accounts before rerunning.
 
 A skipped test is not evidence that live RLS works. A passing run is limited to the tested accounts and flows; still check Supabase Auth configuration and the Security Advisor separately.
