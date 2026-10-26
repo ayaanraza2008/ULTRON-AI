@@ -1,7 +1,7 @@
 import express from "express";
 import { buildIntegrationCatalog } from "./catalog.js";
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024;
 
@@ -68,13 +68,13 @@ async function readResponseTextLimited(response, maxBytes) {
 }
 
 async function requestJson(fetchImpl, url, { method = "GET", headers = {}, body, timeoutMs = 20000 } = {}) {
-  const response = await fetchImpl(url, {
+  const response = await fetchConfiguredOutbound(new URL(url).origin, url, {
     method,
     headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     redirect: "error",
     signal: AbortSignal.timeout(timeoutMs)
-  });
+  }, fetchImpl);
   const raw = await readResponseTextLimited(response, MAX_PROVIDER_RESPONSE);
   let data = null;
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { responseText: raw.slice(0, 2000) }; }
