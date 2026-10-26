@@ -151,6 +151,7 @@ The repository already has overlapping candidate work; no PR was merged or close
 - [PR #276](https://github.com/ayaanraza2008/ULTRON-AI/pull/276) — candidate persistent document-library migration plus a permission-bounded Windows action queue/bridge, with CI [40325922878](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40325922878) passing on its then-current candidate SHA. It overlaps `features.js`, `agent-runtime.js`, `server.js`, `package.json` and migration files changed here/elsewhere, so its feature code was not copied wholesale into #279 and its new migrations are not applied.
 - [PR #277](https://github.com/ayaanraza2008/ULTRON-AI/pull/277) — free vision-provider smoke diagnostic, CI [40332444447](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40332444447) passing on its candidate. It is stacked on #276 rather than the #279 branch; that diagnostic is not evidence of a successful live vision request without configured test credentials.
 - [PR #260](https://github.com/ayaanraza2008/ULTRON-AI/pull/260) — earlier source/production-verification split overlaps in intent with #279. Keep review focused on one agreed workflow change rather than merging competing workflow edits blindly.
+- [PR #258](https://github.com/ayaanraza2008/ULTRON-AI/pull/258) — pinned Geo-Sleuth/uv bootstrap hardening with CI [40215679965](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40215679965) passing; this remains a separate optional installer hardening proposal and was not duplicated in #279.
 
 The above are separate, unmerged source proposals, not deployed capabilities. CI success on their branches does not prove runtime service credentials or live external behavior.
 
@@ -228,6 +229,7 @@ The changes for this pass are on the review branch `ultron/source-ci-split-20261
 - `scripts/model-provider-smoke.mjs`, `scripts/worker-smoke.mjs`, `scripts/supabase-auth-diagnostics.mjs` — safe transport in explicit diagnostics.
 - `integrations/productivity-services.js`, `integrations/obscura-mcp.js`, `integrations/cactus.js`, `integrations/paperclip-services.js`, `integrations/hermes-agent.js`, `integrations/desktop-companion.js`, `integrations/voicestudio.js`, `agentmemory-integration.js`, `integrations/router.js`, `integrations/openviking.js` — safe transport defaults.
 - `package.json` — include transport/test syntax checks.
+- `.github/workflows/ci.yml` — enable the explicitly opt-in public HTTPS transport smoke in candidate CI.
 - This audit document — current score and evidence.
 
 ### Important correction note
