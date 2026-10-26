@@ -1640,7 +1640,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           // Requesting an action only creates a pending record; it cannot cause
           // local execution. Actual approval requires a separate exact current prompt
           // and the database only leases rows already moved to QUEUED.
-          if (dispatchRisk.requiresConfirmation && name !== "request_desktop_action") {
+          if (dispatchRisk.requiresConfirmation && name !== "request_desktop_action" && name !== "save_extracted_document") {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
           } else {
             result = await executeTool(name, args, req.body || {}, req);
