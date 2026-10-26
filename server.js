@@ -357,7 +357,12 @@ function isAllowedBrowserGatewayImageUrl(value) {
     const encoded = dataImage[2];
     if (encoded.length % 4 !== 0) return false;
     const bytes = Buffer.from(encoded, "base64");
-    return bytes.length > 0 && bytes.length <= 675_000 && bytes.toString("base64") === encoded;
+    if (!bytes.length || bytes.length > 675_000 || bytes.toString("base64") !== encoded) return false;
+    const mime = dataImage[1].toLowerCase();
+    if (mime === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    if (mime === "image/png") return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    if (mime === "image/gif") return bytes.length >= 6 && ["GIF87a", "GIF89a"].includes(bytes.toString("ascii", 0, 6));
+    return mime === "image/webp" && bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
   }
   try {
     const url = new URL(candidate);
