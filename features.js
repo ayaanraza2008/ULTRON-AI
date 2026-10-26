@@ -769,7 +769,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         memory: "account_scoped_crud_and_chat_retrieval_available_when_enabled",
         research: "search_endpoint_available",
         tasks: "authenticated task queue plus optional allowlisted research worker",
-        documents: "authenticated_txt_md_csv_json_html_pdf_docx_extraction; optional_owner_scoped_saved_text_library_requires_migration",
+        documents: "authenticated_txt_md_csv_json_html_pdf_docx_extraction; transient_only_for_source_files; optional_owner_scoped_saved_text_library_requires_migration",
         desktopAutomation: "local_companion_required",
         voice: "browser_native_available; premium_services_optional",
         integrations: "configuration_readiness_only"
