@@ -656,6 +656,79 @@ test("Supabase signout preserves cookies and reports failure if remote revocatio
   });
 });
 
+
+
+test("refreshed Supabase access tokens are rejected when their backing session is absent", async () => {
+  let protectedDataRequests = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/user") {
+        return new Response(JSON.stringify({ message: "expired" }), { status: 401 });
+      }
+      if (url === "https://ultron-test.supabase.co/auth/v1/token?grant_type=refresh_token") {
+        assert.equal(JSON.parse(options.body).refresh_token, "old-refresh");
+        return new Response(JSON.stringify({
+          access_token: "fresh-but-revoked-access",
+          refresh_token: "fresh-refresh",
+          expires_in: 3600,
+          user: { id: "123e4567-e89b-12d3-a456-426614174000" }
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        assert.equal(options.headers.Authorization, "Bearer fresh-but-revoked-access");
+        return new Response("false", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.startsWith("https://ultron-test.supabase.co/rest/v1/")) protectedDataRequests += 1;
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/conversations", {
+      headers: { Cookie: "ultron_sb_access=old-access; ultron_sb_refresh=old-refresh" }
+    });
+    assert.equal(response.status, 401);
+    assert.equal(protectedDataRequests, 0);
+    assert.equal(response.headers.get("set-cookie"), null, "revoked refreshed tokens must not be installed as cookies");
+  });
+});
+
+test("Supabase signout refreshes expired access then revokes the refreshed session", async () => {
+  const logoutTokens = [];
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/logout?scope=local") {
+        logoutTokens.push(options.headers.Authorization);
+        if (logoutTokens.length === 1) return new Response(JSON.stringify({ message: "expired access token" }), { status: 401 });
+        return new Response(null, { status: 204 });
+      }
+      if (url === "https://ultron-test.supabase.co/auth/v1/token?grant_type=refresh_token") {
+        assert.equal(JSON.parse(options.body).refresh_token, "old-refresh");
+        return new Response(JSON.stringify({
+          access_token: "fresh-signout-access",
+          refresh_token: "rotated-refresh",
+          expires_in: 3600,
+          user: { id: "123e4567-e89b-12d3-a456-426614174000" }
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/auth/signout", {
+      method: "POST",
+      headers: { Cookie: "ultron_sb_access=expired-access; ultron_sb_refresh=old-refresh" }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, sessionRevoked: true });
+    assert.deepEqual(logoutTokens, ["Bearer expired-access", "Bearer fresh-signout-access"]);
+    assert.match(response.headers.get("set-cookie") || "", /ultron_sb_refresh=;/);
+  });
+});
+
 test("Supabase signup validates credentials before making an upstream request", async () => {
   let calls = 0;
   const app = createApp({
