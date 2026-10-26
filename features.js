@@ -7,6 +7,7 @@ import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
+import { safeOutboundFetch, createConfiguredOutboundFetch } from "./safe-outbound-fetch.js";
 
 function safeBaseUrl(value) {
   return safeServiceBase(value);
@@ -404,7 +405,13 @@ function withTimeout(ms, parentSignal) {
   return { signal: controller.signal, close: () => { clearTimeout(timer); parentSignal?.removeEventListener("abort", abort); } };
 }
 
-export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
+export function createFeatureRouter({ env = process.env, fetchImpl = safeOutboundFetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
+  fetchImpl = createConfiguredOutboundFetch({
+    env,
+    fetchImpl,
+    baseUrlEnvNames: ["SUPABASE_URL", "OPENROUTER_BASE_URL", "OPENAI_BASE_URL", "OLLAMA_BASE_URL", "LITELLM_BASE_URL", "TTS_API_BASE_URL", "STT_API_BASE_URL"],
+    includeModelProviderRegistry: true
+  });
   const router = express.Router();
   async function recordAuditEvent(req, event) {
     try {
