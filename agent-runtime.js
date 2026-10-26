@@ -687,7 +687,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     // Only the current, standalone prompt can authorize a transition. A previous
     // conversation message or a model-generated argument is not an approval.
     const prompt = typeof requestBody?.prompt === "string" ? requestBody.prompt.trim() : "";
-    const uuid = DESKTOP_ACTION_UUID.source;
+    const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
     const pattern = verb === "approve"
       ? new RegExp("^(?:(?:please|yes|okay|ok)[, ]+)*(?:approve|confirm)\\s+(?:the\\s+)?(?:desktop\\s+)?action\\s*:?\\s*(" + uuid + ")\\s*[.!]?$", "i")
       : new RegExp("^(?:(?:please|yes|okay|ok)[, ]+)*cancel\\s+(?:the\\s+)?(?:desktop\\s+)?action\\s*:?\\s*(" + uuid + ")\\s*[.!]?$", "i");
