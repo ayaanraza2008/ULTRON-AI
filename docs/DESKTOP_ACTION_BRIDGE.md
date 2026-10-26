@@ -32,7 +32,7 @@ Generate a high-entropy secret (at least 32 characters) out of band. Set the **s
 - Server secret **ULTRON_DESKTOP_BRIDGE_TOKEN** (Render environment or local backend .env).
 - The Windows user's environment variable **ULTRON_DESKTOP_BRIDGE_TOKEN**.
 
-Never put the secret in source control, a browser bundle, a task payload, or chat. The Windows app does not save this secret. The server must also have **ULTRON_INTEGRATION_OWNER_USER_ID** set to the UUID of the account allowed to request/approve actions. The Windows user's optional **ULTRON_API_BASE_URL** must be an HTTPS base URL for ULTRON; if omitted, the companion uses the current hosted API base.
+Never put the secret in source control, a browser bundle, a task payload, or chat. The Windows app does not save this secret. The server must also have **ULTRON_INTEGRATION_OWNER_USER_ID** set to the UUID of the account allowed to request/approve actions. The Windows user's optional **ULTRON_API_BASE_URL** must be an HTTPS base URL for ULTRON; if omitted, the companion uses the current hosted API base. The API returns a non-secret **bridgeConfigured** boolean that only reports whether a sufficiently long server token is present; it does not claim that the Windows PC is currently online or paired.
 
 In Windows, launch the companion, tick **Enable approved PC actions**, and accept its separate consent prompt. The checkbox is off by default and does not inherit the wake-word auto-start setting. Untick it to stop polling.
 
