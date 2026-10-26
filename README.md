@@ -38,6 +38,8 @@ The Render service is configured with the dedicated Supabase URL and publishable
 
 ## Multi-model text and vision
 
+Backend diagnostics: `npm run smoke:model` checks a configured text provider, and `npm run smoke:vision` sends a tiny inline PNG challenge to explicitly configured free vision models from `ULTRON_VISION_MODELS`. Both are opt-in, bounded, and redact credentials and generated completion text. A passing vision smoke check verifies request compatibility only; it does not prove image-understanding quality or authenticated chat routing. Run these commands only in a trusted backend environment with credentials provided as environment variables.
+
 The chat composer includes a model picker and image attachment support. The server validates selected model IDs and accepts up to two JPEG, PNG, WebP, or GIF images of up to 4 MB each. Image data is sent to the provider for that request and is not stored as image data in Supabase chat history.
 
 OpenRouter configuration:

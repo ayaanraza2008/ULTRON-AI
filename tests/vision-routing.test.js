@@ -51,13 +51,13 @@ test("chat with image attachments prefers explicitly configured vision models", 
       body: JSON.stringify({
         stream: false,
         messages: [{ role: "user", content: "Describe this image" }],
-        attachments: [{ dataUrl: "data:image/png;base64,aGVsbG8=" }]
+        attachments: [{ dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfS8AAAAASUVORK5CYII=" }]
       })
     });
     assert.equal(response.status, 200);
     assert.equal(seen.length, 1);
     assert.equal(seen[0].model, "vendor/vision-a:free");
-    assert.equal(seen[0].messages.at(-1).content[1].image_url.url, "data:image/png;base64,aGVsbG8=");
+    assert.equal(seen[0].messages.at(-1).content[1].image_url.url, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfS8AAAAASUVORK5CYII=");
   });
 });
 
@@ -92,10 +92,31 @@ test("image chat does not silently fall back to text-only model IDs", async () =
       body: JSON.stringify({
         stream: false,
         messages: [{ role: "user", content: "What is shown?" }],
-        attachments: [{ dataUrl: "data:image/png;base64,aGVsbG8=" }]
+        attachments: [{ dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfS8AAAAASUVORK5CYII=" }]
       })
     });
     assert.equal(response.status, 502);
     assert.deepEqual(seen.map(item => item.model), ["vendor/vision-a:free", "vendor/vision-b:free"]);
+  });
+});
+
+test("image chat rejects non-image bytes before contacting the model provider", async () => {
+  let providerCalled = false;
+  await withApp({ ...baseEnv }, async () => {
+    providerCalled = true;
+    return new Response(JSON.stringify({ choices: [{ message: { content: "should not run" } }] }), { status: 200 });
+  }, async (base, cookie) => {
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "Describe this image" }],
+        attachments: [{ dataUrl: "data:image/png;base64,aGVsbG8=" }]
+      })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_IMAGE");
+    assert.equal(providerCalled, false);
   });
 });

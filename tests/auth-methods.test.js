@@ -245,3 +245,31 @@ test("signup rejects safely when the privacy-preserving password screening servi
     assert.match(calls[0].url, /^https:\/\/api\.pwnedpasswords\.com\/range\/[0-9A-F]{5}$/);
   });
 });
+
+test("signup fails closed when the password-breach service returns an empty or malformed HTTP 200 response", async () => {
+  for (const responseBody of ["", "not-a-valid-range-record"]) {
+    const calls = [];
+    await withServer({
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url, options });
+        if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
+          return new Response(responseBody, {
+            status: 200,
+            headers: { "Content-Type": "text/plain" }
+          });
+        }
+        throw new Error("Supabase must not receive a password when breach screening is invalid");
+      }
+    }, async base => {
+      const response = await fetch(base + "/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "person@example.com", password: "Ultron-safe-phrase-2026!" })
+      });
+      assert.equal(response.status, 503);
+      assert.equal((await response.json()).error.code, "PASSWORD_SCREENING_UNAVAILABLE");
+      assert.equal(calls.length, 1);
+      assert.match(calls[0].url, /^https:\/\/api\.pwnedpasswords\.com\/range\/[0-9A-F]{5}$/);
+    });
+  }
+});
