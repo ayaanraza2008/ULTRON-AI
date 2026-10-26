@@ -139,7 +139,9 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
   const leaseHeartbeatMs = Math.max(10000, Math.min(120000, Number(env.ULTRON_WORKER_LEASE_HEARTBEAT_MS) || 60000));
-  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksNeedingReview: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, taskStateUpdateFailures: 0, taskLeaseRenewalFailures: 0, consecutiveCycleFailures: 0 };
+  // Bound the entire task across research plus provider fallbacks, not only each HTTP call.
+  const taskTimeoutMs = Math.max(1000, Math.min(600000, Number(env.ULTRON_WORKER_TASK_TIMEOUT_MS) || 420000));
+  const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksNeedingReview: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, tasksTimedOut: 0, taskStateUpdateFailures: 0, taskLeaseRenewalFailures: 0, consecutiveCycleFailures: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl) || !safeResearchUrl(supabaseUrl)) {
     status.state = "disabled";
     status.lastErrorCode = "WORKER_CONFIGURATION_MISSING";
@@ -500,8 +502,26 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       heartbeatRunner.trigger();
     }, leaseHeartbeatMs);
     heartbeat.unref?.();
+    let taskDeadlineTimer;
     try {
-      const result = await execute(task, taskController.signal);
+      const deadline = new Promise((_, reject) => {
+        taskDeadlineTimer = setTimeout(() => {
+          const timeoutError = Object.assign(new Error("Task exceeded the configured execution deadline."), {
+            name: "TimeoutError",
+            code: "TASK_EXECUTION_TIMEOUT"
+          });
+          // Native fetch and all cooperating adapters receive this cancellation.
+          taskController.abort(timeoutError);
+          reject(timeoutError);
+        }, taskTimeoutMs);
+        taskDeadlineTimer.unref?.();
+      });
+      const result = await Promise.race([execute(task, taskController.signal), deadline]);
+      clearTimeout(taskDeadlineTimer);
+      taskDeadlineTimer = null;
+      if (taskController.signal.aborted) {
+        throw taskController.signal.reason || Object.assign(new Error("Task execution was cancelled."), { code: "TASK_EXECUTION_FAILED" });
+      }
       let completedRows;
       try {
         completedRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
@@ -544,7 +564,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       const code = bounded(error.code, 80) || "TASK_EXECUTION_FAILED";
       status.lastErrorAt = new Date().toISOString();
       status.lastErrorCode = code;
-      const retryable = ["RESEARCH_PROVIDER_RETRYABLE", "EMPLOYEE_PROVIDER_RETRYABLE", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
+      const retryable = ["RESEARCH_PROVIDER_RETRYABLE", "EMPLOYEE_PROVIDER_RETRYABLE", "TASK_EXECUTION_FAILED", "TASK_EXECUTION_TIMEOUT", "AbortError", "TimeoutError"].includes(code);
       const shouldRetry = retryable && Number(task.attempts || 1) < 3;
       let failureRows;
       try {
@@ -580,6 +600,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
         return true;
       }
       const isBlocked = code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED";
+      if (code === "TASK_EXECUTION_TIMEOUT") status.tasksTimedOut += 1;
       if (isBlocked) status.tasksBlocked += 1;
       else if (shouldRetry) status.tasksRetried += 1;
       else status.tasksFailed += 1;
@@ -592,6 +613,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       }
       logger.error?.("Task outcome:", task.id, isBlocked ? "blocked" : shouldRetry ? "retry scheduled" : code);
     } finally {
+      clearTimeout(taskDeadlineTimer);
       clearInterval(heartbeat);
       await heartbeatRunner.wait();
     }
