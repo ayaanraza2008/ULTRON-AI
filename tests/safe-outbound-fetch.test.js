@@ -155,7 +155,7 @@ test("FormData requests are bounded and encoded before the pinned transport", as
   const form = new FormData();
   form.append("language", "hi");
   form.append("file", new Blob(["small audio"], { type: "audio/wav" }), "sample.wav");
-  const result = await safeFetch("https://audio.example.com/upload", { method: "POST", body: form });
+  const result = await safeFetch("https://audio.ultron-public.com.com/upload", { method: "POST", body: form });
   assert.equal(await result.text(), "ok");
   assert.match(captured.headers.get("content-type"), /^multipart\/form-data; boundary=/);
   assert.match(captured.body.toString(), /name="language"/);
