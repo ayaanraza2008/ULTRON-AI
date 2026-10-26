@@ -115,6 +115,7 @@ INSERT INTO public.user_documents (
 
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', false);
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 DO $$
 DECLARE
   visible_count integer;
@@ -271,6 +272,7 @@ RESET ROLE;
 
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', false);
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 DO $$
 DECLARE
   row_count integer;
