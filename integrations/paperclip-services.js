@@ -4,7 +4,7 @@
  * Shared credentials are available only to ULTRON's explicitly configured owner UUID.
  */
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 
@@ -70,12 +70,12 @@ async function readJsonLimited(response) {
 }
 
 async function getJson(fetchImpl, url, token) {
-  const response = await fetchImpl(url, {
+  const response = await fetchConfiguredOutbound(new URL(url).origin, url, {
     method: "GET",
     headers: { Accept: "application/json", Authorization: "Bearer " + token },
     redirect: "error",
     signal: AbortSignal.timeout(12000)
-  });
+  }, fetchImpl);
   const body = await readJsonLimited(response);
   if (!response.ok) {
     throw Object.assign(new Error("Paperclip returned HTTP " + response.status + "."), {
