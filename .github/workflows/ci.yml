@@ -46,6 +46,34 @@ jobs:
           echo 'Deployed health endpoint did not become ready in time.'
           exit 1
 
+  database-migration-contracts:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ultron-ci-only
+          POSTGRES_DB: ultron_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ultron_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Apply migrations and verify database-enforced security invariants
+        env:
+          PGPASSWORD: ultron-ci-only
+        run: |
+          psql -h 127.0.0.1 -U postgres -d ultron_ci -v ON_ERROR_STOP=1 -f tests/postgres/bootstrap.sql
+          psql -h 127.0.0.1 -U postgres -d ultron_ci -v ON_ERROR_STOP=1 -f supabase/migrations/20261026100000_desktop_action_bridge.sql
+          psql -h 127.0.0.1 -U postgres -d ultron_ci -v ON_ERROR_STOP=1 -f supabase/migrations/20261026110000_user_document_library.sql
+          psql -h 127.0.0.1 -U postgres -d ultron_ci -v ON_ERROR_STOP=1 -f tests/postgres/assert-migrations.sql
+
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
