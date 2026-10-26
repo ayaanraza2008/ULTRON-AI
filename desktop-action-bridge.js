@@ -54,8 +54,8 @@ function getBridgeOwner(env, res) {
     return null;
   }
   const token = String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim();
-  if (token.length < 32) {
-    apiError(res, 503, "DESKTOP_BRIDGE_NOT_CONFIGURED", "Configure a high-entropy ULTRON_DESKTOP_BRIDGE_TOKEN on the server and the paired Windows companion.");
+  if (!bridgeTokenConfigured(env)) {
+    apiError(res, 503, "DESKTOP_BRIDGE_NOT_CONFIGURED", "Configure a high-entropy ULTRON_DESKTOP_BRIDGE_TOKEN without whitespace on the server and the paired Windows companion.");
     return null;
   }
   return { ownerId, token };
