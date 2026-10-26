@@ -26,7 +26,16 @@ Phase 2 — Backend hardening and live verification. The empty-repository audit 
 
 ## Tests and verification
 
-### Latest observed snapshot (2026-10-25)
+### Latest verified snapshot (2026-10-26)
+
+- Source-only CI hardening on PR #277 replaced the manually maintained `npm run check` list with a recursive JavaScript syntax scan. The scanner excludes dependencies, generated builds, and deferred frontend folders; its last completed run checked 109 candidate files.
+- CI run [40319922174](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40319922174) passed on Node.js 20 and 24: each runtime discovered 555 tests, passed 554, failed 0, and skipped 1. The skipped case is the opt-in two-account live Supabase isolation test; it was not a live pass. Both dependency audit steps reported 0 vulnerabilities, and the pinned God’s Eye build passed.
+- The PR CI health step queried the existing Render endpoint only; it did not deploy the PR source. PRs #275, #276, and #277 remain open and unmerged. The latest docs-only change records blockers; CI must be green for the final updated head before the branch is treated as fully verified.
+- Live Supabase currently lists 14 migrations through `20261024142725_scope_stale_task_recovery`. The desktop-action and saved-document migrations in the open PR branch have not been applied. The Supabase security advisor currently reports `auth_leaked_password_protection` as disabled; this is a hosted Auth configuration setting.
+- Render service `ultron-ai` auto-deploys from `main`, but recent attempts fail with `build_failed` under the already-recorded pipeline-minute exhaustion. No source commit in the open PRs is confirmed deployed.
+- Still not end-to-end verified: real OpenRouter text/vision calls and authenticated image routing; signup/recovery email, phone OTP and Google sign-in; two-user data isolation; real queued worker task/result persistence; and execution on a physical Windows PC. A green mocked CI run does not close these blockers.
+
+### Historical observed snapshot (2026-10-25)
 - GitHub Actions run `40187140720` completed the browser-use policy/Python checks, dependency audit, `npm run check`, `npm test`, deployed `/api/health` smoke test, and the pinned God’s Eye bridge build successfully on the PR source revision.
 - Render reports recent deploy attempts as failed with `pipeline_minutes_exhausted`. These attempts were stopped by the workspace build-pipeline limit before a new deployment could be confirmed; do not describe the latest `main` revision as live solely because source tests pass.
 - The deployed health endpoint passed the CI smoke check for status plus provider/access/Supabase configuration. Live model inference, user email/recovery flows, cross-user RLS isolation, and real queued-task completion remain separately unverified.
