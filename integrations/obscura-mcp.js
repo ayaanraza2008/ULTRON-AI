@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { isPublicNetworkHost, safeServiceBase } from "../network-safety.js";
+import { safeFetch } from "../outbound-transport.js";
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_PAGE_TEXT = 12_000;
@@ -171,7 +172,7 @@ export function getObscuraReadiness(env = process.env) {
 }
 
 export async function inspectPublicPageWithObscura({
-  env = process.env, fetchImpl = globalThis.fetch, userId, url: rawTarget
+  env = process.env, fetchImpl = safeFetch, userId, url: rawTarget
 } = {}) {
   const config = endpointConfig(env, userId);
   if (config.error) return config.error;
@@ -232,7 +233,7 @@ function extractArtifact(result, format) {
 }
 
 export async function capturePublicPageWithObscura({
-  env = process.env, fetchImpl = globalThis.fetch, userId, url: rawTarget, format = "screenshot"
+  env = process.env, fetchImpl = safeFetch, userId, url: rawTarget, format = "screenshot"
 } = {}) {
   const config = endpointConfig(env, userId);
   if (config.error) return config.error;
