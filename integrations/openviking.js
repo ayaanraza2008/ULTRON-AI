@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { safeServiceBase } from "../network-safety.js";
+import { safeOutboundFetch } from "../safe-outbound-fetch.js";
 
 const MAX_QUERY_CHARS = 1200;
 const MAX_RESPONSE_BYTES = 512 * 1024;
@@ -161,7 +162,7 @@ function normalizeFindHits(body) {
   return { contexts, total: Number.isFinite(result?.total) ? result.total : contexts.length };
 }
 
-export async function findOpenVikingContext({ env = process.env, userId, query, limit = 5, targetUri = "viking://~/", fetchImpl = fetch } = {}) {
+export async function findOpenVikingContext({ env = process.env, userId, query, limit = 5, targetUri = "viking://~/", fetchImpl = safeOutboundFetch } = {}) {
   const access = blockedOrMissing({ env, userId });
   if (access.state !== "ready") return access;
   const normalizedQuery = bounded(query);
