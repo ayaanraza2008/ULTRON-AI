@@ -133,11 +133,10 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
   let testSessions = [];
 
   try {
-    const [userA, userB] = await Promise.all([
-      signIn("A", config.emailA, config.passwordA),
-      signIn("B", config.emailB, config.passwordB)
-    ]);
-    testSessions = [userA, userB];
+    const userA = await signIn("A", config.emailA, config.passwordA);
+    testSessions.push(userA);
+    const userB = await signIn("B", config.emailB, config.passwordB);
+    testSessions.push(userB);
     assert.notEqual(userA.userId, userB.userId, "E2E test accounts must be distinct users.");
 
     const conversationA = await insertRecord("conversations", userA, {
@@ -346,10 +345,6 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
     catch { cleanupFailures.push(record.table + ":" + record.id); }
   }
 
-  if (cleanupFailures.length) {
-    throw new Error("Supabase E2E cleanup failed for " + cleanupFailures.length + " temporary record(s); inspect the dedicated test accounts before rerunning.");
-  }
-
   // Revoke each disposable test session after all temporary rows have been cleaned.
   // A fresh refresh attempt must not be accepted after the Auth logout succeeds.
   const sessionRevocationFailures = [];
@@ -379,6 +374,9 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
     }
   }
 
+  if (cleanupFailures.length) {
+    throw new Error("Supabase E2E cleanup failed for " + cleanupFailures.length + " temporary record(s); inspect the dedicated test accounts before rerunning.");
+  }
   if (primaryError) throw primaryError;
   if (sessionRevocationFailures.length) {
     throw new Error("Could not verify sign-out/refresh-token revocation for disposable test session(s): " + sessionRevocationFailures.join(", ") + ".");
