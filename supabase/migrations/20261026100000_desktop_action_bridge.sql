@@ -87,6 +87,23 @@ begin
       using errcode = '42501';
   end if;
 
+  -- Enforce the lease at the database transition point too: checking it only in
+  -- the HTTP handler leaves a race if the request reaches PostgREST after expiry.
+  if old.status = 'RUNNING' and new.status = 'COMPLETED'
+     and (old.lease_expires_at is null or old.lease_expires_at <= now()) then
+    raise exception 'Expired desktop action leases cannot be acknowledged'
+      using errcode = '42501';
+  end if;
+
+  -- Only the claim RPC may mark a stale max-attempt item failed after its lease.
+  -- Bridge acknowledgements have a smaller error-code allowlist in the API.
+  if old.status = 'RUNNING' and new.status = 'FAILED'
+     and (old.lease_expires_at is null or old.lease_expires_at <= now())
+     and new.error_code is distinct from 'DESKTOP_ACTION_RETRY_EXHAUSTED' then
+    raise exception 'Expired desktop action leases cannot be acknowledged'
+      using errcode = '42501';
+  end if;
+
   return new;
 end;
 $$;
