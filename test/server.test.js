@@ -1299,7 +1299,7 @@ test("password update screens the candidate and uses only the signed-in user's a
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
-        return new Response("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:0\\r\\n", { status: 200, headers: { "Content-Type": "text/plain" } });
+        return new Response("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:0\r\n", { status: 200, headers: { "Content-Type": "text/plain" } });
       }
       if (url === "https://ultron-test.supabase.co/auth/v1/user" && method === "PUT") {
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
