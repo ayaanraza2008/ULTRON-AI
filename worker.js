@@ -253,6 +253,37 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
       seenNames.add(name);
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100 });
     }
+
+    // Background employees use the same zero-cost fallback list as interactive
+    // plain chat. Model IDs alone do not assert tool support; this worker uses
+    // text completions only, so every listed free model is eligible here.
+    const openRouter = providers.find(provider => provider.name === "openrouter");
+    if (openRouter) {
+      const knownModels = new Set(
+        providers.filter(provider => provider.baseUrl === openRouter.baseUrl).map(provider => provider.model)
+      );
+      const listedModels = bounded(env.ULTRON_AVAILABLE_MODELS, 3000)
+        .split(",")
+        .map(model => model.trim())
+        .filter(model => model === "openrouter/free" ||
+          /^[a-z0-9][a-z0-9._-]{0,79}\/[a-z0-9][a-z0-9._-]{0,119}:free$/i.test(model))
+        .slice(0, 12);
+      let fallbackIndex = 0;
+      for (const model of listedModels) {
+        if (knownModels.has(model) || fallbackIndex >= 6) continue;
+        const name = "openrouter-free-fallback-" + (++fallbackIndex);
+        if (seenNames.has(name)) continue;
+        seenNames.add(name);
+        knownModels.add(model);
+        providers.push({
+          name,
+          baseUrl: openRouter.baseUrl,
+          apiKey: openRouter.apiKey,
+          model,
+          priority: 10 + fallbackIndex
+        });
+      }
+    }
     return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
   }
 
