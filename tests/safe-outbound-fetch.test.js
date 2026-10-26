@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { safeOutboundFetch, createSafeOutboundFetch, createConfiguredOutboundFetch, isPublicDestinationAddress } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, createSafeOutboundFetch, createConfiguredOutboundFetch, fetchConfiguredOutbound, isPublicDestinationAddress } from "../safe-outbound-fetch.js";
 
 const publicAddress = { address: "93.184.216.34", family: 4 };
 
@@ -324,4 +324,38 @@ test("live outbound HTTPS pins a validated public destination and verifies the r
   assert.equal(result.status, 200);
   const body = await result.text();
   assert.match(body, /iana|internet assigned numbers authority/i);
+});
+
+
+test("per-call local adapter permission cannot be used for another local origin", async () => {
+  let requests = 0;
+  const fakeFetch = async () => { requests += 1; return response("ok"); };
+  await assert.rejects(
+    fetchConfiguredOutbound(
+      "http://127.0.0.1:11434",
+      "http://127.0.0.1:11435/admin",
+      {},
+      fakeFetch
+    ),
+    { code: "OUTBOUND_CONFIG_ORIGIN_MISMATCH" }
+  );
+  assert.equal(requests, 0);
+});
+
+test("generic outbound transport still blocks loopback even when local adapters are configured elsewhere", async () => {
+  let connections = 0;
+  const genericFetch = createSafeOutboundFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    requestImpl: async () => { connections += 1; return response("unexpected"); }
+  });
+  const localAdapterFetch = createConfiguredOutboundFetch({
+    env: { OLLAMA_BASE_URL: "http://127.0.0.1:11434" },
+    baseUrlEnvNames: ["OLLAMA_BASE_URL"],
+    fetchImpl: genericFetch
+  });
+  // This simulates an unrelated user-supplied URL handler retaining only the
+  // generic fetch function, never the per-adapter scoped wrapper.
+  await assert.rejects(genericFetch("http://127.0.0.1:11434/admin"), { code: "OUTBOUND_SCHEME_BLOCKED" });
+  assert.equal(typeof localAdapterFetch, "function");
+  assert.equal(connections, 0);
 });
