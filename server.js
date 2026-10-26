@@ -87,6 +87,21 @@ function safeEqual(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
+function isValidChatImageDataUrl(value) {
+  if (typeof value !== "string" || value.length > 5_600_000) return false;
+  const match = /^data:image\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
+  if (!match) return false;
+  const encoded = match[2];
+  if (encoded.length % 4 !== 0) return false;
+  const bytes = Buffer.from(encoded, "base64");
+  if (!bytes.length || bytes.length > 4 * 1024 * 1024 || bytes.toString("base64") !== encoded) return false;
+  const mime = match[1].toLowerCase();
+  if (mime === "jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (mime === "png") return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  if (mime === "gif") return bytes.length >= 6 && ["GIF87a", "GIF89a"].includes(bytes.toString("ascii", 0, 6));
+  return bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+}
+
 const MEMORY_EXPIRY_MAX_FUTURE_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
 function normalizeMemoryExpiry(value, now = Date.now()) {
@@ -208,22 +223,28 @@ async function isCompromisedPassword(password, fetchImpl) {
     redirect: "error",
     signal: AbortSignal.timeout(5000)
   });
+  const unavailable = () => Object.assign(new Error("Password safety check unavailable."), {
+    code: "PASSWORD_SCREENING_UNAVAILABLE",
+    status: 503
+  });
   if (!response.ok) {
     try { await response.body?.cancel?.(); } catch { /* body may already be closed */ }
-    throw Object.assign(new Error("Password safety check unavailable."), {
-      code: "PASSWORD_SCREENING_UNAVAILABLE",
-      status: 503
-    });
+    throw unavailable();
   }
   const text = await readResponseTextLimited(response, 1_000_000);
-  for (const line of text.split(/\r?\n/)) {
-    const separator = line.indexOf(":");
-    if (separator < 1) continue;
-    const suffix = line.slice(0, separator).trim().toUpperCase();
-    if (suffix !== targetSuffix) continue;
-    const count = Number(line.slice(separator + 1).trim());
-    if (Number.isFinite(count) && count > 0) return true;
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (!lines.length) throw unavailable();
+
+  let validRecords = 0;
+  for (const line of lines) {
+    const record = /^([0-9A-F]{35}):([0-9]+)$/i.exec(line);
+    if (!record) throw unavailable();
+    const count = Number(record[2]);
+    if (!Number.isSafeInteger(count) || count < 0) throw unavailable();
+    validRecords += 1;
+    if (record[1].toUpperCase() === targetSuffix && count > 0) return true;
   }
+  if (!validRecords) throw unavailable();
   return false;
 }
 
@@ -1244,8 +1265,8 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
       if (!attachment || typeof attachment.dataUrl !== "string" || attachment.dataUrl.length > 5600000) {
         return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
       }
-      if (!attachment.dataUrl.startsWith("data:image/") || !/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(attachment.dataUrl)) {
-        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only JPEG, PNG, WebP, or GIF image data is supported." } });
+      if (!isValidChatImageDataUrl(attachment.dataUrl)) {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only valid JPEG, PNG, WebP, or GIF image data is supported." } });
       }
       imageParts.push({ type: "image_url", image_url: { url: attachment.dataUrl } });
     }
