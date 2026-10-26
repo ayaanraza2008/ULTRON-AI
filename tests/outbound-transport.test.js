@@ -60,24 +60,34 @@ test("safeFetch pins the HTTPS connection to the address it validated", async ()
 
 test("safeFetch blocks private DNS answers before making an upstream request", async () => {
   const fake = fakeRequest();
+  let lookupCalled = false;
   const fetch = createSafeFetch({
-    lookupImpl: async () => [{ address: "127.0.0.1", family: 4 }],
+    lookupImpl: async () => {
+      lookupCalled = true;
+      return [{ address: "127.0.0.1", family: 4 }];
+    },
     httpsRequest: fake.request
   });
-  await assert.rejects(fetch("https://attacker.example/secret"), error => error.code === "UNSAFE_OUTBOUND_TARGET");
+  await assert.rejects(fetch("https://attacker.example.com/secret"), error => error.code === "UNSAFE_OUTBOUND_TARGET");
+  assert.equal(lookupCalled, true);
   assert.equal(fake.seen.calls, 0);
 });
 
 test("safeFetch blocks mixed public/private DNS answers rather than selecting a public answer", async () => {
   const fake = fakeRequest();
+  let lookupCalled = false;
   const fetch = createSafeFetch({
-    lookupImpl: async () => [
-      { address: "93.184.216.34", family: 4 },
-      { address: "10.0.0.8", family: 4 }
-    ],
+    lookupImpl: async () => {
+      lookupCalled = true;
+      return [
+        { address: "93.184.216.34", family: 4 },
+        { address: "10.0.0.8", family: 4 }
+      ];
+    },
     httpsRequest: fake.request
   });
-  await assert.rejects(fetch("https://mixed.example/"), error => error.code === "UNSAFE_OUTBOUND_TARGET");
+  await assert.rejects(fetch("https://mixed.example.com/"), error => error.code === "UNSAFE_OUTBOUND_TARGET");
+  assert.equal(lookupCalled, true);
   assert.equal(fake.seen.calls, 0);
 });
 
