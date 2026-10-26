@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { createSafeOutboundFetch, isPublicDestinationAddress } from "../safe-outbound-fetch.js";
+import { createSafeOutboundFetch, createConfiguredOutboundFetch, isPublicDestinationAddress } from "../safe-outbound-fetch.js";
 
 const publicAddress = { address: "93.184.216.34", family: 4 };
 
@@ -110,7 +110,7 @@ test("redirects to loopback/private addresses are rejected without a second requ
       return response(null, 302, { location: "https://127.0.0.1/admin" });
     }
   });
-  await assert.rejects(safeFetch("https://public.example/start"), { code: "OUTBOUND_HOST_BLOCKED" });
+  await assert.rejects(safeFetch("https://public.example/start"), { code: "OUTBOUND_ADDRESS_BLOCKED" });
   assert.equal(requests, 1);
 });
 
@@ -194,4 +194,42 @@ test("DNS failures and HTTP redirects cannot fall back to global fetch or a seco
   });
   await assert.rejects(redirectError("https://first.example/", { redirect: "error" }), { code: "OUTBOUND_REDIRECT_BLOCKED" });
   assert.equal(calls, 1);
+});
+
+
+test("configured local HTTP origin is opt-in and cannot authorize arbitrary loopback URLs", async () => {
+  const calls = [];
+  const rawFetch = async (url, options = {}) => {
+    calls.push({ url: String(url), allow: options.ultronAllowLoopbackHttp === true });
+    return response("ok");
+  };
+  const configuredFetch = createConfiguredOutboundFetch({
+    env: { VOICESTUDIO_BASE_URL: "http://127.0.0.1:8787/api" },
+    baseUrlEnvNames: ["VOICESTUDIO_BASE_URL"],
+    fetchImpl: rawFetch
+  });
+  await configuredFetch("http://127.0.0.1:8787/api/voices");
+  await configuredFetch("http://127.0.0.1:9090/admin");
+  await configuredFetch("http://localhost:8787/private");
+  await configuredFetch("https://api.example.com/v1");
+  assert.deepEqual(calls.map(item => item.allow), [true, false, false, false]);
+});
+
+test("configured model registry loopback URLs are allowed only when the exact origin is configured", async () => {
+  const calls = [];
+  const configuredFetch = createConfiguredOutboundFetch({
+    env: {
+      ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+        { name: "local-dev", baseUrl: "http://localhost:11434/v1", apiKeyEnv: "LOCAL_KEY", model: "test" }
+      ])
+    },
+    includeModelProviderRegistry: true,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url: String(url), allowed: options.ultronAllowLoopbackHttp === true });
+      return response("ok");
+    }
+  });
+  await configuredFetch("http://localhost:11434/v1/chat/completions");
+  await configuredFetch("http://localhost:11435/v1/chat/completions");
+  assert.deepEqual(calls.map(item => item.allowed), [true, false]);
 });
