@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { safeFetch } from "../outbound-transport.js";
 
 const EXPECTED_PROJECT_REF = "opdjfhwepmcprbqojpat";
 const CONFIRM_WRITES_VALUE = "CONFIRM_ULTRON_E2E_WRITES";
@@ -43,7 +44,7 @@ async function readJson(response) {
 }
 
 async function request(url, { apiKey, accessToken, method = "GET", body, prefer } = {}) {
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     method,
     headers: {
       apikey: apiKey,
