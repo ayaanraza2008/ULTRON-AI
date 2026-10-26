@@ -189,3 +189,21 @@ test("agent refuses unsafe URL actions before creating a pending item", async t 
   assert.equal(h.privilegedCalls.length, 0);
   assert.equal(response.result.toolResults[0].result.error.code, "DESKTOP_ACTION_UNSAFE_URL");
 });
+
+test("agent can inspect its own desktop action queue without leaking owner IDs or tokens", async t => {
+  const h = makeHarness({
+    promptToolCall: { name: "list_desktop_actions", args: {} },
+    initialActions: [existingPendingAction()]
+  });
+  t.after(() => h.close());
+  const response = await h.run("List my desktop actions.");
+  assert.equal(response.status, 200);
+  const result = response.result.toolResults[0].result;
+  assert.equal(result.execution, "read_only");
+  assert.equal(result.bridgeConfigured, false);
+  assert.equal(result.actions.length, 1);
+  assert.equal(result.actions[0].id, ACTION_ID);
+  assert.equal(Object.hasOwn(result.actions[0], "user_id"), false);
+  assert.equal(JSON.stringify(result).includes("synthetic-test-key"), false);
+});
+
