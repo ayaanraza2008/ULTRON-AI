@@ -233,3 +233,14 @@ test("configured model registry loopback URLs are allowed only when the exact or
   await configuredFetch("http://localhost:11435/v1/chat/completions");
   assert.deepEqual(calls.map(item => item.allowed), [true, false]);
 });
+
+
+test("bad URL percent escapes are rejected before DNS", async () => {
+  let dnsCalls = 0;
+  const safeFetch = createSafeOutboundFetch({
+    lookupImpl: async () => { dnsCalls += 1; return [publicAddress]; },
+    requestImpl: async () => response()
+  });
+  await assert.rejects(safeFetch("https://public.example/%ZZ"), { code: "OUTBOUND_URL_INVALID" });
+  assert.equal(dnsCalls, 0);
+});
