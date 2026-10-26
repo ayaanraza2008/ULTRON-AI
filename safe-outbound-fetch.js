@@ -3,7 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import { isIP } from "node:net";
 import { Readable, Transform } from "node:stream";
-import { isPublicNetworkHost } from "./network-safety.js";
+import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -276,7 +276,11 @@ function parseAndValidateUrl(value, { allowLoopbackHttp, allowedPorts }) {
   if (url.protocol !== "https:" && !localHttpAllowed) {
     throw outboundError("OUTBOUND_SCHEME_BLOCKED", "Only HTTPS outbound requests are allowed unless loopback HTTP was explicitly enabled.");
   }
-  if (isIP(host) === 0 && !validHostnameSyntax(host) && !(localHttpAllowed && host === "localhost")) {
+  const hostIpVersion = isIP(host);
+  if (hostIpVersion !== 0 && !(localHttpAllowed && isLoopbackAddress(host)) && !isPublicDestinationAddress(host)) {
+    throw outboundError("OUTBOUND_ADDRESS_BLOCKED", "Outbound IP literal is not a public destination.");
+  }
+  if (hostIpVersion === 0 && !validHostnameSyntax(host) && !(localHttpAllowed && host === "localhost")) {
     throw outboundError("OUTBOUND_HOST_BLOCKED", "Outbound hostname is not eligible for network access.");
   }
   const port = Number(url.port || (url.protocol === "https:" ? 443 : 80));
@@ -428,4 +432,58 @@ export function createSafeOutboundFetch({
   };
 }
 
+
 export const safeOutboundFetch = createSafeOutboundFetch();
+
+/**
+ * Wrap the safe transport with narrowly-scoped loopback HTTP support for
+ * explicitly configured local development services. This does not allow
+ * arbitrary request URLs to opt themselves into loopback access: the exact
+ * HTTP origin must be present in an owner-controlled environment setting.
+ */
+export function createConfiguredOutboundFetch({
+  env = process.env,
+  fetchImpl = safeOutboundFetch,
+  baseUrlEnvNames = [],
+  includeModelProviderRegistry = false
+} = {}) {
+  const approvedLoopbackOrigins = new Set();
+  const addConfiguredBase = value => {
+    const normalized = safeServiceBase(typeof value === "string" ? value : "");
+    if (!normalized) return;
+    try {
+      const url = new URL(normalized);
+      if (url.protocol === "http:" && LOCAL_HOSTS.has(normalizedHostname(url.hostname))) {
+        approvedLoopbackOrigins.add(url.origin);
+      }
+    } catch { /* Invalid optional configuration is ignored and fails closed. */ }
+  };
+  for (const name of baseUrlEnvNames) addConfiguredBase(env[name]);
+
+  if (includeModelProviderRegistry) {
+    try {
+      const providers = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]");
+      if (Array.isArray(providers)) {
+        for (const provider of providers.slice(0, 12)) addConfiguredBase(provider?.baseUrl);
+      }
+    } catch { /* Malformed optional provider configuration is ignored. */ }
+  }
+
+  return (input, init = {}) => {
+    let url;
+    try {
+      const raw = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input);
+      url = new URL(raw);
+    } catch { /* The underlying transport returns a consistent safe URL error. */ }
+    const host = url ? normalizedHostname(url.hostname) : "";
+    const allowConfiguredLoopback = Boolean(
+      url && url.protocol === "http:" && LOCAL_HOSTS.has(host) &&
+      approvedLoopbackOrigins.has(url.origin)
+    );
+    return fetchImpl(input, {
+      ...init,
+      ...(allowConfiguredLoopback ? { ultronAllowLoopbackHttp: true } : {})
+    });
+  };
+}
+
