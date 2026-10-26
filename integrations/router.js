@@ -1,6 +1,7 @@
 import express from "express";
 import { buildIntegrationCatalog } from "./catalog.js";
 import { safeServiceBase } from "../network-safety.js";
+import { safeOutboundFetch } from "../safe-outbound-fetch.js";
 
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024;
 
@@ -99,7 +100,7 @@ function providerHeaders(apiKey) {
   return apiKey ? { Authorization: "Bearer " + apiKey } : {};
 }
 
-export function createIntegrationRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser }) {
+export function createIntegrationRouter({ env = process.env, fetchImpl = safeOutboundFetch, requireSupabaseUser }) {
   const router = express.Router();
 
   // Integrations use server-side shared credentials. Require the configured
