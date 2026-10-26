@@ -108,6 +108,7 @@ Calculation for the candidate branch: `(83.3 + 58.3 + 50.0 + 58.3) / 4 = 62.5%`.
 5. **Migration reproducibility:** review the green candidate PR #261 and ensure its filenames match the already-applied migration history before any approved schema rollout.
 6. **Smoke result correctness:** the tested fix from PR #278 is also in PR #279's candidate branch. Verify combined CI and merge only as part of an approved source change; it is not part of `main`.
 7. **Source/production CI separation:** review PR #279. It changes only CI workflow behavior and deliberately does not run the live-production check on every source push. Production remains unverified until the separately authorized manual verification passes.
+8. **Outbound-fetch DNS rebinding:** `network-safety.js` rejects private/reserved IP literals and unsafe URL syntax, and upstream fetches use `redirect: "error"`; its own code comments explicitly state that DNS-rebinding protection is not provided. Before arbitrary user-influenced fetches are treated as production-complete, pin DNS resolution to a validated public address (including TLS SNI/Host correctness) or enforce network egress restrictions, and test rebind/redirect cases.
 
 ## Safety boundary
 
