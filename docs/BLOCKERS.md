@@ -26,3 +26,4 @@
 - Auth signup, sign-in, and recovery now share a bounded in-process per-IP limiter (10 attempts per 15-minute window). Multi-instance deployments should add shared edge/store throttling as well.
 - Do not paste credentials into chat or source control. Use Render's private environment settings.
 - Frontend implementation is deliberately deferred until backend capabilities and live verification are addressed.
+| BLK-014 | Saved-document library and approved desktop-action migrations are source-only on PR #276 | Those APIs cannot work in the live service/database until migrations and backend source are rolled out together | Keep deployment deferred per user request; in the later coordinated rollout, apply migrations in order and run two-account RLS plus API CRUD/search/worker/bridge checks before enabling companion polling | Yes: code and tests can continue on the feature branch |
