@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
-import { safeOutboundFetch, createConfiguredOutboundFetch } from "./safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "./safe-outbound-fetch.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
@@ -135,7 +135,7 @@ export async function renewTaskLease({ taskId, rest, logger = console, onInactiv
 }
 
 export function startWorker({ env = process.env, logger = console, fetchImpl = safeOutboundFetch, sleepImpl = sleep } = {}) {
-  fetchImpl = createConfiguredOutboundFetch({ env, fetchImpl, baseUrlEnvNames: ["SUPABASE_URL", "OPENROUTER_BASE_URL"], includeModelProviderRegistry: true });
+  const fetchAdapter = (baseUrl, input, init) => fetchConfiguredOutbound(baseUrl, input, init, fetchImpl);
   const supabaseUrl = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
@@ -313,7 +313,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
     for (const provider of providers) {
       if (signal?.aborted) throw signal.reason || new DOMException("Task cancelled", "AbortError");
       try {
-        const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
+        const response = await fetchAdapter(provider.baseUrl, provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: {
             Authorization: "Bearer " + provider.apiKey,
