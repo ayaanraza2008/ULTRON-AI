@@ -1,0 +1,283 @@
+import { lookup as dnsLookup } from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
+import { Readable } from "node:stream";
+import { randomBytes } from "node:crypto";
+import { isIP } from "node:net";
+import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
+
+const MAX_URL_LENGTH = 8192;
+const MAX_REQUEST_BODY_BYTES = 32 * 1024 * 1024;
+const DNS_TIMEOUT_MS = 5000;
+const NO_BODY_STATUSES = new Set([204, 205, 304]);
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+function cleanHost(host) {
+  return String(host || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+}
+
+function isLoopback(host) {
+  return LOOPBACK_HOSTS.has(cleanHost(host));
+}
+
+function safeError(message, code = "UNSAFE_OUTBOUND_TARGET") {
+  return Object.assign(new Error(message), { code });
+}
+
+async function lookupBounded(lookupImpl, host) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => lookupImpl(host, { all: true, verbatim: true })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(safeError("DNS lookup timed out.", "OUTBOUND_DNS_TIMEOUT")), DNS_TIMEOUT_MS);
+      })
+    ]);
+  } catch (error) {
+    throw safeError(
+      error?.code === "OUTBOUND_DNS_TIMEOUT" ? "DNS lookup timed out." : "Could not safely resolve outbound hostname.",
+      error?.code === "OUTBOUND_DNS_TIMEOUT" ? error.code : "OUTBOUND_DNS_FAILED"
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function resolvePinnedAddress(url, lookupImpl) {
+  const host = cleanHost(url.hostname);
+  const local = isLoopback(host);
+  // Validate the origin, not the full path/query: research APIs legitimately use query strings.
+  if (url.username || url.password || !safeServiceBase(url.origin)) {
+    throw safeError("Outbound URL origin is not permitted.");
+  }
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
+    throw safeError("Outbound HTTP is permitted only for explicit loopback development services.");
+  }
+
+  const literalFamily = isIP(host);
+  if (literalFamily) {
+    if (local && url.protocol === "http:") return { address: host, family: literalFamily };
+    if (!isPublicNetworkHost(host)) throw safeError("Outbound IP literal is not public.");
+    return { address: host, family: literalFamily };
+  }
+  if (!isPublicNetworkHost(host) && !local) throw safeError("Outbound hostname is not public.");
+
+  const results = await lookupBounded(lookupImpl, host);
+  if (!Array.isArray(results) || results.length === 0) {
+    throw safeError("Outbound hostname did not resolve to an address.", "OUTBOUND_DNS_FAILED");
+  }
+  // Reject mixed public/private answer sets rather than leaving a private address
+  // eligible for a later connection attempt.
+  for (const result of results) {
+    const address = cleanHost(result?.address);
+    const family = Number(result?.family) || isIP(address);
+    if (!address || !family) throw safeError("DNS returned an invalid address.", "OUTBOUND_DNS_FAILED");
+    if (local ? !isLoopback(address) : !isPublicNetworkHost(address)) {
+      throw safeError("DNS resolved outbound hostname to a non-public address.");
+    }
+  }
+  const selected = results[0];
+  return { address: selected.address, family: Number(selected.family) || isIP(selected.address) };
+}
+
+function pinnedLookup(expectedHost, pinned) {
+  const expected = cleanHost(expectedHost);
+  return (hostname, options, callback) => {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    if (cleanHost(hostname) !== expected) {
+      return callback(safeError("Unexpected hostname passed to pinned DNS lookup."));
+    }
+    const result = { address: pinned.address, family: pinned.family };
+    if (options && typeof options === "object" && options.all) return callback(null, [result]);
+    return callback(null, result.address, result.family);
+  };
+}
+
+function buildHeaders(input) {
+  const source = new Headers(input || {});
+  for (const key of ["host", "connection", "transfer-encoding"]) source.delete(key);
+  // Do not request transport compression; expose upstream bytes as a Fetch Response.
+  if (!source.has("accept-encoding")) source.set("accept-encoding", "identity");
+  return source;
+}
+
+function escapeQuoted(value) {
+  return String(value).replace(/[\r\n"]/g, ch => ch === "\"" ? "%22" : " ");
+}
+
+function boundedBuffer(buffer) {
+  if (buffer.byteLength > MAX_REQUEST_BODY_BYTES) {
+    throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
+  }
+  return { buffer, stream: null };
+}
+
+async function encodeBody(body, headers) {
+  if (body === undefined || body === null) return { buffer: null, stream: null };
+  if (typeof body === "string") return boundedBuffer(Buffer.from(body));
+  if (body instanceof URLSearchParams) {
+    if (!headers.has("content-type")) headers.set("content-type", "application/x-www-form-urlencoded;charset=UTF-8");
+    return boundedBuffer(Buffer.from(body.toString()));
+  }
+  if (body instanceof ArrayBuffer) return boundedBuffer(Buffer.from(body));
+  if (ArrayBuffer.isView(body)) return boundedBuffer(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
+  if (typeof Blob !== "undefined" && body instanceof Blob) return boundedBuffer(Buffer.from(await body.arrayBuffer()));
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    const boundary = "----ultron-" + randomBytes(18).toString("hex");
+    headers.set("content-type", "multipart/form-data; boundary=" + boundary);
+    const chunks = [];
+    let total = 0;
+    const add = value => {
+      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+      total += chunk.byteLength;
+      if (total > MAX_REQUEST_BODY_BYTES) {
+        throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
+      }
+      chunks.push(chunk);
+    };
+    for (const [name, value] of body.entries()) {
+      add("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + escapeQuoted(name) + "\"");
+      if (typeof value !== "string" && value && typeof value.arrayBuffer === "function") {
+        add("; filename=\"" + escapeQuoted(value.name || "blob") + "\"\r\nContent-Type: " + (value.type || "application/octet-stream") + "\r\n\r\n");
+        add(Buffer.from(await value.arrayBuffer()));
+      } else {
+        add("\r\n\r\n" + String(value));
+      }
+      add("\r\n");
+    }
+    add("--" + boundary + "--\r\n");
+    return { buffer: Buffer.concat(chunks), stream: null };
+  }
+  if (typeof ReadableStream !== "undefined" && body instanceof ReadableStream) {
+    return { buffer: null, stream: Readable.fromWeb(body) };
+  }
+  if (body instanceof Readable) return { buffer: null, stream: body };
+  if (typeof body?.pipe === "function") return { buffer: null, stream: body };
+  throw safeError("Outbound request body type is not supported.", "OUTBOUND_BODY_UNSUPPORTED");
+}
+
+function toResponse(response) {
+  const status = Number(response.statusCode) || 502;
+  const headers = new Headers();
+  const raw = response.rawHeaders || [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    try {
+      headers.append(raw[i], raw[i + 1]);
+    } catch {
+      // Ignore malformed upstream headers.
+    }
+  }
+  let body = null;
+  if (NO_BODY_STATUSES.has(status)) {
+    response.resume?.();
+  } else {
+    body = Readable.toWeb(response);
+  }
+  return new Response(body, { status, statusText: String(response.statusMessage || ""), headers });
+}
+
+/**
+ * Fetch-compatible outbound transport that resolves DNS once, rejects private or
+ * reserved targets, and pins the socket lookup to the exact validated address.
+ * Redirects fail closed unless the caller explicitly asks to inspect them manually.
+ * A custom fetchImpl can still be injected by tests.
+ */
+export function createSafeFetch({
+  lookupImpl = dnsLookup,
+  httpRequest = http.request,
+  httpsRequest = https.request
+} = {}) {
+  return async function safeFetch(input, init = {}) {
+    let rawUrl;
+    let requestInit = { ...init };
+    if (typeof Request !== "undefined" && input instanceof Request) {
+      rawUrl = input.url;
+      requestInit = {
+        method: input.method,
+        headers: input.headers,
+        body: input.body,
+        signal: input.signal,
+        redirect: input.redirect,
+        ...init
+      };
+    } else {
+      rawUrl = input instanceof URL ? input.toString() : input;
+    }
+    if (typeof rawUrl !== "string" || rawUrl.length > MAX_URL_LENGTH) {
+      throw safeError("Outbound URL is invalid or too long.");
+    }
+    let url;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      throw safeError("Outbound URL is invalid.");
+    }
+    if (url.hash) throw safeError("Outbound URL fragments are not allowed.");
+    const pinned = await resolvePinnedAddress(url, lookupImpl);
+    if (requestInit.signal?.aborted) {
+      throw requestInit.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
+    }
+
+    const method = String(requestInit.method || "GET").toUpperCase();
+    const headers = buildHeaders(requestInit.headers);
+    const encoded = await encodeBody(requestInit.body, headers);
+    const outboundHeaders = {};
+    for (const [key, value] of headers) outboundHeaders[key] = value;
+    // Preserve the original hostname for Host/SNI while pinning socket resolution.
+    outboundHeaders.host = url.host;
+    if (encoded.buffer && !headers.has("content-length")) {
+      outboundHeaders["content-length"] = String(encoded.buffer.byteLength);
+    }
+
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      const fail = error => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      const requestOptions = {
+        method,
+        headers: outboundHeaders,
+        lookup: pinnedLookup(url.hostname, pinned),
+        signal: requestInit.signal
+      };
+      const transportRequest = url.protocol === "https:" ? httpsRequest : httpRequest;
+      let req;
+      try {
+        req = transportRequest(url, requestOptions, response => {
+          const status = Number(response.statusCode) || 502;
+          if (REDIRECT_STATUSES.has(status) && requestInit.redirect !== "manual") {
+            response.destroy?.();
+            fail(safeError("Outbound redirects are blocked; validate and request the destination explicitly.", "OUTBOUND_REDIRECT_BLOCKED"));
+            return;
+          }
+          settled = true;
+          try {
+            resolve(toResponse(response));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      req.once("error", fail);
+      if (encoded.stream) {
+        encoded.stream.once("error", error => req.destroy(error));
+        encoded.stream.pipe(req);
+      } else if (encoded.buffer) {
+        req.end(encoded.buffer);
+      } else {
+        req.end();
+      }
+    });
+  };
+}
+
+export const safeFetch = createSafeFetch();
