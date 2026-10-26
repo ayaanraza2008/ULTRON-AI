@@ -349,6 +349,28 @@ function cactusCompletionStream(completion) {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isAllowedBrowserGatewayToolCall(value) {
+  if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim() || value.id.length > 200 ||
+      value.type !== "function" || !isRecord(value.function)) return false;
+  return typeof value.function.name === "string" &&
+    /^[A-Za-z0-9_-]{1,64}$/.test(value.function.name) &&
+    typeof value.function.arguments === "string" && value.function.arguments.length <= 40_000;
+}
+
+function isAllowedBrowserGatewayTool(value) {
+  if (!isRecord(value) || value.type !== "function" || !isRecord(value.function)) return false;
+  const fn = value.function;
+  if (typeof fn.name !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(fn.name)) return false;
+  if (fn.description !== undefined && (typeof fn.description !== "string" || fn.description.length > 4000)) return false;
+  if (fn.parameters !== undefined && !isRecord(fn.parameters)) return false;
+  if (fn.strict !== undefined && typeof fn.strict !== "boolean") return false;
+  return true;
+}
+
 function isAllowedBrowserGatewayImageUrl(value) {
   if (typeof value !== "string" || !value.trim() || value.length > 900_000) return false;
   const candidate = value.trim();
@@ -434,17 +456,24 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const validMessages = Array.isArray(payload?.messages) &&
       payload.messages.length >= 1 && payload.messages.length <= 80 &&
       payload.messages.every(message => {
-        if (!message || typeof message !== "object" || Array.isArray(message) || !supportedRoles.has(message.role)) return false;
+        if (!isRecord(message) || !supportedRoles.has(message.role)) return false;
+        if (message.tool_calls !== undefined &&
+            (message.role !== "assistant" || !Array.isArray(message.tool_calls) ||
+             message.tool_calls.length > 64 || !message.tool_calls.every(isAllowedBrowserGatewayToolCall))) return false;
+        if (message.role === "tool" && (typeof message.tool_call_id !== "string" ||
+            !message.tool_call_id.trim() || message.tool_call_id.length > 200)) return false;
         if (typeof message.content === "string") return message.content.length <= 500_000;
         if (Array.isArray(message.content)) return message.content.length >= 1 && message.content.length <= 64 && message.content.every(validContentPart);
         if (message.content === null || message.content === undefined) {
-          return message.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length <= 64;
+          return message.role === "assistant" && Array.isArray(message.tool_calls) &&
+            message.tool_calls.length >= 1 && message.tool_calls.length <= 64;
         }
         return false;
       });
     if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
         !validMessages || serializedBytes > 1_000_000 ||
-        (payload.tools !== undefined && (!Array.isArray(payload.tools) || payload.tools.length > 64))) {
+        (payload.tools !== undefined && (!Array.isArray(payload.tools) || payload.tools.length > 64 ||
+          !payload.tools.every(isAllowedBrowserGatewayTool)))) {
       return res.status(400).json({ error: { message: "Invalid or oversized chat completion request", type: "invalid_request_error" } });
     }
 
