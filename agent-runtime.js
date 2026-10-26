@@ -374,6 +374,11 @@ function buildFallbackCalls(text) {
     const query = savedSearchMatch[1].trim().replace(/[.!?]+$/, "").slice(0, 200);
     add("search_saved_documents", { query, limit: 5 });
   }
+  const savedDocumentUuid = text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i);
+  if (savedDocumentUuid && /\b(?:read|open|show|summari[sz]e|analy[sz]e|review|explain)\b/i.test(text) &&
+      /\b(?:saved|stored|library)\s+(?:document|file)\b/i.test(text)) {
+    add("read_saved_document", { id: savedDocumentUuid[0], offset: 0, limitChars: 18000 });
+  }
   const desktopUrlMatch = text.match(/\bopen\s+(https:\/\/[^\s<>"']{1,1200})\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)\b/i);
   if (desktopUrlMatch) add("request_desktop_action", { actionType: "open_url", url: desktopUrlMatch[1].replace(/[.,!?]+$/, "") });
   const desktopAppMatch = text.match(/\b(?:launch|open|start)\s+(notepad|calculator|explorer)\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)\b/i);
