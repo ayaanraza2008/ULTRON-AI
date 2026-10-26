@@ -209,12 +209,17 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
     assert.deepEqual(await readRows("memory_items", userA, { id: "eq." + memoryB.id }), []);
     assert.deepEqual(await readRows("agent_tasks", userA, { id: "eq." + taskB.id }), []);
 
-    // Anonymous clients must not use the Data API to enumerate user-owned rows.
-    for (const table of ["conversations", "messages", "memory_items"]) {
-      const anonymous = await request(tableUrl(table, { select: "id", limit: "1" }), {
-        apiKey: config.publishableKey
-      });
+    // Anonymous and invalid-token requests must not enumerate user-owned rows.
+    for (const table of ["conversations", "messages", "memory_items", "agent_tasks"]) {
+      const endpoint = tableUrl(table, { select: "id", limit: "1" });
+      const anonymous = await request(endpoint, { apiKey: config.publishableKey });
       assert.equal(anonymous.response.ok, false, "anonymous access to " + table + " must be denied");
+
+      const invalidToken = await request(endpoint, {
+        apiKey: config.publishableKey,
+        accessToken: "invalid.jwt.token"
+      });
+      assert.equal(invalidToken.response.ok, false, "invalid-token access to " + table + " must be denied");
     }
 
     // PostgREST/RLS commonly returns an empty representation for mutations that
