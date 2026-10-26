@@ -13,6 +13,7 @@ import { createAgentRouter } from "./agent-runtime.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safeServiceBase } from "./network-safety.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "./safe-outbound-fetch.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -348,7 +349,8 @@ function cactusCompletionStream(completion) {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
-export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
+export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, logger = console } = {}) {
+  const fetchAdapter = (baseUrl, input, init) => fetchConfiguredOutbound(baseUrl, input, init, fetchImpl);
   const app = express();
   app.locals.workerRuntime = () => ({
     state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "configured_not_started" : "disabled_by_config",
@@ -448,7 +450,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       const { provider, model } = attempts[index];
       let upstream;
       try {
-        upstream = await fetchImpl(provider.baseUrl + "/chat/completions", {
+        upstream = await fetchAdapter(provider.baseUrl, provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: {
             ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}),
@@ -459,7 +461,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           body: JSON.stringify({ ...payload, model, stream: false }),
           redirect: "error",
           signal: AbortSignal.timeout(timeoutMs)
-        });
+        }, fetchImpl);
       } catch (error) {
         if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
           lastStatus = 502;
@@ -534,7 +536,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     if (!config) return null;
     try {
       if (token) {
-        const response = await fetchImpl(config.url + "/auth/v1/user", {
+        const response = await fetchAdapter(config.url, config.url + "/auth/v1/user", {
           headers: { apikey: config.key, Authorization: "Bearer " + token, Accept: "application/json" },
           redirect: "error", signal: AbortSignal.timeout(15_000)
         });
@@ -546,7 +548,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
         }
       }
       if (!refreshToken || !res) return null;
-      const refreshed = await fetchImpl(config.url + "/auth/v1/token?grant_type=refresh_token", {
+      const refreshed = await fetchAdapter(config.url, config.url + "/auth/v1/token?grant_type=refresh_token", {
         method: "POST",
         headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
@@ -562,7 +564,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
   async function supabaseAuthRequest(path, body) {
     const config = supabaseConfig();
     if (!config) throw Object.assign(new Error("Supabase authentication is not configured on the server."), { status: 503 });
-    const response = await fetchImpl(config.url + path, {
+    const response = await fetchAdapter(config.url, config.url + path, {
       method: "POST",
       headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
@@ -599,7 +601,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const config = supabaseConfig();
     const token = req.supabaseAccessToken || parseCookies(req.headers.cookie)["ultron_sb_access"];
     const url = config.url + "/rest/v1/" + table + query;
-    const response = await fetchImpl(url, {
+    const response = await fetchAdapter(config.url, url, {
       method,
       headers: {
         apikey: config.key,
@@ -637,7 +639,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const url = config.url + "/rest/v1/" + table + query;
     let response;
     try {
-      response = await fetchImpl(url, {
+      response = await fetchAdapter(config.url, url, {
         method,
         headers: {
           apikey: serviceKey,
@@ -730,7 +732,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       return res.status(503).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: "Configure OpenRouter or another supported server-side model provider." } });
     }
     try {
-      const upstream = await fetchImpl(baseUrl + "/models", { headers: { Authorization: "Bearer " + openRouterKey }, redirect: "error", signal: AbortSignal.timeout(15_000) });
+      const upstream = await fetchAdapter(baseUrl, baseUrl + "/models", { headers: { Authorization: "Bearer " + openRouterKey }, redirect: "error", signal: AbortSignal.timeout(15_000) });
       if (!upstream.ok) {
         try { await upstream.body?.cancel?.(); } catch {}
         if (alternateModelIds.length) return res.json({ models: alternateModelIds, defaultModel: alternateModelIds[0] });
@@ -1345,7 +1347,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           attemptController.abort(new Error("Provider attempt timeout"));
         }, attemptTimeoutMs);
         try {
-          attempt = await fetchImpl(`${provider.baseUrl}/chat/completions`, {
+          attempt = await fetchAdapter(provider.baseUrl, `${provider.baseUrl}/chat/completions`, {
             method: "POST",
             headers: {
               ...(provider.apiKey ? { "Authorization": `Bearer ${provider.apiKey}` } : {}),
@@ -1361,7 +1363,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
             }),
             signal: attemptController.signal,
             redirect: "error"
-          });
+          }, fetchImpl);
         } catch (error) {
           clearTimeout(attemptTimeout);
           if (activeAttemptController === attemptController) activeAttemptController = null;

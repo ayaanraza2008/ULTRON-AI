@@ -12,11 +12,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - uses: actions/setup-python@v5
+          package-manager-cache: false
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Verify Browser Use bridge policy and Python syntax
@@ -28,27 +29,42 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=high
       - run: npm run check
-      - run: npm test
-      - name: Smoke test deployed health endpoint
+      - name: Run tests with live pinned HTTPS smoke enabled
+        env:
+          ULTRON_SAFE_OUTBOUND_LIVE_TEST: "YES"
+        run: npm test
+  production-verification:
+    # Keep production state separate from source correctness. This read-only
+    # check runs only when an operator manually dispatches the workflow on main.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Verify the live production revision
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
         run: |
           for i in $(seq 1 18); do
             if curl --fail --silent https://ultron-ai-zvd7.onrender.com/api/health -o /tmp/ultron-health.json; then
-              cat /tmp/ultron-health.json
-              node -e "const d=require('/tmp/ultron-health.json'); const required=['providerConfigured','accessConfigured','supabaseConfigured']; const missing=required.filter(k=>d[k]!==true); if(d.status!=='ok'||missing.length){console.error('Health/configuration check failed:', {status:d.status,missing}); process.exit(1)}; console.log('Runtime configuration flags verified:', required.join(', ')); const commit=d.build?.commit; if(commit) console.log('Currently deployed commit:', commit); else console.warn('Live health endpoint does not expose a deployed revision yet; it may be running an older build.'); if(process.env.GITHUB_EVENT_NAME==='push'&&process.env.GITHUB_REF==='refs/heads/main'){if(!commit){console.error('Production deployment drift: health endpoint does not expose a deployed revision; refusing to mark this release verified.');process.exit(1)}if(commit!==process.env.GITHUB_SHA){console.error('Production deployment lag detected: live commit differs from this source commit; release is not production-verified.');process.exit(1)}console.log('Production revision matches the pushed source commit.')}else if(commit&&commit!==process.env.GITHUB_SHA) console.warn('Production deployment lag detected: the live revision differs from this CI source revision; PR/source CI does not imply production deployment.')"
+              node --input-type=commonjs -e 'const fs=require("node:fs"); const d=JSON.parse(fs.readFileSync("/tmp/ultron-health.json","utf8")); const required=["providerConfigured","accessConfigured","supabaseConfigured"]; const missing=required.filter(k=>d[k]!==true); if(d.status!=="ok"||missing.length){console.error("Health/configuration check failed:", {status:d.status,missing});process.exit(1)}; const commit=d.build?.commit; if(!/^[0-9a-f]{40}$/i.test(String(commit||""))){console.error("Production revision is missing or invalid; production is not verified.");process.exit(1)}; if(commit.toLowerCase()!==process.env.EXPECTED_COMMIT.toLowerCase()){console.error("Production revision mismatch; production is not verified.");process.exit(1)}; console.log("Production revision and required runtime configuration verified:",commit)'
               exit 0
             fi
             sleep 8
           done
           echo 'Deployed health endpoint did not become ready in time.'
           exit 1
-
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
+          package-manager-cache: false
       - name: Checkout pinned God’s Eye source
         run: |
           rm -rf .build-gods-eye-view

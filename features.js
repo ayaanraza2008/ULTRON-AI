@@ -7,6 +7,7 @@ import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "./safe-outbound-fetch.js";
 
 function safeBaseUrl(value) {
   return safeServiceBase(value);
@@ -320,7 +321,7 @@ async function requestFeatureCompletion({ env, fetchImpl, messages, temperature,
     const providerTimeout = AbortSignal.timeout(providerTimeoutMs);
     const providerSignal = signal ? AbortSignal.any([signal, providerTimeout]) : providerTimeout;
     try {
-      const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
+      const response = await fetchConfiguredOutbound(provider.baseUrl, provider.baseUrl + "/chat/completions", {
         method: "POST",
         headers: {
           ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}),
@@ -333,7 +334,7 @@ async function requestFeatureCompletion({ env, fetchImpl, messages, temperature,
         body: JSON.stringify({ model: provider.model, messages, temperature, max_tokens: maxTokens }),
         redirect: "error",
         signal: providerSignal
-      });
+      }, fetchImpl);
       if (!response.ok) {
         const status = response.status;
         const retryable = [401, 402, 403, 404, 408, 409, 413, 425, 429].includes(status) || status >= 500;
@@ -404,7 +405,7 @@ function withTimeout(ms, parentSignal) {
   return { signal: controller.signal, close: () => { clearTimeout(timer); parentSignal?.removeEventListener("abort", abort); } };
 }
 
-export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
+export function createFeatureRouter({ env = process.env, fetchImpl = safeOutboundFetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
   const router = express.Router();
   async function recordAuditEvent(req, event) {
     try {
@@ -683,7 +684,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     if (configuredUrl) {
       const timeout = withTimeout(3500);
       try {
-        const response = await fetchImpl(configuredUrl + "/", { method: "GET", redirect: "manual", signal: timeout.signal });
+        const response = await fetchConfiguredOutbound(configuredUrl, configuredUrl + "/", { method: "GET", redirect: "manual", signal: timeout.signal }, fetchImpl);
         serviceReachable = response.status >= 200 && response.status < 400;
         serviceStatus = serviceReachable ? "reachable" : "http_" + response.status;
       } catch {
@@ -832,11 +833,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     const voice = boundedString(req.body?.voice, 120);
     const timeout = withTimeout(30000);
     try {
-      const response = await fetchImpl(base + "/audio/speech", {
+      const response = await fetchConfiguredOutbound(base, base + "/audio/speech", {
         method: "POST", redirect: "error", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.TTS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
         body: JSON.stringify({ model: boundedString(env.TTS_MODEL, 120) || "tts-1", input: text, voice: voice || boundedString(env.TTS_DEFAULT_VOICE, 120) || "alloy", response_format: "mp3" })
-      });
+      }, fetchImpl);
       if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "TTS_PROVIDER_FAILED", message: "The configured OpenAI-compatible speech provider failed." } }); }
       const bytes = await readLimitedResponseBytes(response, 12_000_000, "Speech synthesis response");
       if (!bytes.length || bytes.length > 12_000_000) return res.status(502).json({ error: { code: "TTS_INVALID_AUDIO", message: "The speech provider returned empty or oversized audio." } });
@@ -865,11 +866,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
       const form = new FormData();
       form.append("file", new Blob([bytes], { type: mimeType }), "recording");
       form.append("model", boundedString(env.STT_MODEL, 120) || "whisper-1");
-      const response = await fetchImpl(base + "/audio/transcriptions", {
+      const response = await fetchConfiguredOutbound(base, base + "/audio/transcriptions", {
         method: "POST", redirect: "error", signal: timeout.signal,
         headers: { Authorization: "Bearer " + env.STT_API_KEY },
         body: form
-      });
+      }, fetchImpl);
       if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "STT_PROVIDER_FAILED", message: "The configured OpenAI-compatible transcription provider failed." } }); }
       const payload = await readLimitedResponseJson(response, 1_000_000, "Speech transcription response");
       if (typeof payload.text !== "string") return res.status(502).json({ error: { code: "STT_INVALID_RESPONSE", message: "The transcription provider returned an unexpected response." } });
@@ -885,7 +886,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     if (!base) return res.status(503).json({ error: { code: "LOCAL_MODEL_NOT_CONFIGURED", message: "Set OLLAMA_BASE_URL to an Ollama instance reachable by this server. For a PC-local Ollama, use the Windows companion instead of localhost on Render." } });
     const timeout = withTimeout(8000);
     try {
-      const response = await fetchImpl(base + "/api/tags", { redirect: "error", signal: timeout.signal, headers: { Accept: "application/json" } });
+      const response = await fetchConfiguredOutbound(base, base + "/api/tags", { redirect: "error", signal: timeout.signal, headers: { Accept: "application/json" } }, fetchImpl);
       if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "LOCAL_MODEL_UNAVAILABLE", message: "The configured Ollama endpoint did not return model data." } }); }
       const payload = await readLimitedResponseJson(response, 1_000_000, "Local model list response");
       res.json({ models: Array.isArray(payload.models) ? payload.models.slice(0, 500).map(m => ({ name: String(m.name || "").slice(0, 200), size: Number(m.size) || null, modified_at: m.modified_at || null })) : [] });
@@ -911,11 +912,11 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
     }
     const timeout = withTimeout(Math.min(120, Math.max(5, Number(env.LOCAL_MODEL_TIMEOUT_SECONDS) || 90)));
     try {
-      const response = await fetchImpl(base + "/api/chat", {
+      const response = await fetchConfiguredOutbound(base, base + "/api/chat", {
         method: "POST", redirect: "error", signal: timeout.signal,
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ model, messages: clean, stream: false })
-      });
+      }, fetchImpl);
       if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return res.status(502).json({ error: { code: "LOCAL_MODEL_FAILED", message: "The local model service rejected the request." } }); }
       const payload = await readLimitedResponseJson(response, 2 * 1024 * 1024, "Local model response");
       const content = payload?.message?.content;
@@ -1466,13 +1467,13 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         } else {
           body = { model: config.model, messages, temperature: 0.2, max_tokens: 2800 };
         }
-        const response = await fetchImpl(config.url, {
+        const response = await fetchConfiguredOutbound(new URL(config.url).origin, config.url, {
           method: "POST", headers, body: JSON.stringify(body),
           // Provider calls carry server-side credentials. Never follow a redirect
           // to an unreviewed destination, especially for custom LiteLLM endpoints.
           redirect: "error",
           signal: timeout.signal
-        });
+        }, fetchImpl);
         if (!response.ok) {
           try { await response.body?.cancel?.(); } catch {}
           failures.push({ provider, status: response.status });
@@ -1557,13 +1558,13 @@ export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.
         } else {
           body = { model: config.model, messages: [{ role: "system", content: system }, { role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: "data:" + mimeType + ";base64," + imageBase64, detail: "auto" } }] }], temperature: 0.2, max_tokens: 2200 };
         }
-        const response = await fetchImpl(url, {
+        const response = await fetchConfiguredOutbound(new URL(url).origin, url, {
           method: "POST", headers, body: JSON.stringify(body),
           // Do not forward a model-provider credential or image payload through
           // an upstream redirect. Keep vision responses bounded like chat responses.
           redirect: "error",
           signal: timeout.signal
-        });
+        }, fetchImpl);
         if (!response.ok) {
           try { await response.body?.cancel?.(); } catch {}
           failures.push({ provider, status: response.status });

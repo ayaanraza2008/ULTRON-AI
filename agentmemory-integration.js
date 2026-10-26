@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { safeServiceBase } from "./network-safety.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "./safe-outbound-fetch.js";
 
 const MAX_QUERY = 1200;
 const MAX_MEMORY_TEXT = 2400;
@@ -88,17 +89,17 @@ async function readResponseTextLimited(response, maxBytes = MAX_RESPONSE_BYTES) 
   }
 }
 
-async function requestMemory(path, body, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
+async function requestMemory(path, body, { env = process.env, fetchImpl = safeOutboundFetch } = {}) {
   const base = baseUrl(env.AGENTMEMORY_URL || env.ULTRON_AGENTMEMORY_URL);
   const token = bounded(env.AGENTMEMORY_SECRET || env.ULTRON_AGENTMEMORY_SECRET, 1000);
   if (!base || !token) return { state: "not_configured" };
-  const response = await fetchImpl(base + path, {
+  const response = await fetchConfiguredOutbound(base, base + path, {
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000),
     redirect: "error"
-  });
+  }, fetchImpl);
   const raw = await readResponseTextLimited(response);
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { text: raw.slice(0, 4000) }; }

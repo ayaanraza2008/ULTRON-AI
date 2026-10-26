@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { safeServiceBase } from "../network-safety.js";
+import { safeOutboundFetch } from "../safe-outbound-fetch.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED", "BLOCKED", "WAITING_FOR_PERMISSION"]);
@@ -85,7 +86,7 @@ function report(status, fields, now) {
  */
 export async function runWorkerSmoke({
   env = process.env,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = safeOutboundFetch,
   sleepImpl = ms => new Promise(resolve => setTimeout(resolve, ms)),
   nowMs = Date.now,
   now = () => new Date().toISOString(),
@@ -137,7 +138,7 @@ export async function runWorkerSmoke({
   const taskId = typeof task?.id === "string" && UUID.test(task.id) ? task.id : "";
   if (!taskId) return report("failed", { reason: "TASK_INSERT_DID_NOT_RETURN_VALID_ID" }, now);
 
-  const select = "id,status,attempts,error_code,created_at,started_at,finished_at";
+  const select = "id,status,attempts,error_code,created_at,started_at,finished_at,result";
   const taskUrl = baseUrl + "/rest/v1/agent_tasks?select=" + encodeURIComponent(select) + "&id=eq." + taskId;
   let observedState = "QUEUED";
   let attempts = 0;
@@ -181,16 +182,43 @@ export async function runWorkerSmoke({
     attempts = Number.isInteger(current.attempts) ? current.attempts : attempts;
 
     if (TERMINAL_STATES.has(observedState)) {
-      const cleanupState = await cleanup();
       if (observedState === "COMPLETED") {
+        // A terminal status alone is not proof that the worker produced a usable
+        // result. Verify the persisted JSONB payload before calling this smoke test
+        // successful; never include the model output in the diagnostic report.
+        const result = current.result;
+        const resultVerified = Boolean(
+          result &&
+          typeof result === "object" &&
+          !Array.isArray(result) &&
+          result.type === "employee_output" &&
+          result.role === taskInput.role &&
+          result.mode === taskInput.mode &&
+          typeof result.answer === "string" &&
+          result.answer.trim().length > 0
+        );
+        const cleanupState = await cleanup();
+        if (!resultVerified) {
+          return report("failed", {
+            reason: "TASK_RESULT_MISSING_OR_INVALID",
+            taskId,
+            taskState: observedState,
+            attempts,
+            elapsedMs: Math.max(0, nowMs() - startedAt),
+            cleanup: cleanupState
+          }, now);
+        }
         return report(cleanupState === "deleted" ? "passed" : "passed_with_cleanup_warning", {
           taskId,
           taskState: observedState,
           attempts,
+          resultVerified: true,
+          resultType: "employee_output",
           elapsedMs: Math.max(0, nowMs() - startedAt),
           cleanup: cleanupState
         }, now);
       }
+      const cleanupState = await cleanup();
       return report("failed", {
         reason: safeCode(current.error_code, observedState === "WAITING_FOR_PERMISSION" ? "TASK_NEEDS_PERMISSION" : "TASK_TERMINAL_FAILURE"),
         taskId,

@@ -1,5 +1,6 @@
 import express from "express";
 import { safeServiceBase } from "../network-safety.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
@@ -72,12 +73,12 @@ async function readTextLimited(response, maxBytes) {
 }
 
 async function requestJson(fetchImpl, url, config, options = {}) {
-  const response = await fetchImpl(url, {
+  const response = await fetchConfiguredOutbound(config.baseUrl, url, {
     ...options,
     headers: providerHeaders(config, options.headers || {}),
     redirect: "error",
     signal: AbortSignal.timeout(options.timeoutMs || 15000)
-  });
+  }, fetchImpl);
   const raw = await readTextLimited(response, 1_000_000);
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
@@ -113,7 +114,7 @@ export function voiceStudioReadiness(env = process.env) {
   };
 }
 
-export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSupabaseUser }) {
+export function createVoiceStudioRouter({ env = process.env, fetchImpl = safeOutboundFetch, requireSupabaseUser }) {
   const router = express.Router();
 
   function requireIntegrationOwner(req, res, next) {
@@ -191,13 +192,13 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
       ...(bounded(req.body?.instructions, 1000) ? { instructions: bounded(req.body.instructions, 1000) } : {})
     };
     try {
-      const response = await fetchImpl(config.baseUrl + "/v1/audio/speech", {
+      const response = await fetchConfiguredOutbound(config.baseUrl, config.baseUrl + "/v1/audio/speech", {
         method: "POST",
         headers: providerHeaders(config, { "Content-Type": "application/json", Accept: "audio/*" }),
         body: JSON.stringify(payload),
         redirect: "error",
         signal: AbortSignal.timeout(120000)
-      });
+      }, fetchImpl);
       if (!response.ok) {
         const status = response.status === 429 ? 429 : response.status >= 500 ? 502 : 400;
         throw Object.assign(new Error("VoiceStudio speech synthesis failed."), { status, code: "VOICESTUDIO_UPSTREAM_FAILED" });
@@ -232,13 +233,13 @@ export function createVoiceStudioRouter({ env = process.env, fetchImpl = globalT
       form.append("model", bounded(req.body?.model || "whisper-1", 160));
       form.append("response_format", "json");
       if (language) form.append("language", language);
-      const response = await fetchImpl(config.baseUrl + "/v1/audio/transcriptions", {
+      const response = await fetchConfiguredOutbound(config.baseUrl, config.baseUrl + "/v1/audio/transcriptions", {
         method: "POST",
         headers: providerHeaders(config),
         body: form,
         redirect: "error",
         signal: AbortSignal.timeout(120000)
-      });
+      }, fetchImpl);
       const raw = await readTextLimited(response, 1_000_000);
       let data = {};
       try { data = raw ? JSON.parse(raw) : {}; } catch { data = { text: raw.slice(0, 10000) }; }

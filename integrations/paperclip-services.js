@@ -4,6 +4,7 @@
  * Shared credentials are available only to ULTRON's explicitly configured owner UUID.
  */
 import { safeServiceBase } from "../network-safety.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 
@@ -69,12 +70,12 @@ async function readJsonLimited(response) {
 }
 
 async function getJson(fetchImpl, url, token) {
-  const response = await fetchImpl(url, {
+  const response = await fetchConfiguredOutbound(new URL(url).origin, url, {
     method: "GET",
     headers: { Accept: "application/json", Authorization: "Bearer " + token },
     redirect: "error",
     signal: AbortSignal.timeout(12000)
-  });
+  }, fetchImpl);
   const body = await readJsonLimited(response);
   if (!response.ok) {
     throw Object.assign(new Error("Paperclip returned HTTP " + response.status + "."), {
@@ -159,7 +160,7 @@ export function getPaperclipReadiness(env = process.env) {
   };
 }
 
-export async function getPaperclipAgentDashboard({ env = process.env, fetchImpl = globalThis.fetch, userId } = {}) {
+export async function getPaperclipAgentDashboard({ env = process.env, fetchImpl = safeOutboundFetch, userId } = {}) {
   if (!ownerAllowed(env, userId)) {
     return blocked("INTEGRATION_OWNER_NOT_CONFIGURED", "Set ULTRON_INTEGRATION_OWNER_USER_ID to the owner's exact Supabase auth UUID before exposing shared Paperclip credentials.");
   }
