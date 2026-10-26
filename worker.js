@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
+import { safeOutboundFetch } from "./safe-outbound-fetch.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
@@ -133,7 +134,7 @@ export async function renewTaskLease({ taskId, rest, logger = console, onInactiv
   }
 }
 
-export function startWorker({ env = process.env, logger = console, fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
+export function startWorker({ env = process.env, logger = console, fetchImpl = safeOutboundFetch, sleepImpl = sleep } = {}) {
   const supabaseUrl = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
