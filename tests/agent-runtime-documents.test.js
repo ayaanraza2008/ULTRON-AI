@@ -6,6 +6,7 @@ import { createAgentRouter } from "../agent-runtime.js";
 const OWNER = "00000000-0000-4000-8000-000000000001";
 const OTHER = "00000000-0000-4000-8000-000000000002";
 const DOC_ID = "00000000-0000-4000-8000-000000000101";
+const SAVED_DOC_ID = "00000000-0000-4000-8000-000000000202";
 
 function makeHarness({ toolCall, userId = OWNER, documents = [] } = {}) {
   const rows = documents.map(row => structuredClone(row));
@@ -21,8 +22,24 @@ function makeHarness({ toolCall, userId = OWNER, documents = [] } = {}) {
         excerpt: row.extracted_text.slice(0, 1000), created_at: row.created_at, rank: 0.75
       }));
     }
-    if (table !== "user_documents" || method !== "GET") throw new Error("Unexpected document database operation.");
+    if (table !== "user_documents") throw new Error("Unexpected document database operation.");
     const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+    if (method === "POST") {
+      assert.equal(body.user_id, req.supabaseUser?.id);
+      assert.equal(body.extracted_text.length > 0, true);
+      const row = {
+        id: SAVED_DOC_ID, ...structuredClone(body),
+        created_at: "2026-10-26T08:10:00.000Z",
+        updated_at: "2026-10-26T08:10:00.000Z"
+      };
+      rows.push(row);
+      if (!String(params.get("select") || "").includes("extracted_text")) {
+        const { extracted_text, ...metadata } = row;
+        return [structuredClone(metadata)];
+      }
+      return [structuredClone(row)];
+    }
+    if (method !== "GET") throw new Error("Unexpected document DB method.");
     const id = params.get("id") || "";
     const user = params.get("user_id") || "";
     let found = rows.filter(row =>
@@ -170,3 +187,48 @@ test("agent search fallback recognizes saved document requests when the model om
   assert.ok(searchCall);
   assert.deepEqual(searchCall.body, { p_query: "quantum physics", p_limit: 5 });
 });
+
+test("agent saves extracted text only after an explicit current-user save instruction", async t => {
+  const h = makeHarness({
+    toolCall: {
+      name: "save_extracted_document",
+      args: {
+        filename: "C:\\Users\\Ayaan\\notes.md",
+        format: "md",
+        extractedText: "Quantum notes 🧬: energy levels in a one-dimensional box."
+      }
+    }
+  });
+  t.after(() => h.close());
+  const response = await h.run("Please save this document to my library.");
+  assert.equal(response.status, 200);
+  const result = response.result.toolResults[0].result;
+  assert.equal(result.saved, true);
+  assert.equal(result.storage, "extracted_text_only");
+  assert.equal(result.document.id, SAVED_DOC_ID);
+  assert.equal(result.document.filename, "notes.md");
+  assert.equal(result.document.characterCount, Array.from("Quantum notes 🧬: energy levels in a one-dimensional box.").length);
+  assert.equal(Object.hasOwn(result.document, "extractedText"), false);
+  const write = h.databaseCalls.find(call => call.table === "user_documents" && call.method === "POST");
+  assert.ok(write);
+  assert.equal(write.body.user_id, OWNER);
+  assert.match(write.body.content_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(write.body.source_bytes, Buffer.byteLength(write.body.extracted_text, "utf8"));
+});
+
+test("agent does not persist text for a how-to question without a direct save instruction", async t => {
+  const h = makeHarness({
+    toolCall: {
+      name: "save_extracted_document",
+      args: { filename: "notes.md", format: "md", extractedText: "The text must not be stored." }
+    }
+  });
+  t.after(() => h.close());
+  const response = await h.run("How do I save a document to my library?");
+  assert.equal(response.status, 200);
+  const result = response.result.toolResults[0].result;
+  assert.equal(result.state, "needs_explicit_save_request");
+  assert.equal(result.execution, "not_saved");
+  assert.equal(h.databaseCalls.some(call => call.table === "user_documents" && call.method === "POST"), false);
+});
+
