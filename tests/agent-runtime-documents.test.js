@@ -232,3 +232,15 @@ test("agent does not persist text for a how-to question without a direct save in
   assert.equal(h.databaseCalls.some(call => call.table === "user_documents" && call.method === "POST"), false);
 });
 
+test("agent fallback reads a named saved document by UUID when the model omits tool calls", async t => {
+  const h = makeHarness({ toolCall: null, documents: rows });
+  t.after(() => h.close());
+  const response = await h.run("Read my saved document " + DOC_ID + ".");
+  assert.equal(response.status, 200);
+  const result = response.result.toolResults[0].result;
+  assert.equal(result.document.id, DOC_ID);
+  assert.match(result.document.extractedText, /Quantum physics notes/i);
+  assert.equal(result.untrustedDocumentContent, true);
+  assert.equal(h.databaseCalls.some(call => call.table === "user_documents" && call.method === "GET" && call.query.includes("id=eq." + DOC_ID)), true);
+});
+
