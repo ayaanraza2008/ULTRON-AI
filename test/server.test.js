@@ -1125,7 +1125,7 @@ test("browser-use model proxy accepts supported text, image, and assistant tool-
         model: "openrouter/free",
         messages: [
           { role: "system", content: "Use tools only when appropriate." },
-          { role: "user", content: [{ type: "text", text: "Read this screenshot." }, { type: "image_url", image_url: { url: "https://example.com/screenshot.png" } }] },
+          { role: "user", content: [{ type: "text", text: "Read this screenshot." }, { type: "image_url", image_url: { url: "https://example.com/screenshot.png" } }, { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } }] },
           { role: "assistant", content: null, tool_calls: [{ id: "call-1", type: "function", function: { name: "inspect_page", arguments: "{}" } }] },
           { role: "tool", tool_call_id: "call-1", content: "Page inspected." }
         ],
