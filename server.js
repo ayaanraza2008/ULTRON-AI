@@ -13,7 +13,7 @@ import { createAgentRouter } from "./agent-runtime.js";
 import { createDesktopActionRouter } from "./desktop-action-bridge.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
-import { safeServiceBase } from "./network-safety.js";
+import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -349,6 +349,25 @@ function cactusCompletionStream(completion) {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
+function isAllowedBrowserGatewayImageUrl(value) {
+  if (typeof value !== "string" || !value.trim() || value.length > 900_000) return false;
+  const candidate = value.trim();
+  const dataImage = candidate.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/i);
+  if (dataImage) {
+    const encoded = dataImage[2];
+    if (encoded.length % 4 !== 0) return false;
+    const bytes = Buffer.from(encoded, "base64");
+    return bytes.length > 0 && bytes.length <= 675_000 && bytes.toString("base64") === encoded;
+  }
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" && !url.username && !url.password &&
+      isPublicNetworkHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function chatProxyRoutingTimeoutMs(env = process.env) {
   const configured = Number(env.ULTRON_CHAT_TOTAL_TIMEOUT_MS);
   if (!Number.isFinite(configured) || configured <= 0) return 90_000;
@@ -403,7 +422,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       if (part.type === "text") return typeof part.text === "string" && part.text.length <= 500_000;
       if (part.type === "image_url") {
         const imageUrl = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
-        return typeof imageUrl === "string" && imageUrl.length <= 900_000;
+        return isAllowedBrowserGatewayImageUrl(imageUrl);
       }
       return false;
     };
