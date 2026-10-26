@@ -34,6 +34,18 @@ Never put the secret in source control, a browser bundle, a task payload, or cha
 
 In Windows, launch the companion, tick **Enable approved PC actions**, and accept its separate consent prompt. The checkbox is off by default and does not inherit the wake-word auto-start setting. Untick it to stop polling.
 
+## Agent usage
+
+The authenticated agent router exposes the same narrow queue as tools:
+
+- Request a public HTTPS URL on the Windows PC by asking ULTRON to open the URL on the PC. This only creates a pending action record.
+- Launch Notepad, Calculator, or Explorer on the Windows PC by asking ULTRON for the specific launch. This also only creates a pending action record.
+- Ask ULTRON to list desktop actions to inspect IDs and states.
+- To approve, send a new standalone prompt in this exact form: **approve action <full-action-UUID>**. The approval tool verifies that the current prompt itself contains this exact action ID and verb. An earlier message, model-generated string, or a generic "yes" does not grant approval.
+- To cancel, send a new standalone prompt in this exact form: **cancel action <full-action-UUID>**. Only pending or queued actions can be cancelled.
+
+Even after approval, an action is only queued; the Windows companion must be opted in, authenticated, online, and claim it before execution. ULTRON must not claim the PC action ran until the companion acknowledgement records a result.
+
 ## API shapes
 
 Create a pending action:
