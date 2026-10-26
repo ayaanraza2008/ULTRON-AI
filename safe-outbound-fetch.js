@@ -7,8 +7,8 @@ import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
-const DEFAULT_MAX_REQUEST_BYTES = 8 * 1024 * 1024;
+const DEFAULT_MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
+const DEFAULT_MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_REDIRECTS = 5;
 
@@ -251,6 +251,7 @@ function pinnedNodeRequest({ url, address, family, method, headers, body, signal
         }
       });
       limiter.on("error", () => incoming.destroy());
+      limiter.on("close", () => { if (!incoming.complete) incoming.destroy(); });
       incoming.pipe(limiter);
       const bodyStream = Readable.toWeb(limiter);
       try {
