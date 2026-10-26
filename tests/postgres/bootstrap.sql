@@ -20,7 +20,7 @@ CREATE OR REPLACE FUNCTION auth.role()
 RETURNS text
 LANGUAGE sql
 STABLE
-AS $ SELECT coalesce(NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), ''), current_user::text) $;
+AS $$ SELECT coalesce(NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), ''), current_user::text) $$;
 GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
 
 -- Approximate Supabase's default table grants for objects created by postgres;
