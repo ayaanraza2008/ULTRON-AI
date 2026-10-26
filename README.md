@@ -28,6 +28,15 @@ Backend additions on the feature branch:
 
 These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. Persistent document uploads, a hardened coding sandbox, live external-account integrations, and real provider/database end-to-end tests remain incomplete. A restricted Windows approved-action queue (HTTPS URL open, Notepad/Calculator/Explorer launch, and limited system info) is proposed in PR #276, including owner-only agent tools, exact-action-ID approval, a separate local bridge token, audit events, and bounded leases/retries. It is not merged or deployed and must be rolled out with its Supabase migration before it can run. It intentionally does not execute arbitrary shell commands or access arbitrary local files. Premium speech endpoints need a compatible provider configuration. The frontend and full Windows PC-control UI remain deferred. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.
 
+## Saved extracted-document library (backend only)
+
+The authenticated API can persist only the extracted text from a supported TXT, Markdown, CSV, JSON, HTML, PDF, or DOCX document. The original source binary is not stored. After the existing POST /api/documents/extract endpoint returns text, a caller must explicitly save it with POST /api/documents. The library also exposes GET /api/documents, GET /api/documents/search?q=..., GET /api/documents/:id?offset=0&limitChars=20000, and DELETE /api/documents/:id.
+
+- Extracted text is capped at 100,000 Unicode characters; reads are paged in chunks of up to 20,000 characters.
+- Search uses PostgreSQL full-text search and returns short excerpts, not an unbounded document dump.
+- Listing, reading, search, and delete are account-scoped through Supabase Auth and RLS. The agent has matching list/search/read tools and treats retrieved document text as untrusted content.
+- The migration supabase/migrations/20261026110000_user_document_library.sql must be applied before the new routes can work. This PR is not merged or deployed, and the live database has not been modified by this feature branch.
+- The library stores extracted text and metadata only. It is not a binary upload service and does not scan source files for malware.
 ## Configuration
 
 Copy `.env.example` to `.env` for local development and populate secrets locally. Never commit `.env`, provider keys, session secrets, or service-role keys. A Supabase publishable key may be used by a client only with appropriate authentication and RLS; privileged keys must remain server-side.
