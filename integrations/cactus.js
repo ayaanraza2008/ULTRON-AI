@@ -4,7 +4,7 @@
  */
 import { isIP } from "node:net";
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 function bounded(value, max = 300) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -113,12 +113,12 @@ export async function checkCactusService({ env = process.env, fetchImpl = safeOu
   if (config.error) return config.error;
   const url = config.baseUrl + "/models";
   try {
-    const response = await fetchImpl(url, {
+    const response = await fetchConfiguredOutbound(config.baseUrl, url, {
       method: "GET",
       headers: { Accept: "application/json", ...(config.token ? { Authorization: "Bearer " + config.token } : {}) },
       redirect: "error",
       signal: AbortSignal.timeout(10_000)
-    });
+    }, fetchImpl);
     const payload = await readJsonLimited(response);
     if (!response.ok) return {
       state: "failed", provider: "cactus",
