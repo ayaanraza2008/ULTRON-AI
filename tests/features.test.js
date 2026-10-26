@@ -1149,6 +1149,10 @@ function makeSavedDocumentDatabase(initialRows = []) {
       nextId += 1;
       const row = { id, ...structuredClone(body), created_at: now, updated_at: now };
       rows.set(id, row);
+      if (!String(params.get("select") || "").includes("extracted_text")) {
+        const { extracted_text, ...metadata } = row;
+        return [structuredClone(metadata)];
+      }
       return [structuredClone(row)];
     }
     const idFilter = params.get("id") || "";
