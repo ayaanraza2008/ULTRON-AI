@@ -96,6 +96,33 @@ function validHostnameSyntax(host) {
   );
 }
 
+async function resolveAllDnsAddresses(host) {
+  if (LOCAL_HOSTS.has(normalizedHostname(host))) {
+    // Local-development loopback is permitted only through the explicit
+    // configuration wrapper; consult the OS resolver for hosts-file entries.
+    return dns.lookup(host, { all: true, verbatim: true });
+  }
+  const noRecordCodes = new Set(["ENODATA", "ENOTFOUND"]);
+  const resolveFamily = async resolver => {
+    try {
+      return await resolver(host);
+    } catch (error) {
+      if (noRecordCodes.has(error?.code)) return [];
+      // Resolver timeouts/SERVFAIL and similar errors are not equivalent to
+      // an empty RRset; fail closed rather than trust an incomplete DNS view.
+      throw error;
+    }
+  };
+  const [v4, v6] = await Promise.all([
+    resolveFamily(name => dns.resolve4(name)),
+    resolveFamily(name => dns.resolve6(name))
+  ]);
+  return [
+    ...v4.map(address => ({ address, family: 4 })),
+    ...v6.map(address => ({ address, family: 6 }))
+  ];
+}
+
 function normalizeLookupResults(value) {
   if (Array.isArray(value)) return value;
   if (value && typeof value.address === "string") return [value];
@@ -331,7 +358,7 @@ async function resolvePinnedAddress(url, { lookupImpl, signal, allowLoopbackHttp
  * compressed upstream bodies so a decompression bomb cannot bypass its byte cap.
  */
 export function createSafeOutboundFetch({
-  lookupImpl = dns.lookup,
+  lookupImpl = resolveAllDnsAddresses,
   requestImpl = pinnedNodeRequest,
   maxRedirects = 3,
   maxResponseBytes = DEFAULT_MAX_RESPONSE_BYTES,
