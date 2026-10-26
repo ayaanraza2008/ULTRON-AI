@@ -24,27 +24,36 @@ const expectedMigrationFiles = [
   "20261026110000_user_document_library.sql"
 ];
 
-async function migrationFiles() {
+test("Supabase migration filenames have valid, unique version prefixes", async () => {
   const entries = await readdir(migrationsDirectory, { withFileTypes: true });
-  return entries
+  const files = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
     .map((entry) => entry.name)
     .sort();
-}
 
-test("Supabase migration filenames have valid, unique version prefixes", async () => {
-  const files = await migrationFiles();
   assert.ok(files.length > 0, "At least one SQL migration must exist");
+
   const seenVersions = new Map();
   for (const filename of files) {
     const match = /^(\d+)_([a-z0-9][a-z0-9_-]*)\.sql$/i.exec(filename);
     assert.ok(match, `Invalid Supabase migration filename: ${filename}`);
-    const previous = seenVersions.get(match[1]);
-    assert.equal(previous, undefined, `Duplicate version "${match[1]}" in ${previous} and ${filename}`);
-    seenVersions.set(match[1], filename);
+
+    const version = match[1];
+    const previous = seenVersions.get(version);
+    assert.equal(
+      previous,
+      undefined,
+      `Duplicate Supabase migration version "${version}" in ${previous} and ${filename}`
+    );
+    seenVersions.set(version, filename);
   }
 });
 
-test("local migrations match live Supabase history plus the two pending reviewed migrations", async () => {
-  assert.deepEqual(await migrationFiles(), [...expectedMigrationFiles].sort());
+test("local migrations match live Supabase history plus the two reviewed pending migrations", async () => {
+  const entries = await readdir(migrationsDirectory, { withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+    .map((entry) => entry.name)
+    .sort();
+  assert.deepEqual(files, [...expectedMigrationFiles].sort());
 });
