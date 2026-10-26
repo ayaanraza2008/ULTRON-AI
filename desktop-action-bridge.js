@@ -283,6 +283,10 @@ export function createDesktopActionRouter({
   router.post("/desktop/bridge/ack", requireBridgeToken, async (req, res) => {
     const id = normalizeUuid(req.body?.actionId);
     if (!id) return apiError(res, 400, "DESKTOP_ACTION_ID_INVALID", "The desktop action ID is invalid.");
+    const attempts = Number(req.body?.attempts);
+    if (!Number.isInteger(attempts) || attempts < 1 || attempts > 3) {
+      return apiError(res, 400, "DESKTOP_ACTION_ATTEMPT_INVALID", "The bridge acknowledgement must include the valid attempt number returned by the claim endpoint.");
+    }
     const state = bounded(req.body?.state, 20);
     if (state !== "completed" && state !== "failed") return apiError(res, 400, "DESKTOP_ACTION_STATE_INVALID", "The action state must be completed or failed.");
     const isSuccessful = state === "completed";
@@ -294,11 +298,18 @@ export function createDesktopActionRouter({
     try {
       const existing = await loadAction(req, req.desktopOwnerId, id);
       if (!existing || existing.status !== "RUNNING") return apiError(res, 409, "DESKTOP_ACTION_NOT_RUNNING", "The desktop action is no longer running or its lease has expired.");
+      if (Number(existing.attempts) !== attempts) {
+        return apiError(res, 409, "DESKTOP_ACTION_STALE_ATTEMPT", "This acknowledgement belongs to an older claim attempt and was not stored.");
+      }
+      const leaseExpiry = Date.parse(existing.lease_expires_at || "");
+      if (!Number.isFinite(leaseExpiry) || leaseExpiry <= now().getTime()) {
+        return apiError(res, 409, "DESKTOP_ACTION_LEASE_EXPIRED", "The action lease expired before its acknowledgement arrived.");
+      }
       let result;
       try { result = sanitizeDesktopResult(existing.action_type, existing.payload || {}, state, req.body?.result); }
       catch (error) { return apiError(res, error.status || 400, error.code || "DESKTOP_ACTION_RESULT_INVALID", error.message); }
       const rows = await db(req, "desktop_actions", "PATCH",
-        "?id=eq." + id + "&user_id=eq." + req.desktopOwnerId + "&status=eq.RUNNING",
+        "?id=eq." + id + "&user_id=eq." + req.desktopOwnerId + "&status=eq.RUNNING&attempts=eq." + attempts,
         { status: isSuccessful ? "COMPLETED" : "FAILED", result, error_code: errorCode, finished_at: now().toISOString(), lease_expires_at: null });
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row) return apiError(res, 409, "DESKTOP_ACTION_STATE_CHANGED", "The desktop action changed before its result was stored.");
