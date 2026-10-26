@@ -1,29 +1,88 @@
-# ULTRON backend security migration rollout
+# ULTRON Supabase security and migration rollout
 
-This runbook is for the security migrations on `autonomy/guard-production-operations`. It does not authorize or perform a production rollout.
+This is an evidence-based runbook, not authorization to mutate the live database. The current task explicitly leaves live migrations and deployment deferred.
 
-## Current rollout gate
+## Read-only verified state — 2026-10-26
 
-Before applying anything, confirm the branch and review PR #100. Production Render is configured to deploy `main`, not this feature branch. Do not merge or deploy as part of a database-only review.
+- Project: `ULTRON-AI` (`opdjfhwepmcprbqojpat`), Mumbai region, status `ACTIVE_HEALTHY`.
+- The live migration ledger has 14 entries through `20261024142725_scope_stale_task_recovery`.
+- Repository migration filenames now match those 14 recorded versions plus exactly two pending feature migrations: `20261026100000_desktop_action_bridge.sql` and `20261026110000_user_document_library.sql`.
+- Read-only database checks confirmed RLS is enabled on the seven existing public application tables (conversations, messages, user_preferences, memory_items, agent_tasks, employee_schedules, audit_events), with owner-scoped policies. Message policies also require ownership of the parent conversation.
+- Browser privilege checks returned no `anon` SELECT/INSERT/UPDATE/DELETE on those seven tables, and no `anon` TRUNCATE or authenticated TRUNCATE/TRIGGER privileges.
+- Both worker SECURITY DEFINER RPCs, `ultron_claim_next_task` and `ultron_claim_due_employee_schedule`, have an empty `search_path`.
+- These are schema/policy/grant observations. They are not a substitute for the opt-in two-account live RLS test or real authenticated application flows.
 
-A read-only Supabase audit on 2026-10-23 found that browser-facing roles still had broad table privileges on `agent_tasks` and `audit_events`, including `TRUNCATE` and `TRIGGER`. The new migrations were not present in the live database at that audit. Treat that as a verified outstanding item until the checks below pass.
+## Do not re-apply recorded migrations
 
-## Migration sequence
+The following existing migrations are already recorded in the live project and must not be treated as pending work:
 
-Review and apply the migrations through the approved Supabase migration workflow in timestamp order:
+```text
+20261021183847_initial_schema
+20261021183915_secure_function_search_path
+20261021184829_touch_conversation_on_message
+20261022155928_ai_employee_scheduler
+20261023084934_optimize_rls_policy_auth_uid
+20261023094332_durable_task_retry_backoff
+20261023103950_recover_stale_running_tasks
+20261023105015_autonomous_scheduled_employee_reports
+20261023205345_guard_agent_task_client_updates
+20261023205348_revoke_browser_bypass_table_privileges
+20261023205350_harden_worker_rpc_search_path
+20261023205352_server_authored_audit_events
+20261024085626_revoke_anon_public_table_privileges
+20261024142725_scope_stale_task_recovery
+```
 
-1. `20261023130000_guard_agent_task_client_updates.sql` — restrict authenticated-client task updates to cancellation of an active task without changing worker-owned fields.
-2. `20261023150000_revoke_browser_bypass_table_privileges.sql` — revoke `TRUNCATE` and `TRIGGER` on the seven existing public app tables from `anon` and `authenticated`; adjust defaults for tables created by `postgres`.
-3. `20261023170000_harden_worker_rpc_search_path.sql` — set an empty `search_path` on the two SECURITY DEFINER worker RPCs.
-4. `20261023180000_server_authored_audit_events.sql` — remove the browser insert policy for audit events and revoke browser-role mutation privileges on that table.
+The old duplicate/alternate filenames were a source of migration drift and are no longer the expected canonical names. Never run a blanket migration command until the checked-out branch, exact migration list, and live migration ledger have been compared.
 
-Do not paste service-role secrets into SQL, logs, commits, or chat. Do not apply only part of the sequence without documenting why and validating the resulting behavior.
+## Two migrations remain source-only
 
-## Post-migration SQL checks
+These are new backend schemas from the open feature branch and are **not** applied to the live project:
 
-Run these read-only checks in the target project and save the results with the deployment record.
+1. `20261026100000_desktop_action_bridge.sql` — an owner-scoped, explicitly approved Windows action queue with constrained action types and leases.
+2. `20261026110000_user_document_library.sql` — a bounded extracted-text library with owner-scoped RLS and a caller-scoped search function.
 
-### Browser roles must not have bypass/mutation privileges
+Keep them unapplied until the matching API/worker code is reviewed and the user authorizes the final rollout phase. They must be applied in timestamp order, together with the matching application release. Then verify the two migration records, table grants, RLS, authenticated CRUD/search, cross-user denial, and desktop action lifecycle. Do not enable companion polling until the server and local companion versions are compatible and paired.
+
+## Security advisor warning and ₹0-budget handling
+
+The current Supabase Security Advisor reports `auth_leaked_password_protection` as disabled. Supabase's current password-security guide states that its built-in leaked-password protection is available on Pro plan and above: https://supabase.com/docs/guides/auth/password-security
+
+Do not upgrade or activate paid features to clear this warning under the user's ₹0-budget constraint. ULTRON also has its own fail-closed password screening path, but that is only a separate mitigation; it does **not** clear the hosted Supabase advisor warning. Recheck the advisor after any future eligible configuration change.
+
+## Read-only verification queries
+
+### RLS on application tables
+
+```sql
+select c.relname as table_name, c.relrowsecurity as rls_enabled
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind = 'r'
+order by c.relname;
+```
+
+### Owner-scoped policies
+
+```sql
+select tablename, policyname, roles, cmd, qual, with_check
+from pg_policies
+where schemaname = 'public'
+order by tablename, policyname;
+```
+
+### Worker RPC search paths
+
+```sql
+select p.proname, p.proconfig
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in ('ultron_claim_due_employee_schedule', 'ultron_claim_next_task');
+```
+
+### Browser bypass privileges
 
 ```sql
 select c.relname as table_name,
@@ -43,64 +102,16 @@ where n.nspname = 'public'
 order by c.relname, r.rolname, x.privilege_type;
 ```
 
-Expected: zero rows for those privilege types. This check does not replace verifying ordinary SELECT/INSERT/UPDATE/DELETE grants and RLS policies.
+Expected: zero rows for these browser-facing bypass privileges.
 
-### Audit log browser writes must be disabled
+## Required before a later production rollout
 
-```sql
-select policyname, roles, cmd
-from pg_policies
-where schemaname = 'public'
-  and tablename = 'audit_events'
-order by policyname;
+- Full migration-replay and security-contract CI passes on the exact commit to be released.
+- Opt-in live two-account RLS isolation passes with two dedicated test accounts; skipped tests do not count as passing.
+- A non-production signed-in test account verifies signup/confirmation, sign-in, sign-out, recovery/reset, conversation/message persistence, and memory preference enforcement.
+- A real model smoke request succeeds without logging keys or generated private content.
+- A queued test task completes with a persisted result and clean recovery behavior.
+- The Windows action bridge passes an authenticated owner-approved test on the target Windows machine with a visible Stop control.
+- The actual deployed revision and live health are verified only during the explicitly authorized deployment phase.
 
-select has_table_privilege('anon', 'public.audit_events', 'INSERT') as anon_insert,
-       has_table_privilege('authenticated', 'public.audit_events', 'INSERT') as authenticated_insert,
-       has_table_privilege('service_role', 'public.audit_events', 'INSERT') as service_role_insert;
-```
-
-Expected: no authenticated/anon insert policy, browser-role insert privileges false, service-role insert remains true, and the intended user-owned read policy remains.
-
-### Worker RPC search path
-
-```sql
-select p.proname, p.proconfig
-from pg_proc p
-join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public'
-  and p.proname in ('ultron_claim_due_employee_schedule', 'ultron_claim_next_task');
-```
-
-Expected: both functions include `search_path=` in `proconfig`.
-
-### Agent task guard
-
-```sql
-select t.tgname, c.relname, pg_get_triggerdef(t.oid)
-from pg_trigger t
-join pg_class c on c.oid = t.tgrelid
-join pg_namespace n on n.oid = c.relnamespace
-where not t.tgisinternal
-  and n.nspname = 'public'
-  and c.relname = 'agent_tasks'
-  and t.tgname = 'agent_tasks_guard_client_updates';
-```
-
-Expected: one guard trigger. Also verify the function definition and run authenticated-user tests for allowed cancellation and rejected result/status/input tampering.
-
-## Application smoke checks
-
-After database checks pass, use a non-production test account to verify:
-
-- An authenticated user can read and update only their own conversations, messages, preferences, and memory.
-- A user can cancel their own eligible task, but cannot forge task completion, output, error, ownership, or input fields.
-- The server worker can still claim tasks, persist results, and write audit events using its server-side service role.
-- Browser clients cannot create or mutate audit entries.
-- Sign-in, sign-out, and password recovery work without exposing access/refresh tokens in JSON responses.
-- `/api/health` remains healthy; authenticated `/api/runtime/readiness` reports configured versus verified capabilities accurately.
-
-Do not use real customer data for these checks. Do not claim the product is fully production-ready based only on CI or a health endpoint.
-
-## Default-privilege limitation to track
-
-The migration changes default privileges for `postgres`-owned future tables. The live audit also showed default ACLs for `supabase_admin`. Do not assume the migration covers objects created by `supabase_admin`; verify which role owns each future table and review supported permission to alter that role's defaults separately. Never expand the migration's role scope without checking the database role membership/ownership constraints first.
+Never put service-role secrets or account passwords in SQL files, logs, commits, or chat. Do not use real customer data for these tests.
