@@ -18,6 +18,8 @@
 
 | BLK-014 | Saved-document library and Windows action-bridge migrations are not applied to live Supabase | The implementation is proposed in open stacked PR #285; the live migration history currently ends at `20261024142725` and does not include `20261026100000` or `20261026110000` | Keep the document/desktop features marked source-proposed until the PR stack is reviewed and an explicitly authorized migration rollout is performed. Do not apply either migration during this backend audit | Yes: source tests and migration-contract tests can continue |
 
+| BLK-015 | Latest `main` push CI fails in the production-revision smoke step, not in source tests | The live `/api/health` response is healthy and exposes the required configuration flags but does not expose a deployed commit; the current workflow therefore rejects the main push as unverified | Do not deploy to make CI green. Existing open PRs #260 and #279 split source CI from explicit operator-triggered production verification; review that existing fix stack rather than duplicating the workflow change. Current PR source CI passes separately | Yes: code and deterministic tests continue; production revision remains unverified |
+
 ## Verification discipline
 
 - Configuration means configured, not healthy. A real provider request or task completion is required before marking a feature verified.
