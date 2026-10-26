@@ -1,3 +1,4 @@
+import { safeFetch } from "../outbound-transport.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -72,7 +73,7 @@ function sanitizeSettings(settings, generatedAt) {
 }
 
 /** Read-only auth diagnostic: no signup, email/SMS, database writes, or secret output. */
-export async function diagnoseSupabaseAuth({ env = process.env, fetchImpl = globalThis.fetch, now = () => new Date().toISOString() } = {}) {
+export async function diagnoseSupabaseAuth({ env = process.env, fetchImpl = safeFetch, now = () => new Date().toISOString() } = {}) {
   const baseUrl = safeSupabaseBase(env.SUPABASE_URL);
   const apiKey = typeof env.SUPABASE_PUBLISHABLE_KEY === "string" && env.SUPABASE_PUBLISHABLE_KEY.trim()
     ? env.SUPABASE_PUBLISHABLE_KEY.trim()
