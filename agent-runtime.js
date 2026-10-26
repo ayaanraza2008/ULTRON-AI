@@ -846,10 +846,15 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       });
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row?.id) throw Object.assign(new Error("Desktop action was not saved."), { code: "DESKTOP_ACTION_CREATE_FAILED", status: 502 });
+      const bridgeConfigured = String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim().length >= 32 &&
+        !/\s/.test(String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim());
       return {
         action: { id: row.id, actionType: row.action_type, payload: row.payload, status: row.status, requestedAt: row.created_at || null },
-        requiresApproval: true, execution: "not_executed",
-        message: "The request is saved as pending approval. Nothing has run on Windows. To approve it, send a separate message containing exactly: approve action " + row.id
+        requiresApproval: true, execution: "not_executed", bridgeConfigured,
+        message: (bridgeConfigured
+          ? "The request is saved as pending approval. Nothing has run on Windows."
+          : "The request is saved as pending approval, but the server-side PC bridge token is not configured yet. Nothing has run; configure the same high-entropy token on the backend and paired Windows companion before approving.") +
+          " To approve it, send a separate message containing exactly: approve action " + row.id
       };
     }
     if (name === "approve_desktop_action" || name === "cancel_desktop_action") {
