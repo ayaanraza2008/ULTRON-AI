@@ -244,3 +244,38 @@ test("bad URL percent escapes are rejected before DNS", async () => {
   await assert.rejects(safeFetch("https://public.example/%ZZ"), { code: "OUTBOUND_URL_INVALID" });
   assert.equal(dnsCalls, 0);
 });
+
+
+test("oversized outbound request bodies fail before DNS resolution", async () => {
+  let dnsCalls = 0;
+  const safeFetch = createSafeOutboundFetch({
+    lookupImpl: async () => { dnsCalls += 1; return [publicAddress]; },
+    requestImpl: async () => response()
+  });
+  await assert.rejects(safeFetch("https://public.example/upload", {
+    method: "POST",
+    body: "123456",
+    ultronMaxRequestBytes: 5
+  }), { code: "OUTBOUND_REQUEST_TOO_LARGE" });
+  assert.equal(dnsCalls, 0);
+});
+
+test("pre-aborted outbound requests fail without DNS or connection attempts", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("cancelled"));
+  let calls = 0;
+  const safeFetch = createSafeOutboundFetch({
+    lookupImpl: async () => { calls += 1; return [publicAddress]; },
+    requestImpl: async () => { calls += 1; return response(); }
+  });
+  await assert.rejects(safeFetch("https://public.example/", { signal: controller.signal }), { code: "OUTBOUND_ABORTED" });
+  assert.equal(calls, 0);
+});
+
+test("upstream compressed responses are rejected instead of bypassing response bounds", async () => {
+  const safeFetch = createSafeOutboundFetch({
+    lookupImpl: async () => [publicAddress],
+    requestImpl: async () => response("not really gzip", 200, { "content-encoding": "gzip" })
+  });
+  await assert.rejects(safeFetch("https://public.example/", { redirect: "error" }), { code: "OUTBOUND_COMPRESSION_UNSUPPORTED" });
+});
