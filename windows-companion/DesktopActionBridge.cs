@@ -257,10 +257,23 @@ internal sealed class DesktopActionBridge : IDisposable
 
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {
-            // Reject IPv6 unique-local (fc00::/7) and unspecified/loopback/link-local
-            // ranges; an IPv4-mapped address was already normalized above.
-            if ((bytes[0] & 0xFE) == 0xFC || (bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80))
+            // Public global-unicast IPv6 only. The companion resolves a hostname and
+            // rejects the entire result set if any returned address is non-public.
+            // Mapped IPv4 was normalized above; now reject local/transition/documentation
+            // blocks rather than trusting that a syntactically valid IPv6 literal is public.
+            var first = (bytes[0] << 8) | bytes[1];
+            if (first < 0x2000 || first > 0x3FFF)
                 return false;
+            if (first == 0x3FFF || first == 0x2002) // Documentation and 6to4 transition.
+                return false;
+            if (first == 0x2001)
+            {
+                var second = (bytes[2] << 8) | bytes[3];
+                if (second == 0x0DB8 || second == 0x0000 || second == 0x0002 ||
+                    (second >= 0x0010 && second <= 0x001F) ||
+                    (second >= 0x0020 && second <= 0x003F))
+                    return false; // Documentation, special-use, benchmark, or ORCHID ranges.
+            }
             return true;
         }
         return false;
