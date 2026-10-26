@@ -765,7 +765,7 @@ test("chat forwards validated image input as multimodal content to the selected 
       body: JSON.stringify({
         messages: [{ role: "user", content: "Describe this." }],
         model: "minimax/minimax-m3.1-flash:free",
-        attachments: [{ name: "sample.png", dataUrl: "data:image/png;base64,aGVsbG8=" }],
+        attachments: [{ name: "sample.png", dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfS8AAAAASUVORK5CYII=" }],
         stream: false
       })
     });
@@ -773,7 +773,7 @@ test("chat forwards validated image input as multimodal content to the selected 
     const forwardedUser = forwarded.messages.find(message => message.role === "user");
     assert.equal(forwardedUser.content[0].text, "Describe this.");
     assert.equal(forwardedUser.content[1].type, "image_url");
-    assert.equal(forwardedUser.content[1].image_url.url, "data:image/png;base64,aGVsbG8=");
+    assert.equal(forwardedUser.content[1].image_url.url, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfS8AAAAASUVORK5CYII=");
   });
 });
 
@@ -1299,7 +1299,7 @@ test("password update screens the candidate and uses only the signed-in user's a
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
-        return new Response("", { status: 200, headers: { "Content-Type": "text/plain" } });
+        return new Response("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:0\r\n", { status: 200, headers: { "Content-Type": "text/plain" } });
       }
       if (url === "https://ultron-test.supabase.co/auth/v1/user" && method === "PUT") {
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });

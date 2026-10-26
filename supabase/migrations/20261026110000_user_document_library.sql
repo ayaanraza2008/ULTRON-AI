@@ -42,6 +42,7 @@ create policy user_documents_delete_own
   using (user_id = (select auth.uid()));
 
 revoke all on table public.user_documents from public, anon;
+revoke update on table public.user_documents from authenticated;
 grant select, insert, delete on table public.user_documents to authenticated;
 grant all on table public.user_documents to service_role;
 
