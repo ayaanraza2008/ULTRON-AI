@@ -2,7 +2,7 @@
 
 | ID | Blocker | Impact | Required resolution | Can independent work continue? |
 |---|---|---|---|---|
-| BLK-001 | Live cloud-model inference is not yet verified end-to-end | Health reporting that a provider is configured does not prove a real prompt succeeds | Run an authorized text request and image request using the configured OpenRouter key/model; verify response and safe fallback behavior | Yes: tests and non-provider backend work continue |
+| BLK-001 | Live cloud-model inference is not yet verified end-to-end | Health reporting that a provider is configured does not prove a real prompt succeeds | Run `npm run smoke:model` and `npm run smoke:vision` with server-side OpenRouter credentials and explicitly configured free vision model IDs; then verify one authenticated application chat and safe fallback behavior | Yes: diagnostics and non-provider backend work continue |
 | BLK-002 | Supabase Auth signup/sign-in, recovery email delivery, and reset flow need end-to-end verification | Mocked tests do not prove a real user's session, email delivery, or password reset works | Verify Auth email settings and redirect URL; test signup, confirmation, sign-in, recovery email, password reset, and session renewal using a test account | Yes: recovery API and regression tests are merged; live email/reset verification remains |
 | BLK-003 | Conversation persistence and account isolation need live verification | History may fail to save/read or RLS may be misconfigured despite schema and mocked tests | Verify conversation create/read and message insert/read, then confirm cross-user denial with two test accounts | Yes: schema, APIs, and mocked tests are present |
 | BLK-004 | Web research, speech, and voice providers need live verification | Adapter tests do not prove external provider reachability, quality, quotas, or live failure handling | Run real research, text-to-speech, and speech-to-text requests where credentials are configured; treat browser-native speech as best-effort | Yes: adapters and safe fallbacks can be improved |
@@ -18,7 +18,7 @@
 
 ## Verification discipline
 
-- Configuration means configured, not healthy. A real provider request or task completion is required before marking a feature verified.
+- Configuration means configured, not healthy. A real provider request or task completion is required before marking a feature verified. `npm run smoke:vision` now provides an opt-in, bounded diagnostic for explicitly configured free vision model IDs; a passing result proves the provider accepted an image-shaped request and challenge response, not image-understanding quality or authenticated app routing.
 - Latest merged backend security changes include commit `dbd9058b0594f9124859e5aafa7c3e347f309b72` (bounded model-provider response buffering) and `cdc5d1aecf12acff06d36000434dd1d38e999b51` (per-IP auth endpoint rate limiting). CI passed syntax checks, automated tests, the deployed `/api/health` smoke test, and the pinned God’s Eye bridge build.
 - The CI install reported 0 vulnerabilities, and `npm audit --omit=dev --audit-level=high` also reported 0 vulnerabilities on that run. This does not prove the earlier Render warning was false; its exact dependency/build context still needs investigation.
 - The deployed health endpoint reported `status: ok`, with provider, access, and Supabase configured. This is configuration/startup evidence only, not proof of live model inference or user data flows.
