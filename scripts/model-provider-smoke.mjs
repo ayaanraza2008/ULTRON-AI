@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, createConfiguredOutboundFetch } from "../safe-outbound-fetch.js";
 
 const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1";
 const MAX_PROVIDER_COUNT = 6;
@@ -138,7 +138,8 @@ function failureCode(error, status) {
  * operator. It never returns credentials, generated text, or raw upstream errors.
  */
 export async function runModelProviderSmoke({ env = process.env, fetchImpl = safeOutboundFetch, timeoutMs = DEFAULT_TIMEOUT_MS, now = () => new Date().toISOString() } = {}) {
-  if (typeof fetchImpl !== "function") return { status: "blocked", reason: "FETCH_UNAVAILABLE", attempts: [], generatedAt: now() };
+  fetchImpl = createConfiguredOutboundFetch({ env, fetchImpl, baseUrlEnvNames: ["OPENROUTER_BASE_URL"], includeModelProviderRegistry: true });
+  if (typeof fetchImpl !== "function" return { status: "blocked", reason: "FETCH_UNAVAILABLE", attempts: [], generatedAt: now() };
   const { candidates, errors } = loadProviderCandidates(env);
   if (!candidates.length) {
     return { status: "blocked", reason: "NO_ELIGIBLE_PROVIDER", configurationErrors: errors, attempts: [], generatedAt: now() };
