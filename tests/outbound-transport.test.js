@@ -4,13 +4,18 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { createSafeFetch } from "../outbound-transport.js";
 
-function fakeRequest(status = 200, headers = ["content-type", "application/json"]) {
-  const seen = { calls: 0, options: null, pinnedAddress: null };
+function fakeRequest(status = 200, headers = ["content-type", "application/json"], onWrite = () => {}) {
+  const seen = { calls: 0, options: null, pinnedAddress: null, writtenBytes: 0 };
   const request = (url, options, callback) => {
     seen.calls += 1;
     seen.options = options;
     const req = new EventEmitter();
-    req.write = () => true;
+    req.write = chunk => {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      seen.writtenBytes += bytes.byteLength;
+      onWrite(bytes);
+      return true;
+    };
     req.destroy = error => {
       if (error) req.emit("error", error);
     };
@@ -89,6 +94,25 @@ test("safeFetch blocks mixed public/private DNS answers rather than selecting a 
   await assert.rejects(fetch("https://mixed.example.com/"), error => error.code === "UNSAFE_OUTBOUND_TARGET");
   assert.equal(lookupCalled, true);
   assert.equal(fake.seen.calls, 0);
+});
+
+test("safeFetch limits streaming request bodies before oversized chunks are written", async () => {
+  const chunks = [];
+  const fake = fakeRequest(200, ["content-type", "application/json"], chunk => chunks.push(Buffer.from(chunk)));
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "127.0.0.1", family: 4 }],
+    httpRequest: fake.request,
+    maxRequestBodyBytes: 8
+  });
+  await assert.rejects(
+    fetch("http://localhost:8787/upload", {
+      method: "POST",
+      body: Readable.from([Buffer.from("123456789")])
+    }),
+    error => error.code === "OUTBOUND_BODY_TOO_LARGE"
+  );
+  assert.equal(fake.seen.writtenBytes, 0);
+  assert.deepEqual(chunks, []);
 });
 
 test("safeFetch fails closed on redirects by default", async () => {
