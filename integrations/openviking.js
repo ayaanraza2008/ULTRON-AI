@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { safeServiceBase } from "../network-safety.js";
-import { safeOutboundFetch } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "../safe-outbound-fetch.js";
 
 const MAX_QUERY_CHARS = 1200;
 const MAX_RESPONSE_BYTES = 512 * 1024;
@@ -171,13 +171,13 @@ export async function findOpenVikingContext({ env = process.env, userId, query, 
   if (!isOpenVikingUri(targetUri)) return { state: "failed", error: { code: "OPENVIKING_TARGET_INVALID", message: "Search scope must stay inside the authenticated user's viking://~/ context." } };
 
   try {
-    const response = await fetchImpl(access.settings.baseUrl + "/api/v1/search/find", {
+    const response = await fetchConfiguredOutbound(access.settings.baseUrl, access.settings.baseUrl + "/api/v1/search/find", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": access.settings.token, Accept: "application/json" },
       body: JSON.stringify({ query: normalizedQuery, limit, target_uri: targetUri, read_content: false }),
       redirect: "error",
       signal: AbortSignal.timeout(15000)
-    });
+    }, fetchImpl);
     if (!response.ok) {
       try { await response.body?.cancel?.(); } catch {}
       return { state: "failed", error: { code: "OPENVIKING_UPSTREAM_UNAVAILABLE", message: "OpenViking context search failed.", upstreamStatus: response.status } };
@@ -212,12 +212,12 @@ export async function readOpenVikingContext({ env = process.env, userId, uri, fe
   try {
     const endpoint = new URL(access.settings.baseUrl + "/api/v1/content/read");
     endpoint.searchParams.set("uri", uri);
-    const response = await fetchImpl(endpoint.toString(), {
+    const response = await fetchConfiguredOutbound(access.settings.baseUrl, endpoint.toString(), {
       method: "GET",
       headers: { "X-API-Key": access.settings.token, Accept: "application/json" },
       redirect: "error",
       signal: AbortSignal.timeout(15000)
-    });
+    }, fetchImpl);
     if (!response.ok) {
       try { await response.body?.cancel?.(); } catch {}
       return { state: "failed", error: { code: "OPENVIKING_UPSTREAM_UNAVAILABLE", message: "OpenViking context read failed.", upstreamStatus: response.status } };
