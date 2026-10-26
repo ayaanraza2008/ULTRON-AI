@@ -1,7 +1,7 @@
 import express from "express";
 import { hasEmployeeModelProvider } from "./features.js";
 import { isPublicNetworkHost, safeServiceBase as safeBase } from "./network-safety.js";
-import { safeOutboundFetch, createConfiguredOutboundFetch } from "./safe-outbound-fetch.js";
+import { safeOutboundFetch, fetchConfiguredOutbound } from "./safe-outbound-fetch.js";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
@@ -440,17 +440,7 @@ function classifyToolDispatchRisk(name, args, requestRisk) {
 }
 
 export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundFetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
-  fetchImpl = createConfiguredOutboundFetch({
-    env, fetchImpl,
-    baseUrlEnvNames: [
-      "SUPABASE_URL", "OPENROUTER_BASE_URL", "ULTRON_BROWSER_USE_URL", "VOICESTUDIO_BASE_URL",
-      "COMFYUI_BASE_URL", "HEYGEM_API_BASE_URL", "OMNIVOICE_API_BASE_URL", "ULTRON_HANDY_BRIDGE_URL",
-      "PAPERCLIP_BASE_URL", "CHATWOOT_BASE_URL", "OPENPROJECT_BASE_URL", "CALDIY_BASE_URL",
-      "OPENVIKING_BASE_URL", "OBSCURA_MCP_URL", "CACTUS_BASE_URL", "HERMES_AGENT_BASE_URL",
-      "AGENTMEMORY_URL", "ULTRON_MODEL_GATEWAY_BASE_URL", "OLLAMA_BASE_URL", "TTS_API_BASE_URL", "STT_API_BASE_URL"
-    ],
-    includeModelProviderRegistry: true
-  });
+  const fetchAdapter = (baseUrl, input, init) => fetchConfiguredOutbound(baseUrl, input, init, fetchImpl);
   const router = express.Router();
 
   // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
@@ -590,13 +580,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
     const totalTimeoutSignal = createTimeoutSignal(modelRoutingTimeoutMs(env));
     for (const provider of providers) {
       try {
-        const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
+        const response = await fetchAdapter(provider.baseUrl, provider.baseUrl + "/chat/completions", {
           method: "POST",
           headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
           redirect: "error",
           body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
           signal: AbortSignal.any([createTimeoutSignal(45000), totalTimeoutSignal])
-        });
+        }, fetchImpl);
         if (!response.ok) {
           // This loop attempts each configured provider at most once. Provider-specific
           // auth, quota and model/endpoint errors should fall through to another provider;
@@ -703,13 +693,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
       const base = safeBase(env.ULTRON_BROWSER_USE_URL);
       const token = bounded(env.ULTRON_BROWSER_USE_TOKEN, 500);
       if (!base || !token) return { state: "blocked", execution: "not_started", blocker: "Browser Use bridge is not configured. Deploy the optional Python bridge, then set ULTRON_BROWSER_USE_URL and ULTRON_BROWSER_USE_TOKEN on ULTRON." };
-      const response = await fetchImpl(base + "/run", {
+      const response = await fetchAdapter(base, base + "/run", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json", "X-ULTRON-BROWSER-TOKEN": token },
         body: JSON.stringify({ task, maxSteps: Number.isInteger(args.maxSteps) ? Math.max(1, Math.min(args.maxSteps, 12)) : 8, confirmExternalAction: false }),
         redirect: "error",
         signal: AbortSignal.timeout(110000)
-      });
+      }, fetchImpl);
       let body = {};
       try {
         const raw = await readModelResponseTextLimited(response);
@@ -821,7 +811,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
       const query = bounded(args.query, 500);
       if (query.length < 2) throw Object.assign(new Error("A research query is required."), { code: "INVALID_RESEARCH_QUERY", status: 400 });
       if (env.TAVILY_API_KEY) {
-        const response = await fetchImpl("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: true }), redirect: "error", signal: AbortSignal.timeout(15000) });
+        const response = await fetchImpl("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: env.TAVILY_API_KEY, query, search_depth: "basic", max_results: 5, include_answer: true }), redirect: "error", signal: AbortSignal.timeout(15000) }, fetchImpl);
         if (!response.ok) throw Object.assign(new Error("Research provider failed."), { code: "RESEARCH_PROVIDER_FAILED", status: 502 });
         const data = JSON.parse(await readModelResponseTextLimited(response));
         return { provider: "tavily", query, answer: bounded(data.answer, 3000), results: (Array.isArray(data.results) ? data.results : []).slice(0, 20).map(x => ({ title: bounded(x.title, 300), url: safePublicUrl(x.url), snippet: bounded(x.content, 1000) })).filter(x => x.url).slice(0, 5) };
@@ -902,7 +892,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
       form.append("instruct", bounded(args.instruct, 1000));
       form.append("language", bounded(args.language || "Auto", 40) || "Auto");
       form.append("ref_audio", new Blob([audio], { type: mime }), "voice-reference." + ext);
-      const createResponse = await fetchImpl(voiceStudio.baseUrl + "/profiles", { method: "POST", headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" }, body: form, redirect: "error", signal: AbortSignal.timeout(60000) });
+      const createResponse = await fetchAdapter(voiceStudio.baseUrl, voiceStudio.baseUrl + "/profiles", { method: "POST", headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" }, body: form, redirect: "error", signal: AbortSignal.timeout(60000) }, fetchImpl);
       const createRaw = await readModelResponseTextLimited(createResponse, 1_000_000);
       let profile; try { profile = JSON.parse(createRaw); } catch { profile = {}; }
       if (!createResponse.ok) throw Object.assign(new Error("VoiceStudio could not create the cloned voice profile."), { code: "VOICESTUDIO_PROFILE_CREATE_FAILED", status: createResponse.status === 429 ? 429 : 502 });
@@ -925,7 +915,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
         body: JSON.stringify({ description }),
         redirect: "error",
         signal: AbortSignal.timeout(15000)
-      });
+      }, fetchImpl);
       const describeRaw = await readModelResponseTextLimited(describeResponse, 1_000_000);
       if (!describeResponse.ok) throw Object.assign(new Error("VoiceStudio could not interpret the voice description."), { code: "VOICESTUDIO_DESCRIBE_FAILED", status: describeResponse.status === 429 ? 429 : 502 });
       let design; try { design = JSON.parse(describeRaw); } catch { throw Object.assign(new Error("VoiceStudio returned invalid description JSON."), { code: "VOICESTUDIO_DESCRIBE_INVALID", status: 502 }); }
@@ -942,7 +932,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
         body: form,
         redirect: "error",
         signal: AbortSignal.timeout(45000)
-      });
+      }, fetchImpl);
       const createRaw = await readModelResponseTextLimited(createResponse, 1_000_000);
       let profile; try { profile = JSON.parse(createRaw); } catch { profile = {}; }
       if (!createResponse.ok) throw Object.assign(new Error("VoiceStudio could not save the voice profile."), { code: "VOICESTUDIO_PROFILE_CREATE_FAILED", status: createResponse.status === 429 ? 429 : 502 });
@@ -959,7 +949,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
         body: JSON.stringify({ description }),
         redirect: "error",
         signal: AbortSignal.timeout(15000)
-      });
+      }, fetchImpl);
       const raw = await readModelResponseTextLimited(response, 1_000_000);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice description response exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice description failed."), { code: "VOICESTUDIO_DESCRIBE_FAILED", status: response.status === 429 ? 429 : 502 });
@@ -974,7 +964,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
         headers: { ...(voiceStudio.token ? { Authorization: "Bearer " + voiceStudio.token } : {}), Accept: "application/json" },
         redirect: "error",
         signal: AbortSignal.timeout(15000)
-      });
+      }, fetchImpl);
       const raw = await readModelResponseTextLimited(response, 1_000_000);
       if (raw.length > 1000000) throw Object.assign(new Error("VoiceStudio voice catalog exceeded the size limit."), { code: "VOICESTUDIO_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("VoiceStudio voice listing failed."), { code: "VOICESTUDIO_VOICES_FAILED", status: response.status === 429 ? 429 : 502 });
@@ -993,7 +983,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
           body: JSON.stringify({ model: "tts-1", input: text, voice: bounded(args.voice, 160) || "default", response_format: "wav", ...(bounded(args.language, 40) && args.language !== "auto" ? { instructions: "Speak in " + bounded(args.language, 40) + "." } : {}) }),
           redirect: "error",
           signal: AbortSignal.timeout(120000)
-        });
+        }, fetchImpl);
         if (!response.ok) throw Object.assign(new Error("VoiceStudio speech synthesis failed."), { code: "VOICESTUDIO_SYNTHESIS_FAILED", status: response.status === 429 ? 429 : 502 });
         const audio = await readModelResponseBytesLimited(response, 12 * 1024 * 1024);
         if (!audio.length || audio.byteLength > 12 * 1024 * 1024) throw Object.assign(new Error("VoiceStudio audio was empty or exceeded the 12 MB limit."), { code: "VOICESTUDIO_AUDIO_SIZE_INVALID", status: 502 });
@@ -1003,7 +993,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
       const path = bounded(env.OMNIVOICE_SYNTHESIS_PATH, 200);
       const token = bounded(env.OMNIVOICE_API_KEY, 500);
       if (!base || !path.startsWith("/") || path.startsWith("//") || !token) return { provider: "speech", state: "blocked", blocker: "Configure VoiceStudio (VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY) or OmniVoice (OMNIVOICE_API_BASE_URL, OMNIVOICE_API_KEY, and OMNIVOICE_SYNTHESIS_PATH)." };
-      const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), redirect: "error", signal: AbortSignal.timeout(90000) });
+      const response = await fetchAdapter(base, base + path, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ text, language: bounded(args.language, 40) || undefined, voice: bounded(args.voice, 120) || undefined }), redirect: "error", signal: AbortSignal.timeout(90000) }, fetchImpl);
       const raw = await readModelResponseTextLimited(response);
       if (raw.length > 2000000) throw Object.assign(new Error("Speech provider response exceeded the response limit."), { code: "PROVIDER_RESPONSE_TOO_LARGE", status: 502 });
       if (!response.ok) throw Object.assign(new Error("Speech provider returned HTTP " + response.status), { code: "SPEECH_PROVIDER_FAILED", status: 502 });
@@ -1078,7 +1068,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
         return { provider: "comfyui", state: "needs_input", requiredInputs: ["workflow"], message: "Attach a valid ComfyUI API workflow JSON (under 1.5 MB). ULTRON will inspect the workflow before requesting confirmation." };
       }
       if (requestBody.confirmExternalAction !== true) return { provider: "comfyui", state: "needs_confirmation", message: "Review the exact workflow and expected compute use, then set confirmExternalAction=true to queue this generation job." }
-      const response = await fetchImpl(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), redirect: "error", signal: AbortSignal.timeout(30000) });
+      const response = await fetchAdapter(base, base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json", ...(env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {}) }, body: JSON.stringify({ prompt: workflow }), redirect: "error", signal: AbortSignal.timeout(30000) }, fetchImpl);
       if (!response.ok) throw Object.assign(new Error("ComfyUI returned HTTP " + response.status), { code: "COMFYUI_QUEUE_FAILED", status: 502 });
       const result = JSON.parse(await readModelResponseTextLimited(response));
       if (typeof result.prompt_id !== "string" || !result.prompt_id) throw Object.assign(new Error("ComfyUI returned no prompt ID."), { code: "COMFYUI_INVALID_RESPONSE", status: 502 });
@@ -1089,8 +1079,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safeOutboundF
       if (!base) return { provider: "comfyui", reachable: false, state: "blocked", blocker: "COMFYUI_BASE_URL is not configured." };
       const headers = env.COMFYUI_API_KEY ? { Authorization: "Bearer " + env.COMFYUI_API_KEY } : {};
       const [systemResponse, queueResponse] = await Promise.all([
-        fetchImpl(base + "/system_stats", { headers, redirect: "error", signal: AbortSignal.timeout(10000) }),
-        fetchImpl(base + "/queue", { headers, redirect: "error", signal: AbortSignal.timeout(10000) })
+        fetchAdapter(base, base + "/system_stats", { headers, redirect: "error", signal: AbortSignal.timeout(10000) }, fetchImpl),
+        fetchAdapter(base, base + "/queue", { headers, redirect: "error", signal: AbortSignal.timeout(10000) }, fetchImpl)
       ]);
       if (!systemResponse.ok || !queueResponse.ok) return { provider: "comfyui", reachable: false, state: "unhealthy", status: systemResponse.status || queueResponse.status };
       const [system, queue] = await Promise.all([
