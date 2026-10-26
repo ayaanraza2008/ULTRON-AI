@@ -68,6 +68,113 @@ function makeZipBombDocxEntry({
   return Buffer.concat([local, compressedPayload, central, endRecord]);
 }
 
+
+
+test("vision analysis prefers configured OpenRouter vision models and falls back after a model failure", async () => {
+  const attempts = [];
+  const env = {
+    OPENROUTER_API_KEY: "synthetic-openrouter-key",
+    OPENROUTER_DEFAULT_MODEL: "text-only-default",
+    ULTRON_VISION_MODELS: "openrouter/free,nvidia/nemotron-3.5-super-vl:free"
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/kaligpt/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "openrouter",
+        prompt: "Describe this test image",
+        mimeType: "image/png",
+        imageBase64: Buffer.from("image-fixture").toString("base64")
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provider, "openrouter");
+    assert.equal(body.model, "nvidia/nemotron-3.5-super-vl:free");
+    assert.equal(body.fallbackUsed, true);
+    assert.equal(body.execution, "image_analysis_only");
+  }, {
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, "Bearer synthetic-openrouter-key");
+      assert.equal(options.headers["HTTP-Referer"], "https://ultron-ai-zvd7.onrender.com");
+      const request = JSON.parse(options.body);
+      attempts.push(request.model);
+      assert.equal(request.messages[1].content[1].image_url.url.startsWith("data:image/png;base64,"), true);
+      if (request.model === "openrouter/free") return new Response("model has no image input", { status: 400 });
+      return new Response(JSON.stringify({
+        model: "nvidia/nemotron-3.5-super-vl:free",
+        choices: [{ message: { content: "Vision model recovered." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+  });
+  assert.deepEqual(attempts, ["openrouter/free", "nvidia/nemotron-3.5-super-vl:free"]);
+});
+
+test("explicit OpenRouter vision selection only falls back across its configured vision models", async () => {
+  const attempts = [];
+  const env = {
+    OPENROUTER_API_KEY: "synthetic-openrouter-key",
+    OPENROUTER_DEFAULT_MODEL: "text-only-default",
+    ULTRON_VISION_MODELS: "openrouter/free,nvidia/nemotron-3.5-super-vl:free",
+    OPENAI_API_KEY: "must-not-be-used"
+  };
+  await withServer(env, async base => {
+    const response = await fetch(base + "/api/kaligpt/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "openrouter",
+        prompt: "Describe this test image",
+        mimeType: "image/png",
+        imageBase64: Buffer.from("image-fixture").toString("base64")
+      })
+    });
+    assert.equal(response.status, 502);
+    const body = await response.json();
+    assert.equal(body.error.code, "VISION_PROVIDERS_FAILED");
+    assert.deepEqual(body.attemptedProviders, ["openrouter"]);
+    assert.deepEqual(body.attemptedModels, ["openrouter/free", "nvidia/nemotron-3.5-super-vl:free"]);
+    assert.equal(body.fallbackAttempted, true);
+  }, {
+    fetchImpl: async (url, options) => {
+      attempts.push({ url, model: JSON.parse(options.body).model });
+      if (url === "https://openrouter.ai/api/v1/chat/completions") return new Response("vision model unavailable", { status: 429 });
+      throw new Error("Explicit OpenRouter selection must not use other providers.");
+    }
+  });
+  assert.deepEqual(attempts, [
+    { url: "https://openrouter.ai/api/v1/chat/completions", model: "openrouter/free" },
+    { url: "https://openrouter.ai/api/v1/chat/completions", model: "nvidia/nemotron-3.5-super-vl:free" }
+  ]);
+});
+
+test("vision analysis fails closed when an explicit vision model list contains no valid IDs", async () => {
+  let calls = 0;
+  await withServer({
+    OPENROUTER_API_KEY: "synthetic-openrouter-key",
+    OPENROUTER_DEFAULT_MODEL: "text-only-default",
+    ULTRON_VISION_MODELS: "http://untrusted.example/model,not-a-model, paid/model"
+  }, async base => {
+    const response = await fetch(base + "/api/kaligpt/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Describe this test image",
+        mimeType: "image/png",
+        imageBase64: Buffer.from("image-fixture").toString("base64")
+      })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "VISION_PROVIDER_NOT_CONFIGURED");
+  }, {
+    fetchImpl: async () => { calls += 1; throw new Error("Invalid vision configuration must not trigger an upstream request."); }
+  });
+  assert.equal(calls, 0);
+});
+
 test("capabilities endpoint reports provider readiness without exposing secrets", async () => {
   await withServer({ OPENROUTER_API_KEY: "do-not-return-this", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async base => {
     const response = await fetch(base + "/api/capabilities");
