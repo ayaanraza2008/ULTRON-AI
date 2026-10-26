@@ -182,13 +182,32 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
     });
     created.push(memoryB);
 
+    // Use BLOCKED test tasks so no live worker can pick up or execute them.
+    const taskA = await insertRecord("agent_tasks", userA, {
+      user_id: userA.userId,
+      title: "ULTRON E2E isolation A " + nonce,
+      input: { source: "isolated_e2e", testOnly: true },
+      status: "BLOCKED"
+    });
+    created.push(taskA);
+
+    const taskB = await insertRecord("agent_tasks", userB, {
+      user_id: userB.userId,
+      title: "ULTRON E2E isolation B " + nonce,
+      input: { source: "isolated_e2e", testOnly: true },
+      status: "BLOCKED"
+    });
+    created.push(taskB);
+
     assert.equal((await readRows("conversations", userA, { id: "eq." + conversationA.id })).length, 1);
     assert.equal((await readRows("messages", userA, { id: "eq." + messageA.id })).length, 1);
     assert.equal((await readRows("memory_items", userA, { id: "eq." + memoryA.id })).length, 1);
+    assert.equal((await readRows("agent_tasks", userA, { id: "eq." + taskA.id })).length, 1);
 
     assert.deepEqual(await readRows("conversations", userA, { id: "eq." + conversationB.id }), []);
     assert.deepEqual(await readRows("messages", userA, { id: "eq." + messageB.id }), []);
     assert.deepEqual(await readRows("memory_items", userA, { id: "eq." + memoryB.id }), []);
+    assert.deepEqual(await readRows("agent_tasks", userA, { id: "eq." + taskB.id }), []);
 
     // Anonymous clients must not use the Data API to enumerate user-owned rows.
     for (const table of ["conversations", "messages", "memory_items"]) {
@@ -225,6 +244,10 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
       content: "FORBIDDEN ULTRON E2E change " + nonce
     });
     await assertForeignMutationDenied("memory_items", memoryB.id, "DELETE");
+    await assertForeignMutationDenied("agent_tasks", taskB.id, "PATCH", {
+      title: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("agent_tasks", taskB.id, "DELETE");
 
     // A valid authenticated identity must not be able to create a row owned by B.
     const forged = await request(tableUrl("conversations", { select: "id" }), {
