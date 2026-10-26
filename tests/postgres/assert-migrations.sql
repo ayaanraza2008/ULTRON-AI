@@ -101,3 +101,56 @@ BEGIN
   RAISE NOTICE 'Migration integration assertions passed';
 END;
 $$;
+
+
+-- Exercise actual row-level security and SECURITY INVOKER search as a non-owner.
+INSERT INTO auth.users(id) VALUES ('00000000-0000-4000-8000-000000000002');
+INSERT INTO public.user_documents (
+  user_id, filename, format, source_bytes, character_count, extracted_text, content_sha256
+) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'owner-only.txt', 'txt', 1,
+   char_length('owner unique token'), 'owner unique token', repeat('a', 64)),
+  ('00000000-0000-4000-8000-000000000002', 'other-only.txt', 'txt', 1,
+   char_length('other private token'), 'other private token', repeat('b', 64));
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', false);
+DO $$
+DECLARE
+  visible_count integer;
+  search_count integer;
+  cross_owner_insert_rejected boolean := false;
+BEGIN
+  SELECT count(*) INTO visible_count FROM public.user_documents;
+  IF visible_count <> 1 THEN
+    RAISE EXCEPTION 'RLS expected exactly one owner document, found %', visible_count;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.user_documents
+    WHERE user_id <> auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'RLS exposed another account''s document';
+  END IF;
+
+  SELECT count(*) INTO search_count
+    FROM public.ultron_search_user_documents('owner unique token', 5);
+  IF search_count <> 1 THEN
+    RAISE EXCEPTION 'SECURITY INVOKER search did not return the current owner document';
+  END IF;
+
+  BEGIN
+    INSERT INTO public.user_documents (
+      user_id, filename, format, source_bytes, character_count, extracted_text, content_sha256
+    ) VALUES (
+      '00000000-0000-4000-8000-000000000002', 'forbidden.txt', 'txt', 1,
+      char_length('forbidden data'), 'forbidden data', repeat('c', 64)
+    );
+  EXCEPTION WHEN insufficient_privilege THEN
+    cross_owner_insert_rejected := true;
+  END;
+  IF NOT cross_owner_insert_rejected THEN
+    RAISE EXCEPTION 'RLS allowed inserting a document for another account';
+  END IF;
+END;
+$$;
+RESET ROLE;
