@@ -245,3 +245,10 @@ One tool edit omitted its target branch and briefly created `tests/safe-outbound
 5. Finish persistent document storage, secure sandbox isolation, and real Windows companion action verification in suitable isolated environments.
 6. Reconcile migration history with PR #261 before a separately approved migration operation.
 7. Re-run the strict production-revision verification only after a separately authorized main-branch release; do not treat PR CI as deployed production evidence.
+
+
+## Follow-up source-only reconciliation (2026-10-27)
+
+- The candidate branch aligns the 14 migration filenames represented in the live Supabase migration ledger and removes duplicate version prefixes. tests/supabase-migration-version-uniqueness.test.js checks valid filename syntax, unique prefixes, and that the task-worker attempts DDL begins on a real SQL line; npm run check now syntax-checks that test.
+- Read-only schema inspection confirms public.agent_tasks.attempts and public.ultron_claim_next_task() exist in the live schema, but the separate source file supabase/migrations/202610220001_task_worker.sql has no matching entry in the recorded migration ledger. This remains a migration-history discrepancy; it was not applied or repaired against production. Do not run migrations until that history is reconciled in an isolated database.
+- The earlier synchronous-origin test failure was fixed with assert.throws; CI run [40376384218](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40376384218) passed on commit e8f087ddc70e084cbd68bb4daccecd6862002a19. The migration-renaming/test follow-up is a later commit and must be verified by its own CI run before claiming those checks passed.
