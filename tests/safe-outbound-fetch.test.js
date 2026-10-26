@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { createSafeOutboundFetch, createConfiguredOutboundFetch, isPublicDestinationAddress } from "../safe-outbound-fetch.js";
+import { safeOutboundFetch, createSafeOutboundFetch, createConfiguredOutboundFetch, isPublicDestinationAddress } from "../safe-outbound-fetch.js";
 
 const publicAddress = { address: "93.184.216.34", family: 4 };
 
@@ -309,4 +309,19 @@ test("a private capability survives trusted wrappers without allowing a caller-s
   const result = await outer(url);
   assert.equal(await result.text(), "ok");
   await assert.rejects(safeFetch(url, { ultronAllowLoopbackHttp: true }), { code: "OUTBOUND_SCHEME_BLOCKED" });
+});
+
+
+test("live outbound HTTPS pins a validated public destination and verifies the real TLS host", {
+  skip: process.env.ULTRON_SAFE_OUTBOUND_LIVE_TEST === "YES" ? false : "Set ULTRON_SAFE_OUTBOUND_LIVE_TEST=YES to run the real-network smoke test"
+}, async () => {
+  const result = await safeOutboundFetch("https://www.iana.org/", {
+    method: "GET",
+    redirect: "follow",
+    ultronTimeoutMs: 15_000,
+    ultronMaxResponseBytes: 256 * 1024
+  });
+  assert.equal(result.status, 200);
+  const body = await result.text();
+  assert.match(body, /iana|internet assigned numbers authority/i);
 });
