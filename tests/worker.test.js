@@ -1787,3 +1787,64 @@ test("background AI Employee automatically falls back through configured free Op
   assert.ok(modelCalls.every(call => call.authorization === "Bearer openrouter-worker-fallback-test-key"));
   assert.equal(worker.getStatus().tasksCompleted, 1);
 });
+
+test("worker enforces an overall task deadline, cancels the provider request, and retries safely", async () => {
+  let worker;
+  let claimed = false;
+  let providerAborted = false;
+  let taskPatch;
+  const task = {
+    id: "research-deadline-task",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "research", query: "simulate a provider that never returns" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      TAVILY_API_KEY: "tavily-test",
+      ULTRON_WORKER_TASK_TIMEOUT_MS: "1000",
+      ULTRON_WORKER_POLL_MS: "1000"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) {
+        if (claimed) return new Response("[]", { status: 200 });
+        claimed = true;
+        return new Response(JSON.stringify([task]), { status: 200 });
+      }
+      if (url.includes("api.tavily.com/search")) {
+        return new Promise((resolve, reject) => {
+          const signal = options.signal;
+          const onAbort = () => {
+            providerAborted = true;
+            reject(signal.reason || Object.assign(new Error("Aborted"), { name: "AbortError" }));
+          };
+          if (signal?.aborted) onAbort();
+          else signal?.addEventListener("abort", onAbort, { once: true });
+        });
+      }
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        taskPatch = JSON.parse(options.body);
+        worker.stop();
+        return new Response(JSON.stringify([{ ...task, ...taskPatch }]), { status: 200 });
+      }
+      if (url.includes("/audit_events")) return new Response("[]", { status: 200 });
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+
+  await worker.done;
+  assert.equal(providerAborted, true);
+  assert.equal(taskPatch.status, "QUEUED");
+  assert.equal(taskPatch.error_code, "TASK_EXECUTION_TIMEOUT");
+  assert.equal(taskPatch.result.retry, true);
+  assert.equal(worker.getStatus().tasksTimedOut, 1);
+  assert.equal(worker.getStatus().tasksRetried, 1);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+});
+
