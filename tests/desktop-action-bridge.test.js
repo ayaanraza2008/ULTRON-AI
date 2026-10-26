@@ -210,7 +210,7 @@ test("queued desktop action may be cancelled before the bridge claims it", async
   assert.equal(next.payload.action, null);
 });
 
-test("stale bridge attempts and expired leases cannot acknowledge a newer or expired claim", async t => {
+test("stale bridge attempts and expired leases cannot acknowledge an action", async t => {
   const h = makeHarness();
   t.after(() => h.close());
   await h.request("POST", "/api/desktop/actions", { body: { actionType: "launch_app", payload: { app: "calculator" } } });
@@ -228,12 +228,13 @@ test("stale bridge attempts and expired leases cannot acknowledge a newer or exp
   assert.equal(stale.payload.error.code, "DESKTOP_ACTION_STALE_ATTEMPT");
   assert.equal(row.status, "RUNNING");
 
-  const currentAttemptExpired = await h.request("POST", "/api/desktop/bridge/ack", {
+  row.lease_expires_at = new Date(Date.now() - 1000).toISOString();
+  const expired = await h.request("POST", "/api/desktop/bridge/ack", {
     token: TOKEN,
     body: { actionId: ACTION_ID, attempts: 2, state: "completed", result: { ok: true, summary: "Launched", app: "calculator" } }
   });
-  // The active lease in the mock is still live, so the same attempt is eligible.
-  assert.equal(currentAttemptExpired.status, 200);
-  assert.equal(row.status, "COMPLETED");
+  assert.equal(expired.status, 409);
+  assert.equal(expired.payload.error.code, "DESKTOP_ACTION_LEASE_EXPIRED");
+  assert.equal(row.status, "RUNNING");
 });
 
