@@ -217,3 +217,41 @@ test("safeFetch applies a default network deadline to requests that never receiv
     error => error.code === "OUTBOUND_TIMEOUT"
   );
 });
+
+
+test("safeFetch rejects oversized string bodies before allocating a request buffer", async () => {
+  const fake = fakeRequest();
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    httpsRequest: fake.request,
+    maxRequestBodyBytes: 8
+  });
+  await assert.rejects(
+    fetch("https://api.example.com/oversized-string", { method: "POST", body: "123456789" }),
+    error => error.code === "OUTBOUND_BODY_TOO_LARGE"
+  );
+  assert.equal(fake.seen.calls, 0);
+});
+
+test("safeFetch rejects oversized Blob bodies before materializing their contents", async () => {
+  let materialized = false;
+  class ObservedBlob extends Blob {
+    async arrayBuffer() {
+      materialized = true;
+      return super.arrayBuffer();
+    }
+  }
+  const blob = new ObservedBlob(["123456789"]);
+  const fake = fakeRequest();
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    httpsRequest: fake.request,
+    maxRequestBodyBytes: 8
+  });
+  await assert.rejects(
+    fetch("https://api.example.com/oversized-blob", { method: "POST", body: blob }),
+    error => error.code === "OUTBOUND_BODY_TOO_LARGE"
+  );
+  assert.equal(materialized, false);
+  assert.equal(fake.seen.calls, 0);
+});

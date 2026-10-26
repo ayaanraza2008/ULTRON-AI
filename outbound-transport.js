@@ -141,31 +141,49 @@ function boundedStream(stream, maxBytes = MAX_REQUEST_BODY_BYTES) {
 
 async function encodeBody(body, headers, maxBytes = MAX_REQUEST_BODY_BYTES) {
   if (body === undefined || body === null) return { buffer: null, stream: null };
-  if (typeof body === "string") return boundedBuffer(Buffer.from(body), maxBytes);
+  if (typeof body === "string") {
+    if (Buffer.byteLength(body) > maxBytes) {
+      throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
+    }
+    return boundedBuffer(Buffer.from(body), maxBytes);
+  }
   if (body instanceof URLSearchParams) {
     if (!headers.has("content-type")) headers.set("content-type", "application/x-www-form-urlencoded;charset=UTF-8");
-    return boundedBuffer(Buffer.from(body.toString()), maxBytes);
+    const serialized = body.toString();
+    if (Buffer.byteLength(serialized) > maxBytes) {
+      throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
+    }
+    return boundedBuffer(Buffer.from(serialized), maxBytes);
   }
   if (body instanceof ArrayBuffer) return boundedBuffer(Buffer.from(body), maxBytes);
   if (ArrayBuffer.isView(body)) return boundedBuffer(Buffer.from(body.buffer, body.byteOffset, body.byteLength), maxBytes);
-  if (typeof Blob !== "undefined" && body instanceof Blob) return boundedBuffer(Buffer.from(await body.arrayBuffer()), maxBytes);
+  if (typeof Blob !== "undefined" && body instanceof Blob) {
+    if (Number.isFinite(Number(body.size)) && Number(body.size) > maxBytes) {
+      throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
+    }
+    return boundedBuffer(Buffer.from(await body.arrayBuffer()), maxBytes);
+  }
   if (typeof FormData !== "undefined" && body instanceof FormData) {
     const boundary = "----ultron-" + randomBytes(18).toString("hex");
     headers.set("content-type", "multipart/form-data; boundary=" + boundary);
     const chunks = [];
     let total = 0;
     const add = value => {
-      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
-      total += chunk.byteLength;
-      if (total > maxBytes) {
+      const byteLength = Buffer.isBuffer(value) ? value.byteLength : Buffer.byteLength(value);
+      if (total + byteLength > maxBytes) {
         throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
       }
+      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+      total += chunk.byteLength;
       chunks.push(chunk);
     };
     for (const [name, value] of body.entries()) {
       add("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + escapeQuoted(name) + "\"");
       if (typeof value !== "string" && value && typeof value.arrayBuffer === "function") {
         add("; filename=\"" + escapeQuoted(value.name || "blob") + "\"\r\nContent-Type: " + (value.type || "application/octet-stream") + "\r\n\r\n");
+        if (Number.isFinite(Number(value.size)) && Number(value.size) > maxBytes - total) {
+          throw safeError("Outbound request body exceeded the size limit.", "OUTBOUND_BODY_TOO_LARGE");
+        }
         add(Buffer.from(await value.arrayBuffer()));
       } else {
         add("\r\n\r\n" + String(value));
