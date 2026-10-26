@@ -1238,3 +1238,93 @@ test("browser-use model proxy rejects malformed tool definitions and assistant t
   });
   assert.equal(providerCalls, 0, "malformed tool schemas must not reach the model provider");
 });
+
+
+test("recovery OTP verification creates an HttpOnly session without returning Supabase tokens", async () => {
+  const supabaseEnv = { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
+  let verificationBody;
+  const app = createApp({
+    env: supabaseEnv,
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/verify") {
+        verificationBody = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          access_token: "synthetic-recovery-access",
+          refresh_token: "synthetic-recovery-refresh",
+          expires_in: 3600,
+          user: { id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const invalid = await fetch(base + "/api/auth/recovery/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "operator@example.test", token: "no" })
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).error.code, "INVALID_RECOVERY_CODE");
+    assert.equal(verificationBody, undefined);
+
+    const response = await fetch(base + "/api/auth/recovery/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "operator@example.test", token: "123456" })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(verificationBody.type, "recovery");
+    assert.equal(verificationBody.email, "operator@example.test");
+    assert.equal(verificationBody.token, "123456");
+    assert.match(response.headers.get("set-cookie") || "", /ultron_sb_access=synthetic-recovery-access/);
+    assert.match(response.headers.get("set-cookie") || "", /ultron_sb_refresh=synthetic-recovery-refresh/);
+    const body = await response.json();
+    assert.equal(body.recoveryVerified, true);
+    assert.equal("access_token" in body, false);
+    assert.equal("refresh_token" in body, false);
+  });
+});
+
+test("password update screens the candidate and uses only the signed-in user's access token", async () => {
+  const supabaseEnv = { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
+  const calls = [];
+  const app = createApp({
+    env: supabaseEnv,
+    fetchImpl: async (url, options = {}) => {
+      const method = options.method || "GET";
+      calls.push({ url, method, headers: options.headers || {}, body: options.body ? JSON.parse(options.body) : undefined });
+      if (url === "https://ultron-test.supabase.co/auth/v1/user" && method === "GET") {
+        return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
+        return new Response("", { status: 200, headers: { "Content-Type": "text/plain" } });
+      }
+      if (url === "https://ultron-test.supabase.co/auth/v1/user" && method === "PUT") {
+        return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/auth/password/update", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "ultron_sb_access=synthetic-current-access; ultron_sb_refresh=synthetic-refresh"
+      },
+      body: JSON.stringify({ password: "Strong-Uncompromised-Test-Password-2026!" })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { updated: true, message: "Password updated successfully." });
+    const update = calls.find(call => call.method === "PUT");
+    assert.ok(update);
+    assert.equal(update.headers.Authorization, "Bearer synthetic-current-access");
+    assert.equal(update.headers.apikey, "sb_publishable_test");
+    assert.deepEqual(Object.keys(update.body), ["password"]);
+    assert.equal(update.body.password, "Strong-Uncompromised-Test-Password-2026!");
+    assert.equal(JSON.stringify(calls).includes("synthetic-server-role"), false);
+  });
+});
