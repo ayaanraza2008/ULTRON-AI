@@ -190,6 +190,42 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
     assert.deepEqual(await readRows("messages", userA, { id: "eq." + messageB.id }), []);
     assert.deepEqual(await readRows("memory_items", userA, { id: "eq." + memoryB.id }), []);
 
+    // Anonymous clients must not use the Data API to enumerate user-owned rows.
+    for (const table of ["conversations", "messages", "memory_items"]) {
+      const anonymous = await request(tableUrl(table, { select: "id", limit: "1" }), {
+        apiKey: config.publishableKey
+      });
+      assert.equal(anonymous.response.ok, false, "anonymous access to " + table + " must be denied");
+    }
+
+    // PostgREST/RLS commonly returns an empty representation for mutations that
+    // matched no visible rows. Assert both cross-account updates and deletes have
+    // no effect, rather than requiring one particular HTTP error status.
+    async function assertForeignMutationDenied(table, rowId, method, body) {
+      const result = await request(tableUrl(table, { select: "id", id: "eq." + rowId }), {
+        apiKey: config.publishableKey,
+        accessToken: userA.token,
+        method,
+        ...(body === undefined ? {} : { body }),
+        prefer: "return=representation"
+      });
+      assert.equal(result.response.ok, true, "RLS should safely return zero changed rows for " + method + " " + table);
+      assert.deepEqual(result.payload, [], "user A must not mutate user B's " + table + " row");
+    }
+
+    await assertForeignMutationDenied("conversations", conversationB.id, "PATCH", {
+      title: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("conversations", conversationB.id, "DELETE");
+    await assertForeignMutationDenied("messages", messageB.id, "PATCH", {
+      content: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("messages", messageB.id, "DELETE");
+    await assertForeignMutationDenied("memory_items", memoryB.id, "PATCH", {
+      content: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("memory_items", memoryB.id, "DELETE");
+
     // A valid authenticated identity must not be able to create a row owned by B.
     const forged = await request(tableUrl("conversations", { select: "id" }), {
       apiKey: config.publishableKey,
