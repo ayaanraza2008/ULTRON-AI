@@ -27,7 +27,7 @@ Windows must have an installed compatible English speech-recognition engine and 
 
 The optional approved-action bridge API client resolves and validates every address before connecting and pins its TCP socket to the selected validated destination. DNS answers containing a disallowed IPv4/IPv6 address are rejected as a set. TLS verification and SNI remain tied to the original HTTPS hostname. Redirects and system proxy use are disabled to avoid bypassing the destination policy. An environment that requires an outbound proxy may fail closed.
 
-The Windows Actions workflow compiles the app, executes the offline network-address policy self-test, then publishes a standalone x64 artifact. A passing CI build/test is not proof of a real paired Windows device; action polling must remain opted out until the owner has installed the artifact, confirmed the server-side migration and API revision are available, and explicitly approved a harmless test action.
+The Windows Actions workflow compiles the app, executes the network-address policy self-test plus a bounded local loopback HTTP request through the actual pinned handler, then publishes a standalone x64 artifact. The self-test never contacts a public service. A passing CI build/test is not proof of a real paired Windows device; action polling must remain opted out until the owner has installed the artifact, confirmed the server-side migration and API revision are available, and explicitly approved a harmless test action.
 
 ## Boundaries
 

@@ -15,7 +15,13 @@ namespace Ultron.Companion;
 internal sealed class DesktopActionBridge : IDisposable
 {
     private const int MaxResponseBytes = 64 * 1024;
-    private readonly HttpClient _http = new(new SocketsHttpHandler
+    private readonly HttpClient _http = new(CreatePinnedHandler())
+    {
+        Timeout = TimeSpan.FromSeconds(10)
+    };
+    private bool _disposed;
+
+    private static SocketsHttpHandler CreatePinnedHandler() => new()
     {
         AllowAutoRedirect = false,
         // Avoid an unpinned system proxy path: this client carries the bridge bearer secret.
@@ -23,11 +29,7 @@ internal sealed class DesktopActionBridge : IDisposable
         ConnectTimeout = TimeSpan.FromSeconds(4),
         PooledConnectionLifetime = TimeSpan.FromMinutes(1),
         ConnectCallback = ConnectPinnedAsync
-    })
-    {
-        Timeout = TimeSpan.FromSeconds(10)
     };
-    private bool _disposed;
 
     private static bool IsExplicitLoopbackHost(string host)
     {
@@ -345,7 +347,7 @@ internal sealed class DesktopActionBridge : IDisposable
         return !IPAddress.TryParse(name, out var address) || IsPublicAddress(address);
     }
 
-    internal static int RunNetworkAddressPolicySelfTest()
+    internal static async Task<int> RunNetworkAddressPolicySelfTestAsync()
     {
         var cases = new (string Address, bool Expected)[]
         {
@@ -381,7 +383,67 @@ internal sealed class DesktopActionBridge : IDisposable
             AreAllowedResolvedAddresses("localhost", new[] { privateAddress, publicAddress }) ||
             !AreAllowedResolvedAddresses("localhost", new[] { privateAddress, IPAddress.IPv6Loopback }))
             return 1;
-        return 0;
+
+        // Exercise the actual SocketsHttpHandler ConnectCallback and bounded HTTP
+        // request using a temporary IPv4 loopback listener. No public network is used.
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start(1);
+        try
+        {
+            var endpoint = (IPEndPoint)listener.LocalEndpoint;
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var serverTask = ReplyToLocalProbeAsync(listener, deadline.Token);
+            using var client = new HttpClient(CreatePinnedHandler())
+            {
+                Timeout = TimeSpan.FromSeconds(4)
+            };
+            using var response = await client.GetAsync(
+                $"http://127.0.0.1:{endpoint.Port}/network-policy-self-test",
+                deadline.Token);
+            var body = await response.Content.ReadAsStringAsync(deadline.Token);
+            var serverReplied = await serverTask;
+            return response.IsSuccessStatusCode &&
+                   body == "ULTRON_PINNED_CONNECT_OK" &&
+                   serverReplied ? 0 : 1;
+        }
+        catch
+        {
+            return 1;
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    private static async Task<bool> ReplyToLocalProbeAsync(TcpListener listener, CancellationToken cancellationToken)
+    {
+        using var client = await listener.AcceptTcpClientAsync(cancellationToken);
+        using var stream = client.GetStream();
+        using var received = new MemoryStream();
+        var buffer = new byte[1024];
+        var headerComplete = false;
+
+        while (received.Length < 8192)
+        {
+            var count = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+            if (count == 0) return false;
+            received.Write(buffer, 0, count);
+            if (Encoding.ASCII.GetString(received.ToArray()).Contains("\r\n\r\n", StringComparison.Ordinal))
+            {
+                headerComplete = true;
+                break;
+            }
+        }
+
+        if (!headerComplete) return false;
+        const string body = "ULTRON_PINNED_CONNECT_OK";
+        var response = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
+            Encoding.ASCII.GetByteCount(body) +
+            "\r\nConnection: close\r\n\r\n" + body);
+        await stream.WriteAsync(response.AsMemory(0, response.Length), cancellationToken);
+        return true;
     }
 
     private static bool IsPublicAddress(IPAddress address)

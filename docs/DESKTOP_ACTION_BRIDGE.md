@@ -79,7 +79,7 @@ The companion's API client uses a custom `SocketsHttpHandler.ConnectCallback` ra
 
 Automatic redirects are disabled, the client does not use a system proxy that could bypass its pinning policy, TCP connection timeouts are bounded, and HTTP is permitted only for explicit local loopback development. Corporate environments that require an outbound proxy may therefore fail closed rather than silently fall back to a less controlled route.
 
-The Windows CI workflow runs `--verify-network-policy` after compiling the app. This offline self-test covers public/reserved IPv4 and IPv6 classification plus mixed DNS answer rejection. It proves the deterministic policy checks run on Windows CI; it does **not** prove that this companion has been paired or executed on the user's own Windows device.
+The Windows CI workflow runs `--verify-network-policy` after compiling the app. This self-test covers public/reserved IPv4 and IPv6 classification, mixed DNS answer rejection, and an actual bounded HTTP request through the same pinned handler to a temporary loopback listener. The request never leaves the local machine. It proves the transport callback and deterministic policy checks run on Windows CI; it does **not** prove that this companion has been paired or executed on the user's own Windows device.
 
 ## Important deployment boundary
 

@@ -12,7 +12,7 @@ internal static class Program
     {
         if (args.Any(arg => arg.Equals("--verify-network-policy", StringComparison.OrdinalIgnoreCase)))
         {
-            Environment.ExitCode = DesktopActionBridge.RunNetworkAddressPolicySelfTest();
+            Environment.ExitCode = DesktopActionBridge.RunNetworkAddressPolicySelfTestAsync().GetAwaiter().GetResult();
             return;
         }
 
