@@ -453,11 +453,20 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     const routingBudgetMs = chatProxyRoutingTimeoutMs(env);
     const routingDeadline = Date.now() + routingBudgetMs;
     const totalTimeoutSignal = createTimeoutSignal(routingBudgetMs);
+    const clientAbortController = new AbortController();
+    const markClientDisconnected = () => {
+      if (!res.writableEnded && !clientAbortController.signal.aborted) {
+        clientAbortController.abort(new DOMException("Client disconnected", "AbortError"));
+      }
+    };
+    req.once("aborted", markClientDisconnected);
+    res.once("close", markClientDisconnected);
     const timedOutResponse = () => res.status(504).json({
       error: { message: "Model provider fallback exceeded the overall time budget.", type: "model_routing_timeout" }
     });
     let lastStatus = 502;
     for (let index = 0; index < attempts.length; index += 1) {
+      if (clientAbortController.signal.aborted || res.destroyed) return;
       const remainingMs = routingDeadline - Date.now();
       if (totalTimeoutSignal.aborted || remainingMs <= 0) return timedOutResponse();
       const { provider, model } = attempts[index];
@@ -473,9 +482,10 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           },
           body: JSON.stringify({ ...payload, model, stream: false }),
           redirect: "error",
-          signal: AbortSignal.any([createTimeoutSignal(Math.max(1, Math.min(timeoutMs, remainingMs))), totalTimeoutSignal])
+          signal: AbortSignal.any([createTimeoutSignal(Math.max(1, Math.min(timeoutMs, remainingMs))), totalTimeoutSignal, clientAbortController.signal])
         });
       } catch (error) {
+        if (clientAbortController.signal.aborted || res.destroyed) return;
         if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
         if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
           lastStatus = 502;
@@ -487,6 +497,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       let raw;
       try { raw = await readResponseTextLimited(upstream, 2_000_000); }
       catch {
+        if (clientAbortController.signal.aborted || res.destroyed) return;
         if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
         return res.status(502).json({ error: { message: "Model provider response exceeded the size limit or was not safely streamable", type: "provider_response_too_large" } });
       }
@@ -525,6 +536,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
       if (!fallbackEligible || index + 1 >= attempts.length) break;
     }
+    if (clientAbortController.signal.aborted || res.destroyed) return;
     if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
     return res.status(lastStatus === 429 ? 429 : 502).json({
       error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" }
