@@ -255,3 +255,12 @@ test("action requests disclose missing bridge configuration without exposing sec
   assert.equal(listed.payload.bridgeConfigured, false);
 });
 
+test("bridge refuses a configured token that contains whitespace", async t => {
+  const malformedToken = "this synthetic bridge token contains whitespace";
+  const h = makeHarness({ env: { ULTRON_INTEGRATION_OWNER_USER_ID: OWNER, ULTRON_DESKTOP_BRIDGE_TOKEN: malformedToken } });
+  t.after(() => h.close());
+  const result = await h.request("POST", "/api/desktop/bridge/next", { token: malformedToken, body: {} });
+  assert.equal(result.status, 503);
+  assert.equal(result.payload.error.code, "DESKTOP_BRIDGE_NOT_CONFIGURED");
+});
+
