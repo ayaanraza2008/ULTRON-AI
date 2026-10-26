@@ -255,3 +255,31 @@ test("safeFetch rejects oversized Blob bodies before materializing their content
   assert.equal(materialized, false);
   assert.equal(fake.seen.calls, 0);
 });
+
+
+test("safeFetch propagates caller cancellation through a composed AbortController", async () => {
+  const controller = new AbortController();
+  let transportStarted = false;
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    timeoutMs: 5000,
+    httpsRequest: (_url, options) => {
+      transportStarted = true;
+      const req = new EventEmitter();
+      req.end = () => {};
+      req.destroy = error => {
+        if (error) queueMicrotask(() => req.emit("error", error));
+        return req;
+      };
+      options.signal.addEventListener("abort", () => {
+        req.emit("error", options.signal.reason || Object.assign(new Error("Aborted"), { code: "ABORT_ERR" }));
+      }, { once: true });
+      return req;
+    }
+  });
+  const pending = fetch("https://api.example.com/cancel-me", { signal: controller.signal });
+  await new Promise(resolve => setImmediate(resolve));
+  controller.abort(Object.assign(new Error("Caller aborted"), { code: "CALLER_CANCELLED" }));
+  await assert.rejects(pending, error => error.code === "CALLER_CANCELLED");
+  assert.equal(transportStarted, true);
+});

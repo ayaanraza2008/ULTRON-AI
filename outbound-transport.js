@@ -322,19 +322,35 @@ export function createSafeFetch({
       throw requestInit.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
     }
 
-    const timeoutController = new AbortController();
-    const timeoutTimer = setTimeout(() => {
-      timeoutController.abort(safeError("Outbound request timed out.", "OUTBOUND_TIMEOUT"));
-    }, requestTimeoutMs);
+    // Avoid AbortSignal.any so the declared Node >=20 engine also covers early Node 20 releases.
+    const signalController = new AbortController();
+    const callerSignal = requestInit.signal;
+    let timeoutTimer;
     let timeoutCleaned = false;
+    const abortFromCaller = () => {
+      if (!signalController.signal.aborted) {
+        signalController.abort(callerSignal?.reason || safeError("Outbound request was aborted.", "ABORT_ERR"));
+      }
+    };
     const cleanupTimeout = () => {
       if (timeoutCleaned) return;
       timeoutCleaned = true;
       clearTimeout(timeoutTimer);
+      callerSignal?.removeEventListener("abort", abortFromCaller);
     };
-    const signal = requestInit.signal
-      ? AbortSignal.any([requestInit.signal, timeoutController.signal])
-      : timeoutController.signal;
+    callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+    timeoutTimer = setTimeout(() => {
+      if (!signalController.signal.aborted) {
+        signalController.abort(safeError("Outbound request timed out.", "OUTBOUND_TIMEOUT"));
+      }
+    }, requestTimeoutMs);
+    if (callerSignal?.aborted) abortFromCaller();
+    if (signalController.signal.aborted) {
+      cleanupTimeout();
+      if (encoded.stream && !encoded.stream.destroyed) encoded.stream.destroy();
+      throw signalController.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
+    }
+    const signal = signalController.signal;
 
     const outboundHeaders = {};
     for (const [key, value] of headers) outboundHeaders[key] = value;
