@@ -2,8 +2,8 @@
 **Snapshot date:** 2026-10-26  
 **Repository:** `ayaanraza2008/ULTRON-AI`  
 **Candidate branch:** `ultron/source-ci-split-20261026`  
-**Tested candidate commit:** `e86f83e613d549126b156c0e1ba359f2cc66b1d2`  
-**CI evidence:** [Run 40370142088](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40370142088) — succeeded.
+**Verified application-source commit:** `9e8820cc80637c89b1e1227b7076ea7b0da68720` (the subsequent audit refresh is documentation-only)  
+**CI evidence:** [Run 40371051698](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40371051698) — succeeded.
 
 ## Scope and scoring rules
 
@@ -32,7 +32,7 @@ Calculation: (35.5 / 54 \times 100 = 65.7407\ldots\), rounded to **65.7%**. This
 
 - Candidate PR: [#279 — Harden worker smoke verification and separate source CI](https://github.com/ayaanraza2008/ULTRON-AI/pull/279). It is **open and unmerged**. Do not treat the branch changes as present on `main`.
 - Tested SHA: `e86f83e613d549126b156c0e1ba359f2cc66b1d2`.
-- Candidate workflow [40370142088](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40370142088) concluded **success**. The test job passed the Python browser-policy/syntax checks, dependency audit (`npm audit --omit=dev --audit-level=high`), `npm run check`, and `npm test`. The Node test summary was **524 total, 523 passed, 0 failed, 1 skipped**. The pinned God’s Eye/world-intelligence build and bridge injection validation also passed. Production revision verification was intentionally skipped on the pull-request event.
+- Candidate workflow [40371051698](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40371051698) on application-source commit `9e8820cc80637c89b1e1227b7076ea7b0da68720` concluded **success**. The test job passed the Python browser-policy/syntax checks, dependency audit (`npm audit --omit=dev --audit-level=high`), `npm run check`, and `npm test`. The Node test summary was **524 total, 523 passed, 0 failed, 1 skipped**. The pinned God’s Eye/world-intelligence build and bridge injection validation also passed. Production revision verification was intentionally skipped on the pull-request event.
 - New `safe-outbound-fetch.js` implements DNS A/AAAA resolution, rejection of non-public and mixed DNS answers, exact validated-address pinning at the connection boundary, original-host TLS verification, redirect-by-redirect validation, connection-pool avoidance, URL/port validation, request and response caps, deadline/cancellation handling, and safe cross-origin header stripping. Explicit local HTTP is opt-in only for exact loopback origins found in owner-configured service settings.
 - Added `tests/safe-outbound-fetch.test.js` for private/reserved/mapped addresses, mixed DNS results, pinned destination despite subsequent rebind answers, unsafe redirects, re-resolving allowed redirects, credential stripping, multipart requests, response-size limits, malformed escapes, oversized requests, cancellation, unsupported compressed responses and narrowly configured loopback exceptions.
 - Runtime defaults were switched to the safe transport in `server.js`, `agent-runtime.js`, `worker.js`, the provider/worker/auth smoke scripts and the existing network-backed integration adapters. The Python Browser Use bridge separately pins validated public destinations through Chromium resolver rules and passed its policy tests. These are deterministic/source-CI findings; no live arbitrary URL or provider request was used to claim SSRF protection.
@@ -102,13 +102,13 @@ The live database history shows 14 recorded migrations. Source migration naming/
 
 ## Change record
 
-The changes for this pass are on the review branch `ultron/source-ci-split-20261026` in PR #279. The main implementation changes add the shared outbound transport and tests, wire it into core API/orchestration/worker/smoke/integration request paths, correct provider-smoke syntax, and update package preflight checks. PR #279 is **not merged**. No frontend files were changed on that review branch; no database migration was applied; no production Supabase Auth setting or Render setting was modified by the intended source work. The candidate CI run’s production verification job was skipped as designed.
+The changes for this pass are on the review branch `ultron/source-ci-split-20261026` in PR #279. The verified application-source commit is `9e8820cc80637c89b1e1227b7076ea7b0da68720`; the report refresh that follows is documentation-only. Main implementation changes add the shared outbound transport and tests, wire it into core API/orchestration/worker/feature/smoke/integration request paths, correct provider-smoke syntax, and update package preflight checks. PR #279 is **not merged**. No frontend files were changed on that review branch; no database migration was applied; no production Supabase Auth setting or Render setting was modified by the intended source work. The candidate CI run’s production verification job was skipped as designed.
 
 ### Source file changes in this pass
 
 - `safe-outbound-fetch.js` — DNS-pinned, bounded outbound transport.
 - `tests/safe-outbound-fetch.test.js` — regression tests for URL validation, IP scope, DNS pinning/rebinding, redirects, credential stripping, bounds, cancellation, and configured loopback.
-- `server.js`, `agent-runtime.js`, `worker.js` — safe transport defaults and configured loopback-origin policy.
+- `server.js`, `agent-runtime.js`, `worker.js`, `features.js` — safe transport defaults and configured loopback-origin policy.
 - `scripts/model-provider-smoke.mjs`, `scripts/worker-smoke.mjs`, `scripts/supabase-auth-diagnostics.mjs` — safe transport in explicit diagnostics.
 - `integrations/productivity-services.js`, `integrations/obscura-mcp.js`, `integrations/cactus.js`, `integrations/paperclip-services.js`, `integrations/hermes-agent.js`, `integrations/desktop-companion.js`, `integrations/voicestudio.js`, `agentmemory-integration.js`, `integrations/router.js`, `integrations/openviking.js` — safe transport defaults.
 - `package.json` — include transport/test syntax checks.
