@@ -16,3 +16,10 @@ STABLE
 AS $$ SELECT NULLIF(pg_catalog.current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+CREATE OR REPLACE FUNCTION auth.role()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$ SELECT NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), '')::text $$;
+GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
+
