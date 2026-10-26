@@ -8,7 +8,7 @@ async function withServer(env, run, extras = {}) {
   const app = express();
   app.use(express.json());
   const requireSession = (_req, _res, next) => next();
-  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" }; next(); };
+  const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: extras.userId || "00000000-0000-4000-8000-000000000001" }; next(); };
   const supabaseRest = extras.supabaseRest || (async () => []);
   app.use("/api", createFeatureRouter({
     env, requireSession, requireSupabaseUser, supabaseRest,
@@ -1120,3 +1120,141 @@ test("configured Ollama chat rejects upstream redirects before sending prompt co
     return new Response(JSON.stringify({ model: "tiny-test-model", message: { content: "Local response ready." } }), { status: 200, headers: { "content-type": "application/json" } });
   } });
 });
+
+const DOCUMENT_OWNER = "00000000-0000-4000-8000-000000000001";
+const OTHER_DOCUMENT_OWNER = "00000000-0000-4000-8000-000000000002";
+const SAVED_DOCUMENT_ID = "00000000-0000-4000-8000-000000000101";
+
+function makeSavedDocumentDatabase(initialRows = []) {
+  const rows = new Map(initialRows.map(row => [row.id, structuredClone(row)]));
+  let nextId = 102;
+  const calls = [];
+  const supabaseRest = async (req, table, method, query = "", body) => {
+    calls.push({ table, method, query, body: body ? structuredClone(body) : null, userId: req.supabaseUser?.id });
+    const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+    if (table === "rpc/ultron_search_user_documents" && method === "POST") {
+      const queryText = String(body?.p_query || "").toLowerCase();
+      const owned = [...rows.values()].filter(row => row.user_id === req.supabaseUser?.id);
+      const found = owned.filter(row => (row.filename + " " + row.extracted_text).toLowerCase().includes(queryText));
+      return found.slice(0, body.p_limit).map(row => ({
+        id: row.id, filename: row.filename, format: row.format, character_count: row.character_count,
+        excerpt: row.extracted_text.slice(0, 500), created_at: row.created_at, rank: 0.5
+      }));
+    }
+    if (table !== "user_documents") throw new Error("Unexpected document DB table: " + table);
+    if (method === "POST") {
+      if (body.user_id !== req.supabaseUser?.id) throw Object.assign(new Error("RLS denied"), { status: 403 });
+      const now = new Date().toISOString();
+      const id = nextId === 102 ? SAVED_DOCUMENT_ID : "00000000-0000-4000-8000-" + String(nextId).padStart(12, "0");
+      nextId += 1;
+      const row = { id, ...structuredClone(body), created_at: now, updated_at: now };
+      rows.set(id, row);
+      return [structuredClone(row)];
+    }
+    const idFilter = params.get("id") || "";
+    const userFilter = params.get("user_id") || "";
+    let selected = [...rows.values()].filter(row =>
+      row.user_id === req.supabaseUser?.id &&
+      (!idFilter.startsWith("eq.") || row.id === idFilter.slice(3)) &&
+      (!userFilter.startsWith("eq.") || row.user_id === userFilter.slice(3))
+    );
+    if (method === "GET") {
+      if (params.get("order") === "created_at.desc") selected.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      if (params.get("limit")) selected = selected.slice(0, Number(params.get("limit")));
+      if (!String(params.get("select") || "").includes("extracted_text")) {
+        return selected.map(({ extracted_text, ...metadata }) => structuredClone(metadata));
+      }
+      return selected.map(row => structuredClone(row));
+    }
+    if (method === "DELETE") {
+      for (const row of selected) rows.delete(row.id);
+      return [];
+    }
+    throw new Error("Unexpected document DB method: " + method);
+  };
+  return { rows, calls, supabaseRest };
+}
+
+test("saved document library persists only extracted text and supports list/search/read/delete", async () => {
+  const db = makeSavedDocumentDatabase();
+  await withServer({}, async base => {
+    const save = await fetch(base + "/api/documents", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: "C:\\private\\semester-notes.md", format: "md",
+        sourceBytes: 42, extractedText: "Quantum physics: particle in a one-dimensional box."
+      })
+    });
+    assert.equal(save.status, 201);
+    const saved = await save.json();
+    assert.equal(saved.document.id, SAVED_DOCUMENT_ID);
+    assert.equal(saved.document.filename, "semester-notes.md");
+    assert.equal(saved.document.format, "md");
+    assert.equal(saved.document.character_count, "Quantum physics: particle in a one-dimensional box.".length);
+    assert.match(saved.document.content_sha256, /^[0-9a-f]{64}$/);
+    assert.equal(Object.hasOwn(saved.document, "extracted_text"), false);
+    assert.match(saved.notice, /original source file is not stored/i);
+
+    const list = await fetch(base + "/api/documents");
+    assert.equal(list.status, 200);
+    const listed = await list.json();
+    assert.equal(listed.documents.length, 1);
+    assert.equal(listed.documents[0].id, SAVED_DOCUMENT_ID);
+    assert.equal(Object.hasOwn(listed.documents[0], "extracted_text"), false);
+
+    const search = await fetch(base + "/api/documents/search?q=quantum%20physics&limit=5");
+    assert.equal(search.status, 200);
+    const found = await search.json();
+    assert.equal(found.results.length, 1);
+    assert.equal(found.results[0].id, SAVED_DOCUMENT_ID);
+    assert.match(found.notice, /untrusted input/i);
+
+    const read = await fetch(base + "/api/documents/" + SAVED_DOCUMENT_ID);
+    assert.equal(read.status, 200);
+    assert.match((await read.json()).document.extracted_text, /one-dimensional box/i);
+
+    const deleted = await fetch(base + "/api/documents/" + SAVED_DOCUMENT_ID, { method: "DELETE" });
+    assert.equal(deleted.status, 204);
+    assert.equal(db.rows.size, 0);
+  }, { supabaseRest: db.supabaseRest });
+});
+
+test("saved document library enforces text, size, format, and search bounds", async () => {
+  const db = makeSavedDocumentDatabase();
+  await withServer({}, async base => {
+    const oversize = await fetch(base + "/api/documents", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: "huge.txt", format: "txt", extractedText: "x".repeat(100001), sourceBytes: 100001 })
+    });
+    assert.equal(oversize.status, 413);
+    assert.equal((await oversize.json()).error.code, "DOCUMENT_TEXT_TOO_LARGE");
+    const unsupported = await fetch(base + "/api/documents", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: "x.exe", format: "exe", extractedText: "data", sourceBytes: 4 })
+    });
+    assert.equal(unsupported.status, 415);
+    const emptyQuery = await fetch(base + "/api/documents/search?q=x");
+    assert.equal(emptyQuery.status, 400);
+    const tooMany = await fetch(base + "/api/documents/search?q=notes&limit=11");
+    assert.equal(tooMany.status, 400);
+    assert.equal(db.rows.size, 0);
+    assert.equal(db.calls.filter(call => call.method === "POST").length, 0);
+  }, { supabaseRest: db.supabaseRest });
+});
+
+test("saved-document API does not read or delete another account's document", async () => {
+  const ownerRow = {
+    id: SAVED_DOCUMENT_ID, user_id: DOCUMENT_OWNER, filename: "private.md", format: "md",
+    source_bytes: 10, character_count: 6, extracted_text: "secret", content_sha256: "a".repeat(64),
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  };
+  const db = makeSavedDocumentDatabase([ownerRow]);
+  await withServer({}, async base => {
+    const read = await fetch(base + "/api/documents/" + SAVED_DOCUMENT_ID);
+    assert.equal(read.status, 404);
+    const deleted = await fetch(base + "/api/documents/" + SAVED_DOCUMENT_ID, { method: "DELETE" });
+    assert.equal(deleted.status, 204);
+    assert.equal(db.rows.has(SAVED_DOCUMENT_ID), true);
+  }, { supabaseRest: db.supabaseRest, userId: OTHER_DOCUMENT_OWNER });
+});
+
