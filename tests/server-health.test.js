@@ -186,7 +186,7 @@ test("Browser Use proxy retries free model candidates and keeps image requests o
     calls.length = 0;
     response = await request([{ role: "user", content: [
       { type: "text", text: "Describe the image" },
-      { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } }
+      { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } }
     ] }]);
     assert.equal(response.status, 200);
     assert.deepEqual(calls.map(call => call.model), ["openrouter/free", "nvidia/nemotron-3.5-super-vl:free"]);
