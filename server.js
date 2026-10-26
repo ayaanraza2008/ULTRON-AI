@@ -461,7 +461,7 @@ export function createApp({ fetchImpl = safeOutboundFetch, env = process.env, lo
           body: JSON.stringify({ ...payload, model, stream: false }),
           redirect: "error",
           signal: AbortSignal.timeout(timeoutMs)
-        });
+        }, fetchImpl);
       } catch (error) {
         if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
           lastStatus = 502;
