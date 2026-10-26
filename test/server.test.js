@@ -1137,3 +1137,51 @@ test("browser-use model proxy accepts supported text, image, and assistant tool-
   });
   assert.equal(providerCalls, 1);
 });
+
+
+test("browser-use model proxy rejects private, insecure and non-image URLs before provider calls", async () => {
+  let providerCalls = 0;
+  const app = createApp({
+    env: {
+      NODE_ENV: "test",
+      ULTRON_BROWSER_USE_TOKEN: "test-browser-bridge-token",
+      OPENROUTER_API_KEY: "test-provider-key",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+      ULTRON_VISION_MODELS: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    fetchImpl: async () => {
+      providerCalls += 1;
+      return new Response(JSON.stringify({ choices: [{ message: { content: "should not execute" } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  });
+  await withServer(app, async base => {
+    for (const url of [
+      "http://example.com/image.png",
+      "https://127.0.0.1/private.png",
+      "https://169.254.169.254/latest/meta-data",
+      "https://localhost/image.png",
+      "https://user:password@example.com/image.png",
+      "data:text/html;base64,SGVsbG8=",
+      "data:image/png;base64,not-valid-base64!"
+    ]) {
+      const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer test-browser-bridge-token",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "openrouter/free",
+          messages: [{ role: "user", content: [{ type: "text", text: "Describe this image." }, { type: "image_url", image_url: { url } }] }]
+        })
+      });
+      assert.equal(response.status, 400, url);
+      assert.equal((await response.json()).error.type, "invalid_request_error", url);
+    }
+  });
+  assert.equal(providerCalls, 0, "unsafe image URLs must be rejected before credentials are sent upstream");
+});
