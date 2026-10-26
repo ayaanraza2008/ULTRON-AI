@@ -126,7 +126,7 @@ The report includes only pass/fail status, provider/model labels, attempt count,
 
 ## Explicit live worker smoke check
 
-The command below creates one uniquely labeled AI Employee **plan-only** task in the configured Supabase project, polls it for a terminal state, then deletes it (or cancels it first only if it remains queued after timeout). It does not send messages, publish, execute commands, change production settings, or return the stored task result.
+The command below creates one uniquely labeled AI Employee **plan-only** task in the configured Supabase project and polls it for a terminal state, then deletes it. On timeout, it conditionally cancels the task only while it is still `QUEUED` or `RUNNING`; the row is deleted only after cancellation is confirmed. If a competing state transition wins the race, it preserves the row for inspection and reports a cleanup warning. It does not send messages, publish, execute commands, change production settings, or return the stored task result.
 
 Run only in a trusted environment with the real Supabase service-role key and a valid existing test-user UUID:
 

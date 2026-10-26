@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { safeServiceBase } from "../network-safety.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED", "BLOCKED", "WAITING_FOR_PERMISSION"]);
@@ -11,10 +12,11 @@ function safeCode(value, fallback = "WORKER_SMOKE_FAILED") {
 }
 
 function validSupabaseUrl(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
+  const safeBase = safeServiceBase(value);
+  if (!safeBase) return null;
   try {
-    const url = new URL(value.trim());
-    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) return null;
+    const url = new URL(safeBase);
+    if (url.pathname !== "/" && url.pathname !== "") return null;
     return url.origin;
   } catch {
     return null;
@@ -201,18 +203,21 @@ export async function runWorkerSmoke({
     await sleepImpl(Math.max(1, Math.min(5000, Number(pollIntervalMs) || 5000)));
   }
 
-  // If the worker never claimed the task, cancel only while it is still QUEUED.
-  // A concurrently running task is deliberately left intact to avoid a state race.
+  // A timed-out smoke task can still be running. Cancel it with a conditional
+  // state transition so the worker's own conditional completion write cannot
+  // overwrite cancellation. If completion wins the race, do not delete that row.
+  const cancellableState = ["QUEUED", "RUNNING"].includes(observedState) ? observedState : "";
   let cleanupState = "manual_cleanup_needed";
-  if (observedState === "QUEUED") {
+  if (cancellableState) {
     try {
-      const cancelled = await requestJson(fetchImpl, baseUrl + "/rest/v1/agent_tasks?id=eq." + taskId + "&status=eq.QUEUED", headers, {
+      const cancelled = await requestJson(fetchImpl, baseUrl + "/rest/v1/agent_tasks?id=eq." + taskId + "&status=eq." + cancellableState, headers, {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
         body: JSON.stringify({ status: "CANCELLED", error_code: "SMOKE_TIMEOUT", finished_at: now(), updated_at: now() })
       });
       const updated = Array.isArray(cancelled) ? cancelled[0] : null;
       if (updated?.status === "CANCELLED") cleanupState = await cleanup();
+      else cleanupState = "state_changed_manual_cleanup_needed";
     } catch {
       cleanupState = "manual_cleanup_needed";
     }
