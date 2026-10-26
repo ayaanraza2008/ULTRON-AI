@@ -349,7 +349,13 @@ function cactusCompletionStream(completion) {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
-export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
+export function chatProxyRoutingTimeoutMs(env = process.env) {
+  const configured = Number(env.ULTRON_CHAT_TOTAL_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) return 90_000;
+  return Math.max(15_000, Math.min(120_000, Math.trunc(configured)));
+}
+
+export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console, createTimeoutSignal = ms => AbortSignal.timeout(ms) } = {}) {
   const app = express();
   app.locals.workerRuntime = () => ({
     state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "configured_not_started" : "disabled_by_config",
@@ -444,8 +450,16 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
     }
 
     const timeoutMs = Math.max(5000, Math.min(120000, Number(env.OPENROUTER_TIMEOUT_SECONDS || 60) * 1000));
+    const routingBudgetMs = chatProxyRoutingTimeoutMs(env);
+    const routingDeadline = Date.now() + routingBudgetMs;
+    const totalTimeoutSignal = createTimeoutSignal(routingBudgetMs);
+    const timedOutResponse = () => res.status(504).json({
+      error: { message: "Model provider fallback exceeded the overall time budget.", type: "model_routing_timeout" }
+    });
     let lastStatus = 502;
     for (let index = 0; index < attempts.length; index += 1) {
+      const remainingMs = routingDeadline - Date.now();
+      if (totalTimeoutSignal.aborted || remainingMs <= 0) return timedOutResponse();
       const { provider, model } = attempts[index];
       let upstream;
       try {
@@ -459,9 +473,10 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
           },
           body: JSON.stringify({ ...payload, model, stream: false }),
           redirect: "error",
-          signal: AbortSignal.timeout(timeoutMs)
+          signal: AbortSignal.any([createTimeoutSignal(Math.max(1, Math.min(timeoutMs, remainingMs))), totalTimeoutSignal])
         });
       } catch (error) {
+        if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
         if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
           lastStatus = 502;
           if (index + 1 < attempts.length) continue;
@@ -472,6 +487,7 @@ export function createApp({ fetchImpl = globalThis.fetch, env = process.env, log
       let raw;
       try { raw = await readResponseTextLimited(upstream, 2_000_000); }
       catch {
+        if (totalTimeoutSignal.aborted || Date.now() >= routingDeadline) return timedOutResponse();
         return res.status(502).json({ error: { message: "Model provider response exceeded the size limit or was not safely streamable", type: "provider_response_too_large" } });
       }
       if (upstream.ok) {
