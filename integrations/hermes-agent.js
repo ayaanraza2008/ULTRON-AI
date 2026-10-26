@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import { safeServiceBase } from "../network-safety.js";
+import { safeOutboundFetch } from "../safe-outbound-fetch.js";
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_PROMPT_CHARS = 12_000;
@@ -161,7 +162,7 @@ export function resolveHermesAgentProvider(env = process.env, userId) {
   };
 }
 
-export async function checkHermesAgentService({ env = process.env, fetchImpl = globalThis.fetch, userId } = {}) {
+export async function checkHermesAgentService({ env = process.env, fetchImpl = safeOutboundFetch, userId } = {}) {
   const config = getConfig(env, userId, true);
   if (config.error) return config.error;
   const headers = { Accept: "application/json", Authorization: "Bearer " + config.token };
@@ -211,7 +212,7 @@ export async function checkHermesAgentService({ env = process.env, fetchImpl = g
   };
 }
 
-export async function runHermesAgentTask({ env = process.env, fetchImpl = globalThis.fetch, userId, task, conversationId } = {}) {
+export async function runHermesAgentTask({ env = process.env, fetchImpl = safeOutboundFetch, userId, task, conversationId } = {}) {
   const config = getConfig(env, userId, true);
   if (config.error) return config.error;
   if (typeof task !== "string" || !task.trim() || task.trim().length > config.maxPromptChars) {
