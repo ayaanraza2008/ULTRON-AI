@@ -7,7 +7,7 @@
 
 ## Scope and scoring rules
 
-This matrix evaluates the existing backend and its reproducible verification evidence. Frontend implementation, production deployment, and changes to production infrastructure are excluded. No production deployment was initiated by this audit, no production Supabase Auth setting was changed, and no database migration was applied.
+This matrix evaluates the existing backend and its reproducible verification evidence. Frontend implementation, production deployment, and production-infrastructure changes are excluded. No manual production deployment was triggered. A test-only file was briefly committed and then removed from `main`; because automatic deploy-on-commit is configured, an automated platform action may have been evaluated, but no successful deployment was observed. No production Supabase Auth setting was changed and no database migration was applied.
 
 Use a fixed denominator of **54 acceptance clusters**: nine implementation/verification categories with six criteria each. Each criterion scores **1.0** only when the stated acceptance evidence is available; **0.5** when implemented or tested but only partially verified; and **0.0** when blocked, failed, absent, or unsupported. Mocks prove deterministic code paths only, never live external functionality. The tenth dashboard line, Overall In-Scope Verification, is the aggregate of the first nine categories and is **not an extra scored category**, avoiding double-counting.
 
