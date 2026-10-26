@@ -12,7 +12,7 @@ CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid
 LANGUAGE sql
 STABLE
-AS $$ SELECT NULL::uuid $$;
+AS $ SELECT NULLIF(pg_catalog.current_setting('request.jwt.claim.sub', true), '')::uuid $;
 
 CREATE TABLE public.audit_events (
   id bigserial PRIMARY KEY,
