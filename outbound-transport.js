@@ -130,6 +130,10 @@ function boundedStream(stream, maxBytes = MAX_REQUEST_BODY_BYTES) {
     }
   });
   stream.once("error", error => limiter.destroy(error));
+  limiter.once("error", () => {
+    // Stop upstream production immediately when the byte cap rejects a chunk.
+    if (!stream.destroyed) stream.destroy();
+  });
   return stream.pipe(limiter);
 }
 
@@ -291,6 +295,9 @@ export function createSafeFetch({
       req.once("error", fail);
       if (encoded.stream) {
         encoded.stream.once("error", error => req.destroy(error));
+        req.once("close", () => {
+          if (!encoded.stream.destroyed) encoded.stream.destroy();
+        });
         encoded.stream.pipe(req);
       } else if (encoded.buffer) {
         req.end(encoded.buffer);
