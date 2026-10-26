@@ -14,6 +14,7 @@ test("saved-document table is owner-scoped and stores extracted text with strict
   assert.match(migration, /using \(user_id = \(select auth\.uid\(\)\)\)/i);
   assert.match(migration, /with check \(user_id = \(select auth\.uid\(\)\)\)/i);
   assert.match(migration, /revoke all on table public\.user_documents from public, anon/i);
+  assert.match(migration, /revoke update on table public\.user_documents from authenticated/i);
   assert.match(migration, /grant select, insert, delete on table public\.user_documents to authenticated/i);
 });
 
