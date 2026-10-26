@@ -173,9 +173,17 @@ test("explicit loopback HTTP is limited to local adapters and remains response-s
   t.after(() => server.close());
   const address = server.address();
   const safeFetch = createSafeOutboundFetch({ maxResponseBytes: 5 });
-  const responseResult = await safeFetch("http://127.0.0.1:" + address.port + "/", {
-    ultronAllowLoopbackHttp: true
+  const url = "http://127.0.0.1:" + address.port + "/";
+  await assert.rejects(
+    safeFetch(url, { ultronAllowLoopbackHttp: true }),
+    { code: "OUTBOUND_SCHEME_BLOCKED" }
+  );
+  const configuredFetch = createConfiguredOutboundFetch({
+    env: { LOCAL_BRIDGE_URL: url },
+    baseUrlEnvNames: ["LOCAL_BRIDGE_URL"],
+    fetchImpl: safeFetch
   });
+  const responseResult = await configuredFetch(url);
   await assert.rejects(responseResult.text(), error => error.code === "OUTBOUND_RESPONSE_TOO_LARGE");
 });
 
@@ -278,4 +286,27 @@ test("upstream compressed responses are rejected instead of bypassing response b
     requestImpl: async () => response("not really gzip", 200, { "content-encoding": "gzip" })
   });
   await assert.rejects(safeFetch("https://public.ultron-public.com.com/", { redirect: "error" }), { code: "OUTBOUND_COMPRESSION_UNSUPPORTED" });
+});
+
+
+test("a private capability survives trusted wrappers without allowing a caller-set boolean", async t => {
+  const server = createServer((_req, res) => res.end("ok"));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => server.close());
+  const url = "http://127.0.0.1:" + server.address().port + "/";
+  const safeFetch = createSafeOutboundFetch();
+  const inner = createConfiguredOutboundFetch({
+    env: { OLLAMA_BASE_URL: url },
+    baseUrlEnvNames: ["OLLAMA_BASE_URL"],
+    fetchImpl: safeFetch
+  });
+  const outer = createConfiguredOutboundFetch({
+    env: {},
+    baseUrlEnvNames: [],
+    fetchImpl: inner
+  });
+  const result = await outer(url);
+  assert.equal(await result.text(), "ok");
+  await assert.rejects(safeFetch(url, { ultronAllowLoopbackHttp: true }), { code: "OUTBOUND_SCHEME_BLOCKED" });
 });
