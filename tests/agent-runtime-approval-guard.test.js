@@ -179,7 +179,8 @@ test("safe public browser inspection can prepare a mixed task but cannot send th
     }), { status: 200 });
   }, {
     ULTRON_BROWSER_USE_URL: "https://browser.example.com",
-    ULTRON_BROWSER_USE_TOKEN: "bridge-test-token"
+    ULTRON_BROWSER_USE_TOKEN: "bridge-test-token",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
   });
 
   try {
