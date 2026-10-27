@@ -27,26 +27,42 @@ function safeError(message, code = "UNSAFE_OUTBOUND_TARGET") {
   return Object.assign(new Error(message), { code });
 }
 
-async function lookupBounded(lookupImpl, host) {
+async function lookupBounded(lookupImpl, host, signal) {
   let timer;
+  let abortHandler;
   try {
-    return await Promise.race([
-      Promise.resolve().then(() => lookupImpl(host, { all: true, verbatim: true })),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(safeError("DNS lookup timed out.", "OUTBOUND_DNS_TIMEOUT")), DNS_TIMEOUT_MS);
-      })
-    ]);
+    if (signal?.aborted) {
+      throw signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
+    }
+    const pendingLookup = Promise.resolve().then(() => lookupImpl(host, { all: true, verbatim: true }));
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(safeError("DNS lookup timed out.", "OUTBOUND_DNS_TIMEOUT")), DNS_TIMEOUT_MS);
+    });
+    const pending = [pendingLookup, timeout];
+    if (signal) {
+      pending.push(new Promise((_, reject) => {
+        abortHandler = () => reject(signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR"));
+        signal.addEventListener("abort", abortHandler, { once: true });
+        // Close the race between the initial check and listener registration.
+        if (signal.aborted) abortHandler();
+      }));
+    }
+    return await Promise.race(pending);
   } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
+    }
     throw safeError(
       error?.code === "OUTBOUND_DNS_TIMEOUT" ? "DNS lookup timed out." : "Could not safely resolve outbound hostname.",
       error?.code === "OUTBOUND_DNS_TIMEOUT" ? error.code : "OUTBOUND_DNS_FAILED"
     );
   } finally {
     clearTimeout(timer);
+    if (abortHandler) signal?.removeEventListener("abort", abortHandler);
   }
 }
 
-async function resolvePinnedAddress(url, lookupImpl) {
+async function resolvePinnedAddress(url, lookupImpl, signal) {
   const host = cleanHost(url.hostname);
   const local = isLoopback(host);
   // Validate the origin, not the full path/query: research APIs legitimately use query strings.
@@ -65,7 +81,7 @@ async function resolvePinnedAddress(url, lookupImpl) {
   }
   if (!isPublicNetworkHost(host) && !local) throw safeError("Outbound hostname is not public.");
 
-  const results = await lookupBounded(lookupImpl, host);
+  const results = await lookupBounded(lookupImpl, host, signal);
   if (!Array.isArray(results) || results.length === 0) {
     throw safeError("Outbound hostname did not resolve to an address.", "OUTBOUND_DNS_FAILED");
   }
@@ -249,7 +265,12 @@ function toResponse(response, { maxResponseBodyBytes = MAX_RESPONSE_BODY_BYTES, 
     });
     const finish = () => onBodyDone();
     limiter.once("end", finish);
-    limiter.once("close", finish);
+    limiter.once("close", () => {
+      // A downstream caller can cancel Response.body before the upstream ends.
+      // Destroy the socket in that case instead of leaving the remote response flowing.
+      if (!limiter.readableEnded) response.destroy?.();
+      finish();
+    });
     limiter.once("error", () => {
       response.destroy?.();
       finish();
@@ -309,12 +330,18 @@ export function createSafeFetch({
       throw safeError("Outbound URL is invalid.");
     }
     if (url.hash) throw safeError("Outbound URL fragments are not allowed.");
-    const pinned = await resolvePinnedAddress(url, lookupImpl);
+    const method = String(requestInit.method || "GET").toUpperCase();
+    if ((method === "GET" || method === "HEAD") && requestInit.body !== undefined && requestInit.body !== null) {
+      throw safeError("GET and HEAD requests cannot include a body.", "OUTBOUND_BODY_UNSUPPORTED");
+    }
+    if (requestInit.signal?.aborted) {
+      throw requestInit.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
+    }
+    const pinned = await resolvePinnedAddress(url, lookupImpl, requestInit.signal);
     if (requestInit.signal?.aborted) {
       throw requestInit.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
     }
 
-    const method = String(requestInit.method || "GET").toUpperCase();
     const headers = buildHeaders(requestInit.headers);
     const encoded = await encodeBody(requestInit.body, headers, bodyLimit);
     if (requestInit.signal?.aborted) {
