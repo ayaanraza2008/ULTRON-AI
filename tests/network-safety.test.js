@@ -186,6 +186,22 @@ test("safePinnedFetch aborts before DNS when its signal is already cancelled", a
   assert.equal(lookupCalls, 0);
 });
 
+test("safePinnedFetch times out a resolver that never completes", async () => {
+  let connections = 0;
+  await assert.rejects(
+    () => safePinnedFetch("https://slow-dns.example.com/status", {}, {
+      dnsTimeoutMs: 10,
+      lookupImpl: () => new Promise(() => {}),
+      httpsRequestImpl: () => {
+        connections += 1;
+        throw new Error("transport must not run after DNS timeout");
+      }
+    }),
+    error => error?.code === "DNS_LOOKUP_TIMEOUT"
+  );
+  assert.equal(connections, 0);
+});
+
 test("safePinnedFetch aborts promptly while DNS resolution is still pending", async () => {
   const controller = new AbortController();
   let finishLookup;
