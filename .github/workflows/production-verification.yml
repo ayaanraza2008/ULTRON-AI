@@ -1,0 +1,29 @@
+name: ULTRON Production Revision Verification
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-revision:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify health, required configuration, and deployed revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://ultron-ai-zvd7.onrender.com/api/health"
+          for i in $(seq 1 6); do
+            if curl --fail --silent --show-error "$url" -o /tmp/ultron-health.json; then
+              cat /tmp/ultron-health.json
+              node -e 'const fs=require("node:fs"); const d=JSON.parse(fs.readFileSync("/tmp/ultron-health.json","utf8")); const required=["providerConfigured","accessConfigured","supabaseConfigured"]; const missing=required.filter(k=>d[k]!==true); if(d.status!=="ok"||missing.length){console.error("Health/configuration check failed:",{status:d.status,missing});process.exit(1)} const commit=d.build?.commit; if(!commit){console.error("Production revision is unknown: health endpoint does not expose a deployed commit. Release is NOT production-verified.");process.exit(1)} if(commit!==process.env.GITHUB_SHA){console.error("Production deployment is stale:",{deployedCommit:commit,expectedCommit:process.env.GITHUB_SHA});process.exit(1)} console.log("Production health, required configuration, and revision match verified.");'
+              exit 0
+            fi
+            sleep 8
+          done
+          echo "Production health endpoint did not become ready; release is NOT production-verified."
+          exit 1
