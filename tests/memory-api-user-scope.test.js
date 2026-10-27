@@ -19,9 +19,6 @@ test("memory expiry is validated on create and can be updated or cleared without
       if (parsed.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
         return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
-      if (parsed.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
-        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
-      }
       if (parsed.pathname === "/rest/v1/memory_items") {
         const body = options.body ? JSON.parse(options.body) : null;
         requests.push({ method: options.method || "GET", url: String(url), body });
@@ -139,6 +136,9 @@ test("memory list, update, and delete queries are scoped to the authenticated us
       requests.push({ url: String(url), method: options.method || "GET" });
       if (parsed.pathname === "/auth/v1/user") {
         return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (parsed.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (parsed.pathname === "/rest/v1/memory_items" && options.method === "DELETE") {
         return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
