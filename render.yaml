@@ -13,6 +13,8 @@ services:
         - "**/*.js"
         - "**/*.mjs"
         - "package.json"
+        - "package-lock.json"
+        - "public/**"
         - "supabase/migrations/**"
       ignoredPaths:
         - "tests/**"
