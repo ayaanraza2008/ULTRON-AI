@@ -37,8 +37,10 @@ test("ECC guidance is selected automatically for backend implementation tasks an
   const names = result.eccSkills.map(skill => skill.name);
   assert.ok(names.includes("backend-patterns"));
   assert.ok(names.includes("tdd-workflow"));
-  assert.ok(result.eccSkills.every(skill => skill.sourceUrl.includes("/ECC/25278e7d7b6cf6e6a4e7a6c8e10f14ff22f0eb5b/")));
+  assert.ok(result.eccSkills.every(skill => skill.sourceUrl.includes("/ECC/blob/25278e7d7b6cf6e6a4e7a6c8e10f14ff22f0eb5b/")));
   assert.ok(result.rules.some(rule => rule.includes("ECC") && rule.includes("regression")));
+  assert.ok(result.eccSkills.every(skill => typeof skill.content === "string" && skill.content.length > 0));
+  assert.match(result.eccSkills.find(skill => skill.name === "backend-patterns").content, /Backend Development Patterns/);
 });
 
 test("ECC security and research skills are task-matched rather than injected into unrelated prompts", () => {
