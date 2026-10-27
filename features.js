@@ -1210,7 +1210,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         target_type: "agent_task",
         target_id: rows[0].id,
         outcome: requiresApproval ? "recorded" : "allowed",
-        metadata: { risk, taskType, requiresApproval, executionMode }
+        metadata: { risk: effectiveRisk, requestedRisk: risk, intentRiskLevel: intentRisk.level, requiresApproval, executionMode }
       });
 
       const notice = taskType === "research" && !requiresApproval
