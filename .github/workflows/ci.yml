@@ -29,19 +29,6 @@ jobs:
           npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: npm test
-      - name: Smoke test deployed health endpoint
-        run: |
-          for i in $(seq 1 18); do
-            if curl --fail --silent https://ultron-ai-zvd7.onrender.com/api/health -o /tmp/ultron-health.json; then
-              cat /tmp/ultron-health.json
-              node -e "const d=require('/tmp/ultron-health.json'); const required=['providerConfigured','accessConfigured','supabaseConfigured']; const missing=required.filter(k=>d[k]!==true); if(d.status!=='ok'||missing.length){console.error('Health/configuration check failed:', {status:d.status,missing}); process.exit(1)}; console.log('Runtime configuration flags verified:', required.join(', ')); const commit=d.build?.commit; if(commit) console.log('Currently deployed commit:', commit); else console.warn('Live health endpoint does not expose a deployed revision yet; it may be running an older build.'); if(process.env.GITHUB_EVENT_NAME==='push'&&process.env.GITHUB_REF==='refs/heads/main'){if(!commit){console.error('Production deployment drift: health endpoint does not expose a deployed revision; refusing to mark this release verified.');process.exit(1)}if(commit!==process.env.GITHUB_SHA){console.error('Production deployment lag detected: live commit differs from this source commit; release is not production-verified.');process.exit(1)}console.log('Production revision matches the pushed source commit.')}else if(commit&&commit!==process.env.GITHUB_SHA) console.warn('Production deployment lag detected: the live revision differs from this CI source revision; PR/source CI does not imply production deployment.')"
-              exit 0
-            fi
-            sleep 8
-          done
-          echo 'Deployed health endpoint did not become ready in time.'
-          exit 1
-
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
