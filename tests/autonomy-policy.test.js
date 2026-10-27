@@ -331,4 +331,5 @@ test("draft-only text and research about forwarding stay routine", () => {
 
 test("autonomy risk decisions expose the current policy version", () => {
   assert.equal(classifyAutonomyRisk("Research public energy trends.").policyVersion, "1.4.0");
+  assert.equal(classifyAutonomyRisk("Send a text to my manager.").policyVersion, "1.4.0");
 });
