@@ -54,6 +54,7 @@ test("private document upload, list, integrity-checked download and delete are o
       body: options.body
     });
     if (url.pathname === "/auth/v1/user" && method === "GET") return authUser();
+    if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return json(true);
 
     if (url.pathname.startsWith(bucketPath)) {
       assert.match(url.pathname, new RegExp(bucketPath.replaceAll("/", "\\/") + OWNER + "\\/[0-9a-f-]+\\.txt$"));
@@ -144,6 +145,8 @@ test("private document storage rejects invalid formats and malformed signatures 
   const fetchImpl = async (rawUrl, options = {}) => {
     const url = new URL(rawUrl);
     if (url.pathname === "/auth/v1/user") return authUser();
+    if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return json(true);
+    if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return json(true);
     if (url.pathname.startsWith(bucketPath)) storageCalls.push(url.pathname);
     throw new Error("invalid upload must not reach storage or database");
   };
