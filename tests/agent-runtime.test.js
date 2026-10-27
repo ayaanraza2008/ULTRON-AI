@@ -2040,21 +2040,21 @@ test("authenticated desktop companion status endpoint returns bounded status wit
 });
 
 
-test("agent automatically advertises and consumes pinned ECC guidance with a local fallback", async () => {
+test("agent automatically advertises and consumes locally bundled pinned ECC guidance without network access", async () => {
   const pinnedRevision = "25278e7d7b6cf6e6a4e7a6c8e10f14ff22f0eb5b";
   const task = "Implement a backend API integration with tests";
-  const upstreamUrls = [];
+  let eccNetworkCalls = 0;
   let providerCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options) => {
-    if (url.startsWith("https://raw.githubusercontent.com/affaan-m/ECC/")) {
-      upstreamUrls.push(url);
-      assert.ok(url.includes("/" + pinnedRevision + "/"));
-      return new Response("# Mock ECC skill\\nUse regression tests and verify the changed code.", { status: 200, headers: { "Content-Type": "text/plain" } });
+    if (url.startsWith("https://raw.githubusercontent.com/affaan-m/ECC/") || url.startsWith("https://github.com/affaan-m/ECC/")) {
+      eccNetworkCalls += 1;
+      throw new Error("Bundled ECC skills must not require runtime network access.");
     }
     providerCalls += 1;
     const request = JSON.parse(options.body);
     assert.ok(request.messages.some(message => message.role === "system" && String(message.content).includes("ECC backend-patterns fallback")));
-    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("ecc-backend-patterns") && String(message.content).includes("Mock ECC skill")));
+    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("ecc-backend-patterns") && String(message.content).includes("Backend Development Patterns")));
+    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("ecc-tdd-workflow") && String(message.content).includes("Test-Driven Development Workflow")));
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The backend task was reviewed using task-matched guidance." } }] }), { status: 200 });
   }, async base => {
     const metadataResponse = await fetch(base + "/api/agent/task-skills?task=" + encodeURIComponent(task));
@@ -2064,6 +2064,8 @@ test("agent automatically advertises and consumes pinned ECC guidance with a loc
     assert.equal(metadata.eccIntegration.revision, pinnedRevision);
     assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "backend-patterns"));
     assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "tdd-workflow"));
+    assert.ok(metadata.eccIntegration.selectedSkills.every(skill => skill.revision === pinnedRevision));
+    assert.equal(JSON.stringify(metadata).includes("Test-Driven Development Workflow"), false, "API metadata must not expose bundled skill text");
 
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
@@ -2072,7 +2074,7 @@ test("agent automatically advertises and consumes pinned ECC guidance with a loc
     });
     assert.equal(response.status, 200);
     assert.match((await response.json()).content, /task-matched guidance/);
-    assert.ok(upstreamUrls.length >= 2);
-    assert.equal(providerCalls, 1);
+    assert.equal(eccNetworkCalls, 0);
+    assert.ok(providerCalls >= 1);
   });
 });
