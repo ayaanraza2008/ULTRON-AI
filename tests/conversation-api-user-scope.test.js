@@ -18,9 +18,6 @@ test("conversation list and message reads are scoped to the authenticated user",
       if (parsed.pathname === "/auth/v1/user") {
         return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
-      if (parsed.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
-        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
-      }
       if (parsed.pathname === "/rest/v1/conversations") {
         if (parsed.searchParams.get("id") === "eq." + conversationId && parsed.searchParams.get("user_id") === "eq.user-123") {
           return new Response(JSON.stringify([{ id: conversationId }]), { status: 200, headers: { "Content-Type": "application/json" } });
