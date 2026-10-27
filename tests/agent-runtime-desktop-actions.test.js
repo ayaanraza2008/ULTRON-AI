@@ -193,7 +193,7 @@ test("agent refuses unsafe URL actions before creating a pending item", async t 
   assert.equal(response.status, 200);
   assert.equal(h.store.size, 0);
   assert.equal(h.privilegedCalls.length, 0);
-  assert.equal(response.result.toolResults[0].result.error.code, "DESKTOP_ACTION_UNSAFE_URL");
+  assert.equal(response.result.toolResults[0].result.error.code, "DESKTOP_ACTION_NOT_ALLOWED");
 });
 
 test("agent can inspect its own desktop action queue without leaking owner IDs or tokens", async t => {
