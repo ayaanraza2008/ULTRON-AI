@@ -104,7 +104,7 @@ function chatMarkup(){
   return [
     pageHeading("INTERFACE / 02","AI Chat","A real conversation with the configured ULTRON provider. Provider and session errors remain visible.","<button class=\"secondary-button\" data-action=\"new-chat\">＋ New chat</button>"),
     '<div class="chat-layout"><aside class="panel conversation-panel"><div class="panel-header"><div><div class="panel-title">Conversations</div><div class="panel-subtitle">YOUR ACCOUNT HISTORY</div></div><button class="icon-button" data-action="refresh-conversations" aria-label="Refresh conversations">↻</button></div><div id="conversationList" class="conversation-list"><div class="muted" style="padding:12px;font-size:10px">Loading history…</div></div><button class="conversation-new" data-action="new-chat">＋ Start conversation</button></aside>',
-    '<section class="panel chat-panel"><div class="chat-topline"><div><div class="panel-title" id="chatTitle">ULTRON · CONVERSATION</div><div class="panel-subtitle" id="chatSubtitle">RESPONSES COME FROM THE CONFIGURED PROVIDER</div></div><div style="display:flex;gap:7px"><select id="modelSelect" class="input-control" aria-label="Choose model" style="width:150px;padding:7px;font-size:10px"><option value="">Default model</option></select><button class="icon-button" data-action="stop-chat" title="Cancel current response" aria-label="Cancel current response" disabled>■</button></div></div>',
+    '<section class="panel chat-panel"><div class="chat-topline"><div><div class="panel-title" id="chatTitle">ULTRON · CONVERSATION</div><div class="panel-subtitle" id="chatSubtitle">RESPONSES COME FROM THE CONFIGURED PROVIDER</div></div><div style="display:flex;gap:7px"><select id="modelSelect" class="input-control" aria-label="Choose model" style="width:150px;padding:7px;font-size:10px"><option value="">Default model</option></select><button class="icon-button" id="stop-chat" data-action="stop-chat" title="Cancel current response" aria-label="Cancel current response" disabled>■</button></div></div>',
     '<div id="chatMessages" class="chat-messages"><div class="chat-welcome"><div class="empty-orb">◈</div><h2>What should we work on?</h2><p>Ask a question, draft code, analyze an image, or plan a task. ULTRON only confirms actions that the API actually completes.</p><div class="suggestion-row"><button class="suggestion-chip" data-suggestion="Explain a difficult concept step by step">Explain a concept</button><button class="suggestion-chip" data-suggestion="Help me review this code for bugs and security issues">Review code</button><button class="suggestion-chip" data-suggestion="Research the latest developments and cite sources">Research topic</button></div></div></div>',
     '<div class="chat-composer-wrap"><div id="attachmentChips" class="attachment-chips"></div><form id="chatForm"><div class="composer-box"><textarea id="chatInput" name="message" rows="1" maxlength="12000" placeholder="Message ULTRON… (Shift + Enter for a new line)" aria-label="Message ULTRON"></textarea><div class="composer-toolbar"><div class="composer-tools"><button type="button" class="composer-tool" data-action="attach-images">＋ Image</button><span class="dim" style="font-size:9px">Max 2 images · 4 MB each</span><input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden></div><button id="sendChat" class="composer-send" type="submit" aria-label="Send message">↑</button></div></div><div class="composer-note">AI output can be incorrect. Review important claims and externally consequential actions.</div></form></div></section></div>'
   ].join("");
@@ -229,17 +229,17 @@ function renderChatMessages(){
   area.scrollTop=area.scrollHeight;
 }
 function markdownSafe(raw){
-  const text=String(raw??"");const pieces=text.split(/(\`\`\`[\\s\\S]*?\`\`\`)/g);
+  const text=String(raw??"");const pieces=text.split(/(```[\s\S]*?```)/g);
   return pieces.map(piece=>{
     if(piece.startsWith("\`\`\`")&&piece.endsWith("\`\`\`")){
-      const inner=piece.slice(3,-3);const first=inner.indexOf("\\n");const language=first>=0?inner.slice(0,first).trim():"";const code=first>=0?inner.slice(first+1):inner;
+      const inner=piece.slice(3,-3);const first=inner.indexOf("\n");const language=first>=0?inner.slice(0,first).trim():"";const code=first>=0?inner.slice(first+1):inner;
       return '<pre><code data-language="'+esc(language)+'">'+esc(code)+'</code></pre>';
     }
     let html=esc(piece);
-    html=html.replace(/\`([^\`\\n]+)\`/g,"<code>$1</code>");
-    html=html.replace(/\\*\\*([^*]+)\\*\\*/g,"<strong>$1</strong>");
-    html=html.replace(/(^|\\n)\\s*[-*] (.+)/g,"$1• $2");
-    return html.split(/\\n{2,}/).map(p=>'<p>'+p.replace(/\\n/g,"<br>")+'</p>').join("");
+    html=html.replace(/`([^`\n]+)`/g,"<code>$1</code>");
+    html=html.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>");
+    html=html.replace(/(^|\n)\s*[-*] (.+)/g,"$1• $2");
+    return html.split(/\n{2,}/).map(p=>'<p>'+p.replace(/\n/g,"<br>")+'</p>').join("");
   }).join("");
 }
 function messageMarkup(message,index){
@@ -281,7 +281,7 @@ async function streamChat(messages,model,attachments,onDelta,signal){
   const decoder=new TextDecoder();let buffer="",full="";
   function consume(line){if(!line.startsWith("data:"))return;const raw=line.slice(5).trim();if(!raw||raw==="[DONE]")return;try{const obj=JSON.parse(raw);if(obj.error)throw new APIError(obj.error.message||"The provider stream failed.",502,obj);if(typeof obj.delta==="string"){full+=obj.delta;onDelta(full)}}catch(error){if(error instanceof APIError)throw error}}
   try{
-    while(true){const result=await reader.read();buffer+=decoder.decode(result.value||new Uint8Array(),{stream:!result.done});let idx;while((idx=buffer.indexOf("\\n"))>=0){const line=buffer.slice(0,idx).replace(/\\r$/,"");buffer=buffer.slice(idx+1);if(line.startsWith("event: provider_error"))continue;consume(line)}if(result.done)break}
+    while(true){const result=await reader.read();buffer+=decoder.decode(result.value||new Uint8Array(),{stream:!result.done});let idx;while((idx=buffer.indexOf("\n"))>=0){const line=buffer.slice(0,idx).replace(/\r$/,"");buffer=buffer.slice(idx+1);if(line.startsWith("event: provider_error"))continue;consume(line)}if(result.done)break}
     if(buffer.trim())consume(buffer.trim());
   }finally{reader.releaseLock?.()}
   if(!full.trim())throw new APIError("The provider returned an empty response.",502);
