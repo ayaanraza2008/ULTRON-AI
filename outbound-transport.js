@@ -211,7 +211,7 @@ function responseHeader(response, wantedName) {
   return undefined;
 }
 
-function toResponse(response, { maxResponseBodyBytes = MAX_RESPONSE_BODY_BYTES, onBodyDone = () => {} } = {}) {
+function toResponse(response, { maxResponseBodyBytes = MAX_RESPONSE_BODY_BYTES, method = "GET", onBodyDone = () => {} } = {}) {
   const status = Number(response.statusCode) || 502;
   const headers = new Headers();
   const raw = response.rawHeaders || [];
@@ -223,7 +223,7 @@ function toResponse(response, { maxResponseBodyBytes = MAX_RESPONSE_BODY_BYTES, 
     }
   }
   let body = null;
-  if (NO_BODY_STATUSES.has(status)) {
+  if (NO_BODY_STATUSES.has(status) || method === "HEAD") {
     response.once?.("end", onBodyDone);
     response.once?.("close", onBodyDone);
     response.resume?.();
@@ -390,6 +390,7 @@ export function createSafeFetch({
           try {
             resolve(toResponse(response, {
               maxResponseBodyBytes: responseBodyLimit,
+              method,
               onBodyDone: cleanupTimeout
             }));
           } catch (error) {
