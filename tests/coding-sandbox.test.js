@@ -43,6 +43,8 @@ test("execution requires a direct request and exact code from the current prompt
   const fence = String.fromCharCode(96).repeat(3);
   const prompt = "Please run this code:\n" + fence + "python\nprint(6 * 7)\n" + fence;
   assert.equal(hasExplicitSandboxAuthorization(prompt, "print(6 * 7)", "python"), true);
+  const languagePrompt = "Please execute the Python code:\n" + fence + "python\nprint(6 * 7)\n" + fence;
+  assert.equal(hasExplicitSandboxAuthorization(languagePrompt, "print(6 * 7)", "python"), true);
   assert.deepEqual(extractExplicitSandboxRequest(prompt), { language: "python", source: "print(6 * 7)" });
   assert.equal(extractExplicitSandboxRequest("How can I run Python code?"), null);
   assert.equal(hasExplicitSandboxAuthorization("How can I run Python code?", "print(6 * 7)", "python"), false);
