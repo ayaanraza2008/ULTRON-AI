@@ -2065,6 +2065,7 @@ test("agent automatically advertises and consumes locally bundled pinned ECC gui
     assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "backend-patterns"));
     assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "tdd-workflow"));
     assert.ok(metadata.eccIntegration.selectedSkills.every(skill => skill.revision === pinnedRevision));
+    assert.ok(metadata.eccIntegration.selectedSkills.every(skill => skill.bundled === true && skill.contentLoaded === true));
     assert.equal(JSON.stringify(metadata).includes("Test-Driven Development Workflow"), false, "API metadata must not expose bundled skill text");
 
     const response = await fetch(base + "/api/agent/run", {
