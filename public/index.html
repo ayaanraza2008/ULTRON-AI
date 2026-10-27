@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08070d">
+  <meta name="description" content="ULTRON AI — a cinematic, privacy-aware AI command center.">
+  <title>ULTRON AI — Command Center</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="/ultron.css">
+  <script type="module" src="/ultron-app.js"></script>
+</head>
+<body data-core-state="idle">
+  <div class="ambient ambient-a" aria-hidden="true"></div>
+  <div class="ambient ambient-b" aria-hidden="true"></div>
+  <div id="appShell" class="app-shell">
+    <aside id="sidebar" class="sidebar" aria-label="Main navigation">
+      <a class="brand" href="/" aria-label="ULTRON AI home" data-nav="home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-copy"><strong>ULTRON</strong><small>COMMAND SYSTEM</small></span>
+      </a>
+      <button id="sidebarToggle" class="icon-button sidebar-toggle" aria-label="Collapse navigation" title="Collapse navigation">‹</button>
+      <div class="nav-section-label">COMMAND</div>
+      <nav id="primaryNav" class="nav-list" aria-label="Workspaces">
+        <button class="nav-item active" data-nav="home" aria-current="page" title="Command Center"><span class="nav-icon">⌘</span><span class="nav-label">Command Center</span></button>
+        <button class="nav-item" data-nav="chat" title="AI Chat"><span class="nav-icon">◈</span><span class="nav-label">AI Chat</span></button>
+        <button class="nav-item" data-nav="voice" title="Voice Studio"><span class="nav-icon">〰</span><span class="nav-label">Voice Studio</span></button>
+        <button class="nav-item" data-nav="tasks" title="Autonomous Tasks"><span class="nav-icon">◷</span><span class="nav-label">Autonomous Tasks</span><span class="nav-count" id="taskCount" hidden></span></button>
+        <button class="nav-item" data-nav="coding" title="Coding Agent"><span class="nav-icon">{ }</span><span class="nav-label">Coding Agent</span></button>
+        <button class="nav-item" data-nav="research" title="Research"><span class="nav-icon">⌕</span><span class="nav-label">Research</span></button>
+        <button class="nav-item" data-nav="files" title="Files"><span class="nav-icon">▤</span><span class="nav-label">Files & Documents</span></button>
+        <button class="nav-item" data-nav="memory" title="Memory"><span class="nav-icon">◉</span><span class="nav-label">Memory</span></button>
+      </nav>
+      <div class="nav-section-label nav-section-secondary">SYSTEM</div>
+      <nav class="nav-list" aria-label="System workspaces">
+        <button class="nav-item" data-nav="integrations" title="Integrations"><span class="nav-icon">⤢</span><span class="nav-label">Integrations</span></button>
+        <button class="nav-item" data-nav="automation" title="Automation"><span class="nav-icon">⟳</span><span class="nav-label">Automation</span></button>
+        <button class="nav-item" data-nav="security" title="Security & Approvals"><span class="nav-icon">⬡</span><span class="nav-label">Security & Approvals</span></button>
+        <button class="nav-item" data-nav="system" title="System Diagnostics"><span class="nav-icon">⌁</span><span class="nav-label">System Diagnostics</span></button>
+        <button class="nav-item" data-nav="settings" title="Settings"><span class="nav-icon">⚙</span><span class="nav-label">Settings</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-health"><span class="status-dot" id="sidebarHealthDot"></span><span class="nav-label" id="sidebarHealthText">Checking service</span></div>
+        <button id="profileButton" class="profile-button" title="Account and session">
+          <span class="profile-avatar">U</span><span class="profile-copy"><strong id="profileName">Guest session</strong><small id="profileSub">Sign in to sync</small></span><span class="profile-more">···</span>
+        </button>
+      </div>
+    </aside>
+    <main class="main-shell">
+      <header class="topbar">
+        <div class="topbar-start">
+          <button id="mobileMenu" class="icon-button mobile-menu" aria-label="Open navigation">☰</button>
+          <div class="breadcrumbs"><span class="crumb-muted">ULTRON</span><span class="crumb-separator">/</span><strong id="workspaceTitle">Command Center</strong></div>
+        </div>
+        <div class="topbar-end">
+          <div class="connection-pill" id="connectionPill"><span class="status-dot" id="connectionDot"></span><span id="connectionText">Checking API</span></div>
+          <button id="commandPaletteButton" class="command-button" aria-label="Open command palette"><span>⌕</span><span>Command</span><kbd>Ctrl K</kbd></button>
+          <button id="quickSettings" class="icon-button" title="Settings" aria-label="Open settings">⚙</button>
+        </div>
+      </header>
+      <div id="globalNotice" class="global-notice" role="status" hidden></div>
+      <section id="viewContent" class="view-content" aria-live="polite">
+        <div class="boot-state"><div class="boot-ring"></div><p>Establishing command link</p><small>Connecting to the existing ULTRON API…</small></div>
+      </section>
+      <footer class="statusbar">
+        <div><span class="status-square"></span><span id="footerStatus">LOCAL INTERFACE</span><span class="status-divider">/</span><span id="footerSession">SESSION NOT VERIFIED</span></div>
+        <div><span id="footerCoreState">CORE · IDLE</span><span class="status-divider">/</span><button id="reducedMotionToggle" class="text-button" aria-pressed="false">Motion: Auto</button></div>
+      </footer>
+    </main>
+  </div>
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <div id="dialogBackdrop" class="dialog-backdrop" hidden>
+    <section id="dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+      <div class="dialog-head"><div><span class="eyebrow" id="dialogEyebrow">ULTRON SYSTEM</span><h2 id="dialogTitle">Confirm action</h2></div><button id="dialogClose" class="icon-button" aria-label="Close dialog">×</button></div>
+      <div id="dialogBody" class="dialog-body"></div>
+    </section>
+  </div>
+  <div id="commandBackdrop" class="command-backdrop" hidden>
+    <section class="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="command-search"><span>⌕</span><input id="commandSearch" type="search" placeholder="Jump to a workspace or action…" autocomplete="off"><kbd>ESC</kbd></div>
+      <div id="commandResults" class="command-results"></div>
+      <div class="command-hint">Navigate with ↑ ↓ · Enter to open · Esc to close</div>
+    </section>
+  </div>
+  <div id="authGate" class="auth-gate" hidden>
+    <div class="auth-backdrop"></div>
+    <section class="auth-card" aria-labelledby="authTitle">
+      <div class="auth-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>ULTRON AI</span></div>
+      <p class="eyebrow">SECURE ACCESS GATE</p>
+      <h1 id="authTitle">Your command center.</h1>
+      <p class="auth-copy">Sign in to access account-scoped conversations, tasks, and memory. Your credentials stay with the existing server-side auth flow.</p>
+      <div class="auth-tabs" role="tablist" aria-label="Authentication mode"><button class="auth-tab active" data-auth-mode="signin" role="tab" aria-selected="true">Sign in</button><button class="auth-tab" data-auth-mode="signup" role="tab" aria-selected="false">Create account</button></div>
+      <form id="authForm" class="auth-form">
+        <label>Email address<input id="authEmail" name="email" type="email" autocomplete="email" required maxlength="320" placeholder="you@example.com"></label>
+        <label>Password<input id="authPassword" name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="256" placeholder="At least 8 characters"></label>
+        <button class="primary-button auth-submit" type="submit" id="authSubmit">Sign in securely <span>↗</span></button>
+      </form>
+      <button id="forgotPassword" class="text-button auth-help">Forgot password?</button>
+      <p id="authMessage" class="auth-message" role="status"></p>
+      <p class="auth-footnote">API and account protection are enforced by the existing backend. No browser-side service keys are used.</p>
+    </section>
+  </div>
+  <noscript><div class="noscript">ULTRON requires JavaScript to operate. Enable JavaScript and reload this page.</div></noscript>
+</body>
+</html>
