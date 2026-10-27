@@ -3,6 +3,19 @@ on:
   push:
     branches:
       - main
+    # Only verify revisions for commits that should alter the ULTRON backend service.
+    # Documentation, CI-only, and unit-test-only commits do not need a Render revision.
+    paths:
+      - "**/*.js"
+      - "**/*.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "supabase/migrations/**"
+      - "public/**"
+      - "render.yaml"
+      - "!tests/**"
+      - "!test/**"
+      - "!public/world-intelligence-bridge.js"
   workflow_dispatch:
 
 permissions:
