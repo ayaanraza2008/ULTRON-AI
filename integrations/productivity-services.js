@@ -4,7 +4,7 @@
  * explicitly configured ULTRON_INTEGRATION_OWNER_USER_ID account. Never accept
  * upstream URLs, tokens, or arbitrary paths from model/user input.
  */
-import { safeServiceBase } from "../network-safety.js";
+import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 
 const MAX_RESPONSE_BYTES = 1_500_000;
 
@@ -101,7 +101,7 @@ function numericId(value) {
 }
 
 export async function listChatwootConversations({
-  env = process.env, fetchImpl = globalThis.fetch, userId, status = "open", limit = 10
+  env = process.env, fetchImpl = safePinnedFetch, userId, status = "open", limit = 10
 } = {}) {
   const config = providerConfig(env, userId, { baseKey: "CHATWOOT_BASE_URL", tokenKey: "CHATWOOT_API_TOKEN", extraKeys: ["CHATWOOT_ACCOUNT_ID"] });
   if (config.error) return config.error;
@@ -131,7 +131,7 @@ export async function listChatwootConversations({
 }
 
 export async function listOpenProjectProjects({
-  env = process.env, fetchImpl = globalThis.fetch, userId, limit = 20
+  env = process.env, fetchImpl = safePinnedFetch, userId, limit = 20
 } = {}) {
   const config = providerConfig(env, userId, { baseKey: "OPENPROJECT_BASE_URL", tokenKey: "OPENPROJECT_API_TOKEN" });
   if (config.error) return config.error;
@@ -154,7 +154,7 @@ export async function listOpenProjectProjects({
 }
 
 export async function listOpenProjectWorkPackages({
-  env = process.env, fetchImpl = globalThis.fetch, userId, projectId, limit = 20
+  env = process.env, fetchImpl = safePinnedFetch, userId, projectId, limit = 20
 } = {}) {
   const config = providerConfig(env, userId, { baseKey: "OPENPROJECT_BASE_URL", tokenKey: "OPENPROJECT_API_TOKEN" });
   if (config.error) return config.error;
@@ -183,7 +183,7 @@ export async function listOpenProjectWorkPackages({
 }
 
 export async function listCalDiyEventTypes({
-  env = process.env, fetchImpl = globalThis.fetch, userId, limit = 20
+  env = process.env, fetchImpl = safePinnedFetch, userId, limit = 20
 } = {}) {
   const config = providerConfig(env, userId, { baseKey: "CALDIY_BASE_URL", tokenKey: "CALDIY_API_TOKEN" });
   if (config.error) return config.error;
@@ -207,7 +207,7 @@ export async function listCalDiyEventTypes({
 }
 
 export async function listCalDiySlots({
-  env = process.env, fetchImpl = globalThis.fetch, userId, eventTypeId, start, end, timeZone
+  env = process.env, fetchImpl = safePinnedFetch, userId, eventTypeId, start, end, timeZone
 } = {}) {
   const config = providerConfig(env, userId, { baseKey: "CALDIY_BASE_URL", tokenKey: "CALDIY_API_TOKEN" });
   if (config.error) return config.error;
