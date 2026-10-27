@@ -36,6 +36,12 @@ test("frontend calls verified routes and guards capabilities absent from the cur
   assert.match(js, /saveDocumentToMemory/);
   assert.match(js, /Save text to Memory Vault/);
   assert.match(js, /source:"document"/);
+  assert.match(js, /Save original file privately/);
+  assert.match(js, /\/api\/documents\/upload/);
+  assert.match(js, /\/api\/documents\/\/encodeURIComponent\(id\)\/download/);
+  assert.match(js, /\/api\/documents\/\/encodeURIComponent\(id\)/);
+  assert.match(js, /Private document vault/);
+  assert.match(js, /The original file is never public/);
   assert.match(js, /original file is not retained/);
   assert.match(js, /Non-routine or higher-risk tasks require approval/);
 });
