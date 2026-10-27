@@ -25,7 +25,7 @@ export function buildRuntimeReadiness({
   const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN) && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const desktopBridgeToken = String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim();
   const desktopActionQueueConfigured = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim()) &&
-    desktopBridgeToken.length >= 32 && !/\\s/.test(desktopBridgeToken);
+    desktopBridgeToken.length >= 32 && !/\s/.test(desktopBridgeToken);
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
   const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
