@@ -45,7 +45,10 @@ ULTRON vendors five selected upstream skill Markdown files (backend-patterns, td
 
 ## Verification checklist
 
-- [ ] Confirm GitHub CI executes the new task-aware selector regression tests on the PR branch.
-- [ ] Check selected ECC metadata through `GET /api/agent/task-skills?task=...` in an authorized test session.
-- [ ] Run an authorized model-backed task and verify the locally bundled ECC skill text reaches model context; no live upstream skill fetch is required.
-- [ ] Keep the source revision fixed and preserve `vendor/ecc/LICENSE` if the snapshots are redistributed or updated.
+- [x] GitHub Actions on the PR branch passed `npm run check`, the full automated test suite, the deployed health/configuration smoke test, and the world-intelligence build at commit `92159784d4a9f4a15739dba2196c9ff35a1143cc`.
+- [x] Automated tests verified task-based skill selection, pinned ECC revision metadata, local Markdown loading, delivery of the bundled skills into the agent-model request, and zero ECC-network calls during that request.
+- [x] The selected task-skills metadata endpoint is covered by route-level automated tests using a synthetic authenticated user.
+- [ ] A real provider-backed request on an authorized, live test account has not been run here; mock-model assertions do not establish production inference or deployment.
+- [x] The ECC source revision remains pinned and the upstream MIT license notice is included at `vendor/ecc/LICENSE`.
+
+The source branch is CI-green but this PR is not merged. No deployment or production configuration changes were made.
