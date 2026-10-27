@@ -330,6 +330,10 @@ export function createSafeFetch({
       throw safeError("Outbound URL is invalid.");
     }
     if (url.hash) throw safeError("Outbound URL fragments are not allowed.");
+    const method = String(requestInit.method || "GET").toUpperCase();
+    if ((method === "GET" || method === "HEAD") && requestInit.body !== undefined && requestInit.body !== null) {
+      throw safeError("GET and HEAD requests cannot include a body.", "OUTBOUND_BODY_UNSUPPORTED");
+    }
     if (requestInit.signal?.aborted) {
       throw requestInit.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
     }
@@ -338,7 +342,6 @@ export function createSafeFetch({
       throw requestInit.signal.reason || safeError("Outbound request was aborted.", "ABORT_ERR");
     }
 
-    const method = String(requestInit.method || "GET").toUpperCase();
     const headers = buildHeaders(requestInit.headers);
     const encoded = await encodeBody(requestInit.body, headers, bodyLimit);
     if (requestInit.signal?.aborted) {
