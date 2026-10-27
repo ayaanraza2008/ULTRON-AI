@@ -37,7 +37,7 @@ test("frontend calls only established API path families and does not embed provi
   for (const path of [
     "/health", "/session", "/models", "/chat", "/conversations", "/memory",
     "/preferences", "/tasks", "/runtime/readiness", "/worker/status", "/capabilities",
-    "/research", "/documents/extract", "/coding/assist", "/speech/synthesize",
+    "/research", "/documents/extract", "/coding/assist", "/speech/synthesize", "/speech/transcribe",
     "/integrations/catalog", "/integrations/voicestudio/status", "/employees/schedules"
   ]) {
     assert.ok(app.includes('"' + path + '"') || app.includes("'" + path + "'"), "missing API path: " + path);
