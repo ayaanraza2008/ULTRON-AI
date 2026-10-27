@@ -1,9 +1,8 @@
 import express from "express";
 import crypto from "node:crypto";
-import { isPublicNetworkHost } from "./network-safety.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ACTION_TYPES = new Set(["open_url", "launch_app", "system_info"]);
+const ACTION_TYPES = new Set(["launch_app", "system_info"]);
 const APPS = new Set(["notepad", "calculator", "explorer"]);
 const ERROR_CODES = new Set(["ACTION_FAILED", "APP_LAUNCH_FAILED", "UNSAFE_URL", "ACTION_NOT_SUPPORTED", "ACTION_PAYLOAD_INVALID"]);
 const ACTION_SELECT = "id,user_id,action_type,payload,status,attempts,approved_at,started_at,finished_at,lease_expires_at,result,error_code,created_at,updated_at";
@@ -79,22 +78,7 @@ export function validateDesktopAction(actionType, rawPayload = {}) {
     }
     return { app: rawPayload.app };
   }
-  if (keys.length !== 1 || keys[0] !== "url" || typeof rawPayload.url !== "string") {
-    throw Object.assign(new Error("Open-URL actions require exactly one URL field."), { status: 400, code: "DESKTOP_ACTION_PAYLOAD_INVALID" });
-  }
-  const rawUrl = rawPayload.url.trim();
-  if (!rawUrl || rawUrl.length > 1200) {
-    throw Object.assign(new Error("The URL is empty or too long."), { status: 400, code: "DESKTOP_ACTION_PAYLOAD_INVALID" });
-  }
-  let url;
-  try { url = new URL(rawUrl); } catch {
-    throw Object.assign(new Error("Enter a valid public HTTPS URL."), { status: 400, code: "DESKTOP_ACTION_UNSAFE_URL" });
-  }
-  if (url.protocol !== "https:" || url.username || url.password || url.hash ||
-      (url.port && url.port !== "443") || !isPublicNetworkHost(url.hostname)) {
-    throw Object.assign(new Error("The desktop bridge only opens public HTTPS URLs without credentials or fragments."), { status: 400, code: "DESKTOP_ACTION_UNSAFE_URL" });
-  }
-  return { url: url.href };
+  throw Object.assign(new Error("Choose one of the supported desktop actions."), { status: 400, code: "DESKTOP_ACTION_NOT_ALLOWED" });
 }
 
 function publicAction(row) {
@@ -114,6 +98,9 @@ function publicAction(row) {
 }
 
 function sanitizeDesktopResult(actionType, payload, state, rawResult) {
+  if (!ACTION_TYPES.has(actionType)) {
+    throw Object.assign(new Error("The Windows companion returned an unsupported action type."), { status: 400, code: "DESKTOP_ACTION_RESULT_INVALID" });
+  }
   if (!rawResult || typeof rawResult !== "object" || Array.isArray(rawResult) ||
       typeof rawResult.ok !== "boolean" || (state === "completed") !== rawResult.ok) {
     throw Object.assign(new Error("The Windows companion returned an invalid action result."), { status: 400, code: "DESKTOP_ACTION_RESULT_INVALID" });
@@ -134,13 +121,6 @@ function sanitizeDesktopResult(actionType, payload, state, rawResult) {
       throw Object.assign(new Error("The result did not match the approved application."), { status: 400, code: "DESKTOP_ACTION_RESULT_INVALID" });
     }
     output.app = payload.app;
-  } else if (actionType === "open_url") {
-    let host;
-    try { host = new URL(payload.url).hostname.toLowerCase(); } catch { host = ""; }
-    if (!host || typeof rawResult.host !== "string" || rawResult.host.toLowerCase() !== host) {
-      throw Object.assign(new Error("The result did not match the approved HTTPS destination."), { status: 400, code: "DESKTOP_ACTION_RESULT_INVALID" });
-    }
-    output.host = host;
   } else if (actionType === "system_info") {
     const osVersion = bounded(rawResult.osVersion, 100);
     const architecture = bounded(rawResult.architecture, 20);
