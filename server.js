@@ -1131,9 +1131,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   const documentMimeByExtension = {
     ".txt": "text/plain",
     ".md": "text/markdown",
+    ".markdown": "text/markdown",
     ".csv": "text/csv",
     ".json": "application/json",
     ".html": "text/html",
+    ".htm": "text/html",
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   };
@@ -1164,6 +1166,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       size_bytes: row.size_bytes,
       created_at: row.created_at
     };
+  }
+  function isValidDocumentStoragePath(storagePath, userId) {
+    if (typeof storagePath !== "string" || typeof userId !== "string") return false;
+    const match = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\.(txt|md|markdown|csv|json|html|htm|pdf|docx)$/i.exec(storagePath);
+    return Boolean(match && match[1].toLowerCase() === userId.toLowerCase());
   }
 
   app.get("/api/documents", requireSupabaseUser, async (req, res) => {
@@ -1281,7 +1288,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row || row.user_id !== req.supabaseUser.id ||
-          !String(row.storage_path || "").startsWith(req.supabaseUser.id + "/")) {
+          !isValidDocumentStoragePath(row.storage_path, req.supabaseUser.id)) {
         return res.status(404).json({ error: { code: "DOCUMENT_NOT_FOUND", message: "Saved document was not found." } });
       }
       const config = supabaseConfig();
@@ -1346,7 +1353,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       try { await objectResponse.body?.cancel?.(); } catch {}
       await supabaseRest(req, "documents", "DELETE",
         "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." +
-        encodeURIComponent(req.supabaseUser.id));
+        encodeURIComponent(req.supabaseUser.id) + "&select=id", {});
       res.json({ ok: true });
     } catch (error) {
       logger.warn?.("Private document deletion failed", { code: error?.code || "DOCUMENT_DELETE_FAILED" });
