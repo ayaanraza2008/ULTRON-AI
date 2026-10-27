@@ -710,9 +710,11 @@ async function runAction(action,id,button){
     case "attach-images":$("#imageInput")?.click();break;
     case "remove-image":state.pendingImages.splice(Number(button.dataset.index),1);renderAttachmentChips();break;
     case "start-voice":startVoice();break;
+    case "start-recording":await startPremiumRecording();break;
+    case "stop-recording":stopPremiumRecording(false);break;
     case "stop-voice":stopVoice();break;
     case "speak":speakText();break;
-    case "stop-tts":if("speechSynthesis"in window)window.speechSynthesis.cancel();$("#ttsState")&&($("#ttsState").textContent="STOPPED");break;
+    case "stop-tts":if("speechSynthesis"in window)window.speechSynthesis.cancel();{const audio=$("#serverTtsAudio");if(audio){audio.pause();audio.currentTime=0}}if($("#ttsState"))$("#ttsState").textContent="STOPPED";if(state.coreState==="responding")setCoreState("idle");break;
     case "refresh-voice":await refreshVoiceStatus();break;
     case "transcript-to-chat":{const t=button.dataset.text||"";await goChatWithText(t);break}
     case "refresh-integrations":await loadIntegrations();break;
@@ -777,8 +779,8 @@ $("#dialogBackdrop").addEventListener("click",event=>{if(event.target.id==="dial
 $("#commandBackdrop").addEventListener("click",event=>{if(event.target.id==="commandBackdrop")closeCommandPalette()});
 $("#imageInput").addEventListener("change",event=>{addImages(event.target.files);event.target.value=""});
 $("#reducedMotionToggle").addEventListener("click",()=>{state.forceReducedMotion=!state.forceReducedMotion;state.coreSettings.reducedMotion=state.forceReducedMotion;state.core?.setOptions(state.coreSettings);document.documentElement.classList.toggle("manual-reduced-motion",state.forceReducedMotion);$("#reducedMotionToggle").setAttribute("aria-pressed",String(state.forceReducedMotion));$("#reducedMotionToggle").textContent="Motion: "+(state.forceReducedMotion?"Reduced":"Auto");try{localStorage.setItem("ultron.core.settings",JSON.stringify(state.coreSettings))}catch{}});
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&state.speechRecognition){try{state.speechRecognition.stop()}catch{}}});
-window.addEventListener("beforeunload",()=>{state.core?.dispose();state.chatAbort?.abort();if(state.speechRecognition){try{state.speechRecognition.stop()}catch{}}if("speechSynthesis"in window)window.speechSynthesis.cancel()});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){if(state.speechRecognition)stopVoice();if(state.recorder)stopPremiumRecording(true)}});
+window.addEventListener("beforeunload",()=>{state.core?.dispose();state.chatAbort?.abort();if(state.speechRecognition){try{state.speechRecognition.stop()}catch{}}if(state.recorder)stopPremiumRecording(true);state.mediaStream?.getTracks().forEach(track=>track.stop());stopAudioMeter();if(state.ttsObjectUrl)URL.revokeObjectURL(state.ttsObjectUrl);if("speechSynthesis"in window)window.speechSynthesis.cancel()});
 function showAuthMessage(){if(state.session&&state.session.configured===true&&!state.session.authenticated){$("#authGate").hidden=false}}
 async function init(){
   document.documentElement.classList.toggle("manual-reduced-motion",Boolean(state.coreSettings.reducedMotion));$("#reducedMotionToggle").setAttribute("aria-pressed",String(state.coreSettings.reducedMotion));$("#reducedMotionToggle").textContent="Motion: "+(state.coreSettings.reducedMotion?"Reduced":"Auto");
