@@ -32,6 +32,8 @@ test("frontend calls verified routes and guards capabilities absent from the cur
   assert.match(js, /WEBGL/);
   assert.match(js, /prefers-reduced-motion/);
   assert.match(js, /cancel-chat|cancel-stream/);
+  assert.match(js, /Routine low-risk research and draft\/report tasks can queue automatically/);
+  assert.match(js, /Non-routine or higher-risk tasks require approval/);
 });
 
 test("frontend respects responsive layout and reduced motion settings", () => {
