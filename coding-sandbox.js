@@ -47,6 +47,15 @@ export function hasExplicitSandboxAuthorization(prompt, source, lang) {
   return provided !== null && provided === source.trim();
 }
 
+export function extractExplicitSandboxRequest(prompt) {
+  if (typeof prompt !== "string" || prompt.length > 40000) return null;
+  for (const language of ["node", "python"]) {
+    const source = extractUserCode(prompt.trim(), language);
+    if (source && hasExplicitSandboxAuthorization(prompt, source, language)) return { language, source };
+  }
+  return null;
+}
+
 export function codingSandboxReadiness(env = process.env) {
   const enabled = env.ULTRON_CODING_SANDBOX_ENABLED === "true";
   const ownerConfigured = OWNER.test(clean(env.ULTRON_INTEGRATION_OWNER_USER_ID, 80));
@@ -98,7 +107,7 @@ export async function runCodeInSandbox({ env = process.env, userId, language, so
     const runner = language === "node" ? "node" : "python3";
     const programArgs = language === "node" ? ["--no-warnings", "/workspace/main.mjs"] : ["-I", "-B", "/workspace/main.py"];
     const args = [
-      "create", "--name", name, "--network=none", "--read-only", "--cap-drop=ALL",
+      "create", "--attach=stdout", "--attach=stderr", "--name", name, "--network=none", "--read-only", "--cap-drop=ALL",
       "--security-opt=no-new-privileges:true", "--pids-limit=48", "--memory=256m",
       "--memory-swap=256m", "--cpus=0.5", "--user=65534:65534",
       "--ulimit", "nofile=64:64", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m",
