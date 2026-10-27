@@ -185,6 +185,35 @@ async function readResponseTextLimited(response, maxBytes) {
   }
 }
 
+async function readResponseBufferLimited(response, maxBytes) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw new Error("Document response exceeded the size limit.");
+  }
+  if (!response.body?.getReader) {
+    throw new Error("Document response cannot be safely size-limited without a streaming body.");
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw new Error("Document response exceeded the size limit.");
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, totalBytes);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
 async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
   const raw = await readResponseTextLimited(response, maxBytes);
   if (!raw) return {};
@@ -1098,6 +1127,240 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       res.json({ ok: true });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_DELETE_FAILED", message: error.message } }); }
   });
+
+  const documentMimeByExtension = {
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".markdown": "text/markdown",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  };
+  const documentBucket = "ultron-private-documents";
+  function documentStorageUrl(config, storagePath) {
+    return config.url + "/storage/v1/object/" + documentBucket + "/" +
+      storagePath.split("/").map(part => encodeURIComponent(part)).join("/");
+  }
+  function documentStorageHeaders(req, config, contentType) {
+    const token = req.supabaseAccessToken || parseCookies(req.headers.cookie)["ultron_sb_access"] || "";
+    return {
+      apikey: config.key,
+      Authorization: "Bearer " + token,
+      Accept: "application/json",
+      ...(contentType ? { "Content-Type": contentType } : {})
+    };
+  }
+  function safeDocumentFilename(value) {
+    if (typeof value !== "string") return "";
+    const leaf = value.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) || "";
+    return leaf.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 240);
+  }
+  function documentResponseRow(row) {
+    return {
+      id: row.id,
+      filename: row.filename,
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
+      created_at: row.created_at
+    };
+  }
+  function isValidDocumentStoragePath(storagePath, userId) {
+    if (typeof storagePath !== "string" || typeof userId !== "string") return false;
+    const match = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(txt|md|markdown|csv|json|html|htm|pdf|docx)$/i.exec(storagePath);
+    return Boolean(match && match[1].toLowerCase() === userId.toLowerCase());
+  }
+
+  app.get("/api/documents", requireSupabaseUser, async (req, res) => {
+    try {
+      const rows = await supabaseRest(req, "documents", "GET",
+        "?select=id,filename,mime_type,size_bytes,created_at&user_id=eq." +
+        encodeURIComponent(req.supabaseUser.id) + "&order=created_at.desc&limit=50");
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ documents: (Array.isArray(rows) ? rows : []).map(documentResponseRow) });
+    } catch (error) {
+      const code = error.status === 404 ? "DOCUMENT_STORAGE_NOT_READY" : "DOCUMENT_LIST_FAILED";
+      res.status(error.status || 502).json({ error: { code, message: code === "DOCUMENT_STORAGE_NOT_READY"
+        ? "Private document storage is not installed yet. Apply the ULTRON document-storage migration first."
+        : "Could not load your saved documents." } });
+    }
+  });
+
+  app.post("/api/documents/upload", requireSupabaseUser, async (req, res) => {
+    const filename = safeDocumentFilename(req.body?.filename);
+    const encoded = typeof req.body?.fileBase64 === "string" ? req.body.fileBase64.trim() : "";
+    if (!filename || filename.length > 240) {
+      return res.status(400).json({ error: { code: "INVALID_DOCUMENT_FILENAME", message: "Provide a filename up to 240 characters." } });
+    }
+    const extension = path.extname(filename).toLowerCase();
+    const mimeType = documentMimeByExtension[extension];
+    if (!mimeType) {
+      return res.status(415).json({ error: { code: "UNSUPPORTED_DOCUMENT_FORMAT", message: "Supported files are TXT, Markdown, CSV, JSON, HTML, PDF, and DOCX." } });
+    }
+    if (!encoded || encoded.length > Math.ceil(5_242_880 * 4 / 3) + 8 ||
+        encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+      return res.status(413).json({ error: { code: "DOCUMENT_TOO_LARGE_OR_INVALID", message: "Provide a valid base64 document no larger than 5 MB." } });
+    }
+    const bytes = Buffer.from(encoded, "base64");
+    if (!bytes.length || bytes.length > 5_242_880 || bytes.toString("base64") !== encoded) {
+      return res.status(413).json({ error: { code: "DOCUMENT_TOO_LARGE_OR_INVALID", message: "Provide a valid base64 document no larger than 5 MB." } });
+    }
+    if (extension === ".pdf" && bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      return res.status(400).json({ error: { code: "INVALID_PDF", message: "File does not have a valid PDF signature." } });
+    }
+    if (extension === ".docx" && (bytes.length < 4 || bytes.subarray(0, 2).toString("hex") !== "504b")) {
+      return res.status(400).json({ error: { code: "INVALID_DOCX", message: "File does not have a valid DOCX/ZIP signature." } });
+    }
+    if (![".pdf", ".docx"].includes(extension) && bytes.includes(0)) {
+      return res.status(400).json({ error: { code: "INVALID_TEXT_DOCUMENT", message: "Text formats must not contain binary NUL bytes." } });
+    }
+    const config = supabaseConfig();
+    if (!config || !req.supabaseAccessToken) {
+      return res.status(503).json({ error: { code: "DOCUMENT_STORAGE_NOT_CONFIGURED", message: "Authenticated Supabase storage is not configured." } });
+    }
+    const userId = req.supabaseUser.id;
+    const storagePath = userId + "/" + crypto.randomUUID() + extension;
+    const objectUrl = documentStorageUrl(config, storagePath);
+    const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+    let objectUploaded = false;
+    try {
+      const upload = await fetchImpl(objectUrl, {
+        method: "POST",
+        headers: { ...documentStorageHeaders(req, config, mimeType), "x-upsert": "false" },
+        body: bytes,
+        redirect: "error",
+        signal: AbortSignal.timeout(20_000)
+      });
+      if (!upload.ok) {
+        try { await upload.body?.cancel?.(); } catch {}
+        const status = upload.status === 413 ? 413 : upload.status === 415 ? 415 : upload.status === 401 || upload.status === 403 ? 403 : 502;
+        const code = status === 413 ? "DOCUMENT_TOO_LARGE" : status === 415 ? "DOCUMENT_MIME_REJECTED" : status === 403 ? "DOCUMENT_STORAGE_DENIED" : "DOCUMENT_UPLOAD_FAILED";
+        return res.status(status).json({ error: { code, message: status === 413
+          ? "The storage bucket rejected this file size."
+          : status === 415
+            ? "The storage bucket rejected this file type."
+            : status === 403
+              ? "Private storage denied this upload. Check that the document-storage migration is applied."
+              : "The original file could not be stored." } });
+      }
+      objectUploaded = true;
+      const rows = await supabaseRest(req, "documents", "POST", "?select=id,filename,mime_type,size_bytes,created_at", {
+        user_id: userId,
+        filename,
+        mime_type: mimeType,
+        size_bytes: bytes.length,
+        sha256,
+        storage_path: storagePath
+      });
+      if (!Array.isArray(rows) || !rows[0]?.id) {
+        throw Object.assign(new Error("Document metadata was not returned."), { status: 502, code: "DOCUMENT_METADATA_WRITE_FAILED" });
+      }
+      res.status(201).json({ document: documentResponseRow(rows[0]) });
+    } catch (error) {
+      if (objectUploaded) {
+        try {
+          const cleanup = await fetchImpl(objectUrl, {
+            method: "DELETE",
+            headers: documentStorageHeaders(req, config),
+            redirect: "error",
+            signal: AbortSignal.timeout(10_000)
+          });
+          try { await cleanup.body?.cancel?.(); } catch {}
+        } catch {}
+      }
+      logger.warn?.("Private document upload failed", { code: error?.code || "DOCUMENT_UPLOAD_FAILED", status: error?.status || 0 });
+      const code = error?.code === "DOCUMENT_METADATA_WRITE_FAILED" ? "DOCUMENT_METADATA_WRITE_FAILED" : "DOCUMENT_UPLOAD_FAILED";
+      res.status(error?.status || 502).json({ error: { code, message: code === "DOCUMENT_METADATA_WRITE_FAILED"
+        ? "The file was uploaded but its metadata could not be saved; cleanup was attempted. Please retry."
+        : "The original file could not be stored. Check private storage setup and try again." } });
+    }
+  });
+
+  app.get("/api/documents/:id/download", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_DOCUMENT_ID", message: "Document ID is invalid." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "documents", "GET",
+        "?select=id,user_id,filename,mime_type,size_bytes,sha256,storage_path&id=eq." +
+        encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (!row || row.user_id !== req.supabaseUser.id ||
+          !isValidDocumentStoragePath(row.storage_path, req.supabaseUser.id)) {
+        return res.status(404).json({ error: { code: "DOCUMENT_NOT_FOUND", message: "Saved document was not found." } });
+      }
+      const config = supabaseConfig();
+      const upstream = await fetchImpl(documentStorageUrl(config, row.storage_path), {
+        headers: documentStorageHeaders(req, config),
+        redirect: "error",
+        signal: AbortSignal.timeout(20_000)
+      });
+      if (!upstream.ok) {
+        try { await upstream.body?.cancel?.(); } catch {}
+        return res.status(upstream.status === 404 ? 404 : 502).json({ error: {
+          code: upstream.status === 404 ? "DOCUMENT_FILE_MISSING" : "DOCUMENT_DOWNLOAD_FAILED",
+          message: upstream.status === 404 ? "The saved file is missing from private storage." : "Could not download the saved document."
+        } });
+      }
+      const bytes = await readResponseBufferLimited(upstream, 5_242_880);
+      if (bytes.length !== Number(row.size_bytes) ||
+          crypto.createHash("sha256").update(bytes).digest("hex") !== row.sha256) {
+        return res.status(502).json({ error: { code: "DOCUMENT_INTEGRITY_CHECK_FAILED", message: "Saved file integrity verification failed." } });
+      }
+      const asciiFilename = String(row.filename || "document").replace(/[^\x20-\x7e]/g, "_").replace(/["\\;]/g, "_");
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Type", row.mime_type);
+      res.setHeader("Content-Length", String(bytes.length));
+      res.setHeader("Content-Disposition", 'attachment; filename="' + asciiFilename + '"');
+      return res.status(200).send(bytes);
+    } catch (error) {
+      if (error?.status === 404) return res.status(404).json({ error: { code: "DOCUMENT_NOT_FOUND", message: "Saved document was not found." } });
+      logger.warn?.("Private document download failed", { code: error?.code || "DOCUMENT_DOWNLOAD_FAILED" });
+      res.status(502).json({ error: { code: "DOCUMENT_DOWNLOAD_FAILED", message: "Could not download the saved document." } });
+    }
+  });
+
+  app.delete("/api/documents/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_DOCUMENT_ID", message: "Document ID is invalid." } });
+    }
+    const config = supabaseConfig();
+    try {
+      const rows = await supabaseRest(req, "documents", "GET",
+        "?select=id,user_id,storage_path&id=eq." + encodeURIComponent(req.params.id) +
+        "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (!row || row.user_id !== req.supabaseUser.id ||
+          !isValidDocumentStoragePath(row.storage_path, req.supabaseUser.id)) {
+        return res.status(404).json({ error: { code: "DOCUMENT_NOT_FOUND", message: "Saved document was not found." } });
+      }
+      const objectUrl = documentStorageUrl(config, row.storage_path);
+      const objectResponse = await fetchImpl(objectUrl, {
+        method: "DELETE",
+        headers: documentStorageHeaders(req, config),
+        redirect: "error",
+        signal: AbortSignal.timeout(20_000)
+      });
+      if (!objectResponse.ok && objectResponse.status !== 404) {
+        try { await objectResponse.body?.cancel?.(); } catch {}
+        return res.status(objectResponse.status === 401 || objectResponse.status === 403 ? 403 : 502).json({
+          error: { code: "DOCUMENT_FILE_DELETE_FAILED", message: "The stored file could not be deleted; its metadata was kept." }
+        });
+      }
+      try { await objectResponse.body?.cancel?.(); } catch {}
+      await supabaseRest(req, "documents", "DELETE",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." +
+        encodeURIComponent(req.supabaseUser.id) + "&select=id", {});
+      res.json({ ok: true });
+    } catch (error) {
+      logger.warn?.("Private document deletion failed", { code: error?.code || "DOCUMENT_DELETE_FAILED" });
+      res.status(error?.status || 502).json({ error: { code: "DOCUMENT_DELETE_FAILED", message: "Could not delete the saved document. Retry if the file was already removed." } });
+    }
+  });
+
 
   app.get("/api/preferences", requireSupabaseUser, async (req, res) => {
     try {
