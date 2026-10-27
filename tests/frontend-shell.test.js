@@ -41,7 +41,7 @@ test("frontend calls implemented backend routes and accurately labels capabiliti
   assert.ok(js.includes('"/api/documents/"+encodeURIComponent(id)+"/download'));
   assert.ok(js.includes('"/api/documents/"+encodeURIComponent(id)'));
   assert.match(js, /Private document vault/);
-  assert.match(js, /The original file is never public/);
+  assert.match(js, /Original files are never public/);
   assert.match(js, /original file is not retained/);
   assert.match(js, /Non-routine or higher-risk tasks require approval/);
 });
