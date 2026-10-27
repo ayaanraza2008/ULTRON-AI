@@ -240,7 +240,7 @@ internal sealed class CompanionContext : ApplicationContext
 
         var consent = MessageBox.Show(
             _window,
-            "Enable the ULTRON PC action bridge?\n\nThe companion will poll ULTRON for actions that you separately approve in ULTRON. It can only open an approved public HTTPS URL, launch Notepad/Calculator/Explorer, or return limited Windows system information. It will not run shell commands, read/write files, take screenshots, upload files, or delete data.\n\nKeep this checkbox off when you do not want the PC to receive approved actions.",
+            "Enable the ULTRON PC action bridge?\n\nThe companion will poll ULTRON for actions that you separately approve in ULTRON. It can only launch Notepad, Calculator, or Explorer without arguments, or return limited Windows system information. It will not run shell commands, read/write files, take screenshots, upload files, or delete data.\n\nKeep this checkbox off when you do not want the PC to receive approved actions.",
             "PC action bridge consent",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning);
