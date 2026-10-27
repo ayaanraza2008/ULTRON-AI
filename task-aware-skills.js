@@ -93,7 +93,10 @@ function selectEccSkills(text, categories) {
     }
   };
   if (ECC_SECURITY_INTENT.test(text)) add("security-review");
-  if ((categories.includes("software_change") || categories.includes("multi_step")) && ECC_BACKEND_INTENT.test(text)) add("backend-patterns");
+  // When a security fix also changes code, prioritize tests with the security review.
+  // Otherwise pair backend guidance with TDD for ordinary server-side changes.
+  if (ECC_SECURITY_INTENT.test(text) && categories.includes("software_change")) add("tdd-workflow");
+  else if ((categories.includes("software_change") || categories.includes("multi_step")) && ECC_BACKEND_INTENT.test(text)) add("backend-patterns");
   if (categories.includes("software_change")) add("tdd-workflow");
   if (categories.includes("multi_step")) add("verification-loop");
   if (categories.includes("research")) add("deep-research");
@@ -105,7 +108,7 @@ export function buildTaskSkillsGuidance(task) {
   const text = typeof task === "string" ? task.slice(0, 4000) : "";
   const lower = text.toLowerCase();
   const categories = [];
-  if (/\b(code|coding|debug|implement|repository|repo|pull request|commit|build|test suite)\b/i.test(text)) categories.push("software_change");
+  if (/\b(code|coding|debug|fix|repair|bug|regression|refactor|patch|hotfix|implement|repository|repo|pull request|commit|build|test suite)\b/i.test(text)) categories.push("software_change");
   if (/\b(research|search|latest|current|sources|compare|investigate|look up)\b/i.test(text)) categories.push("research");
   if (/\b(plan|workflow|automate|background|schedule|agent|integrate|integration|deploy|migration)\b/i.test(text)) categories.push("multi_step");
   if (/\b(memory|remember|previous|history|context|preferences)\b/i.test(text)) categories.push("memory_context");
