@@ -40,7 +40,7 @@ export function resolveAutonomyIntent(prompt, history = []) {
 }
 
 function isExplicitDraftOnlyCommunication(text) {
-  return /^\\s*(?:please\\s+)?(?:draft|write|compose|prepare)\\b[\\s\\S]{0,220}\\b(?:but\\s+)?(?:do not|don't|never)\\s+(?:send|text|message|reply|forward|email)\\s+(?:it|this|that|the message|the email|the reply|the draft)?[.!?]*\\s*$/i.test(text);
+  return /^\s*(?:please\s+)?(?:draft|write|compose|prepare)\b[\s\S]{0,220}\b(?:but\s+)?(?:do not|don't|never)\s+(?:send|text|message|reply|forward|email)\s+(?:it|this|that|the message|the email|the reply|the draft)?[.!?]*\s*$/i.test(text);
 }
 
 export function classifyAutonomyRisk(input) {
