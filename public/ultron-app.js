@@ -12,7 +12,7 @@ const state = {
   models:[], preferences:null, conversations:[], conversationId:null, chatMessages:[], pendingImages:[],
   tasks:[], memory:[], integrations:[], schedules:[], employeeRoles:[], routines:[],
   core:null, coreState:"idle", coreSettings:readCoreSettings(), chatBusy:false, chatAbort:null,
-  authMode:"signin", speechRecognition:null, mediaStream:null, speechActive:false,
+  authMode:"signin", speechRecognition:null, mediaStream:null, speechActive:false, recorder:null, recordedChunks:[], discardRecording:false, audioContext:null, analyser:null, waveformSource:null, audioFrequency:null, audioFrame:0, ttsObjectUrl:null, speechCapabilities:null, voiceStudioSummary:null,
   currentTask:null, currentTaskProgress:null, forceReducedMotion:false
 };
 class APIError extends Error { constructor(message,status=0,body=null){super(message);this.name="APIError";this.status=status;this.body=body;} }
@@ -494,15 +494,29 @@ async function savePreferences(event){
   try{const r=await api("/preferences",{method:"PUT",body});state.preferences=r.data.preferences;inlineNotice($("#preferencesNotice"),"Preferences saved by the API.","success");toast("Preferences updated.","success")}
   catch(error){inlineNotice($("#preferencesNotice"),"Preferences were not saved: "+error.message,"error")}
 }
+function renderVoiceAdapterSummary(){
+  const label=$("#voiceAdapterState");if(!label)return;
+  const speech=state.speechCapabilities;const parts=[];
+  if(speech){parts.push("Browser speech: browser capability");parts.push("Server TTS: "+(speech.premiumTtsConfigured?"configured (inference not yet tested)":"not configured"));parts.push("Server STT: "+(speech.premiumSttConfigured?"configured (transcription not yet tested)":"not configured"))}
+  else parts.push("Speech provider configuration: not verified");
+  if(state.voiceStudioSummary)parts.push("VoiceStudio: "+state.voiceStudioSummary);
+  label.textContent=parts.join(" · ");
+}
 function setupVoice(){
-  const locale=$("#voiceLocale");if(locale&&state.preferences?.voice_input_locale)locale.value=state.preferences.voice_input_locale;
+  const locale=$("#voiceLocale");if(locale&&state.preferences?.voice_input_locale)locale.value=state.preferences.voice_input_locale==="hinglish"?"en-IN":state.preferences.voice_input_locale;
   if("speechSynthesis" in window){
     const populate=()=>{const select=$("#ttsVoice");if(!select)return;const voices=window.speechSynthesis.getVoices();const prior=select.value;select.innerHTML='<option value="">System default</option>'+voices.map((v,i)=>'<option value="'+i+'">'+esc(v.name+" ("+v.lang+")")+'</option>').join("");select.value=prior};
     populate();window.speechSynthesis.onvoiceschanged=populate;
   }
   const recognition=window.SpeechRecognition||window.webkitSpeechRecognition;const start=$("#startVoice"),help=$("#voiceStateHelp");
-  if(!recognition){if(start)start.disabled=true;if(help)help.textContent="This browser does not expose SpeechRecognition. No microphone session has started. Use text chat or connect a compatible speech-to-text adapter."}
-  api("/integrations/voicestudio/status").then(r=>{$("#voiceAdapterState").textContent="VoiceStudio status response: "+safeJson(r.data)}).catch(e=>{$("#voiceAdapterState").textContent="VoiceStudio adapter unavailable or owner-restricted: "+e.message+" Browser-native speech remains available where supported."});
+  if(!recognition){if(start)start.disabled=true;if(help)help.textContent="This browser does not expose SpeechRecognition. Use the explicit server-recording option if the transcription adapter is configured, or send text in Chat."}
+  api("/capabilities").then(r=>{
+    state.speechCapabilities=r.data?.providers?.speech||{};
+    const serverOption=$("#ttsEngine option[value='server']");
+    if(serverOption){serverOption.disabled=!state.speechCapabilities.premiumTtsConfigured;serverOption.textContent=state.speechCapabilities.premiumTtsConfigured?"Configured server voice":"Server voice · not configured"}
+    renderVoiceAdapterSummary();
+  }).catch(()=>{state.speechCapabilities=null;renderVoiceAdapterSummary()});
+  api("/integrations/voicestudio/status").then(r=>{state.voiceStudioSummary="status returned";renderVoiceAdapterSummary()}).catch(e=>{state.voiceStudioSummary="unavailable or owner-restricted ("+e.message+")";renderVoiceAdapterSummary()});
 }
 function startVoice(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Recognition){toast("Browser speech recognition is not supported here.","error");return}
