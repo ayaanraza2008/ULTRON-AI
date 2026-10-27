@@ -43,9 +43,19 @@ export async function createEnergyCore(host,onStatus=()=>{},initialOptions={}){
       return new THREE.Points(g,m);
     }
     geometry=[];
-    const preset=presets[options.quality]||presets.balanced;
-    const total=clamp(Number(options.particles)||preset.particles,3500,65000);const inner=Math.floor(total*.68);
-    cloud=makeCloud(inner,0);const farCloud=makeCloud(total-inner,1);ambient.add(cloud,farCloud);geometry=[cloud,farCloud];
+    let total=0;
+    function rebuildParticleClouds(requested){
+      geometry.forEach(points=>{ambient.remove(points);points.geometry.dispose();points.material.dispose()});
+      geometry.length=0;
+      const preset=presets[options.quality]||presets.balanced;
+      total=clamp(Number(requested)||Number(options.particles)||preset.particles,3500,65000);
+      const inner=Math.floor(total*.68);
+      cloud=makeCloud(inner,0);
+      const farCloud=makeCloud(total-inner,1);
+      ambient.add(cloud,farCloud);
+      geometry.push(cloud,farCloud);
+    }
+    rebuildParticleClouds(options.particles);
     for(const spec of [{rx:13,ry:4.25,rz:0.8,color:0xa879ff,opacity:.36},{rx:11,ry:7.2,rz:-.9,color:0xf64c91,opacity:.28},{rx:15.5,ry:6.2,rz:1.55,color:0x70dfff,opacity:.17}]){
       const points=[];for(let i=0;i<512;i++){const a=i/512*Math.PI*2;points.push(new THREE.Vector3(Math.cos(a)*spec.rx,Math.sin(a)*spec.ry,Math.sin(a)*spec.rx*.07));}
       const ringGeo=new THREE.BufferGeometry().setFromPoints(points);const ringMat=new THREE.LineBasicMaterial({color:spec.color,transparent:true,opacity:spec.opacity,blending:THREE.AdditiveBlending,depthWrite:false});const ring=new THREE.LineLoop(ringGeo,ringMat);ring.rotation.z=spec.rz;ring.rotation.x=spec.rz*.17;ambient.add(ring);orbital.push(ring);
@@ -62,6 +72,6 @@ export async function createEnergyCore(host,onStatus=()=>{},initialOptions={}){
     const onVisibility=()=>{if(!document.hidden&&!disposed){resize();}};document.addEventListener("visibilitychange",onVisibility);
     const oldDispose=()=>{renderer.domElement.removeEventListener("webglcontextlost",onContextLost);document.removeEventListener("visibilitychange",onVisibility);};
     setState("idle");animate();onStatus?.({available:true,renderer:"Three.js WebGL",quality:options.quality,particles:total});
-    return {setState,setOptions(next){options={...options,...next};syncOptions();if(typeof options.scale==="number")ambient.scale.setScalar(clamp(options.scale,.65,1.45));if(next.quality||next.particles){onStatus?.({available:true,renderer:"Three.js WebGL",quality:options.quality,particles:total,rebuildRequired:true});}},dispose(){disposed=true;cancelAnimationFrame(frame);oldDispose();resizeObserver?.disconnect();scene?.traverse(obj=>{obj.geometry?.dispose?.();if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose());else obj.material?.dispose?.()});renderer?.dispose();renderer?.domElement.remove();}};
+    return {setState,setOptions(next){const previousQuality=options.quality;const previousParticles=options.particles;options={...options,...next};if(next.quality||next.particles){rebuildParticleClouds(options.particles)}syncOptions();if(typeof options.scale==="number")ambient.scale.setScalar(clamp(options.scale,.65,1.45));if(previousQuality!==options.quality||previousParticles!==options.particles){onStatus?.({available:true,renderer:"Three.js WebGL",quality:options.quality,particles:total})}},dispose(){disposed=true;cancelAnimationFrame(frame);oldDispose();resizeObserver?.disconnect();scene?.traverse(obj=>{obj.geometry?.dispose?.();if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose());else obj.material?.dispose?.()});renderer?.dispose();renderer?.domElement.remove()}};
   }catch(error){try{renderer?.dispose();renderer?.domElement.remove();}catch{}host.replaceChildren();onStatus?.({available:false,reason:"WebGL initialization failed"});return fallbackCore(host,onStatus,options);}
 }
