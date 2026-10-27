@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "../autonomy-policy.js";
+import { buildAutonomyPlan, classifyAutonomyRisk, hasAutonomyRiskLevel, resolveAutonomyIntent } from "../autonomy-policy.js";
 
 test("routine research and drafting remain autonomously eligible", () => {
   const risk = classifyAutonomyRisk("Research renewable energy trends and draft a summary.");
@@ -242,4 +242,13 @@ test("consequential and generic browser buttons require confirmation", () => {
     assert.equal(risk.level, "external_effect", task);
     assert.equal(risk.requiresConfirmation, true, task);
   }
+});
+
+
+test("mixed intents preserve every sensitive risk class for safe-tool dispatch", () => {
+  const mixed = "Read my emails to find order details, then send a reply to the customer.";
+  assert.equal(classifyAutonomyRisk(mixed).level, "external_effect");
+  assert.equal(hasAutonomyRiskLevel(mixed, ["private_data"]), true);
+  assert.equal(hasAutonomyRiskLevel(mixed, ["device_control"]), false);
+  assert.equal(hasAutonomyRiskLevel("Research public email confirmation best practices.", ["private_data", "device_control"]), false);
 });

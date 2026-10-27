@@ -1020,31 +1020,54 @@ test("autonomous fallback combines research, image generation readiness, and cod
 });
 
 
-test("high-impact user intent blocks tool dispatch until a task-specific approval flow exists", async () => {
-  let externalCalls = 0;
+test("high-impact mixed requests can run safe public research without executing the consequential action", async () => {
+  let providerCalls = 0;
+  let researchCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      researchCalls += 1;
+      assert.equal(options.method, "POST");
+      const request = JSON.parse(options.body);
+      assert.equal(request.query, "public order confirmation email best practices");
+      return new Response(JSON.stringify({
+        answer: "Use a clear subject, order details, and delivery estimate.",
+        results: [{ title: "Order confirmation guidance", url: "https://example.com/order-email-guide", content: "Include the order number and next steps." }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
     const body = JSON.parse(options.body);
     if (body.messages.some(message => message.role === "system" && String(message.content).includes("Summarize the tool results accurately"))) {
-      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "ULTRON did not send anything because approval is required." } }] }), { status: 200 });
+      const toolMessages = body.messages.filter(message => message.role === "tool");
+      assert.equal(toolMessages.length, 1);
+      const research = JSON.parse(toolMessages[0].content);
+      assert.equal(research.provider, "tavily");
+      assert.equal(research.results[0].url, "https://example.com/order-email-guide");
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I researched public guidance. I did not send an email; that consequential step remains gated." } }] }), { status: 200 });
     }
-    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "call-risky", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "customer email" }) } }] } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+      id: "call-safe-research", type: "function",
+      function: { name: "research_web", arguments: JSON.stringify({ query: "public order confirmation email best practices" }) }
+    }] } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Send an email to the customer confirming the order." })
+      body: JSON.stringify({ prompt: "Research public best practices, then send an email to the customer confirming the order." })
     });
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.autonomy.risk.level, "external_effect");
-    assert.equal(body.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
-    assert.equal(body.toolResults[0].result.approvalRequired, true);
-    assert.equal(externalCalls, 0);
+    assert.equal(body.autonomy.risk.requiresConfirmation, true);
+    assert.equal(body.toolResults.length, 1);
+    assert.equal(body.toolResults[0].name, "research_web");
+    assert.equal(body.toolResults[0].ok, true);
+    assert.equal(body.toolResults[0].result.provider, "tavily");
+    assert.equal(researchCalls, 1);
+    assert.equal(providerCalls, 2);
+    assert.match(body.content, /did not send an email/i);
   });
 });
-
-
 test("browser-use readiness explains that the optional bridge is not configured", async () => {
   await withServer({}, async () => { throw new Error("readiness must not call a provider"); }, async base => {
     const response = await fetch(base + "/api/agent/browser-use");
@@ -2037,4 +2060,86 @@ test("authenticated desktop companion status endpoint returns bounded status wit
     assert.equal(payload.state, "blocked");
     assert.equal(payload.code, "INTEGRATION_OWNER_ONLY");
   }, { userId: "00000000-0000-4000-8000-000000000002" });
+});
+
+
+test("agent automatically advertises and consumes locally bundled pinned ECC guidance without network access", async () => {
+  const pinnedRevision = "25278e7d7b6cf6e6a4e7a6c8e10f14ff22f0eb5b";
+  const task = "Implement a backend API integration with tests";
+  let eccNetworkCalls = 0;
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options) => {
+    if (url.startsWith("https://raw.githubusercontent.com/affaan-m/ECC/") || url.startsWith("https://github.com/affaan-m/ECC/")) {
+      eccNetworkCalls += 1;
+      throw new Error("Bundled ECC skills must not require runtime network access.");
+    }
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    assert.ok(request.messages.some(message => message.role === "system" && String(message.content).includes("ECC backend-patterns fallback")));
+    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("ecc-backend-patterns") && String(message.content).includes("Backend Development Patterns")));
+    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("ecc-tdd-workflow") && String(message.content).includes("Test-Driven Development Workflow")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The backend task was reviewed using task-matched guidance." } }] }), { status: 200 });
+  }, async base => {
+    const metadataResponse = await fetch(base + "/api/agent/task-skills?task=" + encodeURIComponent(task));
+    assert.equal(metadataResponse.status, 200);
+    const metadata = await metadataResponse.json();
+    assert.equal(metadata.eccIntegration.enabled, true);
+    assert.equal(metadata.eccIntegration.revision, pinnedRevision);
+    assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "backend-patterns"));
+    assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "tdd-workflow"));
+    assert.ok(metadata.eccIntegration.selectedSkills.every(skill => skill.revision === pinnedRevision));
+    assert.ok(metadata.eccIntegration.selectedSkills.every(skill => skill.bundled === true && skill.contentLoaded === true));
+    assert.equal(JSON.stringify(metadata).includes("Test-Driven Development Workflow"), false, "API metadata must not expose bundled skill text");
+
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: task })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /task-matched guidance/);
+    assert.equal(eccNetworkCalls, 0);
+    assert.ok(providerCalls >= 1);
+  });
+});
+
+
+test("short confirmation inherits the task for automatic ECC skill selection", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options = {}) => {
+    if (url.startsWith("https://raw.githubusercontent.com/affaan-m/ECC/") || url.startsWith("https://github.com/affaan-m/ECC/")) {
+      throw new Error("ECC skill snapshots must stay local and not trigger runtime network fetches.");
+    }
+    if (url.startsWith("https://raw.githubusercontent.com/")) {
+      return new Response("# Skill reference\\nUse relevant, defensive guidance and verify claims.", {
+        status: 200,
+        headers: { "content-type": "text/plain; charset=utf-8" }
+      });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    assert.ok(request.messages.some(message => message.role === "user"
+      && String(message.content).includes("ecc-backend-patterns")
+      && String(message.content).includes("Backend Development Patterns")));
+    assert.ok(request.messages.some(message => message.role === "user"
+      && String(message.content).includes("ecc-tdd-workflow")
+      && String(message.content).includes("Test-Driven Development Workflow")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I will continue the backend fix with tests." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "yes, do it",
+        messages: [
+          { role: "user", content: "Fix the backend provider fallback bug." },
+          { role: "assistant", content: "I will inspect the implementation and add a regression test." }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /backend fix/i);
+    assert.equal(providerCalls, 1);
+  });
 });
