@@ -39,7 +39,15 @@ ULTRON vendors five selected upstream skill Markdown files (backend-patterns, td
 
 - No full ECC checkout or bulk copy of its agents, skills, hooks, rules, or scripts.
 - No new runtime dependencies or automated shell hooks.
-- The only API-surface change is additive, non-secret ECC selection metadata from the existing authenticated task-skills endpoint; no tool permissions or execution behavior are widened. No database migrations, environment variables, credentials, Render, or Supabase settings are changed.
+- The API surface adds non-secret ECC selection metadata to the existing authenticated task-skills endpoint.
+- The agent dispatch boundary allows a narrow list of read-only/status-check and draft-only tools to prepare safe parts of a mixed task (for example, research before a requested email). This does **not** authorize the consequential final action. The exception does not apply when the request also contains private-data access or device-control intent; destructive/external-action tool calls remain gated.
+- No database migrations, environment variables, credentials, Render settings, Supabase settings, frontend work, deployment, or redeployment are included.
+
+## Safe preparation in mixed requests — 2026-10-27
+
+A follow-up autonomy hardening change avoids blocking every tool when an overall request combines a safe preparatory step with an external action. SAFE_PREPARATION_TOOLS is deliberately limited to public research, code/planning drafts, status checks, and public-page inspection. Sensitive private-data/device-control intent disables the exception. Other tools still inherit the request risk, and delegated browser/employee/Hermes tasks remain subject to their specific risk checks.
+
+Verification at commit 41313124da61befe8f6e0b653749eff6a8a7b0ec: GitHub Actions run [40511199202](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40511199202) passed npm run check, npm test (514 tests: 513 passed, 0 failed, 1 skipped), the existing deployed health smoke test, and the world-intelligence build. These are automated/CI results; they do not prove live provider inference, Supabase two-user isolation, or live background-task completion.
 - No frontend work, deployment, or redeployment.
 - No claim that provider, account-isolation, background-worker, or other live tests have passed.
 
