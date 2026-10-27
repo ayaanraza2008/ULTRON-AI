@@ -146,7 +146,6 @@ test("private document storage rejects invalid formats and malformed signatures 
     const url = new URL(rawUrl);
     if (url.pathname === "/auth/v1/user") return authUser();
     if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return json(true);
-    if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return json(true);
     if (url.pathname.startsWith(bucketPath)) storageCalls.push(url.pathname);
     throw new Error("invalid upload must not reach storage or database");
   };
@@ -173,6 +172,7 @@ test("document lookup never downloads another user's object", async () => {
   const fetchImpl = async rawUrl => {
     const url = new URL(rawUrl);
     if (url.pathname === "/auth/v1/user") return authUser();
+    if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return json(true);
     if (url.pathname === "/rest/v1/documents") return json([]);
     if (url.pathname.startsWith(bucketPath)) storageCalls.push(url.pathname);
     throw new Error("unexpected fetch " + rawUrl);
@@ -195,6 +195,7 @@ test("document download rejects bytes that do not match stored size and SHA-256"
   const fetchImpl = async rawUrl => {
     const url = new URL(rawUrl);
     if (url.pathname === "/auth/v1/user") return authUser();
+    if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return json(true);
     if (url.pathname === "/rest/v1/documents") return json([row]);
     if (url.pathname.startsWith(bucketPath)) return new Response(stored, { status: 200 });
     throw new Error("unexpected fetch " + rawUrl);
