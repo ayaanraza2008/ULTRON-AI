@@ -16,6 +16,12 @@ test("memory expiry is validated on create and can be updated or cleared without
       if (parsed.pathname === "/auth/v1/user") {
         return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
+      if (parsed.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (parsed.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (parsed.pathname === "/rest/v1/memory_items") {
         const body = options.body ? JSON.parse(options.body) : null;
         requests.push({ method: options.method || "GET", url: String(url), body });
@@ -86,6 +92,7 @@ test("memory expiry rejects normalized invalid calendar dates and invalid timezo
     fetchImpl: async (url, options = {}) => {
       const parsed = new URL(url);
       if (parsed.pathname === "/auth/v1/user") return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      if (parsed.pathname === "/rest/v1/rpc/ultron_is_current_session_active") return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       if (parsed.pathname === "/rest/v1/memory_items") {
         databaseWrites += 1;
         return new Response(JSON.stringify([{ id: "123e4567-e89b-12d3-a456-426614174000" }]), { status: 200, headers: { "Content-Type": "application/json" } });
