@@ -15,10 +15,17 @@ test("frontend shell loads local assets and includes every workspace", () => {
   }
 });
 
-test("frontend uses real backend contracts and does not embed provider credentials", () => {
-  for (const path of ["/api/health", "/api/capabilities", "/api/session", "/api/chat", "/api/tasks", "/api/research", "/api/coding/assist", "/api/documents/extract", "/api/memory", "/api/integrations", "/api/employees/schedules", "/api/preferences"]) {
-    assert.ok(js.includes(path), "Missing API contract: " + path);
+test("frontend calls verified routes and guards capabilities absent from the current backend", () => {
+  for (const path of ["/api/health", "/api/runtime/readiness", "/api/session", "/api/chat", "/api/models", "/api/conversations", "/api/memory", "/api/integrations", "/api/preferences", "/api/worker/status"]) {
+    assert.ok(js.includes(path), "Missing verified API contract: " + path);
   }
+  for (const capability of ["tasks", "research", "coding", "documents", "automation", "agentTools"]) {
+    assert.match(js, new RegExp(capability + ":false"), "Missing explicit capability state: " + capability);
+  }
+  assert.match(js, /Task-record API is not exposed/);
+  assert.match(js, /No search was performed/);
+  assert.match(js, /No code was generated or executed/);
+  assert.match(js, /The file was not uploaded/);
   assert.doesNotMatch(js, /(?:sk-[A-Za-z0-9]{20,}|sk-or-v1-[A-Za-z0-9]{20,})/);
   assert.match(js, /WEBGL/);
   assert.match(js, /prefers-reduced-motion/);
