@@ -13,7 +13,7 @@ const LOCAL_SUFFIXES = [
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function normalizeHostname(hostname) {
-  return String(hostname || "").toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+  return String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
 }
 
 function networkSafetyError(code, message) {
@@ -225,7 +225,7 @@ export async function safePinnedFetch(input, init = {}, dependencies = {}) {
  * recommended in production.
  */
 export function isPublicNetworkHost(hostname) {
-  const host = String(hostname || "").toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+  const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (!host || host === "localhost" || LOCAL_SUFFIXES.some(suffix => host.endsWith(suffix))
       || host === "metadata.google.internal" || host === "metadata.google") return false;
 
@@ -283,12 +283,12 @@ export function safeServiceBase(value) {
   if (typeof value !== "string" || !value.trim() || value.length > 2000) return null;
   try {
     const url = new URL(value.trim());
-    const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
     const loopback = LOCAL_HOSTS.has(host);
     if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol === "http:" && loopback) return url.toString().replace(/\\/+$/, "");
+    if (url.protocol === "http:" && loopback) return url.toString().replace(/\/+$/, "");
     if (url.protocol !== "https:" || !isPublicNetworkHost(url.hostname)) return null;
-    return url.toString().replace(/\\/+$/, "");
+    return url.toString().replace(/\/+$/, "");
   } catch {
     return null;
   }
