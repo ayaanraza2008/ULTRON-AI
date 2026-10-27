@@ -425,10 +425,15 @@ const AUTONOMY_RISK_RANK = { routine: 0, private_data: 1, device_control: 2, ext
 // remains gated. Do not add private-data reads, device controls, publishing,
 // messaging, generation jobs, or arbitrary delegated runtimes to this set.
 const SAFE_PREPARATION_TOOLS = new Set([
+  // Public read-only preparation and draft-only tools. Keep state-changing
+  // tasks (including durable queueing, media jobs, publishing, or messaging)
+  // outside this exception.
   "research_web",
   "create_youtube_production_plan",
   "create_spaceplanner_plan",
+  "plan_employee",
   "coding_assist",
+  "browser_use",
   "check_integrations",
   "check_cactus",
   "check_desktop_companion",
