@@ -113,3 +113,13 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Expanded `npm run check` to explicitly syntax-check `integrations/desktop-companion.js` and `tests/desktop-companion.test.js`; this explicit-check update is now on a follow-up branch and must pass its own CI before merge.
 - Render immediately attempted to deploy merge commit `d444ec16798bab9e139d5365526ebe1995db19c6` but failed with `pipeline_minutes_exhausted` at 2026-10-25 15:43:10Z. The new code is committed but not live-verified; paid pipeline minutes remain disabled.
 
+## 2026-10-27 backend verification follow-up (security PR branch)
+
+- Audited branch `security/autonomy-outbound-intent-guard-20261027`; this checkpoint applies to source on the PR branch, not to `main` or the hosted production service.
+- Hardened `tests/supabase-isolation.e2e.test.js`: enforce the 1 MB response cap using Content-Length and incremental streamed-byte checks, cancel oversized responses, and cover oversized/valid chunked JSON with deterministic regression tests.
+- Hardened `scripts/worker-smoke.mjs`: a `COMPLETED` task now passes only if its persisted result is a non-empty `employee_output` with the expected role and mode. Invalid results fail with a redacted diagnostic and trigger cleanup. Added tests for missing/malformed output and role/mode mismatches.
+- GitHub Actions run [40548100963](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40548100963) passed on `a7176b6e7b0bb9f14575ad9183cf006f6a3bed82`: `npm run check`, `npm test` (**529 passed, 0 failed, 1 skipped**), the read-only hosted API health/configuration check, and the pinned world-intelligence build.
+- The skipped test is the explicitly opt-in live Supabase isolation E2E. A successful CI health/configuration check does **not** prove live text/vision inference, successful task-worker execution, account isolation, the deployed commit, or production DNS protection.
+- Still blocked by external prerequisites: authorized working model credentials for real text and image requests; two disposable Supabase test identities for opt-in isolation writes; a service-role key and confirmed test user for worker smoke; the Supabase leaked-password protection dashboard setting; and an available authorized environment for live integration checks.
+- Release boundary unchanged: no merge to `main`, no migration applied, no secret or production setting changed, no database write, no Render deployment, no frontend modification, and no paid build minutes enabled. Keep DNS-pinned transport marked source-tested but not production-live until the PR stack is reviewed and a deployment is separately authorized and revision-verified.
+
