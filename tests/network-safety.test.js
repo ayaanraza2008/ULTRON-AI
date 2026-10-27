@@ -96,6 +96,7 @@ test("safePinnedFetch pins validated public DNS answers into the actual HTTPS co
   assert.equal(await response.text(), "pinned response");
   assert.equal(connection.url, "https://api.example.com/v1/status");
   assert.equal(connection.options.servername, "api.example.com");
+  assert.equal(connection.options.headers["accept-encoding"], "identity");
   const address = await new Promise((resolve, reject) => {
     connection.options.lookup("api.example.com", { family: 4 }, (error, selected, family) => {
       if (error) return reject(error);
@@ -168,4 +169,40 @@ test("safePinnedFetch streams local HTTP development request and response bodies
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
+});
+
+
+test("safePinnedFetch aborts before DNS when its signal is already cancelled", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let lookupCalls = 0;
+  await assert.rejects(
+    () => safePinnedFetch("https://api.example.com/status", { signal: controller.signal }, {
+      lookupImpl: async () => { lookupCalls += 1; return [{ address: "93.184.216.34", family: 4 }]; },
+      httpsRequestImpl: () => { throw new Error("transport must not run"); }
+    }),
+    error => error?.name === "AbortError"
+  );
+  assert.equal(lookupCalls, 0);
+});
+
+test("safePinnedFetch aborts promptly while DNS resolution is still pending", async () => {
+  const controller = new AbortController();
+  let finishLookup;
+  let markLookupStarted;
+  const lookupStarted = new Promise(resolve => { markLookupStarted = resolve; });
+  const lookupPending = new Promise(resolve => { finishLookup = resolve; });
+  const pending = safePinnedFetch("https://slow-dns.example.com/status", { signal: controller.signal }, {
+    lookupImpl: () => {
+      markLookupStarted();
+      return lookupPending;
+    },
+    httpsRequestImpl: () => { throw new Error("transport must not run"); }
+  });
+  await lookupStarted;
+  controller.abort();
+  await assert.rejects(pending, error => error?.name === "AbortError");
+  // Resolve the injected DNS promise after cancellation to prove it is safely
+  // observed and cannot restart the outbound request.
+  finishLookup([{ address: "93.184.216.34", family: 4 }]);
 });
