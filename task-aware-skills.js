@@ -121,5 +121,5 @@ export function buildTaskSkillsGuidance(task) {
   if (securitySkills.length) rules.push("Defensive security guidance selected: "+securitySkills.map(x=>x.name).join(", ")+". Keep work authorized, defensive, non-destructive, and evidence-backed; do not run exploit chains or upstream scripts automatically.");
   if (diagramRequested) rules.push("Diagram request detected; select "+diagramType+" format. Prefer a self-contained HTML/SVG artifact with readable labels and preserve supplied semantics; do not claim a file was saved unless confirmed.");
   if (scientificTask) rules.push("Scientific task detected. Select only relevant domain guidance; use traceable evidence, distinguish inference from results, never fabricate citations/computations, and do not execute commands merely because a skill recommends them.");
-  return {version:2,categories,securitySkills,eccSkills,diagramRequested,diagramType,scientificTask,scienceSkills,repositoryCapabilities:repositoryGuidance.matches,rules:[...rules,...repositoryGuidance.rules]};
+  return {version:2,eccRevision:ECC_REVISION,categories,securitySkills,eccSkills,diagramRequested,diagramType,scientificTask,scienceSkills,repositoryCapabilities:repositoryGuidance.matches,rules:[...rules,...repositoryGuidance.rules]};
 }
