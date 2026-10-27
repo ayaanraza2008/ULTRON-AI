@@ -147,3 +147,21 @@ test("an intentionally unavailable optional capability does not permanently bloc
   assert.equal(result.overallState, "ready_for_live_verification");
   assert.equal(result.summary.blockerCount, 0);
 });
+
+
+test("Windows action queue readiness requires a valid owner and dedicated high-entropy token but remains unverified", () => {
+  const owner = "00000000-0000-4000-8000-000000000001";
+  const blocked = buildRuntimeReadiness({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: owner, ULTRON_DESKTOP_BRIDGE_TOKEN: "too-short" }
+  });
+  assert.equal(blocked.components.find((item) => item.id === "windows_action_queue").state, "blocked");
+
+  const token = "synthetic-desktop-bridge-token-for-readiness-tests-2026";
+  const configured = buildRuntimeReadiness({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: owner, ULTRON_DESKTOP_BRIDGE_TOKEN: token }
+  });
+  const queue = configured.components.find((item) => item.id === "windows_action_queue");
+  assert.equal(queue.state, "configured_unverified");
+  assert.match(queue.note, /not proof/i);
+  assert.equal(JSON.stringify(configured).includes(token), false);
+});
