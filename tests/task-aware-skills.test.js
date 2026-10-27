@@ -31,3 +31,28 @@ test("consequential tasks are classified but never granted execution permission"
   assert.ok(result.categories.includes("consequential_action"));
   assert.ok(result.rules.some(rule => rule.includes("do not execute side effects")));
 });
+
+test("ECC guidance is selected automatically for backend implementation tasks and uses a pinned upstream revision", () => {
+  const result = buildTaskSkillsGuidance("Implement a backend API integration with tests");
+  const names = result.eccSkills.map(skill => skill.name);
+  assert.ok(names.includes("backend-patterns"));
+  assert.ok(names.includes("tdd-workflow"));
+  assert.ok(result.eccSkills.every(skill => skill.sourceUrl.includes("/ECC/25278e7d7b6cf6e6a4e7a6c8e10f14ff22f0eb5b/")));
+  assert.ok(result.rules.some(rule => rule.includes("ECC") && rule.includes("regression")));
+});
+
+test("ECC security and research skills are task-matched rather than injected into unrelated prompts", () => {
+  const security = buildTaskSkillsGuidance("Review authentication, access control, and secret handling");
+  assert.ok(security.eccSkills.some(skill => skill.name === "security-review"));
+  const research = buildTaskSkillsGuidance("Research current provider options and compare evidence");
+  assert.ok(research.eccSkills.some(skill => skill.name === "deep-research"));
+  const ordinary = buildTaskSkillsGuidance("Write a birthday message");
+  assert.equal(ordinary.eccSkills.length, 0);
+});
+
+test("ECC skill guidance remains locally useful and never removes consequential-action boundaries", () => {
+  const result = buildTaskSkillsGuidance("Implement a workflow to send an email and delete old records");
+  assert.ok(result.eccSkills.length > 0);
+  assert.ok(result.rules.some(rule => rule.includes("explicit approval workflow")));
+  assert.ok(result.rules.some(rule => rule.includes("task-specific approval")));
+});
