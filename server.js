@@ -534,7 +534,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       }
 
       lastStatus = upstream.status;
-      const fallbackEligible = [402, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
+      const fallbackEligible = [401, 402, 403, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
       if (!fallbackEligible || index + 1 >= attempts.length) break;
     }
     return res.status(lastStatus === 429 ? 429 : 502).json({
