@@ -2038,3 +2038,41 @@ test("authenticated desktop companion status endpoint returns bounded status wit
     assert.equal(payload.code, "INTEGRATION_OWNER_ONLY");
   }, { userId: "00000000-0000-4000-8000-000000000002" });
 });
+
+
+test("agent automatically advertises and consumes pinned ECC guidance with a local fallback", async () => {
+  const pinnedRevision = "25278e7d7b6cf6e6a4e7a6c8e10f14ff22f0eb5b";
+  const task = "Implement a backend API integration with tests";
+  const upstreamUrls = [];
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options) => {
+    if (url.startsWith("https://raw.githubusercontent.com/affaan-m/ECC/")) {
+      upstreamUrls.push(url);
+      assert.ok(url.includes("/" + pinnedRevision + "/"));
+      return new Response("# Mock ECC skill\\nUse regression tests and verify the changed code.", { status: 200, headers: { "Content-Type": "text/plain" } });
+    }
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    assert.ok(request.messages.some(message => message.role === "system" && String(message.content).includes("ECC backend-patterns fallback")));
+    assert.ok(request.messages.some(message => message.role === "user" && String(message.content).includes("ecc-backend-patterns") && String(message.content).includes("Mock ECC skill")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The backend task was reviewed using task-matched guidance." } }] }), { status: 200 });
+  }, async base => {
+    const metadataResponse = await fetch(base + "/api/agent/task-skills?task=" + encodeURIComponent(task));
+    assert.equal(metadataResponse.status, 200);
+    const metadata = await metadataResponse.json();
+    assert.equal(metadata.eccIntegration.enabled, true);
+    assert.equal(metadata.eccIntegration.revision, pinnedRevision);
+    assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "backend-patterns"));
+    assert.ok(metadata.eccIntegration.selectedSkills.some(skill => skill.name === "tdd-workflow"));
+
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: task })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /task-matched guidance/);
+    assert.ok(upstreamUrls.length >= 2);
+    assert.equal(providerCalls, 1);
+  });
+});
