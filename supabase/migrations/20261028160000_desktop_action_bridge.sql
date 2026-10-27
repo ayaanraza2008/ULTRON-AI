@@ -4,7 +4,7 @@
 create table if not exists public.desktop_actions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  action_type text not null check (action_type in ('open_url', 'launch_app', 'system_info')),
+  action_type text not null check (action_type in ('launch_app', 'system_info')),
   payload jsonb not null default '{}'::jsonb
     check (jsonb_typeof(payload) = 'object' and pg_column_size(payload) <= 4096),
   status text not null default 'PENDING_APPROVAL'
