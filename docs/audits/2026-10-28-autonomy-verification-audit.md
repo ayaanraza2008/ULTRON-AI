@@ -39,8 +39,8 @@
 
 Keep credentials out of chat and source control. To complete authorized live checks, configure them only in a trusted test environment:
 1. **Provider text/vision:** valid test OpenRouter key and an available compatible free model; run `npm run smoke:model` and, after setting `ULTRON_CONFIRM_VISION_SMOKE=YES`, `npm run smoke:vision`. Each intentionally makes a real provider request.
-2. **Auth/isolation:** two disposable, confirmed Supabase test accounts and a test-environment publishable key; explicitly enable the dedicated E2E write-confirmation variables for `npm run test:supabase:e2e`. Review cleanup even on failure.
-3. **Worker:** a dedicated test user, trusted `SUPABASE_SERVICE_ROLE_KEY`, valid provider credentials and a running test worker; set the explicit smoke confirmation and run `npm run smoke:worker`. Confirm the report verifies a persisted result and cleanup.
+2. **Auth/isolation:** two disposable, confirmed Supabase test accounts and a test-environment publishable key; set `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES` plus `ULTRON_E2E_SUPABASE_URL`, `ULTRON_E2E_SUPABASE_PROJECT_REF`, `ULTRON_E2E_SUPABASE_PUBLISHABLE_KEY`, and the two disposable test-account email/password pairs before `npm run test:supabase:e2e`. Review cleanup even on failure.
+3. **Worker:** a dedicated test user, trusted `SUPABASE_SERVICE_ROLE_KEY`, valid provider credentials and a running test worker; set `ULTRON_CONFIRM_WORKER_SMOKE=YES` and run `npm run smoke:worker`. Confirm the report verifies a persisted result and cleanup.
 4. **Owner dashboard:** enable Supabase leaked-password protection in Auth password-security settings and recheck it; source code cannot change that setting.
 5. **Devices/integrations:** install/pair required companions and configure services separately before calling their workflows live-verified.
 
