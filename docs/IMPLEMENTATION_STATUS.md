@@ -1,7 +1,7 @@
 # Implementation Status
 
 ## Current phase
-Phase 2 — Backend hardening and live verification. The empty-repository audit below is historical, not the current repository state. `main` now contains a Node/Express API, Supabase-backed auth/chat/preferences/memory/task routes, model-provider fallback, bounded transient TXT/Markdown/CSV/JSON/HTML/PDF/DOCX extraction, a database-polled worker for allowlisted tasks, browser-use and other guarded integration adapters, and a task-matched capability registry. Full frontend redesign and the Windows PC-control UI remain deferred. A passing CI run is not proof that every upstream provider or account workflow works in production.
+Phase 3 — Integrated frontend and backend live verification. The empty-repository audit below is historical. `main` contains the Node/Express API, Supabase-backed auth/chat/preferences/memory/task routes, provider fallback, bounded document extraction, an allowlisted task worker, guarded integration adapters, the cinematic command-center frontend, and private original-file storage routes. Source CI passed on main commit `5811ba00fc78065b33c06f171801c39ad5194aad`, but Render's latest build failed before compilation due to `pipeline_minutes_exhausted`; do not claim that commit is live. The private-document-storage migration was applied to Supabase and its private bucket/RLS/grants were verified read-only. Live model inference, authenticated cross-account isolation, worker execution with a dedicated test user, and authenticated file-storage E2E remain unverified. The Windows companion still needs physical-device pairing and testing.
 
 ## Historical foundation and implementation milestones
 - Added server-side Node/Express foundation, secure session gate, validated chat route, SSE forwarding, static web UI, responsive styling, and browser-native voice loop.
@@ -81,3 +81,12 @@ Use a dedicated test account and verify a real model response, one queued employ
 - Multi-provider chat fallback and its regression tests are present. A CI-green mocked provider response does not prove the current OpenRouter key, quotas, chosen free model, image model, or live response quality; an authorized end-to-end provider request remains outstanding.
 - Google OAuth and SMS/phone OTP routes are implemented, but live login is still unverified until the Supabase provider credentials, redirect allow-list, and SMS provider are configured and tested. No credentials should be placed in source control or chat.
 - The native wake-word companion raises a notification that the user taps to open ULTRON. It does not bypass device authentication, and a powered-off phone or PC cannot run wake-word recognition.
+
+
+## 2026-10-28 latest verification checkpoint
+- Main source commit: `5811ba00fc78065b33c06f171801c39ad5194aad`.
+- Source CI: [run 40563634026](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40563634026), automated tests and pinned World Intelligence build both passed.
+- Production revision check: [run 40563633937](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40563633937), failed because Render does not serve the expected current commit; Render reported `pipeline_minutes_exhausted` before building.
+- Supabase project `opdjfhwepmcprbqojpat`: migration `private_document_storage` recorded at version `20261027185203`; `public.documents` exists with RLS enabled; `ultron-private-documents` is private, limited to 5 MiB, and scoped by authenticated-user storage policies. Actual authenticated file upload/download/delete E2E is still unverified.
+- DNS-pinned outbound transport is implemented on main in `network-safety.js`; production protection remains unverified until current main is deployed.
+- Never claim 100% completion based on source tests, configuration snapshots, or database schema alone. Report live-only checks as blocked/unverified until exercised with dedicated test identities and real configured providers.

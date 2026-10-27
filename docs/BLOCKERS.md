@@ -14,7 +14,7 @@
 | BLK-010 | Render previously reported a high-severity npm advisory; latest CI audit does not reproduce it | The exact cause of the earlier Render warning is not yet identified | Compare the exact Render build log and resolved dependency tree before changing versions; do not run blind `npm audit fix` | Yes: latest CI found 0 vulnerabilities in both the install audit and `npm audit --omit=dev --audit-level=high` |
 | BLK-011 | Resolved: Supabase anonymous table privileges revoked and verified | Anonymous clients should not have direct table-level access to private conversation, memory, and task tables | Migration `revoke_anon_public_table_privileges` is recorded in live migration history; a read-only privilege query confirmed `anon` has no SELECT, INSERT, UPDATE, or DELETE grants on the seven public base tables checked | No further action for this specific grant issue; authenticated RLS isolation still needs end-to-end tests |
 | BLK-012 | Render build-pipeline minutes exhausted on 2026-10-25 | Automatic deployments stop before the build; latest source revision is not confirmed live | Preserve the $0-first requirement: wait for included build minutes to reset rather than upgrade; once builds are available, deploy one current commit and verify the deployed revision plus health smoke test | Yes: source work and GitHub CI continue, but production deployment verification is blocked |
-| BLK-013 | DNS-rebinding mitigation is implemented on an unmerged security PR, not yet live | The existing hosted service cannot be considered protected by the new DNS-pinned transport until PR #293 is reviewed/merged and a deployment is verified | Review PR #293; after deployment is explicitly authorized and build minutes are available, verify deployed revision and test outbound provider calls. Keep network egress restrictions as an independent layer | Yes: PR #293 has DNS-pinned transport defaults for app/worker and deterministic CI tests; production protection remains unverified |
+| BLK-013 | DNS-pinned outbound transport is implemented on main but not live-verified at the current revision | The hosted service cannot be considered protected by the latest DNS-pinned transport until a deployment of current main is verified | When included Render build minutes are available, verify the current deployed revision and test safe outbound provider calls. Keep network egress restrictions as an independent layer | Yes: `network-safety.js` is the default transport in `server.js` and regression tests run in source CI; production protection remains unverified |
 
 ## Verification discipline
 
@@ -25,7 +25,7 @@
 - Live Supabase verification on 2026-10-24 confirmed migration `20261024085626_revoke_anon_public_table_privileges` is recorded and `anon` has no table-level SELECT/INSERT/UPDATE/DELETE privileges on the seven public base tables checked. This does not replace two-user RLS isolation tests.
 - Auth signup, sign-in, and recovery now share a bounded in-process per-IP limiter (10 attempts per 15-minute window). Multi-instance deployments should add shared edge/store throttling as well.
 - Do not paste credentials into chat or source control. Use Render's private environment settings.
-- Frontend implementation is deliberately deferred until backend capabilities and live verification are addressed.
+- The cinematic frontend is implemented and merged; its live deployment remains blocked by Render's exhausted build-pipeline minutes.
 
 ## DNS-pinned outbound transport (PR #293)
 
