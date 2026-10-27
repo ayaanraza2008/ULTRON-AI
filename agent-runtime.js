@@ -1121,7 +1121,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
         mode: "automatic_task_matched_reference_with_local_fallback",
         upstream: "https://github.com/affaan-m/ECC",
         revision: guidance.eccRevision,
-        selectedSkills: (guidance.eccSkills || []).map(({ name, path, revision, sourceUrl }) => ({ name, path, revision, sourceUrl }))
+        selectedSkills: (guidance.eccSkills || []).map(({ name, path, revision, sourceUrl, content }) => ({ name, path, revision, sourceUrl, bundled: true, contentLoaded: Boolean(content) }))
       },
       securitySkills: guidance.securitySkills,
       diagramRequested: guidance.diagramRequested,
