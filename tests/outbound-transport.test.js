@@ -375,3 +375,40 @@ test("safeFetch aborts promptly while DNS resolution is pending", async () => {
   assert.equal(transportStarted, false);
 });
 
+test("safeFetch destroys the upstream response when the caller cancels the response body", async () => {
+  const upstream = new Readable({
+    read() {
+      this.push(Buffer.alloc(16 * 1024, 0x61));
+    }
+  });
+  upstream.statusCode = 200;
+  upstream.statusMessage = "OK";
+  upstream.rawHeaders = ["content-type", "application/octet-stream"];
+  let upstreamDestroyed = false;
+  const originalDestroy = upstream.destroy.bind(upstream);
+  upstream.destroy = error => {
+    upstreamDestroyed = true;
+    return originalDestroy(error);
+  };
+
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    timeoutMs: 1000,
+    httpsRequest: (_url, _options, callback) => {
+      const req = new EventEmitter();
+      req.end = () => callback(upstream);
+      req.destroy = error => {
+        if (error) queueMicrotask(() => req.emit("error", error));
+        return req;
+      };
+      return req;
+    }
+  });
+
+  const response = await fetch("https://api.example.com/cancel-body");
+  assert.ok(response.body);
+  await response.body.cancel();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(upstreamDestroyed, true);
+});
+
