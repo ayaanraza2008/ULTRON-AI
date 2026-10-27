@@ -1169,7 +1169,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   }
   function isValidDocumentStoragePath(storagePath, userId) {
     if (typeof storagePath !== "string" || typeof userId !== "string") return false;
-    const match = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\.(txt|md|markdown|csv|json|html|htm|pdf|docx)$/i.exec(storagePath);
+    const match = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(txt|md|markdown|csv|json|html|htm|pdf|docx)$/i.exec(storagePath);
     return Boolean(match && match[1].toLowerCase() === userId.toLowerCase());
   }
 
@@ -1334,7 +1334,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row || row.user_id !== req.supabaseUser.id ||
-          !String(row.storage_path || "").startsWith(req.supabaseUser.id + "/")) {
+          !isValidDocumentStoragePath(row.storage_path, req.supabaseUser.id)) {
         return res.status(404).json({ error: { code: "DOCUMENT_NOT_FOUND", message: "Saved document was not found." } });
       }
       const objectUrl = documentStorageUrl(config, row.storage_path);
