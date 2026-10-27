@@ -412,3 +412,24 @@ test("safeFetch destroys the upstream response when the caller cancels the respo
   assert.equal(upstreamDestroyed, true);
 });
 
+test("safeFetch rejects GET and HEAD request bodies before DNS resolution", async () => {
+  for (const method of ["GET", "HEAD"]) {
+    let lookupCalls = 0;
+    const fake = fakeRequest();
+    const fetch = createSafeFetch({
+      lookupImpl: async () => {
+        lookupCalls += 1;
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+      httpsRequest: fake.request
+    });
+
+    await assert.rejects(
+      fetch("https://api.example.com/invalid-body", { method, body: "not allowed" }),
+      error => error.code === "OUTBOUND_BODY_UNSUPPORTED"
+    );
+    assert.equal(lookupCalls, 0);
+    assert.equal(fake.seen.calls, 0);
+  }
+});
+
