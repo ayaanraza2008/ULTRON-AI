@@ -710,6 +710,84 @@ test("task creation, approval, cancellation and audit use the correct Supabase r
   });
 });
 
+test("document text references persist only with an authenticated owner and correct provenance", async () => {
+  const userId = "123e4567-e89b-12d3-a456-426614174000";
+  const token = "test-user-token";
+  const received = [];
+  const supabaseEnv = {
+    ...env,
+    SUPABASE_URL: "https://ultron-test.supabase.co",
+    SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test"
+  };
+  const app = createApp({
+    env: supabaseEnv,
+    fetchImpl: async (rawUrl, options = {}) => {
+      const url = new URL(rawUrl);
+      const method = options.method || "GET";
+      if (url.pathname === "/auth/v1/user") {
+        assert.equal(options.headers.Authorization, "Bearer " + token);
+        return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200 });
+      }
+      if (url.pathname === "/rest/v1/memory_items" && method === "POST") {
+        const body = JSON.parse(options.body);
+        received.push({ body, authorization: options.headers.Authorization, apikey: options.headers.apikey });
+        return new Response(JSON.stringify([{ id: "123e4567-e89b-12d3-a456-426614174050", ...body, created_at: "2026-10-27T00:00:00Z", updated_at: "2026-10-27T00:00:00Z" }]), { status: 201 });
+      }
+      throw new Error("Unexpected mocked URL: " + rawUrl);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const denied = await fetch(base + "/api/memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "document_reference", title: "notes.txt", content: "private extract", source: "document" })
+    });
+    assert.equal(denied.status, 401);
+    assert.equal(received.length, 0);
+
+    const response = await fetch(base + "/api/memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: "ultron_sb_access=" + token },
+      body: JSON.stringify({ kind: "document_reference", title: "notes.txt", content: "private extract", source: "document" })
+    });
+    assert.equal(response.status, 201);
+    const data = await response.json();
+    assert.equal(data.item.source, "document");
+    assert.equal(data.item.user_id, userId);
+    assert.equal(received[0].body.kind, "document_reference");
+    assert.equal(received[0].body.content, "private extract");
+    assert.equal(received[0].body.source, "document");
+    assert.equal(received[0].authorization, "Bearer " + token);
+    assert.equal(received[0].apikey, "sb_publishable_test");
+  });
+});
+
+test("memory API rejects document provenance for non-document memory items", async () => {
+  let restCalls = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async rawUrl => {
+      if (rawUrl === "https://ultron-test.supabase.co/auth/v1/user") {
+        return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000" }), { status: 200 });
+      }
+      restCalls++;
+      throw new Error("invalid provenance must not reach Supabase");
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: "ultron_sb_access=test-user-token" },
+      body: JSON.stringify({ kind: "preference", title: "Preference", content: "Low motion", source: "document" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_MEMORY_SOURCE");
+    assert.equal(restCalls, 0);
+  });
+});
+
 test("memory API refuses requests without a Supabase account", async () => {
   let calls = 0;
   const app = createApp({
