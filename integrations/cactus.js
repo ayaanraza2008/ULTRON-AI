@@ -3,7 +3,7 @@
  * Cactus is an optional external runtime; ULTRON never downloads model weights.
  */
 import { isIP } from "node:net";
-import { safeServiceBase } from "../network-safety.js";
+import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 
 function bounded(value, max = 300) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -107,7 +107,7 @@ export function getCactusReadiness(env = process.env) {
   };
 }
 
-export async function checkCactusService({ env = process.env, fetchImpl = globalThis.fetch, userId } = {}) {
+export async function checkCactusService({ env = process.env, fetchImpl = safePinnedFetch, userId } = {}) {
   const config = getConfig(env, userId);
   if (config.error) return config.error;
   const url = config.baseUrl + "/models";

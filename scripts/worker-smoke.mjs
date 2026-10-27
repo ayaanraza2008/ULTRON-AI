@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { safeServiceBase } from "../network-safety.js";
+import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED", "BLOCKED", "WAITING_FOR_PERMISSION"]);
@@ -85,7 +85,7 @@ function report(status, fields, now) {
  */
 export async function runWorkerSmoke({
   env = process.env,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = safePinnedFetch,
   sleepImpl = ms => new Promise(resolve => setTimeout(resolve, ms)),
   nowMs = Date.now,
   now = () => new Date().toISOString(),

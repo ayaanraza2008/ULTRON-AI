@@ -12,7 +12,7 @@ import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
-import { safeServiceBase } from "./network-safety.js";
+import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -348,7 +348,7 @@ function cactusCompletionStream(completion) {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
-export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
+export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logger = console } = {}) {
   const app = express();
   app.locals.workerRuntime = () => ({
     state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "configured_not_started" : "disabled_by_config",

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { safeServiceBase } from "../network-safety.js";
+import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 
 const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1";
 const MAX_PROVIDER_COUNT = 6;
@@ -136,7 +136,7 @@ function failureCode(error, status) {
  * Executes one minimal provider completion only when explicitly invoked by an
  * operator. It never returns credentials, generated text, or raw upstream errors.
  */
-export async function runModelProviderSmoke({ env = process.env, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS, now = () => new Date().toISOString() } = {}) {
+export async function runModelProviderSmoke({ env = process.env, fetchImpl = safePinnedFetch, timeoutMs = DEFAULT_TIMEOUT_MS, now = () => new Date().toISOString() } = {}) {
   if (typeof fetchImpl !== "function") return { status: "blocked", reason: "FETCH_UNAVAILABLE", attempts: [], generatedAt: now() };
   const { candidates, errors } = loadProviderCandidates(env);
   if (!candidates.length) {

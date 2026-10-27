@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { safePinnedFetch } from "../network-safety.js";
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 function safeSupabaseBase(value) {
@@ -72,7 +73,7 @@ function sanitizeSettings(settings, generatedAt) {
 }
 
 /** Read-only auth diagnostic: no signup, email/SMS, database writes, or secret output. */
-export async function diagnoseSupabaseAuth({ env = process.env, fetchImpl = globalThis.fetch, now = () => new Date().toISOString() } = {}) {
+export async function diagnoseSupabaseAuth({ env = process.env, fetchImpl = safePinnedFetch, now = () => new Date().toISOString() } = {}) {
   const baseUrl = safeSupabaseBase(env.SUPABASE_URL);
   const apiKey = typeof env.SUPABASE_PUBLISHABLE_KEY === "string" && env.SUPABASE_PUBLISHABLE_KEY.trim()
     ? env.SUPABASE_PUBLISHABLE_KEY.trim()
