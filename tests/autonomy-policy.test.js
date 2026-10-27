@@ -297,3 +297,34 @@ test("less common outbound communication phrasing remains confirmation-gated", (
     assert.equal(risk.requiresConfirmation, true, task);
   }
 });
+
+
+test("text-message and personal-recipient variants are treated as outbound effects", () => {
+  for (const task of [
+    "Send a text to my manager about the deadline.",
+    "Reply to my manager with the summary.",
+    "Forward my notes to my boss.",
+    "Message my colleague with the draft."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+
+test("draft-only text and research about forwarding stay routine", () => {
+  for (const task of [
+    "Draft a text to my manager without sending it.",
+    "Research how to forward summaries securely.",
+    "Write a reply to my colleague but do not send it."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "routine", task);
+    assert.equal(risk.requiresConfirmation, false, task);
+    assert.equal(hasAutonomyRiskLevel(task, ["external_effect"]), false, task);
+  }
+  const mixed = classifyAutonomyRisk("Write a reply to my colleague but do not send it, then publish the report.");
+  assert.equal(mixed.level, "external_effect");
+  assert.equal(mixed.requiresConfirmation, true);
+});
