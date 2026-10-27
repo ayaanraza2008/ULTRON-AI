@@ -30,16 +30,16 @@ This ULTRON workflow is newly written and ECC-inspired; it does not vendor upstr
 
 ## What it changes
 
-- Requires inspection before edits and narrowly scoped, test-first changes.
-- Distinguishes mocked tests from real provider connectivity and opt-in live end-to-end tests.
-- Calls out auth ownership/RLS, worker allowlists, idempotency, cancellation, secret redaction, bounded external calls, and DNS-rebinding limitations.
-- Requires a diff review and reports passed, failed, skipped, and blocked verification separately.
+- Automatically selects pinned ECC backend/TDD/verification/security/research guidance according to task intent, with local fallback rules.
+- Injects selected upstream skill text as untrusted context only; no shell, hook, agent, or skill script is run by this mechanism.
+- Preserves ULTRON-specific requirements for narrow changes, regression tests, auth ownership/RLS, worker allowlists, idempotency, cancellation, secret redaction, bounded external calls, and DNS-rebinding limitations.
+- Requires evidence-based diff review and separate reporting of passed, failed, skipped, and blocked verification.
 
 ## Deliberately not included
 
 - No full ECC checkout or bulk copy of its agents, skills, hooks, rules, or scripts.
 - No new runtime dependencies or automated shell hooks.
-- No changes to API behavior, database migrations, environment variables, credentials, Render, or Supabase settings.
+- The only API-surface change is additive, non-secret ECC selection metadata from the existing authenticated task-skills endpoint; no tool permissions or execution behavior are widened. No database migrations, environment variables, credentials, Render, or Supabase settings are changed.
 - No frontend work, deployment, or redeployment.
 - No claim that provider, account-isolation, background-worker, or other live tests have passed.
 
