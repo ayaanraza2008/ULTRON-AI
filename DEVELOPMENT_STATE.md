@@ -1,9 +1,9 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-25 UTC
+Last verified: 2026-10-27 UTC (source changes verified; production deployment blocked by Render quota)
 
 ## Operating constraints
-- Backend-first. Do not redesign, rebuild, or delete frontend source until explicitly authorized.
+- Preserve the existing repository, backend data, and frontend. The cinematic command center has been built and merged, but is not live-verified until Render serves and reports the expected commit.
 - Preserve the existing repository, Render service, and Supabase project.
 - Free-first; never expose secrets in repository documentation.
 - Treat configuration as unverified until the relevant live workflow succeeds.
@@ -124,4 +124,5 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Read-only Supabase inspection confirmed project `opdjfhwepmcprbqojpat` is `ACTIVE_HEALTHY`; all seven inspected public tables have RLS enabled. There are currently 2 Auth users, 1 conversation owner, 1 message owner, 0 task rows, 0 employee schedule rows and 0 audit-event rows. This does not prove two-user isolation or successful task execution because no authenticated cross-user E2E test or worker smoke completed.
 - Supabase Security Advisor still reports `Leaked Password Protection Disabled`. The available connector does not expose the Auth dashboard switch; an owner must enable it before a clean security-advisor result can be claimed.
 - Live provider inference, auth sign-up/recovery/Google/phone flows, cross-user isolation, task-worker completion, voice provider operation, Browser Use bridge execution, Windows companion pairing, and optional external integrations remain unverified until authorized credentials and test access are available.
+- PR #299 merged at `6401e5af12403342b1576e76e0c84cb4c7e82b52`: low-risk research, AI Employee drafts and autonomous plans/reports can be queued automatically when server-side intent classification remains routine. A client-supplied `risk: low` cannot override inferred private-data, device-control, external-effect or destructive risk; those tasks retain approval gates. Actual completion still requires the configured worker and live provider.
 - Autonomy boundary: routine eligible research and bounded draft/report generation can run through the configured allowlisted worker. Arbitrary shell execution, unrestricted PC control, sending communications, publishing, purchases, destructive edits and other consequential external actions are not made permissionless.
