@@ -38,8 +38,8 @@ test("frontend calls implemented backend routes and accurately labels capabiliti
   assert.match(js, /source:"document"/);
   assert.match(js, /Save original file privately/);
   assert.match(js, /\/api\/documents\/upload/);
-  assert.match(js, /\/api\/documents\/\/encodeURIComponent\(id\)\/download/);
-  assert.match(js, /\/api\/documents\/\/encodeURIComponent\(id\)/);
+  assert.ok(js.includes('"/api/documents/"+encodeURIComponent(id)+"/download'));
+  assert.ok(js.includes('"/api/documents/"+encodeURIComponent(id)'));
   assert.match(js, /Private document vault/);
   assert.match(js, /The original file is never public/);
   assert.match(js, /original file is not retained/);
