@@ -20,6 +20,43 @@ function networkSafetyError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+function abortError(signal) {
+  if (signal?.reason instanceof Error) return signal.reason;
+  return Object.assign(new Error("The operation was aborted."), { name: "AbortError", code: "ABORT_ERR" });
+}
+
+function waitForPromiseOrAbort(value, signal) {
+  const promise = Promise.resolve(value);
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(abortError(signal));
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(abortError(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      result => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      },
+      error => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      }
+    );
+  });
+}
+
 function isLoopbackAddress(address) {
   const host = normalizeHostname(address);
   const version = isIP(host);
@@ -77,7 +114,8 @@ export function createPinnedDnsLookup(addresses, expectedHostname = "") {
   };
 }
 
-async function resolvePinnedAddresses(hostname, { lookupImpl = dnsLookup, allowLoopback = false } = {}) {
+async function resolvePinnedAddresses(hostname, { lookupImpl = dnsLookup, allowLoopback = false, signal } = {}) {
+  if (signal?.aborted) throw abortError(signal);
   const host = normalizeHostname(hostname);
   const version = isIP(host);
   if (version) {
@@ -98,8 +136,10 @@ async function resolvePinnedAddresses(hostname, { lookupImpl = dnsLookup, allowL
 
   let records;
   try {
-    records = normalizeAddressRecords(await lookupImpl(host, { all: true, verbatim: true }));
-  } catch {
+    const lookupPromise = Promise.resolve().then(() => lookupImpl(host, { all: true, verbatim: true }));
+    records = normalizeAddressRecords(await waitForPromiseOrAbort(lookupPromise, signal));
+  } catch (error) {
+    if (signal?.aborted || error?.name === "AbortError") throw error;
     throw networkSafetyError("DNS_LOOKUP_FAILED", "The outbound hostname could not be resolved safely.");
   }
   if (!records.length) {
@@ -146,7 +186,7 @@ export async function safePinnedFetch(input, init = {}, dependencies = {}) {
     throw networkSafetyError("OUTBOUND_PROTOCOL_BLOCKED", "Remote outbound requests require HTTPS; HTTP is allowed only for explicit loopback development targets.");
   }
 
-  const addresses = await resolvePinnedAddresses(hostname, { lookupImpl, allowLoopback });
+  const addresses = await resolvePinnedAddresses(hostname, { lookupImpl, allowLoopback, signal: request.signal });
   const lookup = createPinnedDnsLookup(addresses, hostname);
   const requestHeaders = new Headers(request.headers);
   // Node must generate Host from the validated request URL; callers cannot
@@ -154,6 +194,10 @@ export async function safePinnedFetch(input, init = {}, dependencies = {}) {
   requestHeaders.delete("host");
   requestHeaders.delete("proxy-authorization");
   requestHeaders.delete("proxy-connection");
+  // This transport does not transparently decompress like browser fetch. Ask
+  // upstreams for an uncompressed body so downstream response parsing matches
+  // the normal fetch contract.
+  requestHeaders.set("accept-encoding", "identity");
   const headers = Object.fromEntries(requestHeaders.entries());
   const transport = url.protocol === "https:" ? httpsRequestImpl : httpRequestImpl;
 
