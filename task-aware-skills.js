@@ -63,8 +63,8 @@ const ECC_SKILLS = [
   }
 ];
 const ECC_SKILL_URL = (path) => "https://raw.githubusercontent.com/affaan-m/ECC/" + ECC_REVISION + "/.agents/skills/" + path;
-const ECC_SECURITY_INTENT = /\\b(security review|security audit|authentication|authorization|access control|secret handling|vulnerability|sql injection|xss|prompt injection|csrf|rls|row level security)\\b/i;
-const ECC_BACKEND_INTENT = /\\b(backend|api|database|supabase|provider|worker|queue|integration|endpoint|express|authentication|authorization|server)\\b/i;
+const ECC_SECURITY_INTENT = /\b(security review|security audit|authentication|authorization|access control|secret handling|vulnerability|sql injection|xss|prompt injection|csrf|rls|row level security)\b/i;
+const ECC_BACKEND_INTENT = /\b(backend|api|database|supabase|provider|worker|queue|integration|endpoint|express|authentication|authorization|server)\b/i;
 
 function selectEccSkills(text, categories) {
   const selected = [];
