@@ -216,7 +216,7 @@ test("task creation records a queued plan and audit event, without claiming exec
   }, { supabaseRest: fakeSupabaseRest });
 });
 
-test("employee draft task creation requires approval and selects the bounded worker mode", async () => {
+test("low-risk employee draft queues automatically with a bounded worker mode", async () => {
   const writes = [];
   const taskId = "00000000-0000-4000-8000-000000000041";
   const fakeSupabaseRest = async (_req, table, method, _query, body) => {
@@ -237,16 +237,51 @@ test("employee draft task creation requires approval and selects the bounded wor
     });
     assert.equal(response.status, 201);
     const body = await response.json();
-    assert.equal(body.task.status, "WAITING_FOR_PERMISSION");
+    assert.equal(body.task.status, "QUEUED");
     assert.equal(body.task.input.taskType, "employee");
     assert.equal(body.task.input.executionMode, "employee_worker");
-    assert.equal(body.task.input.requiresApproval, true);
-    assert.equal(body.task.input.approved, false);
+    assert.equal(body.task.input.requiresApproval, false);
+    assert.equal(body.task.input.approved, false, "auto-eligible work must not pretend explicit approval occurred");
+    assert.equal(body.task.input.risk, "low");
+    assert.equal(body.task.input.requestedRisk, "low");
+    assert.equal(body.task.input.intentRisk.level, "routine");
     assert.equal(body.task.input.role, "seo-aeo");
     assert.equal(body.task.input.routineId, "seo-draft-run");
-    assert.match(body.notice, /explicit approval/i);
+    assert.match(body.notice, /low-risk draft\/report queued/i);
+    assert.match(body.notice, /remain disabled/i);
     assert.equal(writes.filter(item => item.table === "agent_tasks").length, 1);
     assert.equal(writes.find(item => item.table === "audit_events").body.metadata.executionMode, "employee_worker");
+    assert.equal(writes.find(item => item.table === "audit_events").body.outcome, "allowed");
+  }, { supabaseRest: fakeSupabaseRest });
+});
+
+test("server-inferred external intent overrides a client-supplied low risk label", async () => {
+  const writes = [];
+  const fakeSupabaseRest = async (_req, table, method, _query, body) => {
+    writes.push({ table, method, body });
+    if (table === "agent_tasks" && method === "POST") {
+      return [{ id: "00000000-0000-4000-8000-000000000043", title: body.title, input: body.input, status: body.status, created_at: "2026-10-25T08:00:00Z" }];
+    }
+    return [];
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/tasks", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Send customer email", description: "Send this email to the customer and confirm when sent",
+        taskType: "autonomous", role: "chief-of-staff", mode: "report",
+        goal: "Send this email to the customer and confirm when sent", risk: "low"
+      })
+    });
+    assert.equal(response.status, 201);
+    const result = await response.json();
+    assert.equal(result.task.status, "WAITING_FOR_PERMISSION");
+    assert.equal(result.task.input.requestedRisk, "low");
+    assert.equal(result.task.input.risk, "high");
+    assert.equal(result.task.input.intentRisk.level, "external_effect");
+    assert.equal(result.task.input.requiresApproval, true);
+    assert.match(result.notice, /intent is not routine/i);
+    assert.equal(writes.find(item => item.table === "audit_events").body.metadata.risk, "high");
   }, { supabaseRest: fakeSupabaseRest });
 });
 
