@@ -6,7 +6,6 @@ This bridge provides a small, explicit-consent path from the ULTRON backend to t
 
 The initial protocol accepts only:
 
-- **open_url** — open a public HTTPS URL after the owner approves it. URLs with embedded credentials, fragments, non-standard HTTPS ports, local/private targets, or unsafe hostnames are rejected.
 - **launch_app** — launch exactly one of Notepad, Calculator, or Explorer with no command-line arguments.
 - **system_info** — return OS version, architecture, and processor count only.
 
@@ -40,8 +39,7 @@ In Windows, launch the companion, tick **Enable approved PC actions**, and accep
 
 The authenticated agent router exposes the same narrow queue as tools:
 
-- Request a public HTTPS URL on the Windows PC by asking ULTRON to open the URL on the PC. This only creates a pending action record.
-- Launch Notepad, Calculator, or Explorer on the Windows PC by asking ULTRON for the specific launch. This also only creates a pending action record.
+- - Launch Notepad, Calculator, or Explorer on the Windows PC by asking ULTRON for the specific launch. This also only creates a pending action record.
 - Ask ULTRON to list desktop actions to inspect IDs and states.
 - To approve, send a new standalone prompt in this exact form: **approve action <full-action-UUID>**. The approval tool verifies that the current prompt itself contains this exact action ID and verb. An earlier message, model-generated string, or a generic "yes" does not grant approval.
 - To cancel, send a new standalone prompt in this exact form: **cancel action <full-action-UUID>**. Only pending or queued actions can be cancelled.
@@ -59,11 +57,7 @@ Content-Type: application/json
 {"actionType":"launch_app","payload":{"app":"calculator"}}
 ~~~
 
-Open a public HTTPS URL:
-
-~~~json
-{"actionType":"open_url","payload":{"url":"https://example.com/"}}
-~~~
+External URL opening is disabled in this version. Validating DNS before launching a separate browser does not pin the browser's eventual destination, so the action queue cannot yet guarantee DNS-rebinding protection for browser navigation.
 
 Read limited system information:
 
