@@ -19,13 +19,19 @@ test("frontend calls verified routes and guards capabilities absent from the cur
   for (const path of ["/api/health", "/api/runtime/readiness", "/api/session", "/api/chat", "/api/models", "/api/conversations", "/api/memory", "/api/integrations", "/api/preferences", "/api/worker/status"]) {
     assert.ok(js.includes(path), "Missing verified API contract: " + path);
   }
-  for (const capability of ["tasks", "research", "coding", "documents", "automation", "agentTools"]) {
-    assert.match(js, new RegExp(capability + ":false"), "Missing explicit capability state: " + capability);
+  assert.match(js, /tasks:true/);
+  assert.match(js, /research:true/);
+  assert.match(js, /coding:true/);
+  assert.match(js, /documents:true/);
+  assert.match(js, /automation:true/);
+  assert.match(js, /agentTools:true/);
+  for (const path of ["/api/tasks", "/api/research", "/api/coding/assist", "/api/documents/extract", "/api/employees/schedules", "/api/kaligpt/tools"]) {
+    assert.ok(js.includes(path), "Missing implemented backend integration: " + path);
   }
-  assert.match(js, /Task-record API is not exposed/);
-  assert.match(js, /No search was performed/);
-  assert.match(js, /No code was generated or executed/);
-  assert.match(js, /The file was not uploaded/);
+  assert.doesNotMatch(js, /Task-record API is not exposed/);
+  assert.doesNotMatch(js, /No search was performed/);
+  assert.doesNotMatch(js, /No code was generated or executed/);
+  assert.doesNotMatch(js, /The file was not uploaded/);
   assert.doesNotMatch(js, /(?:sk-[A-Za-z0-9]{20,}|sk-or-v1-[A-Za-z0-9]{20,})/);
   assert.match(js, /WEBGL/);
   assert.match(js, /prefers-reduced-motion/);
