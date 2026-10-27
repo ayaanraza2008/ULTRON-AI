@@ -320,3 +320,58 @@ test("safeFetch treats HEAD responses as bodyless even when content-length descr
   assert.equal(fake.seen.calls, 1);
 });
 
+test("safeFetch skips DNS resolution when the caller signal is already aborted", async () => {
+  const controller = new AbortController();
+  const reason = Object.assign(new Error("Caller cancelled before lookup"), { code: "CALLER_CANCELLED" });
+  controller.abort(reason);
+  let lookupCalls = 0;
+  const fetch = createSafeFetch({
+    lookupImpl: async () => {
+      lookupCalls += 1;
+      return [{ address: "93.184.216.34", family: 4 }];
+    },
+    httpsRequest: fakeRequest().request
+  });
+
+  await assert.rejects(
+    fetch("https://api.example.com/pre-aborted", { signal: controller.signal }),
+    error => error.code === "CALLER_CANCELLED"
+  );
+  assert.equal(lookupCalls, 0);
+});
+
+test("safeFetch aborts promptly while DNS resolution is pending", async () => {
+  const controller = new AbortController();
+  const reason = Object.assign(new Error("Caller cancelled during DNS"), { code: "CALLER_CANCELLED" });
+  let lookupStarted = false;
+  let transportStarted = false;
+  const fetch = createSafeFetch({
+    lookupImpl: () => {
+      lookupStarted = true;
+      return new Promise(() => {});
+    },
+    httpsRequest: () => {
+      transportStarted = true;
+      throw new Error("Transport must not start after DNS cancellation");
+    }
+  });
+
+  const pending = fetch("https://api.example.com/slow-dns", { signal: controller.signal });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(lookupStarted, true);
+  controller.abort(reason);
+
+  let guard;
+  try {
+    await Promise.race([
+      assert.rejects(pending, error => error.code === "CALLER_CANCELLED"),
+      new Promise((_, reject) => {
+        guard = setTimeout(() => reject(new Error("Caller abort did not interrupt DNS lookup promptly")), 1000);
+      })
+    ]);
+  } finally {
+    clearTimeout(guard);
+  }
+  assert.equal(transportStarted, false);
+});
+
