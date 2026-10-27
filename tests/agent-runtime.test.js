@@ -2106,7 +2106,16 @@ test("agent automatically advertises and consumes locally bundled pinned ECC gui
 
 test("short confirmation inherits the task for automatic ECC skill selection", async () => {
   let providerCalls = 0;
-  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options) => {
+  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options = {}) => {
+    if (url.startsWith("https://raw.githubusercontent.com/affaan-m/ECC/") || url.startsWith("https://github.com/affaan-m/ECC/")) {
+      throw new Error("ECC skill snapshots must stay local and not trigger runtime network fetches.");
+    }
+    if (url.startsWith("https://raw.githubusercontent.com/")) {
+      return new Response("# Skill reference\\nUse relevant, defensive guidance and verify claims.", {
+        status: 200,
+        headers: { "content-type": "text/plain; charset=utf-8" }
+      });
+    }
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
     providerCalls += 1;
     const request = JSON.parse(options.body);
