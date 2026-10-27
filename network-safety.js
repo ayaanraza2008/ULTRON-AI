@@ -11,6 +11,7 @@ const LOCAL_SUFFIXES = [
 ];
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const DNS_LOOKUP_TIMEOUT_MS = 5000;
 
 function normalizeHostname(hostname) {
   return String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
@@ -25,34 +26,41 @@ function abortError(signal) {
   return Object.assign(new Error("The operation was aborted."), { name: "AbortError", code: "ABORT_ERR" });
 }
 
-function waitForPromiseOrAbort(value, signal) {
+function waitForPromiseOrAbort(value, signal, timeoutMs = 0) {
   const promise = Promise.resolve(value);
-  if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(abortError(signal));
+  if (signal?.aborted) return Promise.reject(abortError(signal));
+  if (!signal && !(timeoutMs > 0)) return promise;
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    const cleanup = () => signal.removeEventListener("abort", onAbort);
-    const onAbort = () => {
+    let timer;
+    const cleanup = () => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+      if (timer) clearTimeout(timer);
+    };
+    const settle = (callback, result) => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(abortError(signal));
+      callback(result);
     };
-    signal.addEventListener("abort", onAbort, { once: true });
+    const onAbort = () => settle(reject, abortError(signal));
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => settle(
+        reject,
+        networkSafetyError("DNS_LOOKUP_TIMEOUT", "The outbound hostname lookup timed out.")
+      ), timeoutMs);
+    }
+    // Close the race where cancellation happens between the initial check and
+    // listener registration.
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
     promise.then(
-      result => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(result);
-      },
-      error => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(error);
-      }
+      result => settle(resolve, result),
+      error => settle(reject, error)
     );
   });
 }
@@ -114,7 +122,7 @@ export function createPinnedDnsLookup(addresses, expectedHostname = "") {
   };
 }
 
-async function resolvePinnedAddresses(hostname, { lookupImpl = dnsLookup, allowLoopback = false, signal } = {}) {
+async function resolvePinnedAddresses(hostname, { lookupImpl = dnsLookup, allowLoopback = false, signal, lookupTimeoutMs = DNS_LOOKUP_TIMEOUT_MS } = {}) {
   if (signal?.aborted) throw abortError(signal);
   const host = normalizeHostname(hostname);
   const version = isIP(host);
@@ -137,9 +145,9 @@ async function resolvePinnedAddresses(hostname, { lookupImpl = dnsLookup, allowL
   let records;
   try {
     const lookupPromise = Promise.resolve().then(() => lookupImpl(host, { all: true, verbatim: true }));
-    records = normalizeAddressRecords(await waitForPromiseOrAbort(lookupPromise, signal));
+    records = normalizeAddressRecords(await waitForPromiseOrAbort(lookupPromise, signal, lookupTimeoutMs));
   } catch (error) {
-    if (signal?.aborted || error?.name === "AbortError") throw error;
+    if (signal?.aborted || error?.name === "AbortError" || error?.code === "DNS_LOOKUP_TIMEOUT") throw error;
     throw networkSafetyError("DNS_LOOKUP_FAILED", "The outbound hostname could not be resolved safely.");
   }
   if (!records.length) {
@@ -170,8 +178,12 @@ export async function safePinnedFetch(input, init = {}, dependencies = {}) {
   const {
     lookupImpl = dnsLookup,
     httpRequestImpl = httpRequest,
-    httpsRequestImpl = httpsRequest
+    httpsRequestImpl = httpsRequest,
+    dnsTimeoutMs = DNS_LOOKUP_TIMEOUT_MS
   } = dependencies || {};
+  const lookupTimeoutMs = Number.isFinite(dnsTimeoutMs)
+    ? Math.min(30_000, Math.max(1, dnsTimeoutMs))
+    : DNS_LOOKUP_TIMEOUT_MS;
 
   const redirectMode = init?.redirect ?? "error";
   const request = new Request(input, { ...init, redirect: redirectMode, duplex: "half" });
@@ -186,7 +198,7 @@ export async function safePinnedFetch(input, init = {}, dependencies = {}) {
     throw networkSafetyError("OUTBOUND_PROTOCOL_BLOCKED", "Remote outbound requests require HTTPS; HTTP is allowed only for explicit loopback development targets.");
   }
 
-  const addresses = await resolvePinnedAddresses(hostname, { lookupImpl, allowLoopback, signal: request.signal });
+  const addresses = await resolvePinnedAddresses(hostname, { lookupImpl, allowLoopback, signal: request.signal, lookupTimeoutMs });
   const lookup = createPinnedDnsLookup(addresses, hostname);
   const requestHeaders = new Headers(request.headers);
   // Node must generate Host from the validated request URL; callers cannot
