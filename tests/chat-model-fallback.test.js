@@ -251,3 +251,25 @@ test("chat does not use the integration owner's Hermes provider for another auth
     assert.equal(calls[0].url, "https://openrouter.ai/api/v1/chat/completions");
   }, overrides);
 });
+
+
+for (const status of [401, 403]) {
+  test("chat falls back to another model after primary provider HTTP " + status, async () => {
+    const calls = [];
+    await withApp(async (_url, options) => {
+      const model = JSON.parse(options.body).model;
+      calls.push(model);
+      if (model === "vendor/model-a") {
+        return new Response(JSON.stringify({ error: { message: "provider access denied" } }), { status });
+      }
+      return success("Recovered after provider authorization failure.");
+    }, async (base, cookie) => {
+      const response = await chat(base, cookie);
+      assert.equal(response.status, 200);
+      assert.match(await response.text(), /Recovered after provider authorization failure/);
+      assert.equal(response.headers.get("x-ultron-model"), "vendor/model-b");
+      assert.equal(response.headers.get("x-ultron-fallback"), "true");
+      assert.deepEqual(calls, ["vendor/model-a", "vendor/model-b"]);
+    });
+  });
+}
