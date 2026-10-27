@@ -456,8 +456,8 @@ const SAFE_PREPARATION_TOOLS = new Set([
   "obscura_capture_public_page"
 ]);
 
-function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
-  if (name === "run_code_in_sandbox" && hasExplicitSandboxAuthorization(requestText, args?.source, args?.language)) {
+function classifyToolDispatchRisk(name, args, requestRisk, requestText = "", currentPrompt = requestText) {
+  if (name === "run_code_in_sandbox" && hasExplicitSandboxAuthorization(currentPrompt, args?.source, args?.language)) {
     return { requiresConfirmation: false, risk: { level: "routine", reason: "Explicitly requested snippet runs only in the owner-only, resource-bounded, network-disabled container.", requiresConfirmation: false } };
   }
   let delegatedTask = "";
