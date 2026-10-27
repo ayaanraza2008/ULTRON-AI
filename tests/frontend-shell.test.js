@@ -33,6 +33,10 @@ test("frontend calls verified routes and guards capabilities absent from the cur
   assert.match(js, /prefers-reduced-motion/);
   assert.match(js, /cancel-chat|cancel-stream/);
   assert.match(js, /Routine low-risk research and draft\/report tasks can queue automatically/);
+  assert.match(js, /saveDocumentToMemory/);
+  assert.match(js, /Save text to Memory Vault/);
+  assert.match(js, /source:"document"/);
+  assert.match(js, /original file is not retained/);
   assert.match(js, /Non-routine or higher-risk tasks require approval/);
 });
 

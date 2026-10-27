@@ -1038,6 +1038,13 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     const kind = req.body?.kind;
     const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
     const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+    const requestedSource = req.body?.source;
+    if (requestedSource !== undefined && !["user_approved", "document"].includes(requestedSource)) {
+      return res.status(400).json({ error: { code: "INVALID_MEMORY_SOURCE", message: "Memory source must be user_approved or document." } });
+    }
+    if (requestedSource === "document" && kind !== "document_reference") {
+      return res.status(400).json({ error: { code: "INVALID_MEMORY_SOURCE", message: "Document source is only valid for a document reference." } });
+    }
     if (!allowedKinds.includes(kind) || !title || title.length > 240 || !content || content.length > 20000) {
       return res.status(400).json({ error: { code: "INVALID_MEMORY_ITEM", message: "Choose a valid memory type, enter a title up to 240 characters, and content up to 20,000 characters." } });
     }
@@ -1047,7 +1054,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     }
     try {
       const rows = await supabaseRest(req, "memory_items", "POST", "?select=id,kind,title,content,source,is_active,expires_at,created_at,updated_at", {
-        user_id: req.supabaseUser.id, kind, title, content, source: "user_approved", is_active: true, expires_at: expiry.value
+        user_id: req.supabaseUser.id, kind, title, content, source: requestedSource === "document" ? "document" : "user_approved", is_active: true, expires_at: expiry.value
       });
       if (!Array.isArray(rows) || !rows[0]?.id) return res.status(502).json({ error: { code: "MEMORY_WRITE_FAILED", message: "Supabase did not return the saved memory item." } });
       res.status(201).json({ item: rows[0] });
