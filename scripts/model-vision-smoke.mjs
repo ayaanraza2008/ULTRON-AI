@@ -211,7 +211,7 @@ export async function runVisionProviderSmoke({
       continue;
     }
     const text = extractText(data?.choices?.[0]?.message);
-    if (text.toUpperCase().includes(CHALLENGE_OK)) {
+    if (/^ULTRON_VISION_SMOKE_OK[.!]?$/i.test(text)) {
       attempts.push({ model, code: "VISION_CHALLENGE_PASSED", httpStatus: response.status });
       return report("passed", {
         provider: "openrouter",
