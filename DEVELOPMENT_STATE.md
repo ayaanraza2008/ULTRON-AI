@@ -9,6 +9,15 @@ Last verified: 2026-10-27 UTC (source changes verified; production deployment bl
 - Treat configuration as unverified until the relevant live workflow succeeds.
 - Consequential external actions require explicit approval.
 
+
+## 2026-10-28 current checkpoint (supersedes earlier frontend-deferred notes)
+- Main commit `5811ba00fc78065b33c06f171801c39ad5194aad` includes the cinematic command-center frontend, corrected wiring to implemented task/research/coding/document/automation/tool APIs, and private original-file storage routes.
+- Source verification for that main commit passed: [CI run 40563634026](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40563634026) reports both the automated test job and pinned World Intelligence build successful.
+- Production revision verification failed separately: [run 40563633937](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40563633937). Render deployment `dep-dbgf4np5efls73dnm6fg` failed before build due to `pipeline_minutes_exhausted`; the new main revision is not live-verified. Do not upgrade or increase spend without owner approval.
+- Supabase migration `private_document_storage` was applied to project `opdjfhwepmcprbqojpat` and recorded as version `20261027185203`. Read-only checks confirm the `documents` table has RLS enabled, the `ultron-private-documents` bucket is private with a 5 MiB limit, and authenticated grants exclude UPDATE. Authenticated upload/download/delete E2E remains unverified because no dedicated disposable test account was available.
+- DNS-pinned outbound transport is already present on main as `network-safety.js` and is the default transport in `server.js`; do not describe the source fix as unmerged. Production deployment of that protection remains unverified until the current revision is deployed and checked.
+- Remaining live blockers: real text/vision provider completion, two-account Auth/RLS isolation, queued worker task execution against a dedicated test user, Supabase leaked-password protection dashboard setting, optional integrations and physical Windows companion verification.
+
 ## Verified progress
 - PR #129: reject JWT-shaped strings and GitHub access-token formats from AgentMemory durable capture; merged, CI passed, and Render deployment verified `live` at commit `76a49edb5e08bd469fab596484330257e21344b1`.
 - PR #130: AgentMemory recall and capture now fail closed when the authenticated user ID is absent, preventing fallback to a shared project namespace; regression test added, CI jobs passed, and Render deployment verified `live` at commit `56583bb56c438fa00cec917edd3166a1e053894a`.
@@ -36,7 +45,7 @@ Last verified: 2026-10-27 UTC (source changes verified; production deployment bl
 3. Verify task worker execution and task state transitions against a test task; record actual completed/retried/failed outcomes.
 4. Resolve the Supabase leaked-password protection warning via dashboard configuration, then recheck the security advisor.
 5. Verify PR #124's Browser Use proxy deployment and live bridge behavior when bridge credentials are configured.
-6. Continue backend capability work and regression tests. Frontend remains deferred.
+6. Continue backend capability work and live verification. The cinematic frontend is merged; production deployment remains blocked by Render's exhausted build-pipeline minutes.
 
 ## Reporting standard
 For each capability, distinguish implemented, unit-tested, integration-tested, deployed, live-verified, and blocked. Never claim full autonomy, 100% correctness, or successful provider inference based only on configuration or a passing mock test.
