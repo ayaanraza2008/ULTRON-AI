@@ -328,3 +328,7 @@ test("draft-only text and research about forwarding stay routine", () => {
   assert.equal(mixed.level, "external_effect");
   assert.equal(mixed.requiresConfirmation, true);
 });
+
+test("autonomy risk decisions expose the current policy version", () => {
+  assert.equal(classifyAutonomyRisk("Research public energy trends.").policyVersion, "1.4.0");
+});
