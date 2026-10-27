@@ -49,3 +49,7 @@ Keep credentials out of chat and source control. To complete authorized live che
 ## Safety and release boundary
 
 No changes to this audit intentionally deploy, merge a pull request, mutate production secrets, apply a production migration, or alter Render/Supabase settings. Continue backend work on isolated branches. Deployment remains explicitly excluded until owner authorization.
+
+## Operational scope incident and containment
+
+During this audit, six test/config-only changes were briefly committed to `main` because one GitHub update batch omitted its target branch. The six files (`tests/chat-model-fallback.test.js`, `tests/conversation-api-user-scope.test.js`, `tests/document-storage.test.js`, `tests/memory-api-user-scope.test.js`, `tests/message-write-conversation-ownership.test.js`, and `package.json`) were restored to their exact pre-edit contents in six follow-up commits. The server implementation and migration were never changed on `main` by that incident. Render's service history confirms automatic attempts for these commits because `ultron-ai` has auto-deploy-on-commit enabled; every attempt observed in the 20:46–20:47 UTC window failed with `pipeline_minutes_exhausted`, and no successful deployment appeared in that window. No manual deploy or rollback was triggered, and Render settings were not changed. All ongoing session-revocation changes are on `security/session-revocation-mainline-20261028` / draft PR #315.
