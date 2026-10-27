@@ -265,7 +265,12 @@ function toResponse(response, { maxResponseBodyBytes = MAX_RESPONSE_BODY_BYTES, 
     });
     const finish = () => onBodyDone();
     limiter.once("end", finish);
-    limiter.once("close", finish);
+    limiter.once("close", () => {
+      // A downstream caller can cancel Response.body before the upstream ends.
+      // Destroy the socket in that case instead of leaving the remote response flowing.
+      if (!limiter.readableEnded) response.destroy?.();
+      finish();
+    });
     limiter.once("error", () => {
       response.destroy?.();
       finish();
