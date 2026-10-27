@@ -33,15 +33,80 @@ function readConfig(env = process.env) {
 }
 
 const config = readConfig();
+const MAX_RESPONSE_BYTES = 1_000_000;
 
 async function readJson(response) {
-  const raw = await response.text();
-  if (Buffer.byteLength(raw, "utf8") > 1_000_000) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
+    try { await response.body?.cancel?.(); } catch {}
     throw new Error("Supabase E2E response exceeded the 1 MB safety limit.");
   }
+
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    throw new Error("Supabase E2E response did not expose a safely readable body.");
+  }
+
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        try { await reader.cancel(); } catch {}
+        throw new Error("Supabase E2E response exceeded the 1 MB safety limit.");
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+
   try { return raw ? JSON.parse(raw) : null; }
   catch { throw new Error("Supabase E2E endpoint returned malformed JSON."); }
 }
+
+test("Supabase E2E JSON reader rejects oversized Content-Length before parsing", async () => {
+  let cancelled = false;
+  const body = new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("{}")); },
+    cancel() { cancelled = true; }
+  });
+  const response = new Response(body, {
+    headers: { "content-length": String(MAX_RESPONSE_BYTES + 1) }
+  });
+
+  await assert.rejects(readJson(response), /exceeded the 1 MB safety limit/);
+  assert.equal(cancelled, true);
+});
+
+test("Supabase E2E JSON reader enforces the byte limit while streaming", async () => {
+  let cancelled = false;
+  const oversizedChunk = new Uint8Array(MAX_RESPONSE_BYTES + 1);
+  const body = new ReadableStream({
+    start(controller) { controller.enqueue(oversizedChunk); },
+    cancel() { cancelled = true; }
+  });
+
+  await assert.rejects(readJson(new Response(body)), /exceeded the 1 MB safety limit/);
+  assert.equal(cancelled, true);
+});
+
+test("Supabase E2E JSON reader decodes valid JSON across chunks", async () => {
+  const encoded = new TextEncoder().encode('{"ok":true,"text":"hello"}');
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoded.slice(0, 8));
+      controller.enqueue(encoded.slice(8));
+      controller.close();
+    }
+  });
+  assert.deepEqual(await readJson(new Response(body)), { ok: true, text: "hello" });
+});
 
 async function request(url, { apiKey, accessToken, method = "GET", body, prefer } = {}) {
   const response = await safePinnedFetch(url, {

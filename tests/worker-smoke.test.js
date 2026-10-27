@@ -47,7 +47,7 @@ test("worker smoke inserts, polls to completion, cleans up, and redacts task res
       if (url.includes("/rest/v1/agent_tasks?select=")) {
         polls += 1;
         if (polls === 1) return response([{ id: UUID, status: "RUNNING", attempts: 1 }]);
-        return response([{ id: UUID, status: "COMPLETED", attempts: 1, result: { content: "private provider output" } }]);
+        return response([{ id: UUID, status: "COMPLETED", attempts: 1, result: { type: "employee_output", role: "chief-of-staff", mode: "plan", answer: "private provider output" } }]);
       }
       if (url.includes("/rest/v1/agent_tasks?id=eq.")) {
         assert.equal(options.method, "DELETE");
@@ -58,10 +58,53 @@ test("worker smoke inserts, polls to completion, cleans up, and redacts task res
   });
   assert.equal(result.status, "passed");
   assert.equal(result.taskState, "COMPLETED");
+  assert.equal(result.resultVerified, true);
+  assert.equal(result.resultType, "employee_output");
   assert.equal(result.cleanup, "deleted");
   assert.equal(result.generatedAt, "fixed-time");
   assert.equal(JSON.stringify(result).includes(serviceEnv.SUPABASE_SERVICE_ROLE_KEY), false);
   assert.equal(JSON.stringify(result).includes("private provider output"), false);
+});
+
+test("worker smoke rejects COMPLETED tasks when persisted employee output is missing or invalid", async () => {
+  const invalidResults = [
+    null,
+    {},
+    { type: "employee_output", role: "chief-of-staff", mode: "plan", answer: "  " },
+    { type: "employee_output", role: "other-role", mode: "plan", answer: "looks useful" },
+    { type: "employee_output", role: "chief-of-staff", mode: "draft", answer: "wrong mode" }
+  ];
+
+  for (const invalidResult of invalidResults) {
+    let deleted = false;
+    const result = await runWorkerSmoke({
+      env: serviceEnv,
+      now: () => "fixed-time",
+      sleepImpl: async () => {},
+      fetchImpl: async (url, options = {}) => {
+        if (url.endsWith("/rest/v1/agent_tasks")) {
+          return response([{ id: UUID, status: "QUEUED" }], 201);
+        }
+        if (url.includes("/rest/v1/agent_tasks?select=")) {
+          assert.match(decodeURIComponent(url), /result/);
+          return response([{ id: UUID, status: "COMPLETED", attempts: 1, result: invalidResult }]);
+        }
+        if (url.includes("/rest/v1/agent_tasks?id=eq.")) {
+          assert.equal(options.method, "DELETE");
+          deleted = true;
+          return response(null, 204);
+        }
+        throw new Error("Unexpected URL");
+      }
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.reason, "TASK_RESULT_MISSING_OR_INVALID");
+    assert.equal(result.resultVerified, undefined);
+    assert.equal(deleted, true, "invalid-result smoke task should still be cleaned up");
+    assert.equal(JSON.stringify(result).includes("looks useful"), false);
+    assert.equal(JSON.stringify(result).includes(serviceEnv.SUPABASE_SERVICE_ROLE_KEY), false);
+  }
 });
 
 test("worker smoke blocks unsafe Supabase URL and missing user ID before network", async () => {
