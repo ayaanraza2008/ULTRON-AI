@@ -119,20 +119,15 @@ function makeHarness({ env = API_ENV, authUserId = OWNER } = {}) {
 test("desktop action validator accepts only the narrow allowlist", () => {
   assert.deepEqual(validateDesktopAction("launch_app", { app: "calculator" }), { app: "calculator" });
   assert.deepEqual(validateDesktopAction("system_info", {}), {});
-  assert.equal(validateDesktopAction("open_url", { url: "https://example.com/docs?topic=ultron" }).url, "https://example.com/docs?topic=ultron");
+  assert.throws(() => validateDesktopAction("open_url", { url: "https://example.com/docs?topic=ultron" }), { code: "DESKTOP_ACTION_NOT_ALLOWED" });
   assert.throws(() => validateDesktopAction("run_shell", { command: "whoami" }), { code: "DESKTOP_ACTION_NOT_ALLOWED" });
   assert.throws(() => validateDesktopAction("launch_app", { app: "powershell.exe" }), { code: "DESKTOP_ACTION_PAYLOAD_INVALID" });
   assert.throws(() => validateDesktopAction("launch_app", { app: "notepad", args: ["secret.txt"] }), { code: "DESKTOP_ACTION_PAYLOAD_INVALID" });
-  assert.throws(() => validateDesktopAction("open_url", { url: "file:///C:/Windows/win.ini" }), { code: "DESKTOP_ACTION_UNSAFE_URL" });
-  assert.throws(() => validateDesktopAction("open_url", { url: "http://127.0.0.1:8080/" }), { code: "DESKTOP_ACTION_UNSAFE_URL" });
-  assert.throws(() => validateDesktopAction("open_url", { url: "https://user:password@example.com/" }), { code: "DESKTOP_ACTION_UNSAFE_URL" });
-  for (const url of [
-    "https://[2001:1::1]/",
-    "https://[2001:1ff::1]/",
-    "https://[2001:db8::1]/"
-  ]) {
-    assert.throws(() => validateDesktopAction("open_url", { url }), { code: "DESKTOP_ACTION_UNSAFE_URL" }, url);
-  }
+  assert.throws(() => validateDesktopAction("open_url", { url: "file:///C:/Windows/win.ini" }), { code: "DESKTOP_ACTION_NOT_ALLOWED" });
+  assert.throws(() => validateDesktopAction("open_url", { url: "http://127.0.0.1:8080/" }), { code: "DESKTOP_ACTION_NOT_ALLOWED" });
+  assert.throws(() => validateDesktopAction("open_url", { url: "https://user:password@example.com/" }), { code: "DESKTOP_ACTION_NOT_ALLOWED" });
+  assert.throws(() => validateDesktopAction("open_url", { url: "https://[2001:db8::1]/" }), { code: "DESKTOP_ACTION_NOT_ALLOWED" });
+
   assert.throws(() => validateDesktopAction("system_info", { includeEnvironment: true }), { code: "DESKTOP_ACTION_PAYLOAD_INVALID" });
 });
 
@@ -200,25 +195,25 @@ test("only the configured owner may list, request, approve, or cancel local PC a
 test("bridge result is bounded and must match the approved action", async t => {
   const h = makeHarness();
   t.after(() => h.close());
-  await h.request("POST", "/api/desktop/actions", { body: { actionType: "open_url", payload: { url: "https://example.com/path" } } });
+  await h.request("POST", "/api/desktop/actions", { body: { actionType: "launch_app", payload: { app: "calculator" } } });
   await h.request("POST", "/api/desktop/actions/" + ACTION_ID + "/approve");
   await h.request("POST", "/api/desktop/bridge/next", { token: TOKEN, body: {} });
 
   const mismatch = await h.request("POST", "/api/desktop/bridge/ack", {
     token: TOKEN,
-    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Opened URL", host: "evil.example", platform: "windows" } }
+    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Launched Notepad", app: "notepad", platform: "windows" } }
   });
   assert.equal(mismatch.status, 400);
   assert.equal(h.store.get(ACTION_ID).status, "RUNNING");
 
   const acknowledged = await h.request("POST", "/api/desktop/bridge/ack", {
     token: TOKEN,
-    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Opened destination", host: "example.com", platform: "windows" } }
+    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Launched Calculator", app: "calculator", platform: "windows" } }
   });
   assert.equal(acknowledged.status, 200);
   assert.equal(acknowledged.payload.action.status, "COMPLETED");
-  assert.equal(acknowledged.payload.action.result.host, "example.com");
-  assert.equal(JSON.stringify(acknowledged.payload).includes("evil.example"), false);
+  assert.equal(acknowledged.payload.action.result.app, "calculator");
+  assert.equal(JSON.stringify(acknowledged.payload).includes("notepad"), false);
 });
 
 test("queued desktop action may be cancelled before the bridge claims it", async t => {
