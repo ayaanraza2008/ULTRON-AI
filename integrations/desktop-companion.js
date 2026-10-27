@@ -1,4 +1,5 @@
 import { safeServiceBase } from "../network-safety.js";
+import { safeFetch } from "../outbound-transport.js";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const TOKEN_MAX_LENGTH = 2000;
@@ -166,7 +167,7 @@ function validateStatusPayload(payload) {
 
 export async function checkDesktopCompanion({
   env = process.env,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = safeFetch,
   userId
 } = {}) {
   const denied = ownerDenied(env, userId);

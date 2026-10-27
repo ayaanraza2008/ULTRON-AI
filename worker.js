@@ -1,10 +1,53 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
+import { safeFetch } from "./outbound-transport.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { verifyAutonomousOutput } from "./autonomous-quality-gate.js";
+
+/**
+ * Combine cancellation signals while retaining compatibility with the full Node >=20 range.
+ * The fallback removes sibling listeners as soon as one source aborts.
+ */
+export function composeAbortSignals(signals, anyImpl = AbortSignal.any) {
+  const valid = Array.isArray(signals)
+    ? signals.filter(signal => signal && typeof signal.addEventListener === "function")
+    : [];
+  if (valid.length === 0) return undefined;
+  if (valid.length === 1) return valid[0];
+  if (typeof anyImpl === "function") return anyImpl(valid);
+
+  const controller = new AbortController();
+  const listeners = new Map();
+  const cleanup = () => {
+    for (const [source, listener] of listeners) {
+      source.removeEventListener("abort", listener);
+    }
+    listeners.clear();
+  };
+  const abortFrom = source => {
+    if (controller.signal.aborted) return;
+    const reason = source?.reason;
+    controller.abort(reason === undefined
+      ? Object.assign(new Error("The operation was aborted."), { name: "AbortError" })
+      : reason);
+    cleanup();
+  };
+
+  for (const source of valid) {
+    if (source.aborted) {
+      abortFrom(source);
+      break;
+    }
+    if (controller.signal.aborted) break;
+    const listener = () => abortFrom(source);
+    listeners.set(source, listener);
+    source.addEventListener("abort", listener, { once: true });
+  }
+  return controller.signal;
+}
 
 const maxTaskAgeMs = 24 * 60 * 60 * 1000;
 const maxFutureTaskClockSkewMs = 5 * 60 * 1000;
@@ -133,7 +176,7 @@ export async function renewTaskLease({ taskId, rest, logger = console, onInactiv
   }
 }
 
-export function startWorker({ env = process.env, logger = console, fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
+export function startWorker({ env = process.env, logger = console, fetchImpl = safeFetch, sleepImpl = sleep } = {}) {
   const supabaseUrl = String(env.SUPABASE_URL || "").replace(/\/+$/, "");
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
@@ -180,7 +223,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = g
 
   function providerSignal(signal, timeoutMs) {
     const timeout = AbortSignal.timeout(timeoutMs);
-    return signal ? AbortSignal.any([signal, timeout]) : timeout;
+    return signal ? composeAbortSignals([signal, timeout]) : timeout;
   }
 
   async function runResearch(task, signal) {

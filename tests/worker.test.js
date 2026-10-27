@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner, safeResearchUrl } from "../worker.js";
+import { startWorker, renewTaskLease, readJsonLimited, readTextLimited, createNonOverlappingRunner, safeResearchUrl, composeAbortSignals } from "../worker.js";
 
 test("worker research URL validation shares reserved IPv4 and IPv6 host rules", () => {
   for (const url of [
@@ -1786,4 +1786,30 @@ test("background AI Employee automatically falls back through configured free Op
   assert.deepEqual(modelCalls.map(call => call.model), ["openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
   assert.ok(modelCalls.every(call => call.authorization === "Bearer openrouter-worker-fallback-test-key"));
   assert.equal(worker.getStatus().tasksCompleted, 1);
+});
+
+
+test("composeAbortSignals propagates caller cancellation without AbortSignal.any", () => {
+  const caller = new AbortController();
+  const deadline = new AbortController();
+  const combined = composeAbortSignals([caller.signal, deadline.signal], null);
+  const reason = new Error("caller cancelled the task");
+  caller.abort(reason);
+  assert.equal(combined.aborted, true);
+  assert.equal(combined.reason, reason);
+});
+
+test("composeAbortSignals propagates a timeout and handles already-aborted inputs", async () => {
+  const caller = new AbortController();
+  const deadline = new AbortController();
+  deadline.abort(Object.assign(new Error("provider timeout"), { code: "PROVIDER_TIMEOUT" }));
+  const combined = composeAbortSignals([caller.signal, deadline.signal], null);
+  assert.equal(combined.aborted, true);
+  assert.equal(combined.reason.code, "PROVIDER_TIMEOUT");
+
+  const later = new AbortController();
+  const timed = composeAbortSignals([later.signal, AbortSignal.timeout(5)], null);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(timed.aborted, true);
+  assert.equal(timed.reason instanceof Error, true);
 });

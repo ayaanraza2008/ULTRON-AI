@@ -38,12 +38,15 @@ export function isPublicNetworkHost(hostname) {
   }
 
   if (ipVersion === 6) {
-    const firstHextet = Number.parseInt(host.split(":")[0] || "0", 16);
+    const hextets = host.split(":");
+    const firstHextet = Number.parseInt(hextets[0] || "0", 16);
+    const secondHextet = Number.parseInt(hextets[1] || "0", 16);
+    // Exclude the full 2001::/23 IETF protocol-assignment block, not only a
+    // hand-picked subset of prefixes within it.
+    const inIetfProtocolAssignments = firstHextet === 0x2001 && secondHextet <= 0x01ff;
     if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
-        || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:")
-        || host.startsWith("2001:0:") || host.startsWith("2001:2:")
-        || host.startsWith("2001:10:") || host.startsWith("2001:20:") || host.startsWith("2002:")
-        || host.startsWith("3fff:")) return false;
+        || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:") || inIetfProtocolAssignments
+        || host.startsWith("2002:") || host.startsWith("3fff:")) return false;
 
     const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
     if (mapped) return isPublicNetworkHost(mapped[1]);

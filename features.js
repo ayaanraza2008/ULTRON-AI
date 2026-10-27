@@ -7,6 +7,7 @@ import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { isPublicNetworkHost, safeServiceBase } from "./network-safety.js";
+import { safeFetch } from "./outbound-transport.js";
 
 function safeBaseUrl(value) {
   return safeServiceBase(value);
@@ -404,7 +405,7 @@ function withTimeout(ms, parentSignal) {
   return { signal: controller.signal, close: () => { clearTimeout(timer); parentSignal?.removeEventListener("abort", abort); } };
 }
 
-export function createFeatureRouter({ env = process.env, fetchImpl = globalThis.fetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
+export function createFeatureRouter({ env = process.env, fetchImpl = safeFetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
   const router = express.Router();
   async function recordAuditEvent(req, event) {
     try {

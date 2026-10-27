@@ -13,6 +13,7 @@ import { createAgentRouter } from "./agent-runtime.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safeServiceBase } from "./network-safety.js";
+import { safeFetch } from "./outbound-transport.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -215,15 +216,30 @@ async function isCompromisedPassword(password, fetchImpl) {
     });
   }
   const text = await readResponseTextLimited(response, 1_000_000);
-  for (const line of text.split(/\r?\n/)) {
-    const separator = line.indexOf(":");
-    if (separator < 1) continue;
-    const suffix = line.slice(0, separator).trim().toUpperCase();
-    if (suffix !== targetSuffix) continue;
-    const count = Number(line.slice(separator + 1).trim());
-    if (Number.isFinite(count) && count > 0) return true;
+  const lines = text.split(/\r?\n/);
+  let compromised = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    // A single trailing newline is normal. Any other malformed line means the
+    // screening response cannot be trusted, so signup must fail closed.
+    if (line === "" && index === lines.length - 1) continue;
+    const match = /^([0-9a-f]{35}):([0-9]+)$/i.exec(line);
+    if (!match) {
+      throw Object.assign(new Error("Password safety screening returned an invalid response."), {
+        code: "PASSWORD_SCREENING_UNAVAILABLE",
+        status: 503
+      });
+    }
+    const count = Number(match[2]);
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw Object.assign(new Error("Password safety screening returned an invalid response."), {
+        code: "PASSWORD_SCREENING_UNAVAILABLE",
+        status: 503
+      });
+    }
+    if (match[1].toUpperCase() === targetSuffix && count > 0) compromised = true;
   }
-  return false;
+  return compromised;
 }
 
 function normalizeBaseUrl(value) {
@@ -348,7 +364,7 @@ function cactusCompletionStream(completion) {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
 }
 
-export function createApp({ fetchImpl = globalThis.fetch, env = process.env, logger = console } = {}) {
+export function createApp({ fetchImpl = safeFetch, env = process.env, logger = console } = {}) {
   const app = express();
   app.locals.workerRuntime = () => ({
     state: env.ULTRON_EMPLOYEES_ENABLED === "true" ? "configured_not_started" : "disabled_by_config",

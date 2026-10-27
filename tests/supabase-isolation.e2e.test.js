@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { safeFetch } from "../outbound-transport.js";
 
 const EXPECTED_PROJECT_REF = "opdjfhwepmcprbqojpat";
 const CONFIRM_WRITES_VALUE = "CONFIRM_ULTRON_E2E_WRITES";
@@ -43,7 +44,7 @@ async function readJson(response) {
 }
 
 async function request(url, { apiKey, accessToken, method = "GET", body, prefer } = {}) {
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     method,
     headers: {
       apikey: apiKey,
@@ -68,11 +69,17 @@ async function signIn(label, email, password) {
     method: "POST",
     body: { email, password }
   });
-  if (!response.ok || typeof payload?.access_token !== "string" || typeof payload?.user?.id !== "string") {
+  if (!response.ok || typeof payload?.access_token !== "string" ||
+      typeof payload?.refresh_token !== "string" || typeof payload?.user?.id !== "string") {
     // Do not include auth response bodies, which can contain sensitive details.
     throw new Error(`Test user ${label} could not sign in (HTTP ${response.status}). Check test-account confirmation and credentials.`);
   }
-  return { label, token: payload.access_token, userId: payload.user.id };
+  return {
+    label,
+    token: payload.access_token,
+    refreshToken: payload.refresh_token,
+    userId: payload.user.id
+  };
 }
 
 function tableUrl(table, params = {}) {
@@ -95,8 +102,8 @@ async function insertRecord(table, session, values) {
   return { table, id: payload[0].id, owner: session };
 }
 
-async function readRows(table, session, filters) {
-  const { response, payload } = await request(tableUrl(table, { select: "id", ...filters }), {
+async function readRows(table, session, filters, selectColumn = "id") {
+  const { response, payload } = await request(tableUrl(table, { select: selectColumn, ...filters }), {
     apiKey: config.publishableKey,
     accessToken: session.token
   });
@@ -123,12 +130,13 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
   const nonce = randomUUID();
   const created = [];
   let primaryError = null;
+  let testSessions = [];
 
   try {
-    const [userA, userB] = await Promise.all([
-      signIn("A", config.emailA, config.passwordA),
-      signIn("B", config.emailB, config.passwordB)
-    ]);
+    const userA = await signIn("A", config.emailA, config.passwordA);
+    testSessions.push(userA);
+    const userB = await signIn("B", config.emailB, config.passwordB);
+    testSessions.push(userB);
     assert.notEqual(userA.userId, userB.userId, "E2E test accounts must be distinct users.");
 
     const conversationA = await insertRecord("conversations", userA, {
@@ -181,13 +189,136 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
     });
     created.push(memoryB);
 
+    // Use BLOCKED test tasks so no live worker can pick up or execute them.
+    const taskA = await insertRecord("agent_tasks", userA, {
+      user_id: userA.userId,
+      title: "ULTRON E2E isolation A " + nonce,
+      input: { source: "isolated_e2e", testOnly: true },
+      status: "BLOCKED"
+    });
+    created.push(taskA);
+
+    const taskB = await insertRecord("agent_tasks", userB, {
+      user_id: userB.userId,
+      title: "ULTRON E2E isolation B " + nonce,
+      input: { source: "isolated_e2e", testOnly: true },
+      status: "BLOCKED"
+    });
+    created.push(taskB);
+
+    // Disabled schedules are temporary ownership probes and cannot run during E2E.
+    const scheduleA = await insertRecord("employee_schedules", userA, {
+      user_id: userA.userId,
+      role_id: "seo-aeo",
+      routine_id: "ultron-isolation-test",
+      goal: "Temporary ULTRON E2E isolation probe " + nonce,
+      context: "Test only; no external actions",
+      interval_minutes: 1440,
+      enabled: false
+    });
+    created.push(scheduleA);
+
+    const scheduleB = await insertRecord("employee_schedules", userB, {
+      user_id: userB.userId,
+      role_id: "seo-aeo",
+      routine_id: "ultron-isolation-test",
+      goal: "Temporary ULTRON E2E isolation probe " + nonce,
+      context: "Test only; no external actions",
+      interval_minutes: 1440,
+      enabled: false
+    });
+    created.push(scheduleB);
+
     assert.equal((await readRows("conversations", userA, { id: "eq." + conversationA.id })).length, 1);
     assert.equal((await readRows("messages", userA, { id: "eq." + messageA.id })).length, 1);
     assert.equal((await readRows("memory_items", userA, { id: "eq." + memoryA.id })).length, 1);
+    assert.equal((await readRows("agent_tasks", userA, { id: "eq." + taskA.id })).length, 1);
+    assert.equal((await readRows("employee_schedules", userA, { id: "eq." + scheduleA.id })).length, 1);
 
     assert.deepEqual(await readRows("conversations", userA, { id: "eq." + conversationB.id }), []);
     assert.deepEqual(await readRows("messages", userA, { id: "eq." + messageB.id }), []);
     assert.deepEqual(await readRows("memory_items", userA, { id: "eq." + memoryB.id }), []);
+    assert.deepEqual(await readRows("agent_tasks", userA, { id: "eq." + taskB.id }), []);
+    assert.deepEqual(await readRows("employee_schedules", userA, { id: "eq." + scheduleB.id }), []);
+
+    // Preferences and audit records use different access patterns; verify neither
+    // permits a user to enumerate the other account's records.
+    assert.deepEqual(await readRows("user_preferences", userA, { user_id: "eq." + userB.userId }, "user_id"), []);
+    assert.deepEqual(await readRows("audit_events", userA, { user_id: "eq." + userB.userId }), []);
+
+    // Anonymous and invalid-token requests must not enumerate user-owned rows.
+    for (const [table, selectColumn] of [
+      ["conversations", "id"],
+      ["messages", "id"],
+      ["memory_items", "id"],
+      ["agent_tasks", "id"],
+      ["employee_schedules", "id"],
+      ["user_preferences", "user_id"],
+      ["audit_events", "id"]
+    ]) {
+      const endpoint = tableUrl(table, { select: selectColumn, limit: "1" });
+      const anonymous = await request(endpoint, { apiKey: config.publishableKey });
+      assert.equal(anonymous.response.ok, false, "anonymous access to " + table + " must be denied");
+
+      const invalidToken = await request(endpoint, {
+        apiKey: config.publishableKey,
+        accessToken: "invalid.jwt.token"
+      });
+      assert.equal(invalidToken.response.ok, false, "invalid-token access to " + table + " must be denied");
+    }
+
+    // PostgREST/RLS commonly returns an empty representation for mutations that
+    // matched no visible rows. Assert both cross-account updates and deletes have
+    // no effect, rather than requiring one particular HTTP error status.
+    async function assertForeignMutationDenied(table, rowId, method, body) {
+      const result = await request(tableUrl(table, { select: "id", id: "eq." + rowId }), {
+        apiKey: config.publishableKey,
+        accessToken: userA.token,
+        method,
+        ...(body === undefined ? {} : { body }),
+        prefer: "return=representation"
+      });
+      assert.equal(result.response.ok, true, "RLS should safely return zero changed rows for " + method + " " + table);
+      assert.deepEqual(result.payload, [], "user A must not mutate user B's " + table + " row");
+    }
+
+    await assertForeignMutationDenied("conversations", conversationB.id, "PATCH", {
+      title: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("conversations", conversationB.id, "DELETE");
+    await assertForeignMutationDenied("messages", messageB.id, "PATCH", {
+      content: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("messages", messageB.id, "DELETE");
+    await assertForeignMutationDenied("memory_items", memoryB.id, "PATCH", {
+      content: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("memory_items", memoryB.id, "DELETE");
+    await assertForeignMutationDenied("agent_tasks", taskB.id, "PATCH", {
+      title: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("agent_tasks", taskB.id, "DELETE");
+    await assertForeignMutationDenied("employee_schedules", scheduleB.id, "PATCH", {
+      goal: "FORBIDDEN ULTRON E2E change " + nonce
+    });
+    await assertForeignMutationDenied("employee_schedules", scheduleB.id, "DELETE");
+
+    // Preferences are keyed by user_id rather than an id column.
+    const foreignPreferencePatch = await request(tableUrl("user_preferences", {
+      select: "user_id",
+      user_id: "eq." + userB.userId
+    }), {
+      apiKey: config.publishableKey,
+      accessToken: userA.token,
+      method: "PATCH",
+      body: { language: "hi" },
+      prefer: "return=representation"
+    });
+    if (!foreignPreferencePatch.response.ok) {
+      assert.ok([401, 403, 404].includes(foreignPreferencePatch.response.status));
+    } else {
+      assert.deepEqual(foreignPreferencePatch.payload, [], "user A must not change user B's preferences");
+    }
 
     // A valid authenticated identity must not be able to create a row owned by B.
     const forged = await request(tableUrl("conversations", { select: "id" }), {
@@ -214,8 +345,40 @@ test("live Supabase auth, conversation, message, and memory access is isolated b
     catch { cleanupFailures.push(record.table + ":" + record.id); }
   }
 
+  // Revoke each disposable test session after all temporary rows have been cleaned.
+  // A fresh refresh attempt must not be accepted after the Auth logout succeeds.
+  const sessionRevocationFailures = [];
+  for (const session of testSessions) {
+    try {
+      const logout = await request(new URL("/auth/v1/logout", config.url), {
+        apiKey: config.publishableKey,
+        accessToken: session.token,
+        method: "POST"
+      });
+      if (!logout.response.ok) {
+        throw new Error("Sign-out returned HTTP " + logout.response.status + ".");
+      }
+
+      const refreshEndpoint = new URL("/auth/v1/token", config.url);
+      refreshEndpoint.searchParams.set("grant_type", "refresh_token");
+      const refreshed = await request(refreshEndpoint, {
+        apiKey: config.publishableKey,
+        method: "POST",
+        body: { refresh_token: session.refreshToken }
+      });
+      if (refreshed.response.ok) {
+        throw new Error("Supabase accepted a refresh token after sign-out.");
+      }
+    } catch {
+      sessionRevocationFailures.push(session.label);
+    }
+  }
+
   if (cleanupFailures.length) {
     throw new Error("Supabase E2E cleanup failed for " + cleanupFailures.length + " temporary record(s); inspect the dedicated test accounts before rerunning.");
   }
   if (primaryError) throw primaryError;
+  if (sessionRevocationFailures.length) {
+    throw new Error("Could not verify sign-out/refresh-token revocation for disposable test session(s): " + sessionRevocationFailures.join(", ") + ".");
+  }
 });
