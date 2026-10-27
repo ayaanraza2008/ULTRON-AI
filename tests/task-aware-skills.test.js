@@ -58,3 +58,16 @@ test("ECC skill guidance remains locally useful and never removes consequential-
   assert.ok(result.rules.some(rule => rule.includes("explicit approval workflow")));
   assert.ok(result.rules.some(rule => rule.includes("task-specific approval")));
 });
+
+test("ECC auto-selection covers bug-fix phrasing and keeps security fixes paired with TDD", () => {
+  const providerFix = buildTaskSkillsGuidance("Fix the backend provider fallback bug");
+  assert.ok(providerFix.categories.includes("software_change"));
+  assert.ok(providerFix.eccSkills.some(skill => skill.name === "backend-patterns"));
+  assert.ok(providerFix.eccSkills.some(skill => skill.name === "tdd-workflow"));
+
+  const securityFix = buildTaskSkillsGuidance("Fix the authentication API token-refresh vulnerability");
+  const names = securityFix.eccSkills.map(skill => skill.name);
+  assert.ok(names.includes("security-review"));
+  assert.ok(names.includes("tdd-workflow"));
+  assert.ok(!names.includes("backend-patterns"), "Keep security review and TDD as the two most relevant skills");
+});
