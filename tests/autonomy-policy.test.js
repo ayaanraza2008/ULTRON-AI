@@ -322,5 +322,9 @@ test("draft-only text and research about forwarding stay routine", () => {
     const risk = classifyAutonomyRisk(task);
     assert.equal(risk.level, "routine", task);
     assert.equal(risk.requiresConfirmation, false, task);
+    assert.equal(hasAutonomyRiskLevel(task, ["external_effect"]), false, task);
   }
+  const mixed = classifyAutonomyRisk("Write a reply to my colleague but do not send it, then publish the report.");
+  assert.equal(mixed.level, "external_effect");
+  assert.equal(mixed.requiresConfirmation, true);
 });
