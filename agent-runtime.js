@@ -4,7 +4,7 @@ import { isPublicNetworkHost, safeServiceBase as safeBase } from "./network-safe
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
-import { buildAutonomyPlan, classifyAutonomyRisk, resolveAutonomyIntent } from "./autonomy-policy.js";
+import { buildAutonomyPlan, classifyAutonomyRisk, hasAutonomyRiskLevel, resolveAutonomyIntent } from "./autonomy-policy.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { getRepositoryCapabilityStatus, matchRepositoryCapabilities } from "./repository-capabilities.js";
 import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWorkPackages, listCalDiyEventTypes, listCalDiySlots } from "./integrations/productivity-services.js";
@@ -420,13 +420,53 @@ export function modelSafeResult(value, depth = 0) {
 
 const AUTONOMY_RISK_RANK = { routine: 0, private_data: 1, device_control: 2, external_effect: 3, destructive: 4 };
 
-function classifyToolDispatchRisk(name, args, requestRisk) {
+// These tools only perform public/read-only checks or return drafts. They may
+// prepare safe parts of a mixed request while a separate consequential action
+// remains gated. Do not add private-data reads, device controls, publishing,
+// messaging, generation jobs, or arbitrary delegated runtimes to this set.
+const SAFE_PREPARATION_TOOLS = new Set([
+  "research_web",
+  "create_youtube_production_plan",
+  "create_spaceplanner_plan",
+  "coding_assist",
+  "check_integrations",
+  "check_cactus",
+  "check_desktop_companion",
+  "check_repository_capabilities",
+  "check_openviking",
+  "check_hermes_agent",
+  "check_comfyui",
+  "obscura_inspect_public_page",
+  "obscura_capture_public_page"
+]);
+
+function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "browser_use") delegatedTask = args?.task;
   else if (name === "enqueue_employee_task") delegatedTask = args?.goal;
   const delegatedRisk = typeof delegatedTask === "string" && delegatedTask.trim()
     ? classifyAutonomyRisk(delegatedTask)
     : null;
+
+  // A request such as "research this, then send it" should not block its safe
+  // research/draft step. However, if the same request also requires reading
+  // private data or controlling a device, no safe-tool exception applies.
+  // The actual consequential action is still denied by its own tool/task risk.
+  const canPrepareSafely = SAFE_PREPARATION_TOOLS.has(name)
+    && ["external_effect", "destructive"].includes(requestRisk?.level)
+    && !hasAutonomyRiskLevel(requestText, ["private_data", "device_control"])
+    && !delegatedRisk?.requiresConfirmation;
+  if (canPrepareSafely) {
+    return {
+      requiresConfirmation: false,
+      risk: {
+        level: "routine",
+        reason: "Independent read-only or draft-only preparation; consequential action remains gated",
+        requiresConfirmation: false
+      }
+    };
+  }
+
   const requestLevel = requestRisk?.level || "routine";
   const delegatedLevel = delegatedRisk?.level || "routine";
   const risk = AUTONOMY_RISK_RANK[delegatedLevel] > AUTONOMY_RISK_RANK[requestLevel]
@@ -1375,7 +1415,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
           // Enforce the autonomy policy at the dispatch boundary, not just in
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
-          const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk);
+          const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
           } else {
@@ -1421,7 +1461,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
             executedToolCalls.add(dedupeKey);
             let result;
             try {
-              const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk);
+              const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
               } else {
