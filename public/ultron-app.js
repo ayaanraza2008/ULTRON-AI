@@ -190,6 +190,7 @@ function settingsMarkup(){
   ].join("");
 }
 function renderView(view=state.view){
+  if(state.view==="voice"&&view!=="voice"){stopVoice();stopPremiumRecording(true);if("speechSynthesis"in window)window.speechSynthesis.cancel();const audio=$("#serverTtsAudio");if(audio)audio.pause();if(state.ttsObjectUrl){URL.revokeObjectURL(state.ttsObjectUrl);state.ttsObjectUrl=null}}
   if(!navTitles[view])view="home";
   if(state.core && view!=="home"){state.core.dispose();state.core=null}
   state.view=view;root.innerHTML=({home:homeMarkup,chat:chatMarkup,voice:voiceMarkup,tasks:tasksMarkup,coding:codingMarkup,research:researchMarkup,files:filesMarkup,memory:memoryMarkup,integrations:integrationsMarkup,automation:automationMarkup,security:securityMarkup,system:systemMarkup,settings:settingsMarkup}[view]||homeMarkup)();
@@ -519,6 +520,7 @@ function setupVoice(){
   api("/integrations/voicestudio/status").then(r=>{state.voiceStudioSummary="status returned";renderVoiceAdapterSummary()}).catch(e=>{state.voiceStudioSummary="unavailable or owner-restricted ("+e.message+")";renderVoiceAdapterSummary()});
 }
 function startVoice(){
+  if(state.recorder){toast("Stop the active recording before using browser speech recognition.","error");return}
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Recognition){toast("Browser speech recognition is not supported here.","error");return}
   if(state.speechRecognition){try{state.speechRecognition.stop()}catch{}state.speechRecognition=null}
   const recognition=new Recognition();recognition.lang=$("#voiceLocale")?.value||"en-IN";recognition.interimResults=true;recognition.continuous=false;recognition.maxAlternatives=1;state.speechRecognition=recognition;state.speechActive=false;
@@ -531,10 +533,105 @@ function startVoice(){
 function finishVoice(){
   state.speechActive=false;$("#micStatePill")&&($("#micStatePill").textContent="MICROPHONE OFF");$("#micStatePill")&&($("#micStatePill").className="pill");$("#voiceStateText")&&($("#voiceStateText").textContent="Session ended");$("#voiceOrb")&&$("#voiceOrb").classList.remove("active");$("#startVoice")&&($("#startVoice").disabled=false);$("#stopVoice")&&($("#stopVoice").disabled=true);state.speechRecognition=null;if(state.coreState==="listening")setCoreState("idle");
 }
+function animateAudioMeter(){
+  if(!state.analyser||!state.audioFrequency||!state.mediaStream)return;
+  state.audioFrame=requestAnimationFrame(animateAudioMeter);
+  if(document.hidden)return;
+  state.analyser.getByteFrequencyData(state.audioFrequency);
+  const bars=$$("#audioWaveform i");
+  let total=0;
+  bars.forEach((bar,index)=>{const slot=Math.min(state.audioFrequency.length-1,Math.floor(index/Math.max(1,bars.length)*state.audioFrequency.length));const value=state.audioFrequency[slot]||0;total+=value;bar.style.height=(3+(value/255)*27)+"px"});
+  const level=bars.length?total/bars.length/255:0;
+  $("#voiceOrb")?.style.setProperty("--audio-level",String(level));
+}
+function stopAudioMeter(){
+  cancelAnimationFrame(state.audioFrame);state.audioFrame=0;
+  try{state.waveformSource?.disconnect()}catch{}
+  state.waveformSource=null;state.analyser=null;state.audioFrequency=null;
+  const context=state.audioContext;state.audioContext=null;
+  if(context){try{context.close()}catch{}}
+  const wave=$("#audioWaveform");if(wave)wave.hidden=true;
+  $$("#audioWaveform i").forEach(bar=>bar.style.height="4px");
+}
+async function startPremiumRecording(){
+  if(state.speechActive||state.recorder){toast("Another microphone session is already active.","error");return}
+  if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==="undefined"){toast("This browser does not support the required recording APIs.","error");$("#recordingState").textContent="Recording is unavailable in this browser.";return}
+  let stream=null;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const mimeCandidates=["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/ogg"];
+    const mimeType=mimeCandidates.find(type=>MediaRecorder.isTypeSupported?.(type));
+    const recorder=new MediaRecorder(stream,mimeType?{mimeType}:undefined);
+    state.mediaStream=stream;state.recordedChunks=[];state.discardRecording=false;state.recorder=recorder;
+    recorder.ondataavailable=event=>{if(event.data?.size)state.recordedChunks.push(event.data)};
+    recorder.onerror=event=>{toast("Recording failed: "+(event.error?.message||"media recorder error"),"error");stopPremiumRecording(true)};
+    recorder.onstop=async()=>{
+      const chunks=state.recordedChunks.slice();state.recordedChunks=[];state.recorder=null;
+      const discard=state.discardRecording;state.discardRecording=false;
+      stream.getTracks().forEach(track=>track.stop());if(state.mediaStream===stream)state.mediaStream=null;
+      stopAudioMeter();const start=$("#startRecording"),stop=$("#stopRecording"),pill=$("#micStatePill"),stateLabel=$("#recordingState");
+      if(start)start.disabled=false;if(stop)stop.disabled=true;if(pill){pill.textContent="MICROPHONE OFF";pill.className="pill"}
+      if(state.coreState==="listening")setCoreState("idle");
+      if(discard){if(stateLabel)stateLabel.textContent="Recording discarded; no audio was sent.";return}
+      const blob=new Blob(chunks,{type:recorder.mimeType||"audio/webm"});
+      if(!blob.size){if(stateLabel)stateLabel.textContent="No audio data was recorded.";return}
+      if(blob.size>7_000_000){if(stateLabel)stateLabel.textContent="Recording exceeds the 7 MB audio limit.";toast("Recording too large. Try a shorter clip.","error");return}
+      if(stateLabel)stateLabel.textContent="Sending the completed recording for transcription…";
+      try{
+        const audioBase64=await fileToBase64(blob);
+        const result=await api("/speech/transcribe",{method:"POST",body:{audioBase64,mimeType:(blob.type||"audio/webm").split(";")[0]}});
+        const transcript=String(result.data?.text||"").trim();
+        if(!transcript)throw new APIError("The transcription API returned no text.",502,result.data);
+        const host=$("#serverTranscript");if(host){host.replaceChildren();const textNode=document.createElement("span");textNode.textContent=transcript;host.append(textNode);const button=document.createElement("button");button.className="small-button";button.type="button";button.dataset.action="transcript-to-chat";button.dataset.text=transcript;button.textContent="Send transcript to chat";host.append(document.createTextNode(" "));host.append(button)}
+        if(stateLabel)stateLabel.textContent="Transcription response received. Review the text before sending it anywhere.";toast("Transcription returned by the server.","success");setCoreState("success");
+      }catch(error){if(stateLabel)stateLabel.textContent="Server transcription did not complete.";inlineError($("#serverTranscript"),error.message);toast("Transcription failed: "+error.message,"error");setCoreState(error.status===503?"offline":"error")}
+    };
+    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+    if(AudioContextClass){
+      state.audioContext=new AudioContextClass();state.analyser=state.audioContext.createAnalyser();state.analyser.fftSize=256;state.audioFrequency=new Uint8Array(state.analyser.frequencyBinCount);state.waveformSource=state.audioContext.createMediaStreamSource(stream);state.waveformSource.connect(state.analyser);
+      try{await state.audioContext.resume()}catch{}
+      const wave=$("#audioWaveform");if(wave)wave.hidden=false;animateAudioMeter();
+    }
+    recorder.start(250);
+    const start=$("#startRecording"),stop=$("#stopRecording"),pill=$("#micStatePill"),stateLabel=$("#recordingState");
+    if(start)start.disabled=true;if(stop)stop.disabled=false;if(pill){pill.textContent="MICROPHONE ACTIVE";pill.className="pill red"}
+    if(stateLabel)stateLabel.textContent="Recording locally. Click Stop & transcribe to send this clip; navigating away discards it.";
+    const voiceState=$("#voiceStateText");if(voiceState)voiceState.textContent="Recording audio";
+    $("#voiceOrb")?.classList.add("active");setCoreState("listening");
+  }catch(error){
+    stream?.getTracks().forEach(track=>track.stop());state.mediaStream=null;state.recorder=null;stopAudioMeter();
+    $("#recordingState").textContent="Recording could not start: "+error.message;
+    toast("Microphone could not start: "+error.message,"error");
+  }
+}
+function stopPremiumRecording(discard=false){
+  const recorder=state.recorder;
+  if(!recorder||recorder.state==="inactive"){
+    if(discard){state.recordedChunks=[];state.mediaStream?.getTracks().forEach(track=>track.stop());state.mediaStream=null;state.recorder=null;stopAudioMeter()}
+    return;
+  }
+  state.discardRecording=discard;
+  try{recorder.stop()}catch{state.discardRecording=true;state.mediaStream?.getTracks().forEach(track=>track.stop());state.mediaStream=null;state.recordedChunks=[];state.recorder=null;stopAudioMeter()}
+}
 function stopVoice(){if(state.speechRecognition){try{state.speechRecognition.stop()}catch{} }finishVoice()}
-function speakText(){
-  if(!("speechSynthesis" in window)){toast("Browser speech synthesis is not available.","error");return}
+async function speakText(){
   const text=$("#ttsText")?.value.trim();if(!text){toast("Enter text to speak first.","error");return}
+  const engine=$("#ttsEngine")?.value||"browser";
+  if(engine==="server"){
+    const button=$('[data-action="speak"]');if(button)button.disabled=true;$("#ttsState").textContent="REQUESTING";
+    try{
+      const response=await fetch(apiUrl("/speech/synthesize"),{method:"POST",credentials:"same-origin",headers:{"Accept":"audio/*, application/json","Content-Type":"application/json"},body:JSON.stringify({text})});
+      if(!response.ok){let payload=null;try{payload=await response.json()}catch{}throw new APIError(payload?.error?.message||"Server speech request failed with HTTP "+response.status,response.status,payload)}
+      const blob=await response.blob();if(!blob.size||!String(blob.type||"").startsWith("audio/"))throw new APIError("The speech endpoint did not return a valid audio response.",502);
+      if(state.ttsObjectUrl)URL.revokeObjectURL(state.ttsObjectUrl);
+      state.ttsObjectUrl=URL.createObjectURL(blob);const audio=$("#serverTtsAudio");audio.src=state.ttsObjectUrl;audio.hidden=false;
+      audio.onplay=()=>{$("#ttsState").textContent="PLAYING";setCoreState("responding")};audio.onended=()=>{$("#ttsState").textContent="FINISHED";setCoreState("idle")};audio.onerror=()=>{$("#ttsState").textContent="AUDIO ERROR";setCoreState("error")};
+      try{await audio.play()}catch{$("#ttsState").textContent="AUDIO READY · PRESS PLAY";toast("Audio is ready. Press the player’s Play control if autoplay was blocked.","info")}
+      return;
+    }catch(error){$("#ttsState").textContent="SERVER SPEECH ERROR";toast("Server speech failed: "+error.message,"error");setCoreState(error.status===503?"offline":"error");return}
+    finally{if(button)button.disabled=false}
+  }
+  if(!("speechSynthesis"in window)){toast("Browser speech synthesis is not available. Configure server speech or use text output.","error");$("#ttsState").textContent="UNAVAILABLE";return}
   window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);const voiceIndex=$("#ttsVoice")?.value;const voices=window.speechSynthesis.getVoices();if(voiceIndex!==undefined&&voiceIndex!==""&&voices[Number(voiceIndex)])utterance.voice=voices[Number(voiceIndex)];utterance.rate=Number($("#ttsRate")?.value)||1;utterance.onstart=()=>{$("#ttsState").textContent="SPEAKING";setCoreState("responding")};utterance.onend=()=>{$("#ttsState").textContent="READY";setCoreState("idle")};utterance.onerror=()=>{$("#ttsState").textContent="ERROR";setCoreState("error")};window.speechSynthesis.speak(utterance);
 }
 async function refreshVoiceStatus(){setupVoice();toast("Speech adapter status check requested.","info")}
