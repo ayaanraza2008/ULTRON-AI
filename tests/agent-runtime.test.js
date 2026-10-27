@@ -2102,3 +2102,35 @@ test("agent automatically advertises and consumes locally bundled pinned ECC gui
     assert.ok(providerCalls >= 1);
   });
 });
+
+
+test("short confirmation inherits the task for automatic ECC skill selection", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const request = JSON.parse(options.body);
+    assert.ok(request.messages.some(message => message.role === "user"
+      && String(message.content).includes("ecc-backend-patterns")
+      && String(message.content).includes("Backend Development Patterns")));
+    assert.ok(request.messages.some(message => message.role === "user"
+      && String(message.content).includes("ecc-tdd-workflow")
+      && String(message.content).includes("Test-Driven Development Workflow")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I will continue the backend fix with tests." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "yes, do it",
+        messages: [
+          { role: "user", content: "Fix the backend provider fallback bug." },
+          { role: "assistant", content: "I will inspect the implementation and add a regression test." }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /backend fix/i);
+    assert.equal(providerCalls, 1);
+  });
+});
