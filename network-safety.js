@@ -300,8 +300,11 @@ export function isPublicNetworkHost(hostname) {
     // special-purpose range rather than only a few known sub-prefixes.
     const inIetfProtocolAssignments = firstHextet === 0x2001
       && Number.isFinite(secondHextet) && secondHextet >= 0 && secondHextet <= 0x01ff;
+    // Match the documentation prefix numerically so zero-padded hextets such
+    // as 2001:0db8::1 cannot bypass a textual prefix check.
+    const inDocumentationPrefix = firstHextet === 0x2001 && secondHextet === 0x0db8;
     if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")
-        || /^fe[89ab]/.test(host) || host.startsWith("2001:db8:") || inIetfProtocolAssignments
+        || /^fe[89ab]/.test(host) || inDocumentationPrefix || inIetfProtocolAssignments
         || host.startsWith("2002:") || host.startsWith("3fff:")) return false;
 
     const mapped = host.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
