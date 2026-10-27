@@ -15,7 +15,7 @@ test("frontend shell loads local assets and includes every workspace", () => {
   }
 });
 
-test("frontend calls verified routes and guards capabilities absent from the current backend", () => {
+test("frontend calls implemented backend routes and accurately labels capabilities", () => {
   for (const path of ["/api/health", "/api/runtime/readiness", "/api/session", "/api/chat", "/api/models", "/api/conversations", "/api/memory", "/api/integrations", "/api/preferences", "/api/worker/status"]) {
     assert.ok(js.includes(path), "Missing verified API contract: " + path);
   }
@@ -34,7 +34,7 @@ test("frontend calls verified routes and guards capabilities absent from the cur
   assert.match(js, /cancel-chat|cancel-stream/);
   assert.match(js, /Routine low-risk research and draft\/report tasks can queue automatically/);
   assert.match(js, /saveDocumentToMemory/);
-  assert.match(js, /Save text to Memory Vault/);
+  assert.match(js, /Save extracted text/);
   assert.match(js, /source:"document"/);
   assert.match(js, /Save original file privately/);
   assert.match(js, /\/api\/documents\/upload/);
