@@ -55,6 +55,19 @@ export function classifyAutonomyRisk(input) {
   };
 }
 
+
+/**
+ * Checks whether any requested risk level appears in the original intent.
+ * This matters for mixed requests: a high-level side effect must not erase a
+ * separate private-data or device-control requirement when deciding which
+ * preparatory tools can run autonomously.
+ */
+export function hasAutonomyRiskLevel(input, levels) {
+  const text = typeof input === "string" ? input.slice(0, 6000) : "";
+  const wanted = new Set(Array.isArray(levels) ? levels : [levels]);
+  return RULES.some(rule => wanted.has(rule.level) && rule.pattern.test(text));
+}
+
 /**
  * Produces a small execution outline. It does not execute actions and never
  * treats user wording, model output, memory, or tool results as a permission.
