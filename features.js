@@ -7,6 +7,7 @@ import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { isPublicNetworkHost, safePinnedFetch, safeServiceBase } from "./network-safety.js";
+import { classifyAutonomyRisk } from "./autonomy-policy.js";
 
 function safeBaseUrl(value) {
   return safeServiceBase(value);
@@ -1160,18 +1161,35 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
       };
     }
 
-    const requiresApproval = taskType !== "research" || risk !== "low" || req.body?.requiresApproval === true;
+    // Infer risk on the server from the full request. A client-provided "low"
+    // label cannot downgrade language that asks for external, private-data,
+    // device-control, or destructive work.
+    const intentRisk = classifyAutonomyRisk([
+      title, description, query, draftInputs.goal, draftInputs.context
+    ].filter(Boolean).join("\n"));
+    const inferredRisk = intentRisk.level === "routine"
+      ? "low"
+      : intentRisk.level === "private_data"
+        ? "medium"
+        : "high";
+    const riskRank = { low: 0, medium: 1, high: 2 };
+    const effectiveRisk = riskRank[inferredRisk] > riskRank[risk] ? inferredRisk : risk;
+
     const executionMode = taskType === "research"
       ? "allowlisted_worker"
       : taskType === "employee" || taskType === "autonomous"
         ? "employee_worker"
         : "planned_only";
+    const autoExecutable = ["research", "employee", "autonomous"].includes(taskType);
+    const requiresApproval = !autoExecutable || effectiveRisk !== "low" || req.body?.requiresApproval === true;
     const taskInput = {
       description,
       taskType,
       ...(["research", "autonomous"].includes(taskType) && query ? { query } : {}),
       ...draftInputs,
-      risk,
+      risk: effectiveRisk,
+      requestedRisk: risk,
+      intentRisk: { level: intentRisk.level, reason: intentRisk.reason },
       requiresApproval,
       approved: false,
       executionMode,
@@ -1196,10 +1214,12 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
       });
 
       const notice = taskType === "research" && !requiresApproval
-        ? "Research task queued for the optional allowlisted worker. It runs only when that worker and its provider are configured."
-        : taskType === "employee" || taskType === "autonomous"
-          ? "Task saved for explicit approval. After approval, the configured worker may create a bounded draft/report; external actions and PC commands remain disabled."
-          : "Task saved for review. It will not execute unless its type is supported by an allowlisted worker and the required approvals are present.";
+        ? "Low-risk research queued for the allowlisted worker. It runs when that worker and its provider are configured."
+        : ["employee", "autonomous"].includes(taskType) && !requiresApproval
+          ? "Low-risk draft/report queued for bounded autonomous execution. Sending, publishing, purchases, destructive edits, and PC commands remain disabled."
+          : ["employee", "autonomous"].includes(taskType)
+            ? "Task saved for approval because its requested risk or intent is not routine. Approval permits only a bounded draft/report workflow; external actions and PC commands remain disabled."
+            : "Task saved for review. It will not execute unless its type is supported by an allowlisted worker and the required approvals are present.";
       return res.status(201).json({ task: rows[0], notice });
     } catch (error) {
       return res.status(error.status || 502).json({ error: { code: "TASK_CREATE_FAILED", message: error.message } });
