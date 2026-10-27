@@ -90,3 +90,11 @@ Use a dedicated test account and verify a real model response, one queued employ
 - Supabase project `opdjfhwepmcprbqojpat`: migration `private_document_storage` recorded at version `20261027185203`; `public.documents` exists with RLS enabled; `ultron-private-documents` is private, limited to 5 MiB, and scoped by authenticated-user storage policies. Actual authenticated file upload/download/delete E2E is still unverified.
 - DNS-pinned outbound transport is implemented on main in `network-safety.js`; production protection remains unverified until current main is deployed.
 - Never claim 100% completion based on source tests, configuration snapshots, or database schema alone. Report live-only checks as blocked/unverified until exercised with dedicated test identities and real configured providers.
+
+
+## Follow-up verification — 2026-10-28
+- Current main commit: `33df434a7a231dd1c06ee303c6a787686d6c5281`. It includes private document storage and the expanded, versioned autonomy policy (`1.4.0`) that gates more outbound message variants while allowing explicit draft-only requests.
+- Source CI for this commit passed both jobs: [run 40566570192](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40566570192), including the full test suite and pinned World Intelligence build.
+- Production revision check failed separately: [run 40566570245](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40566570245). Render's deploy for this commit was stopped before compilation by `pipeline_minutes_exhausted`; this revision is not live-verified.
+- Supabase project `opdjfhwepmcprbqojpat` remains `ACTIVE_HEALTHY`. Migration `private_document_storage` is applied at version `20261027185203`; read-only checks confirm private bucket, 5 MiB limit, RLS, and authenticated grants. Real authenticated file E2E is still unverified.
+- Latest code changes improve source-level safety and test coverage; they do not resolve the external blockers for Render build quota, live provider inference, dedicated Auth/RLS E2E accounts, the leaked-password-protection dashboard setting, or physical Windows companion verification.
