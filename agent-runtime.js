@@ -267,16 +267,16 @@ function buildFallbackCalls(text) {
     }
   };
   const desktopActionId = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-  const approveMatch = text.match(new RegExp("\\b(?:approve|confirm)\\s+(?:the\\s+)?(?:desktop\\s+)?action\\s+(" + desktopActionId + ")\\b", "i"));
-  const cancelMatch = text.match(new RegExp("\\bcancel\\s+(?:the\\s+)?(?:desktop\\s+)?action\\s+(" + desktopActionId + ")\\b", "i"));
+  const approveMatch = text.match(new RegExp("\\b(?:approve|confirm)\s+(?:the\s+)?(?:desktop\s+)?action\s+(" + desktopActionId + ")\\b", "i"));
+  const cancelMatch = text.match(new RegExp("\\bcancel\s+(?:the\s+)?(?:desktop\s+)?action\s+(" + desktopActionId + ")\\b", "i"));
   if (approveMatch) add("approve_desktop_action", { id: approveMatch[1] });
   if (cancelMatch) add("cancel_desktop_action", { id: cancelMatch[1] });
-  if (/\\b(?:show|list|check|review)\\b/.test(s) && /\\b(?:my )?(?:pending )?(?:desktop|pc|windows) actions\\b/.test(s)) add("list_desktop_actions");
-  const desktopUrlMatch = text.match(/^\\s*(?:please\\s+)?open\\s+(https:\\/\\/[^\\s<>"']{1,1200})\\s+(?:on|in)\\s+(?:my\\s+)?(?:pc|computer|windows)[.!]?\\s*$/i);
+  if (/\b(?:show|list|check|review)\b/.test(s) && /\b(?:my )?(?:pending )?(?:desktop|pc|windows) actions\b/.test(s)) add("list_desktop_actions");
+  const desktopUrlMatch = text.match(/^\s*(?:please\s+)?open\s+(https:\/\/[^\\s<>"']{1,1200})\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)[.!]?\s*$/i);
   if (desktopUrlMatch) add("request_desktop_action", { actionType: "open_url", url: desktopUrlMatch[1].replace(/[.,!?]+$/, "") });
-  const desktopAppMatch = text.match(/^\\s*(?:please\\s+)?(?:launch|open|start)\\s+(notepad|calculator|explorer)\\s+(?:on|in)\\s+(?:my\\s+)?(?:pc|computer|windows)[.!]?\\s*$/i);
+  const desktopAppMatch = text.match(/^\s*(?:please\s+)?(?:launch|open|start)\s+(notepad|calculator|explorer)\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)[.!]?\s*$/i);
   if (desktopAppMatch) add("request_desktop_action", { actionType: "launch_app", app: desktopAppMatch[1].toLowerCase() });
-  if (/^\\s*(?:please\\s+)?(?:get|check|show)\\s+(?:my\\s+)?(?:windows|pc|computer)\\s+system\\s+info(?:rmation)?[.!]?\\s*$/i.test(text)) {
+  if (/^\s*(?:please\s+)?(?:get|check|show)\s+(?:my\s+)?(?:windows|pc|computer)\s+system\s+info(?:rmation)?[.!]?\s*$/i.test(text)) {
     add("request_desktop_action", { actionType: "system_info" });
   }
   const intent = extractIntent(text);
@@ -743,11 +743,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
   function explicitDesktopRequest(requestBody, actionType, payload) {
     const prompt = typeof requestBody?.prompt === "string" ? requestBody.prompt.trim() : "";
     if (actionType === "launch_app") {
-      const match = prompt.match(/^(?:please\\s+)?(?:launch|open|start)\\s+(notepad|calculator|explorer)\\s+(?:on|in)\\s+(?:my\\s+)?(?:pc|computer|windows)[.!]?$/i);
+      const match = prompt.match(/^(?:please\s+)?(?:launch|open|start)\s+(notepad|calculator|explorer)\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)[.!]?$/i);
       return Boolean(match && match[1].toLowerCase() === payload.app);
     }
     if (actionType === "open_url") {
-      const match = prompt.match(/^(?:please\\s+)?open\\s+(https:\\/\\/[^\\s<>"']{1,1200})\\s+(?:on|in)\\s+(?:my\\s+)?(?:pc|computer|windows)[.!]?$/i);
+      const match = prompt.match(/^(?:please\s+)?open\s+(https:\/\/[^\\s<>"']{1,1200})\s+(?:on|in)\s+(?:my\s+)?(?:pc|computer|windows)[.!]?$/i);
       if (!match) return false;
       try {
         const requested = validateDesktopAction("open_url", { url: match[1].replace(/[.,!?]+$/, "") });
@@ -755,7 +755,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       } catch { return false; }
     }
     return actionType === "system_info" &&
-      /^(?:please\\s+)?(?:get|check|show)\\s+(?:my\\s+)?(?:windows|pc|computer)\\s+system\\s+info(?:rmation)?[.!]?$/i.test(prompt);
+      /^(?:please\s+)?(?:get|check|show)\s+(?:my\s+)?(?:windows|pc|computer)\s+system\s+info(?:rmation)?[.!]?$/i.test(prompt);
   }
 
   async function executeTool(name, args, requestBody = {}, req = {}) {
