@@ -311,3 +311,16 @@ test("text-message and personal-recipient variants are treated as outbound effec
     assert.equal(risk.requiresConfirmation, true, task);
   }
 });
+
+
+test("draft-only text and research about forwarding stay routine", () => {
+  for (const task of [
+    "Draft a text to my manager without sending it.",
+    "Research how to forward summaries securely.",
+    "Write a reply to my colleague but do not send it."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "routine", task);
+    assert.equal(risk.requiresConfirmation, false, task);
+  }
+});
