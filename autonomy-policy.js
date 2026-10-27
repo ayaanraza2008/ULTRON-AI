@@ -39,10 +39,16 @@ export function resolveAutonomyIntent(prompt, history = []) {
     .at(-1)?.content?.slice(0, 6000) || "";
 }
 
+function isExplicitDraftOnlyCommunication(text) {
+  return /^\\s*(?:please\\s+)?(?:draft|write|compose|prepare)\\b[\\s\\S]{0,220}\\b(?:but\\s+)?(?:do not|don't|never)\\s+(?:send|text|message|reply|forward|email)\\s+(?:it|this|that|the message|the email|the reply|the draft)?[.!?]*\\s*$/i.test(text);
+}
+
 export function classifyAutonomyRisk(input) {
   const text = typeof input === "string" ? input.slice(0, 6000) : "";
+  const explicitDraftOnly = isExplicitDraftOnlyCommunication(text);
   let match = { level: "routine", reason: "Read-only, informational, or draft-oriented request" };
   for (const rule of RULES) {
+    if (explicitDraftOnly && rule.level === "external_effect") continue;
     if (rule.pattern.test(text) && LEVEL_ORDER[rule.level] > LEVEL_ORDER[match.level]) {
       match = { level: rule.level, reason: rule.reason };
     }
@@ -66,7 +72,8 @@ export function classifyAutonomyRisk(input) {
 export function hasAutonomyRiskLevel(input, levels) {
   const text = typeof input === "string" ? input.slice(0, 6000) : "";
   const wanted = new Set(Array.isArray(levels) ? levels : [levels]);
-  return RULES.some(rule => wanted.has(rule.level) && rule.pattern.test(text));
+  const explicitDraftOnly = isExplicitDraftOnlyCommunication(text);
+  return RULES.some(rule => wanted.has(rule.level) && !(explicitDraftOnly && rule.level === "external_effect") && rule.pattern.test(text));
 }
 
 /**
