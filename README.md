@@ -1,6 +1,6 @@
 # ULTRON AI
 
-ULTRON AI is currently in a backend-only implementation phase. Frontend and Windows desktop UI work are deferred until the backend capabilities and integrations are complete and verified.
+ULTRON AI is an existing API-first assistant runtime with a new responsive cinematic web command center in `public/`. The interface is served by the existing Express static-file middleware; it is not a separate replacement app. Frontend features are capability-aware and must not be treated as evidence that every backend integration is live or production-ready.
 
 ## Current status
 
@@ -10,7 +10,8 @@ ULTRON AI is currently in a backend-only implementation phase. Frontend and Wind
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** full frontend redesign and Windows PC-control UI are intentionally deferred. Existing UI/companion scaffolding is not treated as production-ready solely because source files exist; current focus is backend APIs, integrations, worker reliability, and verification.
+- **Frontend status:** cinematic command-center source is in the frontend PR branch. It includes the adaptive Living Energy Core, responsive navigation, and capability-aware workspaces. CI verifies syntax and shell contracts, but a green PR CI run does not by itself prove the frontend is deployed or visually tested in a real browser. Windows PC-control UI and live voice/wake-word operation remain separate capability gates.
+- **Frontend API rule:** the UI consumes existing `/api/*` routes and capability/readiness responses. It must show unavailable/error states when a route or provider is not configured; it must not invent task progress, model responses, audio capture, or success.
 
 ## Backend-only capability integration phase
 
