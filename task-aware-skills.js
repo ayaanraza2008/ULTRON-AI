@@ -2,6 +2,7 @@
  * Lightweight task-aware guidance pack for ULTRON.
  * Selectors are deterministic; external skill instructions are never executed.
  */
+import { readFileSync } from "node:fs";
 import { buildRepositoryCapabilityGuidance } from "./repository-capabilities.js";
 
 const RULES = [
@@ -62,7 +63,16 @@ const ECC_SKILLS = [
     fallback: "ECC deep-research fallback: break broad questions into explicit subquestions, prioritize current primary/authoritative sources, cross-check important claims, cite exact URLs, separate fact from inference, and disclose evidence gaps. Never fabricate searches, quotes, sources, or metrics."
   }
 ];
-const ECC_SKILL_URL = (path) => "https://raw.githubusercontent.com/affaan-m/ECC/" + ECC_REVISION + "/.agents/skills/" + path;
+const ECC_SKILL_URL = (path) => "https://github.com/affaan-m/ECC/blob/" + ECC_REVISION + "/.agents/skills/" + path;
+function readBundledEccSkill(path) {
+  try {
+    // MIT-licensed snapshot from the pinned ECC revision; loading is local and read-only.
+    return readFileSync(new URL("./vendor/ecc/skills/" + path, import.meta.url), "utf8").slice(0, 7000);
+  } catch {
+    // Locally-authored fallback guidance in RULES remains available if packaging omits a snapshot.
+    return "";
+  }
+}
 const ECC_SECURITY_INTENT = /\b(security review|security audit|authentication|authorization|access control|secret handling|vulnerability|sql injection|xss|prompt injection|csrf|rls|row level security)\b/i;
 const ECC_BACKEND_INTENT = /\b(backend|api|database|supabase|provider|worker|queue|integration|endpoint|express|authentication|authorization|server)\b/i;
 
@@ -77,6 +87,7 @@ function selectEccSkills(text, categories) {
         source: "https://github.com/affaan-m/ECC",
         revision: ECC_REVISION,
         sourceUrl: ECC_SKILL_URL(skill.path),
+        content: readBundledEccSkill(skill.path),
         fallback: skill.fallback
       });
     }
@@ -86,7 +97,7 @@ function selectEccSkills(text, categories) {
   if (categories.includes("software_change")) add("tdd-workflow");
   if (categories.includes("multi_step")) add("verification-loop");
   if (categories.includes("research")) add("deep-research");
-  // Keep remote skill retrieval bounded; local fallback rules below still apply.
+  // Skills are bundled and pinned locally, so selection works offline without a runtime network request.
   return selected.slice(0, 2);
 }
 
