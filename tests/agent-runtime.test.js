@@ -1020,31 +1020,54 @@ test("autonomous fallback combines research, image generation readiness, and cod
 });
 
 
-test("high-impact user intent blocks tool dispatch until a task-specific approval flow exists", async () => {
-  let externalCalls = 0;
+test("high-impact mixed requests can run safe public research without executing the consequential action", async () => {
+  let providerCalls = 0;
+  let researchCalls = 0;
   await withServer({ OPENROUTER_API_KEY: "test-only", TAVILY_API_KEY: "tavily-test" }, async (url, options) => {
+    if (url === "https://api.tavily.com/search") {
+      researchCalls += 1;
+      assert.equal(options.method, "POST");
+      const request = JSON.parse(options.body);
+      assert.equal(request.query, "public order confirmation email best practices");
+      return new Response(JSON.stringify({
+        answer: "Use a clear subject, order details, and delivery estimate.",
+        results: [{ title: "Order confirmation guidance", url: "https://example.com/order-email-guide", content: "Include the order number and next steps." }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
     const body = JSON.parse(options.body);
     if (body.messages.some(message => message.role === "system" && String(message.content).includes("Summarize the tool results accurately"))) {
-      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "ULTRON did not send anything because approval is required." } }] }), { status: 200 });
+      const toolMessages = body.messages.filter(message => message.role === "tool");
+      assert.equal(toolMessages.length, 1);
+      const research = JSON.parse(toolMessages[0].content);
+      assert.equal(research.provider, "tavily");
+      assert.equal(research.results[0].url, "https://example.com/order-email-guide");
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I researched public guidance. I did not send an email; that consequential step remains gated." } }] }), { status: 200 });
     }
-    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "call-risky", type: "function", function: { name: "research_web", arguments: JSON.stringify({ query: "customer email" }) } }] } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+      id: "call-safe-research", type: "function",
+      function: { name: "research_web", arguments: JSON.stringify({ query: "public order confirmation email best practices" }) }
+    }] } }] }), { status: 200 });
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Send an email to the customer confirming the order." })
+      body: JSON.stringify({ prompt: "Research public best practices, then send an email to the customer confirming the order." })
     });
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.autonomy.risk.level, "external_effect");
-    assert.equal(body.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
-    assert.equal(body.toolResults[0].result.approvalRequired, true);
-    assert.equal(externalCalls, 0);
+    assert.equal(body.autonomy.risk.requiresConfirmation, true);
+    assert.equal(body.toolResults.length, 1);
+    assert.equal(body.toolResults[0].name, "research_web");
+    assert.equal(body.toolResults[0].ok, true);
+    assert.equal(body.toolResults[0].result.provider, "tavily");
+    assert.equal(researchCalls, 1);
+    assert.equal(providerCalls, 2);
+    assert.match(body.content, /did not send an email/i);
   });
 });
-
-
 test("browser-use readiness explains that the optional bridge is not configured", async () => {
   await withServer({}, async () => { throw new Error("readiness must not call a provider"); }, async base => {
     const response = await fetch(base + "/api/agent/browser-use");
