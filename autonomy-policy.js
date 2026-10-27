@@ -58,7 +58,7 @@ export function classifyAutonomyRisk(input) {
     level: match.level,
     reason: match.reason,
     requiresConfirmation,
-    policyVersion: "1.3.0"
+    policyVersion: "1.4.0"
   };
 }
 
