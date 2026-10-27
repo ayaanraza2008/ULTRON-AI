@@ -97,7 +97,7 @@ test("private document upload, list, integrity-checked download and delete are o
 
     if (url.pathname === "/rest/v1/documents" && method === "DELETE") {
       if (metadata && url.searchParams.get("id") === "eq." + DOCUMENT_ID && url.searchParams.get("user_id") === "eq." + OWNER) metadata = null;
-      return new Response(null, { status: 204 });
+      return json([], 200);
     }
     throw new Error("Unexpected mocked upstream URL: " + method + " " + rawUrl);
   };
