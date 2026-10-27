@@ -252,3 +252,33 @@ test("mixed intents preserve every sensitive risk class for safe-tool dispatch",
   assert.equal(hasAutonomyRiskLevel(mixed, ["device_control"]), false);
   assert.equal(hasAutonomyRiskLevel("Research public email confirmation best practices.", ["private_data", "device_control"]), false);
 });
+
+
+test("common outbound communication verbs require confirmation", () => {
+  for (const task of [
+    "Forward the conversation to the team.",
+    "Forward this email to the supplier.",
+    "Text the customer the results.",
+    "DM them the draft.",
+    "Send this document to the team.",
+    "Notify the customer about the delay.",
+    "Tell the supplier that the order is ready.",
+    "Reply to the customer with the findings."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
+
+test("research about communication stays routine rather than an outbound action", () => {
+  for (const task of [
+    "Research how to forward emails securely.",
+    "Draft a text message to the customer but do not send it.",
+    "Summarize best practices for notifying customers."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "routine", task);
+    assert.equal(risk.requiresConfirmation, false, task);
+  }
+});
