@@ -282,3 +282,18 @@ test("research about communication stays routine rather than an outbound action"
     assert.equal(risk.requiresConfirmation, false, task);
   }
 });
+
+
+test("less common outbound communication phrasing remains confirmation-gated", () => {
+  for (const task of [
+    "Reply to the team with the report.",
+    "Text my boss that I will be late.",
+    "Send a DM to the client with the draft.",
+    "Forward the findings to the team.",
+    "Message the recipient with the details."
+  ]) {
+    const risk = classifyAutonomyRisk(task);
+    assert.equal(risk.level, "external_effect", task);
+    assert.equal(risk.requiresConfirmation, true, task);
+  }
+});
