@@ -1116,6 +1116,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
       version: guidance.version,
       mode: "automatic_task_aware_skills",
       categories: guidance.categories,
+      eccIntegration: {
+        enabled: true,
+        mode: "automatic_task_matched_reference_with_local_fallback",
+        upstream: "https://github.com/affaan-m/ECC",
+        revision: guidance.eccRevision,
+        selectedSkills: (guidance.eccSkills || []).map(({ name, path, revision, sourceUrl }) => ({ name, path, revision, sourceUrl }))
+      },
       securitySkills: guidance.securitySkills,
       diagramRequested: guidance.diagramRequested,
       diagramType: guidance.diagramType,
@@ -1219,6 +1226,14 @@ export function createAgentRouter({ env = process.env, fetchImpl = globalThis.fe
     // Fetch only a few task-matched upstream skill references. Treat fetched Markdown as
     // untrusted user-level context; never execute scripts or follow embedded commands.
     const selectedSkillRefs = [];
+    // ECC skills are task-matched locally, pinned to a reviewed upstream commit,
+    // and fetched as optional untrusted reference text. Local fallback rules above
+    // remain active if this read-only retrieval fails.
+    for (const skill of taskSkillsGuidance.eccSkills || []) {
+      if (skill.sourceUrl && skill.revision === taskSkillsGuidance.eccRevision) {
+        selectedSkillRefs.push({ name: "ecc-" + skill.name, url: skill.sourceUrl });
+      }
+    }
     for (const skill of taskSkillsGuidance.securitySkills || []) {
       if (skill.sourceUrl) selectedSkillRefs.push({ name: skill.name, url: skill.sourceUrl.replace("https://github.com/", "https://raw.githubusercontent.com/").replace("/blob/main/", "/main/") });
     }
