@@ -302,3 +302,21 @@ test("safeFetch completes a bounded real HTTPS request through the DNS-pinned tr
   assert.ok(Buffer.byteLength(body, "utf8") > 0);
   assert.match(body.toLowerCase(), /<html\b/);
 });
+
+test("safeFetch treats HEAD responses as bodyless even when content-length describes a large GET response", async () => {
+  const declaredGetLength = String(20 * 1024 * 1024);
+  const fake = fakeRequest(200, ["content-type", "text/plain", "content-length", declaredGetLength]);
+  const fetch = createSafeFetch({
+    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    httpsRequest: fake.request,
+    maxResponseBodyBytes: 1024
+  });
+
+  const response = await fetch("https://api.example.com/large-head", { method: "HEAD" });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body, null);
+  assert.equal(response.headers.get("content-length"), declaredGetLength);
+  assert.equal(fake.seen.calls, 1);
+});
+
