@@ -1181,3 +1181,29 @@ test("Supabase signout refreshes expired access and retries remote revocation on
     assert.match(response.headers.get("set-cookie") || "", /ultron_sb_refresh=;/);
   });
 });
+
+test("Supabase protected routes fail closed when active-session verification is unavailable", async () => {
+  let protectedDataRequests = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async url => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/user") {
+        return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000" }), { status: 200 });
+      }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("temporarily unavailable", { status: 503 });
+      }
+      if (url.startsWith("https://ultron-test.supabase.co/rest/v1/")) protectedDataRequests += 1;
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/conversations", {
+      headers: { Cookie: "ultron_sb_access=valid-user-but-unverified-session" }
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
+    assert.equal(protectedDataRequests, 0);
+  });
+});
