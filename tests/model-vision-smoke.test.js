@@ -1,6 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { inflateSync } from "node:zlib";
 import { runVisionProviderSmoke } from "../scripts/model-vision-smoke.mjs";
+
+function decodeChallengePng(png) {
+  let offset = 8;
+  const imageChunks = [];
+  while (offset + 12 <= png.length) {
+    const length = png.readUInt32BE(offset);
+    const type = png.toString("ascii", offset + 4, offset + 8);
+    const end = offset + 8 + length;
+    if (end + 4 > png.length) throw new Error("Malformed PNG chunk");
+    if (type === "IDAT") imageChunks.push(png.subarray(offset + 8, end));
+    offset = end + 4;
+    if (type === "IEND") break;
+  }
+  return inflateSync(Buffer.concat(imageChunks));
+}
 
 const env = {
   ULTRON_CONFIRM_VISION_SMOKE: "YES",
@@ -55,6 +71,11 @@ test("vision smoke verifies a real image payload and falls back through free vis
       assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
       assert.equal(bytes.readUInt32BE(16), 64);
       assert.equal(bytes.readUInt32BE(20), 64);
+      const pixels = decodeChallengePng(bytes);
+      assert.equal(pixels.length, 64 * (1 + 64 * 3));
+      assert.deepEqual([...pixels.subarray(1, 4)], [255, 0, 0], "leftmost pixel must be red");
+      assert.deepEqual([...pixels.subarray(1 + 31 * 3, 1 + 32 * 3)], [255, 0, 0], "left half must be red");
+      assert.deepEqual([...pixels.subarray(1 + 32 * 3, 1 + 33 * 3)], [0, 0, 255], "right half must be blue");
       assert.match(body.messages[0].content, /ULTRON_VISION_SMOKE_OK/);
       assert.equal(body.max_tokens, 20);
       assert.equal(body.stream, false);
