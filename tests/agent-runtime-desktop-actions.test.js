@@ -184,6 +184,18 @@ test("non-owner cannot use agent desktop action tools even with a model tool cal
   assert.equal(response.result.toolResults[0].result.error.code, "DESKTOP_OWNER_ONLY");
 });
 
+test("agent does not queue a PC action when the current prompt only asks how to do it", async t => {
+  const h = makeHarness({
+    promptToolCall: { name: "request_desktop_action", args: { actionType: "launch_app", app: "calculator" } }
+  });
+  t.after(() => h.close());
+  const response = await h.run("How can I open Calculator on my PC?");
+  assert.equal(response.status, 200);
+  assert.equal(h.store.size, 0);
+  assert.equal(h.privilegedCalls.length, 0);
+  assert.equal(response.result.toolResults[0].result.state, "needs_explicit_request");
+});
+
 test("agent refuses unsafe URL actions before creating a pending item", async t => {
   const h = makeHarness({
     promptToolCall: { name: "request_desktop_action", args: { actionType: "open_url", url: "http://127.0.0.1:8080/" } }
