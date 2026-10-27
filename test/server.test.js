@@ -536,6 +536,9 @@ test("Supabase conversation APIs require an authenticated user and respect the c
         assert.equal(options.headers.Authorization, "Bearer test-user-token");
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200 });
       }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
         restRequest = { url, options };
         return new Response(JSON.stringify([{ id: "123e4567-e89b-12d3-a456-426614174001", title: "Hello", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z" }]), { status: 200 });
@@ -592,6 +595,10 @@ test("expired Supabase access tokens refresh before database requests", async ()
           user: { id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }
         }), { status: 200 });
       }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        assert.equal(options.headers.Authorization, "Bearer fresh-access");
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
         restAuthorization = options.headers.Authorization;
         return new Response(JSON.stringify([]), { status: 200 });
@@ -640,6 +647,10 @@ test("task creation, approval, cancellation and audit use the correct Supabase r
         assert.equal(authorization, "Bearer " + clientToken);
         assert.equal(options.headers.apikey, "sb_publishable_test");
         return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active" && method === "POST") {
+        assert.equal(authorization, "Bearer " + clientToken);
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/rest/v1/agent_tasks" && method === "POST") {
         assert.equal(authorization, "Bearer " + clientToken, "task insertion remains user-scoped");
@@ -728,6 +739,9 @@ test("document text references persist only with an authenticated owner and corr
         assert.equal(options.headers.Authorization, "Bearer " + token);
         return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200 });
       }
+      if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/rest/v1/memory_items" && method === "POST") {
         const body = JSON.parse(options.body);
         received.push({ body, authorization: options.headers.Authorization, apikey: options.headers.apikey });
@@ -770,6 +784,9 @@ test("memory API rejects document provenance for non-document memory items", asy
     fetchImpl: async rawUrl => {
       if (rawUrl === "https://ultron-test.supabase.co/auth/v1/user") {
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000" }), { status: 200 });
+      }
+      if (rawUrl === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       restCalls++;
       throw new Error("invalid provenance must not reach Supabase");
@@ -940,6 +957,9 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
       if (url === supabaseUrl + "/auth/v1/user") {
         return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
+      if (url === supabaseUrl + "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
         return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
       }
@@ -1018,3 +1038,172 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(providerCalls, 0);
   });
 });
+
+test("Supabase protected routes reject an otherwise valid access JWT after its Auth session is revoked", async () => {
+  let protectedDataRequests = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async url => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/user") {
+        return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000" }), { status: 200 });
+      }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("false", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.startsWith("https://ultron-test.supabase.co/rest/v1/")) protectedDataRequests += 1;
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/conversations", {
+      headers: { Cookie: "ultron_sb_access=revoked-access; ultron_sb_refresh=must-not-be-used" }
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
+    assert.equal(protectedDataRequests, 0);
+  });
+});
+
+test("Supabase signout revokes the remote session before clearing cookies", async () => {
+  const calls = [];
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, method: options.method || "GET", headers: options.headers });
+      if (url === "https://ultron-test.supabase.co/auth/v1/logout?scope=local") {
+        assert.equal(options.method, "POST");
+        assert.equal(options.headers.apikey, "sb_publishable_test");
+        assert.equal(options.headers.Authorization, "Bearer current-access");
+        return new Response(null, { status: 204 });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/auth/signout", {
+      method: "POST",
+      headers: { Cookie: "ultron_sb_access=current-access; ultron_sb_refresh=current-refresh" }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, sessionRevoked: true });
+    assert.equal(calls.length, 1);
+    const setCookie = response.headers.get("set-cookie") || "";
+    assert.match(setCookie, /ultron_sb_access=;/);
+    assert.match(setCookie, /ultron_sb_refresh=;/);
+  });
+});
+
+test("Supabase signout preserves cookies when remote revocation is unavailable", async () => {
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async url => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/logout?scope=local") {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/auth/signout", {
+      method: "POST",
+      headers: { Cookie: "ultron_sb_access=current-access; ultron_sb_refresh=current-refresh" }
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "SIGNOUT_UNAVAILABLE");
+    assert.equal(response.headers.get("set-cookie"), null);
+  });
+});
+
+test("refreshed Supabase access tokens are rejected when their session no longer exists", async () => {
+  let protectedDataRequests = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/user") return new Response("{}", { status: 401 });
+      if (url === "https://ultron-test.supabase.co/auth/v1/token?grant_type=refresh_token") {
+        return new Response(JSON.stringify({
+          access_token: "fresh-but-revoked-access", refresh_token: "fresh-refresh", expires_in: 3600,
+          user: { id: "123e4567-e89b-12d3-a456-426614174000" }
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        assert.equal(options.headers.Authorization, "Bearer fresh-but-revoked-access");
+        return new Response("false", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.startsWith("https://ultron-test.supabase.co/rest/v1/")) protectedDataRequests += 1;
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/conversations", {
+      headers: { Cookie: "ultron_sb_access=old-access; ultron_sb_refresh=old-refresh" }
+    });
+    assert.equal(response.status, 401);
+    assert.equal(protectedDataRequests, 0);
+    assert.equal(response.headers.get("set-cookie"), null);
+  });
+});
+
+test("Supabase signout refreshes expired access and retries remote revocation once", async () => {
+  const logoutTokens = [];
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/logout?scope=local") {
+        logoutTokens.push(options.headers.Authorization);
+        if (logoutTokens.length === 1) return new Response("expired access", { status: 401 });
+        return new Response(null, { status: 204 });
+      }
+      if (url === "https://ultron-test.supabase.co/auth/v1/token?grant_type=refresh_token") {
+        assert.equal(JSON.parse(options.body).refresh_token, "old-refresh");
+        return new Response(JSON.stringify({
+          access_token: "fresh-signout-access", refresh_token: "rotated-refresh", expires_in: 3600,
+          user: { id: "123e4567-e89b-12d3-a456-426614174000" }
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/auth/signout", {
+      method: "POST",
+      headers: { Cookie: "ultron_sb_access=expired-access; ultron_sb_refresh=old-refresh" }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, sessionRevoked: true });
+    assert.deepEqual(logoutTokens, ["Bearer expired-access", "Bearer fresh-signout-access"]);
+    assert.match(response.headers.get("set-cookie") || "", /ultron_sb_refresh=;/);
+  });
+});
+
+test("Supabase protected routes fail closed when active-session verification is unavailable", async () => {
+  let protectedDataRequests = 0;
+  const app = createApp({
+    env: { ...env, SUPABASE_URL: "https://ultron-test.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" },
+    fetchImpl: async url => {
+      if (url === "https://ultron-test.supabase.co/auth/v1/user") {
+        return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000" }), { status: 200 });
+      }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("temporarily unavailable", { status: 503 });
+      }
+      if (url.startsWith("https://ultron-test.supabase.co/rest/v1/")) protectedDataRequests += 1;
+      throw new Error("Unexpected mocked URL: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/conversations", {
+      headers: { Cookie: "ultron_sb_access=valid-user-but-unverified-session" }
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
+    assert.equal(protectedDataRequests, 0);
+  });
+});
+
