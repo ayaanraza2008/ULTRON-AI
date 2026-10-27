@@ -235,8 +235,6 @@ internal sealed class DesktopActionBridge : IDisposable
             return actionType switch
             {
                 "launch_app" => "Executing owner-approved PC action: launching " + ReadString(payload, "app", 30) + ".",
-                "open_url" => "Executing owner-approved PC action: opening public website " +
-                    new Uri(ReadString(payload, "url", 1200)).Host + " in the default browser.",
                 "system_info" => "Executing owner-approved PC action: reading limited Windows system information.",
                 _ => "Executing an owner-approved PC action from the restricted allowlist."
             };
@@ -269,14 +267,6 @@ internal sealed class DesktopActionBridge : IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true });
                 return new { ok = true, summary = "The approved application was launched.", platform = "windows", app };
-            }
-            case "open_url":
-            {
-                var value = ReadString(payload, "url", 1200);
-                var uri = await ValidatePublicHttpsUriAsync(value, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
-                return new { ok = true, summary = "The approved HTTPS destination was opened in the default browser.", platform = "windows", host = uri.Host.ToLowerInvariant() };
             }
             case "system_info":
                 if (payload.EnumerateObject().Any())
