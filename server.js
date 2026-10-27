@@ -10,6 +10,7 @@ import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
+import { createDesktopActionRouter } from "./desktop-action-bridge.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
@@ -1913,6 +1914,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createDesktopActionRouter({ env, requireSupabaseUser, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
