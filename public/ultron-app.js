@@ -189,9 +189,10 @@ function settingsMarkup(){
     '<div class="field-help" style="margin-top:13px">The WebGL core uses a pinned remote Three.js ES module; if the module or WebGL fails, the UI falls back to a simpler canvas visualization. Reduced-motion and lower-quality settings help on integrated GPUs.</div>'
   ].join("");
 }
-function renderView(view=state.view){
+function renderView(view=state.view,fromHistory=false){
   if(state.view==="voice"&&view!=="voice"){stopVoice();stopPremiumRecording(true);if("speechSynthesis"in window)window.speechSynthesis.cancel();const audio=$("#serverTtsAudio");if(audio)audio.pause();if(state.ttsObjectUrl){URL.revokeObjectURL(state.ttsObjectUrl);state.ttsObjectUrl=null}}
   if(!navTitles[view])view="home";
+  if(!fromHistory&&window.location.hash!=="#"+view)window.history.pushState({view},"","#"+view);
   if(state.core && view!=="home"){state.core.dispose();state.core=null}
   state.view=view;root.innerHTML=({home:homeMarkup,chat:chatMarkup,voice:voiceMarkup,tasks:tasksMarkup,coding:codingMarkup,research:researchMarkup,files:filesMarkup,memory:memoryMarkup,integrations:integrationsMarkup,automation:automationMarkup,security:securityMarkup,system:systemMarkup,settings:settingsMarkup}[view]||homeMarkup)();
   $("#workspaceTitle").textContent=navTitles[view];
@@ -317,7 +318,7 @@ async function newChat(){
 }
 async function loadTasks(){
   const list=$("#taskList");if(!list)return;
-  try{const r=await api("/tasks");state.tasks=r.data.tasks||[];renderTasks();updateTaskCount()}
+  try{const r=await api("/tasks");state.tasks=r.data.tasks||[];const hasRunning=state.tasks.some(t=>["running","processing"].includes(String(t.status||"").toLowerCase()));if(hasRunning)setCoreState("executing");else if(state.coreState==="executing")setCoreState("idle");renderTasks();updateTaskCount()}
   catch(error){inlineError($("#taskError"),error.message);list.innerHTML=emptyState("Tasks unavailable","The API did not return account-scoped task records. Sign in and check database/worker setup.")}
 }
 function renderTasks(){
@@ -576,7 +577,7 @@ async function startPremiumRecording(){
       const blob=new Blob(chunks,{type:recorder.mimeType||"audio/webm"});
       if(!blob.size){if(stateLabel)stateLabel.textContent="No audio data was recorded.";return}
       if(blob.size>7_000_000){if(stateLabel)stateLabel.textContent="Recording exceeds the 7 MB audio limit.";toast("Recording too large. Try a shorter clip.","error");return}
-      if(stateLabel)stateLabel.textContent="Sending the completed recording for transcription…";
+      if(stateLabel)stateLabel.textContent="Sending the completed recording for transcription…";setCoreState("thinking");
       try{
         const audioBase64=await fileToBase64(blob);
         const result=await api("/speech/transcribe",{method:"POST",body:{audioBase64,mimeType:(blob.type||"audio/webm").split(";")[0]}});
@@ -767,6 +768,7 @@ document.addEventListener("keydown",event=>{
   if(event.target.id==="chatInput"&&event.key==="Enter"&&!event.shiftKey){event.preventDefault();sendChat(event)}
   if($("#commandBackdrop")&&!$("#commandBackdrop").hidden&&["ArrowDown","ArrowUp","Enter"].includes(event.key)){const buttons=$$(".command-result");if(!buttons.length)return;let idx=buttons.findIndex(b=>b.classList.contains("selected"));if(event.key==="ArrowDown")idx=(idx+1)%buttons.length;if(event.key==="ArrowUp")idx=(idx-1+buttons.length)%buttons.length;if(event.key==="Enter"){buttons[Math.max(0,idx)].click();return}buttons.forEach((b,i)=>b.classList.toggle("selected",i===idx));buttons[Math.max(0,idx)].scrollIntoView({block:"nearest"})}
 });
+window.addEventListener("popstate",()=>{const target=window.location.hash.slice(1);renderView(navTitles[target]?target:"home",true)});
 $("#sidebarToggle").addEventListener("click",()=>{document.body.classList.toggle("sidebar-collapsed");$("#sidebarToggle").setAttribute("aria-label",document.body.classList.contains("sidebar-collapsed")?"Expand navigation":"Collapse navigation")});
 $("#mobileMenu").addEventListener("click",()=>document.body.classList.toggle("mobile-nav-open"));
 $("#profileButton").addEventListener("click",()=>{if(state.session?.authenticated)openDialog("Account session","AUTHENTICATED SESSION",'<p class="muted" style="font-size:11px;line-height:1.7">'+esc(state.session.email||"Signed-in account")+'</p><div class="form-actions"><button class="secondary-button" data-action="close-dialog" type="button">Close</button><button class="danger-button" data-action="signout" type="button">Sign out</button></div>');else if(state.session?.configured)$("#authGate").hidden=false;else toast("The current API has not confirmed a configured authentication flow.","error")});
@@ -784,6 +786,6 @@ window.addEventListener("beforeunload",()=>{state.core?.dispose();state.chatAbor
 function showAuthMessage(){if(state.session&&state.session.configured===true&&!state.session.authenticated){$("#authGate").hidden=false}}
 async function init(){
   document.documentElement.classList.toggle("manual-reduced-motion",Boolean(state.coreSettings.reducedMotion));$("#reducedMotionToggle").setAttribute("aria-pressed",String(state.coreSettings.reducedMotion));$("#reducedMotionToggle").textContent="Motion: "+(state.coreSettings.reducedMotion?"Reduced":"Auto");
-  renderView("home");await refreshHealth();showAuthMessage();if(state.session?.authenticated)await postAuthRefresh();setCoreLabel();
+  const initial=window.location.hash.slice(1);renderView(navTitles[initial]?initial:"home",true);if(!window.location.hash)window.history.replaceState({view:state.view},"","#"+state.view);await refreshHealth();showAuthMessage();if(state.session?.authenticated)await postAuthRefresh();setCoreLabel();
 }
 init().catch(error=>{updateConnection(false,"Initialization error: "+error.message);root.innerHTML=emptyState("ULTRON could not initialize","Reload the interface or check browser compatibility.");});
