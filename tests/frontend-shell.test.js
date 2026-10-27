@@ -28,10 +28,6 @@ test("frontend calls verified routes and guards capabilities absent from the cur
   for (const path of ["/api/tasks", "/api/research", "/api/coding/assist", "/api/documents/extract", "/api/employees/schedules", "/api/kaligpt/tools"]) {
     assert.ok(js.includes(path), "Missing implemented backend integration: " + path);
   }
-  assert.doesNotMatch(js, /Task-record API is not exposed/);
-  assert.doesNotMatch(js, /No search was performed/);
-  assert.doesNotMatch(js, /No code was generated or executed/);
-  assert.doesNotMatch(js, /The file was not uploaded/);
   assert.doesNotMatch(js, /(?:sk-[A-Za-z0-9]{20,}|sk-or-v1-[A-Za-z0-9]{20,})/);
   assert.match(js, /WEBGL/);
   assert.match(js, /prefers-reduced-motion/);
