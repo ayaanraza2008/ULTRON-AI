@@ -1156,7 +1156,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   function safeDocumentFilename(value) {
     if (typeof value !== "string") return "";
     const leaf = value.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) || "";
-    return leaf.replace(/[\\u0000-\\u001f\\u007f]/g, "").trim().slice(0, 240);
+    return leaf.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 240);
   }
   function documentResponseRow(row) {
     return {
