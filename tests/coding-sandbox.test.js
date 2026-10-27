@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { codingSandboxReadiness, hasExplicitSandboxAuthorization, runCodeInSandbox } from "../coding-sandbox.js";
+import { codingSandboxReadiness, extractExplicitSandboxRequest, hasExplicitSandboxAuthorization, runCodeInSandbox } from "../coding-sandbox.js";
 
 const OWNER = "00000000-0000-4000-8000-000000000001";
 const NODE_IMAGE = "registry.example/ultron-node:22@sha256:" + "a".repeat(64);
@@ -43,6 +43,8 @@ test("execution requires a direct request and exact code from the current prompt
   const fence = String.fromCharCode(96).repeat(3);
   const prompt = "Please run this code:\n" + fence + "python\nprint(6 * 7)\n" + fence;
   assert.equal(hasExplicitSandboxAuthorization(prompt, "print(6 * 7)", "python"), true);
+  assert.deepEqual(extractExplicitSandboxRequest(prompt), { language: "python", source: "print(6 * 7)" });
+  assert.equal(extractExplicitSandboxRequest("How can I run Python code?"), null);
   assert.equal(hasExplicitSandboxAuthorization("How can I run Python code?", "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization("Write a Python script", "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization(prompt, "print(7 * 6)", "python"), false);
