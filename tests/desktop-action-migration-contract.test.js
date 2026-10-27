@@ -7,7 +7,7 @@ const migration = await readFile(new URL("../supabase/migrations/20261028160000_
 test("desktop action migration defaults all new actions to explicit approval", () => {
   assert.match(migration, /create table if not exists public\.desktop_actions/i);
   assert.match(migration, /status text not null default 'PENDING_APPROVAL'/i);
-  assert.match(migration, /check \(action_type in \('open_url', 'launch_app', 'system_info'\)\)/i);
+  assert.match(migration, /check \(action_type in \('launch_app', 'system_info'\)\)/i);
   assert.match(migration, /revoke all on table public\.desktop_actions from public, anon, authenticated/i);
   assert.match(migration, /grant all on table public\.desktop_actions to service_role/i);
   assert.match(migration, /alter table public\.desktop_actions enable row level security/i);
