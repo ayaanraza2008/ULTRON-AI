@@ -1212,6 +1212,136 @@
       }
       return;
     }
+    if (name === "control") {
+      drawerHeading("Full system control", "Request a user-authorized control session for a paired device. ULTRON will show exactly which scopes are requested and whether a compatible companion can execute them.");
+      drawerCard("Control session", "Checking device pairing and available action handlers…", "CHECKING", "warning");
+      let capabilities = null;
+      let integrations = null;
+      try {
+        [capabilities, integrations] = await Promise.all([
+          apiRequest("/api/capabilities"),
+          apiRequest("/api/integrations").catch(() => null)
+        ]);
+      } catch (error) {
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Full system control", "The backend must confirm authentication and companion readiness before a control session can be considered.");
+        drawerCard("Cannot check control readiness", error.message, error.code || "REQUEST FAILED", "error");
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        return;
+      }
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Full system control", "Choose the minimum permissions ULTRON may request. This is not an operating-system bypass; the device must be paired and the companion must enforce each permission.");
+      const desktop = capabilities?.providers?.desktop || {};
+      const desktopConfigured = desktop.localAgentConfigured === true;
+      const companionEntry = Array.isArray(integrations?.integrations)
+        ? integrations.integrations.find(item => item.id === "windows-desktop-companion")
+        : null;
+      const companionNote = companionEntry?.note || "The current desktop adapter supports read-only device status only; it has no verified keyboard, mouse, file, app-launch, or system-command handlers.";
+      drawerCard("Windows companion",
+        desktopConfigured
+          ? "The backend reports companion settings, but has not proved the device is paired, online, or able to execute actions. " + companionNote
+          : "No Windows companion is configured. Install and pair a local companion before device-control actions can run. " + companionNote,
+        desktopConfigured ? "CONFIGURED · NOT VERIFIED" : "NOT CONNECTED",
+        "warning");
+      drawerCard("Mobile device",
+        "No paired mobile action bridge is connected to this UI. A trusted mobile companion and OS-granted permissions are required.",
+        "NOT CONNECTED", "warning");
+
+      const warning = document.createElement("div");
+      warning.className = "drawer-note";
+      warning.textContent = "A click on this web page cannot grant OS-level administrator/root rights or take over a device. Only a paired companion can perform the specific, visible, revocable actions it implements. This session is currently NOT ACTIVE.";
+      ui.drawerContent.appendChild(warning);
+
+      const scopes = [
+        ["screen-view", "View screen", "Visible screen capture with an on-device indicator."],
+        ["selected-files", "User-selected files", "Read only files the owner deliberately selects."],
+        ["approved-apps", "Open approved apps", "Launch named apps from an owner-maintained allowlist."],
+        ["keyboard-mouse", "Keyboard and mouse", "Visible foreground interaction with session confirmation."],
+        ["allowlisted-system", "Allowlisted system settings", "Specific reversible settings and read-only diagnostics."],
+        ["mobile-bridge", "Paired mobile actions", "Only actions implemented and granted by the mobile companion."]
+      ];
+      const scopeHeading = document.createElement("h3");
+      scopeHeading.className = "drawer-view-title";
+      scopeHeading.textContent = "Session permissions";
+      const scopeDescription = document.createElement("p");
+      scopeDescription.className = "drawer-view-description";
+      scopeDescription.textContent = "Select the scopes to include in a control request. Every scope starts off.";
+      ui.drawerContent.append(scopeHeading, scopeDescription);
+      const list = document.createElement("div");
+      list.className = "device-scope-list";
+      const selected = new Set(requestedDeviceScopes);
+      for (const [id, labelText, detailText] of scopes) {
+        const label = document.createElement("label");
+        label.className = "device-scope";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = selected.has(id);
+        checkbox.value = id;
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) selected.add(id);
+          else selected.delete(id);
+          if (checkbox.checked) requestedDeviceScopes.add(id);
+          else requestedDeviceScopes.delete(id);
+          requestButton.disabled = selected.size === 0 || !desktopConfigured;
+        });
+        const textBox = document.createElement("span");
+        const strong = document.createElement("strong");
+        strong.textContent = labelText;
+        const small = document.createElement("small");
+        small.textContent = detailText;
+        textBox.append(strong, small);
+        label.append(checkbox, textBox);
+        list.appendChild(label);
+      }
+      ui.drawerContent.appendChild(list);
+
+      const manifest = document.createElement("pre");
+      manifest.className = "permission-manifest";
+      manifest.hidden = true;
+      const prepareButton = document.createElement("button");
+      prepareButton.type = "button";
+      prepareButton.className = "drawer-action secondary";
+      prepareButton.textContent = "PREPARE PERMISSION REQUEST";
+      prepareButton.addEventListener("click", () => {
+        if (!selected.size) {
+          showToast("Choose at least one scope before preparing the request.");
+          return;
+        }
+        manifest.textContent = [
+          "ULTRON CONTROL SESSION REQUEST",
+          "Status: PREPARED ONLY — NOT ACTIVE",
+          "Target: explicitly paired owner device",
+          "Requested scopes: " + Array.from(selected).join(", "),
+          "Companion configuration: " + (desktopConfigured ? "present but unverified" : "missing"),
+          "Current backend execution: read-only companion status; device actions are not implemented by this adapter",
+          "Required before activation: paired online device, authenticated owner session, per-scope OS grants, action allowlist, visible control indicator, session expiry, audit trail, and immediate revoke/stop."
+        ].join("\n");
+        manifest.hidden = false;
+        showToast("Permission request prepared. No system access has been granted.");
+      });
+      ui.drawerContent.appendChild(prepareButton);
+      ui.drawerContent.appendChild(manifest);
+
+      const requestButton = document.createElement("button");
+      requestButton.type = "button";
+      requestButton.className = "drawer-action";
+      requestButton.textContent = "REQUEST CONTROL SESSION";
+      requestButton.disabled = selected.size === 0 || !desktopConfigured;
+      requestButton.title = !desktopConfigured
+        ? "Pair a Windows companion first."
+        : "The installed adapter is read-only; control handlers must be implemented and verified before enabling a session.";
+      requestButton.addEventListener("click", () => {
+        showToast(
+          desktopConfigured
+            ? "Control session not activated: the current companion adapter is read-only. No keyboard, mouse, app-launch, file-write, or system-action handler is available."
+            : "Control session not activated: pair a trusted Windows or mobile companion first.",
+          8500
+        );
+      });
+      ui.drawerContent.appendChild(requestButton);
+      drawerButton("OPEN DEVICE SETUP", () => { void showDrawerView("devices"); }, true);
+      return;
+    }
     if (name === "system") {
       drawerHeading("System readiness", "Live status from the existing ULTRON CORE backend. A healthy HTTP service does not by itself guarantee a working AI provider.");
       drawerCard("Backend API", "Checking health, access and model configuration…", "CHECKING", "warning");
