@@ -528,8 +528,8 @@ export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch }
         synonyms: Array.isArray(sense?.synonyms) ? sense.synonyms.slice(0, 8).map(item => boundedQuery(item, 80)) : [],
         antonyms: Array.isArray(sense?.antonyms) ? sense.antonyms.slice(0, 8).map(item => boundedQuery(item, 80)) : []
       })),
-      synonyms: Array.isArray(entry?.synonyms) ? entry.synonyms.slice(0, 10).map(item => boundedQuery(item, 80)) : [],
-      antonyms: Array.isArray(entry?.antonyms) ? entry.antonyms.slice(0, 10).map(item => boundedQuery(item, 80)) : []
+      synonyms: [...new Set([...(Array.isArray(entry?.synonyms) ? entry.synonyms : []), ...(Array.isArray(entry?.senses) ? entry.senses.flatMap(sense => Array.isArray(sense?.synonyms) ? sense.synonyms : []) : [])].map(item => boundedQuery(item, 80)).filter(Boolean))].slice(0, 10),
+      antonyms: [...new Set([...(Array.isArray(entry?.antonyms) ? entry.antonyms : []), ...(Array.isArray(entry?.senses) ? entry.senses.flatMap(sense => Array.isArray(sense?.antonyms) ? sense.antonyms : []) : [])].map(item => boundedQuery(item, 80)).filter(Boolean))].slice(0, 10)
     }));
     const originalUrl = typeof data?.source?.url === "string" && data.source.url.startsWith("https://en.wiktionary.org/") ? data.source.url : undefined;
     const license = boundedQuery(data?.source?.license?.name, 80) || "CC BY-SA 4.0";
