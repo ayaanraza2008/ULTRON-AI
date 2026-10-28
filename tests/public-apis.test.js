@@ -11,7 +11,7 @@ function jsonResponse(value, status = 200) {
 
 test("catalog contains useful keyless public-data services and never requires secret values", () => {
   const catalog = getPublicApiCatalog();
-  assert.deepEqual(catalog.map(item => item.id), ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes"]);
+  assert.deepEqual(catalog.map(item => item.id), ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes", "dictionary", "news"]);
   assert.ok(catalog.every(item => item.requiresApiKey === false));
   assert.ok(catalog.every(item => Array.isArray(item.capabilities) && item.capabilities.length > 0));
   assert.equal(JSON.stringify(catalog).includes("API_KEY="), false);
@@ -225,4 +225,61 @@ test("deterministic routing recognizes solar times, ebook search, trivia and ear
   assert.match(ebook.query, /Frankenstein/i);
   assert.deepEqual(inferPublicApiRequest("Give me 5 easy science trivia questions"), { service: "trivia", amount: 5, categoryId: 17, difficulty: "easy" });
   assert.deepEqual(inferPublicApiRequest("Show earthquakes in the last hour above 4"), { service: "earthquakes", period: "hour", minMagnitude: 4 });
+});
+
+
+test("FreeDictionaryAPI lookup normalizes dictionary entries and attribution", async () => {
+  const result = await lookupPublicApi({ service: "dictionary", query: "serendipity" }, {
+    fetchImpl: async url => {
+      assert.equal(String(url), "https://freedictionaryapi.com/api/v1/entries/en/serendipity");
+      return jsonResponse({
+        word: "serendipity",
+        entries: [{
+          language: { code: "en", name: "English" },
+          partOfSpeech: "noun",
+          pronunciations: [{ type: "ipa", text: "/ˌsɛr.ənˈdɪp.ə.ti/" }],
+          senses: [{
+            definition: "An unplanned fortunate discovery.",
+            examples: ["They found it by serendipity."],
+            synonyms: ["chance", "fortune"],
+            antonyms: ["design"]
+          }]
+        }],
+        source: { url: "https://en.wiktionary.org/wiki/serendipity", license: { name: "CC BY-SA 4.0" } }
+      });
+    }
+  });
+  assert.equal(result.word, "serendipity");
+  assert.equal(result.entries[0].definitions[0].definition, "An unplanned fortunate discovery.");
+  assert.equal(result.entries[0].synonyms[0], "chance");
+  assert.equal(result.wiktionarySourceUrl, "https://en.wiktionary.org/wiki/serendipity");
+  assert.equal(result.contentLicense, "CC BY-SA 4.0");
+  await assert.rejects(() => lookupPublicApi({ service: "dictionary", query: "two words" }, {
+    fetchImpl: async () => { throw new Error("must validate before networking"); }
+  }), error => error.code === "PUBLIC_API_WORD_INVALID");
+});
+
+test("GDELT public news search normalizes articles and limits the requested timespan", async () => {
+  let requested;
+  const result = await lookupPublicApi({ service: "news", query: "AI safety", period: "week" }, {
+    fetchImpl: async url => {
+      requested = new URL(String(url));
+      return jsonResponse({ articles: [
+        { title: "AI safety research update", url: "https://news.example.org/article", domain: "news.example.org", language: "English", sourcecountry: "United States", seendate: "20261029T010000Z" },
+        { title: "Unsafe scheme", url: "javascript:alert(1)", domain: "bad.example" }
+      ] });
+    }
+  });
+  assert.equal(requested.origin + requested.pathname, "https://api.gdeltproject.org/api/v2/doc/doc");
+  assert.equal(requested.searchParams.get("query"), "AI safety");
+  assert.equal(requested.searchParams.get("timespan"), "7d");
+  assert.equal(requested.searchParams.get("mode"), "ArtList");
+  assert.equal(result.articles.length, 1);
+  assert.equal(result.articles[0].title, "AI safety research update");
+  assert.equal(result.articles[0].url, "https://news.example.org/article");
+});
+
+test("deterministic routing recognizes dictionary and news lookup requests", () => {
+  assert.deepEqual(inferPublicApiRequest("Define serendipity"), { service: "dictionary", query: "serendipity" });
+  assert.deepEqual(inferPublicApiRequest("latest news about AI safety"), { service: "news", query: "AI safety", period: "day" });
 });
