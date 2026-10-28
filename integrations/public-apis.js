@@ -84,6 +84,22 @@ const PUBLIC_API_CATALOG = Object.freeze([
     requiresApiKey: false,
     capabilities: ["recent earthquake events", "magnitude", "place", "time", "coordinates", "event link"],
     terms: "Use USGS event feed data with source attribution; event catalogs can be revised."
+  },
+  {
+    id: "dictionary",
+    name: "Dictionary definitions and vocabulary",
+    provider: "FreeDictionaryAPI.com",
+    requiresApiKey: false,
+    capabilities: ["word definitions", "parts of speech", "examples", "synonyms", "antonyms", "multilingual entries"],
+    terms: "Wiktionary-derived content is CC BY-SA 4.0; attribute FreeDictionaryAPI.com and link the original Wiktionary source. Rate limit: 1,000 requests/hour per IP."
+  },
+  {
+    id: "news",
+    name: "Public news search",
+    provider: "GDELT DOC 2.0",
+    requiresApiKey: false,
+    capabilities: ["recent news articles", "titles", "source domains", "publication-seen time", "article links"],
+    terms: "News coverage is not exhaustive. Verify important claims against the linked publisher source."
   }
 ]);
 
@@ -172,7 +188,9 @@ function sourceRecord(id, extra = {}) {
       sunrise_sunset: "https://sunrise-sunset.org/api",
       ebooks: "https://gutendex.com/",
       trivia: "https://opentdb.com/api_config.php",
-      earthquakes: "https://earthquake.usgs.gov/data/software/"
+      earthquakes: "https://earthquake.usgs.gov/data/software/",
+      dictionary: "https://freedictionaryapi.com/",
+      news: "https://api.gdeltproject.org/api/v2/doc/doc"
     }[id],
     attribution: service.terms,
     ...extra
@@ -484,6 +502,77 @@ export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch }
     return sourceRecord(service, { period, significantOnly: significant, minMagnitude, totalInFeed: features.length, matchingEvents: results.length, events: results, notice: "Preliminary earthquake catalog data can be updated as new reports are reviewed." });
   }
 
+
+  if (service === "dictionary") {
+    const word = boundedQuery(args.query, 100);
+    if (!/^[\p{L}\p{M}'’-]{1,80}$/u.test(word)) {
+      throw apiError("PUBLIC_API_WORD_INVALID", "Provide a single word using letters, apostrophes, or hyphens.", 400);
+    }
+    const language = boundedQuery(args.language || "en", 12).toLowerCase();
+    if (!/^(?:[a-z]{2,3}|all)$/.test(language)) throw apiError("PUBLIC_API_LANGUAGE_INVALID", "Provide a 2- or 3-letter language code.", 400);
+    const url = "https://freedictionaryapi.com/api/v1/entries/" + encodeURIComponent(language) + "/" + encodeURIComponent(word);
+    const data = await requestJson(fetchImpl, url);
+    const entries = (Array.isArray(data?.entries) ? data.entries : []).slice(0, 6).map(entry => ({
+      language: {
+        code: boundedQuery(entry?.language?.code, 12),
+        name: boundedQuery(entry?.language?.name, 80)
+      },
+      partOfSpeech: boundedQuery(entry?.partOfSpeech, 40),
+      pronunciations: Array.isArray(entry?.pronunciations) ? entry.pronunciations.slice(0, 3).map(item => ({
+        type: boundedQuery(item?.type, 30),
+        text: boundedQuery(item?.text, 100)
+      })) : [],
+      definitions: (Array.isArray(entry?.senses) ? entry.senses : []).slice(0, 5).map(sense => ({
+        definition: boundedQuery(sense?.definition, 800),
+        examples: Array.isArray(sense?.examples) ? sense.examples.slice(0, 3).map(item => boundedQuery(item, 300)) : [],
+        synonyms: Array.isArray(sense?.synonyms) ? sense.synonyms.slice(0, 8).map(item => boundedQuery(item, 80)) : [],
+        antonyms: Array.isArray(sense?.antonyms) ? sense.antonyms.slice(0, 8).map(item => boundedQuery(item, 80)) : []
+      })),
+      synonyms: Array.isArray(entry?.synonyms) ? entry.synonyms.slice(0, 10).map(item => boundedQuery(item, 80)) : [],
+      antonyms: Array.isArray(entry?.antonyms) ? entry.antonyms.slice(0, 10).map(item => boundedQuery(item, 80)) : []
+    }));
+    const originalUrl = typeof data?.source?.url === "string" && data.source.url.startsWith("https://en.wiktionary.org/") ? data.source.url : undefined;
+    const license = boundedQuery(data?.source?.license?.name, 80) || "CC BY-SA 4.0";
+    return sourceRecord(service, {
+      word: boundedQuery(data?.word || word, 100),
+      entries,
+      wiktionarySourceUrl: originalUrl,
+      contentLicense: license,
+      attribution: "Dictionary data sourced from Wiktionary (CC BY-SA 4.0), via FreeDictionaryAPI.com"
+    });
+  }
+
+  if (service === "news") {
+    const query = boundedQuery(args.query, 220);
+    if (query.length < 3) throw apiError("PUBLIC_API_QUERY_REQUIRED", "Provide at least three characters for news search.", 400);
+    const period = args.period === "week" ? "7d" : args.period === "hour" ? "1h" : "1d";
+    const url = new URL("https://api.gdeltproject.org/api/v2/doc/doc");
+    url.search = new URLSearchParams({
+      query,
+      mode: "ArtList",
+      format: "json",
+      maxrecords: "10",
+      sort: "HybridRel",
+      timespan: period
+    }).toString();
+    const data = await requestJson(fetchImpl, url.toString());
+    const articles = (Array.isArray(data?.articles) ? data.articles : []).slice(0, 10).map(article => ({
+      title: boundedQuery(article?.title, 400),
+      url: typeof article?.url === "string" && article.url.startsWith("https://") ? article.url : undefined,
+      domain: boundedQuery(article?.domain, 120),
+      language: boundedQuery(article?.language, 40),
+      sourceCountry: boundedQuery(article?.sourcecountry, 60),
+      seenAt: boundedQuery(article?.seendate, 40)
+    })).filter(article => article.title && article.url);
+    return sourceRecord(service, {
+      query,
+      timespan: period,
+      totalArticlesReturned: articles.length,
+      articles,
+      notice: "GDELT provides best-effort coverage; a returned article is not proof that every claim in its headline or article is true."
+    });
+  }
+
   throw apiError("PUBLIC_API_SERVICE_UNSUPPORTED", "The selected public API service is not supported.", 400);
 }
 
@@ -558,6 +647,21 @@ export function inferPublicApiRequest(text) {
     const magnitude = value.match(/\b(?:magnitude|mag|above|over|greater than)\s*(?:of\s*)?(\d(?:\.\d)?)\b/i);
     const significant = /\b(significant|major)\b/i.test(value);
     return { service: "earthquakes", period, ...(magnitude ? { minMagnitude: Number(magnitude[1]) } : {}), ...(significant ? { significant: true } : {}) };
+  }
+
+
+  if (/\b(?:define|definition of|meaning of|dictionary|synonyms? for|antonyms? for|what does .{1,70} mean)\b/i.test(value) && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
+    const wordMatch = value.match(/\b(?:define|definition of|meaning of|dictionary(?: entry)? for|synonyms? for|antonyms? for|what does)\s+["“]?([\p{L}\p{M}'’-]{1,80})/iu);
+    if (wordMatch) return { service: "dictionary", query: wordMatch[1] };
+  }
+
+  if (/\b(?:news|headlines|latest updates|recent articles|news search|what is happening about)\b/i.test(value) && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
+    const newsMatch = value.match(/\b(?:news|headlines|articles|updates)\s+(?:about|on|for|regarding)\s+(.{3,160}?)(?=[?.!,;]|$)/i)
+      || value.match(/\b(?:search|find|show)\s+(?:the\s+)?(?:news|headlines|articles)\s+(?:about|on|for)\s+(.{3,160}?)(?=[?.!,;]|$)/i);
+    if (newsMatch) {
+      const period = /\b(last hour|past hour|hourly)\b/i.test(value) ? "hour" : /\b(last week|past week|weekly)\b/i.test(value) ? "week" : "day";
+      return { service: "news", query: boundedQuery(newsMatch[1], 200), period };
+    }
   }
 
   return null;
