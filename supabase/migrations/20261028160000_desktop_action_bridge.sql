@@ -1,6 +1,7 @@
 -- Queue only a narrowly allow-listed set of local Windows actions.
 -- Browser-facing roles get no direct table or RPC access. The API authenticates the
--- owner, requires a separate bridge bearer token, and every action needs explicit approval.
+-- owner and requires a separate bridge bearer token. Manual approval is the default;
+-- owner-opted allowlisted mode may enqueue only the fixed low-risk action allowlist.
 create table if not exists public.desktop_actions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
