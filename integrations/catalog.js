@@ -2,6 +2,8 @@ import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
+import { getPublicApiCatalog } from "./public-apis.js";
+import { getPublicApiDirectoryStats } from "./public-api-directory.js";
 import { safeServiceBase } from "../network-safety.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
@@ -29,6 +31,19 @@ export function buildIntegrationCatalog(env = process.env) {
   const cactusReadiness = getCactusReadiness(env);
 
   return [
+    {
+      id: "public-apis",
+      name: "Public API Directory + Tested Adapters",
+      capability: "Search the full bundled upstream public-apis directory; execute only fixed, tested keyless data adapters for weather, currencies, country metadata, Wikipedia, books, public GitHub metadata, sunrise/sunset, public-domain ebooks, trivia, recent earthquakes, dictionary definitions, and public news search",
+      state: "available",
+      configured: true,
+      mode: "catalog_discovery_plus_fixed_allowlist",
+      requiredEnv: [],
+      apiRoutes: ["agent tool: search_public_api_catalog", "agent tool: public_api_lookup"],
+      directory: getPublicApiDirectoryStats(),
+      services: getPublicApiCatalog().map(item => ({ id: item.id, provider: item.provider, requiresApiKey: item.requiresApiKey })),
+      note: "The directory contains provider listings and authentication labels, not usable API keys. Listings remain unverified and are never called dynamically."
+    },
     {
       id: "free-public-data",
       name: "Keyless Public Data APIs",
