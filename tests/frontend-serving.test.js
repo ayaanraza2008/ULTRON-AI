@@ -36,4 +36,6 @@ test("Express serves the command center and its assets from the same origin", as
   assert.equal(cssResponse.status, 200);
   assert.match(await cssResponse.text(), /\.energy-core/);
   assert.equal(healthResponse.status, 200);
+  assert.match(healthResponse.headers.get("permissions-policy") || "", /camera=\\(self\\)/);
+  assert.match(healthResponse.headers.get("permissions-policy") || "", /geolocation=\\(\\)/);
 });
