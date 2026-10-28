@@ -104,9 +104,9 @@ test("quality gate does not count URLs inside Markdown code as citations", () =>
   const sourceUrl = "https://example.com/source";
   const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
   for (const codeOnlyCitation of [
-    "```text\\n" + sourceUrl + "\\n```",
+    "```text\n" + sourceUrl + "\n```",
     "`" + sourceUrl + "`",
-    "```text\\nexample output: " + sourceUrl
+    "```text\nexample output: " + sourceUrl
   ]) {
     const result = verifyAutonomousOutput({
       research: { sources: [{ url: sourceUrl }] },
