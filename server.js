@@ -19,6 +19,7 @@ const SESSION_COOKIE = "ultron_session";
 
 const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT = 10;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Small bounded in-process guard for public auth endpoints. Production deployments
 // with multiple instances should additionally enforce limits at a shared edge/store.
@@ -393,7 +394,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     const worldIntelligence = req.path === "/world-intelligence" || req.path.startsWith("/world-intelligence/");
     if (worldIntelligence) res.removeHeader("X-Frame-Options");
     else res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
+    res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
     res.setHeader("Content-Security-Policy", worldIntelligence
       ? "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' blob: https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https: wss: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
       : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
@@ -1564,9 +1565,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
     try {
       const openRouterCandidates = hasImageAttachments
-        // Keep backward compatibility: when no dedicated vision list is configured,
-        // try the explicitly selected/allowed model, as older ULTRON deployments did.
-        ? [...new Set(visionModels.length ? visionModels : [selectedModel, ...configuredModels].filter(Boolean))]
+        // Never infer visual capability from an ordinary/free text model ID.
+        // Only operator-configured vision models may receive image attachments.
+        ? [...new Set(visionModels)]
         : [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelAttempts = [];
       for (const provider of chatProviders) {
@@ -1929,6 +1930,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
   });
+  // Serve the same-origin command center; API routes remain backed by the existing runtime.
+  app.use(express.static(path.join(__dirname, "public"), { index: "index.html", maxAge: env.NODE_ENV === "production" ? "1h" : 0 }));
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();
     if (err?.type === "entity.too.large") return res.status(413).json({ error: { code: "BODY_TOO_LARGE", message: "Request body is too large." } });

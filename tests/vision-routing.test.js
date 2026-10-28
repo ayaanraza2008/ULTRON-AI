@@ -99,3 +99,26 @@ test("image chat does not silently fall back to text-only model IDs", async () =
     assert.deepEqual(seen.map(item => item.model), ["vendor/vision-a:free", "vendor/vision-b:free"]);
   });
 });
+
+test("image chat refuses to send frames to ordinary models when no vision model is configured", async () => {
+  const seen = [];
+  const { ULTRON_VISION_MODELS, ...envWithoutVision } = baseEnv;
+  await withApp({
+    ...envWithoutVision,
+    ULTRON_AVAILABLE_MODELS: "vendor/text-model"
+  }, fakeChatFetch(seen), async (base, cookie) => {
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "Describe this camera frame" }],
+        attachments: [{ dataUrl: "data:image/jpeg;base64,aGVsbG8=" }]
+      })
+    });
+    assert.equal(response.status, 503);
+    const result = await response.json();
+    assert.equal(result.error.code, "VISION_MODEL_NOT_CONFIGURED");
+    assert.equal(seen.length, 0, "do not call a text-only model with image content");
+  });
+});
