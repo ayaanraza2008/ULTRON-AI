@@ -14,7 +14,7 @@ test("command center exposes every primary ULTRON workspace", () => {
   }
   assert.match(html, /id="view-root"/);
   assert.match(html, /id="particle-field"/);
-  assert.match(html, /class="energy-core"/);
+  assert.match(app, /class="energy-core"/);
 });
 
 test("frontend calls same-origin backend routes instead of exposing provider secrets", () => {
