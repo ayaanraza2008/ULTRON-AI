@@ -912,7 +912,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         if (!explicitDesktopRequest(requestBody, actionType, payload)) {
           return { state: "needs_explicit_request", execution: "not_executed", message: "No PC action was queued. Send a direct, standalone instruction such as 'Launch Calculator on my PC' or 'Open https://example.com on my PC'." };
         }
-        const autoApproved = env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted";
+        const bridgeToken = String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim();
+        const bridgeConfigured = bridgeToken.length >= 32 && !/\s/.test(bridgeToken);
+        const autoApproved = env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted" && bridgeConfigured;
         const approvedAt = autoApproved ? new Date().toISOString() : null;
         const rows = await desktopActionDb(req, "desktop_actions", "POST", "?select=" + DESKTOP_ACTION_SELECT, {
           user_id: ownerId, action_type: actionType, payload,
@@ -921,8 +923,6 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         });
         const row = Array.isArray(rows) ? rows[0] : null;
         if (!row?.id) throw Object.assign(new Error("Desktop action was not saved."), { code: "DESKTOP_ACTION_CREATE_FAILED", status: 502 });
-        const bridgeConfigured = String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim().length >= 32 &&
-          !/\s/.test(String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim());
         return {
           action: { id: row.id, actionType: row.action_type, payload: row.payload, status: row.status, requestedAt: row.created_at || null },
           requiresApproval: !autoApproved,
