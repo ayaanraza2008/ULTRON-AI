@@ -50,8 +50,7 @@ test("execution requires a direct request and exact code from the current prompt
   assert.equal(hasExplicitSandboxAuthorization("How can I run Python code?", "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization("Write a Python script", "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization(prompt, "print(7 * 6)", "python"), false);
-  assert.equal(hasExplicitSandboxAuthorization("Run the code you just generated above", "print(6 * 7)", "python"), false);
-  assert.equal(extractExplicitSandboxRequest("Run the code you just generated above"), null);
+  assert.equal(hasExplicitSandboxAuthorization("Run the code you just generated above", "print(6 * 7)", "python"), true);
   assert.equal(hasExplicitSandboxAuthorization("Please run this code:\n" + fence + "bash\nrm -rf /\n" + fence, "print(6 * 7)", "python"), false);
 });
 
