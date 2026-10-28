@@ -54,23 +54,29 @@ test("currency lookup validates ISO-style codes and calculates a bounded convers
   }), error => error.code === "PUBLIC_API_CURRENCY_REQUIRED");
 });
 
-test("country data returns a reduced result rather than passing the entire upstream payload through", async () => {
+test("country data uses the no-key World Bank endpoint and reduces results to documented metadata", async () => {
   const result = await lookupPublicApi({ service: "country", query: "India" }, {
     fetchImpl: async url => {
-      assert.match(String(url), /^https:\/\/restcountries\.com\/v3\.1\/name\/India\?/);
+      assert.equal(String(url), "https://api.worldbank.org/v2/country?format=json&per_page=400");
       return jsonResponse([{
-        name: { common: "India", official: "Republic of India" },
-        cca2: "IN", capital: ["New Delhi"], region: "Asia", population: 1000,
-        currencies: { INR: { name: "Indian rupee", symbol: "₹" } },
-        languages: { hin: "Hindi", eng: "English" }, timezones: ["UTC+05:30"],
-        flags: { svg: "https://example.com/flag.svg" }, privateMetadata: "never forwarded"
-      }]);
+        page: 1, pages: 1, per_page: "400", total: 1
+      }, [{
+        id: "IND", iso2Code: "IN", name: "India",
+        region: { value: "South Asia" },
+        incomeLevel: { value: "Lower middle income" },
+        capitalCity: "New Delhi", latitude: "20.5937", longitude: "78.9629",
+        privateMetadata: "never forwarded"
+      }]]);
     }
   });
   assert.equal(result.results[0].name, "India");
-  assert.deepEqual(result.results[0].languages, ["Hindi", "English"]);
+  assert.equal(result.results[0].code, "IND");
+  assert.equal(result.results[0].iso2Code, "IN");
+  assert.equal(result.results[0].capital, "New Delhi");
+  assert.equal(result.results[0].region, "South Asia");
+  assert.equal(result.results[0].incomeLevel, "Lower middle income");
+  assert.equal(result.results[0].latitude, 20.5937);
   assert.equal(Object.hasOwn(result.results[0], "privateMetadata"), false);
-  assert.equal(result.results[0].flag, "https://example.com/flag.svg");
 });
 
 test("Wikipedia, Open Library, and GitHub repository lookups normalize responses", async () => {
