@@ -1086,6 +1086,9 @@ test("authenticated desktop action requests can reach only the allow-listed serv
       if (url.endsWith("/auth/v1/user")) {
         return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
+      if (url.endsWith("/rest/v1/rpc/ultron_is_current_session_active")) {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.includes("/rest/v1/desktop_actions?select=") && options.method === "POST") {
         assert.equal(options.headers.Authorization, "Bearer " + serviceKey);
         assert.equal(options.headers.apikey, serviceKey);
