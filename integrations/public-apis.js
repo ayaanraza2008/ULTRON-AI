@@ -24,10 +24,10 @@ const PUBLIC_API_CATALOG = Object.freeze([
   {
     id: "country",
     name: "Country information",
-    provider: "REST Countries v3.1",
+    provider: "World Bank Country API",
     requiresApiKey: false,
-    capabilities: ["capital", "region", "population", "currency", "languages", "time zones"],
-    terms: "Public endpoint; availability and rate limits can change."
+    capabilities: ["country name", "ISO country codes", "capital", "region", "income level", "coordinates"],
+    terms: "Public country metadata endpoint; no API key required. Attribute the World Bank and note data limitations."
   },
   {
     id: "wikipedia",
@@ -133,7 +133,7 @@ function sourceRecord(id, extra = {}) {
     sourceUrl: {
       weather: "https://open-meteo.com/en/docs",
       currency: "https://frankfurter.dev/",
-      country: "https://restcountries.com/",
+      country: "https://datahelpdesk.worldbank.org/knowledgebase/articles/898590-country-api-queries",
       wikipedia: "https://www.mediawiki.org/wiki/API:REST_API",
       books: "https://openlibrary.org/developers/api",
       github_repo: "https://docs.github.com/en/rest/repos/repos"
@@ -214,25 +214,33 @@ export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch }
   if (service === "country") {
     const query = boundedQuery(args.query);
     if (query.length < 2) throw apiError("PUBLIC_API_QUERY_REQUIRED", "Provide a country name or ISO country code.", 400);
-    const url = "https://restcountries.com/v3.1/name/" + encodeURIComponent(query) +
-      "?fields=name,capital,region,subregion,population,cca2,currencies,languages,timezones,flags";
-    const data = await requestJson(fetchImpl, url);
-    const countries = (Array.isArray(data) ? data : []).slice(0, 5).map(item => ({
-      name: boundedQuery(item?.name?.common, 120),
-      officialName: boundedQuery(item?.name?.official, 160) || undefined,
-      code: boundedQuery(item?.cca2, 3) || undefined,
-      capital: Array.isArray(item?.capital) ? item.capital.slice(0, 5).map(x => boundedQuery(x, 100)) : [],
-      region: boundedQuery(item?.region, 100) || undefined,
-      subregion: boundedQuery(item?.subregion, 100) || undefined,
-      population: Number.isFinite(Number(item?.population)) ? Number(item.population) : undefined,
-      currencies: Object.values(item?.currencies && typeof item.currencies === "object" ? item.currencies : {}).slice(0, 10).map(currency => ({
-        name: boundedQuery(currency?.name, 80),
-        symbol: boundedQuery(currency?.symbol, 12) || undefined
-      })),
-      languages: Object.values(item?.languages && typeof item.languages === "object" ? item.languages : {}).slice(0, 12).map(x => boundedQuery(x, 80)),
-      timezones: Array.isArray(item?.timezones) ? item.timezones.slice(0, 16).map(x => boundedQuery(x, 40)) : [],
-      flag: typeof item?.flags?.svg === "string" && item.flags.svg.startsWith("https://") ? item.flags.svg : undefined
-    }));
+    const url = new URL("https://api.worldbank.org/v2/country");
+    url.search = new URLSearchParams({ format: "json", per_page: "400" }).toString();
+    const data = await requestJson(fetchImpl, url.toString());
+    const queryLower = query.toLocaleLowerCase("en");
+    const codeQuery = query.toUpperCase();
+    const rows = Array.isArray(data?.[1]) ? data[1] : [];
+    const matching = rows.filter(item => {
+      const name = boundedQuery(item?.name, 120).toLocaleLowerCase("en");
+      const iso2 = boundedQuery(item?.iso2Code, 2).toUpperCase();
+      const iso3 = boundedQuery(item?.id, 3).toUpperCase();
+      return name === queryLower || iso2 === codeQuery || iso3 === codeQuery || name.includes(queryLower);
+    }).slice(0, 5);
+    const countries = matching.map(item => {
+      const latitude = item?.latitude !== "" && item?.latitude != null ? Number(item.latitude) : NaN;
+      const longitude = item?.longitude !== "" && item?.longitude != null ? Number(item.longitude) : NaN;
+      return {
+        name: boundedQuery(item?.name, 120),
+        code: boundedQuery(item?.id, 3) || undefined,
+        iso2Code: boundedQuery(item?.iso2Code, 2) || undefined,
+        capital: boundedQuery(item?.capitalCity, 120) || undefined,
+        region: boundedQuery(item?.region?.value, 120) || undefined,
+        incomeLevel: boundedQuery(item?.incomeLevel?.value, 120) || undefined,
+        ...(Number.isFinite(latitude) ? { latitude } : {}),
+        ...(Number.isFinite(longitude) ? { longitude } : {})
+      };
+    });
+    if (!countries.length) throw apiError("PUBLIC_API_NOT_FOUND", "No matching country was found.", 404);
     return sourceRecord(service, { results: countries });
   }
 
