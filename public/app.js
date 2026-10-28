@@ -1144,6 +1144,21 @@
       drawerCard("Privacy", "The interface does not save video. A single compressed frame is sent to ULTRON only when you request analysis or enable Live observation.", "VISIBLE CONTROLS");
       return;
     }
+    if (name === "voice-quality") {
+      drawerHeading("Voice quality & pronunciation", "ULTRON selects the best installed male-leaning Indian English and Hindi voices available in this browser. The final sound depends on the voices provided by Windows and the browser.");
+      drawerCard("Hindi voice", speechVoiceLabel("hi-IN"), /browser default/i.test(speechVoiceLabel("hi-IN")) ? "VOICE LIST NOT READY" : "SELECTED AUTOMATICALLY", /browser default/i.test(speechVoiceLabel("hi-IN")) ? "warning" : "ready");
+      drawerCard("English voice", speechVoiceLabel("en-IN"), /browser default/i.test(speechVoiceLabel("en-IN")) ? "VOICE LIST NOT READY" : "SELECTED AUTOMATICALLY", /browser default/i.test(speechVoiceLabel("en-IN")) ? "warning" : "ready");
+      drawerCard("Delivery profile", "Sentence-by-sentence Hindi/English routing, a slightly slower speaking rate, and a lower pitch for a fuller male presentation. Punctuation is retained for pauses.", "LOCAL SPEECH");
+      drawerCard("Naturalness limit", "No extra paid voice API is added. For the most human-sounding result, install a Natural/Neural male voice for Hindi (India) and English (India) in Windows speech settings, then reload this page.", "DEVICE DEPENDENT", "warning");
+      drawerButton("PREVIEW HINDI + ENGLISH VOICE", () => {
+        const wasListening = voiceActive && mode === "voice";
+        if (wasListening) stopRecognition();
+        void speakResponse("Hello, I am ULTRON. नमस्ते, मैं ULTRON हूँ। मैं हिंदी और English दोनों में जवाब दूँगा।", true)
+          .finally(() => { if (wasListening) scheduleRecognitionRestart(); });
+      });
+      drawerButton("REFRESH AVAILABLE VOICES", () => { void showDrawerView("voice-quality"); }, true);
+      return;
+    }
     if (name === "tasks") {
       drawerHeading("Task activity", "View task records returned by the ULTRON backend. A queue is not proof that a task has completed.");
       drawerCard("Task service", "Loading your account-scoped task list…", "CHECKING", "warning");
