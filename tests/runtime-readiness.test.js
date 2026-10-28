@@ -147,3 +147,29 @@ test("an intentionally unavailable optional capability does not permanently bloc
   assert.equal(result.overallState, "ready_for_live_verification");
   assert.equal(result.summary.blockerCount, 0);
 });
+
+test("readiness distinguishes disabled, misconfigured and configured-but-unverified code sandbox states", () => {
+  const disabled = buildRuntimeReadiness({ env: {} });
+  assert.equal(disabled.components.find(item => item.id === "safe_code_execution").state, "not_available");
+
+  const incomplete = buildRuntimeReadiness({
+    env: {
+      ULTRON_CODING_SANDBOX_ENABLED: "true",
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+    }
+  });
+  assert.equal(incomplete.components.find(item => item.id === "safe_code_execution").state, "blocked");
+
+  const configured = buildRuntimeReadiness({
+    env: {
+      ULTRON_CODING_SANDBOX_ENABLED: "true",
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+      ULTRON_CODING_SANDBOX_NODE_IMAGE: "registry.example/ultron-node:22@sha256:" + "a".repeat(64)
+    }
+  });
+  const sandbox = configured.components.find(item => item.id === "safe_code_execution");
+  assert.equal(sandbox.state, "configured_unverified");
+  assert.match(sandbox.note, /Docker availability and real isolated execution remain unverified/);
+  assert.doesNotMatch(JSON.stringify(configured), /registry\.example|sha256:/);
+});
+
