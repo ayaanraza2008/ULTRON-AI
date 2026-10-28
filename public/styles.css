@@ -378,3 +378,11 @@ body.composer-open .core-coordinate { opacity: .2; }
 .device-scope strong { color: #dceeff; font-size: 10px; font-weight: 500; }
 .device-scope small { color: #7186a5; font-size: 9px; line-height: 1.5; }
 .permission-manifest { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 10px; color: #b6c9e3; font: 9px/1.65 "SFMono-Regular", Consolas, monospace; }
+
+
+.system-control-nav { border-color: rgba(255,65,125,.13) !important; }
+.system-control-nav .nav-icon { color: #ff7aaa; border-color: rgba(255,63,126,.36); background: rgba(69,10,39,.25); }
+.system-control-nav:hover, .system-control-nav[aria-current="page"] { border-color: rgba(255,70,135,.42) !important; background: linear-gradient(105deg, rgba(150,18,66,.16), rgba(88,24,110,.09)) !important; }
+.system-control-nav .nav-chevron { color: #e975a0; }
+.drawer-action:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+.drawer-action:disabled:hover { border-color: rgba(75,183,255,.34); box-shadow: none; }
