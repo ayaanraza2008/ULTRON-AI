@@ -12,7 +12,7 @@ const ENV = {
   ULTRON_INTEGRATION_OWNER_USER_ID: OWNER
 };
 
-function makeHarness({ promptToolCall, initialActions = [], userId = OWNER } = {}) {
+function makeHarness({ promptToolCall, initialActions = [], userId = OWNER, autonomyMode = "" } = {}) {
   const store = new Map(initialActions.map(row => [row.id, structuredClone(row)]));
   let createdCount = 0;
   const privilegedCalls = [];
@@ -40,7 +40,7 @@ function makeHarness({ promptToolCall, initialActions = [], userId = OWNER } = {
       const id = createdCount === 1 ? CREATED_ID : "00000000-0000-4000-8000-" + String(100 + createdCount).padStart(12, "0");
       const now = "2026-10-26T08:00:00.000Z";
       const row = {
-        id, ...structuredClone(body), approved_at: null, started_at: null,
+        id, ...structuredClone(body), approved_at: body.approved_at ?? null, started_at: null,
         lease_expires_at: null, finished_at: null, result: null, error_code: null,
         created_at: now, updated_at: now
       };
@@ -90,7 +90,7 @@ function makeHarness({ promptToolCall, initialActions = [], userId = OWNER } = {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
   app.use("/api", createAgentRouter({
-    env: { ...ENV },
+    env: { ...ENV, ...(autonomyMode ? { ULTRON_DESKTOP_AUTONOMY_MODE: autonomyMode } : {}) },
     fetchImpl,
     requireSupabaseUser: (req, _res, next) => {
       req.supabaseUser = { id: userId };
@@ -237,3 +237,20 @@ test("agent system policy treats saved document content as untrusted and explain
   assert.match(prompt, /Never use the queue for shell commands or arbitrary file access/i);
 });
 
+
+test("owner-opted allowlisted desktop mode queues a direct Calculator request without per-action approval", async t => {
+  const h = makeHarness({
+    autonomyMode: "allowlisted",
+    promptToolCall: { name: "request_desktop_action", args: { actionType: "launch_app", app: "calculator" } }
+  });
+  t.after(() => h.close());
+  const response = await h.run("Launch Calculator on my PC.");
+  assert.equal(response.status, 200);
+  const created = h.store.get(CREATED_ID);
+  assert.equal(created.status, "QUEUED");
+  assert.ok(created.approved_at);
+  assert.equal(response.result.toolResults[0].result.requiresApproval, false);
+  assert.equal(response.result.toolResults[0].result.execution, "queued_not_yet_executed");
+  assert.equal(response.result.toolResults[0].result.autonomyMode, "owner_allowlisted");
+  assert.equal(h.privilegedCalls.some(call => call.method === "PATCH"), false);
+});
