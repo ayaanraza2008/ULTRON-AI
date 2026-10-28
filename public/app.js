@@ -74,6 +74,7 @@
     cameraTimer: null,
     cameraRunId: 0,
     cameraContinuousStartedAt: 0,
+    cameraConsecutiveFailures: 0,
     cameraSummaries: [],
     lastAnswer: "",
     sidebarCollapsed: false
@@ -367,7 +368,7 @@
       '<label class="camera-consent"><input id="camera-continuous-consent" type="checkbox"' + (state.cameraContinuousConsent ? " checked" : "") + (cameraOn ? "" : " disabled") + '><span><strong>Allow continuous still-frame analysis</strong><small>Explicitly allow a camera still to be sent at the selected interval. This does not record video.</small></span></label>' +
       '<label for="camera-interval">Sampling interval</label><select id="camera-interval"' + (state.cameraContinuous ? " disabled" : "") + '><option value="15"' + (state.cameraIntervalSeconds === 15 ? " selected" : "") + '>Every 15 seconds</option><option value="30"' + (state.cameraIntervalSeconds === 30 ? " selected" : "") + '>Every 30 seconds</option><option value="60"' + (state.cameraIntervalSeconds === 60 ? " selected" : "") + '>Every 60 seconds</option></select>' +
       '<div class="form-actions"><button class="button button-primary" data-action="camera-continuous-start" type="button"' + (!cameraOn || !state.cameraContinuousConsent || state.cameraContinuous || !hasSession() ? " disabled" : "") + '>Start continuous summaries</button><button class="button button-danger" data-action="camera-continuous-stop" type="button"' + (!state.cameraContinuous ? " disabled" : "") + '>Stop summaries</button></div>' +
-      '<p class="field-help">Continuous mode requires sign-in and a compatible vision model. It sends no more than one frame at a time, skips samples while another chat request is active, and stops automatically after 30 minutes. Navigating away, hiding this tab, unchecking consent, or stopping the camera halts future sampling.</p>' +
+      '<p class="field-help">Continuous mode requires sign-in and a compatible vision model. It sends no more than one frame at a time, stops after three consecutive failed analyses or 30 minutes, and skips samples while another chat request is active. Navigating away, hiding this tab, unchecking consent, or stopping the camera halts future sampling.</p>' +
       '<div class="panel-head camera-summary-heading"><div class="panel-title"><strong>Recent visual observations</strong><small>Newest first · up to 8 summaries</small></div></div>' + summaries + '</section></div>';
   }
 
@@ -1004,21 +1005,34 @@
           );
           const samplingStillActive = state.cameraContinuous && Boolean(state.cameraStream) && runId === state.cameraRunId;
           if (answer) {
+            state.cameraConsecutiveFailures = 0;
             state.cameraSummaries.unshift({ at: new Date().toISOString(), text: answer });
             state.cameraSummaries = state.cameraSummaries.slice(0, 8);
             state.cameraNotice = samplingStillActive
               ? "Latest frame analyzed. Continuous sampling remains active until you stop it or the 30-minute limit is reached."
               : "The in-flight frame finished after sampling stopped. No further frames will be sent.";
           } else {
-            state.cameraNotice = samplingStillActive
-              ? "The latest frame did not produce a verified description. Check chat errors and vision-provider readiness."
-              : "Sampling has stopped. No further frames will be sent; the in-flight request produced no description.";
+            if (samplingStillActive) state.cameraConsecutiveFailures += 1;
+            if (samplingStillActive && state.cameraConsecutiveFailures >= 3) {
+              stopContinuousCameraAnalysis(false);
+              state.cameraNotice = "Continuous summaries stopped after three consecutive failures. Check vision-provider configuration and the last chat error.";
+            } else {
+              state.cameraNotice = samplingStillActive
+                ? "The latest frame did not produce a verified description (" + state.cameraConsecutiveFailures + "/3 consecutive failures). Check chat errors and vision-provider readiness."
+                : "Sampling has stopped. No further frames will be sent; the in-flight request produced no description.";
+            }
           }
         } catch (error) {
           const samplingStillActive = state.cameraContinuous && Boolean(state.cameraStream) && runId === state.cameraRunId;
-          state.cameraNotice = samplingStillActive
-            ? (error.message || "The latest frame could not be analyzed.")
-            : "Sampling has stopped. No further frames will be sent; the in-flight request failed.";
+          if (samplingStillActive) state.cameraConsecutiveFailures += 1;
+          if (samplingStillActive && state.cameraConsecutiveFailures >= 3) {
+            stopContinuousCameraAnalysis(false);
+            state.cameraNotice = "Continuous summaries stopped after three consecutive failures. Check vision-provider configuration and the last chat error.";
+          } else {
+            state.cameraNotice = samplingStillActive
+              ? (error.message || "The latest frame could not be analyzed.")
+              : "Sampling has stopped. No further frames will be sent; the in-flight request failed.";
+          }
         }
       } else {
         state.cameraNotice = "Sample skipped because another chat request is active.";
@@ -1033,6 +1047,7 @@
     if (!hasSession()) { state.cameraNotice = "Sign in before sending continuous camera frames to the AI model."; openAuth("signin"); renderCurrent(); return; }
     if (state.cameraContinuous) return;
     state.cameraContinuous = true;
+    state.cameraConsecutiveFailures = 0;
     state.cameraContinuousStartedAt = Date.now();
     const runId = ++state.cameraRunId;
     state.cameraNotice = "Continuous summaries are active. One still frame will be sampled per interval; maximum session length is 30 minutes.";
