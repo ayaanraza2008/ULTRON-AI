@@ -457,7 +457,23 @@ const SAFE_PREPARATION_TOOLS = new Set([
   "obscura_capture_public_page"
 ]);
 
-function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
+function classifyToolDispatchRisk(name, args, requestRisk, requestText = "", allowlistedDesktopAutonomy = false) {
+  // A standing owner opt-in removes the per-action prompt only for the closed
+  // Windows action allowlist. The action validator, explicit direct request,
+  // owner check, and paired bridge token remain mandatory at execution time.
+  if (name === "request_desktop_action" && allowlistedDesktopAutonomy === true &&
+      ["routine", "device_control"].includes(requestRisk?.level) &&
+      ["launch_app", "system_info"].includes(args?.actionType)) {
+    return {
+      requiresConfirmation: false,
+      risk: {
+        level: "routine",
+        reason: "Owner-enabled allowlisted desktop action; server-side validation and pairing still apply.",
+        requiresConfirmation: false
+      }
+    };
+  }
+
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "browser_use") delegatedTask = args?.task;
   else if (name === "enqueue_employee_task") delegatedTask = args?.goal;
@@ -896,8 +912,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         if (!explicitDesktopRequest(requestBody, actionType, payload)) {
           return { state: "needs_explicit_request", execution: "not_executed", message: "No PC action was queued. Send a direct, standalone instruction such as 'Launch Calculator on my PC' or 'Open https://example.com on my PC'." };
         }
+        const autoApproved = env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted";
+        const approvedAt = autoApproved ? new Date().toISOString() : null;
         const rows = await desktopActionDb(req, "desktop_actions", "POST", "?select=" + DESKTOP_ACTION_SELECT, {
-          user_id: ownerId, action_type: actionType, payload, status: "PENDING_APPROVAL", attempts: 0
+          user_id: ownerId, action_type: actionType, payload,
+          status: autoApproved ? "QUEUED" : "PENDING_APPROVAL",
+          attempts: 0, approved_at: approvedAt
         });
         const row = Array.isArray(rows) ? rows[0] : null;
         if (!row?.id) throw Object.assign(new Error("Desktop action was not saved."), { code: "DESKTOP_ACTION_CREATE_FAILED", status: 502 });
@@ -905,11 +925,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           !/\s/.test(String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim());
         return {
           action: { id: row.id, actionType: row.action_type, payload: row.payload, status: row.status, requestedAt: row.created_at || null },
-          requiresApproval: true, execution: "not_executed", bridgeConfigured,
-          message: (bridgeConfigured
-            ? "The request is saved as pending approval. Nothing has run on Windows."
-            : "The request is saved as pending approval, but the server-side PC bridge token is not configured yet. Nothing has run; configure the same high-entropy token on the backend and paired Windows companion before approving.") +
-            " To approve it, send a separate message containing exactly: approve action " + row.id
+          requiresApproval: !autoApproved,
+          execution: autoApproved ? "queued_not_yet_executed" : "not_executed",
+          autonomyMode: autoApproved ? "owner_allowlisted" : "approval_required",
+          bridgeConfigured,
+          message: autoApproved
+            ? "This owner-allowlisted action is queued for the paired Windows companion. It has not executed yet; check the recorded result."
+            : (bridgeConfigured
+              ? "The request is saved as pending approval. Nothing has run on Windows."
+              : "The request is saved as pending approval, but the server-side PC bridge token is not configured yet. Nothing has run; configure the same high-entropy token on the backend and paired Windows companion before approving.") +
+              " To approve it, send a separate message containing exactly: approve action " + row.id
         };
       }
       const id = String(args.id || "").trim().toLowerCase();
@@ -1560,7 +1585,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           // Enforce the autonomy policy at the dispatch boundary, not just in
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
-          const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
+          const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent, env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted");
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
           } else {
@@ -1606,7 +1631,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
             executedToolCalls.add(dedupeKey);
             let result;
             try {
-              const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
+              const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent, env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted");
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
               } else {
