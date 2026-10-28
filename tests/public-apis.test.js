@@ -11,7 +11,7 @@ function jsonResponse(value, status = 200) {
 
 test("catalog contains useful keyless public-data services and never requires secret values", () => {
   const catalog = getPublicApiCatalog();
-  assert.deepEqual(catalog.map(item => item.id), ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes", "dictionary", "news"]);
+  assert.deepEqual(catalog.map(item => item.id), ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes", "dictionary", "news", "air_quality", "holidays", "research_papers", "museum_art"]);
   assert.ok(catalog.every(item => item.requiresApiKey === false));
   assert.ok(catalog.every(item => Array.isArray(item.capabilities) && item.capabilities.length > 0));
   assert.equal(JSON.stringify(catalog).includes("API_KEY="), false);
@@ -339,4 +339,114 @@ test("GDELT public news search normalizes articles and fixes the search endpoint
 test("deterministic routing recognizes dictionary and news lookup prompts", () => {
   assert.deepEqual(inferPublicApiRequest("Define serendipity"), { service: "dictionary", query: "serendipity" });
   assert.deepEqual(inferPublicApiRequest("latest news about AI safety"), { service: "news", query: "AI safety", period: "day" });
+});
+
+
+test("air quality lookup geocodes a place and requests only fixed Open-Meteo air-quality data", async () => {
+  const calls = [];
+  const result = await lookupPublicApi({ service: "air_quality", query: "Agra" }, {
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), options });
+      if (String(url).startsWith("https://geocoding-api.open-meteo.com/")) {
+        return jsonResponse({ results: [{ name: "Agra", country: "India", admin1: "Uttar Pradesh", latitude: 27.17, longitude: 78.00 }] });
+      }
+      const requested = new URL(String(url));
+      assert.equal(requested.origin + requested.pathname, "https://air-quality-api.open-meteo.com/v1/air-quality");
+      assert.match(requested.searchParams.get("current"), /pm2_5/);
+      return jsonResponse({ timezone: "Asia/Kolkata", current: { us_aqi: 61, pm2_5: 12.4, time: "2026-10-29T12:00" }, current_units: { us_aqi: "USAQI", pm2_5: "μg/m³" } });
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(result.location.name, "Agra");
+  assert.equal(result.current.us_aqi, 61);
+  assert.match(result.notice, /model estimates/);
+});
+
+test("Nager.Date holiday lookup validates country and year and normalizes result metadata", async () => {
+  let requested = "";
+  const result = await lookupPublicApi({ service: "holidays", countryCode: "in", year: 2026 }, {
+    fetchImpl: async url => {
+      requested = String(url);
+      return jsonResponse([
+        { date: "2026-01-26", localName: "गणतंत्र दिवस", name: "Republic Day", countryCode: "IN", fixed: true, global: true, types: ["Public"] },
+        { date: "not-a-date", localName: "bad", name: "Invalid", countryCode: "IN" }
+      ]);
+    }
+  });
+  assert.equal(requested, "https://date.nager.at/api/v3/PublicHolidays/2026/IN");
+  assert.equal(result.holidays.length, 1);
+  assert.equal(result.holidays[0].name, "Republic Day");
+  assert.equal(result.countryCode, "IN");
+  await assert.rejects(() => lookupPublicApi({ service: "holidays", countryCode: "IND", year: 2026 }, {
+    fetchImpl: async () => { throw new Error("must validate before networking"); }
+  }), error => error.code === "PUBLIC_API_COUNTRY_CODE_INVALID");
+  await assert.rejects(() => lookupPublicApi({ service: "holidays", countryCode: "IN", year: 2300 }, {
+    fetchImpl: async () => { throw new Error("must validate before networking"); }
+  }), error => error.code === "PUBLIC_API_YEAR_INVALID");
+});
+
+test("OpenAlex research search normalizes titles, authors, DOIs and open-access links", async () => {
+  let requested;
+  const result = await lookupPublicApi({ service: "research_papers", query: "quantum error correction" }, {
+    fetchImpl: async url => {
+      requested = new URL(String(url));
+      return jsonResponse({ results: [{
+        id: "https://openalex.org/W123456789",
+        doi: "https://doi.org/10.1000/example",
+        title: "A survey of quantum error correction",
+        publication_year: 2025,
+        type: "article",
+        cited_by_count: 42,
+        authorships: [{ author: { display_name: "A. Researcher" } }],
+        open_access: { is_oa: true, oa_url: "https://repository.example/paper.pdf" },
+        primary_location: { landing_page_url: "https://publisher.example/article" }
+      }] });
+    }
+  });
+  assert.equal(requested.origin + requested.pathname, "https://api.openalex.org/works");
+  assert.equal(requested.searchParams.get("search"), "quantum error correction");
+  assert.equal(requested.searchParams.get("per-page"), "5");
+  assert.equal(result.results[0].title, "A survey of quantum error correction");
+  assert.deepEqual(result.results[0].authors, ["A. Researcher"]);
+  assert.equal(result.results[0].openAccess, true);
+  assert.equal(result.results[0].doi, "https://doi.org/10.1000/example");
+});
+
+test("Met Museum search uses the paginated v1.1 endpoint and returns bounded artwork metadata", async () => {
+  const calls = [];
+  const result = await lookupPublicApi({ service: "museum_art", query: "sunflowers" }, {
+    fetchImpl: async url => {
+      const value = String(url);
+      calls.push(value);
+      if (value.startsWith("https://collectionapi.metmuseum.org/public/collection/v1.1/search?")) {
+        assert.equal(new URL(value).searchParams.get("limit"), "3");
+        return jsonResponse({ total: 1, objectIDs: [436524] });
+      }
+      assert.equal(value, "https://collectionapi.metmuseum.org/public/collection/v1/objects/436524");
+      return jsonResponse({
+        objectID: 436524,
+        title: "Vase with Sunflowers",
+        artistDisplayName: "Artist Example",
+        objectDate: "1888",
+        medium: "Oil on canvas",
+        culture: "Dutch",
+        department: "European Paintings",
+        isPublicDomain: true,
+        primaryImageSmall: "https://images.metmuseum.org/example.jpg",
+        objectURL: "https://www.metmuseum.org/art/collection/search/436524"
+      });
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(result.totalMatches, 1);
+  assert.equal(result.results[0].title, "Vase with Sunflowers");
+  assert.equal(result.results[0].isPublicDomain, true);
+  assert.equal(result.results[0].imageUrl, "https://images.metmuseum.org/example.jpg");
+});
+
+test("deterministic routing recognizes air quality, holidays, scholarly papers, and museum-art requests", () => {
+  assert.deepEqual(inferPublicApiRequest("air quality in Agra today"), { service: "air_quality", query: "Agra" });
+  assert.deepEqual(inferPublicApiRequest("public holidays in India this year"), { service: "holidays", countryCode: "IN", year: new Date().getUTCFullYear() });
+  assert.deepEqual(inferPublicApiRequest("find research papers about quantum computing"), { service: "research_papers", query: "quantum computing" });
+  assert.deepEqual(inferPublicApiRequest("search the Met Museum for sunflowers"), { service: "museum_art", query: "sunflowers" });
 });
