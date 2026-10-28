@@ -605,7 +605,10 @@
         video: false
       });
       const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextConstructor) return false;
+      if (!AudioContextConstructor) {
+        releaseMicVisualizer();
+        return false;
+      }
       audioContext = new AudioContextConstructor();
       analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
