@@ -14,7 +14,7 @@ Shell commands, arbitrary executables/arguments, file reads/writes, screenshots,
 ## Approval and state flow
 
 1. An authenticated user whose UUID matches **ULTRON_INTEGRATION_OWNER_USER_ID** requests an action using **POST /api/desktop/actions**.
-2. The action is stored as **PENDING_APPROVAL**. Request fields cannot set status or skip approval.
+2. By default, the action is stored as **PENDING_APPROVAL**. If the owner deliberately configures `ULTRON_DESKTOP_AUTONOMY_MODE=allowlisted`, only the validated Notepad/Calculator/Explorer and bounded system-info allowlist may be queued without a separate per-action approval. Request fields cannot set status or skip approval.
 3. The same owner approves using **POST /api/desktop/actions/:id/approve**. The database transition guard rejects illegal state transitions; audit events are written by a database trigger in the same transaction.
 4. The signed-in owner can review the latest 20 actions with **GET /api/desktop/actions**, or cancel a **PENDING_APPROVAL**/**QUEUED** action using **POST /api/desktop/actions/:id/cancel**.
 5. The Windows companion polls **POST /api/desktop/bridge/next** using a dedicated server/local bearer token. A database RPC claims one action atomically and leases it for 90 seconds. Expired leases may be retried at most three times.
@@ -39,12 +39,12 @@ In Windows, launch the companion, tick **Enable approved PC actions**, and accep
 
 The authenticated agent router exposes the same narrow queue as tools:
 
-- - Launch Notepad, Calculator, or Explorer on the Windows PC by asking ULTRON for the specific launch. This also only creates a pending action record.
+- - Launch Notepad, Calculator, or Explorer on the Windows PC by asking ULTRON for the specific launch. By default, this creates a pending action; owner-opted allowlisted mode may queue it automatically.
 - Ask ULTRON to list desktop actions to inspect IDs and states.
-- To approve, send a new standalone prompt in this exact form: **approve action <full-action-UUID>**. The approval tool verifies that the current prompt itself contains this exact action ID and verb. An earlier message, model-generated string, or a generic "yes" does not grant approval.
+- In default manual mode, to approve, send a new standalone prompt in this exact form: **approve action <full-action-UUID>**. The approval tool verifies that the current prompt itself contains this exact action ID and verb. An earlier message, model-generated string, or a generic "yes" does not grant approval. Owner-opted allowlisted mode skips this separate step only for the stated action allowlist.
 - To cancel, send a new standalone prompt in this exact form: **cancel action <full-action-UUID>**. Only pending or queued actions can be cancelled.
 
-Even after approval, an action is only queued; the Windows companion must be opted in, authenticated, online, and claim it before execution. ULTRON must not claim the PC action ran until the companion acknowledgement records a result.
+Even after manual approval or automatic allowlisted queueing, an action is only queued; the Windows companion must be opted in, authenticated, online, and claim it before execution. ULTRON must not claim the PC action ran until the companion acknowledgement records a result.
 
 ## API shapes
 
