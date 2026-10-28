@@ -56,3 +56,20 @@ No changes to this audit intentionally deploy, merge a pull request, mutate prod
 ## Operational scope incident and containment
 
 During this audit, six test/config-only changes were briefly committed to `main` because one GitHub update batch omitted its target branch. The six files (`tests/chat-model-fallback.test.js`, `tests/conversation-api-user-scope.test.js`, `tests/document-storage.test.js`, `tests/memory-api-user-scope.test.js`, `tests/message-write-conversation-ownership.test.js`, and `package.json`) were restored to their exact pre-edit contents in six follow-up commits. The server implementation and migration were never changed on `main` by that incident. Render's service history confirms automatic attempts for these commits because `ultron-ai` has auto-deploy-on-commit enabled; every attempt observed in the 20:46–20:47 UTC window failed with `pipeline_minutes_exhausted`, and no successful deployment appeared in that window. No manual deploy or rollback was triggered, and Render settings were not changed. All ongoing feature changes are on isolated branches: Windows action queue `feature/windows-action-queue-mainline-20261028` / draft PR #314, session revocation `security/session-revocation-mainline-20261028` / draft PR #315, and coding sandbox `feature/coding-sandbox-20261028` / draft PR #316.
+
+## Read-only Supabase environment snapshot (2026-10-28)
+
+The connected Supabase account exposes one active project named \`ULTRON-AI\` in the Mumbai region. The available metadata does not identify it as a disposable test project, and no separate test project is visible in the connected account. Treat it as protected until the owner confirms its purpose. No SQL was executed and no project settings were changed during this inspection.
+
+- The project's recorded migrations include \`durable_task_retry_backoff\`, \`recover_stale_running_tasks\`, \`scope_stale_task_recovery\`, and \`private_document_storage\`.
+- The recorded migration list does **not** include the session guard migration from PR #315 or the desktop action queue migration from PR #314. Both remain unapplied.
+- The Supabase security advisor returned \`auth_leaked_password_protection\` at warning level: leaked-password protection is disabled. Enable it through the project owner's Auth password-security settings after confirming the project and checking the expected user impact. This audit did not alter that setting.
+- The performance advisor reported three unused indexes: \`memory_items_expiry_idx\`, \`agent_tasks_user_created_idx\`, and \`documents_user_created_idx\`. This is informational on a low-traffic project, not justification for dropping indexes without workload evidence.
+
+### Safe next steps for the owner
+
+1. Identify or create a dedicated non-production Supabase test environment only after confirming its quoted cost is ₹0. Do not use the only visible project for opt-in write/E2E tests unless the owner explicitly designates it as the test target.
+2. Supply valid disposable-account credentials directly to the trusted test environment, not to chat, then run the documented live auth/isolation tests.
+3. Apply PR #315's additive session migration only to that authorized test environment, then verify revocation and fail-closed behavior there.
+4. Apply PR #314's desktop-action migration only to the authorized test environment after the action bridge receives review; verify request, approval, execution acknowledgement, cancellation, ownership, and cleanup with a paired Windows device.
+5. Enable leaked-password protection through the owner dashboard and rerun the security advisor. Do not claim the warning is fixed before the advisor confirms it.
