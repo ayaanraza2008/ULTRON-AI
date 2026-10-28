@@ -1355,7 +1355,7 @@
     }
   }
 
-  function stopCamera() {
+  function stopCamera(showNotice = true) {
     if (cameraLiveTimer) window.clearTimeout(cameraLiveTimer);
     cameraLiveTimer = null;
     ui.cameraLiveObserve.checked = false;
@@ -1374,7 +1374,7 @@
     ui.cameraPlaceholder.querySelector("b").textContent = "CAMERA OFF";
     ui.cameraPlaceholder.querySelector("small").textContent = "Enable Eyes to request camera permission";
     ui.cameraRecBadge.hidden = true;
-    showToast("ULTRON Eyes stopped. The browser camera track has been released.", 2300);
+    if (showNotice) showToast("ULTRON Eyes stopped. The browser camera track has been released.", 2300);
   }
 
   function captureCameraFrame() {
@@ -1442,7 +1442,7 @@
 
   function switchVoiceFromDrawer() {
     setDrawerOpen(false);
-    toggleVoiceMode();
+    if (mode !== "voice" || !voiceActive) void activateVoice();
   }
 
   function switchTextFromDrawer() {
@@ -1509,6 +1509,47 @@
   ui.openInput.addEventListener("click", openOptionalTextInput);
   ui.closeInput.addEventListener("click", closeOptionalTextInput);
   ui.muteToggle.addEventListener("click", toggleMute);
+
+  ui.drawerToggle.addEventListener("click", () => {
+    const opening = ui.drawer.hidden;
+    setDrawerOpen(opening);
+    if (opening) showDrawerWelcome();
+  });
+  ui.drawerClose.addEventListener("click", () => setDrawerOpen(false));
+  ui.drawerScrim.addEventListener("click", () => setDrawerOpen(false));
+  ui.drawer.addEventListener("click", handleDrawerClick);
+  ui.cameraToggle.addEventListener("click", () => {
+    if (cameraStream) stopCamera();
+    else void enableCamera();
+  });
+  ui.cameraAnalyze.addEventListener("click", () => { void analyzeCameraFrame(false); });
+  ui.cameraClose.addEventListener("click", () => {
+    stopCamera();
+    ui.cameraPanel.hidden = true;
+  });
+  ui.cameraLiveObserve.addEventListener("change", () => {
+    if (ui.cameraLiveObserve.checked && cameraStream) {
+      ui.cameraStatus.textContent = "EYES ACTIVE · LIVE OBSERVATION";
+      ui.cameraRecBadge.hidden = false;
+      showToast("Live observation enabled. One compressed frame is sent to the configured vision model every 12 seconds; turn it off at any time.", 6500);
+      scheduleCameraObservation();
+    } else {
+      if (cameraLiveTimer) window.clearTimeout(cameraLiveTimer);
+      cameraLiveTimer = null;
+      ui.cameraRecBadge.hidden = true;
+      if (cameraStream) ui.cameraStatus.textContent = "EYES ACTIVE · LOCAL FEED";
+    }
+  });
+  ui.fileInput.addEventListener("change", () => { void analyzeLocalFile(ui.fileInput.files?.[0]); });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      if (!ui.drawer.hidden) setDrawerOpen(false);
+      else if (!ui.cameraPanel.hidden) {
+        stopCamera();
+        ui.cameraPanel.hidden = true;
+      }
+    }
+  });
   ui.messageForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const prompt = ui.messageInput.value.trim();
@@ -1534,6 +1575,7 @@
   window.addEventListener("pagehide", () => {
     stopRecognition();
     releaseMicVisualizer();
+    stopCamera(false);
     if (window.speechSynthesis) window.speechSynthesis.cancel();
   });
 
