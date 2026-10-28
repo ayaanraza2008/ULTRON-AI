@@ -75,6 +75,7 @@ test("revoked sessions and unavailable session registry fail closed before user 
     }, async base => {
       const response = await fetch(base + "/api/conversations", { headers: { Cookie: authCookie } });
       assert.equal(response.status, 401);
+      assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
       assert.deepEqual(dataReads, []);
     });
   }
