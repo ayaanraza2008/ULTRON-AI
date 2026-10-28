@@ -8,13 +8,29 @@ const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const server = readFileSync(new URL("../server.js", import.meta.url), "utf8");
 
 test("command center exposes every primary ULTRON workspace", () => {
-  for (const view of ["home", "chat", "tasks", "research", "coding", "voice", "files", "memory", "automation", "integrations", "security", "system", "settings"]) {
+  for (const view of ["home", "chat", "tasks", "research", "coding", "vision", "voice", "files", "memory", "automation", "integrations", "security", "system", "settings"]) {
     assert.match(html, new RegExp('data-view="' + view + '"'));
     assert.match(app, new RegExp(view + ":"));
   }
   assert.match(html, /id="view-root"/);
   assert.match(html, /id="particle-field"/);
   assert.match(app, /class="energy-core"/);
+});
+
+test("camera workspace is consent-gated, low-resolution, and stops sampling on exit", () => {
+  assert.match(html, /data-view="vision"/);
+  assert.match(app, /cameraContinuousConsent: false/);
+  assert.match(app, /navigator\\.mediaDevices\\.getUserMedia/);
+  assert.match(app, /audio: false/);
+  assert.match(app, /width: \\{ ideal: 640, max: 640 \\}/);
+  assert.match(app, /height: \\{ ideal: 360, max: 360 \\}/);
+  assert.match(app, /Math\\.min\\(1, 640 \\/ sourceWidth, 360 \\/ sourceHeight\\)/);
+  assert.match(app, /if \\(state\\.view === "vision" && view !== "vision"\\) stopCamera\\(\\)/);
+  assert.match(app, /document\\.hidden && state\\.cameraStream/);
+  assert.match(app, /camera-continuous-consent/);
+  assert.match(app, /30 \\* 60 \\* 1000/);
+  assert.match(app, /data-action="camera-stop"/);
+  assert.match(app, /data-action="camera-continuous-stop"/);
 });
 
 test("frontend calls same-origin backend routes instead of exposing provider secrets", () => {
