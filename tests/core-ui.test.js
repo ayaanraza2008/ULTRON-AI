@@ -30,12 +30,22 @@ test("center label is removed without crashing core initialization", () => {
 test("the glass drawer includes eyes, tools, devices, and readiness panels", () => {
   assert.match(html, /id="drawer-toggle"/);
   assert.match(html, /id="feature-drawer"/);
-  for (const feature of ["eyes", "tasks", "apps", "devices", "system"]) {
+  for (const feature of ["eyes", "tasks", "apps", "devices", "control", "system"]) {
     assert.ok(html.includes('data-drawer-view="' + feature + '"'));
   }
   assert.ok(app.includes("function showDrawerView"));
   assert.ok(app.includes("function addCustomConnectorBrief"));
   assert.ok(app.includes("function checkBackend"));
+});
+
+test("full system control is an explicit scoped request, never a fake takeover", () => {
+  assert.match(html, /data-drawer-view="control"/);
+  assert.ok(app.includes('if (name === "control")'));
+  assert.ok(app.includes('requestButton.textContent = "REQUEST CONTROL SESSION"'));
+  assert.ok(app.includes('requestButton.disabled = selected.size === 0 || !desktopConfigured'));
+  assert.ok(app.includes("Status: PREPARED ONLY — NOT ACTIVE"));
+  assert.ok(app.includes("current companion adapter is read-only"));
+  assert.match(css, /\.system-control-nav/);
 });
 
 test("camera access is explicitly permissioned and camera frames can reach vision chat", () => {
