@@ -257,15 +257,24 @@ internal sealed class DesktopActionBridge : IDisposable
             case "launch_app":
             {
                 var app = ReadString(payload, "app", 30);
+                var systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
                 var executable = app switch
                 {
-                    "notepad" => "notepad.exe",
-                    "calculator" => "calc.exe",
-                    "explorer" => "explorer.exe",
+                    "notepad" => Path.Combine(systemDirectory, "notepad.exe"),
+                    "calculator" => Path.Combine(systemDirectory, "calc.exe"),
+                    "explorer" => Path.Combine(windowsDirectory, "explorer.exe"),
                     _ => throw new NotSupportedException("Application is not allow-listed.")
                 };
+                if (!Path.IsPathFullyQualified(executable) || !File.Exists(executable))
+                    throw new NotSupportedException("The allow-listed Windows application is unavailable at its expected system path.");
                 cancellationToken.ThrowIfCancellationRequested();
-                Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true });
+                using var process = Process.Start(new ProcessStartInfo(executable)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                if (process is null) throw new InvalidOperationException("Windows did not start the allow-listed application.");
                 return new { ok = true, summary = "The approved application was launched.", platform = "windows", app };
             }
             case "system_info":
