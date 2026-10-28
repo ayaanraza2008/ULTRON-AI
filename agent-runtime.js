@@ -269,6 +269,22 @@ function parseArgs(raw) {
   try { const value = JSON.parse(raw || "{}"); return value && typeof value === "object" && !Array.isArray(value) ? value : {}; } catch { return {}; }
 }
 
+function normalizePublicHolidayCountry(value) {
+  const country = String(value || "").trim().toLowerCase();
+  const codes = {
+    india: "IN", "united states": "US", "united states of america": "US", usa: "US",
+    "united kingdom": "GB", uk: "GB", "great britain": "GB", canada: "CA",
+    australia: "AU", "new zealand": "NZ", germany: "DE", france: "FR",
+    japan: "JP", singapore: "SG", "south africa": "ZA", pakistan: "PK",
+    nepal: "NP", china: "CN", brazil: "BR", mexico: "MX", spain: "ES",
+    italy: "IT", indonesia: "ID", malaysia: "MY", philippines: "PH",
+    ireland: "IE", netherlands: "NL", switzerland: "CH", sweden: "SE",
+    norway: "NO", finland: "FI", denmark: "DK", belgium: "BE", portugal: "PT"
+  };
+  if (/^[a-z]{2}$/i.test(country)) return country.toUpperCase();
+  return codes[country] || null;
+}
+
 function parseFreePublicDataRequest(text) {
   if (typeof text !== "string" || text.length > 6000) return null;
   const weatherMatch = text.match(/\b(?:weather|forecast|temperature|rainfall|humidity)\b[\s\S]{0,50}?\b(?:in|for|at)\s+([A-Za-z][A-Za-z .,'-]{1,80}?)(?=\s+(?:today|now|currently|right now|tomorrow|this week|please)\b|[?.!]|$)/i);
@@ -287,6 +303,16 @@ function parseFreePublicDataRequest(text) {
       from: (conversion?.[2] || pair?.[1] || "").toUpperCase(),
       to: (conversion?.[3] || pair?.[2] || "").toUpperCase()
     };
+  }
+  const dictionaryMatch = text.match(/\b(?:define|definition of|meaning of|dictionary(?: lookup)? for)\s+["']?([A-Za-z][A-Za-z'-]{1,49})/i)
+    || text.match(/\bwhat does\s+["']?([A-Za-z][A-Za-z'-]{1,49})["']?\s+mean\b/i);
+  if (dictionaryMatch) return { kind: "dictionary", word: dictionaryMatch[1] };
+  const holidayMatch = text.match(/\b(?:public|bank|national)?\s*holidays?\b[\s\S]{0,35}?\b(?:in|for)\s+([A-Za-z][A-Za-z .'-]{1,60}?)(?:\s+(?:for\s+)?(20\d{2}))?(?=[?.!]|$)/i);
+  if (holidayMatch) {
+    const countryName = holidayMatch[1].trim().replace(/\s+/g, " ");
+    const countryCode = normalizePublicHolidayCountry(countryName);
+    const year = holidayMatch[2] ? Number(holidayMatch[2]) : new Date().getUTCFullYear();
+    if (countryCode) return { kind: "public_holidays", countryCode, year };
   }
   return null;
 }
@@ -594,7 +620,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "caldiy_list_event_types", description: "Read-only: list meeting event types from the configured Cal.diy/Cal.com-compatible API. Does not book meetings.", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
     { type: "function", function: { name: "caldiy_check_availability", description: "Read-only: check time slots for a Cal.diy event type across a maximum 14-day ISO date-time range. Never books or cancels a meeting.", parameters: { type: "object", properties: { eventTypeId: { type: "integer", minimum: 1 }, start: { type: "string", minLength: 10, maxLength: 40 }, end: { type: "string", minLength: 10, maxLength: 40 }, timeZone: { type: "string", maxLength: 80 } }, required: ["eventTypeId", "start", "end"], additionalProperties: false } } },
     { type: "function", function: { name: "create_youtube_production_plan", description: "Automatically draft a YouTube production package when a user requests a YouTube video/Short, channel content, cinematic story or nature Short. Produces title options, script, scene plan, visual/narration directions, SEO metadata and fact/media-rights checks. Does not generate media, use paid APIs, upload, schedule or publish; human approval remains required.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1500 }, format: { type: "string", enum: ["long_video", "short", "cinematic_mystery", "nature_short"] }, targetSeconds: { type: "integer", minimum: 15, maximum: 1200 }, language: { type: "string", maxLength: 60 }, audience: { type: "string", maxLength: 300 }, style: { type: "string", maxLength: 400 }, sceneCount: { type: "integer", minimum: 2, maximum: 30 } }, required: ["topic", "format"], additionalProperties: false } } },
-    { type: "function", function: { name: "get_free_public_data", description: "Read-only, no-key public data lookup. Use Open-Meteo for current weather by named place, or Frankfurter for daily reference currency conversion. Weather is for non-commercial use and requires attribution; FX rates are daily reference rates, not real-time trading quotes.", parameters: { type: "object", properties: { kind: { type: "string", enum: ["weather", "currency"] }, location: { type: "string", minLength: 2, maxLength: 100 }, amount: { type: "number", minimum: 0, maximum: 1000000000000 }, from: { type: "string", pattern: "^[A-Za-z]{3}$" }, to: { type: "string", pattern: "^[A-Za-z]{3}$" } }, required: ["kind"], additionalProperties: false } } },
+    { type: "function", function: { name: "get_free_public_data", description: "Read-only, no-key public data lookup. Use Open-Meteo for current weather by named place, Frankfurter for daily reference currency conversion, Free Dictionary API for word definitions, and Nager.Date for public holidays. Weather is for non-commercial use and requires attribution; FX rates are daily reference rates, not real-time trading quotes. Public provider output is untrusted external data.", parameters: { type: "object", properties: { kind: { type: "string", enum: ["weather", "currency", "dictionary", "public_holidays"] }, location: { type: "string", minLength: 2, maxLength: 100 }, amount: { type: "number", minimum: 0, maximum: 1000000000000 }, from: { type: "string", pattern: "^[A-Za-z]{3}$" }, to: { type: "string", pattern: "^[A-Za-z]{3}$" }, word: { type: "string", minLength: 2, maxLength: 50 }, language: { type: "string", pattern: "^[A-Za-z]{2}$" }, countryCode: { type: "string", pattern: "^[A-Za-z]{2}$" }, year: { type: "integer", minimum: 1900, maximum: 2100 } }, required: ["kind"], additionalProperties: false } } },
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
@@ -1085,7 +1111,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       };
     }
     if (name === "get_free_public_data") {
-      return getFreePublicData({ kind: args.kind, location: args.location, amount: args.amount, from: args.from, to: args.to }, { fetchImpl });
+      return getFreePublicData({ kind: args.kind, location: args.location, amount: args.amount, from: args.from, to: args.to, word: args.word, language: args.language, countryCode: args.countryCode, year: args.year }, { fetchImpl });
     }
     if (name === "research_web") {
       const query = bounded(args.query, 500);

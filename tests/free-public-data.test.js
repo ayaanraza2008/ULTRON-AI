@@ -97,3 +97,69 @@ test("integration catalog marks keyless providers available without required sec
   assert.deepEqual(item.requiredEnv, []);
   assert.match(item.note, /No API keys are required/);
 });
+
+
+test("dictionary lookup uses a fixed no-key endpoint and returns bounded definitions", async () => {
+  let request;
+  const result = await getFreePublicData({ kind: "dictionary", word: "serendipity" }, {
+    fetchImpl: async (url, options) => {
+      request = { url: new URL(url), options };
+      return jsonResponse([{
+        word: "serendipity",
+        phonetic: "ˌser.ənˈdɪp.ə.ti",
+        meanings: [{
+          partOfSpeech: "noun",
+          definitions: [{
+            definition: "The occurrence and development of events by chance in a happy or beneficial way.",
+            example: "A fortunate discovery by serendipity.",
+            synonyms: ["chance"],
+            antonyms: []
+          }]
+        }]
+      }]);
+    }
+  });
+  assert.equal(request.url.origin, "https://api.dictionaryapi.dev");
+  assert.equal(request.url.pathname, "/api/v2/entries/en/serendipity");
+  assert.equal(request.options.headers.Authorization, undefined);
+  assert.equal(result.kind, "dictionary");
+  assert.equal(result.entries[0].word, "serendipity");
+  assert.equal(result.entries[0].meanings[0].definitions[0].synonyms[0], "chance");
+  assert.equal(result.trust, "untrusted_external_data");
+});
+
+test("public holiday lookup uses fixed Nager.Date endpoint and normalizes common country names", async () => {
+  let request;
+  const result = await getFreePublicData({ kind: "public_holidays", countryCode: "India", year: 2026 }, {
+    fetchImpl: async (url, options) => {
+      request = { url: new URL(url), options };
+      return jsonResponse([{
+        date: "2026-01-26",
+        localName: "गणतंत्र दिवस",
+        name: "Republic Day",
+        countryCode: "IN",
+        global: true,
+        fixed: true,
+        counties: null,
+        types: ["Public"]
+      }]);
+    }
+  });
+  assert.equal(request.url.origin, "https://date.nager.at");
+  assert.equal(request.url.pathname, "/api/v3/PublicHolidays/2026/IN");
+  assert.equal(request.options.headers.Authorization, undefined);
+  assert.equal(result.kind, "public_holidays");
+  assert.equal(result.countryCode, "IN");
+  assert.equal(result.holidays[0].name, "Republic Day");
+  assert.equal(result.holidays[0].global, true);
+  assert.equal(result.trust, "untrusted_external_data");
+});
+
+test("dictionary and holiday input validation rejects invalid values before network access", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; return jsonResponse([]); };
+  await assert.rejects(() => getFreePublicData({ kind: "dictionary", word: "../../bad" }, { fetchImpl }), { code: "FREE_PUBLIC_DICTIONARY_INPUT_INVALID" });
+  await assert.rejects(() => getFreePublicData({ kind: "public_holidays", countryCode: "India", year: 2200 }, { fetchImpl }), { code: "FREE_PUBLIC_HOLIDAY_YEAR_INVALID" });
+  await assert.rejects(() => getFreePublicData({ kind: "public_holidays", countryCode: "Atlantis", year: 2026 }, { fetchImpl }), { code: "FREE_PUBLIC_HOLIDAY_COUNTRY_INVALID" });
+  assert.equal(calls, 0);
+});

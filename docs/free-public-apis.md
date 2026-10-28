@@ -19,11 +19,26 @@ ULTRON uses the public-apis/public-apis repository as a discovery catalogue, not
 - The returned quote is a daily reference rate, not an intraday market/trading quote. The result exposes the provider's rate date when present.
 - Same-currency conversion is computed locally without a network call.
 
+### Dictionary — Free Dictionary API
+
+- Looks up words using a fixed HTTPS endpoint.
+- No API key is sent or stored.
+- Results are bounded to a small number of meanings, definitions, examples and synonyms. Provider text is treated as untrusted external data.
+
+### Public holidays — Nager.Date
+
+- Returns public holiday dates by ISO alpha-2 country code and year.
+- No API key is sent or stored.
+- Country names are normalized from a small common-country map; callers can also specify an ISO alpha-2 code.
+- The adapter validates the year and filters results to bounded fields.
+
 ## Example prompts
 
 - "What is the weather in Agra?"
 - "Convert 500 USD to INR."
 - "What is the exchange rate from EUR to USD?"
+- "Define serendipity."
+- "What are the public holidays in India for 2026?"
 
 ## Security and reliability
 

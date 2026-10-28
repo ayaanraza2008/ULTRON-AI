@@ -5,6 +5,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const OPEN_METEO_GEOCODING = "https://geocoding-api.open-meteo.com/v1/search";
 const OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast";
 const FRANKFURTER_RATES = "https://api.frankfurter.dev/v2/rates";
+const DICTIONARY_API = "https://api.dictionaryapi.dev/api/v2/entries";
+const NAGER_HOLIDAYS = "https://date.nager.at/api/v3/PublicHolidays";
 
 function apiError(code, message, status = 502) {
   return Object.assign(new Error(message), { code, status });
@@ -62,6 +64,7 @@ async function getJson(url, { fetchImpl, provider }) {
     const status = Number(response?.status) || 0;
     try { await response?.body?.cancel?.(); } catch {}
     if (status === 429) throw apiError("FREE_PUBLIC_API_RATE_LIMITED", provider + " rate-limited the request.", 429);
+    if (status === 404) throw apiError("FREE_PUBLIC_API_NOT_FOUND", provider + " did not find a matching result.", 404);
     throw apiError("FREE_PUBLIC_API_UNAVAILABLE", provider + " could not complete the request.");
   }
   return readJsonLimited(response);
@@ -188,9 +191,96 @@ async function getCurrency({ amount = 1, from, to }, fetchImpl) {
   };
 }
 
-export async function getFreePublicData({ kind, location, amount = 1, from, to } = {}, { fetchImpl = safePinnedFetch } = {}) {
+
+async function getDictionary({ word, language = "en" }, fetchImpl) {
+  const cleanWord = cleanString(word, 50);
+  const lang = cleanString(language, 2).toLowerCase() || "en";
+  if (!/^[A-Za-z][A-Za-z'-]{0,49}$/.test(cleanWord) || !/^[a-z]{2}$/.test(lang)) {
+    throw apiError("FREE_PUBLIC_DICTIONARY_INPUT_INVALID", "Provide a single dictionary word and a two-letter language code.", 400);
+  }
+  const url = DICTIONARY_API + "/" + encodeURIComponent(lang) + "/" + encodeURIComponent(cleanWord);
+  const data = await getJson(url, { fetchImpl, provider: "Free Dictionary API" });
+  if (!Array.isArray(data) || !data.length) {
+    throw apiError("FREE_PUBLIC_API_INVALID_RESPONSE", "The dictionary provider returned no usable entry.");
+  }
+  const entries = data.slice(0, 3).map(entry => ({
+    word: cleanString(entry?.word, 80),
+    phonetic: cleanString(entry?.phonetic, 80) || null,
+    meanings: (Array.isArray(entry?.meanings) ? entry.meanings : []).slice(0, 8).map(meaning => ({
+      partOfSpeech: cleanString(meaning?.partOfSpeech, 40) || null,
+      definitions: (Array.isArray(meaning?.definitions) ? meaning.definitions : []).slice(0, 3).map(definition => ({
+        definition: cleanString(definition?.definition, 600),
+        example: cleanString(definition?.example, 240) || null,
+        synonyms: (Array.isArray(definition?.synonyms) ? definition.synonyms : []).slice(0, 5).map(item => cleanString(item, 80)).filter(Boolean),
+        antonyms: (Array.isArray(definition?.antonyms) ? definition.antonyms : []).slice(0, 5).map(item => cleanString(item, 80)).filter(Boolean)
+      })).filter(definition => definition.definition)
+    })).filter(meaning => meaning.definitions.length)
+  })).filter(entry => entry.word);
+  if (!entries.length) throw apiError("FREE_PUBLIC_API_INVALID_RESPONSE", "The dictionary provider returned no usable entry.");
+  return {
+    kind: "dictionary",
+    language: lang,
+    entries,
+    source: "Free Dictionary API",
+    sourceUrl: "https://dictionaryapi.dev/",
+    trust: "untrusted_external_data"
+  };
+}
+
+const COMMON_COUNTRY_CODES = new Map([
+  ["india", "IN"], ["united states", "US"], ["united states of america", "US"], ["usa", "US"],
+  ["united kingdom", "GB"], ["uk", "GB"], ["great britain", "GB"], ["canada", "CA"],
+  ["australia", "AU"], ["new zealand", "NZ"], ["germany", "DE"], ["france", "FR"],
+  ["japan", "JP"], ["singapore", "SG"], ["south africa", "ZA"], ["pakistan", "PK"],
+  ["nepal", "NP"], ["china", "CN"], ["brazil", "BR"], ["mexico", "MX"],
+  ["spain", "ES"], ["italy", "IT"], ["indonesia", "ID"], ["malaysia", "MY"],
+  ["philippines", "PH"], ["ireland", "IE"], ["netherlands", "NL"], ["switzerland", "CH"],
+  ["sweden", "SE"], ["norway", "NO"], ["finland", "FI"], ["denmark", "DK"],
+  ["belgium", "BE"], ["portugal", "PT"], ["turkey", "TR"], ["türkiye", "TR"]
+]);
+
+function normalizeCountryCode(value) {
+  const country = cleanString(value, 80).toLowerCase();
+  if (/^[a-z]{2}$/.test(country)) return country.toUpperCase();
+  return COMMON_COUNTRY_CODES.get(country) || null;
+}
+
+async function getPublicHolidays({ countryCode, year = new Date().getUTCFullYear() }, fetchImpl) {
+  const code = normalizeCountryCode(countryCode);
+  const numericYear = Number(year);
+  if (!code) throw apiError("FREE_PUBLIC_HOLIDAY_COUNTRY_INVALID", "Provide a two-letter ISO country code or a supported country name.", 400);
+  if (!Number.isInteger(numericYear) || numericYear < 1900 || numericYear > 2100) {
+    throw apiError("FREE_PUBLIC_HOLIDAY_YEAR_INVALID", "Holiday year must be an integer from 1900 through 2100.", 400);
+  }
+  const url = NAGER_HOLIDAYS + "/" + numericYear + "/" + code;
+  const data = await getJson(url, { fetchImpl, provider: "Nager.Date public holidays" });
+  if (!Array.isArray(data)) throw apiError("FREE_PUBLIC_API_INVALID_RESPONSE", "Nager.Date did not return a holiday list.");
+  return {
+    kind: "public_holidays",
+    countryCode: code,
+    year: numericYear,
+    count: Math.min(data.length, 100),
+    holidays: data.slice(0, 100).map(item => ({
+      date: cleanString(item?.date, 20),
+      localName: cleanString(item?.localName, 180),
+      name: cleanString(item?.name, 180),
+      countryCode: cleanString(item?.countryCode, 2).toUpperCase() || code,
+      global: typeof item?.global === "boolean" ? item.global : null,
+      fixed: typeof item?.fixed === "boolean" ? item.fixed : null,
+      counties: (Array.isArray(item?.counties) ? item.counties : []).slice(0, 30).map(value => cleanString(value, 30)).filter(Boolean),
+      types: (Array.isArray(item?.types) ? item.types : []).slice(0, 10).map(value => cleanString(value, 40)).filter(Boolean)
+    })).filter(item => item.date && item.name),
+    source: "Nager.Date",
+    sourceUrl: "https://date.nager.at/",
+    trust: "untrusted_external_data"
+  };
+}
+
+export async function getFreePublicData({ kind, location, amount = 1, from, to, word, language, countryCode, year } = {}, { fetchImpl = safePinnedFetch } = {}) {
   if (typeof fetchImpl !== "function") throw apiError("FREE_PUBLIC_API_UNAVAILABLE", "No outbound HTTP transport is available.");
   if (kind === "weather") return getWeather(location, fetchImpl);
   if (kind === "currency") return getCurrency({ amount, from, to }, fetchImpl);
-  throw apiError("FREE_PUBLIC_DATA_KIND_INVALID", "Choose weather or currency for the free public-data lookup.", 400);
+  if (kind === "dictionary") return getDictionary({ word, language }, fetchImpl);
+  if (kind === "public_holidays") return getPublicHolidays({ countryCode, year }, fetchImpl);
+  throw apiError("FREE_PUBLIC_DATA_KIND_INVALID", "Choose weather, currency, dictionary, or public_holidays for the free public-data lookup.", 400);
 }

@@ -32,14 +32,14 @@ export function buildIntegrationCatalog(env = process.env) {
     {
       id: "free-public-data",
       name: "Keyless Public Data APIs",
-      capability: "Current weather by named location and daily reference currency conversion",
+      capability: "Current weather, daily reference currency conversion, dictionary definitions, and public-holiday calendars",
       state: "available_unverified",
       configured: true,
       mode: "fixed_public_https_apis_no_key",
       requiredEnv: [],
       optionalEnv: [],
       apiRoutes: ["agent tool: get_free_public_data"],
-      note: "Uses fixed Open-Meteo endpoints for non-commercial weather with CC BY 4.0 attribution, and Frankfurter v2 for daily reference exchange rates. No API keys are required or stored; provider reachability is checked only when a lookup runs."
+      note: "Uses fixed HTTPS endpoints for Open-Meteo, Frankfurter, Free Dictionary API, and Nager.Date. No API keys are required or stored; weather is non-commercial with attribution, FX is daily reference data, and providers may have their own availability/fair-use terms."
     },
     {
       id: "heygem",
