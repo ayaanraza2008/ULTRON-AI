@@ -20,6 +20,42 @@ test("the default screen is a black, minimal living-core interface", () => {
   assert.match(app, /gl_VertexID/);
 });
 
+test("center label is removed without crashing core initialization", () => {
+  assert.doesNotMatch(html, /class="core-wordmark"/);
+  assert.doesNotMatch(html, /class="core-word"/);
+  assert.ok(app.includes("if (ui.coreStateLabel) ui.coreStateLabel.textContent"));
+  assert.ok(app.includes('setCoreState("idle");\n  startParticleCore();'));
+});
+
+test("the glass drawer includes eyes, tools, devices, and readiness panels", () => {
+  assert.match(html, /id="drawer-toggle"/);
+  assert.match(html, /id="feature-drawer"/);
+  for (const feature of ["eyes", "tasks", "apps", "devices", "system"]) {
+    assert.ok(html.includes('data-drawer-view="' + feature + '"'));
+  }
+  assert.ok(app.includes("function showDrawerView"));
+  assert.ok(app.includes("function addCustomConnectorBrief"));
+  assert.ok(app.includes("function checkBackend"));
+});
+
+test("camera access is explicitly permissioned and camera frames can reach vision chat", () => {
+  assert.match(html, /id="eye-video"/);
+  assert.match(html, /id="camera-live-observe"/);
+  assert.ok(app.includes("navigator.mediaDevices.getUserMedia"));
+  assert.ok(app.includes("function captureCameraFrame"));
+  assert.ok(app.includes("function analyzeCameraFrame"));
+  assert.ok(app.includes("attachments: [{ dataUrl }]"));
+  assert.ok(proxySource.includes("camera=(self)"));
+  assert.ok(proxySource.includes("microphone=(self)"));
+});
+
+test("API errors are explicit instead of crashing the interface silently", () => {
+  assert.ok(app.includes("CORE_LINK_FAILED"));
+  assert.ok(app.includes("ACCESS SETUP REQUIRED"));
+  assert.ok(app.includes("MODEL PROVIDER NOT READY"));
+  assert.ok(app.includes("VISION_MODEL_NOT_CONFIGURED"));
+});
+
 test("voice mode hides the text box by default and offers an optional open-input control", () => {
   assert.match(html, /id="message-form" class="message-shell" hidden/);
   assert.match(html, /id="open-text-input"/);
