@@ -244,7 +244,10 @@ begin
      or p_status is null or p_status not in ('COMPLETED', 'FAILED')
      or p_result is null or jsonb_typeof(p_result) <> 'object'
      or pg_column_size(p_result) > 4096
-     or (p_error_code is not null and char_length(p_error_code) > 80)
+     or (p_error_code is not null and (
+       char_length(p_error_code) > 80
+       or p_error_code not in ('ACTION_FAILED', 'APP_LAUNCH_FAILED', 'UNSAFE_URL', 'ACTION_NOT_SUPPORTED', 'ACTION_PAYLOAD_INVALID')
+     ))
      or (p_status = 'COMPLETED' and p_error_code is not null) then
     return;
   end if;
@@ -261,6 +264,19 @@ begin
      and action.status = 'RUNNING'
      and action.attempts = p_attempts
      and action.lease_expires_at > clock_timestamp()
+     and jsonb_typeof(p_result -> 'ok') = 'boolean'
+     and p_result -> 'ok' = to_jsonb(p_status = 'COMPLETED')
+     and jsonb_typeof(p_result -> 'summary') = 'string'
+     and char_length(btrim(coalesce(p_result ->> 'summary', ''))) between 1 and 300
+     and p_result ->> 'actionType' = action.action_type
+     and p_result ->> 'platform' = 'windows'
+     and (
+       p_status = 'FAILED'
+       or (
+         (action.action_type = 'launch_app' and p_result ->> 'app' = action.payload ->> 'app')
+         or action.action_type = 'system_info'
+       )
+     )
   returning action.* into updated;
 
   if not found then
