@@ -76,3 +76,15 @@ The connected Supabase account exposes one active project named \`ULTRON-AI\` in
 3. Apply PR #315's additive session migration only to that authorized test environment, then verify revocation and fail-closed behavior there.
 4. Apply PR #317's desktop-action migration only to the authorized test environment after the action bridge receives review; verify request, approval, execution acknowledgement, cancellation, ownership, and cleanup with a paired Windows device.
 5. Enable leaked-password protection through the owner dashboard and rerun the security advisor. Do not claim the warning is fixed before the advisor confirms it.
+
+## Second branch-isolation incident and containment (2026-10-28)
+
+A subsequent audit detected two files accidentally present on \`main\` after branch-target arguments were omitted in update calls: \`docs/audits/2026-10-28-autonomy-verification-audit.md\` and \`tests/coding-sandbox.test.js\`. Both files were absent at the clean baseline revision \`435431d42f02f2bcff992ba666bf6fe719bf2e06\`; the sandbox module and sandbox docs were not on \`main\`, making the test file an orphaned test that could fail CI.
+
+Containment:
+- Deleted the accidental test file from \`main\` in commit \`a3f7646372050c32a24b1ec685ae4f7c906ddc7e\`.
+- Deleted the accidental audit document from \`main\` in commit \`c71929d33fc71e4a06556bf27d99c430472dae8b\`.
+- Verified the deleted paths now return 404 on \`main\`, while the audit document still exists on \`audit/autonomy-verification-20261028\` and the coding sandbox module/test/docs still exist on \`feature/coding-sandbox-rebased-20261028\`.
+- Verified the six earlier test/package paths from the first incident remain byte-identical to their baseline blobs.
+
+Render's read-only event history shows automatic build/deploy attempts for the two removal commits. Both failed with \`pipeline_minutes_exhausted\`; no successful deployment was observed for these commits. No manual deployment, rollback, Render configuration change, production secret change, SQL execution, or live migration was initiated. This second incident is a clear process failure: all further GitHub writes must specify a literal branch parameter and verify the resulting ref/content immediately.
