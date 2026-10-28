@@ -555,6 +555,32 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   function cookieOptions(maxAge) {
     return `HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${env.NODE_ENV === "production" ? "; Secure" : ""}`;
   }
+  async function isCurrentSupabaseSessionActive(config, accessToken) {
+    if (!config || typeof accessToken !== "string" || !accessToken) return false;
+    let response;
+    try {
+      response = await fetchImpl(config.url + "/rest/v1/rpc/ultron_is_current_session_active", {
+        method: "POST",
+        headers: {
+          apikey: config.key,
+          Authorization: "Bearer " + accessToken,
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: "{}",
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (!response.ok) {
+        try { await response.body?.cancel?.(); } catch {}
+        return false;
+      }
+      return (await readResponseJsonLimited(response, 16_384)) === true;
+    } catch {
+      try { await response?.body?.cancel?.(); } catch {}
+      return false;
+    }
+  }
   async function getSupabaseUser(req, res) {
     const config = supabaseConfig();
     const cookies = parseCookies(req.headers.cookie);
@@ -569,7 +595,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         });
         if (response.ok) {
           const user = await readResponseJsonLimited(response, 512_000);
-          if (user && typeof user.id === "string") { req.supabaseAccessToken = token; return user; }
+          if (user && typeof user.id === "string") {
+            if (!await isCurrentSupabaseSessionActive(config, token)) return null;
+            req.supabaseAccessToken = token;
+            return user;
+          }
         } else if (response.status !== 401 || !refreshToken) {
           return null;
         }
@@ -581,11 +611,19 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         body: JSON.stringify({ refresh_token: refreshToken }),
         redirect: "error", signal: AbortSignal.timeout(15_000)
       });
-      if (!refreshed.ok) return null;
+      if (!refreshed.ok) {
+        try { await refreshed.body?.cancel?.(); } catch {}
+        return null;
+      }
       const payload = await readResponseJsonLimited(refreshed, 1_000_000);
+      if (typeof payload?.access_token !== "string" ||
+          !payload.user || typeof payload.user.id !== "string" ||
+          !await isCurrentSupabaseSessionActive(config, payload.access_token)) {
+        return null;
+      }
       if (!setSupabaseCookies(res, payload)) return null;
       req.supabaseAccessToken = payload.access_token;
-      return payload.user && typeof payload.user.id === "string" ? payload.user : null;
+      return payload.user;
     } catch { return null; }
   }
   async function supabaseAuthRequest(path, body) {
@@ -618,6 +656,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.append("Set-Cookie", `ultron_sb_refresh=${encodeURIComponent(refresh)}; ${cookieOptions(60 * 60 * 24 * 30)}`);
     return true;
   }
+  function clearSupabaseCookies(res) {
+    res.append("Set-Cookie", `ultron_sb_access=; ${cookieOptions(0)}`);
+    res.append("Set-Cookie", `ultron_sb_refresh=; ${cookieOptions(0)}`);
+  }
+
   async function requireSupabaseUser(req, res, next) {
     const user = await getSupabaseUser(req, res);
     if (!user) return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Sign in to your ULTRON account to use saved data." } });
@@ -1022,10 +1065,79 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     }
   });
 
-  app.post("/api/auth/signout", (_req, res) => {
-    res.append("Set-Cookie", `ultron_sb_access=; ${cookieOptions(0)}`);
-    res.append("Set-Cookie", `ultron_sb_refresh=; ${cookieOptions(0)}`);
-    res.json({ ok: true });
+  app.post("/api/auth/signout", async (req, res) => {
+    const cookies = parseCookies(req.headers.cookie);
+    let accessToken = cookies["ultron_sb_access"] || "";
+    let refreshToken = cookies["ultron_sb_refresh"] || "";
+
+    if (!accessToken && !refreshToken) {
+      clearSupabaseCookies(res);
+      return res.json({ ok: true, sessionRevoked: false });
+    }
+
+    const config = supabaseConfig();
+    if (!config) {
+      return res.status(503).json({
+        error: { code: "SIGNOUT_UNAVAILABLE", message: "Could not safely sign out of the account service. Please retry." }
+      });
+    }
+
+    const refreshAccessToken = async () => {
+      if (!refreshToken) return false;
+      const response = await fetchImpl(config.url + "/auth/v1/token?grant_type=refresh_token", {
+        method: "POST",
+        headers: { apikey: config.key, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000)
+      });
+      if (!response.ok) {
+        try { await response.body?.cancel?.(); } catch {}
+        return false;
+      }
+      const payload = await readResponseJsonLimited(response, 1_000_000);
+      if (typeof payload?.access_token !== "string" || typeof payload?.refresh_token !== "string") {
+        throw new Error("The account service returned an incomplete refreshed session.");
+      }
+      accessToken = payload.access_token;
+      refreshToken = payload.refresh_token;
+      return true;
+    };
+
+    const revokeCurrentSession = async () => fetchImpl(config.url + "/auth/v1/logout?scope=local", {
+      method: "POST",
+      headers: { apikey: config.key, Authorization: "Bearer " + accessToken, Accept: "application/json" },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000)
+    });
+
+    try {
+      if (!accessToken && !await refreshAccessToken()) {
+        return res.status(502).json({
+          error: { code: "SIGNOUT_UNAVAILABLE", message: "Could not verify remote sign-out. Please retry." }
+        });
+      }
+
+      let response = await revokeCurrentSession();
+      if (response.status === 401) {
+        try { await response.body?.cancel?.(); } catch {}
+        // Access may have expired before sign-out; rotate and retry exactly once.
+        if (await refreshAccessToken()) response = await revokeCurrentSession();
+      }
+      if (!response.ok) {
+        try { await response.body?.cancel?.(); } catch {}
+        return res.status(502).json({
+          error: { code: "SIGNOUT_UNAVAILABLE", message: "The account service did not confirm sign-out. Please retry." }
+        });
+      }
+      try { await response.body?.cancel?.(); } catch {}
+      clearSupabaseCookies(res);
+      return res.json({ ok: true, sessionRevoked: true });
+    } catch {
+      return res.status(502).json({
+        error: { code: "SIGNOUT_UNAVAILABLE", message: "Could not confirm remote sign-out. Please retry." }
+      });
+    }
   });
 
   app.get("/api/conversations", requireSupabaseUser, async (req, res) => {
