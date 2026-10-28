@@ -88,6 +88,7 @@
   let backendStatus = null;
   let lastCameraFrameAt = 0;
   let authSetupNeeded = false;
+  let requestedDeviceScopes = new Set();
 
   const stateCodes = { idle: 0, listening: 1, thinking: 2, speaking: 3, research: 4, error: 5 };
   const stateLabels = { idle: "STANDBY", listening: "LISTENING", thinking: "THINKING", speaking: "SPEAKING", research: "SCANNING", error: "ATTENTION" };
@@ -1116,8 +1117,85 @@
           "No mobile control companion is connected through this interface yet. Mobile permissions and supported actions must be implemented by a trusted mobile app.",
           "NOT CONNECTED", "warning");
         drawerCard("Access boundaries",
-          "A future companion should grant separate permissions for screen view, files, apps, keyboard/mouse and system actions. Sensitive, destructive, external or money-related actions should require confirmation.",
+          "The browser cannot bypass operating-system permissions. Sensitive, destructive, external or money-related actions must require a separate confirmation.",
           "SCOPED ACCESS");
+
+        const scopeHeading = document.createElement("h3");
+        scopeHeading.className = "drawer-view-title";
+        scopeHeading.textContent = "Request device permissions";
+        const scopeText = document.createElement("p");
+        scopeText.className = "drawer-view-description";
+        scopeText.textContent = "Select only the capabilities you want a future paired companion to request. These selections are a draft policy—not an active grant.";
+        ui.drawerContent.append(scopeHeading, scopeText);
+        const scopeList = document.createElement("div");
+        scopeList.className = "device-scope-list";
+        const scopes = [
+          ["screen-view", "View screen", "Capture a visible screen only after the companion displays an active indicator."],
+          ["selected-files", "User-selected files", "Read files or folders you explicitly select in the local companion."],
+          ["approved-apps", "Launch approved apps", "Open only apps listed in a user-reviewed allowlist."],
+          ["keyboard-mouse", "Keyboard and mouse", "Perform visible interaction after a per-session confirmation."],
+          ["allowlisted-system", "Allowlisted system actions", "Use reviewed settings and diagnostics; no arbitrary shell commands."],
+          ["mobile-bridge", "Paired mobile actions", "Request only permissions supported by a separately installed mobile companion."]
+        ];
+        for (const scopeInfo of scopes) {
+          const label = document.createElement("label");
+          label.className = "device-scope";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = scopeInfo[0];
+          checkbox.checked = requestedDeviceScopes.has(scopeInfo[0]);
+          checkbox.addEventListener("change", () => {
+            if (checkbox.checked) requestedDeviceScopes.add(scopeInfo[0]);
+            else requestedDeviceScopes.delete(scopeInfo[0]);
+          });
+          const textBox = document.createElement("span");
+          const name = document.createElement("strong");
+          name.textContent = scopeInfo[1];
+          const detail = document.createElement("small");
+          detail.textContent = scopeInfo[2];
+          textBox.append(name, detail);
+          label.append(checkbox, textBox);
+          scopeList.appendChild(label);
+        }
+        ui.drawerContent.appendChild(scopeList);
+        const manifestOutput = document.createElement("div");
+        manifestOutput.className = "drawer-note";
+        manifestOutput.hidden = true;
+        const makeManifest = document.createElement("button");
+        makeManifest.type = "button";
+        makeManifest.className = "drawer-action";
+        makeManifest.textContent = "PREPARE PERMISSION POLICY";
+        makeManifest.addEventListener("click", () => {
+          if (!requestedDeviceScopes.size) {
+            showToast("Select at least one permission scope first.");
+            return;
+          }
+          const brief = [
+            "ULTRON device permission request",
+            "Device target: user-owned, explicitly paired device",
+            "Requested scopes: " + Array.from(requestedDeviceScopes).join(", "),
+            "Grant status: NOT GRANTED by this web page",
+            "Activation requirements: install a trusted local/mobile companion, pair this account and device, show an obvious active indicator, persist a revocable least-privilege policy, and require confirmation for sensitive actions.",
+            "Disallowed by default: arbitrary shell commands, stealth capture, credential extraction, persistence, and actions outside the user's selected device."
+          ].join("\n");
+          manifestOutput.replaceChildren();
+          const text = document.createElement("pre");
+          text.className = "permission-manifest";
+          text.textContent = brief;
+          manifestOutput.appendChild(text);
+          const copy = document.createElement("button");
+          copy.type = "button";
+          copy.className = "drawer-action secondary";
+          copy.textContent = "COPY PERMISSION POLICY";
+          copy.addEventListener("click", () => {
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(brief).then(() => showToast("Permission policy copied."), () => showToast(brief, 9000));
+            } else showToast(brief, 9000);
+          });
+          manifestOutput.appendChild(copy);
+          manifestOutput.hidden = false;
+        });
+        ui.drawerContent.append(makeManifest, manifestOutput);
         drawerButton("VIEW INTEGRATIONS", () => { void showDrawerView("apps"); });
       } catch (error) {
         ui.drawerContent.replaceChildren();
