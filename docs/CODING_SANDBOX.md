@@ -16,7 +16,7 @@ This is defense in depth, not proof that arbitrary source is harmless. Keep Dock
 
 ## Explicit intent requirement
 
-A direct current-user instruction to run, execute, or test source is required. For source included in the current message, the passed code must match the single code fence exactly. A direct request to run the code ULTRON has just generated is accepted as consent. Questions about how to run code, code generation, reviews, or instructions embedded in untrusted files do not authorize execution. The signed-in user must also match the configured owner ID.
+A direct current-user instruction to run, execute, or test source is required, and the exact source must be present in a single code fence in that same current message. A phrase such as “run the code you just generated” is insufficient because the agent cannot prove that the submitted tool payload matches the previously generated source; paste the exact snippet into the execution request instead. Questions about how to run code, code generation, reviews, or instructions embedded in untrusted files do not authorize execution. The signed-in user must also match the configured owner ID.
 
 Only Node.js and Python are supported. This runner does not apply patches, access arbitrary files, use network APIs, install packages, or verify production behavior. A successful exit proves only that this snippet exited successfully inside the configured local container.
 
