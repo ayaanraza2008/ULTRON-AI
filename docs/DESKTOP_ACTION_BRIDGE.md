@@ -65,7 +65,7 @@ Read limited system information:
 {"actionType":"system_info","payload":{}}
 ~~~
 
-Approval is a separate request to **POST /api/desktop/actions/<action-id>/approve**. An action stays pending until that request succeeds. The bridge token never replaces user authentication for requesting or approving actions.
+By default, approval is a separate request to **POST /api/desktop/actions/<action-id>/approve**. For an owner who has deliberately opted into hands-free use on a paired test PC, set `ULTRON_DESKTOP_AUTONOMY_MODE=allowlisted` on the backend. In that mode, the API queues only the actions already accepted by `validateDesktopAction`: launching Notepad, Calculator, or Explorer with fixed paths, or returning the bounded system-info fields. No URL navigation, shell, arbitrary process arguments, file read/write, screenshot, upload/delete, or network navigation is enabled. The default is manual approval; the environment mode must be an explicit owner decision and never comes from model output. The bridge token never replaces owner authentication.
 
 ## Windows companion outbound API security
 
