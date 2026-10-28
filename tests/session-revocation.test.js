@@ -89,6 +89,35 @@ test("revoked sessions and unavailable session registry fail closed before user 
   }
 });
 
+test("malformed or non-boolean session-registry responses fail closed before user data reads", async () => {
+  const invalidResponses = [
+    new Response("{not-json", { status: 200, headers: { "Content-Type": "application/json" } }),
+    new Response(JSON.stringify({ active: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    new Response(JSON.stringify([true]), { status: 200, headers: { "Content-Type": "application/json" } })
+  ];
+
+  for (const invalidResponse of invalidResponses) {
+    let dataReads = 0;
+    await withServer(async url => {
+      if (url.endsWith("/auth/v1/user")) return userResponse();
+      if (url.endsWith("/rest/v1/rpc/ultron_is_current_session_active")) return invalidResponse;
+      if (url.includes("/rest/v1/conversations?")) {
+        dataReads += 1;
+        return emptyRows();
+      }
+      throw new Error("Unexpected request: " + url);
+    }, async base => {
+      const response = await fetch(base + "/api/conversations", {
+        headers: { Cookie: authCookie },
+        signal: AbortSignal.timeout(5_000)
+      });
+      assert.equal(response.status, 401);
+      assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
+      assert.equal(dataReads, 0, "invalid session-registry data must not reach protected database reads");
+    });
+  }
+});
+
 test("refreshed access tokens are checked before refreshed cookies or protected data are accepted", async () => {
   const seen = [];
   await withServer(async (url, options = {}) => {
