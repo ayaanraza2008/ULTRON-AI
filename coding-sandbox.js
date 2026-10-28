@@ -122,7 +122,7 @@ export async function runCodeInSandbox({ env = process.env, userId, language, so
     } catch (error) {
       const timedOut = error?.code === "ETIMEDOUT" || error?.killed === true || ["SIGTERM", "SIGKILL"].includes(error?.signal);
       const stdout = boundedOutput(error?.stdout), stderr = boundedOutput(error?.stderr);
-      return { runId, state: timedOut ? "timed_out" : "failed", success: false, code: timedOut ? "SANDBOX_TIMEOUT" : error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "SANDBOX_OUTPUT_LIMIT" : "SANDBOX_EXECUTION_FAILED", language, stdout: stdout.text, stderr: stderr.text, outputTruncated: stdout.truncated || stderr.truncated || error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", timeoutMs: budget, execution: "restricted_local_container" };
+      return { runId, state: timedOut ? "timed_out" : "failed", success: false, code: timedOut ? "SANDBOX_TIMEOUT" : error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "SANDBOX_OUTPUT_LIMIT" : "SANDBOX_EXECUTION_FAILED", exitCode: Number.isInteger(error?.code) ? error.code : null, language, stdout: stdout.text, stderr: stderr.text, outputTruncated: stdout.truncated || stderr.truncated || error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", timeoutMs: budget, execution: "restricted_local_container" };
     }
   } catch (error) {
     return { runId, state: "blocked", code: "SANDBOX_RUNTIME_ERROR", execution: "not_executed", detail: String(error?.code || error?.name || "unknown").slice(0, 120), message: "Sandbox preparation failed; host execution is never used as a fallback." };
