@@ -205,7 +205,7 @@ export function createDesktopActionRouter({
       catch (error) { return apiError(res, error.status || 400, error.code || "DESKTOP_ACTION_INVALID", error.message); }
       // The owner may opt into hands-free execution for this exact low-risk allowlist.
       // validateDesktopAction above rejects every other action type and parameter.
-      const autoApproved = env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted";
+      const autoApproved = env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted" && bridgeTokenConfigured(env);
       const approvedAt = autoApproved ? now().toISOString() : null;
       const rows = await db(req, "desktop_actions", "POST", "?select=" + ACTION_SELECT, {
         user_id: req.desktopOwnerId,
