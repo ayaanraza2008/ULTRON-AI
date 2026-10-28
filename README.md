@@ -1,6 +1,6 @@
 # ULTRON AI
 
-ULTRON AI is an existing API-first assistant runtime with a new responsive cinematic web command center in `public/`. The interface is served by the existing Express static-file middleware; it is not a separate replacement app. Frontend features are capability-aware and must not be treated as evidence that every backend integration is live or production-ready.
+ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
 
 ## Current status
 
@@ -10,8 +10,7 @@ ULTRON AI is an existing API-first assistant runtime with a new responsive cinem
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** cinematic command-center source is in the frontend PR branch. It includes the adaptive Living Energy Core, responsive navigation, and capability-aware workspaces. CI verifies syntax and shell contracts, but a green PR CI run does not by itself prove the frontend is deployed or visually tested in a real browser. Windows PC-control UI and live voice/wake-word operation remain separate capability gates.
-- **Frontend API rule:** the UI consumes existing `/api/*` routes and capability/readiness responses. It must show unavailable/error states when a route or provider is not configured; it must not invent task progress, model responses, audio capture, or success.
+- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
 
 ## Backend-only capability integration phase
 
@@ -28,7 +27,7 @@ Backend additions on the feature branch:
 - Private binary document storage is implemented in source with `GET /api/documents`, `POST /api/documents/upload`, `GET /api/documents/:id/download`, and `DELETE /api/documents/:id`. The additive migration creates a private 5 MB bucket, owner-scoped Storage/table RLS, UUID-only object paths, SHA-256/size verification on download, and immutable metadata permissions. Apply `supabase/migrations/20261027181000_private_document_storage.sql` before enabling these endpoints; original files remain private and are stored only after an explicit user action.
 - `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
 
-These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. The private original-file storage implementation requires its additive Supabase migration to be applied and live upload/download/delete E2E verification. A hardened coding sandbox, Windows PC-control action runner, live external-account integrations, and real provider/database end-to-end tests remain incomplete. Premium speech endpoints need a compatible provider configuration. The frontend and full Windows PC-control UI remain deferred. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.
+These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. The private original-file storage implementation requires its additive Supabase migration to be applied and live upload/download/delete E2E verification. A hardened coding sandbox, Windows PC-control action runner, live external-account integrations, and real provider/database end-to-end tests remain incomplete. Premium speech endpoints need a compatible provider configuration. The user-facing frontend and full Windows PC-control UI remain deferred. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.
 
 ## Configuration
 
