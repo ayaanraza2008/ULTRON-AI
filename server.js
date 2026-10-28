@@ -19,6 +19,7 @@ const SESSION_COOKIE = "ultron_session";
 
 const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT = 10;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Small bounded in-process guard for public auth endpoints. Production deployments
 // with multiple instances should additionally enforce limits at a shared edge/store.
@@ -1929,6 +1930,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
   });
+  // Serve the same-origin command center; API routes remain backed by the existing runtime.
+  app.use(express.static(path.join(__dirname, "public"), { index: "index.html", maxAge: env.NODE_ENV === "production" ? "1h" : 0 }));
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();
     if (err?.type === "entity.too.large") return res.status(413).json({ error: { code: "BODY_TOO_LARGE", message: "Request body is too large." } });
