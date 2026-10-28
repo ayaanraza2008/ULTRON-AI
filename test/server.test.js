@@ -63,7 +63,8 @@ test("integration catalog reports readiness without exposing secret values", asy
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 16);
+    assert.equal(payload.integrations.length, 17);
+    assert.equal(payload.integrations.find(item => item.id === "public-apis").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "free-public-data").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
