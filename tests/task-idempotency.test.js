@@ -196,6 +196,51 @@ test("concurrent same-key requests recover from the database unique-index confli
   });
 });
 
+test("same submitted request reuses its task even if model-generated tool arguments drift", async () => {
+  const store = taskStore();
+  let toolCalls = 0;
+  const fetchImpl = async (_url, options = {}) => {
+    const body = JSON.parse(options.body || "{}");
+    if (Array.isArray(body.tools) && body.tools.some(tool => tool.function?.name === "enqueue_employee_task")) {
+      toolCalls += 1;
+      const goal = toolCalls === 1 ? "Queue a web-dev review in the background" : "Queue a web-dev review plus dependency checks in the background";
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [{
+              id: "enqueue-task-call-" + toolCalls,
+              type: "function",
+              function: {
+                name: "enqueue_employee_task",
+                arguments: JSON.stringify({ role: "web-dev", goal, mode: "review" })
+              }
+            }]
+          }
+        }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Task request processed." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  await withServer({ fetchImpl, supabaseRest: store.supabaseRest }, async base => {
+    const prompt = "Queue a web-dev review in the background";
+    const first = await queueTask(base, prompt, "ultron-task-request-model-drift-01");
+    const firstBody = await first.json();
+    const second = await queueTask(base, prompt, "ultron-task-request-model-drift-01");
+    const secondBody = await second.json();
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    assert.equal(store.tasks.length, 1);
+    assert.equal(firstBody.toolResults[0].result.task.id, secondBody.toolResults[0].result.task.id);
+    assert.equal(secondBody.toolResults[0].result.deduplicated, true);
+    assert.equal(store.auditEvents.length, 1);
+  });
+});
+
 test("the same key is isolated per user and never reuses another account's task", async () => {
   const store = taskStore();
   const prompt = "Queue a web-dev review in the background";
