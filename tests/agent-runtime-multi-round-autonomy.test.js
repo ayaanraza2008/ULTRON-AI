@@ -82,7 +82,10 @@ test("agent executes up to three bounded safe tool rounds without user orchestra
     assert.equal(modelCalls, 4, "one initial call, two tool-aware follow-ups, and bounded final synthesis");
     assert.deepEqual(chosenTools, ["check_integrations", "check_repository_capabilities", "check_cactus"]);
     assert.deepEqual(result.toolsUsed.map(tool => tool.name), chosenTools);
-    assert.ok(result.toolsUsed.every(tool => tool.ok));
+    assert.equal(result.toolsUsed[0].ok, true);
+    assert.equal(result.toolsUsed[1].ok, true);
+    assert.equal(result.toolsUsed[2].ok, false, "unconfigured optional Cactus must report a blocker");
+    assert.equal(result.toolResults[2].result.error.code, "CACTUS_NOT_CONFIGURED");
     assert.equal(result.autonomy.executionLimits.maxToolRounds, 3);
     assert.equal(result.autonomy.executionLimits.maxToolCallsPerRound, 3);
     assert.equal(result.autonomy.executionLimits.maxToolCallsPerRequest, 9);
