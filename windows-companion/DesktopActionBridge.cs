@@ -356,6 +356,9 @@ internal sealed class DesktopActionBridge : IDisposable
             ("127.0.0.1", false),
             ("10.0.0.1", false),
             ("169.254.169.254", false),
+            ("192.0.0.9", false),
+            ("192.0.2.10", false),
+            ("192.0.1.1", true),
             ("::1", false),
             ("fd00::1", false),
             ("fe80::1", false),
@@ -463,7 +466,7 @@ internal sealed class DesktopActionBridge : IDisposable
                 (a == 100 && b >= 64 && b <= 127) ||
                 (a == 169 && b == 254) ||
                 (a == 172 && b >= 16 && b <= 31) ||
-                (a == 192 && (b == 0 || b == 168)) ||
+                (a == 192 && (b == 168 || (b == 0 && (c == 0 || c == 2)))) ||
                 (a == 192 && b == 88 && c == 99) ||
                 (a == 198 && (b == 18 || b == 19)) ||
                 (a == 198 && b == 51 && c == 100) ||
