@@ -20,6 +20,8 @@ test("command center exposes every primary ULTRON workspace", () => {
 test("camera workspace is consent-gated, low-resolution, and stops sampling on exit", () => {
   assert.match(html, /data-view="vision"/);
   assert.ok(app.includes("cameraContinuousConsent: false"));
+  assert.ok(app.includes("cameraPending: false"));
+  assert.ok(app.includes("state.cameraStream || state.cameraPending"));
   assert.ok(app.includes("navigator.mediaDevices.getUserMedia"));
   assert.ok(app.includes("audio: false"));
   assert.ok(app.includes("width: { ideal: 640, max: 640 }"));
