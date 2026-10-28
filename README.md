@@ -5,7 +5,7 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-zvd7.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
+- **Hosted API service:** https://ultron-ai-core.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
@@ -162,3 +162,9 @@ For account-enumeration resistance, invalid input is rejected, but upstream erro
 ## Opt-in live Supabase isolation test
 
 `npm run test:supabase:e2e` runs the two-account conversation, message, memory, and row-level-security test. It is skipped unless dedicated, confirmed test accounts and all required variables are supplied, including `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`. It is hard-scoped to the configured ULTRON Supabase project and creates/deletes temporary test rows. Read `docs/SUPABASE_E2E_ISOLATION.md` first. Do not use personal/admin accounts or commit secrets. A skipped test is not evidence that live data isolation works.
+
+## ULTRON CORE interface
+
+The living-core web interface is included in this repository as a separate service entrypoint. Keep the backend process on `npm start`; the interface proxy can be run separately with `npm run start:core-ui`. The proxy forwards requests to the configured backend HTTPS origin using `ULTRON_CORE_API_ORIGIN` (defaults to `https://ultron-ai-core.onrender.com`). The value must be an origin only: HTTPS, no credentials, path, query, or fragment.
+
+This separation lets source/CI integration finish before deployment. Do not change Render service commands or deploy this integration branch until the backend, proxy, and browser checks have passed against the intended staging target.

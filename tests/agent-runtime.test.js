@@ -1713,21 +1713,27 @@ test("client-facing agent tool results redact secrets but retain valid media pay
     status: "completed",
     service_role_key: "supabase-service-role-secret",
     client_secret: "oauth-client-secret",
+    token: "opaque-generic-token-value",
+    authToken: "opaque-auth-token-value",
     nested: {
       connectionString: "postgres://admin:database-secret@db.example",
-      refresh_token: "private-refresh-token"
+      refresh_token: "private-refresh-token",
+      token: "opaque-nested-token-value"
     },
-    message: "Authorization: Bearer abc.def.ghi api_key=some-key-value " + slackToken + " " + jwt,
+    message: "Authorization: Bearer abc.def.ghi api_key=some-key-value token=inline-token-value authToken=inline-auth-value " + slackToken + " " + jwt,
     audioBase64: "A".repeat(1201)
   });
   assert.equal(safe.service_role_key, "[redacted]");
   assert.equal(safe.client_secret, "[redacted]");
+  assert.equal(safe.token, "[redacted]");
+  assert.equal(safe.authToken, "[redacted]");
   assert.equal(safe.nested.connectionString, "[redacted]");
   assert.equal(safe.nested.refresh_token, "[redacted]");
+  assert.equal(safe.nested.token, "[redacted]");
   assert.equal(safe.audioBase64, "A".repeat(1201));
   assert.equal(JSON.stringify(safe).includes(slackToken), false);
   assert.equal(JSON.stringify(safe).includes(jwt), false);
-  assert.doesNotMatch(JSON.stringify(safe), /supabase-service-role-secret|oauth-client-secret|database-secret|private-refresh-token|abc\.def\.ghi|some-key-value/);
+  assert.doesNotMatch(JSON.stringify(safe), /supabase-service-role-secret|oauth-client-secret|database-secret|private-refresh-token|opaque-generic-token-value|opaque-auth-token-value|opaque-nested-token-value|inline-token-value|inline-auth-value|abc\.def\.ghi|some-key-value/);
 });
 
 test("model tool results redact credentials before model context", () => {
@@ -1737,20 +1743,25 @@ test("model tool results redact credentials before model context", () => {
     apiKey: "credential-value",
     service_role_key: "supabase-service-role-secret",
     client_secret: "oauth-client-secret",
+    token: "generic-provider-token-value",
+    authToken: "generic-auth-token-value",
     refresh_token: "private-refresh-token",
     connection_string: "postgres://admin:database-secret@db.example",
-    nested: { access_token: "private-value", title: "safe output" },
-    message: "Authorization: Bearer abc.def.ghi and api_key=some-key-value; Slack " + slackToken + "; JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signaturepayload123"
+    nested: { access_token: "private-value", token: "nested-model-token-value", title: "safe output" },
+    message: "Authorization: Bearer abc.def.ghi and api_key=some-key-value token=inline-model-token-value authToken=inline-model-auth-value; Slack " + slackToken + "; JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signaturepayload123"
   });
   assert.equal(safe.apiKey, "[redacted]");
   assert.equal(safe.service_role_key, "[redacted]");
   assert.equal(safe.client_secret, "[redacted]");
+  assert.equal(safe.token, "[redacted]");
+  assert.equal(safe.authToken, "[redacted]");
+  assert.equal(safe.nested.token, "[redacted]");
   assert.equal(safe.refresh_token, "[redacted]");
   assert.equal(safe.connection_string, "[redacted]");
   assert.equal(safe.nested.access_token, "[redacted]");
   assert.equal(safe.nested.title, "safe output");
   assert.equal(JSON.stringify(safe).includes(slackToken), false);
-  assert.doesNotMatch(JSON.stringify(safe), /credential-value|supabase-service-role-secret|oauth-client-secret|private-refresh-token|database-secret|private-value|abc\.def\.ghi|some-key-value|eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTYifQ\.signaturepayload123/);
+  assert.doesNotMatch(JSON.stringify(safe), /credential-value|supabase-service-role-secret|oauth-client-secret|private-refresh-token|database-secret|private-value|generic-provider-token-value|generic-auth-token-value|nested-model-token-value|inline-model-token-value|inline-model-auth-value|abc\.def\.ghi|some-key-value|eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTYifQ\.signaturepayload123/);
 });
 
 

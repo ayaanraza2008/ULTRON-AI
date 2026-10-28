@@ -1,4 +1,5 @@
 import { safeServiceBase } from "./network-safety.js";
+import { codingSandboxReadiness } from "./coding-sandbox.js";
 
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -23,6 +24,9 @@ export function buildRuntimeReadiness({
 } = {}) {
   const browserConfigured = secureServiceUrl(env.ULTRON_BROWSER_USE_URL) && truthy(env.ULTRON_BROWSER_USE_TOKEN);
   const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN) && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
+  const desktopBridgeToken = String(env.ULTRON_DESKTOP_BRIDGE_TOKEN || "").trim();
+  const desktopActionQueueConfigured = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim()) &&
+    desktopBridgeToken.length >= 32 && !/\s/.test(desktopBridgeToken);
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
   const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
@@ -75,19 +79,36 @@ export function buildRuntimeReadiness({
       ["ULTRON_DESKTOP_AGENT_URL", "ULTRON_DESKTOP_AGENT_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], desktopConfigured
         ? "Bridge settings and the owner guard are present; live pairing is unverified. The current adapter only probes status and does not execute PC commands."
         : "A reachable, authenticated Windows companion is required. A cloud server cannot directly control the user's PC."),
+    component("windows_action_queue", "Windows approved-action queue", desktopActionQueueConfigured ? "configured_unverified" : "blocked",
+      ["ULTRON_INTEGRATION_OWNER_USER_ID", "ULTRON_DESKTOP_BRIDGE_TOKEN"], desktopActionQueueConfigured
+        ? "Owner UUID and a high-entropy bridge token are configured; " + (env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted"
+            ? "owner-opted allowlisted hands-free mode is enabled for Notepad/Calculator/Explorer launches and bounded system info only. "
+            : "desktop actions remain per-action approval gated. ") + "This is not proof that the SQL migration is applied, a Windows companion is paired, or any action has run."
+        : "Requires the configured owner UUID and a dedicated 32+ character bridge token. Actions remain unavailable until the additive migration is applied and a companion is paired; configuration alone is not verification."),
     component("local_models", "Local model runtime", localModelConfigured ? "configured_unverified" : "optional",
       ["OLLAMA_BASE_URL"], localModelConfigured
         ? "Endpoint is configured; model availability and network reachability are not tested."
         : "Optional. A cloud-hosted service cannot reach a PC-local localhost endpoint."),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
-    component("safe_code_execution", "Isolated code execution", "not_available",
-      [], "ULTRON does not claim to run arbitrary user code in an isolated sandbox; coding assistance is limited to supported plan, draft, and review workflows.")
+    (() => {
+      const sandbox = codingSandboxReadiness(env);
+      const state = sandbox.configured ? "configured_unverified" : sandbox.enabled ? "blocked" : "not_available";
+      return component("safe_code_execution", "Isolated code execution", state,
+        ["ULTRON_CODING_SANDBOX_ENABLED=true", "ULTRON_INTEGRATION_OWNER_USER_ID", "digest-pinned cached runtime image"],
+        sandbox.configured
+          ? "Owner-only digest-pinned runtimes are configured; Docker availability and real isolated execution remain unverified."
+          : sandbox.enabled
+            ? "Sandbox was explicitly enabled but owner or cached-image configuration is incomplete. Execution remains blocked."
+            : "Disabled by default; arbitrary code execution remains unavailable until explicitly enabled with owner and cached-image safeguards.");
+    })()
   ];
 
-  // A deliberately unsupported optional capability is disclosed in the component list,
-  // but must not make otherwise configured core services permanently unready.
-  const blockers = components.filter((item) => ["blocked", "disabled", "not_started"].includes(item.state));
+  // Optional capability gaps are reported, but do not make otherwise configured
+  // core services permanently unready. The Windows action queue is separately
+  // opt-in and therefore is not a core readiness blocker.
+  const blockers = components.filter((item) =>
+    item.id !== "windows_action_queue" && ["blocked", "disabled", "not_started"].includes(item.state));
   const configuredCount = components.filter((item) => ["configured_unverified", "running", "best_effort_fallback"].includes(item.state)).length;
   return {
     app: "ULTRON AI",

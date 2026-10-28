@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { createApp } from "../server.js";
+import { createApp, isPrivilegedSupabaseOperationAllowed } from "../server.js";
 
 async function withServer(app, fn) {
   const server = createServer(app);
@@ -63,7 +63,9 @@ test("integration catalog reports readiness without exposing secret values", asy
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 15);
+    assert.equal(payload.integrations.length, 17);
+    assert.equal(payload.integrations.find(item => item.id === "public-apis").configured, true);
+    assert.equal(payload.integrations.find(item => item.id === "free-public-data").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "omnivoice").configured, true);
@@ -536,6 +538,9 @@ test("Supabase conversation APIs require an authenticated user and respect the c
         assert.equal(options.headers.Authorization, "Bearer test-user-token");
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200 });
       }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
         restRequest = { url, options };
         return new Response(JSON.stringify([{ id: "123e4567-e89b-12d3-a456-426614174001", title: "Hello", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z" }]), { status: 200 });
@@ -592,6 +597,10 @@ test("expired Supabase access tokens refresh before database requests", async ()
           user: { id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }
         }), { status: 200 });
       }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        assert.equal(options.headers.Authorization, "Bearer fresh-access");
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
         restAuthorization = options.headers.Authorization;
         return new Response(JSON.stringify([]), { status: 200 });
@@ -640,6 +649,10 @@ test("task creation, approval, cancellation and audit use the correct Supabase r
         assert.equal(authorization, "Bearer " + clientToken);
         assert.equal(options.headers.apikey, "sb_publishable_test");
         return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active" && method === "POST") {
+        assert.equal(authorization, "Bearer " + clientToken);
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/rest/v1/agent_tasks" && method === "POST") {
         assert.equal(authorization, "Bearer " + clientToken, "task insertion remains user-scoped");
@@ -728,6 +741,9 @@ test("document text references persist only with an authenticated owner and corr
         assert.equal(options.headers.Authorization, "Bearer " + token);
         return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200 });
       }
+      if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/rest/v1/memory_items" && method === "POST") {
         const body = JSON.parse(options.body);
         received.push({ body, authorization: options.headers.Authorization, apikey: options.headers.apikey });
@@ -770,6 +786,9 @@ test("memory API rejects document provenance for non-document memory items", asy
     fetchImpl: async rawUrl => {
       if (rawUrl === "https://ultron-test.supabase.co/auth/v1/user") {
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000" }), { status: 200 });
+      }
+      if (rawUrl === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       restCalls++;
       throw new Error("invalid provenance must not reach Supabase");
@@ -940,6 +959,9 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
       if (url === supabaseUrl + "/auth/v1/user") {
         return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
+      if (url === supabaseUrl + "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
         return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
       }
@@ -1018,3 +1040,90 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(providerCalls, 0);
   });
 });
+
+test("server-role database policy allows only the desktop queue's required operations", () => {
+  for (const [table, method] of [
+    ["desktop_actions", "GET"],
+    ["desktop_actions", "POST"],
+    ["desktop_actions", "PATCH"],
+    ["rpc/ultron_claim_next_desktop_action", "POST"],
+    ["rpc/ultron_ack_desktop_action", "POST"],
+    ["agent_tasks", "PATCH"],
+    ["audit_events", "POST"]
+  ]) {
+    assert.equal(isPrivilegedSupabaseOperationAllowed(table, method), true, table + " " + method);
+  }
+
+  for (const [table, method] of [
+    ["desktop_actions", "DELETE"],
+    ["desktop_actions", "PUT"],
+    ["rpc/ultron_claim_next_desktop_action", "GET"],
+    ["rpc/arbitrary_function", "POST"],
+    ["users", "GET"],
+    ["agent_tasks", "DELETE"],
+    ["audit_events", "PATCH"]
+  ]) {
+    assert.equal(isPrivilegedSupabaseOperationAllowed(table, method), false, table + " " + method);
+  }
+});
+
+test("authenticated desktop action requests can reach only the allow-listed server-role store", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const serviceKey = "synthetic-service-role-secret-for-test";
+  const storedId = "00000000-0000-4000-8000-000000000102";
+  const calls = [];
+  const app = createApp({
+    env: {
+      NODE_ENV: "test",
+      SUPABASE_URL: "https://demo-project.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+      SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      ULTRON_DESKTOP_BRIDGE_TOKEN: "synthetic-desktop-bridge-token-with-more-than-32-characters"
+    },
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/auth/v1/user")) {
+        return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.endsWith("/rest/v1/rpc/ultron_is_current_session_active")) {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/rest/v1/desktop_actions?select=") && options.method === "POST") {
+        assert.equal(options.headers.Authorization, "Bearer " + serviceKey);
+        assert.equal(options.headers.apikey, serviceKey);
+        const body = JSON.parse(options.body);
+        assert.equal(body.user_id, ownerId);
+        assert.equal(body.status, "PENDING_APPROVAL");
+        assert.equal(body.action_type, "system_info");
+        return new Response(JSON.stringify([{
+          id: storedId, user_id: ownerId, action_type: "system_info", payload: {},
+          status: "PENDING_APPROVAL", attempts: 0, approved_at: null, started_at: null,
+          lease_expires_at: null, finished_at: null, result: null, error_code: null,
+          created_at: "2026-10-28T00:00:00.000Z", updated_at: "2026-10-28T00:00:00.000Z"
+        }]), { status: 201, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/desktop/actions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "ultron_sb_access=access-token; ultron_sb_refresh=refresh-token"
+      },
+      body: JSON.stringify({ actionType: "system_info", payload: {} })
+    });
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.action.id, storedId);
+    assert.equal(payload.action.status, "PENDING_APPROVAL");
+    assert.equal(payload.execution, "not_executed");
+    assert.equal(payload.requiresApproval, true);
+    assert.equal(calls.filter(call => call.url.includes("/rest/v1/desktop_actions?select=")).length, 1);
+  });
+});
+

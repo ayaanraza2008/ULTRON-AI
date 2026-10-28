@@ -30,3 +30,12 @@ Windows must have an installed compatible English speech-recognition engine and 
 - Wake-word recognition is available only while the companion is running, the Windows session/audio device is available, and the installed speech recognizer works.
 - Automatic startup is off by default and only enabled by an explicit checkbox after microphone consent. It uses the current user's normal Windows Run registry entry and stays visible in the system tray; it does not create a hidden task or service.
 - It does not hide microphone activity, execute arbitrary commands, or perform consequential actions.
+
+
+## Optional approved local actions
+
+An optional, separate checkbox can enable the owner-approved action bridge. It defaults off and requires a dedicated high-entropy `ULTRON_DESKTOP_BRIDGE_TOKEN` configured out of band both on the backend and in the Windows user's environment. The backend also requires `ULTRON_INTEGRATION_OWNER_USER_ID` and the additive `supabase/migrations/20261028160000_desktop_action_bridge.sql` migration in the target test environment. Do not apply this migration to production without separate authorization.
+
+The first safe allowlist can launch Notepad, Calculator, or Explorer without arguments, or return limited system information. By default, each request starts pending approval and requires a separate, exact action-ID approval. An owner may opt into hands-free mode by setting `ULTRON_DESKTOP_AUTONOMY_MODE=allowlisted` on the backend; only the stated allowlist can then be queued without a per-action prompt, and a valid bridge token is still required. Shell commands, arbitrary files, URL launching, screenshots, uploads, and deletion are not supported. External URL launching remains disabled because the browser's eventual network connection is not pinned to a prevalidated DNS answer.
+
+A passing build or deterministic queue test is not proof of a paired Windows device or live database state. Keep the checkbox off until a separately authorized, non-sensitive test environment is ready.

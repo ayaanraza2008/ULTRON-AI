@@ -2,6 +2,8 @@ import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
+import { getPublicApiCatalog } from "./public-apis.js";
+import { getPublicApiDirectoryStats } from "./public-api-directory.js";
 import { safeServiceBase } from "../network-safety.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
@@ -29,6 +31,31 @@ export function buildIntegrationCatalog(env = process.env) {
   const cactusReadiness = getCactusReadiness(env);
 
   return [
+    {
+      id: "public-apis",
+      name: "Public API Directory + Tested Adapters",
+      capability: "Search the full bundled upstream public-apis directory; execute only fixed, tested keyless data adapters for weather, currencies, country metadata, Wikipedia, books, public GitHub metadata, sunrise/sunset, public-domain ebooks, trivia, recent earthquakes, dictionary definitions, and public news search",
+      state: "available",
+      configured: true,
+      mode: "catalog_discovery_plus_fixed_allowlist",
+      requiredEnv: [],
+      apiRoutes: ["agent tool: search_public_api_catalog", "agent tool: public_api_lookup"],
+      directory: getPublicApiDirectoryStats(),
+      services: getPublicApiCatalog().map(item => ({ id: item.id, provider: item.provider, requiresApiKey: item.requiresApiKey })),
+      note: "The directory contains provider listings and authentication labels, not usable API keys. Listings remain unverified and are never called dynamically."
+    },
+    {
+      id: "free-public-data",
+      name: "Keyless Public Data APIs",
+      capability: "Current weather, daily reference currency conversion, dictionary definitions, public-holiday calendars, Wikipedia summaries, and book discovery",
+      state: "available_unverified",
+      configured: true,
+      mode: "fixed_public_https_apis_no_key",
+      requiredEnv: [],
+      optionalEnv: [],
+      apiRoutes: ["agent tool: get_free_public_data"],
+      note: "Uses fixed HTTPS endpoints for Open-Meteo, Frankfurter, Free Dictionary API, Nager.Date, Wikipedia REST API, and Open Library. No API keys are required or stored; weather is non-commercial with attribution, FX is daily reference data, and Open Library is limited to low-volume human-facing discovery."
+    },
     {
       id: "heygem",
       name: "HeyGem Avatar",

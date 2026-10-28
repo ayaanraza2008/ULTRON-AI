@@ -1,5 +1,6 @@
 import { deflateSync } from "node:zlib";
 import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
+import { getPublicBaseUrl } from "../public-base-url.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const MAX_RESPONSE_BYTES = 512 * 1024;
@@ -171,7 +172,7 @@ export async function runVisionProviderSmoke({
           Authorization: "Bearer " + configuration.apiKey,
           Accept: "application/json",
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com",
+          "HTTP-Referer": getPublicBaseUrl(env),
           "X-Title": "ULTRON AI Vision Smoke Test"
         },
         body: JSON.stringify({

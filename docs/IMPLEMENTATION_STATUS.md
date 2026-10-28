@@ -1,9 +1,13 @@
 # Implementation Status
 
 ## Current phase
-Phase 3 — Integrated frontend and backend live verification. The empty-repository audit below is historical. `main` contains the Node/Express API, Supabase-backed auth/chat/preferences/memory/task routes, provider fallback, bounded document extraction, an allowlisted task worker, guarded integration adapters, the cinematic command-center frontend, and private original-file storage routes. Source CI passed on main commit `5811ba00fc78065b33c06f171801c39ad5194aad`, but Render's latest build failed before compilation due to `pipeline_minutes_exhausted`; do not claim that commit is live. The private-document-storage migration was applied to Supabase and its private bucket/RLS/grants were verified read-only. Live model inference, authenticated cross-account isolation, worker execution with a dedicated test user, and authenticated file-storage E2E remain unverified. The Windows companion still needs physical-device pairing and testing.
+
+Backend reliability and controlled autonomy. The public web frontend is intentionally absent from this backend service, and this candidate is not deployed. This integration candidate is based on current `main` and combines the bounded autonomy loop, opt-in restricted code sandbox, owner-scoped Windows action bridge, and retry-safe task enqueue. Follow-on changes add worker claim-attempt fencing, autonomous citation validation, and a centralized verified service origin.
+
+The branch is a non-production integration candidate. Passing source CI is necessary but does not prove live provider inference, account isolation, queue execution, or physical Windows pairing. Both new Supabase migrations remain un-applied and must be validated in a disposable test project first. Do not enable code execution or hands-free desktop actions until their real runtime smoke tests and approvals are complete.
 
 ## Historical foundation and implementation milestones
+
 - Added server-side Node/Express foundation, secure session gate, validated chat route, SSE forwarding, static web UI, responsive styling, and browser-native voice loop.
 - Added environment template, `.gitignore`, Render Blueprint, and six initial API security/provider-contract tests.
 - Added GitHub Actions workflow; latest observed run `39651294713` completed successfully (`npm run check`, `npm test`).
@@ -98,3 +102,23 @@ Use a dedicated test account and verify a real model response, one queued employ
 - Production revision check failed separately: [run 40566570245](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40566570245). Render's deploy for this commit was stopped before compilation by `pipeline_minutes_exhausted`; this revision is not live-verified.
 - Supabase project `opdjfhwepmcprbqojpat` remains `ACTIVE_HEALTHY`. Migration `private_document_storage` is applied at version `20261027185203`; read-only checks confirm private bucket, 5 MiB limit, RLS, and authenticated grants. Real authenticated file E2E is still unverified.
 - Latest code changes improve source-level safety and test coverage; they do not resolve the external blockers for Render build quota, live provider inference, dedicated Auth/RLS E2E accounts, the leaked-password-protection dashboard setting, or physical Windows companion verification.
+
+
+## Unified autonomy implementation checkpoint — 2026-10-28 (PR #317, not merged)
+
+- PR: [#317 — unify autonomous agent, safe execution and desktop capabilities](https://github.com/ayaanraza2008/ULTRON-AI/pull/317). This is a source branch from current `main`; it is ready for review but has **not** been merged or deployed.
+- Bounded interactive tool workflow: up to 3 rounds, 3 tools per round, maximum 9 tool calls per request; tool calls remain allowlisted, de-duplicated, and risk-classified before dispatch.
+- Coding sandbox adapter: owner-only Node.js/Python, default-off, exact current-prompt code only, digest-pinned images must already be cached, network disabled, resource limits applied, and no host-execution fallback. Automated tests use a fake Docker runner; actual Docker execution on the owner PC is unverified.
+- Background task enqueue: optional idempotency key plus request fingerprint and database uniqueness migration prevent duplicate task rows on retries. `20261028123000_agent_task_idempotency.sql` is included in the PR but has **not** been applied to any Supabase project.
+- Windows action bridge: owner-scoped queue for Notepad/Calculator/Explorer with fixed paths and bounded system information. Manual approval is the default; `ULTRON_DESKTOP_AUTONOMY_MODE=allowlisted` can skip the per-action prompt only for the exact allowlist after an owner configures a high-entropy bridge token. The Windows companion must still be opted in and acknowledge results. Migration `20261028160000_desktop_action_bridge.sql` is included but unapplied.
+- Outbound transport guard: `tests/outbound-transport-policy.test.js` enforces use of the shared DNS-pinned transport by audited backend callers, so CI can detect future direct `fetch()` bypasses.
+- Latest unified source CI: [run 40715316508](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40715316508) passed `npm run check`, 614 tests (613 passed, 0 failed, 1 opt-in live Supabase E2E skipped), dependency audits (0 vulnerabilities), and the pinned World Intelligence build.
+- Latest Windows companion build: [run 40715316667](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40715316667) passed restore, compile, its network-destination policy self-test, and standalone x64 publish.
+- Still blocked/unverified: real provider text/vision inference, two-account Auth/RLS tests, queue-to-worker persisted result with a disposable test user, live idempotency/desktop migrations, Docker execution on a real trusted machine, and paired Windows action execution on physical hardware. Deployment and production setting changes remain deferred.
+- Do not treat this PR's automated tests, readiness configuration, or Windows CI build as proof that the latest source is live in Render or that a live account/PC action ran.
+
+## Unified integration candidate — 2026-10-29 (source-only)
+
+The isolated `integration/ultron-unified-20261029` branch composes the guarded autonomy/reliability candidate, a keyless public API directory with ten fixed read-only adapters, the ULTRON CORE living interface/proxy, and the Supabase current-session revocation guard. The public API directory is a discovery index; its entries are not executable adapters and do not contain API credentials. The UI is an explicit separate entrypoint (`npm run start:core-ui`); the backend remains `npm start`.
+
+This is source integration only. The session-revocation SQL migration is committed but **not applied** to Supabase. The candidate is not production-ready until exact-head CI passes, the migration is reviewed on a disposable Supabase project, live account/session isolation is verified, and the model/worker/UI flows are smoke-tested against a staging service. No deployment was performed.

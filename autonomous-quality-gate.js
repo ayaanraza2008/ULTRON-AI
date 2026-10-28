@@ -16,16 +16,57 @@ function isPublicHttpUrl(value) {
   }
 }
 
+function normalizePublicUrl(value) {
+  if (!isPublicHttpUrl(value)) return "";
+  try {
+    return new URL(value).toString();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Extract URL tokens rather than using substring matching. Without tokenization,
+ * a source such as https://example.com/source could be "cited" accidentally by
+ * https://example.com/source.evil or nested inside another URL's query string.
+ */
+function stripMarkdownCode(answer) {
+  // Links inside code samples are not citations. Treat an unterminated fenced
+  // block as code through end-of-report, preferring a review warning to a false pass.
+  // Preserve every character offset so citation-token boundaries still refer
+  // to the same positions in the original answer after code is removed.
+  const replaceVisibleCharacters = block => block.replace(/[^\r\n]/g, " ");
+  return answer
+    .replace(/```[\s\S]*?(?:```|$)/g, replaceVisibleCharacters)
+    .replace(/`[^`\r\n]*`/g, replaceVisibleCharacters);
+}
+
+function extractPublicCitationUrls(answer) {
+  const citations = new Set();
+  const prose = stripMarkdownCode(answer);
+  for (const match of prose.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+    const preceding = answer[match.index - 1] || "";
+    // Do not treat an HTTP URL embedded in a larger URL/identifier as a citation.
+    // Parentheses and square brackets remain valid Markdown link delimiters.
+    if (/[A-Za-z0-9._~:/?#@!$&'*;,+%=-]/.test(preceding)) continue;
+    const candidate = match[0].replace(/[.,;:!?)}\]]+$/g, "");
+    const normalized = normalizePublicUrl(candidate);
+    if (normalized) citations.add(normalized);
+  }
+  return citations;
+}
+
 export function verifyAutonomousOutput({ research, report } = {}) {
   const answer = typeof report?.answer === "string" ? report.answer.trim() : "";
   const rawSources = Array.isArray(research?.sources) ? research.sources : [];
   const sources = rawSources.filter(source => isPublicHttpUrl(source?.url));
-  const citedSource = sources.find(source => answer.includes(source.url));
+  const citedUrls = extractPublicCitationUrls(answer);
+  const citedSource = sources.find(source => citedUrls.has(normalizePublicUrl(source.url)));
   const checks = [
     { id: "report_nonempty", passed: answer.length >= 80, detail: answer.length >= 80 ? "A substantive report was produced." : "Report is empty or unusually short." },
     { id: "research_available", passed: Boolean(research), detail: research ? "Research stage returned a result." : "Research was skipped; claims are not supported by live research in this run." },
     { id: "sources_available", passed: sources.length > 0, detail: sources.length ? sources.length + " source record(s) with public HTTP(S) URLs are available." : "No usable public HTTP(S) source records are available." },
-    { id: "citations_traceable", passed: Boolean(citedSource), detail: citedSource ? "At least one public source URL appears in the report." : "The report does not visibly cite a usable supplied source URL." }
+    { id: "citations_traceable", passed: Boolean(citedSource), detail: citedSource ? "At least one exact public source URL appears as a citation in the report." : "The report does not visibly cite an exact usable supplied source URL." }
   ];
   return {
     state: checks.every(check => check.passed) ? "passed" : "needs_review",

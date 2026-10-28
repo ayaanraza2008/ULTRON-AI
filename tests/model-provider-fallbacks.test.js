@@ -20,6 +20,7 @@ async function withServer(env, fetchImpl, run) {
 
 test("agent model routing falls back after rate limiting and keeps credentials server-side", async () => {
   const calls = [];
+  let primaryErrorBodyCancelled = false;
   const env = {
     OPENROUTER_API_KEY: "primary-test-secret",
     OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
@@ -31,7 +32,14 @@ test("agent model routing falls back after rate limiting and keeps credentials s
   };
   await withServer(env, async (url, options) => {
     calls.push({ url, authorization: options.headers.Authorization });
-    if (url.startsWith("https://openrouter.ai/")) return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+    if (url.startsWith("https://openrouter.ai/")) {
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ error: { message: "rate limited" } })));
+        },
+        cancel() { primaryErrorBodyCancelled = true; }
+      }), { status: 429 });
+    }
     assert.equal(url, "https://api.groq.com/openai/v1/chat/completions");
     return new Response(JSON.stringify({ model: "llama-3.3-70b-versatile", choices: [{ message: { role: "assistant", content: "Completed through fallback." } }] }), { status: 200 });
   }, async base => {
@@ -42,6 +50,7 @@ test("agent model routing falls back after rate limiting and keeps credentials s
     });
     assert.equal(response.status, 200);
     assert.match((await response.text()), /Completed through fallback/);
+    assert.equal(primaryErrorBodyCancelled, true, "unused error response stream must be cancelled before fallback");
     assert.deepEqual(calls.map(call => call.url), [
       "https://openrouter.ai/api/v1/chat/completions",
       "https://api.groq.com/openai/v1/chat/completions"
