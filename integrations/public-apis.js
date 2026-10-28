@@ -100,6 +100,38 @@ const PUBLIC_API_CATALOG = Object.freeze([
     requiresApiKey: false,
     capabilities: ["recent news articles", "titles", "source domains", "publication-seen time", "article links"],
     terms: "News coverage is not exhaustive. Verify important claims against the linked publisher source."
+  },
+  {
+    id: "air_quality",
+    name: "Air quality and pollution indicators",
+    provider: "Open-Meteo Air Quality",
+    requiresApiKey: false,
+    capabilities: ["estimated air quality index", "PM2.5", "PM10", "ozone", "nitrogen dioxide", "sulphur dioxide", "carbon monoxide"],
+    terms: "Free for non-commercial use; attribute Open-Meteo under CC BY 4.0. Values are model estimates and provider limits apply."
+  },
+  {
+    id: "holidays",
+    name: "Public holidays by country and year",
+    provider: "Nager.Date",
+    requiresApiKey: false,
+    capabilities: ["public holiday dates", "local holiday names", "country holiday calendars", "global and regional holiday flags"],
+    terms: "Public read-only holiday API; validate the selected country and year. Coverage varies by country."
+  },
+  {
+    id: "research_papers",
+    name: "Scholarly work search",
+    provider: "OpenAlex",
+    requiresApiKey: false,
+    capabilities: ["research paper search", "authors", "publication year", "DOI", "open access links", "citation counts"],
+    terms: "OpenAlex metadata is CC0. Search results are discovery aids; verify papers and claims from their original publications."
+  },
+  {
+    id: "museum_art",
+    name: "Metropolitan Museum public collection",
+    provider: "The Metropolitan Museum of Art",
+    requiresApiKey: false,
+    capabilities: ["artwork search", "artist", "date", "medium", "culture", "public-domain status", "image link"],
+    terms: "Use the Met collection API terms and respect artwork-specific rights and public-domain status."
   }
 ]);
 
@@ -190,7 +222,11 @@ function sourceRecord(id, extra = {}) {
       trivia: "https://opentdb.com/api_config.php",
       earthquakes: "https://earthquake.usgs.gov/data/software/",
       dictionary: "https://freedictionaryapi.com/",
-      news: "https://api.gdeltproject.org/api/v2/doc/doc"
+      news: "https://api.gdeltproject.org/api/v2/doc/doc",
+      air_quality: "https://open-meteo.com/en/docs/air-quality-api",
+      holidays: "https://date.nager.at/",
+      research_papers: "https://help.openalex.org/api/",
+      museum_art: "https://metmuseum.github.io/"
     }[id],
     attribution: service.terms,
     ...extra
@@ -206,7 +242,7 @@ export function getPublicApiCatalog() {
 export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch } = {}) {
   const service = boundedQuery(args.service, 40);
   if (!PUBLIC_API_CATALOG.some(item => item.id === service)) {
-    throw apiError("PUBLIC_API_SERVICE_UNSUPPORTED", "Choose a supported public API service: weather, currency, country, wikipedia, books, or github_repo.", 400);
+    throw apiError("PUBLIC_API_SERVICE_UNSUPPORTED", "Choose a supported service from ULTRON's fixed keyless public API catalog.", 400);
   }
 
   if (service === "weather") {
@@ -240,6 +276,41 @@ export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch }
       current: forecast?.current && typeof forecast.current === "object" ? forecast.current : {},
       units: forecast?.current_units && typeof forecast.current_units === "object" ? forecast.current_units : {},
       observedAt: boundedQuery(forecast?.current?.time, 50) || undefined
+    });
+  }
+
+  if (service === "air_quality") {
+    const query = boundedQuery(args.query);
+    if (query.length < 2) throw apiError("PUBLIC_API_QUERY_REQUIRED", "Provide a city, town, or place name for the air-quality lookup.", 400);
+    const geocodeUrl = new URL("https://geocoding-api.open-meteo.com/v1/search");
+    geocodeUrl.search = new URLSearchParams({ name: query, count: "1", language: "en", format: "json" }).toString();
+    const geocoded = await requestJson(fetchImpl, geocodeUrl.toString());
+    const place = Array.isArray(geocoded?.results) ? geocoded.results[0] : null;
+    if (!place || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))) {
+      throw apiError("PUBLIC_API_NOT_FOUND", "No matching place was found for the air-quality lookup.", 404);
+    }
+    const url = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
+    url.search = new URLSearchParams({
+      latitude: String(place.latitude),
+      longitude: String(place.longitude),
+      current: "us_aqi,european_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone",
+      timezone: "auto",
+      forecast_days: "1"
+    }).toString();
+    const data = await requestJson(fetchImpl, url.toString());
+    return sourceRecord(service, {
+      location: {
+        name: boundedQuery(place.name, 120),
+        region: boundedQuery(place.admin1, 120) || undefined,
+        country: boundedQuery(place.country, 120) || undefined,
+        latitude: Number(place.latitude),
+        longitude: Number(place.longitude),
+        timezone: boundedQuery(data?.timezone, 80) || undefined
+      },
+      current: data?.current && typeof data.current === "object" ? data.current : {},
+      units: data?.current_units && typeof data.current_units === "object" ? data.current_units : {},
+      observedAt: boundedQuery(data?.current?.time, 50) || undefined,
+      notice: "Air-quality values are grid-model estimates, not a street-level sensor reading."
     });
   }
 
@@ -539,6 +610,97 @@ export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch }
       wiktionarySourceUrl: originalUrl,
       contentLicense: license,
       attribution: "Dictionary data sourced from Wiktionary (CC BY-SA 4.0), via FreeDictionaryAPI.com"
+    });
+  }
+
+  if (service === "holidays") {
+    const countryCode = boundedQuery(args.countryCode, 2).toUpperCase();
+    const year = args.year === undefined ? new Date().getUTCFullYear() : Number(args.year);
+    if (!/^[A-Z]{2}$/.test(countryCode)) {
+      throw apiError("PUBLIC_API_COUNTRY_CODE_INVALID", "Provide a two-letter ISO country code, such as IN, US, or GB.", 400);
+    }
+    if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+      throw apiError("PUBLIC_API_YEAR_INVALID", "Holiday calendar year must be an integer from 1900 to 2100.", 400);
+    }
+    const url = "https://date.nager.at/api/v3/PublicHolidays/" + String(year) + "/" + countryCode;
+    const data = await requestJson(fetchImpl, url);
+    const holidays = (Array.isArray(data) ? data : []).slice(0, 60).map(item => ({
+      date: boundedQuery(item?.date, 10),
+      localName: boundedQuery(item?.localName, 160),
+      name: boundedQuery(item?.name, 160),
+      countryCode: boundedQuery(item?.countryCode, 2).toUpperCase() || countryCode,
+      fixed: typeof item?.fixed === "boolean" ? item.fixed : undefined,
+      global: typeof item?.global === "boolean" ? item.global : undefined,
+      counties: Array.isArray(item?.counties) ? item.counties.slice(0, 20).map(county => boundedQuery(county, 20)) : [],
+      types: Array.isArray(item?.types) ? item.types.slice(0, 10).map(type => boundedQuery(type, 40)) : []
+    })).filter(item => /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.name);
+    return sourceRecord(service, { year, countryCode, count: holidays.length, holidays });
+  }
+
+  if (service === "research_papers") {
+    const query = boundedQuery(args.query, 180);
+    if (query.length < 3) throw apiError("PUBLIC_API_QUERY_REQUIRED", "Provide a topic or title with at least three characters to search scholarly works.", 400);
+    const url = new URL("https://api.openalex.org/works");
+    url.search = new URLSearchParams({
+      search: query,
+      "per-page": "5",
+      select: "id,doi,title,publication_year,type,cited_by_count,authorships,open_access,primary_location"
+    }).toString();
+    const data = await requestJson(fetchImpl, url.toString());
+    const results = (Array.isArray(data?.results) ? data.results : []).slice(0, 5).map(work => {
+      const openAlexUrl = typeof work?.id === "string" && /^https:\/\/openalex\.org\/W[A-Z0-9]+$/i.test(work.id) ? work.id : undefined;
+      const doiUrl = typeof work?.doi === "string" && /^https:\/\/doi\.org\//i.test(work.doi) ? work.doi : undefined;
+      const primary = work?.primary_location;
+      const landingPage = typeof primary?.landing_page_url === "string" && primary.landing_page_url.startsWith("https://") ? primary.landing_page_url : undefined;
+      const oaUrl = typeof work?.open_access?.oa_url === "string" && work.open_access.oa_url.startsWith("https://") ? work.open_access.oa_url : undefined;
+      return {
+        title: boundedQuery(work?.title, 400),
+        year: Number.isInteger(work?.publication_year) ? work.publication_year : undefined,
+        type: boundedQuery(work?.type, 60) || undefined,
+        authors: Array.isArray(work?.authorships) ? work.authorships.slice(0, 5).map(item => boundedQuery(item?.author?.display_name, 120)).filter(Boolean) : [],
+        citedByCount: Number.isFinite(Number(work?.cited_by_count)) ? Number(work.cited_by_count) : undefined,
+        doi: doiUrl,
+        openAlexUrl,
+        landingPageUrl: landingPage,
+        openAccess: typeof work?.open_access?.is_oa === "boolean" ? work.open_access.is_oa : undefined,
+        openAccessUrl: oaUrl
+      };
+    }).filter(work => work.title);
+    return sourceRecord(service, { query, count: results.length, results, notice: "Search metadata is not peer review by itself; check the original publisher or repository record." });
+  }
+
+  if (service === "museum_art") {
+    const query = boundedQuery(args.query, 160);
+    if (query.length < 2) throw apiError("PUBLIC_API_QUERY_REQUIRED", "Provide an artwork, artist, subject, or object type to search the Met collection.", 400);
+    const searchUrl = new URL("https://collectionapi.metmuseum.org/public/collection/v1.1/search");
+    searchUrl.search = new URLSearchParams({ q: query, limit: "3" }).toString();
+    const search = await requestJson(fetchImpl, searchUrl.toString());
+    const ids = Array.isArray(search?.objectIDs) ? search.objectIDs.slice(0, 3).filter(id => Number.isInteger(id) && id > 0) : [];
+    const objects = await Promise.all(ids.map(async objectId => {
+      const url = "https://collectionapi.metmuseum.org/public/collection/v1/objects/" + String(objectId);
+      const item = await requestJson(fetchImpl, url).catch(() => null);
+      if (!item || typeof item !== "object") return null;
+      const image = typeof item.primaryImageSmall === "string" && item.primaryImageSmall.startsWith("https://images.metmuseum.org/") ? item.primaryImageSmall : undefined;
+      const objectUrl = typeof item.objectURL === "string" && item.objectURL.startsWith("https://www.metmuseum.org/art/collection/search/") ? item.objectURL : undefined;
+      return {
+        objectId,
+        title: boundedQuery(item.title, 300) || undefined,
+        artist: boundedQuery(item.artistDisplayName, 160) || undefined,
+        date: boundedQuery(item.objectDate, 80) || undefined,
+        medium: boundedQuery(item.medium, 200) || undefined,
+        culture: boundedQuery(item.culture, 120) || undefined,
+        department: boundedQuery(item.department, 100) || undefined,
+        isPublicDomain: typeof item.isPublicDomain === "boolean" ? item.isPublicDomain : undefined,
+        imageUrl: image,
+        objectUrl
+      };
+    }));
+    const results = objects.filter(Boolean);
+    return sourceRecord(service, {
+      query,
+      totalMatches: Number.isInteger(search?.total) && search.total >= 0 ? search.total : ids.length,
+      count: results.length,
+      results
     });
   }
 
