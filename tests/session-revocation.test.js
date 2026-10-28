@@ -59,21 +59,29 @@ test("protected data routes check the signed session against the session registr
 });
 
 test("revoked sessions and unavailable session registry fail closed before user data reads", async () => {
-  for (const rpcResponse of [
-    okBoolean(false),
-    new Response(JSON.stringify({ message: "RPC unavailable" }), { status: 503 })
-  ]) {
+  for (const rpcState of ["inactive", "unavailable"]) {
     const dataReads = [];
     await withServer(async url => {
       if (url.endsWith("/auth/v1/user")) return userResponse();
-      if (url.endsWith("/rest/v1/rpc/ultron_is_current_session_active")) return rpcResponse.clone();
+      if (url.endsWith("/rest/v1/rpc/ultron_is_current_session_active")) {
+        // Construct a fresh Response per request. Cloning a shared streamed
+        // 503 Response leaves the original tee branch unconsumed and can hang
+        // cancellation in the production fail-closed path.
+        if (rpcState === "unavailable") {
+          return new Response(JSON.stringify({ message: "RPC unavailable" }), { status: 503 });
+        }
+        return okBoolean(false);
+      }
       if (url.includes("/rest/v1/conversations?")) {
         dataReads.push(url);
         return emptyRows();
       }
       throw new Error("Unexpected request: " + url);
     }, async base => {
-      const response = await fetch(base + "/api/conversations", { headers: { Cookie: authCookie } });
+      const response = await fetch(base + "/api/conversations", {
+        headers: { Cookie: authCookie },
+        signal: AbortSignal.timeout(5_000)
+      });
       assert.equal(response.status, 401);
       assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
       assert.deepEqual(dataReads, []);
