@@ -2,6 +2,7 @@ import { getObscuraReadiness } from "./obscura-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
+import { getPublicApiCatalog } from "./public-apis.js";
 import { safeServiceBase } from "../network-safety.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
@@ -29,6 +30,18 @@ export function buildIntegrationCatalog(env = process.env) {
   const cactusReadiness = getCactusReadiness(env);
 
   return [
+    {
+      id: "public-apis",
+      name: "Keyless Public API Catalog",
+      capability: "Fixed allowlist of read-only public data lookups for weather, currency, country facts, Wikipedia, books, and public GitHub repository metadata",
+      state: "available",
+      configured: true,
+      mode: "fixed_allowlist_public_read_only",
+      requiredEnv: [],
+      apiRoutes: ["agent tool: public_api_lookup"],
+      services: getPublicApiCatalog().map(item => ({ id: item.id, provider: item.provider, requiresApiKey: item.requiresApiKey })),
+      note: "This registry contains API endpoints, not provider credentials. Providers can rate-limit, change terms, or become unavailable; all returned data is untrusted reference material."
+    },
     {
       id: "heygem",
       name: "HeyGem Avatar",
