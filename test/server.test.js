@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { createApp } from "../server.js";
+import { createApp, isPrivilegedSupabaseOperationAllowed } from "../server.js";
 
 async function withServer(app, fn) {
   const server = createServer(app);
@@ -1018,3 +1018,30 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(providerCalls, 0);
   });
 });
+
+test("server-role database policy allows only the desktop queue's required operations", () => {
+  for (const [table, method] of [
+    ["desktop_actions", "GET"],
+    ["desktop_actions", "POST"],
+    ["desktop_actions", "PATCH"],
+    ["rpc/ultron_claim_next_desktop_action", "POST"],
+    ["rpc/ultron_ack_desktop_action", "POST"],
+    ["agent_tasks", "PATCH"],
+    ["audit_events", "POST"]
+  ]) {
+    assert.equal(isPrivilegedSupabaseOperationAllowed(table, method), true, table + " " + method);
+  }
+
+  for (const [table, method] of [
+    ["desktop_actions", "DELETE"],
+    ["desktop_actions", "PUT"],
+    ["rpc/ultron_claim_next_desktop_action", "GET"],
+    ["rpc/arbitrary_function", "POST"],
+    ["users", "GET"],
+    ["agent_tasks", "DELETE"],
+    ["audit_events", "PATCH"]
+  ]) {
+    assert.equal(isPrivilegedSupabaseOperationAllowed(table, method), false, table + " " + method);
+  }
+});
+
