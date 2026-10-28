@@ -116,3 +116,9 @@ Use a dedicated test account and verify a real model response, one queued employ
 - Latest Windows companion build: [run 40715316667](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40715316667) passed restore, compile, its network-destination policy self-test, and standalone x64 publish.
 - Still blocked/unverified: real provider text/vision inference, two-account Auth/RLS tests, queue-to-worker persisted result with a disposable test user, live idempotency/desktop migrations, Docker execution on a real trusted machine, and paired Windows action execution on physical hardware. Deployment and production setting changes remain deferred.
 - Do not treat this PR's automated tests, readiness configuration, or Windows CI build as proof that the latest source is live in Render or that a live account/PC action ran.
+
+## Unified integration candidate — 2026-10-29 (source-only)
+
+The isolated `integration/ultron-unified-20261029` branch composes the guarded autonomy/reliability candidate, a keyless public API directory with ten fixed read-only adapters, the ULTRON CORE living interface/proxy, and the Supabase current-session revocation guard. The public API directory is a discovery index; its entries are not executable adapters and do not contain API credentials. The UI is an explicit separate entrypoint (`npm run start:core-ui`); the backend remains `npm start`.
+
+This is source integration only. The session-revocation SQL migration is committed but **not applied** to Supabase. The candidate is not production-ready until exact-head CI passes, the migration is reviewed on a disposable Supabase project, live account/session isolation is verified, and the model/worker/UI flows are smoke-tested against a staging service. No deployment was performed.
