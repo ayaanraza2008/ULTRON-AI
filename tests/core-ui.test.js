@@ -43,7 +43,7 @@ test("tasks render transient holographic panels with real sources and completion
   assert.match(app, /function openTaskPanel/);
   assert.match(app, /function markTaskComplete/);
   assert.match(app, /function schedulePanelHide/);
-  assert.match(app, /apiRequest\("/api\/research"/);
+  assert.ok(app.includes('apiRequest("/api/research"'));
   assert.match(app, /safeUrl\.protocol !== "https:"/);
   assert.match(css, /\.holo-panel\[hidden\]/);
 });
