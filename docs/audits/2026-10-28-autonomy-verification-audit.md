@@ -67,6 +67,8 @@ The connected Supabase account exposes one active project named \`ULTRON-AI\` in
 - The Supabase security advisor returned \`auth_leaked_password_protection\` at warning level: leaked-password protection is disabled. Enable it through the project owner's Auth password-security settings after confirming the project and checking the expected user impact. This audit did not alter that setting.
 - The performance advisor reported three unused indexes: \`memory_items_expiry_idx\`, \`agent_tasks_user_created_idx\`, and \`documents_user_created_idx\`. This is informational on a low-traffic project, not justification for dropping indexes without workload evidence.
 
+- Supabase `get_cost` for creating a project in organization `Ayaan` returned a monthly amount of `0`. No project was created: provisioned resources remain an owner-confirmed action, and the only currently visible project has not been designated as a disposable test target.
+
 ### Safe next steps for the owner
 
 1. Identify or create a dedicated non-production Supabase test environment only after confirming its quoted cost is ₹0. Do not use the only visible project for opt-in write/E2E tests unless the owner explicitly designates it as the test target.
