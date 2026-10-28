@@ -24,7 +24,7 @@ internal static class Program
 
 internal sealed class CompanionContext : ApplicationContext
 {
-    private const string AssistantUrl = "https://ultron-ai-core.onrender.com/";
+    private const string AssistantUrl = "https://ultron-ai-core.onrender.com/api/health";
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupRegistryValue = "ULTRONWakeCompanion";
     private readonly Form _window;
@@ -109,7 +109,7 @@ internal sealed class CompanionContext : ApplicationContext
         };
         _startButton = new Button { Text = "Start wake word", AutoSize = true };
         _stopButton = new Button { Text = "Pause listening", AutoSize = true, Enabled = false };
-        var openButton = new Button { Text = "Open ULTRON", AutoSize = true };
+        var openButton = new Button { Text = "Open ULTRON Core status", AutoSize = true };
         _startButton.Click += (_, _) => StartListening();
         _stopButton.Click += (_, _) => StopListening();
         openButton.Click += (_, _) => OpenAssistant();

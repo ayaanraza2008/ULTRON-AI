@@ -18,7 +18,8 @@ test("Windows actions use absolute system paths instead of shell/PATH resolution
 });
 
 
-test("Windows companion opens the current ULTRON Core service origin", () => {
-  assert.match(program, /AssistantUrl\s*=\s*"https:\/\/ultron-ai-core\.onrender\.com\/"/);
-  assert.doesNotMatch(program, /ultron-ai-zvd7\.onrender\.com/);
+test("Windows companion status button opens the Core health endpoint while the frontend is absent", () => {
+  assert.ok(program.includes('private const string AssistantUrl = "https://ultron-ai-core.onrender.com/api/health";'));
+  assert.ok(program.includes('Text = "Open ULTRON Core status"'));
+  assert.ok(!program.includes("ultron-ai-zvd7.onrender.com"));
 });
