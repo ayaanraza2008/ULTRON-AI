@@ -46,7 +46,7 @@ export function hasExplicitSandboxAuthorization(prompt, source, lang) {
   // Contradictory language before the code fence invalidates authorization.
   // Inspect instruction prose only, not the code, which may contain these words.
   const instructionText = p.split(String.fromCharCode(96).repeat(3), 1)[0];
-  if (/\\b(?:don['’]t|do not|never|must not|should not|not to)\\s+(?:(?:actually|really|ever)\\s+)*(?:run|execute|test)\\b/i.test(instructionText)) return false;
+  if (/\b(?:don['’]t|do not|never|must not|should not|not to)\s+(?:(?:actually|really|ever)\s+)*(?:run|execute|test)\b/i.test(instructionText)) return false;
   const provided = extractUserCode(p, lang);
   return provided !== null && provided === source.trim();
 }
