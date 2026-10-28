@@ -134,3 +134,95 @@ test("deterministic routing recognizes common weather, exchange-rate, country, b
   assert.deepEqual(inferPublicApiRequest("check github repo openai/openai"), { service: "github_repo", query: "openai/openai" });
   assert.equal(inferPublicApiRequest("Integrate a weather API into ULTRON"), null);
 });
+
+
+test("sunrise/sunset lookup uses geocoding plus the documented v2 solar endpoint", async () => {
+  const calls = [];
+  const result = await lookupPublicApi({ service: "sunrise_sunset", query: "Agra", date: "2026-10-29" }, {
+    fetchImpl: async url => {
+      calls.push(String(url));
+      if (String(url).startsWith("https://geocoding-api.open-meteo.com/")) {
+        return jsonResponse({ results: [{ name: "Agra", country: "India", admin1: "Uttar Pradesh", latitude: 27.1767, longitude: 78.0081 }] });
+      }
+      assert.match(String(url), /^https:\/\/api\.sunrise-sunset\.org\/v2\?/);
+      assert.match(String(url), /date=2026-10-29/);
+      return jsonResponse({ status: "OK", date: "2026-10-29", tzid: "Asia/Kolkata", sunrise: "2026-10-29T06:20:00+05:30", sunset: "2026-10-29T17:45:00+05:30", day_length: 41100, moon_phase: "Waxing Crescent" });
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(result.location.name, "Agra");
+  assert.match(result.sunrise, /06:20:00/);
+  assert.equal(result.dayLengthSeconds, 41100);
+  assert.equal(result.attribution, "Sun data by Sunrise-Sunset.org");
+});
+
+test("Gutendex search returns bounded ebook metadata and only trusted download hosts", async () => {
+  const result = await lookupPublicApi({ service: "ebooks", query: "Frankenstein" }, {
+    fetchImpl: async url => {
+      assert.match(String(url), /^https:\/\/gutendex\.com\/books\/\?search=Frankenstein$/);
+      return jsonResponse({ count: 1, results: [{
+        id: 84, title: "Frankenstein; Or, The Modern Prometheus",
+        authors: [{ name: "Mary Wollstonecraft Shelley", birth_year: 1797, death_year: 1851 }],
+        languages: ["en"], subjects: ["Science fiction", "Gothic fiction"],
+        download_count: 12345, copyright: false,
+        formats: { "text/html": "https://www.gutenberg.org/ebooks/84.html.images", "application/zip": "https://bad.example/file.zip" }
+      }] });
+    }
+  });
+  assert.equal(result.results[0].title, "Frankenstein; Or, The Modern Prometheus");
+  assert.equal(result.results[0].authors[0].name, "Mary Wollstonecraft Shelley");
+  assert.equal(result.results[0].downloadUrl, "https://www.gutenberg.org/ebooks/84.html.images");
+  assert.equal(result.results[0].copyright, false);
+});
+
+test("Open Trivia DB validates request bounds, decodes base64 text, and respects rate limits", async () => {
+  const encode = value => Buffer.from(value, "utf8").toString("base64");
+  let requestUrl = "";
+  const result = await lookupPublicApi({ service: "trivia", amount: 2, categoryId: 18, difficulty: "easy" }, {
+    fetchImpl: async url => {
+      requestUrl = String(url);
+      return jsonResponse({ response_code: 0, results: [{
+        category: encode("Science: Computers"), type: "multiple", difficulty: "easy",
+        question: encode("What does CPU stand for?"), correct_answer: encode("Central Processing Unit"),
+        incorrect_answers: [encode("Computer Personal Unit"), encode("Central Program Utility")]
+      }] });
+    }
+  });
+  assert.match(requestUrl, /^https:\/\/opentdb\.com\/api\.php\?/);
+  assert.match(requestUrl, /category=18/);
+  assert.match(requestUrl, /difficulty=easy/);
+  assert.equal(result.results[0].question, "What does CPU stand for?");
+  assert.equal(result.results[0].correctAnswer, "Central Processing Unit");
+  await assert.rejects(() => lookupPublicApi({ service: "trivia", amount: 50 }, {
+    fetchImpl: async () => { throw new Error("must validate before networking"); }
+  }), error => error.code === "PUBLIC_API_AMOUNT_INVALID");
+  await assert.rejects(() => lookupPublicApi({ service: "trivia" }, {
+    fetchImpl: async () => jsonResponse({ response_code: 5 })
+  }), error => error.code === "PUBLIC_API_RATE_LIMITED");
+});
+
+test("USGS earthquake feed returns normalized recent events filtered by magnitude", async () => {
+  const result = await lookupPublicApi({ service: "earthquakes", period: "day", minMagnitude: 4 }, {
+    fetchImpl: async url => {
+      assert.equal(String(url), "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson");
+      return jsonResponse({ features: [
+        { id: "event-1", properties: { mag: 4.8, place: "10 km NE of Sample Town", time: 1793250000000, updated: 1793250100000, url: "https://earthquake.usgs.gov/earthquakes/eventpage/event-1" }, geometry: { coordinates: [78.1, 27.2, 12.4] } },
+        { id: "event-2", properties: { mag: 2.1, place: "Small tremor", time: 1793250000000 }, geometry: { coordinates: [1, 2, 3] } }
+      ] });
+    }
+  });
+  assert.equal(result.totalInFeed, 2);
+  assert.equal(result.matchingEvents, 1);
+  assert.equal(result.events[0].magnitude, 4.8);
+  assert.equal(result.events[0].depthKm, 12.4);
+  assert.match(result.events[0].url, /^https:\/\/earthquake\.usgs\.gov\//);
+});
+
+test("deterministic routing recognizes solar times, ebook search, trivia and earthquake requests", () => {
+  assert.deepEqual(inferPublicApiRequest("When is sunrise in Agra tomorrow?"), { service: "sunrise_sunset", query: "Agra", date: "tomorrow" });
+  const ebook = inferPublicApiRequest("Find ebooks about Frankenstein on Project Gutenberg");
+  assert.equal(ebook.service, "ebooks");
+  assert.match(ebook.query, /Frankenstein/i);
+  assert.deepEqual(inferPublicApiRequest("Give me 5 easy science trivia questions"), { service: "trivia", amount: 5, categoryId: 17, difficulty: "easy" });
+  assert.deepEqual(inferPublicApiRequest("Show earthquakes in the last hour above 4"), { service: "earthquakes", period: "hour", minMagnitude: 4 });
+});
