@@ -1565,9 +1565,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
     try {
       const openRouterCandidates = hasImageAttachments
-        // Keep backward compatibility: when no dedicated vision list is configured,
-        // try the explicitly selected/allowed model, as older ULTRON deployments did.
-        ? [...new Set(visionModels.length ? visionModels : [selectedModel, ...configuredModels].filter(Boolean))]
+        // Never infer visual capability from an ordinary/free text model ID.
+        // Only operator-configured vision models may receive image attachments.
+        ? [...new Set(visionModels)]
         : [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelAttempts = [];
       for (const provider of chatProviders) {
