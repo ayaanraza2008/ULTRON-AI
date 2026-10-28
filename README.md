@@ -174,3 +174,8 @@ The `feature/ultron-live-core-interface-20261029` branch contains a standalone c
 - Deploy this branch as `node core-ui-proxy.mjs` in the **Ultron core** Render workspace only. Do not merge this branch into `main` for the workspace-limited rollout, because other Render services in the separate My Workspace also auto-deploy from `main`.
 
 The 20,000-point GPU path requires a browser with WebGL 2. Voice recognition and speech synthesis depend on browser support and microphone permission. The interface falls back to a lighter particle field if WebGL 2 is unavailable; this fallback is not the 20,000-point GPU renderer.
+
+
+### Scoped system-control request panel
+
+The living interface includes a **Full system control** drawer entry. It checks the backend's Windows companion readiness, lists separately selectable permission scopes, and prepares a policy request that is explicitly not an active grant. The button cannot start a device-control session unless scope selections and companion configuration are present. Even then, the current backend Windows companion adapter is read-only status-only; no keyboard/mouse, file-write, app-launch, arbitrary shell, or system-control handler is implemented. Do not present this as a full takeover. Implement and verify a local companion with owner pairing, least-privilege scopes, visible activity indicator, expiry, audit, and revoke/stop controls before enabling actions.
