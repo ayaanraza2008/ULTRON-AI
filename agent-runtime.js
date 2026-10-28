@@ -1484,8 +1484,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           contextMessages.push(...await executeToolBatch(roundCalls, roundAssistantMessage, round + 1));
           const finalRound = round === maxToolRounds - 1;
           const roundGuidance = finalRound
-            ? "The bounded tool budget is exhausted. Do not request or claim additional tool execution. Summarize verified results from all rounds, cite source URLs where available, and state blockers plainly."
-            : "Inspect all results so far. If the request is not yet satisfied, call only the next necessary allowlisted tool(s), at most three this round. Do not repeat identical calls. Use another tool only for a useful, safe next step; otherwise provide the final answer. Cite source URLs where research results exist. Plans and code are drafts, not external execution.";
+            ? "Summarize the tool results accurately. The bounded tool budget is exhausted, so do not request or claim additional tool execution. Cite source URLs where available and state blockers plainly."
+            : "Summarize the tool results accurately. Cite source URLs where research results exist and state blockers plainly. If the request is not yet satisfied, call only the next necessary allowlisted tool(s), at most three this round. Do not repeat identical calls. Use another tool only for a useful, safe next step; otherwise provide the final answer. Plans and code are drafts, not external execution.";
 
           let next;
           try {
