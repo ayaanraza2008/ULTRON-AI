@@ -106,7 +106,7 @@ function forwardResponseHeaders(upstream, res) {
   }
 }
 
-export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, retryDelayMs = 1200 } = {}) {
+export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gatewayRetryDelaysMs = [1500, 2500, 4000, 6000, 8000, 10000, 12000] } = {}) {
   return createServer(async (req, res) => {
     let requestUrl;
     try {
@@ -166,23 +166,49 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, ret
         return contentType.includes("application/json") || contentType.includes("+json");
       };
 
-      // Render's gateway can return an HTML 502/503 while the free backend is
-      // starting. Retry only that non-JSON gateway response; never retry a
+      // Render's free instances can take about a minute to resume after idle.
+      // Retry only non-JSON gateway 502/503s, with bounded backoff. Never retry a
       // structured API error, because a POST may already have reached the app.
+      const retryDelays = Array.isArray(gatewayRetryDelaysMs)
+        ? gatewayRetryDelaysMs.slice(0, 8).map(value => Number.isFinite(Number(value))
+          ? Math.min(12000, Math.max(0, Number(value)))
+          : 0)
+        : [1500, 2500, 4000, 6000, 8000, 10000, 12000];
+      let gatewayRetries = 0;
       if ([502, 503].includes(upstream.status) && !isJsonResponse(upstream)) {
-        const firstStatus = upstream.status;
-        const firstContentType = upstream.headers.get("content-type") || "unknown";
         logger.warn?.("ULTRON upstream returned a non-JSON gateway response", {
-          status: firstStatus,
-          contentType: String(firstContentType).slice(0, 100)
+          status: upstream.status,
+          contentType: String(upstream.headers.get("content-type") || "unknown").slice(0, 100)
         });
-        try { await upstream.body?.cancel?.(); } catch {}
-        if (!controller.signal.aborted) {
-          const waitMs = Number.isFinite(Number(retryDelayMs))
-            ? Math.min(5000, Math.max(0, Number(retryDelayMs)))
-            : 1200;
+        while (gatewayRetries < retryDelays.length && !controller.signal.aborted &&
+          [502, 503].includes(upstream.status) && !isJsonResponse(upstream)) {
+          try { await upstream.body?.cancel?.(); } catch {}
+          const waitMs = retryDelays[gatewayRetries];
+          gatewayRetries += 1;
           if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
-          upstream = await fetchImpl(target, forwardOptions);
+          if (controller.signal.aborted) break;
+          try {
+            upstream = await fetchImpl(target, forwardOptions);
+          } catch (retryError) {
+            logger.warn?.("ULTRON gateway retry could not connect", {
+              retry: gatewayRetries,
+              name: retryError?.name || "Error"
+            });
+            if (gatewayRetries >= retryDelays.length) {
+              sendJson(res, 502, {
+                error: {
+                  code: "CORE_BACKEND_UNAVAILABLE",
+                  message: "ULTRON Core could not reconnect after " + gatewayRetries + " retries. Its free service may still be waking up. Please retry shortly."
+                }
+              });
+              return;
+            }
+            // Continue bounded retries for a transient transport failure following a gateway error.
+            upstream = new Response("<html>Upstream connection unavailable</html>", {
+              status: 502,
+              headers: { "Content-Type": "text/html; charset=utf-8" }
+            });
+          }
         }
       }
 
@@ -192,7 +218,7 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, ret
         sendJson(res, status, {
           error: {
             code: status === 502 ? "CORE_GATEWAY_502" : "CORE_BACKEND_UNAVAILABLE",
-            message: "ULTRON Core returned an upstream " + status + " gateway response after one retry. The backend may be starting or temporarily unavailable. Please retry in a few seconds."
+            message: "ULTRON Core returned an upstream " + status + " gateway response after " + gatewayRetries + " retries (" + (gatewayRetries + 1) + " attempts). This can happen while the free backend wakes from idle; please retry shortly."
           }
         });
         return;
