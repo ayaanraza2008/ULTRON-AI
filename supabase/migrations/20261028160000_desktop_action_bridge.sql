@@ -219,3 +219,58 @@ $$;
 
 revoke all on function public.ultron_claim_next_desktop_action(uuid) from public, anon, authenticated;
 grant execute on function public.ultron_claim_next_desktop_action(uuid) to service_role;
+
+-- Finalize a bridge result only when the lease is still live at the database
+-- update itself. A separate application-side lease check has a TOCTOU window:
+-- a lease can expire or another worker can reclaim it before the subsequent PATCH.
+create or replace function public.ultron_ack_desktop_action(
+  p_action_id uuid,
+  p_user_id uuid,
+  p_attempts integer,
+  p_status text,
+  p_result jsonb,
+  p_error_code text
+)
+returns setof public.desktop_actions
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  updated public.desktop_actions;
+begin
+  if p_action_id is null or p_user_id is null
+     or p_attempts is null or p_attempts < 1 or p_attempts > 3
+     or p_status is null or p_status not in ('COMPLETED', 'FAILED')
+     or p_result is null or jsonb_typeof(p_result) <> 'object'
+     or pg_column_size(p_result) > 4096
+     or (p_error_code is not null and char_length(p_error_code) > 80)
+     or (p_status = 'COMPLETED' and p_error_code is not null) then
+    return;
+  end if;
+
+  update public.desktop_actions as action
+     set status = p_status,
+         result = p_result,
+         error_code = p_error_code,
+         finished_at = clock_timestamp(),
+         lease_expires_at = null,
+         updated_at = clock_timestamp()
+   where action.id = p_action_id
+     and action.user_id = p_user_id
+     and action.status = 'RUNNING'
+     and action.attempts = p_attempts
+     and action.lease_expires_at > clock_timestamp()
+  returning action.* into updated;
+
+  if not found then
+    return;
+  end if;
+
+  return next updated;
+end;
+$$;
+
+revoke all on function public.ultron_ack_desktop_action(uuid, uuid, integer, text, jsonb, text) from public, anon, authenticated;
+grant execute on function public.ultron_ack_desktop_action(uuid, uuid, integer, text, jsonb, text) to service_role;
+
