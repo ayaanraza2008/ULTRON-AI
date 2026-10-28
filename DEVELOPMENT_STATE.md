@@ -1,6 +1,11 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-27 UTC (source changes verified; production deployment blocked by Render quota)
+Last verified: 2026-10-28 UTC (Render Ultron core workspace reports the Core service live at main commit `5f0272d727d84f9ca0eb0989b0745838a6fd0b38`; real model inference, authenticated user flows, and background-task completion remain separate verification gates).
+
+## Current ULTRON Core workspace checkpoint — 2026-10-28
+- The designated Render workspace is **Ultron core**. Its `ultron-ai-core` service is on the free plan and reports a live deployment at `https://ultron-ai-core.onrender.com`, commit `5f0272d727d84f9ca0eb0989b0745838a6fd0b38` (deployment `dep-dbgvo82jnfac739q5lk0`). No deployment was triggered for this checkpoint.
+- Keep current Core service URLs separate from historical `ultron-ai-zvd7.onrender.com` records. The production-verification workflow and provider attribution headers must target the Core origin.
+- A green source CI run or Render `live` deployment status does not prove successful provider inference, account isolation, task completion, Windows pairing, or other live-only workflows.
 
 ## Operating constraints
 - Preserve the existing repository, backend data, and frontend. The cinematic command center has been built and merged, but is not live-verified until Render serves and reports the expected commit.
