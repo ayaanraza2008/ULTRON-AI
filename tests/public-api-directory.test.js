@@ -22,6 +22,14 @@ test("catalog search returns relevant metadata without claiming a listing is a l
   assert.equal(JSON.stringify(result).includes("OPENROUTER_API_KEY="), false);
 });
 
+test("catalog overview reports categories without arbitrarily promoting sponsored entries", () => {
+  const stats = getPublicApiDirectoryStats();
+  const result = searchPublicApiDirectory({});
+  assert.equal(result.totalMatches, stats.entries);
+  assert.deepEqual(result.results, []);
+  assert.ok(result.popularCategories.length > 0);
+});
+
 test("catalog search supports category and explicit no-auth filters", () => {
   const result = searchPublicApiDirectory({ query: "Agent Nexus", category: "MCP Servers", authFilter: "no_auth", limit: 12 });
   assert.ok(result.results.length > 0);
