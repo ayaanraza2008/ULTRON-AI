@@ -106,7 +106,7 @@ export function searchPublicApiDirectory(args = {}) {
       if (url.includes(token)) score += 1;
     }
     if (!phrase && categoryFilter) score = 1;
-    if (!phrase && !categoryFilter) score = 1;
+    if (!phrase && !categoryFilter) continue;
     if (score > 0) ranked.push({ entry, score });
   }
 
@@ -131,7 +131,7 @@ export function searchPublicApiDirectory(args = {}) {
     query: query || undefined,
     category: categoryFilter ? cleanText(args.category, 120) : undefined,
     authFilter,
-    totalMatches: ranked.length,
+    totalMatches: !phrase && !categoryFilter ? PUBLIC_API_DIRECTORY.length : ranked.length,
     results,
     ...(query ? {} : { popularCategories: categories }),
     source: {
