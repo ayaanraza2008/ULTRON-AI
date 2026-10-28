@@ -1,6 +1,6 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is an API-first assistant runtime with a responsive cinematic command center in `public/`. Express serves the UI and `/api/*` routes from the same origin. UI indicators reflect actual API responses and configured capability gates; source presence is not proof of live provider availability or production deployment.
 
 ## Current status
 
@@ -10,9 +10,9 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **Frontend status:** the command-center source is included under `public/` and served by Express at `/`. CI checks its shell contracts and syntax; live-browser and deployed-revision verification remain separate.
 
-## Backend-only capability integration phase
+## Capability integration and verification phase
 
 Backend additions on the feature branch:
 
