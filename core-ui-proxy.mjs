@@ -106,7 +106,7 @@ function forwardResponseHeaders(upstream, res) {
   }
 }
 
-export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gatewayRetryDelaysMs = [1500, 2500, 4000, 6000, 8000, 10000, 12000] } = {}) {
+export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gatewayRetryDelaysMs = [1500, 3000, 5000, 7000, 9000, 10000, 12000, 12000, 12000] } = {}) {
   return createServer(async (req, res) => {
     let requestUrl;
     try {
@@ -170,7 +170,7 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
       // Retry only non-JSON gateway 502/503s, with bounded backoff. Never retry a
       // structured API error, because a POST may already have reached the app.
       const retryDelays = Array.isArray(gatewayRetryDelaysMs)
-        ? gatewayRetryDelaysMs.slice(0, 8).map(value => Number.isFinite(Number(value))
+        ? gatewayRetryDelaysMs.slice(0, 9).map(value => Number.isFinite(Number(value))
           ? Math.min(12000, Math.max(0, Number(value)))
           : 0)
         : [1500, 2500, 4000, 6000, 8000, 10000, 12000];
