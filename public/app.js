@@ -976,6 +976,14 @@
     ui.drawerToggle.setAttribute("aria-expanded", String(open));
     ui.drawerToggle.setAttribute("aria-label", open ? "Close ULTRON features" : "Open ULTRON features");
     document.body.classList.toggle("drawer-open", open);
+    // Avoid hidden, unattended camera analysis behind the feature drawer.
+    if (open && ui.cameraLiveObserve.checked) {
+      ui.cameraLiveObserve.checked = false;
+      if (cameraLiveTimer) window.clearTimeout(cameraLiveTimer);
+      cameraLiveTimer = null;
+      ui.cameraRecBadge.hidden = true;
+      if (cameraStream) ui.cameraStatus.textContent = "EYES ACTIVE · OBSERVATION PAUSED";
+    }
   }
 
   function drawerHeading(title, description) {
@@ -1417,6 +1425,7 @@
       ui.cameraLiveObserve.disabled = false;
       ui.cameraPlaceholder.hidden = ui.cameraVideo.readyState >= 2;
       ui.cameraRecBadge.hidden = true;
+      setDrawerOpen(false);
       showToast("ULTRON Eyes is active. The camera stays visible; frame analysis happens only when requested or when Live observation is switched on.", 6000);
       return true;
     } catch (error) {
@@ -1479,6 +1488,7 @@
   }
 
   async function analyzeCameraFrame(automatic = false) {
+    if (!automatic) setDrawerOpen(false);
     if (!cameraStream) {
       showToast("Enable Eyes first so ULTRON has a visible, permissioned camera feed.");
       return;
