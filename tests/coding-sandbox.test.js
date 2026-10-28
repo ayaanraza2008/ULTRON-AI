@@ -47,6 +47,9 @@ test("execution requires a direct request and exact code from the current prompt
   assert.equal(hasExplicitSandboxAuthorization(languagePrompt, "print(6 * 7)", "python"), true);
   assert.deepEqual(extractExplicitSandboxRequest(prompt), { language: "python", source: "print(6 * 7)" });
   assert.equal(extractExplicitSandboxRequest("How can I run Python code?"), null);
+  const untaggedPrompt = "Please run this code:\n" + fence + "\nprint(6 * 7)\n" + fence;
+  assert.equal(extractExplicitSandboxRequest(untaggedPrompt), null);
+  assert.equal(hasExplicitSandboxAuthorization(untaggedPrompt, "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization("How can I run Python code?", "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization("Write a Python script", "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization(prompt, "print(7 * 6)", "python"), false);
