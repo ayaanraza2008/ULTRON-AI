@@ -30,3 +30,9 @@
 ## DNS-pinned outbound transport (PR #293)
 
 The security branch adds a transport that resolves public hostnames, rejects any private/reserved DNS answer, pins validated addresses into the actual outbound socket lookup, blocks unvalidated redirects, and honors aborts while resolving DNS. It is not live until merged and deployed. This is application-layer defence in depth; deployment-level outbound egress controls remain recommended.
+
+## Additional release gate — unified integration candidate
+
+- **Current-session revocation:** the source guard and migration are present on the integration candidate, but the migration has not been applied to any live project. Verify the SQL contract and revocation behavior in a disposable Supabase project before deployment; do not deploy the guard ahead of its migration.
+- **Combined source verification:** the exact latest head of PR #339 must pass CI after the API catalog, UI proxy, and session guard changes. Runs on earlier branch heads are not proof for the final head.
+- **Runtime evidence still needed:** live model and vision inference, account isolation, worker task-to-result persistence, and physical Windows pairing remain independent release gates.
