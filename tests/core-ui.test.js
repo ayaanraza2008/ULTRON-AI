@@ -11,7 +11,7 @@ const proxySource = await readFile(new URL("../core-ui-proxy.mjs", import.meta.u
 test("the default screen is a black, minimal living-core interface", () => {
   assert.match(html, /id="core-canvas"/);
   assert.match(html, /id="core-stage"/);
-  assert.match(css, /background:\s*#020205/);
+  assert.match(css, /--black:\s*#020205/);
   assert.match(css, /\.core-orbit/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(app, /drawArrays\(gl\.POINTS, 0, PARTICLE_COUNT\)/);
