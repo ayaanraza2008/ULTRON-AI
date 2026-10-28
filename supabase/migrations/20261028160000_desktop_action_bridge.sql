@@ -75,15 +75,31 @@ begin
       using errcode = '42501';
   end if;
 
+  if old.status = 'QUEUED' and new.status = 'RUNNING'
+     and (new.attempts <> old.attempts + 1
+       or new.started_at is null
+       or new.lease_expires_at is null
+       or new.lease_expires_at <= now()
+       or new.finished_at is not null) then
+    raise exception 'Claimed desktop action must increment attempts and receive a live lease'
+      using errcode = '42501';
+  end if;
+
   if old.status = 'RUNNING' and new.status = 'RUNNING'
-     and (new.attempts <> old.attempts + 1 or old.lease_expires_at > now()) then
-    raise exception 'Running desktop action can only be reclaimed after its lease expires'
+     and (new.attempts <> old.attempts + 1
+       or old.lease_expires_at > now()
+       or new.started_at is null
+       or new.lease_expires_at is null
+       or new.lease_expires_at <= now()) then
+    raise exception 'Running desktop action can only be reclaimed after expiry with a new live lease'
       using errcode = '42501';
   end if;
 
   if old.status = 'RUNNING' and new.status in ('COMPLETED', 'FAILED')
-     and new.attempts <> old.attempts then
-    raise exception 'Action completion cannot change its attempt counter'
+     and (new.attempts <> old.attempts
+       or new.lease_expires_at is not null
+       or new.finished_at is null) then
+    raise exception 'Action completion must preserve attempts and release its lease'
       using errcode = '42501';
   end if;
 
