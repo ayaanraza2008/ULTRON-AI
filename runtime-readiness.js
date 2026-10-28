@@ -80,7 +80,9 @@ export function buildRuntimeReadiness({
         : "A reachable, authenticated Windows companion is required. A cloud server cannot directly control the user's PC."),
     component("windows_action_queue", "Windows approved-action queue", desktopActionQueueConfigured ? "configured_unverified" : "blocked",
       ["ULTRON_INTEGRATION_OWNER_USER_ID", "ULTRON_DESKTOP_BRIDGE_TOKEN"], desktopActionQueueConfigured
-        ? "Owner UUID and a high-entropy bridge token are configured; this is not proof that the SQL migration is applied, a Windows companion is paired, or any action has run."
+        ? "Owner UUID and a high-entropy bridge token are configured; " + (env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted"
+            ? "owner-opted allowlisted hands-free mode is enabled for Notepad/Calculator/Explorer launches and bounded system info only. "
+            : "desktop actions remain per-action approval gated. ") + "This is not proof that the SQL migration is applied, a Windows companion is paired, or any action has run."
         : "Requires the configured owner UUID and a dedicated 32+ character bridge token. Actions remain unavailable until the additive migration is applied and a companion is paired; configuration alone is not verification."),
     component("local_models", "Local model runtime", localModelConfigured ? "configured_unverified" : "optional",
       ["OLLAMA_BASE_URL"], localModelConfigured
