@@ -9,6 +9,21 @@
     connection: document.querySelector(".connection"),
     coreStage: byId("core-stage"),
     coreStateLabel: byId("core-state-label"),
+    drawerToggle: byId("drawer-toggle"),
+    drawerScrim: byId("drawer-scrim"),
+    drawer: byId("feature-drawer"),
+    drawerClose: byId("drawer-close"),
+    drawerContent: byId("drawer-content"),
+    cameraPanel: byId("camera-panel"),
+    cameraVideo: byId("eye-video"),
+    cameraPlaceholder: byId("camera-placeholder"),
+    cameraStatus: byId("camera-status"),
+    cameraToggle: byId("camera-toggle"),
+    cameraAnalyze: byId("camera-analyze"),
+    cameraLiveObserve: byId("camera-live-observe"),
+    cameraRecBadge: byId("camera-rec-badge"),
+    cameraClose: byId("camera-close"),
+    fileInput: byId("local-file-input"),
     energyIndicator: byId("energy-indicator"),
     fieldMode: byId("field-mode"),
     voiceMode: byId("voice-mode"),
@@ -67,6 +82,12 @@
   let gl = null;
   let glUniforms = null;
   let fallbackContext = null;
+  let cameraStream = null;
+  let cameraLiveTimer = null;
+  let drawerView = "home";
+  let backendStatus = null;
+  let lastCameraFrameAt = 0;
+  let authSetupNeeded = false;
 
   const stateCodes = { idle: 0, listening: 1, thinking: 2, speaking: 3, research: 4, error: 5 };
   const stateLabels = { idle: "STANDBY", listening: "LISTENING", thinking: "THINKING", speaking: "SPEAKING", research: "SCANNING", error: "ATTENTION" };
@@ -74,7 +95,7 @@
   function setCoreState(nextState) {
     coreState = stateCodes[nextState] === undefined ? "idle" : nextState;
     ui.coreStage.dataset.state = coreState;
-    ui.coreStateLabel.textContent = stateLabels[coreState] || "STANDBY";
+    if (ui.coreStateLabel) ui.coreStateLabel.textContent = stateLabels[coreState] || "STANDBY";
     ui.energyIndicator.textContent = coreState === "listening" ? "RECEPTIVE"
       : coreState === "thinking" ? "PROCESSING"
       : coreState === "speaking" ? "TRANSMITTING"
