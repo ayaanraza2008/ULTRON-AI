@@ -91,3 +91,70 @@ test("agent executes up to three bounded safe tool rounds without user orchestra
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test("a consequential tool call in a later round is still blocked by the dispatch policy", async () => {
+  let modelCalls = 0;
+  let browserServiceCalls = 0;
+  const app = express();
+  app.use(express.json({ limit: "2mb" }));
+  const requireSupabaseUser = (req, _res, next) => {
+    req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" };
+    next();
+  };
+  app.use("/api", createAgentRouter({
+    env: { OPENROUTER_API_KEY: "test-only", BROWSER_USE_URL: "https://browser.example.com", ULTRON_BROWSER_USE_URL: "https://browser.example.com", ULTRON_BROWSER_USE_TOKEN: "test-token" },
+    requireSupabaseUser,
+    logger: { warn() {}, info() {} },
+    fetchImpl: async (url, options = {}) => {
+      if (url === "https://browser.example.com/run") {
+        browserServiceCalls += 1;
+        throw new Error("A consequential browser action must never be dispatched by this test.");
+      }
+      if (url !== "https://openrouter.ai/api/v1/chat/completions") {
+        return new Response("not found", { status: 404 });
+      }
+      modelCalls += 1;
+      if (modelCalls === 1) {
+        return new Response(JSON.stringify({ choices: [{ message: {
+          role: "assistant", content: null,
+          tool_calls: [{ id: "call_safe_check", type: "function", function: { name: "check_integrations", arguments: "{}" } }]
+        } }] }), { status: 200 });
+      }
+      if (modelCalls === 2) {
+        return new Response(JSON.stringify({ choices: [{ message: {
+          role: "assistant", content: null,
+          tool_calls: [{ id: "call_send_email", type: "function", function: { name: "browser_use", arguments: JSON.stringify({ task: "Send an email to the customer confirming the order.", maxSteps: 3 }) } }]
+        } }] }), { status: 200 });
+      }
+      const toolResults = bodyToolResults(JSON.parse(options.body).messages);
+      assert.equal(toolResults.length, 2);
+      const blocked = JSON.parse(toolResults[1].content);
+      assert.equal(blocked.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+      assert.equal(blocked.approvalRequired, true);
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The integration check ran; sending the email remained blocked for approval." } }] }), { status: 200 });
+    }
+  }));
+  function bodyToolResults(messages) {
+    return messages.filter(message => message.role === "tool");
+  }
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  try {
+    const response = await fetch("http://127.0.0.1:" + server.address().port + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Check connected integrations, then send an email to the customer confirming the order." })
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(modelCalls, 3);
+    assert.equal(browserServiceCalls, 0);
+    assert.deepEqual(result.toolsUsed.map(tool => tool.name), ["check_integrations", "browser_use"]);
+    assert.equal(result.toolResults[1].result.approvalRequired, true);
+    assert.equal(result.toolResults[1].result.risk.level, "external_effect");
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
