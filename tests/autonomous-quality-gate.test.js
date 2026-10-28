@@ -118,3 +118,29 @@ test("quality gate does not count URLs inside Markdown code as citations", () =>
   }
 });
 
+
+
+test("quality gate preserves URL boundary positions after long Markdown code blocks", () => {
+  const sourceUrl = "https://example.com/source";
+  const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
+  const longCode = "~~~";
+  const fencedCode = "```text\\n" + " ".repeat(300) + "\\n```\\n";
+
+  const nestedUrlAfterCode = verifyAutonomousOutput({
+    research: { sources: [{ url: sourceUrl }] },
+    report: { answer: reportPrefix + fencedCode + "Citation: ftp://https://example.com/source" }
+  });
+  assert.equal(
+    nestedUrlAfterCode.checks.find(check => check.id === "citations_traceable").passed,
+    false,
+    "a nested HTTPS URL after a code block must not count as a citation"
+  );
+  assert.equal(nestedUrlAfterCode.state, "needs_review");
+
+  const exactUrlAfterCode = verifyAutonomousOutput({
+    research: { sources: [{ url: sourceUrl }] },
+    report: { answer: reportPrefix + fencedCode + "Citation: (" + sourceUrl + ")." }
+  });
+  assert.equal(exactUrlAfterCode.checks.find(check => check.id === "citations_traceable").passed, true);
+  assert.equal(exactUrlAfterCode.state, "passed");
+});
