@@ -139,8 +139,9 @@ async function getWeather(location, fetchImpl) {
 }
 
 async function getCurrency({ amount = 1, from, to }, fetchImpl) {
-  const sourceCurrency = cleanString(from, 3).toUpperCase();
-  const targetCurrency = cleanString(to, 3).toUpperCase();
+  // Do not truncate before validation: "USDT" must be rejected, not silently changed to "USD".
+  const sourceCurrency = cleanString(from, 10).toUpperCase();
+  const targetCurrency = cleanString(to, 10).toUpperCase();
   const numericAmount = Number(amount);
   if (!/^[A-Z]{3}$/.test(sourceCurrency) || !/^[A-Z]{3}$/.test(targetCurrency)) {
     throw apiError("FREE_PUBLIC_CURRENCY_CODES_INVALID", "Provide valid three-letter currency codes, for example USD and INR.", 400);
