@@ -13,7 +13,7 @@ const BASE_ENV = {
   SUPABASE_SERVICE_ROLE_KEY: "test-only-service-role"
 };
 
-async function withServer({ fetchImpl, supabaseRest, privilegedSupabaseRest = supabaseRest }, run) {
+async function withServer({ fetchImpl, supabaseRest, privilegedSupabaseRest = supabaseRest }, run, userId = USER_ID) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
   app.use("/api", createAgentRouter({
@@ -22,7 +22,7 @@ async function withServer({ fetchImpl, supabaseRest, privilegedSupabaseRest = su
     supabaseRest,
     privilegedSupabaseRest,
     requireSupabaseUser: (req, _res, next) => {
-      req.supabaseUser = { id: USER_ID };
+      req.supabaseUser = { id: userId };
       next();
     },
     logger: { info() {}, warn() {}, error() {} }
@@ -194,6 +194,30 @@ test("concurrent same-key requests recover from the database unique-index confli
     assert.equal([a.toolResults[0].result.deduplicated, b.toolResults[0].result.deduplicated].filter(Boolean).length, 1);
     assert.equal(store.auditEvents.length, 1);
   });
+});
+
+test("the same key is isolated per user and never reuses another account's task", async () => {
+  const store = taskStore();
+  const prompt = "Queue a web-dev review in the background";
+  let firstTask;
+  await withServer({ fetchImpl: providerFetchImpl(), supabaseRest: store.supabaseRest }, async base => {
+    const first = await queueTask(base, prompt, "shared-key-across-users-01");
+    assert.equal(first.status, 200);
+    firstTask = (await first.json()).toolResults[0].result.task;
+  }, USER_ID);
+
+  const secondUser = "00000000-0000-4000-8000-000000000002";
+  await withServer({ fetchImpl: providerFetchImpl(), supabaseRest: store.supabaseRest }, async base => {
+    const second = await queueTask(base, prompt, "shared-key-across-users-01");
+    assert.equal(second.status, 200);
+    const secondTask = (await second.json()).toolResults[0].result.task;
+    assert.notEqual(secondTask.id, firstTask.id);
+    assert.equal(secondTask.user_id, secondUser);
+  }, secondUser);
+
+  assert.equal(store.tasks.length, 2);
+  assert.deepEqual(new Set(store.tasks.map(task => task.user_id)), new Set([USER_ID, secondUser]));
+  assert.equal(store.auditEvents.length, 2);
 });
 
 test("malformed Idempotency-Key values cannot enqueue a task", async () => {
