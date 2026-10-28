@@ -24,7 +24,7 @@ function securityHeaders(res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self)");
+  res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self)");
   res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
 }
 
