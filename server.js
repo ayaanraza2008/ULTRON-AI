@@ -652,7 +652,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     try { payload = await readResponseJsonLimited(response, 2_000_000); } catch { throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 }); }
     if (!response.ok) {
       logger.warn?.("Supabase data request failed", { table, status: response.status });
-      const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : 502;
+      const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : response.status === 409 ? 409 : 502;
       throw Object.assign(new Error(status === 403 ? "Database access was denied by authentication or row-level security." : "Could not save or load data from Supabase."), { status });
     }
     return payload;
