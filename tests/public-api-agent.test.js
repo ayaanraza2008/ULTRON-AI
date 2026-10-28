@@ -51,7 +51,7 @@ test("agent exposes and executes the fixed public API lookup tool for an ordinar
     const publicApiTool = toolsBody.tools.find(tool => tool.name === "public_api_lookup");
     assert.equal(publicApiTool.available, true);
     assert.equal(publicApiTool.requiresApiKey, false);
-    assert.deepEqual(publicApiTool.services, ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes", "dictionary", "news"]);
+    assert.deepEqual(publicApiTool.services, ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes", "dictionary", "news", "air_quality", "holidays", "research_papers", "museum_art"]);
 
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
