@@ -187,7 +187,7 @@ test("proxy retries a transient HTML 502 once and returns the backend response",
 test("proxy turns a persistent non-JSON gateway 502 into an actionable API error", async (t) => {
   let calls = 0;
   const proxy = createUltronCoreProxy({
-    retryDelayMs: 0,
+    gatewayRetryDelaysMs: [0],
     fetchImpl: async () => {
       calls += 1;
       return new Response("<html>502 Bad Gateway</html>", {
@@ -221,7 +221,7 @@ test("proxy does not retry structured JSON model-provider errors", async (t) => 
   let calls = 0;
   const expected = { error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" } };
   const proxy = createUltronCoreProxy({
-    retryDelayMs: 0,
+    gatewayRetryDelaysMs: [0],
     fetchImpl: async () => {
       calls += 1;
       return new Response(JSON.stringify(expected), {
