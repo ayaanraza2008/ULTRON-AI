@@ -32,6 +32,7 @@ test("camera workspace is consent-gated, low-resolution, and stops sampling on e
   assert.ok(app.includes("camera-continuous-consent"));
   assert.ok(app.includes("const samplingStillActive = state.cameraContinuous"));
   assert.ok(app.includes("The in-flight frame finished after sampling stopped."));
+  assert.ok(app.includes("cameraConsecutiveFailures >= 3"));
   assert.ok(app.includes("30 * 60 * 1000"));
   assert.ok(app.includes('data-action="camera-stop"'));
   assert.ok(app.includes('data-action="camera-continuous-stop"'));
