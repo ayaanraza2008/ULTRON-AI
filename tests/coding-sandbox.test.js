@@ -51,6 +51,18 @@ test("execution requires a direct request and exact code from the current prompt
   assert.equal(hasExplicitSandboxAuthorization("Write a Python script", "print(6 * 7)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization(prompt, "print(7 * 6)", "python"), false);
   assert.equal(hasExplicitSandboxAuthorization("Run the code you just generated above", "print(6 * 7)", "python"), false);
+
+  const negatedBeforeFence = "Please run this code but do not execute it:\\n" + fence + "python\\nprint(6 * 7)\\n" + fence;
+  assert.equal(hasExplicitSandboxAuthorization(negatedBeforeFence, "print(6 * 7)", "python"), false);
+  assert.equal(extractExplicitSandboxRequest(negatedBeforeFence), null);
+
+  const negatedAfterFence = prompt + "\\nActually, do not run it; explain it instead.";
+  assert.equal(hasExplicitSandboxAuthorization(negatedAfterFence, "print(6 * 7)", "python"), false);
+  assert.equal(extractExplicitSandboxRequest(negatedAfterFence), null);
+
+  const stringLiteralSource = 'console.log("do not run this code")';
+  const stringLiteralPrompt = "Please run this code:\\n" + fence + "javascript\\n" + stringLiteralSource + "\\n" + fence;
+  assert.equal(hasExplicitSandboxAuthorization(stringLiteralPrompt, stringLiteralSource, "node"), true);
   assert.equal(extractExplicitSandboxRequest("Run the code you just generated above"), null);
   assert.equal(hasExplicitSandboxAuthorization("Please run this code:\n" + fence + "bash\nrm -rf /\n" + fence, "print(6 * 7)", "python"), false);
 });
