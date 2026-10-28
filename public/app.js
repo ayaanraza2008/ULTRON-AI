@@ -64,6 +64,7 @@
     voiceActive: false,
     recognition: null,
     cameraStream: null,
+    cameraPending: false,
     cameraRequestId: 0,
     cameraError: "",
     cameraNotice: "Camera is off. No frames are being captured.",
@@ -348,6 +349,7 @@
   function renderVision() {
     const supported = Boolean(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const cameraOn = Boolean(state.cameraStream);
+    const cameraPending = state.cameraPending === true;
     const summaries = state.cameraSummaries.length
       ? '<div class="camera-summary-list">' + state.cameraSummaries.map(item =>
           '<article class="camera-summary"><div class="list-row-meta"><span>' + esc(displayDate(item.at)) + '</span>' + chip("SUMMARY") + '</div><p>' + plainText(item.text) + '</p></article>'
@@ -357,7 +359,7 @@
       '<div class="two-col vision-layout"><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Live camera preview</strong><small>No recording or automatic upload on start</small></div>' + chip(state.cameraContinuous ? "ANALYZING" : cameraOn ? "CAMERA ACTIVE" : "CAMERA OFF") + '</div>' +
       '<div class="camera-preview-frame' + (cameraOn ? ' is-active' : '') + '"><video id="vision-preview" autoplay muted playsinline aria-label="Live camera preview"></video><div class="camera-preview-placeholder"><span class="empty-symbol">◉</span><strong>Camera offline</strong><span>Start the camera when you are ready.</span></div></div>' +
       (state.cameraError ? '<div class="error-panel">' + esc(state.cameraError) + '</div>' : '') +
-      '<div class="camera-controls"><button class="button button-primary" data-action="camera-start" type="button"' + (!supported || cameraOn ? " disabled" : "") + '>Start camera</button><button class="button button-danger" data-action="camera-stop" type="button"' + (!cameraOn ? " disabled" : "") + '>Stop camera</button><button class="button" data-action="camera-analyze" type="button"' + (!cameraOn || state.busy ? " disabled" : "") + '>Analyze one frame</button></div>' +
+      '<div class="camera-controls"><button class="button button-primary" data-action="camera-start" type="button"' + (!supported || cameraOn || cameraPending ? " disabled" : "") + '>' + (cameraPending ? "Waiting for permission…" : "Start camera") + '</button><button class="button button-danger" data-action="camera-stop" type="button"' + (!cameraOn && !cameraPending ? " disabled" : "") + '>Stop camera</button><button class="button" data-action="camera-analyze" type="button"' + (!cameraOn || state.busy ? " disabled" : "") + '>Analyze one frame</button></div>' +
       '<p class="field-help">' + (supported ? 'Browser camera access is available. Your browser will ask permission after you press Start camera.' : 'Camera access requires a supported browser API and a secure context (HTTPS or trusted localhost).') + '</p>' +
       '<div class="notice-panel">' + esc(state.cameraNotice) + '</div>' +
       '<p class="microcopy">A frame is resized to at most 640 × 360 and encoded as JPEG before a request. One-shot analysis sends the still image to the configured model; image bytes are not stored as camera recordings. The returned text may be saved in your chat history when signed in.</p>' +
@@ -865,8 +867,9 @@
       renderCurrent();
       return;
     }
-    if (state.cameraStream) return;
+    if (state.cameraStream || state.cameraPending) return;
     const requestId = ++state.cameraRequestId;
+    state.cameraPending = true;
     state.cameraError = "";
     state.cameraNotice = "Requesting camera permission. No frames are sent while the preview is idle.";
     renderCurrent();
@@ -883,6 +886,7 @@
         stream.getTracks().forEach(track => track.stop());
         return;
       }
+      state.cameraPending = false;
       state.cameraStream = stream;
       state.cameraError = "";
       state.cameraNotice = "Camera preview is active. No frames are sent unless you choose one-shot analysis or start continuous summaries.";
@@ -896,7 +900,12 @@
       const preview = $("#vision-preview");
       if (preview) {
         preview.srcObject = stream;
-        await preview.play();
+        preview.play().catch(() => {
+          if (state.cameraStream === stream) {
+            state.cameraNotice = "Camera is connected, but preview playback was blocked by the browser. Check site permissions and retry.";
+            if (state.view === "vision") renderCurrent();
+          }
+        });
       }
     } catch (error) {
       if (requestId !== state.cameraRequestId) return;
@@ -918,6 +927,7 @@
   }
   function stopCamera() {
     state.cameraRequestId += 1;
+    state.cameraPending = false;
     stopContinuousCameraAnalysis(false);
     state.cameraContinuousConsent = false;
     const stream = state.cameraStream;
