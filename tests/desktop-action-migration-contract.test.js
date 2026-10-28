@@ -35,3 +35,12 @@ test("desktop action audit entries are written by a database trigger", () => {
   assert.match(migration, /insert into public\.audit_events/i);
   assert.match(migration, /after insert or update on public\.desktop_actions/i);
 });
+
+
+test("desktop action transition guard requires fresh leases and consistent attempt counts", () => {
+  assert.match(migration, /old\.status = 'QUEUED' and new\.status = 'RUNNING'/i);
+  assert.match(migration, /new\.attempts <> old\.attempts \+ 1/i);
+  assert.match(migration, /new\.lease_expires_at is null/i);
+  assert.match(migration, /new\.lease_expires_at <= now\(\)/i);
+  assert.match(migration, /new\.status in \('COMPLETED', 'FAILED'\)[\s\S]*?new\.finished_at is null/i);
+});
