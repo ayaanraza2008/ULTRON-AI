@@ -163,3 +163,64 @@ test("dictionary and holiday input validation rejects invalid values before netw
   await assert.rejects(() => getFreePublicData({ kind: "public_holidays", countryCode: "Atlantis", year: 2026 }, { fetchImpl }), { code: "FREE_PUBLIC_HOLIDAY_COUNTRY_INVALID" });
   assert.equal(calls, 0);
 });
+
+
+test("Wikipedia summaries use a fixed HTTPS endpoint and return a bounded summary", async () => {
+  let request;
+  const result = await getFreePublicData({ kind: "wikipedia", title: "Alan Turing" }, {
+    fetchImpl: async (url, options) => {
+      request = { url: new URL(url), options };
+      return jsonResponse({
+        title: "Alan Turing",
+        description: "English mathematician and computer scientist",
+        extract: "Alan Mathison Turing was an English mathematician, computer scientist, logician, and cryptanalyst."
+      });
+    }
+  });
+  assert.equal(request.url.origin, "https://en.wikipedia.org");
+  assert.equal(request.url.pathname, "/api/rest_v1/page/summary/Alan_Turing");
+  assert.match(request.options.headers["User-Agent"], /ULTRON-AI/);
+  assert.equal(result.kind, "wikipedia");
+  assert.equal(result.title, "Alan Turing");
+  assert.match(result.sourceUrl, /^https:\/\/en\.wikipedia\.org\/wiki\//);
+  assert.equal(result.trust, "untrusted_external_data");
+});
+
+test("Open Library book search uses a fixed endpoint, five-result cap and safe work URLs", async () => {
+  let request;
+  const result = await getFreePublicData({ kind: "books", query: "robotics" }, {
+    fetchImpl: async (url, options) => {
+      request = { url: new URL(url), options };
+      return jsonResponse({
+        num_found: 1,
+        docs: [{
+          title: "Introduction to Robotics",
+          author_name: ["John Craig"],
+          first_publish_year: 1989,
+          edition_count: 23,
+          key: "OL123456W"
+        }, {
+          title: "Untrusted missing ID",
+          author_name: [],
+          key: "https://evil.example"
+        }]
+      });
+    }
+  });
+  assert.equal(request.url.origin, "https://openlibrary.org");
+  assert.equal(request.url.pathname, "/search.json");
+  assert.equal(request.url.searchParams.get("limit"), "5");
+  assert.match(request.options.headers["User-Agent"], /ULTRON-AI/);
+  assert.equal(result.kind, "books");
+  assert.equal(result.books[0].sourceUrl, "https://openlibrary.org/works/OL123456W");
+  assert.equal(result.books[1].sourceUrl, null);
+  assert.match(result.usageNotice, /not bulk data collection/);
+});
+
+test("Wikipedia and book queries reject invalid input before networking", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; return jsonResponse({}); };
+  await assert.rejects(() => getFreePublicData({ kind: "wikipedia", title: "https://evil.example/path" }, { fetchImpl }), { code: "FREE_PUBLIC_WIKIPEDIA_TITLE_INVALID" });
+  await assert.rejects(() => getFreePublicData({ kind: "books", query: "x" }, { fetchImpl }), { code: "FREE_PUBLIC_BOOK_QUERY_INVALID" });
+  assert.equal(calls, 0);
+});

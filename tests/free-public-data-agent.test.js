@@ -76,3 +76,55 @@ test("agent may fetch public weather while consequential follow-up remains appro
   assert.equal(publicApiCalls.length, 2);
   assert.ok(publicApiCalls.every(call => call.options.redirect === "error"));
 });
+
+
+test("agent deterministically routes book search to Open Library when model tool calls are unavailable", async t => {
+  const providerCalls = [];
+  const publicApiCalls = [];
+  const app = express();
+  app.use(express.json({ limit: "12mb" }));
+  app.use("/api", createAgentRouter({
+    env: { OPENROUTER_API_KEY: "synthetic-test-key", OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1", OPENROUTER_DEFAULT_MODEL: "openrouter/free" },
+    requireSupabaseUser: (req, _res, next) => {
+      req.supabaseUser = { id: "00000000-0000-4000-8000-000000000001" };
+      next();
+    },
+    fetchImpl: async (url, options = {}) => {
+      if (String(url).includes("/chat/completions")) {
+        providerCalls.push(JSON.parse(options.body));
+        if (providerCalls.length === 1) {
+          return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { role: "assistant", content: "I'll look up book records." } }] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { role: "assistant", content: "Open Library returned Introduction to Robotics by John Craig." } }] }), { status: 200 });
+      }
+      const parsed = new URL(url);
+      publicApiCalls.push({ url: parsed, options });
+      assert.equal(options.headers.Authorization, undefined);
+      assert.match(options.headers["User-Agent"], /ULTRON-AI/);
+      assert.equal(parsed.hostname, "openlibrary.org");
+      assert.equal(parsed.pathname, "/search.json");
+      return new Response(JSON.stringify({
+        docs: [{ title: "Introduction to Robotics", author_name: ["John Craig"], first_publish_year: 1989, edition_count: 23, key: "OL123456W" }]
+      }), { status: 200 });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  }));
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  t.after(() => new Promise(resolve => server.close(() => resolve())));
+
+  const response = await fetch("http://127.0.0.1:" + server.address().port + "/api/agent/run", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "Find books about robotics." })
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.match(body.content, /Introduction to Robotics/);
+  assert.ok(body.toolsUsed.some(item => item.name === "get_free_public_data" && item.ok));
+  const result = body.toolResults.find(item => item.name === "get_free_public_data")?.result;
+  assert.equal(result.kind, "books");
+  assert.equal(result.books[0].title, "Introduction to Robotics");
+  assert.equal(providerCalls.length, 2);
+  assert.equal(publicApiCalls.length, 1);
+});

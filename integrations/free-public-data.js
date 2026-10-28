@@ -7,6 +7,8 @@ const OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast";
 const FRANKFURTER_RATES = "https://api.frankfurter.dev/v2/rates";
 const DICTIONARY_API = "https://api.dictionaryapi.dev/api/v2/entries";
 const NAGER_HOLIDAYS = "https://date.nager.at/api/v3/PublicHolidays";
+const WIKIPEDIA_SUMMARY = "https://en.wikipedia.org/api/rest_v1/page/summary";
+const OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json";
 
 function apiError(code, message, status = 502) {
   return Object.assign(new Error(message), { code, status });
@@ -48,12 +50,12 @@ async function readJsonLimited(response) {
   catch { throw apiError("FREE_PUBLIC_API_INVALID_RESPONSE", "The free public-data provider returned invalid JSON."); }
 }
 
-async function getJson(url, { fetchImpl, provider }) {
+async function getJson(url, { fetchImpl, provider, headers = {} }) {
   let response;
   try {
     response = await fetchImpl(url, {
       method: "GET",
-      headers: { Accept: "application/json", "User-Agent": "ULTRON-AI/1.0 (free public-data adapter)" },
+      headers: { Accept: "application/json", "User-Agent": "ULTRON-AI/1.0 (free public-data adapter)", ...headers },
       redirect: "error",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
@@ -276,11 +278,73 @@ async function getPublicHolidays({ countryCode, year = new Date().getUTCFullYear
   };
 }
 
-export async function getFreePublicData({ kind, location, amount = 1, from, to, word, language, countryCode, year } = {}, { fetchImpl = safePinnedFetch } = {}) {
+
+async function getWikipediaSummary({ title }, fetchImpl) {
+  const pageTitle = cleanString(title, 100);
+  if (pageTitle.length < 2 || !/^[\p{L}\p{N}][\p{L}\p{N} .,'()-]{1,99}$/u.test(pageTitle)) {
+    throw apiError("FREE_PUBLIC_WIKIPEDIA_TITLE_INVALID", "Provide a Wikipedia article title, not a URL.", 400);
+  }
+  const endpoint = WIKIPEDIA_SUMMARY + "/" + encodeURIComponent(pageTitle.replace(/\s+/g, " ").replace(/ /g, "_"));
+  const data = await getJson(endpoint, { fetchImpl, provider: "Wikipedia REST API" });
+  const extract = cleanString(data?.extract, 2400);
+  const normalizedTitle = cleanString(data?.title, 120) || pageTitle;
+  if (!extract) throw apiError("FREE_PUBLIC_API_NOT_FOUND", "Wikipedia did not return an article summary.", 404);
+  return {
+    kind: "wikipedia",
+    title: normalizedTitle,
+    description: cleanString(data?.description, 240) || null,
+    extract,
+    source: "Wikipedia",
+    sourceUrl: "https://en.wikipedia.org/wiki/" + encodeURIComponent(normalizedTitle.replace(/ /g, "_")),
+    trust: "untrusted_external_data",
+    usageNotice: "Article summaries can be incomplete or outdated; verify important claims against cited sources."
+  };
+}
+
+let lastOpenLibraryRequestAt = 0;
+
+async function getBooks({ query }, fetchImpl) {
+  const search = cleanString(query, 120);
+  if (search.length < 2) throw apiError("FREE_PUBLIC_BOOK_QUERY_INVALID", "Give a book topic, title, or author to search for.", 400);
+  const now = Date.now();
+  if (now - lastOpenLibraryRequestAt < 1000) {
+    throw apiError("FREE_PUBLIC_API_RATE_LIMITED", "Open Library lookup is rate-limited to one request per second in this process.", 429);
+  }
+  lastOpenLibraryRequestAt = now;
+  const url = new URL(OPEN_LIBRARY_SEARCH);
+  url.searchParams.set("q", search);
+  url.searchParams.set("limit", "5");
+  url.searchParams.set("fields", "title,author_name,first_publish_year,edition_count,key");
+  const data = await getJson(url.toString(), { fetchImpl, provider: "Open Library" });
+  const docs = Array.isArray(data?.docs) ? data.docs : [];
+  return {
+    kind: "books",
+    query: search,
+    count: Math.min(docs.length, 5),
+    books: docs.slice(0, 5).map(item => {
+      const workKey = typeof item?.key === "string" && /^OL\d+W$/.test(item.key) ? item.key : null;
+      return {
+        title: cleanString(item?.title, 240),
+        authors: (Array.isArray(item?.author_name) ? item.author_name : []).slice(0, 5).map(author => cleanString(author, 120)).filter(Boolean),
+        firstPublishYear: Number.isInteger(item?.first_publish_year) ? item.first_publish_year : null,
+        editionCount: Number.isInteger(item?.edition_count) ? item.edition_count : null,
+        sourceUrl: workKey ? "https://openlibrary.org/works/" + workKey : null
+      };
+    }).filter(item => item.title),
+    source: "Open Library",
+    sourceUrl: "https://openlibrary.org/developers/api",
+    trust: "untrusted_external_data",
+    usageNotice: "Open Library is intended for human-facing book discovery, not bulk data collection; results are limited to five."
+  };
+}
+
+export async function getFreePublicData({ kind, location, amount = 1, from, to, word, language, countryCode, year, title, query } = {}, { fetchImpl = safePinnedFetch } = {}) {
   if (typeof fetchImpl !== "function") throw apiError("FREE_PUBLIC_API_UNAVAILABLE", "No outbound HTTP transport is available.");
   if (kind === "weather") return getWeather(location, fetchImpl);
   if (kind === "currency") return getCurrency({ amount, from, to }, fetchImpl);
   if (kind === "dictionary") return getDictionary({ word, language }, fetchImpl);
   if (kind === "public_holidays") return getPublicHolidays({ countryCode, year }, fetchImpl);
-  throw apiError("FREE_PUBLIC_DATA_KIND_INVALID", "Choose weather, currency, dictionary, or public_holidays for the free public-data lookup.", 400);
+  if (kind === "wikipedia") return getWikipediaSummary({ title }, fetchImpl);
+  if (kind === "books") return getBooks({ query }, fetchImpl);
+  throw apiError("FREE_PUBLIC_DATA_KIND_INVALID", "Choose weather, currency, dictionary, public_holidays, wikipedia, or books for the free public-data lookup.", 400);
 }

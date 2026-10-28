@@ -32,6 +32,18 @@ ULTRON uses the public-apis/public-apis repository as a discovery catalogue, not
 - Country names are normalized from a small common-country map; callers can also specify an ISO alpha-2 code.
 - The adapter validates the year and filters results to bounded fields.
 
+### Wikipedia summaries
+
+- Reads one article summary from the fixed English Wikipedia REST endpoint.
+- No API key is used. The result includes a source link and is marked as untrusted external data.
+- Article text may be incomplete or outdated; verify important claims against the linked references.
+
+### Book discovery — Open Library
+
+- Performs a single low-volume search request for a title, author or topic and returns up to five works.
+- No API key is used. Results are not treated as instructions.
+- Open Library is designed for human-facing book discovery, not bulk access. The adapter limits each lookup to five results and throttles requests to one per second per process.
+
 ## Example prompts
 
 - "What is the weather in Agra?"
@@ -39,6 +51,8 @@ ULTRON uses the public-apis/public-apis repository as a discovery catalogue, not
 - "What is the exchange rate from EUR to USD?"
 - "Define serendipity."
 - "What are the public holidays in India for 2026?"
+- "Wikipedia summary of Alan Turing."
+- "Find books about robotics."
 
 ## Security and reliability
 
