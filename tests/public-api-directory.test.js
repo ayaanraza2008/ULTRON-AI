@@ -23,10 +23,10 @@ test("catalog search returns relevant metadata without claiming a listing is a l
 });
 
 test("catalog search supports category and explicit no-auth filters", () => {
-  const result = searchPublicApiDirectory({ query: "weather", category: "Weather", authFilter: "no_auth", limit: 12 });
+  const result = searchPublicApiDirectory({ query: "Agent Nexus", category: "MCP Servers", authFilter: "no_auth", limit: 12 });
   assert.ok(result.results.length > 0);
   assert.ok(result.results.every(item => item.authStatus === "no_auth"));
-  assert.ok(result.results.every(item => /weather/i.test(item.category)));
+  assert.ok(result.results.every(item => /MCP Servers/i.test(item.category)));
 });
 
 test("directory intent recognizes catalog discovery without confusing normal weather lookups", () => {
