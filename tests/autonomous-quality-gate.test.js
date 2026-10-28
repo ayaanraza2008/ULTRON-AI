@@ -100,3 +100,21 @@ test("quality gate requires an exact URL token instead of a URL substring", () =
   assert.equal(exact.state, "passed");
 });
 
+test("quality gate does not count URLs inside Markdown code as citations", () => {
+  const sourceUrl = "https://example.com/source";
+  const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
+  for (const codeOnlyCitation of [
+    "```text\\n" + sourceUrl + "\\n```",
+    "`" + sourceUrl + "`",
+    "```text\\nexample output: " + sourceUrl
+  ]) {
+    const result = verifyAutonomousOutput({
+      research: { sources: [{ url: sourceUrl }] },
+      report: { answer: reportPrefix + codeOnlyCitation }
+    });
+    assert.equal(result.checks.find(check => check.id === "sources_available").passed, true);
+    assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false, codeOnlyCitation);
+    assert.equal(result.state, "needs_review", codeOnlyCitation);
+  }
+});
+
