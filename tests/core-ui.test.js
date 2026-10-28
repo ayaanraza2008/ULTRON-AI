@@ -30,7 +30,7 @@ test("center label is removed without crashing core initialization", () => {
 test("the glass drawer includes eyes, tools, devices, and readiness panels", () => {
   assert.match(html, /id="drawer-toggle"/);
   assert.match(html, /id="feature-drawer"/);
-  for (const feature of ["eyes", "tasks", "apps", "devices", "control", "system"]) {
+  for (const feature of ["eyes", "voice-quality", "tasks", "apps", "devices", "control", "system"]) {
     assert.ok(html.includes('data-drawer-view="' + feature + '"'));
   }
   assert.ok(app.includes("function showDrawerView"));
@@ -145,15 +145,15 @@ test("the proxy serves local assets and does not forward unknown public paths", 
 
 
 test("API gateway errors are retried only when they are non-JSON responses", () => {
-  assert.ok(proxySource.includes('retryDelayMs = 1200'));
+  assert.ok(proxySource.includes('gatewayRetryDelaysMs = [1500, 3000, 5000, 7000, 9000, 10000, 12000, 12000, 12000]'));
   assert.ok(proxySource.includes('status === 502 ? "CORE_GATEWAY_502"'));
-  assert.ok(proxySource.includes("after one retry"));
+  assert.ok(proxySource.includes('" retries (" + (gatewayRetries + 1) + " attempts)'));
 });
 
 test("proxy retries a transient HTML 502 once and returns the backend response", async (t) => {
   let calls = 0;
   const proxy = createUltronCoreProxy({
-    retryDelayMs: 0,
+    gatewayRetryDelaysMs: [0],
     fetchImpl: async () => {
       calls += 1;
       if (calls === 1) {
@@ -211,7 +211,7 @@ test("proxy turns a persistent non-JSON gateway 502 into an actionable API error
   assert.deepEqual(await response.json(), {
     error: {
       code: "CORE_GATEWAY_502",
-      message: "ULTRON Core returned an upstream 502 gateway response after one retry. The backend may be starting or temporarily unavailable. Please retry in a few seconds."
+      message: "ULTRON Core returned an upstream 502 gateway response after 1 retries (2 attempts). This can happen while the free backend wakes from idle; please retry shortly."
     }
   });
   assert.equal(calls, 2);
@@ -244,4 +244,53 @@ test("proxy does not retry structured JSON model-provider errors", async (t) => 
   assert.equal(response.status, 502);
   assert.deepEqual(await response.json(), expected);
   assert.equal(calls, 1);
+});
+
+
+test("voice output prefers installed male voices and uses language-specific speech segments", () => {
+  assert.match(html, /data-drawer-view="voice-quality"/);
+  assert.ok(app.includes("function chooseSpeechVoice(language)"));
+  assert.ok(app.includes("const maleVoiceName ="));
+  assert.ok(app.includes("function splitSpeechSegments(text)"));
+  assert.ok(app.includes('utterance.lang = segment.lang'));
+  assert.ok(app.includes('utterance.pitch = 0.86'));
+  assert.ok(app.includes('utterance.rate = 0.94'));
+  assert.ok(app.includes('function speechVoiceLabel(language)'));
+});
+
+test("voice quality panel explains browser voice requirements and can preview Hindi and English", () => {
+  assert.ok(app.includes('if (name === "voice-quality")'));
+  assert.ok(app.includes('drawerButton("PREVIEW HINDI + ENGLISH VOICE"'));
+  assert.ok(app.includes("Natural/Neural male voice"));
+  assert.ok(app.includes("मैं हिंदी और English दोनों में जवाब दूँगा"));
+});
+
+test("gateway recovery keeps trying through a longer cold start and returns when the backend wakes", async (t) => {
+  let calls = 0;
+  const proxy = createUltronCoreProxy({
+    gatewayRetryDelaysMs: [0, 0, 0, 0],
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls < 5) {
+        return new Response("<html>503 Service Unavailable</html>", {
+          status: 503,
+          headers: { "Content-Type": "text/html" }
+        });
+      }
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    },
+    logger: { warn() {} }
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once("error", reject);
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
+  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/health");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "ok" });
+  assert.equal(calls, 5);
 });
