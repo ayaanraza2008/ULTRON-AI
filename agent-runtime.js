@@ -1,4 +1,5 @@
 import express from "express";
+import { createHash } from "node:crypto";
 import { hasEmployeeModelProvider } from "./features.js";
 import { isPublicNetworkHost, safePinnedFetch, safeServiceBase as safeBase } from "./network-safety.js";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
@@ -903,7 +904,70 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) throw Object.assign(new Error("Authenticated task storage is unavailable."), { code: "TASK_STORAGE_UNAVAILABLE", status: 503 });
       const autonomousWorkflow = /\b(research|investigate|look into|find sources)\b/i.test(goal) && /\b(report|summary|recommendations|brief)\b/i.test(goal);
       const input = { taskType: autonomousWorkflow ? "autonomous" : "employee", executionMode: "employee_worker", role, goal, context, mode: autonomousWorkflow ? "report" : mode, requiresApproval: false, approved: true, createdBy: "ultron_agent_tool" };
-      const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", { user_id: req.supabaseUser.id, title: goal.slice(0, 240), input, status: "QUEUED" });
+      const rawIdempotencyKey = req.headers?.["idempotency-key"];
+      if (rawIdempotencyKey !== undefined &&
+          (typeof rawIdempotencyKey !== "string" || rawIdempotencyKey.length < 8 ||
+           rawIdempotencyKey.length > 200 || !/^[A-Za-z0-9._~-]+$/.test(rawIdempotencyKey))) {
+        throw Object.assign(new Error("Idempotency-Key must be 8-200 ASCII letters, digits, dots, underscores, tildes, or hyphens."), { code: "IDEMPOTENCY_KEY_INVALID", status: 400 });
+      }
+      const idempotencyKey = typeof rawIdempotencyKey === "string"
+        ? createHash("sha256").update(rawIdempotencyKey, "utf8").digest("hex")
+        : "";
+      // Fingerprint the submitted operation, not LLM-generated tool arguments:
+      // model output may vary across retries of the same HTTP request, but retrying
+      // the same client operation must still resolve to the original queued task.
+      const submittedMessages = Array.isArray(req.body?.messages)
+        ? req.body.messages.slice(-12).map(message => ({
+          role: message?.role,
+          content: bounded(message?.content, 6000)
+        }))
+        : [];
+      const requestFingerprint = createHash("sha256").update(JSON.stringify({
+        userId: req.supabaseUser.id,
+        prompt: bounded(req.body?.prompt, 6000),
+        messages: submittedMessages,
+        taskType: input.taskType,
+        confirmBackgroundTask: req.body?.confirmBackgroundTask === true
+      }), "utf8").digest("hex");
+      if (idempotencyKey) {
+        input.idempotencyKey = idempotencyKey;
+        input.requestFingerprint = requestFingerprint;
+      }
+      const taskQuery = "?select=id,title,input,status,created_at&user_id=eq." +
+        encodeURIComponent(req.supabaseUser.id) +
+        (idempotencyKey ? "&input->>idempotencyKey=eq." + idempotencyKey : "") + "&limit=1";
+      const findPriorTask = async () => {
+        if (!idempotencyKey) return null;
+        const found = await supabaseRest(req, "agent_tasks", "GET", taskQuery);
+        if (!Array.isArray(found) || !found[0]?.id) return null;
+        return found[0];
+      };
+      const reusePriorTask = task => {
+        if (task.input?.requestFingerprint !== requestFingerprint) {
+          throw Object.assign(new Error("This Idempotency-Key was already used for a different task request."), { code: "IDEMPOTENCY_KEY_REUSED", status: 409 });
+        }
+        return {
+          state: String(task.status || "QUEUED").toLowerCase(),
+          task,
+          deduplicated: true,
+          execution: autonomousWorkflow ? "background_autonomous_research_and_report" : "background_draft_only",
+          notice: "Reused the existing task for this Idempotency-Key; no additional task was created."
+        };
+      };
+      const priorTask = await findPriorTask();
+      if (priorTask) return reusePriorTask(priorTask);
+      let rows;
+      try {
+        rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,input,status,created_at", { user_id: req.supabaseUser.id, title: goal.slice(0, 240), input, status: "QUEUED" });
+      } catch (error) {
+        // The database unique index closes the race between the initial lookup and insert.
+        // A duplicate insert is resolved by reading the winner's row, never by creating a second task.
+        if (!idempotencyKey || error?.status !== 409) throw error;
+        const concurrentTask = await findPriorTask();
+        if (concurrentTask) return reusePriorTask(concurrentTask);
+        throw error;
+      }
+
       if (!Array.isArray(rows) || !rows[0]?.id) throw Object.assign(new Error("Task queue did not return a task ID."), { code: "TASK_CREATE_FAILED", status: 502 });
       let auditRecorded = true;
       try {
