@@ -604,6 +604,78 @@
     return /[\u0900-\u097F]/.test(String(text || "")) ? "hi-IN" : "en-IN";
   }
 
+  function getAvailableSpeechVoices() {
+    try {
+      const voices = window.speechSynthesis?.getVoices?.();
+      return Array.isArray(voices) ? voices : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function chooseSpeechVoice(language) {
+    const voices = getAvailableSpeechVoices();
+    if (!voices.length) return null;
+    const wanted = String(language || "en-IN").toLowerCase();
+    const base = wanted.split("-")[0];
+    const preferredLocale = base === "hi" ? "hi-in" : "en-in";
+    const maleVoiceName = /\b(prabhat|ravi|madhur|hemant|david|mark|guy|daniel|alex|james|thomas|aaron|ryan|matthew|male)\b/i;
+    const femaleVoiceName = /\b(zira|samantha|victoria|karen|hazel|heera|lekha|swara|kavya|pallavi|priya|neerja|reena|female|woman)\b/i;
+    const naturalVoiceName = /natural|neural|online|enhanced|premium/i;
+    const scoreVoice = (voice) => {
+      const lang = String(voice.lang || "").toLowerCase().replaceAll("_", "-");
+      let score = 0;
+      if (lang === preferredLocale) score += 120;
+      else if (lang.startsWith(base + "-")) score += 75;
+      else if (lang === base) score += 65;
+      else if (base === "en" && /^en-(gb|us|au|ca)/.test(lang)) score += 45;
+      else score -= 35;
+      if (naturalVoiceName.test(voice.name || "")) score += 35;
+      if (maleVoiceName.test(voice.name || "")) score += 45;
+      if (femaleVoiceName.test(voice.name || "")) score -= 70;
+      if (voice.localService === false) score += 12;
+      if (voice.default) score += 2;
+      return score;
+    };
+    return voices.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
+  }
+
+  function speechVoiceLabel(language) {
+    const voice = chooseSpeechVoice(language);
+    return voice ? String(voice.name || voice.lang || "Installed voice") : "Browser default (voice list not loaded)";
+  }
+
+  function splitSpeechSegments(text) {
+    const source = String(text || "").replace(/\s+/g, " ").trim().slice(0, 4000);
+    if (!source) return [];
+    const tokens = source.match(/[\u0900-\u097F]+|[A-Za-z]+(?:['’'-][A-Za-z]+)*|\d+(?:[.,]\d+)*|[^\sA-Za-z0-9\u0900-\u097F]+|\s+/g) || [];
+    const segments = [];
+    let active = null;
+    let pending = "";
+    for (const token of tokens) {
+      if (/^\s+$/.test(token) || /^[^A-Za-z0-9\u0900-\u097F]+$/.test(token)) {
+        pending += token;
+        continue;
+      }
+      const lang = /[\u0900-\u097F]/.test(token) ? "hi-IN" : "en-IN";
+      if (!active) {
+        active = { lang, text: pending + token };
+      } else if (active.lang === lang) {
+        active.text += pending + token;
+      } else {
+        active.text += pending;
+        segments.push(active);
+        active = { lang, text: token };
+      }
+      pending = "";
+    }
+    if (active) {
+      active.text += pending;
+      segments.push(active);
+    }
+    return segments.map(segment => ({ ...segment, text: segment.text.trim() })).filter(segment => segment.text);
+  }
+
   function speakResponse(text, force = false) {
     const shouldSpeak = force || (mode === "text" && !mutedInTextMode);
     if (!shouldSpeak) return Promise.resolve(false);
@@ -613,29 +685,44 @@
       showToast("Speech output is not supported by this browser.");
       return Promise.resolve(false);
     }
+    const segments = splitSpeechSegments(text);
+    if (!segments.length) return Promise.resolve(false);
     speechEpoch += 1;
     const epoch = speechEpoch;
     try { synth.cancel(); } catch { /* continue with a fresh utterance */ }
     return new Promise((resolve) => {
-      const utterance = new Utterance(String(text || "").slice(0, 4000));
-      utterance.lang = detectSpeechLanguage(text);
-      utterance.rate = 1.01;
-      utterance.pitch = 0.94;
-      utterance.volume = 1;
+      let pending = segments.length;
+      let anySpoken = false;
       let settled = false;
-      const settle = (spoken) => {
-        if (settled) return;
-        settled = true;
-        if (epoch === speechEpoch) resolve(spoken);
-        else resolve(false);
+      const finishSegment = (spoken) => {
+        if (epoch !== speechEpoch) {
+          if (!settled) { settled = true; resolve(false); }
+          return;
+        }
+        if (spoken) anySpoken = true;
+        pending -= 1;
+        if (pending <= 0 && !settled) {
+          settled = true;
+          resolve(anySpoken);
+        }
       };
-      utterance.onstart = () => setCoreState("speaking");
-      utterance.onend = () => settle(true);
-      utterance.onerror = () => settle(false);
-      try {
-        synth.speak(utterance);
-      } catch {
-        settle(false);
+      for (const segment of segments) {
+        const utterance = new Utterance(segment.text);
+        utterance.lang = segment.lang;
+        utterance.voice = chooseSpeechVoice(segment.lang);
+        utterance.rate = 0.94;
+        utterance.pitch = 0.86;
+        utterance.volume = 1;
+        utterance.onstart = () => {
+          if (epoch === speechEpoch) setCoreState("speaking");
+        };
+        utterance.onend = () => finishSegment(true);
+        utterance.onerror = () => finishSegment(false);
+        try {
+          synth.speak(utterance);
+        } catch {
+          finishSegment(false);
+        }
       }
     });
   }
@@ -1055,6 +1142,21 @@
       drawerButton("ANALYZE CURRENT VIEW", () => { void analyzeCameraFrame(false); }, true).disabled = !cameraStream;
       drawerButton("STOP EYES", () => stopCamera(), true).disabled = !cameraStream;
       drawerCard("Privacy", "The interface does not save video. A single compressed frame is sent to ULTRON only when you request analysis or enable Live observation.", "VISIBLE CONTROLS");
+      return;
+    }
+    if (name === "voice-quality") {
+      drawerHeading("Voice quality & pronunciation", "ULTRON selects the best installed male-leaning Indian English and Hindi voices available in this browser. The final sound depends on the voices provided by Windows and the browser.");
+      drawerCard("Hindi voice", speechVoiceLabel("hi-IN"), /browser default/i.test(speechVoiceLabel("hi-IN")) ? "VOICE LIST NOT READY" : "SELECTED AUTOMATICALLY", /browser default/i.test(speechVoiceLabel("hi-IN")) ? "warning" : "ready");
+      drawerCard("English voice", speechVoiceLabel("en-IN"), /browser default/i.test(speechVoiceLabel("en-IN")) ? "VOICE LIST NOT READY" : "SELECTED AUTOMATICALLY", /browser default/i.test(speechVoiceLabel("en-IN")) ? "warning" : "ready");
+      drawerCard("Delivery profile", "Sentence-by-sentence Hindi/English routing, a slightly slower speaking rate, and a lower pitch for a fuller male presentation. Punctuation is retained for pauses.", "LOCAL SPEECH");
+      drawerCard("Naturalness limit", "No extra paid voice API is added. For the most human-sounding result, install a Natural/Neural male voice for Hindi (India) and English (India) in Windows speech settings, then reload this page.", "DEVICE DEPENDENT", "warning");
+      drawerButton("PREVIEW HINDI + ENGLISH VOICE", () => {
+        const wasListening = voiceActive && mode === "voice";
+        if (wasListening) stopRecognition();
+        void speakResponse("Hello, I am ULTRON. नमस्ते, मैं ULTRON हूँ। मैं हिंदी और English दोनों में जवाब दूँगा।", true)
+          .finally(() => { if (wasListening) scheduleRecognitionRestart(); });
+      });
+      drawerButton("REFRESH AVAILABLE VOICES", () => { void showDrawerView("voice-quality"); }, true);
       return;
     }
     if (name === "tasks") {
