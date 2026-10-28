@@ -12,7 +12,7 @@ const API_ENV = {
   ULTRON_DESKTOP_BRIDGE_TOKEN: TOKEN
 };
 
-function makeHarness({ env = API_ENV, authUserId = OWNER } = {}) {
+function makeHarness({ env = API_ENV, authUserId = OWNER, ackRace = null } = {}) {
   const store = new Map();
   let sequence = 0;
 
@@ -32,6 +32,29 @@ function makeHarness({ env = API_ENV, authUserId = OWNER } = {}) {
       row.started_at = new Date(now).toISOString();
       row.lease_expires_at = new Date(now + 90_000).toISOString();
       row.updated_at = new Date(now).toISOString();
+      return [structuredClone(row)];
+    }
+    if (table === "rpc/ultron_ack_desktop_action" && method === "POST") {
+      const row = store.get(body?.p_action_id);
+      if (!row) return [];
+      if (ackRace === "lease_expires") row.lease_expires_at = new Date(Date.now() - 1000).toISOString();
+      if (ackRace === "lease_reclaimed") {
+        row.attempts = Number(body.p_attempts) + 1;
+        row.lease_expires_at = new Date(Date.now() + 90_000).toISOString();
+      }
+      const leaseExpiry = Date.parse(row.lease_expires_at || "");
+      if (row.user_id !== body.p_user_id || row.status !== "RUNNING" ||
+          Number(row.attempts) !== Number(body.p_attempts) || !Number.isFinite(leaseExpiry) || leaseExpiry <= Date.now()) {
+        return [];
+      }
+      Object.assign(row, {
+        status: body.p_status,
+        result: structuredClone(body.p_result),
+        error_code: body.p_error_code ?? null,
+        finished_at: new Date().toISOString(),
+        lease_expires_at: null,
+        updated_at: new Date().toISOString()
+      });
       return [structuredClone(row)];
     }
     if (table !== "desktop_actions") throw new Error("Unexpected privileged table: " + table);
@@ -277,5 +300,40 @@ test("bridge refuses a configured token that contains whitespace", async t => {
   const result = await h.request("POST", "/api/desktop/bridge/next", { token: malformedToken, body: {} });
   assert.equal(result.status, 503);
   assert.equal(result.payload.error.code, "DESKTOP_BRIDGE_NOT_CONFIGURED");
+});
+
+test("atomic database acknowledgement rejects a lease that expires after the initial read", async t => {
+  const h = makeHarness({ ackRace: "lease_expires" });
+  t.after(() => h.close());
+  await h.request("POST", "/api/desktop/actions", { body: { actionType: "launch_app", payload: { app: "calculator" } } });
+  await h.request("POST", "/api/desktop/actions/" + ACTION_ID + "/approve");
+  await h.request("POST", "/api/desktop/bridge/next", { token: TOKEN, body: {} });
+
+  const response = await h.request("POST", "/api/desktop/bridge/ack", {
+    token: TOKEN,
+    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Launched Calculator", app: "calculator" } }
+  });
+  assert.equal(response.status, 409);
+  assert.equal(response.payload.error.code, "DESKTOP_ACTION_STATE_CHANGED");
+  assert.equal(h.store.get(ACTION_ID).status, "RUNNING");
+  assert.ok(Date.parse(h.store.get(ACTION_ID).lease_expires_at) < Date.now());
+});
+
+test("atomic database acknowledgement rejects an old worker after a lease is reclaimed", async t => {
+  const h = makeHarness({ ackRace: "lease_reclaimed" });
+  t.after(() => h.close());
+  await h.request("POST", "/api/desktop/actions", { body: { actionType: "launch_app", payload: { app: "calculator" } } });
+  await h.request("POST", "/api/desktop/actions/" + ACTION_ID + "/approve");
+  await h.request("POST", "/api/desktop/bridge/next", { token: TOKEN, body: {} });
+
+  const response = await h.request("POST", "/api/desktop/bridge/ack", {
+    token: TOKEN,
+    body: { actionId: ACTION_ID, attempts: 1, state: "completed", result: { ok: true, summary: "Launched Calculator", app: "calculator" } }
+  });
+  assert.equal(response.status, 409);
+  assert.equal(response.payload.error.code, "DESKTOP_ACTION_STATE_CHANGED");
+  assert.equal(h.store.get(ACTION_ID).status, "RUNNING");
+  assert.equal(h.store.get(ACTION_ID).attempts, 2);
+  assert.ok(Date.parse(h.store.get(ACTION_ID).lease_expires_at) > Date.now());
 });
 
