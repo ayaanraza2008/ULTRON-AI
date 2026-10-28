@@ -943,9 +943,12 @@
       if (error.status === 503 && ["PROVIDER_NOT_CONFIGURED", "VISION_MODEL_NOT_CONFIGURED"].includes(error.code)) {
         showToast(error.message + " This must be configured server-side; no API secret should be entered into this interface.", 8500);
       }
-      if (source === "camera-auto" && error.status === 503) {
+      if (source === "camera-auto") {
         if (ui.cameraLiveObserve) ui.cameraLiveObserve.checked = false;
-        showToast("Live camera analysis stopped because the backend reports no eligible vision model.", 8500);
+        if (cameraLiveTimer) window.clearTimeout(cameraLiveTimer);
+        cameraLiveTimer = null;
+        if (ui.cameraRecBadge) ui.cameraRecBadge.hidden = true;
+        showToast("Live camera observation paused because the vision request failed. Check System readiness, then enable it again.", 8500);
       }
       if (mode === "voice" && voiceActive && source !== "camera-auto" && !mutedInTextMode && error.status !== 401) {
         await speakResponse(error.message || "I could not complete that request.", true);
@@ -1256,7 +1259,9 @@
 
   function fileExtension(filename) {
     const match = /\.([a-z0-9]{1,8})$/i.exec(String(filename || ""));
-    return match ? match[1].toLowerCase().replace("htm", "html") : "";
+    if (!match) return "";
+    const extension = match[1].toLowerCase();
+    return extension === "htm" ? "html" : extension;
   }
 
   async function analyzeLocalFile(file) {
@@ -1417,7 +1422,7 @@
       ? "Observe this camera frame. Briefly describe visible objects, scene context, and obvious changes that are useful to the user. Only state what is actually visible; do not identify a person or infer sensitive traits. This is a periodic observation, not permission to take actions."
       : "ULTRON Eyes: describe what is visible in this camera frame, identify relevant objects and context, and mention uncertainty. Only state what is actually visible. Do not identify a person, infer sensitive traits, or perform an external action.";
     await sendPrompt(prompt, automatic ? "camera-auto" : "camera", [{ dataUrl }]);
-    ui.cameraRecBadge.hidden = true;
+    ui.cameraRecBadge.hidden = !ui.cameraLiveObserve.checked;
   }
 
   function scheduleCameraObservation() {
