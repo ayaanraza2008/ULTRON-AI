@@ -33,9 +33,12 @@ function normalizePublicUrl(value) {
 function stripMarkdownCode(answer) {
   // Links inside code samples are not citations. Treat an unterminated fenced
   // block as code through end-of-report, preferring a review warning to a false pass.
+  // Preserve every character offset so citation-token boundaries still refer
+  // to the same positions in the original answer after code is removed.
+  const replaceVisibleCharacters = block => block.replace(/[^\r\n]/g, " ");
   return answer
-    .replace(/```[\s\S]*?(?:```|$)/g, " ")
-    .replace(/`[^`\n]*`/g, " ");
+    .replace(/```[\s\S]*?(?:```|$)/g, replaceVisibleCharacters)
+    .replace(/`[^`\r\n]*`/g, replaceVisibleCharacters);
 }
 
 function extractPublicCitationUrls(answer) {
