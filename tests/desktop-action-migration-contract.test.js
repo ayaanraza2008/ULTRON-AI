@@ -44,3 +44,16 @@ test("desktop action transition guard requires fresh leases and consistent attem
   assert.match(migration, /new\.lease_expires_at <= now\(\)/i);
   assert.match(migration, /new\.status in \('COMPLETED', 'FAILED'\)[\s\S]*?new\.finished_at is null/i);
 });
+
+test("desktop acknowledgement RPC atomically checks owner, attempt and live lease", () => {
+  assert.match(migration, /create or replace function public\\.ultron_ack_desktop_action\\(/i);
+  assert.match(migration, /returns setof public\\.desktop_actions/i);
+  assert.match(migration, /security definer[\\s\\S]*?set search_path = ''/i);
+  assert.match(migration, /action\\.user_id = p_user_id/i);
+  assert.match(migration, /action\\.status = 'RUNNING'/i);
+  assert.match(migration, /action\\.attempts = p_attempts/i);
+  assert.match(migration, /action\\.lease_expires_at > clock_timestamp\\(\\)/i);
+  assert.match(migration, /revoke all on function public\\.ultron_ack_desktop_action\\(uuid, uuid, integer, text, jsonb, text\\) from public, anon, authenticated/i);
+  assert.match(migration, /grant execute on function public\\.ultron_ack_desktop_action\\(uuid, uuid, integer, text, jsonb, text\\) to service_role/i);
+});
+
