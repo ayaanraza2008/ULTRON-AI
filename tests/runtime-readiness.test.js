@@ -147,3 +147,57 @@ test("an intentionally unavailable optional capability does not permanently bloc
   assert.equal(result.overallState, "ready_for_live_verification");
   assert.equal(result.summary.blockerCount, 0);
 });
+
+
+test("Windows action queue readiness requires a valid owner and dedicated high-entropy token but remains unverified", () => {
+  const owner = "00000000-0000-4000-8000-000000000001";
+  const blocked = buildRuntimeReadiness({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: owner, ULTRON_DESKTOP_BRIDGE_TOKEN: "too-short" }
+  });
+  assert.equal(blocked.components.find((item) => item.id === "windows_action_queue").state, "blocked");
+
+  const token = "synthetic-desktop-bridge-token-for-readiness-tests-2026";
+  const configured = buildRuntimeReadiness({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: owner, ULTRON_DESKTOP_BRIDGE_TOKEN: token }
+  });
+  const queue = configured.components.find((item) => item.id === "windows_action_queue");
+  assert.equal(queue.state, "configured_unverified");
+  assert.match(queue.note, /not proof/i);
+  assert.equal(JSON.stringify(configured).includes(token), false);
+});
+
+test("desktop readiness explains owner-opted allowlisted autonomy without exposing configuration secrets", () => {
+  const owner = "00000000-0000-4000-8000-000000000001";
+  const token = "synthetic-desktop-bridge-token-for-readiness-tests-2026";
+  const result = buildRuntimeReadiness({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: owner, ULTRON_DESKTOP_BRIDGE_TOKEN: token, ULTRON_DESKTOP_AUTONOMY_MODE: "allowlisted" }
+  });
+  const queue = result.components.find((item) => item.id === "windows_action_queue");
+  assert.equal(queue.state, "configured_unverified");
+  assert.match(queue.note, /allowlisted hands-free mode is enabled/i);
+  assert.match(queue.note, /not proof/i);
+  assert.equal(JSON.stringify(result).includes(token), false);
+});
+
+test("code execution readiness stays unavailable by default and reflects opt-in configuration", () => {
+  const disabled = buildRuntimeReadiness({ env: {} });
+  const disabledSandbox = disabled.components.find((item) => item.id === "safe_code_execution");
+  assert.equal(disabledSandbox.state, "not_available");
+  assert.match(disabledSandbox.note, /disabled by default/i);
+
+  const owner = "00000000-0000-4000-8000-000000000001";
+  const nodeImage = "registry.example/ultron-node:22@sha256:" + "a".repeat(64);
+  const pythonImage = "registry.example/ultron-python:3.12@sha256:" + "b".repeat(64);
+  const configured = buildRuntimeReadiness({
+    env: {
+      ULTRON_CODING_SANDBOX_ENABLED: "true",
+      ULTRON_INTEGRATION_OWNER_USER_ID: owner,
+      ULTRON_CODING_SANDBOX_NODE_IMAGE: nodeImage,
+      ULTRON_CODING_SANDBOX_PYTHON_IMAGE: pythonImage
+    }
+  });
+  const sandbox = configured.components.find((item) => item.id === "safe_code_execution");
+  assert.equal(sandbox.state, "configured_unverified");
+  assert.match(sandbox.note, /Docker availability and real isolated execution remain unverified/i);
+  assert.equal(JSON.stringify(configured).includes(nodeImage), false);
+});
