@@ -301,11 +301,19 @@ export function createDesktopActionRouter({
       let result;
       try { result = sanitizeDesktopResult(existing.action_type, existing.payload || {}, state, req.body?.result); }
       catch (error) { return apiError(res, error.status || 400, error.code || "DESKTOP_ACTION_RESULT_INVALID", error.message); }
-      const rows = await db(req, "desktop_actions", "PATCH",
-        "?id=eq." + id + "&user_id=eq." + req.desktopOwnerId + "&status=eq.RUNNING&attempts=eq." + attempts,
-        { status: isSuccessful ? "COMPLETED" : "FAILED", result, error_code: errorCode, finished_at: now().toISOString(), lease_expires_at: null });
+      // The database must re-check status, owner, attempt and lease expiry in
+      // the same UPDATE that persists the acknowledgement. A prior GET is not
+      // sufficient: another worker may reclaim the lease between the GET and write.
+      const rows = await db(req, "rpc/ultron_ack_desktop_action", "POST", "", {
+        p_action_id: id,
+        p_user_id: req.desktopOwnerId,
+        p_attempts: attempts,
+        p_status: isSuccessful ? "COMPLETED" : "FAILED",
+        p_result: result,
+        p_error_code: errorCode
+      });
       const row = Array.isArray(rows) ? rows[0] : null;
-      if (!row) return apiError(res, 409, "DESKTOP_ACTION_STATE_CHANGED", "The desktop action changed before its result was stored.");
+      if (!row) return apiError(res, 409, "DESKTOP_ACTION_STATE_CHANGED", "The action state or lease changed before its result was stored.");
       return res.json({ action: publicAction(row), acknowledged: true });
     } catch (error) {
       return handleFailure(res, error, "The desktop action result could not be saved.");
