@@ -203,19 +203,25 @@ export function createDesktopActionRouter({
       let payload;
       try { payload = validateDesktopAction(actionType, req.body?.payload ?? {}); }
       catch (error) { return apiError(res, error.status || 400, error.code || "DESKTOP_ACTION_INVALID", error.message); }
+      // The owner may opt into hands-free execution for this exact low-risk allowlist.
+      // validateDesktopAction above rejects every other action type and parameter.
+      const autoApproved = env.ULTRON_DESKTOP_AUTONOMY_MODE === "allowlisted";
+      const approvedAt = autoApproved ? now().toISOString() : null;
       const rows = await db(req, "desktop_actions", "POST", "?select=" + ACTION_SELECT, {
         user_id: req.desktopOwnerId,
         action_type: actionType,
         payload,
-        status: "PENDING_APPROVAL",
-        attempts: 0
+        status: autoApproved ? "QUEUED" : "PENDING_APPROVAL",
+        attempts: 0,
+        approved_at: approvedAt
       });
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row?.id) return apiError(res, 502, "DESKTOP_ACTION_CREATE_FAILED", "The desktop action could not be recorded.");
       return res.status(201).json({
         action: publicAction(row),
-        requiresApproval: true,
-        execution: "not_executed",
+        requiresApproval: !autoApproved,
+        execution: autoApproved ? "queued_not_yet_executed" : "not_executed",
+        autonomyMode: autoApproved ? "owner_allowlisted" : "approval_required",
         bridgeConfigured: bridgeTokenConfigured(env)
       });
     } catch (error) {
