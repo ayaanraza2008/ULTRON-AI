@@ -106,7 +106,7 @@ function forwardResponseHeaders(upstream, res) {
   }
 }
 
-export function createUltronCoreProxy({ fetchImpl = fetch, logger = console } = {}) {
+export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, retryDelayMs = 1200 } = {}) {
   return createServer(async (req, res) => {
     let requestUrl;
     try {
@@ -153,13 +153,51 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console } = 
     req.once("aborted", abortRequest);
     res.once("close", () => { if (!res.writableEnded) controller.abort(); });
     try {
-      const upstream = await fetchImpl(target, {
+      const forwardOptions = {
         method: req.method,
         headers: forwardedRequestHeaders(req),
         ...(body === undefined ? {} : { body }),
         redirect: "manual",
         signal: controller.signal
-      });
+      };
+      let upstream = await fetchImpl(target, forwardOptions);
+      const isJsonResponse = response => {
+        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+        return contentType.includes("application/json") || contentType.includes("+json");
+      };
+
+      // Render's gateway can return an HTML 502/503 while the free backend is
+      // starting. Retry only that non-JSON gateway response; never retry a
+      // structured API error, because a POST may already have reached the app.
+      if ([502, 503].includes(upstream.status) && !isJsonResponse(upstream)) {
+        const firstStatus = upstream.status;
+        const firstContentType = upstream.headers.get("content-type") || "unknown";
+        logger.warn?.("ULTRON upstream returned a non-JSON gateway response", {
+          status: firstStatus,
+          contentType: String(firstContentType).slice(0, 100)
+        });
+        try { await upstream.body?.cancel?.(); } catch {}
+        if (!controller.signal.aborted) {
+          const waitMs = Number.isFinite(Number(retryDelayMs))
+            ? Math.min(5000, Math.max(0, Number(retryDelayMs)))
+            : 1200;
+          if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+          upstream = await fetchImpl(target, forwardOptions);
+        }
+      }
+
+      if ([502, 503].includes(upstream.status) && !isJsonResponse(upstream)) {
+        const status = upstream.status;
+        try { await upstream.body?.cancel?.(); } catch {}
+        sendJson(res, status, {
+          error: {
+            code: status === 502 ? "CORE_GATEWAY_502" : "CORE_BACKEND_UNAVAILABLE",
+            message: "ULTRON Core returned an upstream " + status + " gateway response after one retry. The backend may be starting or temporarily unavailable. Please retry in a few seconds."
+          }
+        });
+        return;
+      }
+
       res.statusCode = upstream.status;
       forwardResponseHeaders(upstream, res);
       if (req.method === "HEAD" || upstream.status === 204 || upstream.status === 304 || !upstream.body) {
