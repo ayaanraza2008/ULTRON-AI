@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../windows-companion/DesktopActionBridge.cs", import.meta.url), "utf8");
+const program = await readFile(new URL("../windows-companion/Program.cs", import.meta.url), "utf8");
 
 test("Windows actions use absolute system paths instead of shell/PATH resolution", () => {
   assert.match(source, /Environment\.GetFolderPath\(Environment\.SpecialFolder\.System\)/);
@@ -14,4 +15,10 @@ test("Windows actions use absolute system paths instead of shell/PATH resolution
   assert.match(source, /File\.Exists\(executable\)/);
   assert.match(source, /UseShellExecute\s*=\s*false/);
   assert.doesNotMatch(source, /UseShellExecute\s*=\s*true/);
+});
+
+
+test("Windows companion opens the current ULTRON Core service origin", () => {
+  assert.match(program, /AssistantUrl\s*=\s*"https:\/\/ultron-ai-core\.onrender\.com\/"/);
+  assert.doesNotMatch(program, /ultron-ai-zvd7\.onrender\.com/);
 });

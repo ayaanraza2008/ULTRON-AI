@@ -24,7 +24,7 @@ internal static class Program
 
 internal sealed class CompanionContext : ApplicationContext
 {
-    private const string AssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
+    private const string AssistantUrl = "https://ultron-ai-core.onrender.com/";
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupRegistryValue = "ULTRONWakeCompanion";
     private readonly Form _window;
