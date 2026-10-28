@@ -87,3 +87,39 @@ test("agent public API routing does not turn API integration requests into weath
     assert.equal(externalCalls, 1);
   });
 });
+
+
+test("agent can search the bundled public API directory without network calls to catalog providers", async () => {
+  let modelCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "test-only" }, async (url, options) => {
+    if (!String(url).startsWith("https://openrouter.ai/api/v1/chat/completions")) {
+      throw new Error("Catalog search must not call a catalog endpoint: " + url);
+    }
+    modelCalls++;
+    const body = JSON.parse(options.body);
+    assert.ok(body.tools.some(tool => tool.function?.name === "search_public_api_catalog"));
+    if (modelCalls === 1) return jsonResponse({ choices: [{ message: { role: "assistant", content: "I'll search the catalog." } }] });
+    return jsonResponse({ choices: [{ message: { role: "assistant", content: "I found public API listings for geocoding. These are discovery results, not live integrations." } }] });
+  }, async base => {
+    const toolResponse = await fetch(base + "/api/agent/tools");
+    assert.equal(toolResponse.status, 200);
+    const toolBody = await toolResponse.json();
+    const directoryTool = toolBody.tools.find(tool => tool.name === "search_public_api_catalog");
+    assert.equal(directoryTool.available, true);
+    assert.ok(directoryTool.entries >= 2000);
+    assert.ok(directoryTool.categories >= 50);
+
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Find public APIs for geocoding" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.toolsUsed.some(item => item.name === "search_public_api_catalog" && item.ok));
+    const result = body.toolResults.find(item => item.name === "search_public_api_catalog")?.result;
+    assert.ok(result.totalMatches > 0);
+    assert.ok(result.results.some(item => /geocod/i.test(item.name + " " + item.description + " " + item.category)));
+    assert.match(result.notice, /not verified live integrations/i);
+  });
+});
