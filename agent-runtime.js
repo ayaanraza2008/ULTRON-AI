@@ -483,8 +483,132 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   };
 }
 
-export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
+export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console, now = Date.now } = {}) {
   const router = express.Router();
+
+  // Provider health is deliberately per router/process and contains no keys,
+  // URLs, prompt content, or upstream response bodies. This limits repeated
+  // calls to a provider/model that has repeatedly failed while allowing a
+  // single half-open probe after a bounded cooldown.
+  const providerHealth = new Map();
+  const PROVIDER_HEALTH_MAX_ENTRIES = 128;
+  const clock = () => {
+    try {
+      const value = Number(now());
+      return Number.isFinite(value) ? value : Date.now();
+    } catch {
+      return Date.now();
+    }
+  };
+  function providerCircuitConfig() {
+    const rawThreshold = Number.parseInt(String(env.ULTRON_PROVIDER_CIRCUIT_FAILURE_THRESHOLD || ""), 10);
+    const rawOpenMs = Number.parseInt(String(env.ULTRON_PROVIDER_CIRCUIT_OPEN_MS || ""), 10);
+    return {
+      failureThreshold: Number.isFinite(rawThreshold) ? Math.max(1, Math.min(10, rawThreshold)) : 3,
+      openMs: Number.isFinite(rawOpenMs) ? Math.max(1000, Math.min(300000, rawOpenMs)) : 30000
+    };
+  }
+  function providerHealthKey(provider) {
+    return JSON.stringify([provider.name, provider.model]);
+  }
+  function providerState(provider, create = false) {
+    const key = providerHealthKey(provider);
+    let state = providerHealth.get(key);
+    if (!state && create) {
+      if (providerHealth.size >= PROVIDER_HEALTH_MAX_ENTRIES) {
+        providerHealth.delete(providerHealth.keys().next().value);
+      }
+      state = {
+        consecutiveFailures: 0,
+        openUntil: 0,
+        openedAt: 0,
+        probeInFlight: false,
+        lastFailureAt: null,
+        lastErrorCode: null,
+        lastStatus: null,
+        lastSuccessAt: null
+      };
+      providerHealth.set(key, state);
+    }
+    return state || null;
+  }
+  function admitProviderAttempt(provider) {
+    const state = providerState(provider);
+    if (!state) return { allowed: true, retryAfterMs: 0 };
+    const at = clock();
+    if (state.openUntil > at) return { allowed: false, retryAfterMs: state.openUntil - at };
+    if (state.openUntil > 0 && state.openUntil <= at) {
+      if (state.probeInFlight) return { allowed: false, retryAfterMs: 1000 };
+      state.probeInFlight = true;
+      return { allowed: true, retryAfterMs: 0, halfOpenProbe: true };
+    }
+    return { allowed: true, retryAfterMs: 0 };
+  }
+  function recordProviderFailure(provider, error) {
+    const state = providerState(provider, true);
+    const at = clock();
+    state.consecutiveFailures += 1;
+    state.lastFailureAt = at;
+    state.lastErrorCode = bounded(
+      typeof error?.code === "string" ? error.code :
+        typeof error?.name === "string" ? error.name : "PROVIDER_FAILURE",
+      80
+    );
+    const status = Number(error?.providerStatus ?? error?.status);
+    state.lastStatus = Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+    state.probeInFlight = false;
+    const config = providerCircuitConfig();
+    if (state.consecutiveFailures >= config.failureThreshold) {
+      state.openedAt = at;
+      state.openUntil = at + config.openMs;
+      logger.warn?.("AI provider circuit opened", {
+        provider: provider.name,
+        model: provider.model,
+        consecutiveFailures: state.consecutiveFailures,
+        cooldownMs: config.openMs,
+        code: state.lastErrorCode
+      });
+    }
+  }
+  function recordProviderSuccess(provider) {
+    const state = providerState(provider, true);
+    state.consecutiveFailures = 0;
+    state.openUntil = 0;
+    state.openedAt = 0;
+    state.probeInFlight = false;
+    state.lastSuccessAt = clock();
+  }
+  function releaseProviderProbe(provider) {
+    const state = providerState(provider);
+    if (state) state.probeInFlight = false;
+  }
+  function providerHealthSnapshot(userId) {
+    const at = clock();
+    const config = providerCircuitConfig();
+    return configuredModelProviders(userId).map(provider => {
+      const state = providerState(provider);
+      let circuitState = "unknown";
+      if (state) {
+        if (state.openUntil > at) circuitState = "open";
+        else if (state.probeInFlight) circuitState = "half_open";
+        else if (state.openUntil > 0 && state.openUntil <= at && state.consecutiveFailures >= config.failureThreshold) circuitState = "probe_due";
+        else if (state.consecutiveFailures > 0) circuitState = "degraded";
+        else if (state.lastSuccessAt !== null) circuitState = "healthy";
+      }
+      const timestamp = value => Number.isFinite(value) ? new Date(value).toISOString() : null;
+      return {
+        name: provider.name,
+        model: provider.model,
+        circuitState,
+        consecutiveFailures: state?.consecutiveFailures || 0,
+        lastStatus: state?.lastStatus ?? null,
+        lastErrorCode: state?.lastErrorCode ?? null,
+        lastFailureAt: timestamp(state?.lastFailureAt),
+        lastSuccessAt: timestamp(state?.lastSuccessAt),
+        retryAfterMs: state && state.openUntil > at ? state.openUntil - at : circuitState === "half_open" ? 1000 : 0
+      };
+    });
+  }
 
   // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
   // table when the optional AgentMemory daemon is not configured. RLS and the
@@ -620,8 +744,21 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     const providers = configuredModelProviders(userId).filter(provider => !useTools || provider.supportsTools);
     if (!providers.length) throw Object.assign(new Error("No configured AI provider is available. Add OPENROUTER_API_KEY or a valid provider entry with its server-side API key."), { status: 503, code: "PROVIDER_NOT_CONFIGURED" });
     let lastError;
+    let attemptedProviders = 0;
+    const circuitSkipped = [];
     const totalTimeoutSignal = createTimeoutSignal(modelRoutingTimeoutMs(env));
     for (const provider of providers) {
+      const admission = admitProviderAttempt(provider);
+      if (!admission.allowed) {
+        circuitSkipped.push(admission.retryAfterMs);
+        logger.warn?.("AI provider skipped because its circuit is open", {
+          provider: provider.name,
+          model: provider.model,
+          retryAfterMs: admission.retryAfterMs
+        });
+        continue;
+      }
+      attemptedProviders += 1;
       try {
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
@@ -631,61 +768,83 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           signal: AbortSignal.any([createTimeoutSignal(45000), totalTimeoutSignal])
         });
         if (!response.ok) {
-          // This loop attempts each configured provider at most once. Provider-specific
-          // auth, quota and model/endpoint errors should fall through to another provider;
-          // malformed requests remain non-fallback errors so schema bugs do not get hidden.
+          // Provider-specific auth, quota, model/endpoint and server errors may
+          // fail over. Malformed client requests remain non-fallback errors.
           const fallbackAllowed = [401, 402, 403, 404, 408, 429].includes(response.status) || response.status >= 500;
           const error = Object.assign(new Error("AI provider request failed."), {
             status: response.status === 429 ? 429 : 502,
+            providerStatus: response.status,
             code: "PROVIDER_REQUEST_FAILED",
             retryable: fallbackAllowed
           });
-          if (!fallbackAllowed) throw error;
+          if (!fallbackAllowed) {
+            releaseProviderProbe(provider);
+            throw error;
+          }
+          recordProviderFailure(provider, error);
           lastError = error;
           logger.warn?.("AI provider unavailable; trying fallback", { provider: provider.name, status: response.status });
           continue;
         }
         const raw = await readModelResponseTextLimited(response);
         let data;
-        try { data = raw ? JSON.parse(raw) : {}; } catch {
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
           lastError = Object.assign(new Error("AI provider returned malformed JSON."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
+          recordProviderFailure(provider, lastError);
           continue;
         }
         const message = data?.choices?.[0]?.message;
         const hasText = typeof message?.content === "string" && message.content.trim().length > 0;
         const hasToolCalls = Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
         if (!Array.isArray(data?.choices) || (!hasText && !hasToolCalls)) {
-          // A successful HTTP response can still be unusable. Fail over rather
-          // than returning an empty assistant answer to the user.
           lastError = Object.assign(new Error("AI provider returned an invalid completion."), { status: 502, code: "PROVIDER_RESPONSE_INVALID", retryable: true });
+          recordProviderFailure(provider, lastError);
           continue;
         }
         if (provider.name === "cactus") {
           const confidence = typeof data.confidence === "number" && Number.isFinite(data.confidence) ? data.confidence : null;
           if (data.cloud_handoff === true && env.CACTUS_ALLOW_CLOUD_HANDOFF !== "true") {
             lastError = Object.assign(new Error("Cactus reported a cloud handoff, which is disabled by ULTRON's free/local-first policy."), { status: 502, code: "CACTUS_CLOUD_HANDOFF_BLOCKED", retryable: true });
+            recordProviderFailure(provider, lastError);
             logger.warn?.("Cactus reported a cloud handoff while handoff is disabled", { provider: provider.name });
             continue;
           }
           if (confidence !== null && confidence < provider.confidenceThreshold) {
             lastError = Object.assign(new Error("Cactus confidence was below the configured threshold; trying the next provider."), { status: 502, code: "CACTUS_CONFIDENCE_LOW", retryable: true });
+            recordProviderFailure(provider, lastError);
             logger.info?.("Cactus confidence below threshold; trying next provider", { provider: provider.name, confidence: Number(confidence.toFixed(3)), threshold: provider.confidenceThreshold });
             continue;
           }
         }
+        recordProviderSuccess(provider);
         return data;
       } catch (error) {
         if (totalTimeoutSignal.aborted) {
+          releaseProviderProbe(provider);
           // The total budget is exhausted; do not cascade through already-aborted
           // fallback requests or report a generic provider failure.
           throw Object.assign(new Error("AI provider routing exceeded its overall time budget."), {
             status: 504, code: "PROVIDER_TOTAL_TIMEOUT", retryable: false
           });
         }
-        if (error?.retryable === false || (error?.status && error.status !== 429 && error.status < 500)) throw error;
+        if (error?.retryable === false || (error?.status && error.status !== 429 && error.status < 500)) {
+          releaseProviderProbe(provider);
+          throw error;
+        }
+        recordProviderFailure(provider, error);
         lastError = error;
         logger.warn?.("AI provider network/timeout failure; trying fallback", { provider: provider.name, code: error?.name === "TimeoutError" ? "PROVIDER_TIMEOUT" : error?.code || "PROVIDER_NETWORK_ERROR" });
       }
+    }
+    if (attemptedProviders === 0 && circuitSkipped.length) {
+      const retryAfterMs = Math.max(0, Math.min(...circuitSkipped));
+      throw Object.assign(new Error("All eligible AI provider circuits are open. Retry after the reported cooldown."), {
+        status: 503,
+        code: "PROVIDER_CIRCUIT_OPEN",
+        retryAfterMs
+      });
     }
     throw Object.assign(new Error("All configured AI providers failed. Check provider keys, model IDs, quotas, and network access."), { status: 502, code: lastError?.code || "ALL_PROVIDERS_FAILED" });
   }
@@ -1249,6 +1408,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       }
     }
     res.json({ ...readiness, taskRelevant: Boolean(task), recallState, memoriesReturned });
+  });
+
+  router.get("/agent/provider-health", requireSupabaseUser, (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const config = providerCircuitConfig();
+    res.json({
+      asOf: new Date(clock()).toISOString(),
+      circuitBreaker: { failureThreshold: config.failureThreshold, openMs: config.openMs },
+      providers: providerHealthSnapshot(req.supabaseUser?.id)
+    });
   });
 
   router.post("/agent/run", requireSupabaseUser, async (req, res) => {
