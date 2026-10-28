@@ -44,7 +44,8 @@ test("camera access is explicitly permissioned and camera frames can reach visio
   assert.ok(app.includes("navigator.mediaDevices.getUserMedia"));
   assert.ok(app.includes("function captureCameraFrame"));
   assert.ok(app.includes("function analyzeCameraFrame"));
-  assert.ok(app.includes('[{ dataUrl }]'));\n  assert.ok(app.includes("...(attachments.length ? { attachments } : {})"));
+  assert.ok(app.includes('[{ dataUrl }]'));
+  assert.ok(app.includes("...(attachments.length ? { attachments } : {})"));
   assert.ok(proxySource.includes("camera=(self)"));
   assert.ok(proxySource.includes("microphone=(self)"));
 });
