@@ -51,7 +51,7 @@ This is an evidence ledger, not a claim of fictional JARVIS equivalence. A passi
 | Sandbox PR `82544a709ae30b30f7d3ee47281e5d5d23425c8b` | [Run 40667428030](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40667428030) | 567 | 0 | 1 | World-intelligence build passed |
 | Session-revocation PR `7737bcdba2b5ebee7ff2d837e714f5fa7c21e8ad` | [Run 40679028089](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40679028089) | 561 | 0 | 1 | World-intelligence build passed |
 | Outbound transport policy PR `b5743790e7fa5d3ecdb80affdf0b4b425adebe2e` | [Run 40679770424](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40679770424) | 555 | 0 | 1 | World-intelligence build passed; static outbound caller guard passed |
-| Task idempotency PR `b93e843831ea449b7f686830153210a1bcc4d0a8` | [Run 40680576831](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40680576831) | 559 | 0 | 1 | World-intelligence build passed; task retry/concurrency tests passed |
+| Task idempotency PR `4af7861cd73b9e9e5b4a29261ab696037149fa4b` | [Run 40681016285](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40681016285) | 561 | 0 | 1 | World-intelligence build passed; per-user isolation, concurrent insert and model-output-drift idempotency tests passed |
 
 Each CI run also reported **0 dependency vulnerabilities** in the audited install/audit steps. The one skipped test in these snapshots is the opt-in live Supabase two-user E2E workflow; it requires a verified test project, dedicated accounts, and explicit live-write confirmation. Skip is not equivalent to pass.
 
