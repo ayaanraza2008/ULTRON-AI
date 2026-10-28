@@ -251,7 +251,7 @@ test("FreeDictionaryAPI lookup normalizes dictionary entries and attribution", a
   });
   assert.equal(result.word, "serendipity");
   assert.equal(result.entries[0].definitions[0].definition, "An unplanned fortunate discovery.");
-  assert.equal(result.entries[0].synonyms[0], "chance");
+  assert.equal(result.entries[0].definitions[0].synonyms[0], "chance");
   assert.equal(result.wiktionarySourceUrl, "https://en.wiktionary.org/wiki/serendipity");
   assert.equal(result.contentLicense, "CC BY-SA 4.0");
   await assert.rejects(() => lookupPublicApi({ service: "dictionary", query: "two words" }, {
@@ -308,7 +308,7 @@ test("FreeDictionaryAPI lookup normalizes definitions and Wiktionary attribution
   });
   assert.equal(result.word, "serendipity");
   assert.equal(result.entries[0].definitions[0].definition, "An unplanned fortunate discovery.");
-  assert.equal(result.entries[0].synonyms[0], "chance");
+  assert.equal(result.entries[0].definitions[0].synonyms[0], "chance");
   assert.equal(result.wiktionarySourceUrl, "https://en.wiktionary.org/wiki/serendipity");
   assert.equal(result.contentLicense, "CC BY-SA 4.0");
   await assert.rejects(() => lookupPublicApi({ service: "dictionary", query: "two words" }, {
