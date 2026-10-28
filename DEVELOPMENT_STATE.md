@@ -1,9 +1,30 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-27 UTC (source changes verified; production deployment blocked by Render quota)
+Last verified: 2026-10-29 (backend source CI and Windows companion build verified; production deployment intentionally deferred)
+
+## Active backend-only checkpoint — 2026-10-29
+- Current integration candidate: [PR #334](https://github.com/ayaanraza2008/ULTRON-AI/pull/334), head `ce60dd58f2dce83814341e7431783ee465e49479`, based on current backend-only `main` commit `59c77acdf2378a5a93878d3f2d22527c9b8a3d8e`. It is open and unmerged; no deployment was triggered.
+- Latest CI on this exact head: [ULTRON CI](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40747036809) passed both the test job and World Intelligence build. `npm test`: 622 total, 621 passed, 0 failed, 1 opt-in live Supabase E2E skipped. Both dependency audits reported 0 vulnerabilities.
+- Latest Windows companion CI: [run 40747036775](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40747036775) passed compilation, the network-destination policy self-test, and standalone x64 publish.
+- Combined candidate adds bounded multi-round tool autonomy, an owner-only Docker code sandbox disabled by default, a tightly allowlisted Windows action queue, retry-safe task enqueue, worker claim-attempt fencing, exact citation validation, and the centralized Core service origin.
+- Fixed the Windows companion's stale “open ULTRON” URL and added a regression test requiring `https://ultron-ai-core.onrender.com/` and rejecting the retired hostname.
+- The frontend remains absent: the candidate contains no public static frontend directory, no Express static-file middleware, and no frontend-only syntax checks.
+- No Render environment settings or deployments were changed. No Supabase dashboard settings were changed and neither new migration was applied. The candidate is source-tested, not production-released.
+
+## Current blockers
+- Live real-provider text and vision requests remain unverified; configuration and mocks do not prove a successful completion.
+- Two-account Supabase Auth/RLS isolation, persisted task execution with a dedicated test identity, memory isolation, and authenticated document-storage E2E need disposable test accounts/credentials.
+- Supabase leaked-password protection is an owner-side Auth dashboard setting still to be enabled and rechecked.
+- The new task-idempotency and desktop-action migrations require validation in a disposable non-production Supabase project before release.
+- Actual Docker execution with pre-cached images and physical Windows companion pairing/action execution are not verified. Keep the code sandbox disabled and Windows hands-free mode off until these tests pass.
+- Production deployment remains deferred until the final release phase and should not be triggered by merging the integration candidate without first deliberately clearing the live verification gates.
+
+## Historical notes (pre-frontend-removal checkpoints)
+
+Earlier entries below record historical changes. They do not override the active backend-only checkpoint above, particularly the deliberate frontend removal and deployment deferral.
 
 ## Operating constraints
-- Preserve the existing repository, backend data, and frontend. The cinematic command center has been built and merged, but is not live-verified until Render serves and reports the expected commit.
+- Preserve the existing repository and backend data. The web frontend was intentionally removed from this service; keep it absent until separate frontend work is explicitly authorized. Deployment remains the final phase.
 - Preserve the existing repository, Render service, and Supabase project.
 - Free-first; never expose secrets in repository documentation.
 - Treat configuration as unverified until the relevant live workflow succeeds.
