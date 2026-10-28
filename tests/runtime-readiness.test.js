@@ -165,3 +165,16 @@ test("Windows action queue readiness requires a valid owner and dedicated high-e
   assert.match(queue.note, /not proof/i);
   assert.equal(JSON.stringify(configured).includes(token), false);
 });
+
+test("desktop readiness explains owner-opted allowlisted autonomy without exposing configuration secrets", () => {
+  const owner = "00000000-0000-4000-8000-000000000001";
+  const token = "synthetic-desktop-bridge-token-for-readiness-tests-2026";
+  const result = buildRuntimeReadiness({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: owner, ULTRON_DESKTOP_BRIDGE_TOKEN: token, ULTRON_DESKTOP_AUTONOMY_MODE: "allowlisted" }
+  });
+  const queue = result.components.find((item) => item.id === "windows_action_queue");
+  assert.equal(queue.state, "configured_unverified");
+  assert.match(queue.note, /allowlisted hands-free mode is enabled/i);
+  assert.match(queue.note, /not proof/i);
+  assert.equal(JSON.stringify(result).includes(token), false);
+});
