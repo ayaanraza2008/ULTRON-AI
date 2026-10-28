@@ -10,6 +10,7 @@ import { buildAutonomyPlan, classifyAutonomyRisk, hasAutonomyRiskLevel, resolveA
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { getRepositoryCapabilityStatus, matchRepositoryCapabilities } from "./repository-capabilities.js";
 import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWorkPackages, listCalDiyEventTypes, listCalDiySlots } from "./integrations/productivity-services.js";
+import { getFreePublicData } from "./integrations/free-public-data.js";
 import { inspectPublicPageWithObscura, capturePublicPageWithObscura, getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { checkCactusService, resolveCactusProvider, getCactusReadiness } from "./integrations/cactus.js";
 import { getPaperclipAgentDashboard } from "./integrations/paperclip-services.js";
@@ -255,6 +256,7 @@ function extractIntent(text) {
   if (/\b(run|queue|submit)\b/.test(s) && /\b(comfyui|workflow)\b/.test(s)) return "run_comfyui_workflow";
   if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "check_comfyui";
   if (/\b(integration|integrations|connected services|provider status|what tools|capabilities)\b/.test(s) && /\b(check|status|available|configured|show|list|what)\b/.test(s)) return "integration_status";
+  if (parseFreePublicDataRequest(text)) return "get_free_public_data";
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) return "research_web";
   if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task|web-dev|review|draft|plan)\b/.test(s)) return "enqueue_employee_task";
   if (/\b(ai employee|employee routine|make a plan|create a plan|draft a|review this|write a report)\b/.test(s)) return "plan_employee";
@@ -265,6 +267,28 @@ function extractIntent(text) {
 }
 function parseArgs(raw) {
   try { const value = JSON.parse(raw || "{}"); return value && typeof value === "object" && !Array.isArray(value) ? value : {}; } catch { return {}; }
+}
+
+function parseFreePublicDataRequest(text) {
+  if (typeof text !== "string" || text.length > 6000) return null;
+  const weatherMatch = text.match(/\b(?:weather|forecast|temperature|rainfall|humidity)\b[\s\S]{0,50}?\b(?:in|for|at)\s+([A-Za-z][A-Za-z .,'-]{1,80}?)(?=\s+(?:today|now|currently|right now|tomorrow|this week|please)\b|[?.!]|$)/i);
+  if (weatherMatch) {
+    const location = weatherMatch[1].trim().replace(/\s+/g, " ").slice(0, 100);
+    if (location.length >= 2) return { kind: "weather", location };
+  }
+  const conversion = text.match(/\b(?:convert|exchange)\s+(?:[$€£₹]\s*)?([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})\s+(?:to|into|in)\s+([A-Za-z]{3})\b/i);
+  const currencyContext = /\b(?:currency|exchange rate|currency rate|convert|conversion|forex|rate)\b/i.test(text);
+  const pair = currencyContext ? text.match(/\b([A-Za-z]{3})\s+(?:to|into)\s+([A-Za-z]{3})\b/i) : null;
+  if (conversion || pair) {
+    const amount = conversion ? Number(conversion[1].replace(/,/g, "")) : 1;
+    return {
+      kind: "currency",
+      amount,
+      from: (conversion?.[2] || pair?.[1] || "").toUpperCase(),
+      to: (conversion?.[3] || pair?.[2] || "").toUpperCase()
+    };
+  }
+  return null;
 }
 
 function buildFallbackCalls(text) {
@@ -291,6 +315,8 @@ function buildFallbackCalls(text) {
     add("run_code_in_sandbox", explicitSandboxRequest);
     return calls;
   }
+  const freePublicDataRequest = parseFreePublicDataRequest(text);
+  if (freePublicDataRequest) add("get_free_public_data", freePublicDataRequest);
   const intent = extractIntent(text);
   const browserGuidance = buildBrowserUseGuidance(text);
   if (intent === "paperclip_read_agent_governance") add("paperclip_read_agent_governance");
@@ -567,6 +593,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "caldiy_list_event_types", description: "Read-only: list meeting event types from the configured Cal.diy/Cal.com-compatible API. Does not book meetings.", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
     { type: "function", function: { name: "caldiy_check_availability", description: "Read-only: check time slots for a Cal.diy event type across a maximum 14-day ISO date-time range. Never books or cancels a meeting.", parameters: { type: "object", properties: { eventTypeId: { type: "integer", minimum: 1 }, start: { type: "string", minLength: 10, maxLength: 40 }, end: { type: "string", minLength: 10, maxLength: 40 }, timeZone: { type: "string", maxLength: 80 } }, required: ["eventTypeId", "start", "end"], additionalProperties: false } } },
     { type: "function", function: { name: "create_youtube_production_plan", description: "Automatically draft a YouTube production package when a user requests a YouTube video/Short, channel content, cinematic story or nature Short. Produces title options, script, scene plan, visual/narration directions, SEO metadata and fact/media-rights checks. Does not generate media, use paid APIs, upload, schedule or publish; human approval remains required.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1500 }, format: { type: "string", enum: ["long_video", "short", "cinematic_mystery", "nature_short"] }, targetSeconds: { type: "integer", minimum: 15, maximum: 1200 }, language: { type: "string", maxLength: 60 }, audience: { type: "string", maxLength: 300 }, style: { type: "string", maxLength: 400 }, sceneCount: { type: "integer", minimum: 2, maximum: 30 } }, required: ["topic", "format"], additionalProperties: false } } },
+    { type: "function", function: { name: "get_free_public_data", description: "Read-only, no-key public data lookup. Use Open-Meteo for current weather by named place, or Frankfurter for daily reference currency conversion. Weather is for non-commercial use and requires attribution; FX rates are daily reference rates, not real-time trading quotes.", parameters: { type: "object", properties: { kind: { type: "string", enum: ["weather", "currency"] }, location: { type: "string", minLength: 2, maxLength: 100 }, amount: { type: "number", minimum: 0, maximum: 1000000000000 }, from: { type: "string", pattern: "^[A-Za-z]{3}$" }, to: { type: "string", pattern: "^[A-Za-z]{3}$" } }, required: ["kind"], additionalProperties: false } } },
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
@@ -1055,6 +1082,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         published: false,
         notice: "This is a draft production package only. It does not generate media or publish; fact-check, actual output, and media rights must be verified."
       };
+    }
+    if (name === "get_free_public_data") {
+      return getFreePublicData({ kind: args.kind, location: args.location, amount: args.amount, from: args.from, to: args.to }, { fetchImpl });
     }
     if (name === "research_web") {
       const query = bounded(args.query, 500);

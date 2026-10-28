@@ -30,6 +30,18 @@ export function buildIntegrationCatalog(env = process.env) {
 
   return [
     {
+      id: "free-public-data",
+      name: "Keyless Public Data APIs",
+      capability: "Current weather by named location and daily reference currency conversion",
+      state: "available_unverified",
+      configured: true,
+      mode: "fixed_public_https_apis_no_key",
+      requiredEnv: [],
+      optionalEnv: [],
+      apiRoutes: ["agent tool: get_free_public_data"],
+      note: "Uses fixed Open-Meteo endpoints for non-commercial weather with CC BY 4.0 attribution, and Frankfurter v2 for daily reference exchange rates. No API keys are required or stored; provider reachability is checked only when a lookup runs."
+    },
+    {
       id: "heygem",
       name: "HeyGem Avatar",
       capability: "Talking-head avatar and lip-sync media jobs",
