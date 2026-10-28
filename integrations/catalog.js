@@ -34,7 +34,7 @@ export function buildIntegrationCatalog(env = process.env) {
     {
       id: "public-apis",
       name: "Public API Directory + Tested Adapters",
-      capability: "Search the full bundled upstream public-apis directory; execute only fixed, tested keyless data adapters for weather, currencies, country metadata, Wikipedia, books, public GitHub metadata, sunrise/sunset, public-domain ebooks, trivia, recent earthquakes, dictionary definitions, and public news search",
+      capability: "Search the full bundled upstream public-apis directory; execute only fixed, tested keyless data adapters for weather, air quality, public holidays, scholarly papers, Met Museum artwork, currencies, country metadata, Wikipedia, books, public GitHub metadata, sunrise/sunset, public-domain ebooks, trivia, recent earthquakes, dictionary definitions, and public news search",
       state: "available",
       configured: true,
       mode: "catalog_discovery_plus_fixed_allowlist",
