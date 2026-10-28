@@ -34,8 +34,8 @@ function stripMarkdownCode(answer) {
   // Links inside code samples are not citations. Treat an unterminated fenced
   // block as code through end-of-report, preferring a review warning to a false pass.
   return answer
-    .replace(/```[\\s\\S]*?(?:```|$)/g, " ")
-    .replace(/`[^`\\n]*`/g, " ");
+    .replace(/```[\s\S]*?(?:```|$)/g, " ")
+    .replace(/`[^`\n]*`/g, " ");
 }
 
 function extractPublicCitationUrls(answer) {
