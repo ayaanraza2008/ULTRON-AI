@@ -59,7 +59,7 @@ test("agent exposes and executes the fixed public API lookup tool for an earthqu
     });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.match(body.content, /31\.2°C/);
+    assert.match(body.content, /magnitude 4\.8 earthquake/i);
     assert.ok(body.toolsUsed.some(item => item.name === "public_api_lookup" && item.ok));
     const result = body.toolResults.find(item => item.name === "public_api_lookup")?.result;
     assert.equal(result.events[0].magnitude, 4.8);
