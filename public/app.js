@@ -1002,15 +1002,23 @@
             "Describe the current camera still in 1–3 concise sentences. Mention only visible evidence and clearly state uncertainty.",
             { attachments: [frame], preserveAttachments: true }
           );
+          const samplingStillActive = state.cameraContinuous && Boolean(state.cameraStream) && runId === state.cameraRunId;
           if (answer) {
             state.cameraSummaries.unshift({ at: new Date().toISOString(), text: answer });
             state.cameraSummaries = state.cameraSummaries.slice(0, 8);
-            state.cameraNotice = "Latest frame analyzed. Continuous sampling remains active until you stop it or the 30-minute limit is reached.";
+            state.cameraNotice = samplingStillActive
+              ? "Latest frame analyzed. Continuous sampling remains active until you stop it or the 30-minute limit is reached."
+              : "The in-flight frame finished after sampling stopped. No further frames will be sent.";
           } else {
-            state.cameraNotice = "The latest frame did not produce a verified description. Check chat errors and vision-provider readiness.";
+            state.cameraNotice = samplingStillActive
+              ? "The latest frame did not produce a verified description. Check chat errors and vision-provider readiness."
+              : "Sampling has stopped. No further frames will be sent; the in-flight request produced no description.";
           }
         } catch (error) {
-          state.cameraNotice = error.message || "The latest frame could not be analyzed.";
+          const samplingStillActive = state.cameraContinuous && Boolean(state.cameraStream) && runId === state.cameraRunId;
+          state.cameraNotice = samplingStillActive
+            ? (error.message || "The latest frame could not be analyzed.")
+            : "Sampling has stopped. No further frames will be sent; the in-flight request failed.";
         }
       } else {
         state.cameraNotice = "Sample skipped because another chat request is active.";
