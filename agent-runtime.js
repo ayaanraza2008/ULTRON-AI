@@ -495,22 +495,6 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "", cur
     };
   }
 
-  // A standing owner opt-in removes the per-action prompt only for the closed
-  // Windows action allowlist. The action validator, explicit direct request,
-  // owner check, and paired bridge token remain mandatory at execution time.
-  if (name === "request_desktop_action" && allowlistedDesktopAutonomy === true &&
-      ["routine", "device_control"].includes(requestRisk?.level) &&
-      ["launch_app", "system_info"].includes(args?.actionType)) {
-    return {
-      requiresConfirmation: false,
-      risk: {
-        level: "routine",
-        reason: "Owner-enabled allowlisted desktop action; server-side validation and pairing still apply.",
-        requiresConfirmation: false
-      }
-    };
-  }
-
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "browser_use") delegatedTask = args?.task;
   else if (name === "enqueue_employee_task") delegatedTask = args?.goal;
