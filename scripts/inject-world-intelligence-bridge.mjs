@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const dist = path.resolve(root, '.build-gods-eye-view', 'dist');
-const source = path.resolve(root, 'public', 'world-intelligence-bridge.js');
+const source = path.resolve(root, 'integrations', 'world-intelligence-bridge.js');
 const target = path.join(dist, 'ultron-bridge.js');
 const htmlPath = path.join(dist, 'index.html');
 await copyFile(source, target);

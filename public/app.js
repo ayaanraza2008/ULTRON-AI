@@ -1,153 +1,1088 @@
 (() => {
-"use strict";
-const $=(s,r)=> (r||document).querySelector(s), $$=(s,r)=>Array.from((r||document).querySelectorAll(s));
-const V={home:["COMMAND CENTER","Command center"],chat:["AI TERMINAL","AI terminal"],tasks:["AUTONOMOUS TASKS","Autonomous tasks"],voice:["VOICE STUDIO","Voice studio"],coding:["CODING AGENT","Coding agent"],research:["RESEARCH LAB","Research lab"],files:["DOCUMENT INTELLIGENCE","Document intelligence"],memory:["MEMORY VAULT","Memory vault"],integrations:["INTEGRATIONS","Integrations"],automation:["AUTOMATION","Automation"],security:["SECURITY & APPROVALS","Security & approvals"],system:["SYSTEM HEALTH","System health"],settings:["SETTINGS","Settings"]};
-const API_CAPABILITIES=Object.freeze({tasks:true,research:true,coding:true,documents:true,automation:true,agentTools:true});
-const DEFAULT_CORE={quality:"high",speed:.65,scale:1,glow:.78,orbit:.8,turbulence:.55,colorMode:"adaptive",reducedMotion:!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)};
-function getCore(){try{return Object.assign({},DEFAULT_CORE,JSON.parse(localStorage.getItem("ultron-core-settings")||"{}"));}catch{return Object.assign({},DEFAULT_CORE);}}
-const S={view:"home",health:null,caps:null,session:{authenticated:false,configured:false,authType:null,email:null},core:getCore(),coreState:"idle",coreDetail:"READY FOR INPUT",coreDestroy:null,coreRenderer:null,coreTimer:null,authMode:"signin",messages:[],conversations:[],conversationId:null,isBusy:false,controller:null,attachments:[],models:[{id:"openrouter/free",label:"Automatic free router"}],model:localStorage.getItem("ultron-selected-model")||"openrouter/free",persona:localStorage.getItem("ultron-persona")||"ultron",tasks:[],tasksError:"",selectedTask:null,taskProgress:null,taskError:"",memories:[],memoryError:"",research:null,researchError:"",coding:null,codingError:"",document:null,documentError:"",documentSaved:false,documentMemoryId:null,documentFile:null,documentOriginalSaved:false,documentStorageId:null,savedDocuments:[],savedDocumentsError:"",integrations:[],tools:[],integrationError:"",schedules:[],scheduleError:"",roles:[],routines:[],employeeStatus:null,preferences:{voice_enabled:true,voice_input_locale:"en-IN",memory_enabled:true},voiceActive:false,recognition:null,micStream:null,audioContext:null,analyser:null,meterFrame:0,voiceText:"",voiceError:"",diagnostics:{worker:null,runtime:null},commandQuery:"",commandIndex:0};
-const CORE_LABEL={idle:"READY FOR INPUT",listening:"MICROPHONE ACTIVE",thinking:"GENERATING RESPONSE",executing:"TASK EXECUTION VERIFIED",responding:"RESPONSE STREAMING",success:"REQUEST COMPLETED",error:"REQUEST FAILED",offline:"API CONNECTION UNVERIFIED"};
-function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function safeUrl(v){try{const u=new URL(String(v||""));return (u.protocol==="http:"||u.protocol==="https:")&&!u.username&&!u.password?u.href:null;}catch{return null;}}
-function inlineMd(t){let s=String(t),saved=[];s=s.replace(/\x60([^\x60\n]+)\x60/g,(_m,c)=>{const tag="CODETOKEN"+saved.length+"X";saved.push("<code>"+c+"</code>");return tag;});s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,(_m,l,u)=>{const url=safeUrl(u);return url?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+l+"</a>":l;});s=s.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>");saved.forEach((v,i)=>s=s.replace("CODETOKEN"+i+"X",v));return s;}
-function md(input){let s=esc(input),code=[];s=s.replace(/\x60\x60\x60([a-z0-9_+-]*)[ \t]*\n?([\s\S]*?)\x60\x60\x60/gi,(_m,l,c)=>{const token="FENCE"+code.length+"X";code.push('<pre><code class="language-'+esc(l||"")+'">'+c.replace(/\n$/,"")+"</code></pre>");return token;});return s.split(/\n{2,}/).map(b=>{const m=/^FENCE(\d+)X$/.exec(b.trim());if(m)return code[Number(m[1])]||"";const h=/^(#{1,3}) (.*)$/.exec(b.trim());if(h)return "<h"+h[1].length+">"+inlineMd(h[2])+"</h"+h[1].length+">";const lines=b.split("\n");if(lines.every(x=>/^\s*[-*]\s+/.test(x)))return "<ul>"+lines.map(x=>"<li>"+inlineMd(x.replace(/^\s*[-*]\s+/,""))+"</li>").join("")+"</ul>";if(lines.every(x=>/^\s*\d+\.\s+/.test(x)))return "<ol>"+lines.map(x=>"<li>"+inlineMd(x.replace(/^\s*\d+\.\s+/,""))+"</li>").join("")+"</ol>";return "<p>"+lines.map(inlineMd).join("<br>")+"</p>";}).join("");}
-function fmt(v,short){if(!v)return "—";const d=new Date(v);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat(undefined,short?{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}:{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d):"—";}
-function chip(v){const s=String(v||"UNKNOWN").toUpperCase().replace(/_/g," "),c=["COMPLETED","SUCCESS","PASSED","ENABLED","CONNECTED"].includes(s)?"good":["FAILED","ERROR","BLOCKED","CANCELLED","DISABLED"].includes(s)?"bad":["RUNNING","QUEUED","UNKNOWN","WAITING FOR PERMISSION","NOT CONFIGURED"].includes(s)?"warn":"purple";return '<span class="state-chip '+c+'">'+esc(s)+"</span>";}
-function toast(text,kind){const root=$("#toast-stack");if(!root)return;const node=document.createElement("div");node.className="toast"+(kind?" toast-"+kind:"");node.textContent=String(text||"Done");root.appendChild(node);setTimeout(()=>node.remove(),4200);}
-async function readPayload(r){const t=await r.text();if(!t)return {};try{return JSON.parse(t);}catch{return {message:t.slice(0,400)};}}
-async function api(url,opt){opt=Object.assign({method:"GET",credentials:"same-origin",cache:"no-store",headers:{Accept:"application/json"}},opt||{});opt.headers=Object.assign({Accept:"application/json"},opt.headers||{});if(opt.body!==undefined&&typeof opt.body!=="string"&&!(opt.body instanceof FormData)&&!(opt.body instanceof Blob)){opt.headers["Content-Type"]="application/json";opt.body=JSON.stringify(opt.body);}const r=await fetch(url,opt),d=await readPayload(r);if(!r.ok){const e=new Error(d&&d.error&&d.error.message||d.message||("Request failed ("+r.status+")"));e.status=r.status;throw e;}return d;}
-async function maybe(url){try{const r=await fetch(url,{credentials:"same-origin",cache:"no-store",headers:{Accept:"application/json"}});return {ok:r.ok,status:r.status,data:await readPayload(r)};}catch(e){return {ok:false,status:0,data:{},error:e};}}
-const signed=()=>S.session.authenticated===true&&S.session.authType==="supabase";
-const hasSession=()=>S.session.authenticated===true;
-const readinessComponent=id=>S.caps&&Array.isArray(S.caps.components)?S.caps.components.find(x=>x&&x.id===id)||null:null;
-const hasProvider=()=>{const p=readinessComponent("cloud_model");return !!(p&&p.state==="configured_unverified");};
-function authGate(){return signed()?"":'<div class="auth-required-panel"><span class="required-icon">◇</span><div><strong>Sign in to unlock private data</strong><p>Tasks, memory, schedules and saved conversations require an authenticated Supabase account.</p><button class="button button-primary button-small" data-action="open-auth">Sign in securely ↗</button></div></div>';}
-function head(k,t,d,actions){return '<div class="page-head"><div><div class="eyebrow">'+esc(k)+'</div><h1>'+t+'</h1><p>'+esc(d)+'</p></div><div class="page-head-actions">'+(actions||"")+"</div></div>";}
-function empty(sym,title,desc){return '<div class="empty-state"><span class="empty-symbol">'+esc(sym)+'</span><h3>'+esc(title)+'</h3><p>'+esc(desc)+'</p></div>';}
-function updateChrome(){
- const health=$("#api-status"),ht=$("#api-status-text"),provider=$("#provider-status"),pt=$("#provider-status-text");
- if(health){health.dataset.state=S.health==null?"checking":S.health.status==="ok"?"online":"offline";if(ht)ht.textContent=S.health==null?"CONNECTING":S.health.status==="ok"?"API CONNECTED":"API OFFLINE";health.title="Health checks do not prove model inference.";}
- if(provider){provider.dataset.state=hasProvider()?"configured":"unknown";if(pt)pt.textContent=S.caps?(hasProvider()?"PROVIDER CONFIGURED":"PROVIDER NOT CONFIGURED"):"AI STATUS UNKNOWN";provider.title="Provider configuration is not proof of successful inference.";}
- if($("#account-name"))$("#account-name").textContent=hasSession()?(S.session.email||"Signed-in operator"):"Guest operator";
- if($("#account-detail"))$("#account-detail").textContent=!S.session.configured?"Authentication not configured":signed()?"Supabase account":hasSession()?"Access gate session":"Sign-in required";
- if($("#breadcrumb-current"))$("#breadcrumb-current").textContent=(V[S.view]||V.home)[0];
- if($("#footer-state"))$("#footer-state").textContent=CORE_LABEL[S.coreState]||CORE_LABEL.idle;
- if($("#footer-model"))$("#footer-model").textContent=hasProvider()?"MODEL ROUTING · "+String(S.caps.providers.cloud.defaultModel||"CONFIGURED").toUpperCase():"MODEL PROVIDER NOT CONFIRMED";
- $$(".nav-item,.mobile-nav-item").forEach(x=>x.classList.toggle("is-active",x.dataset.view===S.view));
- document.body.dataset.coreState=S.coreState;updateHomeStatus();
-}
-function setCore(s,label,reset){S.coreState=CORE_LABEL[s]?s:"idle";S.coreDetail=label||CORE_LABEL[S.coreState];updateChrome();const t=$(".core-state-label");if(t)t.textContent=S.coreDetail;if(S.coreTimer)clearTimeout(S.coreTimer);if(reset&&s==="success")S.coreTimer=setTimeout(()=>{if(S.coreState==="success")setCore("idle");},1700);}
-function updateHomeStatus(){const up=!!(S.health&&S.health.status==="ok"),a=$("#home-api-status"),p=$("#home-provider-status");if(a){a.classList.toggle("is-up",up);a.classList.toggle("is-warn",!up);const e=$("span",a);if(e)e.textContent=up?"API CONNECTED":"API UNAVAILABLE";}if(p){p.classList.toggle("is-up",hasProvider());p.classList.toggle("is-warn",!hasProvider());const e=$("span",p);if(e)e.textContent=S.caps?(hasProvider()?"PROVIDER CONFIGURED":"PROVIDER MISSING"):"PROVIDER UNKNOWN";}const pairs=[["core-api-value",up?"Connected":"Unverified"],["core-api-detail",up?"Health endpoint responded":"API reachability not verified"],["core-provider-value",hasProvider()?"Configured":"Not confirmed"],["core-provider-detail","Configuration ≠ live inference"],["core-auth-value",signed()?"Account active":hasSession()?"Access gate":"Guest session"],["core-auth-detail",signed()?"Account session present":"Private API requires sign-in"],["core-quality-value",S.core.quality==="high"?"High / adaptive":S.core.quality==="medium"?"Balanced":"Low power"],["core-quality-detail",S.core.reducedMotion?"Reduced motion":"Adapts to viewport"]];pairs.forEach(p=>{const e=$("#"+p[0]);if(e)e.textContent=p[1];});}
-async function refreshStatus(show){const out=await Promise.all([maybe("/api/health"),maybe("/api/runtime/readiness"),maybe("/api/session")]);S.health=out[0].ok?out[0].data:{status:"unavailable"};S.caps=out[1].ok?out[1].data:null;if(out[2].ok)S.session={authenticated:out[2].data.authenticated===true,configured:out[2].data.configured!==false,authType:out[2].data.authType||null,email:out[2].data.email||null};else S.session={authenticated:false,configured:out[2].status!==503&&out[2].status!==404,authType:null,email:null};updateChrome();if(!out[0].ok||S.health.status!=="ok")setCore("offline","API HEALTH UNVERIFIED");else if(S.coreState==="offline")setCore("idle");if(show)toast(out[0].ok?"Health refreshed; live AI inference remains unverified.":"API health endpoint could not be reached.",out[0].ok?"success":"error");}
-function renderHome(){return '<section class="view home-view"><div class="home-intro"><div><div class="eyebrow">PERSONAL INTELLIGENCE SYSTEM / 01</div><h1>Command <em>center.</em></h1><p>Your command surface. Ready when you are.</p></div><div class="home-status-cluster"><span class="tiny-status" id="home-api-status"><i></i><span>CHECKING API</span></span><span class="tiny-status" id="home-provider-status"><i></i><span>AI STATUS UNKNOWN</span></span></div></div><div class="core-stage"><div class="core-scene" id="core-scene"><canvas id="energy-core" class="energy-canvas" role="img" aria-label="Three-dimensional energy core showing current verified ULTRON state"></canvas><div class="core-fallback" id="core-fallback" hidden aria-hidden="true"></div><div class="core-label"><strong>ULTRON</strong><span class="core-state-label">'+esc(S.coreDetail)+'</span><span id="core-renderer-label">INITIALIZING GPU PARTICLE FIELD</span></div></div><aside class="core-side-panel"><h2>CORE TELEMETRY</h2><p class="core-side-intro">Only verified connection signals appear here. Configured is not live-tested.</p><div class="core-metric"><span>API HEALTH</span><strong id="core-api-value">Checking…</strong><small id="core-api-detail">Waiting for health response</small></div><div class="core-divider"></div><div class="core-metric"><span>MODEL PROVIDER</span><strong id="core-provider-value">Unknown</strong><small id="core-provider-detail">Configuration only</small></div><div class="core-divider"></div><div class="core-metric"><span>AUTHENTICATION</span><strong id="core-auth-value">Guest session</strong><small id="core-auth-detail">Private APIs require sign-in</small></div><div class="core-divider"></div><div class="core-metric"><span>RENDER QUALITY</span><strong id="core-quality-value">Adaptive GPU</strong><small id="core-quality-detail">Integrated graphics aware</small></div><div class="core-legend"><span class="legend-dot purple-legend">CORE</span><span class="legend-dot red-legend">ENERGY</span><span class="legend-dot white-legend">NUCLEUS</span></div><button class="button button-quiet button-small" data-view="settings">Tune energy core ↗</button></aside></div><div class="command-dock"><form class="quick-prompt" id="home-chat-form"><div id="home-attachments" class="attachments-strip"></div><button class="prompt-attachment" type="button" data-action="attach-images" aria-label="Attach images">＋</button><label class="sr-only" for="home-prompt">Ask ULTRON</label><textarea id="home-prompt" maxlength="12000" rows="1" placeholder="Ask ULTRON anything. Think, plan, create…"></textarea><button class="prompt-send" type="submit" aria-label="Send command">↑</button></form><div class="prompt-tools"><button class="prompt-tool" data-view="chat"><span class="tool-symbol">◉</span> Open terminal</button><button class="prompt-tool" data-view="voice"><span class="tool-symbol">◖</span> Voice studio</button><button class="prompt-tool" data-view="tasks"><span class="tool-symbol">⌁</span> Task monitor</button><button class="prompt-tool" data-view="research"><span class="tool-symbol">⌕</span> Research</button></div></div><div class="home-bottom-note"><span>REAL BACKEND STATE</span><span>·</span><span>NO SIMULATED TASK PROGRESS</span><span>·</span><span>FREE-FIRST RUNTIME</span></div></section>';}
-function attachments(id){const r=$("#"+id);if(r)r.innerHTML=S.attachments.map((a,i)=>'<div class="attachment-preview"><img alt="" src="'+esc(a.dataUrl)+'"><span>'+esc(a.name)+'</span><button data-action="remove-attachment" data-index="'+i+'" aria-label="Remove attachment">×</button></div>').join("");}
-function renderChatMessages(){const root=$("#chat-messages");if(!root)return;if(!S.messages.length){root.innerHTML=empty("✦","Your terminal is clear.","Send a message. ULTRON reports only backend results.")+'<div class="chat-suggestions"><button class="suggestion-chip" data-action="suggest-chat" data-prompt="Summarize what is available in this ULTRON session.">Session status</button><button class="suggestion-chip" data-action="suggest-chat" data-prompt="Help me plan a coding task.">Plan a coding task</button><button class="suggestion-chip" data-action="suggest-chat" data-prompt="Research a topic and cite sources.">Research with sources</button></div>';return;}root.innerHTML=S.messages.map((m,i)=>{const user=m.role==="user",bad=m.role==="error";return '<article class="message '+(user?"user":bad?"status":"assistant")+'"><div class="message-avatar">'+(user?"Y":bad?"!":S.persona==="naya"?"N":"U")+'</div><div class="message-main"><div class="message-topline"><strong>'+ (user?"YOU":bad?"STATUS":S.persona.toUpperCase()) +'</strong><small>'+esc(m.time||(m.streaming?"LIVE STREAM":"SESSION"))+'</small>'+(m.saved===false?"<small>NOT SAVED</small>":"")+(m.model?'<small>'+esc(m.model)+'</small>':"")+'</div><div class="message-content">'+(bad?'<div class="message-error">'+esc(m.content)+'</div>':md(m.content||"Thinking…"))+'</div>'+((m.attachments||[]).length?'<div class="attachments-strip">'+m.attachments.map(a=>'<div class="attachment-preview"><img alt="" src="'+esc(a.dataUrl)+'"><span>'+esc(a.name)+'</span></div>').join("")+'</div>':"")+(!user&&!bad&&m.content?'<div class="message-actions"><button class="message-action" data-action="copy-message" data-index="'+i+'">Copy</button><button class="message-action" data-action="speak-message" data-index="'+i+'">Speak</button></div>':"")+'</div></article>';}).join("");root.scrollTop=root.scrollHeight;}
-function renderChat(){const conv=S.conversations.map(c=>'<button class="conversation-item '+(c.id===S.conversationId?"is-active":"")+'" data-action="select-conversation" data-id="'+esc(c.id)+'"><span class="conversation-glyph">◉</span><span>'+esc(c.title||"Untitled conversation")+'</span></button>').join("")||(signed()?'<div class="form-note">No saved conversations.</div>':'<div class="form-note">Sign in for saved history.</div>');return '<section class="view">'+head("COMMAND INTERFACE / 02","AI terminal.","Live backend chat with streaming when supported. History requires a Supabase session.",'<button class="button button-quiet" data-action="open-auth">Sign in / account</button><button class="button button-primary" data-action="new-chat">＋ New conversation</button>')+'<div class="chat-layout"><aside class="surface chat-sidebar"><div class="chat-sidebar-head"><strong>CONVERSATIONS</strong><button class="icon-button-small" data-action="refresh-conversations">↻</button></div><div class="conversation-list" id="conversation-list">'+conv+'</div><p class="form-note">'+(signed()?"Saved under your account. Attachments are not saved.":"Saved history requires sign-in.")+'</p><div class="sidebar-spacer"></div><button class="button button-quiet button-wide" data-action="clear-chat">Clear current view</button></aside><section class="surface chat-terminal"><header class="chat-terminal-head"><div class="chat-terminal-title"><span class="terminal-avatar">✦</span><div><strong>ULTRON / LIVE TERMINAL</strong><small id="chat-live-status">'+(S.isBusy?"Response streaming…":"Ready for a command")+'</small></div></div><div class="chat-head-actions"><select class="chat-model-select" id="model-select" aria-label="Model">'+S.models.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===S.model?" selected":"")+'>'+esc(m.label)+'</option>').join("")+'</select><select class="persona-select" id="persona-select" aria-label="Assistant personality"><option value="ultron"'+(S.persona==="ultron"?" selected":"")+'>ULTRON</option><option value="naya"'+(S.persona==="naya"?" selected":"")+'>NAYA</option></select></div></header><div class="chat-messages" id="chat-messages"></div><div class="chat-composer-wrap"><div class="attachments-strip" id="chat-attachments"></div><form class="chat-composer" id="chat-form"><button class="prompt-attachment" type="button" data-action="attach-images" aria-label="Attach images">＋</button><label class="sr-only" for="chat-prompt">Message ULTRON</label><textarea id="chat-prompt" maxlength="12000" rows="1" placeholder="Send a message… Enter to send; Shift+Enter for newline" '+(S.isBusy?"disabled":"")+'></textarea><div class="chat-composer-tools">'+(S.isBusy?'<button class="button button-danger button-small" type="button" data-action="cancel-chat">Stop</button>':'<button class="prompt-send" type="submit" aria-label="Send">↑</button>')+'</div></form><div class="chat-composer-hint"><span>Verify important output.</span><span>MAX 2 IMAGES · 4 MB EACH</span></div></div></section></div></section>';}
-function rolesOptions(){const rs=S.roles.length?S.roles:[{id:"chief-of-staff",name:"Chief of Staff"},{id:"web-dev",name:"Web Developer"},{id:"seo-aeo",name:"SEO / AEO"},{id:"sales",name:"Sales"}];return rs.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name||r.id)+'</option>').join("");}
-function renderTasks(){const rows=S.tasks.map(t=>{const input=t.input&&typeof t.input==="object"?t.input:{},st=String(t.status||"UNKNOWN").toUpperCase(),actions=st==="WAITING_FOR_PERMISSION"?'<button class="button button-primary button-small" data-action="task-approve" data-id="'+esc(t.id)+'">Approve</button><button class="button button-quiet button-small" data-action="task-cancel" data-id="'+esc(t.id)+'">Cancel</button>':st==="QUEUED"?'<button class="button button-quiet button-small" data-action="task-cancel" data-id="'+esc(t.id)+'">Cancel task</button>':"";return '<article class="list-row"><span class="list-row-icon">⌁</span><div class="list-row-main"><div class="row-between"><h3 class="list-row-title">'+esc(t.title||input.goal||"Untitled task")+'</h3>'+chip(st)+'</div><p class="list-row-sub">'+esc(input.taskType||"task")+' · '+esc(input.executionMode||"not specified")+' · '+esc(fmt(t.created_at,true))+'</p>'+(t.error_code?'<p class="list-row-sub">Error: '+esc(t.error_code)+'</p>':"")+'<div class="list-row-actions"><button class="button button-quiet button-small" data-action="task-detail" data-id="'+esc(t.id)+'">Timeline ↗</button>'+actions+'</div></div></article>';}).join("");let detail="";const t=S.tasks.find(x=>x.id===S.selectedTask);if(t)detail='<section class="surface" style="margin-top:15px"><div class="surface-header"><h2>Task timeline · '+esc(t.id.slice(0,8))+'</h2><button class="icon-button-small" data-action="close-task">×</button></div><div class="surface-body">'+(S.taskError?'<div class="error-note">'+esc(S.taskError)+'</div>':!S.taskProgress?'<div class="loading-line"><span class="spinner"></span> Loading timeline…</div>':'<div class="metric-grid"><div class="metric-box"><span>STATUS</span><strong>'+esc(S.taskProgress.task.status)+'</strong></div><div class="metric-box"><span>CHECKPOINTS</span><strong>'+esc(S.taskProgress.progress.checkpointCount)+'</strong></div><div class="metric-box"><span>PROGRESS</span><strong>'+(S.taskProgress.progress.percent===null?"—":esc(S.taskProgress.progress.percent)+"%")+'</strong></div></div><div class="task-timeline">'+(S.taskProgress.checkpoints||[]).map(e=>'<div class="timeline-entry is-done"><span class="timeline-dot"></span><div><strong>'+esc(e.stage||e.action||"Checkpoint")+'</strong><small>'+esc(e.outcome||"Recorded")+' · '+esc(fmt(e.timestamp))+'</small></div></div>').join("")+'</div>')+'</div></section>';
-return '<section class="view">'+head("BACKGROUND WORK / 03","Autonomous tasks.","Inspect real task records and permission gates. No invented progress percentage.",'<button class="button button-quiet" data-action="refresh-tasks">↻ Refresh</button><button class="button button-primary" data-action="focus-task">＋ Create task</button>')+authNeeded()+'<div class="workspace-grid" style="margin-top:16px"><section class="surface"><div class="surface-header"><div><h2>Task queue</h2><p class="form-note">'+S.tasks.length+' record(s) returned</p></div>'+chip(signed()?"CONNECTED":"AUTH REQUIRED")+'</div><div class="surface-body">'+(S.tasksError?'<div class="error-note">'+esc(S.tasksError)+'</div>':"")+'<div class="list-stack">'+(rows||empty("⌁","No task records returned","Create a bounded task. It may stay queued when the optional worker is unavailable."))+'</div></div></section><section class="surface" id="task-create-panel"><div class="surface-header"><h2>New task</h2></div><div class="surface-body"><form id="task-form" class="stack-form"><label class="field-label" for="task-title">Title</label><input id="task-title" name="title" required maxlength="240"><label class="field-label" for="task-description">Objective</label><textarea id="task-description" name="description" required maxlength="12000"></textarea><div class="form-row"><div><label class="field-label" for="task-type">Type</label><select id="task-type" name="taskType"><option value="research">Research</option><option value="employee">AI Employee</option><option value="autonomous">Report</option><option value="manual">Review only</option></select></div><div><label class="field-label" for="task-risk">Risk</label><select id="task-risk" name="risk"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div></div><div id="employee-task-fields" hidden><div class="form-row"><div><label class="field-label" for="task-role">Role</label><select id="task-role" name="role">'+rolesOptions()+'</select></div><div><label class="field-label" for="task-mode">Mode</label><select id="task-mode" name="mode"><option value="plan">Plan</option><option value="draft">Draft</option><option value="review">Review</option><option value="report">Report</option></select></div></div><label class="field-label" for="task-goal">Goal</label><textarea id="task-goal" name="goal" maxlength="2000"></textarea></div><label class="field-label" for="task-query">Research query (optional)</label><input id="task-query" name="query" maxlength="400"><div class="warning-note">Routine low-risk research and draft/report tasks can queue automatically when the worker and provider are available. Non-routine or higher-risk tasks require approval. Sending, publishing, purchases, destructive edits, and PC commands remain disabled.</div><button class="button button-primary button-wide" type="submit">Save task ↗</button></form></div></section></div>'+detail+'</section>';}
-function renderVoice(){const R=window.SpeechRecognition||window.webkitSpeechRecognition,sp=readinessComponent("premium_speech")||{};return '<section class="view">'+head("AUDIO INTERFACE / 04","Voice studio.","Microphone capture starts only after you press Listen. Browser support varies by device.",chip(S.voiceActive?"LISTENING":R?"BROWSER SPEECH AVAILABLE":"RECOGNITION UNAVAILABLE"))+'<div class="voice-grid"><section class="surface voice-orb-panel"><div class="voice-orb '+(S.voiceActive?"is-listening":"")+'"><span class="voice-orb-glyph">◖</span></div><h2 class="voice-status-text">'+(S.voiceActive?"Listening for your command…":"Audio session inactive")+'</h2><p class="voice-status-sub">'+(S.voiceActive?"Microphone capture is active.":"No audio is being captured.")+'</p><div class="waveform '+(S.voiceActive?"is-active":"")+'">'+new Array(24).fill("<span></span>").join("")+'</div><div class="voice-actions"><button class="button button-primary" data-action="voice-start" '+(S.voiceActive||!R?"disabled":"")+'>◖ Start listening</button><button class="button button-danger" data-action="voice-stop" '+(!S.voiceActive?"disabled":"")+'>Stop session</button><button class="button button-quiet" data-action="voice-speak" '+(!S.voiceText.trim()?"disabled":"")+'>Speak transcript</button></div>'+(S.voiceError?'<div class="error-note">'+esc(S.voiceError)+'</div>':"")+'<p class="form-note">Wake-word detection is not claimed without a real compatible component.</p></section><section class="surface"><div class="surface-header"><h2>Session settings</h2></div><div class="surface-body"><form id="voice-prefs" class="stack-form"><label class="field-label" for="voice-locale">Recognition language</label><select id="voice-locale" name="voice_input_locale"><option value="en-IN"'+((S.preferences.voice_input_locale||"en-IN")==="en-IN"?" selected":"")+'>English (India)</option><option value="hi-IN"'+(S.preferences.voice_input_locale==="hi-IN"?" selected":"")+'>Hindi</option><option value="hinglish"'+(S.preferences.voice_input_locale==="hinglish"?" selected":"")+'>Hinglish (best effort)</option></select><div class="metric-grid"><div class="metric-box"><span>BROWSER STT</span><strong>'+(R?"Available":"Unavailable")+'</strong></div><div class="metric-box"><span>HOSTED TTS</span><strong>'+(sp.state==="configured_unverified"?"Configured · unverified":"Not configured")+'</strong></div><div class="metric-box"><span>HOSTED STT</span><strong>'+(sp.state==="configured_unverified"?"Configured · unverified":"Not configured")+'</strong></div></div><label class="field-label" for="voice-transcript">Recognized transcript</label><textarea id="voice-transcript" maxlength="12000">'+esc(S.voiceText)+'</textarea><div class="page-head-actions"><button class="button button-primary" type="button" data-action="transcript-to-chat">Use in chat ↗</button><button class="button button-quiet" type="button" data-action="clear-transcript">Clear</button></div><p class="form-note">Browser speech may use external browser services. Do not dictate sensitive information on shared devices.</p></form></div></section></div></section>';}
-function renderCoding(){return '<section class="view">'+head("CODE ASSISTANCE / 05","Coding agent.","Generate or review code drafts through the backend. Nothing is written to your repository or executed.",chip("DRAFT ONLY"))+'<div class="workspace-grid"><section class="surface"><div class="surface-header"><h2>Code workspace</h2></div><div class="surface-body"><form id="coding-form" class="stack-form"><label class="field-label" for="coding-task">Task</label><textarea id="coding-task" name="task" required maxlength="6000"></textarea><div class="form-row"><div><label class="field-label" for="coding-mode">Mode</label><select id="coding-mode" name="mode"><option value="plan">Plan</option><option value="generate">Generate</option><option value="review">Review</option></select></div><div><label class="field-label" for="coding-language">Language</label><input id="coding-language" name="language" value="JavaScript / Node.js" maxlength="80"></div></div><label class="field-label" for="coding-code">Existing code (optional)</label><textarea id="coding-code" name="code" maxlength="16000"></textarea><button class="button button-primary" type="submit">Generate assistance ↗</button></form>'+(S.codingError?'<div class="error-note">'+esc(S.codingError)+'</div>':"")+'</div></section><section class="surface"><div class="surface-header"><h2>Result &amp; verification</h2></div><div class="surface-body">'+(S.coding?'<div class="warning-note">Execution: '+esc(S.coding.execution||"not executed")+'. This is a draft result.</div><div class="result-panel"><div class="result-heading">'+esc((S.coding.provider||"provider")+" / "+(S.coding.model||"model"))+' <button class="message-action" data-action="copy-code">Copy</button></div><div class="result-content">'+md(S.coding.answer||"")+'</div></div>':empty("‹›","No code result yet","Submit a task to call the coding assistance endpoint."))+'<div class="warning-note">A hardened isolated coding sandbox is not implemented.</div></div></section></div></section>';}
-function renderResearch(){const rs=S.research&&Array.isArray(S.research.results)?S.research.results:[];return '<section class="view">'+head("SOURCE INTELLIGENCE / 06","Research lab.","Search using the backend adapter and preserve returned source links.",'<span class="state-chip purple">'+(S.research?"RESULTS RECEIVED":"READY")+'</span>')+'<section class="surface"><div class="surface-body"><form id="research-form" class="stack-form"><label class="field-label" for="research-query">Research question</label><div class="form-row"><input id="research-query" name="query" required minlength="2" maxlength="500"><button class="button button-primary" type="submit">Search sources ↗</button></div><p class="form-note">Tavily if configured, otherwise a best-effort public HTML search fallback.</p></form></div></section>'+(S.researchError?'<div class="error-note">'+esc(S.researchError)+'</div>':"")+'<section class="surface" style="margin-top:15px"><div class="surface-header"><h2>Source results</h2>'+(S.research?'<button class="button button-quiet button-small" data-action="research-to-chat">Discuss in chat ↗</button>':"")+'</div><div class="surface-body">'+(rs.length?'<div class="source-list">'+rs.map((r,i)=>{const u=safeUrl(r.url);return '<a class="source-card" href="'+esc(u||"#")+'" '+(u?'target="_blank" rel="noopener noreferrer"':"")+'><strong>'+esc(r.title||"Source "+(i+1))+'</strong><span class="source-url">'+esc(u||"Missing URL")+'</span><p>'+esc(r.snippet||"No snippet returned.")+'</p></a>';}).join("")+'</div>':empty("⌕","No results yet","Search to display sources actually returned by the API."))+'</div></section></section>';}
-function renderFiles(){const d=S.document;const saveControl=d?(S.documentSaved?'<span class="state-chip good">TEXT SAVED TO MEMORY</span>':signed()?'<button class="button button-primary button-small" data-action="save-document-memory">Save extracted text</button>':'<button class="button button-quiet button-small" data-action="open-auth">Sign in to save text</button>'):"";const originalControl=d?(S.documentOriginalSaved?'<span class="state-chip good">ORIGINAL FILE SAVED</span>':S.documentFile?(signed()?'<button class="button button-primary button-small" data-action="save-original-document">Save original file privately</button>':'<button class="button button-quiet button-small" data-action="open-auth">Sign in to save original</button>'):""):"";const stored=S.savedDocuments.map(x=>'<article class="list-row"><span class="list-row-icon">▤</span><div class="list-row-main"><h3 class="list-row-title">'+esc(x.filename||"Saved document")+'</h3><p class="list-row-sub">'+esc(x.mime_type||"file")+' · '+esc((Number(x.size_bytes||0)/1024).toFixed(1))+' KB · '+esc(fmt(x.created_at,true))+'</p><div class="list-row-actions"><button class="button button-quiet button-small" data-action="document-download" data-id="'+esc(x.id)+'">Download</button><button class="button button-danger button-small" data-action="document-delete" data-id="'+esc(x.id)+'">Delete</button></div></div></article>').join("");return '<section class="view">'+head("DOCUMENT INTELLIGENCE / 07","Files &amp; documents.","Extract text, save selected extracts to your Memory Vault, or explicitly store the original file in private per-user storage. Original files are never public.",'<button class="button button-primary" data-action="choose-document">＋ Select document</button>')+'<div class="workspace-grid"><section class="surface"><div class="surface-header"><h2>Document intake</h2></div><div class="surface-body"><div class="drop-zone"><span class="empty-symbol">▤</span><strong>Choose a document</strong><p>PDF/DOCX/TXT/MD/CSV/JSON/HTML up to 5 MB.</p><button class="button button-quiet" data-action="choose-document">Browse files</button></div>'+(S.documentError?'<div class="error-note">'+esc(S.documentError)+'</div>':"")+(d?'<div class="success-note">Extracted '+esc(d.characters)+' characters from '+esc(d.filename)+'. '+(S.documentSaved?'Text extract saved to Memory Vault.':'Text extract not saved yet.')+'</div><div class="page-head-actions"><button class="button button-primary button-small" data-action="document-to-chat">Send text to chat</button>'+saveControl+originalControl+'<button class="button button-quiet button-small" data-action="clear-document">Clear</button></div>'+(d.characters>20000&&!S.documentSaved?'<p class="form-note">Saving text to Memory Vault clips it to 20,000 characters. Private original-file storage retains the original bytes.</p>':""):'')+'</div></section><section class="surface"><div class="surface-header"><h2>Extracted text</h2>'+(d?'<button class="message-action" data-action="copy-document">Copy</button>':"")+'</div><div class="surface-body">'+(d?'<div class="metric-grid"><div class="metric-box"><span>FORMAT</span><strong>'+esc(String(d.format).toUpperCase())+'</strong></div><div class="metric-box"><span>CHARACTERS</span><strong>'+esc(d.characters)+'</strong></div><div class="metric-box"><span>TRUNCATED</span><strong>'+(d.truncated?"YES":"NO")+'</strong></div></div><pre class="file-preview">'+esc(d.extractedText||"")+'</pre>':empty("▤","No document loaded","Select a supported file to request text extraction."))+'</div></section></div><section class="surface" style="margin-top:16px"><div class="surface-header"><div><h2>Private document vault</h2><p class="form-note">'+S.savedDocuments.length+' saved file(s) · private · signed-in account only</p></div><button class="button button-quiet button-small" data-action="refresh-documents">↻ Refresh</button></div><div class="surface-body">'+(S.savedDocumentsError?'<div class="error-note">'+esc(S.savedDocumentsError)+'</div>':"")+'<div class="list-stack">'+(stored||empty("▤","No saved files","After selecting a file, choose Save original file privately. The original bytes are stored only in your private account folder."))+'</div><p class="form-note">Private storage requires the ULTRON document-storage migration. Download verifies the saved size and SHA-256. Delete removes the object and its metadata.</p></div></section></section>';}
-function renderMemory(){const rows=S.memories.map(m=>'<article class="memory-card"><div class="memory-card-head"><div><h3>'+esc(m.title||"Untitled memory")+'</h3><p class="form-note">'+esc(m.kind||"memory")+'</p></div>'+chip(m.is_active?"ACTIVE":"INACTIVE")+'</div><p>'+esc(m.content||"")+'</p><div class="memory-card-foot"><span>'+esc(fmt(m.updated_at||m.created_at,true))+'</span><div class="page-head-actions"><button class="button button-quiet button-small" data-action="memory-toggle" data-id="'+esc(m.id)+'" data-active="'+(!m.is_active)+'">'+(m.is_active?"Deactivate":"Reactivate")+'</button><button class="button button-danger button-small" data-action="memory-delete" data-id="'+esc(m.id)+'">Delete</button></div></div></article>').join("");return '<section class="view">'+head("PERSONAL KNOWLEDGE / 08","Memory vault.","Browse and manage memory scoped to your signed-in account.",'<button class="button button-quiet" data-action="refresh-memory">↻ Refresh</button>')+authNeeded()+'<div class="workspace-grid" style="margin-top:16px"><section class="surface"><div class="surface-header"><h2>Stored memories</h2></div><div class="surface-body">'+(S.memoryError?'<div class="error-note">'+esc(S.memoryError)+'</div>':rows||empty("◈","No memories returned","Add a memory using the form beside this list."))+'</div></section><section class="surface"><div class="surface-header"><h2>Add a memory</h2></div><div class="surface-body"><form id="memory-form" class="stack-form"><label class="field-label" for="memory-kind">Type</label><select id="memory-kind" name="kind"><option value="preference">Preference</option><option value="project_fact">Project fact</option><option value="profile_note">Profile note</option><option value="document_reference">Document reference</option></select><label class="field-label" for="memory-title">Title</label><input id="memory-title" name="title" required maxlength="240"><label class="field-label" for="memory-content">Content</label><textarea id="memory-content" name="content" required maxlength="20000"></textarea><label class="field-label" for="memory-expiry">Expiry (optional)</label><input id="memory-expiry" name="expires_at" type="datetime-local"><button class="button button-primary button-wide" type="submit">Save memory ↗</button></form></div></section></div></section>';}
-function renderIntegrations(){const rows=S.integrations.map(i=>'<article class="integration-card"><div class="integration-card-head"><span class="integration-icon">⟡</span><div><h3>'+esc(i.name||i.label||i.id||"Integration")+'</h3><div class="form-note">'+esc(i.category||i.provider||"Adapter")+'</div></div></div><p>'+esc(i.description||i.notice||i.reason||i.execution||"Readiness result")+'</p><div class="integration-card-foot">'+chip(i.state||i.status||(i.configured?"CONFIGURED":"UNKNOWN"))+'<span class="form-note">Configuration only</span></div></article>').join("");const tools=S.tools.map(t=>'<div class="list-row"><span class="list-row-icon">⌘</span><div class="list-row-main"><h3 class="list-row-title">'+esc(t.name||t.id||"Tool")+'</h3><p class="list-row-sub">'+esc(t.execution||"Readiness")+'</p></div>'+chip(t.available?"AVAILABLE":"NOT CONFIGURED")+'</div>').join("");return '<section class="view">'+head("CONNECTED SERVICES / 09","Integrations.","Server readiness signals do not independently prove external connectivity.",'<button class="button button-quiet" data-action="refresh-integrations">↻ Refresh</button>')+(S.integrationError?'<div class="error-note">'+esc(S.integrationError)+'</div>':"")+'<div class="integration-grid" style="margin-top:14px">'+(rows||empty("⟡","No catalog returned","Sign in to inspect integration readiness."))+'</div><section class="surface" style="margin-top:16px"><div class="surface-header"><h2>Agent tool registry</h2></div><div class="surface-body"><div class="list-stack">'+(tools||'<p class="muted-copy">Sign in with Supabase to inspect the tool registry.</p>')+'</div><div class="warning-note">PC control, publishing, purchases and arbitrary code execution are not unrestricted automatic tools.</div></div></section></section>';}
-function renderAutomation(){const rows=S.schedules.map(s=>'<article class="list-row"><span class="list-row-icon">◷</span><div class="list-row-main"><div class="row-between"><h3 class="list-row-title">'+esc(s.goal||"Scheduled routine")+'</h3>'+chip(s.enabled?"ENABLED":"DISABLED")+'</div><p class="list-row-sub">'+esc(s.role_id||"")+' · '+esc(s.routine_id||"")+' · '+esc(s.interval_minutes)+' minutes</p><p class="list-row-sub">Next '+esc(fmt(s.next_run_at,true))+' · Last '+esc(fmt(s.last_run_at,true))+'</p><div class="list-row-actions"><button class="button button-quiet button-small" data-action="schedule-toggle" data-id="'+esc(s.id)+'" data-enabled="'+(!s.enabled)+'">'+(s.enabled?"Pause":"Enable")+'</button><button class="button button-quiet button-small" data-action="schedule-run" data-id="'+esc(s.id)+'">Run now</button><button class="button button-danger button-small" data-action="schedule-delete" data-id="'+esc(s.id)+'">Delete</button></div></div></article>').join("");return '<section class="view">'+head("RECURRING WORK / 10","Automation.","Scheduled routines create bounded plans/reports; they do not send, publish, spend or control a device.",'<button class="button button-quiet" data-action="refresh-schedules">↻ Refresh</button>')+authNeeded()+'<div class="metric-grid" style="margin-top:16px"><div class="metric-box"><span>SCHEDULER</span><strong>'+(S.employeeStatus?(S.employeeStatus.schedulerEnabled?"Enabled":"Not enabled"):"—")+'</strong></div><div class="metric-box"><span>WORKER KEY</span><strong>'+(S.employeeStatus?(S.employeeStatus.workerCredentialsConfigured?"Configured":"Missing"):"—")+'</strong></div><div class="metric-box"><span>MODEL</span><strong>'+(S.employeeStatus?(S.employeeStatus.modelProviderConfigured?"Configured":"Missing"):"—")+'</strong></div></div><div class="workspace-grid" style="margin-top:16px"><section class="surface"><div class="surface-header"><h2>Schedules</h2></div><div class="surface-body">'+(S.scheduleError?'<div class="error-note">'+esc(S.scheduleError)+'</div>':rows||empty("◷","No schedules","The actual worker/scheduler determines execution."))+'</div></section><section class="surface"><div class="surface-header"><h2>Create schedule</h2></div><div class="surface-body"><form id="schedule-form" class="stack-form"><label class="field-label" for="schedule-role">Role</label><select id="schedule-role" name="role">'+roleOptions()+'</select><label class="field-label" for="schedule-routine">Routine</label><select id="schedule-routine" name="routineId"><option value="">Load routines first</option></select><button type="button" class="button button-quiet button-small" data-action="load-routines">Load role routines</button><label class="field-label" for="schedule-goal">Goal</label><textarea id="schedule-goal" name="goal" required maxlength="2000"></textarea><label class="field-label" for="schedule-context">Context</label><textarea id="schedule-context" name="context" maxlength="4000"></textarea><label class="field-label" for="schedule-interval">Interval minutes (60–10080)</label><input id="schedule-interval" name="intervalMinutes" type="number" min="60" max="10080" step="60" value="1440" required><button class="button button-primary button-wide" type="submit">Save schedule ↗</button></form></div></section></div></section>';}
-function renderSecurity(){const rows=S.tasks.filter(t=>String(t.status||"").toUpperCase()==="WAITING_FOR_PERMISSION").map(t=>'<article class="approval-card"><h3>'+esc(t.title||"Task needs permission")+'</h3><p>'+esc(String(t.id).slice(0,8))+' · '+esc(fmt(t.created_at,true))+'<br>Approval only queues bounded supported work, not external side effects.</p><div class="page-head-actions"><button class="button button-primary button-small" data-action="task-approve" data-id="'+esc(t.id)+'">Approve</button><button class="button button-danger button-small" data-action="task-cancel" data-id="'+esc(t.id)+'">Cancel</button></div></article>').join("");return '<section class="view">'+head("PERMISSIONS / 11","Security &amp; approvals.","Review actual task permission gates and known security boundaries.",'<button class="button button-quiet" data-view="tasks">Open task queue ↗</button>')+authNeeded()+'<div class="grid-2" style="margin-top:16px"><section class="surface"><div class="surface-header"><h2>Pending approvals</h2></div><div class="surface-body">'+(S.tasksError?'<div class="error-note">'+esc(S.tasksError)+'</div>':rows||empty("⛨","No approval rows","Only actual task records appear here."))+'</div></section><section class="surface"><div class="surface-header"><h2>Enforced boundaries</h2></div><div class="surface-body"><div class="list-stack"><div class="list-row"><div class="list-row-main"><h3 class="list-row-title">Account scope</h3><p class="list-row-sub">Private APIs require authentication; live two-user isolation is still pending.</p></div></div><div class="list-row"><div class="list-row-main"><h3 class="list-row-title">Coding execution</h3><p class="list-row-sub">Draft only; hardened sandbox not implemented.</p></div></div><div class="list-row"><div class="list-row-main"><h3 class="list-row-title">External effects</h3><p class="list-row-sub">No unrestricted publishing, payments, destructive actions or PC commands.</p></div></div><div class="list-row"><div class="list-row-main"><h3 class="list-row-title">Owner action</h3><p class="list-row-sub">Leaked-password protection and deployed DNS-rebinding verification remain blockers.</p></div></div></div></div></section></div></section>';}
-function renderSystem(){const h=S.health||{},c=S.caps||{},mods=Array.isArray(c.components)?Object.fromEntries(c.components.map(x=>[x.label,String(x.state||"unknown")+" — "+String(x.note||"")])):(c.modules||{});function list(d){return '<div class="list-stack">'+Object.entries(d||{}).filter(([k])=>!/key|secret|token|password|authorization/i.test(k)).map(([k,v])=>'<div class="list-row"><div class="list-row-main"><h3 class="list-row-title">'+esc(k)+'</h3><p class="list-row-sub">'+esc(typeof v==="object"?JSON.stringify(v):String(v))+'</p></div></div>').join("")+'</div>';}return '<section class="view">'+head("RUNTIME DIAGNOSTICS / 12","System health.","Read-only readiness does not prove inference, worker completion or deployed revision.",'<button class="button button-primary" data-action="refresh-system">↻ Refresh</button>')+'<div class="metric-grid"><div class="metric-box"><span>API HEALTH</span><strong>'+esc(String(h.status||"UNKNOWN").toUpperCase())+'</strong></div><div class="metric-box"><span>CLOUD PROVIDER</span><strong>'+(hasProvider()?"Configured":"Unknown")+'</strong></div><div class="metric-box"><span>SUPABASE CONFIG</span><strong>'+(h.supabaseConfigured===true?"Present":h.supabaseConfigured===false?"Missing":"Unknown")+'</strong></div></div><div class="grid-2" style="margin-top:16px"><section class="surface"><div class="surface-header"><h2>Runtime readiness</h2></div><div class="surface-body">'+(S.diagnostics.runtime?list(S.diagnostics.runtime):empty("⌬","Not loaded","Sign in and refresh diagnostics."))+'</div></section><section class="surface"><div class="surface-header"><h2>Worker status</h2></div><div class="surface-body">'+(S.diagnostics.worker?list(S.diagnostics.worker):empty("⌁","Not loaded","Worker status requires a Supabase account."))+'</div></section></div><section class="surface" style="margin-top:16px"><div class="surface-header"><h2>Capability contract</h2></div><div class="surface-body">'+list(mods)+'<details class="json-details"><summary>Public health response</summary><pre>'+esc(JSON.stringify(h,null,2))+'</pre></details><details class="json-details"><summary>Capability response</summary><pre>'+esc(JSON.stringify(c,null,2))+'</pre></details></div></section></section>';}
-function rangeControl(n,label,min,max,step,val,suffix){return '<div class="range-row"><label for="core-'+n+'">'+label+'</label><input type="range" id="core-'+n+'" name="'+n+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'"><output class="range-value" id="core-'+n+'-value">'+(suffix==="%"?Math.round(val*100)+"%":Number(val).toFixed(2)+suffix)+'</output></div>';}
-function renderSettings(){const c=S.core,p=S.preferences;return '<section class="view">'+head("SYSTEM CONFIGURATION / 13","Settings.","Tune local visuals and account preferences. No provider secrets or production settings are changed.",'<button class="button button-quiet" data-action="core-reset">Reset core</button>')+'<div class="grid-2"><section class="surface"><div class="surface-header"><h2>Living Energy Core</h2></div><div class="surface-body"><form id="core-form" class="stack-form"><label class="field-label" for="core-quality">Quality preset</label><select id="core-quality" name="quality"><option value="low"'+(c.quality==="low"?" selected":"")+'>Low · mobile</option><option value="medium"'+(c.quality==="medium"?" selected":"")+'>Balanced · integrated GPU</option><option value="high"'+(c.quality==="high"?" selected":"")+'>High · adaptive particles</option></select>'+rangeControl("speed","Animation speed",0,1.5,.05,c.speed,"×")+rangeControl("scale","Core scale",.65,1.25,.05,c.scale,"×")+rangeControl("glow","Nucleus glow",0,1,.05,c.glow,"%")+rangeControl("orbit","Orbit intensity",0,1,.05,c.orbit,"%")+rangeControl("turbulence","Energy turbulence",0,1,.05,c.turbulence,"%")+'<label class="field-label" for="core-colors">Colour behaviour</label><select id="core-colors" name="colorMode"><option value="adaptive"'+(c.colorMode==="adaptive"?" selected":"")+'>Adaptive to real state</option><option value="purple"'+(c.colorMode==="purple"?" selected":"")+'>Cosmic purple</option><option value="red"'+(c.colorMode==="red"?" selected":"")+'>Crimson red</option></select><div class="toggle-row"><div class="toggle-copy"><strong>Reduced motion</strong><small>Reduce movement and power use.</small></div><button class="toggle-switch" type="button" role="switch" aria-checked="'+!!c.reducedMotion+'" data-action="toggle-core" data-key="reducedMotion" aria-label="Reduced motion"></button></div><button class="button button-primary button-wide" type="submit">Apply visual settings</button><p class="form-note">Particle count adapts to viewport and quality. Actual frame rates vary by hardware.</p></form></div></section><section class="surface"><div class="surface-header"><h2>Account preferences</h2></div><div class="surface-body">'+(signed()?'<form id="prefs-form" class="stack-form"><label class="field-label" for="pref-locale">Voice language</label><select id="pref-locale" name="voice_input_locale"><option value="en-IN"'+((p.voice_input_locale||"en-IN")==="en-IN"?" selected":"")+'>English (India)</option><option value="hi-IN"'+(p.voice_input_locale==="hi-IN"?" selected":"")+'>Hindi</option><option value="hinglish"'+(p.voice_input_locale==="hinglish"?" selected":"")+'>Hinglish</option></select><div class="toggle-row"><div class="toggle-copy"><strong>Voice enabled</strong></div><button class="toggle-switch" type="button" role="switch" aria-checked="'+(p.voice_enabled!==false)+'" data-action="toggle-pref" data-key="voice_enabled"></button></div><div class="toggle-row"><div class="toggle-copy"><strong>Memory retrieval</strong></div><button class="toggle-switch" type="button" role="switch" aria-checked="'+(p.memory_enabled!==false)+'" data-action="toggle-pref" data-key="memory_enabled"></button></div><button class="button button-primary button-wide" type="submit">Save preferences</button></form>':authNeeded())+'<div class="core-divider" style="margin:18px 0"></div><h3 class="list-row-title">Assistant identity</h3><p class="form-note">Persona is sent to the chat API; it does not alter provider credentials.</p><div class="page-head-actions"><button class="button '+(S.persona==="ultron"?"button-primary":"button-quiet")+' button-small" data-action="persona" data-persona="ultron">ULTRON</button><button class="button '+(S.persona==="naya"?"button-primary":"button-quiet")+' button-small" data-action="persona" data-persona="naya">NAYA</button></div>'+(hasSession()?'<button class="button button-danger button-small" data-action="signout">Sign out</button>':'<button class="button button-primary button-small" data-action="open-auth">Sign in</button>')+'</div></section></div></section>';}
-function renderView(view){if(S.coreDestroy){S.coreDestroy();S.coreDestroy=null;}if(S.voiceActive&&view!=="voice")stopVoice();S.view=V[view]?view:"home";const f={home:renderHome,chat:renderChat,tasks:renderTasks,voice:renderVoice,coding:renderCoding,research:renderResearch,files:renderFiles,memory:renderMemory,integrations:renderIntegrations,automation:renderAutomation,security:renderSecurity,system:renderSystem,settings:renderSettings};$("#view-root").innerHTML=f[S.view]();updateChrome();if(S.view==="home"){mountCore();updateHomeStatus();}if(S.view==="files")loadSavedDocuments();if(S.view==="chat"){renderChatMessages();attachments("chat-attachments");loadModels();loadConversations();}if(S.view==="tasks"||S.view==="security")loadTasks();if(S.view==="memory")loadMemories();if(S.view==="integrations")loadIntegrations();if(S.view==="automation")loadSchedules();if(S.view==="system")diagnostics();if(S.view==="settings"&&signed())loadPrefs();$("#workspace").scrollTop=0;}
-function navigate(v){if(!V[v])return;closeMobile();if(location.hash!=="#"+v)location.hash=v;else renderView(v);}
-function closeMobile(){$("#app-shell").classList.remove("sidebar-mobile-open");}
-async function loadConversations(){if(!signed()){S.conversations=[];const l=$("#conversation-list");if(l)l.innerHTML='<div class="form-note">Sign in for saved history.</div>';return;}try{const d=await api("/api/conversations");S.conversations=Array.isArray(d.conversations)?d.conversations:[];const l=$("#conversation-list");if(l)l.innerHTML=S.conversations.map(c=>'<button class="conversation-item '+(c.id===S.conversationId?"is-active":"")+'" data-action="select-conversation" data-id="'+esc(c.id)+'"><span class="conversation-glyph">◉</span><span>'+esc(c.title||"Untitled conversation")+'</span></button>').join("")||'<div class="form-note">No saved conversations.</div>';}catch(e){S.conversations=[];const l=$("#conversation-list");if(l)l.innerHTML='<div class="form-note">'+esc(e.message)+'</div>';}}
-async function loadConversation(id){if(!signed())return;S.conversationId=id;S.messages=[];try{const d=await api("/api/conversations/"+encodeURIComponent(id)+"/messages");S.messages=(Array.isArray(d.messages)?d.messages:[]).map(m=>({role:m.role,content:m.content,time:fmt(m.created_at,true),model:m.model||"",saved:true}));}catch(e){S.messages=[{role:"error",content:"Could not load conversation: "+e.message}];}if(S.view==="chat"){renderChatMessages();await loadConversations();}}
-async function loadModels(){if(!hasSession())return;try{const d=await api("/api/models"),src=Array.isArray(d.models)?d.models:Array.isArray(d.data)?d.data:[];S.models=src.map(m=>typeof m==="string"?{id:m,label:m}:{id:m.id||m.model||m.name,label:m.name||m.id||m.model||"Model"}).filter(m=>m.id&&(/^[a-zA-Z0-9._/-]+(?::free)?$/.test(m.id)||m.id==="openrouter/free"));if(!S.models.some(m=>m.id==="openrouter/free"))S.models.unshift({id:"openrouter/free",label:"Automatic free router"});S.models=S.models.filter((m,i,a)=>a.findIndex(x=>x.id===m.id)===i).slice(0,30);if(!S.models.some(m=>m.id===S.model))S.model="openrouter/free";const e=$("#model-select");if(e)e.innerHTML=S.models.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===S.model?" selected":"")+'>'+esc(m.label)+'</option>').join("");}catch{S.models=[{id:"openrouter/free",label:"Automatic free router"}];}}
-async function ensureConversation(title){if(!signed())return null;if(S.conversationId)return S.conversationId;const d=await api("/api/conversations",{method:"POST",body:{title:String(title||"New conversation").slice(0,160)}});if(!d.conversation||!d.conversation.id)throw new Error("No conversation ID returned.");S.conversationId=d.conversation.id;await loadConversations();return S.conversationId;}
-async function saveMsg(id,role,text){if(!signed()||!id||!text)return true;try{await api("/api/conversations/"+encodeURIComponent(id)+"/messages",{method:"POST",body:{role:role,content:String(text).slice(0,100000)}});return true;}catch{toast("Message displayed but not saved to history.","error");return false;}}
-async function sendChat(input){const text=String(input||"").trim();if(!text&&!S.attachments.length)return;if(!hasSession()){toast("Sign in to send chat requests.","error");openModal("auth-modal");return;}if(S.isBusy)return;const imgs=S.attachments.slice(0,2);S.attachments=[];const user={role:"user",content:text,attachments:imgs,time:"NOW",saved:true};S.messages.push(user);const title=text.slice(0,160)||(imgs.length?"Image analysis":"New conversation");if(S.view!=="chat")navigate("chat");else{renderChat();renderChatMessages();}attachments("chat-attachments");if($("#home-prompt"))$("#home-prompt").value="";if($("#chat-prompt"))$("#chat-prompt").value="";setCore("thinking","MODEL REQUEST IN PROGRESS");S.isBusy=true;S.messages.push({role:"assistant",content:"",time:"LIVE STREAM",streaming:true});renderChat();renderChatMessages();attachments("chat-attachments");let cid=null;try{if(signed())try{cid=await ensureConversation(title);}catch(e){toast("Conversation persistence unavailable: "+e.message,"error");}if(cid)user.saved=await saveMsg(cid,"user",text||"Please analyze the attached image.");const b={messages:S.messages.filter(m=>m.role==="user"||m.role==="assistant").slice(-35).map(m=>({role:m.role,content:m.content||""})),stream:true,model:S.model||"openrouter/free",persona:S.persona,attachments:imgs.map(a=>({dataUrl:a.dataUrl}))};const ctrl=new AbortController();S.controller=ctrl;const r=await fetch("/api/chat",{method:"POST",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json","Accept":"text/event-stream, application/json"},body:JSON.stringify(b),signal:ctrl.signal});if(!r.ok){const d=await readPayload(r);throw new Error(d&&d.error&&d.error.message||"Chat failed with HTTP "+r.status);}if(!r.body||!r.body.getReader)throw new Error("Stream unreadable in this browser.");const reader=r.body.getReader(),decoder=new TextDecoder(),last=S.messages[S.messages.length-1];let answer="",buf="",done=false;async function block(part){let ev="message",d=[];part.split(/\r?\n/).forEach(l=>{if(l.startsWith("event:"))ev=l.slice(6).trim();else if(l.startsWith("data:"))d.push(l.slice(5).trimStart());});if(!d.length)return;const raw=d.join("\n");if(ev==="done"||raw==="[DONE]"){done=true;return;}if(ev==="provider_error"){let p={};try{p=JSON.parse(raw);}catch{}throw new Error(p&&p.error&&p.error.message||"Provider interrupted response.");}let p;try{p=JSON.parse(raw);}catch{return;}if(typeof p.delta==="string"){answer+=p.delta;last.content=answer;last.model=r.headers.get("X-ULTRON-Model")||S.model;setCore("responding","RESPONSE STREAMING");renderChatMessages();const live=$("#chat-live-status");if(live)live.textContent="Response streaming…";}}
-while(!done){const part=await reader.read();if(part.done)break;buf+=decoder.decode(part.value,{stream:true});if(buf.length>260000)throw new Error("Response stream exceeded the UI buffer limit.");let index;while((index=buf.indexOf("\n\n"))>=0){const chunk=buf.slice(0,index);buf=buf.slice(index+2);await block(chunk);if(done)break;}}buf+=decoder.decode();if(!done&&buf.trim())await block(buf);if(!answer.trim())throw new Error("Backend returned no assistant text.");last.content=answer;last.streaming=false;last.time=fmt(new Date().toISOString(),true);if(cid)last.saved=await saveMsg(cid,"assistant",answer);setCore("success","RESPONSE RECEIVED",true);renderChatMessages();await loadConversations();const status=$("#chat-live-status");if(status)status.textContent="Response completed · "+(last.model||S.model);}catch(e){const last=S.messages[S.messages.length-1];if(e.name==="AbortError"){if(last){last.content=last.content||"Response stopped.";last.streaming=false;}setCore("idle","RESPONSE CANCELLED");}else{if(last&&last.role==="assistant"&&last.streaming){last.role="error";last.content=e.message;last.streaming=false;}else S.messages.push({role:"error",content:e.message});setCore("error","REQUEST FAILED");toast(e.message||"Chat failed.","error");}renderChatMessages();}finally{S.isBusy=false;S.controller=null;if(S.view==="chat"){if($("#chat-prompt"))$("#chat-prompt").disabled=false;const tools=$(".chat-composer-tools");if(tools)tools.innerHTML='<button class="prompt-send" type="submit" aria-label="Send">↑</button>';}}}
-async function loadTasks(){if(!API_CAPABILITIES.tasks){S.tasks=[];S.tasksError="Task-record API is not exposed by the current backend build. No task was created or executed.";}else if(!signed()){S.tasks=[];S.tasksError="Sign in with Supabase to read private task records.";}else try{const d=await api("/api/tasks");S.tasks=Array.isArray(d.tasks)?d.tasks:[];S.tasksError="";}catch(e){S.tasks=[];S.tasksError=e.message;}if(S.view==="tasks")$("#view-root").innerHTML=renderTasks();if(S.view==="security")$("#view-root").innerHTML=renderSecurity();}
-async function submitTask(form){if(!API_CAPABILITIES.tasks){toast("Task creation is unavailable: the current backend does not expose a task-record API.","error");return;}if(!signed()){openModal("auth-modal");return;}const v=Object.fromEntries(new FormData(form).entries()),b={title:String(v.title||"").trim(),description:String(v.description||"").trim(),taskType:v.taskType,risk:v.risk,query:String(v.query||"").trim()};if(["employee","autonomous"].includes(b.taskType)){b.role=v.role;b.goal=String(v.goal||b.description).trim();b.mode=v.mode;}try{const d=await api("/api/tasks",{method:"POST",body:b});toast(d.notice||"Task record created.","success");await loadTasks();if(d.task&&d.task.id)await taskTimeline(d.task.id);setCore("success","TASK RECORD SAVED",true);}catch(e){toast(e.message||"Task creation failed.","error");}}
-async function taskAction(kind,id){if(!API_CAPABILITIES.tasks){toast("Task actions are unavailable: no task API is exposed by the current backend.","error");return;}if(!signed()){openModal("auth-modal");return;}const task=S.tasks.find(t=>t.id===id);if(!task){toast("Task not found; refresh before acting.","error");return;}if(kind==="approve"){if(!confirm("Approve this saved task?\n\n"+String(task.title||id).slice(0,160)+"\n\nApproval only queues supported bounded work."))return;try{const d=await api("/api/tasks/"+encodeURIComponent(id)+"/approve",{method:"POST",body:{confirm:true}});toast(d.notice||"Approval recorded.","success");await loadTasks();}catch(e){toast(e.message||"Approval failed.","error");}}else{if(!["QUEUED","WAITING_FOR_PERMISSION"].includes(String(task.status).toUpperCase())){toast("Only queued or awaiting-permission tasks are cancellable here.","error");return;}if(!confirm("Cancel this queued task?"))return;try{await api("/api/tasks/"+encodeURIComponent(id)+"/cancel",{method:"POST",body:{}});toast("Cancellation recorded.","success");await loadTasks();}catch(e){toast(e.message||"Cancellation failed.","error");}}}
-async function taskTimeline(id){if(!API_CAPABILITIES.tasks){S.taskError="Task timeline API is unavailable in the current backend build.";return;}S.selectedTask=id;S.taskProgress=null;S.taskError="";if(S.view==="tasks")$("#view-root").innerHTML=renderTasks();try{S.taskProgress=await api("/api/tasks/"+encodeURIComponent(id)+"/progress");}catch(e){S.taskError=e.message;}if(S.view==="tasks")$("#view-root").innerHTML=renderTasks();}
-async function loadMemories(){if(!signed()){S.memories=[];S.memoryError="Sign in to access private memory.";}else try{const d=await api("/api/memory");S.memories=Array.isArray(d.items)?d.items:[];S.memoryError="";}catch(e){S.memories=[];S.memoryError=e.message;}if(S.view==="memory")$("#view-root").innerHTML=renderMemory();}
-async function submitMemory(form){if(!signed()){openModal("auth-modal");return;}const v=Object.fromEntries(new FormData(form).entries()),b={kind:v.kind,title:String(v.title||"").trim(),content:String(v.content||"").trim()};if(v.expires_at)b.expires_at=new Date(v.expires_at).toISOString();try{await api("/api/memory",{method:"POST",body:b});toast("Memory saved to your account.","success");form.reset();await loadMemories();}catch(e){toast(e.message||"Could not save memory.","error");}}
-async function memoryAction(kind,id,b){if(!signed()){openModal("auth-modal");return;}const m=S.memories.find(x=>x.id===id);if(!m)return;try{if(kind==="delete"){if(!confirm("Delete this memory?\n\n"+m.title))return;await api("/api/memory/"+encodeURIComponent(id),{method:"DELETE"});toast("Memory deleted.","success");}else{await api("/api/memory/"+encodeURIComponent(id),{method:"PATCH",body:{is_active:b.dataset.active==="true"}});toast("Memory updated.","success");}await loadMemories();}catch(e){toast(e.message||"Memory action failed.","error");}}
-async function submitResearch(form){if(!API_CAPABILITIES.research){S.researchError="Research API is not exposed by the current backend build. No search was performed.";$("#view-root").innerHTML=renderResearch();return;}const v=Object.fromEntries(new FormData(form).entries()),query=String(v.query||"").trim();if(query.length<2)return;S.research=null;S.researchError="";$("#view-root").innerHTML=renderResearch();setCore("thinking","RESEARCH REQUEST IN PROGRESS");try{S.research=await api("/api/research",{method:"POST",body:{query:query}});setCore("success","RESEARCH RESULTS RECEIVED",true);}catch(e){S.researchError=e.message;setCore("error","RESEARCH FAILED");}if(S.view==="research")$("#view-root").innerHTML=renderResearch();}
-async function submitCoding(form){if(!API_CAPABILITIES.coding){S.codingError="Coding-assistance API is not exposed by the current backend build. No code was generated or executed.";$("#view-root").innerHTML=renderCoding();return;}const v=Object.fromEntries(new FormData(form).entries()),b={task:String(v.task||"").trim(),mode:v.mode||"plan",language:String(v.language||"unspecified"),code:String(v.code||"")};if(!b.task)return;S.coding=null;S.codingError="";$("#view-root").innerHTML=renderCoding();setCore("thinking","CODING ASSISTANCE REQUESTED");try{S.coding=await api("/api/coding/assist",{method:"POST",body:b});setCore("success","CODING RESPONSE RECEIVED",true);}catch(e){S.codingError=e.message;setCore("error","CODING REQUEST FAILED");}if(S.view==="coding")$("#view-root").innerHTML=renderCoding();}
-function formatFor(name){const m=/\.([a-z0-9]+)$/i.exec(name);let f=m?m[1].toLowerCase():"";if(f==="markdown")f="md";if(f==="htm")f="html";return ["txt","md","csv","json","html","pdf","docx"].includes(f)?f:"";}
-function base64(buf){const bytes=new Uint8Array(buf);let s="";for(let i=0;i<bytes.length;i+=32768)s+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(bytes.length,i+32768)));return btoa(s);}
-async function loadSavedDocuments(){if(!signed()){S.savedDocuments=[];S.savedDocumentsError="Sign in with your Supabase account to access private saved files.";}else{try{const d=await api("/api/documents");S.savedDocuments=Array.isArray(d.documents)?d.documents:[];S.savedDocumentsError="";}catch(e){S.savedDocuments=[];S.savedDocumentsError=e.message==="Could not load your saved documents."?e.message:e.message+" — private document storage may need its database/storage migration applied.";}}if(S.view==="files")$("#view-root").innerHTML=renderFiles();}
-async function saveOriginalDocument(){const file=S.documentFile;if(!file){toast("Select and extract a file first.","error");return;}if(S.documentOriginalSaved){toast("This original file is already saved in your private vault.","info");return;}if(!signed()){openModal("auth-modal");toast("Sign in with your Supabase account to save a private file.","error");return;}if(file.size>5*1024*1024){toast("Private storage accepts files up to 5 MB.","error");return;}try{toast("Uploading to your private vault…","info");const fileBase64=base64(await file.arrayBuffer());const d=await api("/api/documents/upload",{method:"POST",body:{filename:file.name,fileBase64}});S.documentOriginalSaved=true;S.documentStorageId=d.document&&d.document.id||null;toast("Original file saved privately to your account.","success");await loadSavedDocuments();}catch(e){toast(e.message||"Private document upload failed.","error");}if(S.view==="files")$("#view-root").innerHTML=renderFiles();}
-async function deleteSavedDocument(id){if(!signed()){openModal("auth-modal");return;}const item=S.savedDocuments.find(x=>x.id===id);if(!item)return;if(!confirm("Delete this private document permanently?\n\n"+String(item.filename||"Saved document").slice(0,180)))return;try{await api("/api/documents/"+encodeURIComponent(id),{method:"DELETE"});toast("Private document and metadata deleted.","success");await loadSavedDocuments();}catch(e){toast(e.message||"Could not delete the private document.","error");}}
-async function saveDocumentToMemory(){const d=S.document;if(!d){toast("Load a document first.","error");return;}if(S.documentSaved){toast("This text extract is already saved to your Memory Vault.","info");return;}if(!signed()){openModal("auth-modal");toast("Sign in with a Supabase account to save a document text extract.","error");return;}const extracted=String(d.extractedText||"").trim();if(!extracted){toast("There is no extracted text to save.","error");return;}const metadata="Extracted from "+String(d.filename||"document").slice(0,200)+" ("+String(d.format||"unknown").toUpperCase()+", "+Number(d.characters||extracted.length)+" characters). Stored as untrusted document text; original file is not retained.\n\n";const content=(metadata+extracted).slice(0,20000);try{const saved=await api("/api/memory",{method:"POST",body:{kind:"document_reference",title:String(d.filename||"Saved document").slice(0,240),content,source:"document"}});S.documentSaved=true;S.documentMemoryId=saved.item&&saved.item.id||null;toast(extracted.length+metadata.length>20000?"Saved the first 20,000 characters to your account's Memory Vault.":"Text extract saved to your account's Memory Vault.","success");if(S.view==="memory")await loadMemories();}catch(e){toast(e.message||"Could not save the document text extract.","error");}if(S.view==="files")$("#view-root").innerHTML=renderFiles();}
-async function extractDocument(file){if(!file)return;if(!API_CAPABILITIES.documents){S.documentError="Document extraction API is not exposed by the current backend build. The file was not uploaded.";$("#view-root").innerHTML=renderFiles();return;}const f=formatFor(file.name);if(!f){toast("Supported files: TXT, Markdown, CSV, JSON, HTML, PDF, DOCX.","error");return;}if((["pdf","docx"].includes(f)&&file.size>5*1024*1024)||(!["pdf","docx"].includes(f)&&file.size>1024*1024)){toast("File exceeds the API extraction limit.","error");return;}S.document=null;S.documentError="";S.documentSaved=false;S.documentMemoryId=null;S.documentFile=file;S.documentOriginalSaved=false;S.documentStorageId=null;$("#view-root").innerHTML=renderFiles();setCore("thinking","DOCUMENT EXTRACTION IN PROGRESS");try{const b=["pdf","docx"].includes(f)?{filename:file.name,format:f,fileBase64:base64(await file.arrayBuffer())}:{filename:file.name,format:f,content:await file.text()};S.document=await api("/api/documents/extract",{method:"POST",body:b});toast("Text extraction succeeded. Nothing is stored until you choose Save to Memory Vault.","success");setCore("success","DOCUMENT TEXT EXTRACTED",true);}catch(e){S.documentError=e.message;setCore("error","DOCUMENT EXTRACTION FAILED");}if(S.view==="files")$("#view-root").innerHTML=renderFiles();}
-async function loadIntegrations(){if(!hasSession()){S.integrations=[];S.tools=[];S.integrationError="Sign in to request readiness data.";}else{try{const d=await api("/api/integrations");S.integrations=Array.isArray(d.integrations)?d.integrations:[];S.integrationError="";}catch(e){S.integrations=[];S.integrationError=e.message;}if(signed()&&API_CAPABILITIES.agentTools)try{const d=await api("/api/kaligpt/tools");S.tools=Array.isArray(d.tools)?d.tools:[];}catch{S.tools=[];}else S.tools=[];}if(S.view==="integrations")$("#view-root").innerHTML=renderIntegrations();}
-async function loadSchedules(){if(!API_CAPABILITIES.automation){S.schedules=[];S.employeeStatus=null;S.scheduleError="Automation and schedule APIs are not exposed by the current backend build.";}else if(!signed()){S.schedules=[];S.employeeStatus=null;S.scheduleError="Sign in to access private schedules.";}else{try{const r=await Promise.all([api("/api/employees/schedules"),api("/api/employees/status")]);S.schedules=Array.isArray(r[0].schedules)?r[0].schedules:[];S.employeeStatus=r[1];S.scheduleError="";}catch(e){S.schedules=[];S.scheduleError=e.message;}try{const d=await api("/api/employees/roles");S.roles=Array.isArray(d.roles)?d.roles:[];}catch{S.roles=[];}}if(S.view==="automation")$("#view-root").innerHTML=renderAutomation();}
-async function loadRoutines(role){if(!API_CAPABILITIES.automation){toast("Routine API is unavailable in the current backend build.","error");return;}if(!signed()){openModal("auth-modal");return;}try{const d=await api("/api/employees/routines?role="+encodeURIComponent(role||"chief-of-staff"));S.routines=Array.isArray(d.routines)?d.routines:[];const s=$("#schedule-routine");if(s)s.innerHTML='<option value="">Choose routine</option>'+S.routines.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name||r.id)+'</option>').join("");if(!S.routines.length)toast("No routines returned.","info");}catch(e){toast(e.message||"Routines could not be loaded.","error");}}
-async function submitSchedule(form){if(!API_CAPABILITIES.automation){toast("Schedule creation is unavailable in the current backend build.","error");return;}if(!signed()){openModal("auth-modal");return;}const v=Object.fromEntries(new FormData(form).entries()),b={role:v.role,routineId:v.routineId,goal:String(v.goal||"").trim(),context:String(v.context||"").trim(),intervalMinutes:Number(v.intervalMinutes)};if(!b.routineId){toast("Load and select a routine first.","error");return;}try{const d=await api("/api/employees/schedules",{method:"POST",body:b});toast(d.notice||"Schedule saved.","success");await loadSchedules();}catch(e){toast(e.message||"Schedule save failed.","error");}}
-async function scheduleAction(kind,id,b){if(!API_CAPABILITIES.automation){toast("Schedule actions are unavailable in the current backend build.","error");return;}if(!signed()){openModal("auth-modal");return;}try{if(kind==="toggle"){await api("/api/employees/schedules/"+encodeURIComponent(id),{method:"PATCH",body:{enabled:b.dataset.enabled==="true"}});toast("Schedule state updated.","success");}else if(kind==="delete"){if(!confirm("Delete schedule? Existing task rows remain."))return;await api("/api/employees/schedules/"+encodeURIComponent(id),{method:"DELETE"});toast("Schedule deleted.","success");}else{if(!confirm("Queue a bounded report now? No external actions are performed."))return;const d=await api("/api/employees/schedules/"+encodeURIComponent(id)+"/run",{method:"POST",body:{}});toast(d.notice||"Run request recorded.","success");}await loadSchedules();}catch(e){toast(e.message||"Schedule action failed.","error");}}
-async function loadPreferences(){if(!signed())return;try{const d=await api("/api/preferences");if(d.preferences)S.preferences=Object.assign(S.preferences,d.preferences);if(S.view==="settings")$("#view-root").innerHTML=renderSettings();if(S.view==="voice")$("#view-root").innerHTML=renderVoice();}catch(e){toast("Preferences not loaded: "+e.message,"error");}}
-async function savePreferences(form){if(!signed()){openModal("auth-modal");return;}const v=Object.fromEntries(new FormData(form).entries()),b={voice_input_locale:v.voice_input_locale||S.preferences.voice_input_locale||"en-IN",voice_enabled:S.preferences.voice_enabled!==false,memory_enabled:S.preferences.memory_enabled!==false};try{const d=await api("/api/preferences",{method:"PUT",body:b});S.preferences=Object.assign(S.preferences,d.preferences||b);toast("Preferences saved.","success");if(S.view==="settings")$("#view-root").innerHTML=renderSettings();if(S.view==="voice")$("#view-root").innerHTML=renderVoice();}catch(e){toast("Preference update failed: "+e.message,"error");}}
-async function togglePreference(key,b){if(!signed()){openModal("auth-modal");return;}const old=S.preferences[key]!==false;S.preferences[key]=!old;try{const d=await api("/api/preferences",{method:"PUT",body:{voice_input_locale:S.preferences.voice_input_locale||"en-IN",voice_enabled:S.preferences.voice_enabled!==false,memory_enabled:S.preferences.memory_enabled!==false}});S.preferences=Object.assign(S.preferences,d.preferences||{});b.setAttribute("aria-checked",String(S.preferences[key]!==false));toast("Preference updated.","success");}catch(e){S.preferences[key]=old;toast("Preference not saved: "+e.message,"error");}}
-async function diagnostics(){S.diagnostics={worker:null,runtime:null};if(signed()){const r=await Promise.all([maybe("/api/worker/status"),maybe("/api/runtime/readiness")]);S.diagnostics.worker=r[0].ok?r[0].data:null;S.diagnostics.runtime=r[1].ok?r[1].data:null;}else if(hasSession()){const r=await maybe("/api/runtime/readiness");S.diagnostics.runtime=r.ok?r.data:null;}if(S.view==="system")$("#view-root").innerHTML=renderSystem();}
-async function refreshSystem(){await refreshStatus(false);await diagnostics();if(S.view==="system")$("#view-root").innerHTML=renderSystem();toast("Read-only diagnostics refreshed; provider inference remains separate.","success");}
-function setAuthMode(mode){S.authMode=["signin","signup","recovery"].includes(mode)?mode:"signin";$$(".auth-tab").forEach(t=>{const on=t.dataset.authMode===S.authMode;t.classList.toggle("is-active",on);t.setAttribute("aria-selected",String(on));});$("#auth-password-wrap").hidden=S.authMode==="recovery";$("#auth-password").required=S.authMode!=="recovery";$("#auth-password").autocomplete=S.authMode==="signup"?"new-password":"current-password";$("#auth-submit").innerHTML=S.authMode==="signup"?"Create account <span>↗</span>":S.authMode==="recovery"?"Send recovery email <span>↗</span>":"Sign in securely <span>↗</span>";$("#auth-title").textContent=S.authMode==="signup"?"Create your ULTRON account":S.authMode==="recovery"?"Recover account access":"Access your ULTRON";$("#google-signin").disabled=S.authMode!=="signin";$("#auth-error").hidden=true;}
-function openModal(id){const m=$("#"+id);if(!m)return;m.hidden=false;document.body.classList.add("modal-open");if(id==="auth-modal"){setAuthMode(S.authMode);setTimeout(()=>$("#auth-email").focus(),20);}if(id==="command-modal"){S.commandQuery="";S.commandIndex=0;$("#command-search").value="";renderCommands();setTimeout(()=>$("#command-search").focus(),20);}}
-function closeModal(id){const m=$("#"+id);if(m)m.hidden=true;if(!$$(".modal-layer:not([hidden])").length)document.body.classList.remove("modal-open");}
-async function submitAuth(form){const v=Object.fromEntries(new FormData(form).entries()),email=String(v.email||"").trim(),password=String(v.password||""),button=$("#auth-submit"),err=$("#auth-error");button.disabled=true;button.textContent="Contacting auth service…";err.hidden=true;try{if(S.authMode==="recovery"){const d=await api("/api/auth/recovery",{method:"POST",body:{email:email}});toast(d.message||"If an account exists, recovery instructions will be sent.","success");setAuthMode("signin");return;}if(S.authMode==="signup"){const d=await api("/api/auth/signup",{method:"POST",body:{email:email,password:password}});if(!d.authenticated){toast(d.message||"Check email confirmation before signing in.","success");setAuthMode("signin");return;}}else await api("/api/auth/signin",{method:"POST",body:{email:email,password:password}});await refreshStatus(false);closeModal("auth-modal");toast("Signed in; loading account-scoped workspaces.","success");if(signed()){await loadPreferences();await loadConversations();}renderView(S.view);}catch(e){err.textContent=e.message||"Authentication failed.";err.hidden=false;}finally{button.disabled=false;setAuthMode(S.authMode);}}
-async function signOut(){try{await api("/api/auth/signout",{method:"POST",body:{}});}catch(e){toast("Sign-out failed: "+e.message,"error");return;}S.session={authenticated:false,configured:true,authType:null,email:null};S.messages=[];S.conversations=[];S.conversationId=null;S.tasks=[];S.memories=[];S.schedules=[];stopVoice();await refreshStatus(false);renderView(S.view);toast("Signed out.","success");}
-async function copyText(t){try{if(navigator.clipboard&&isSecureContext)await navigator.clipboard.writeText(String(t||""));else{const el=document.createElement("textarea");el.value=String(t||"");el.style.position="fixed";el.style.opacity="0";document.body.appendChild(el);el.select();const ok=document.execCommand("copy");el.remove();if(!ok)throw new Error("Copy was blocked.");}toast("Copied to clipboard.","success");}catch(e){toast(e.message||"Copy failed.","error");}}
-function meter(){if(!S.analyser)return;const data=new Uint8Array(S.analyser.frequencyBinCount);function draw(){if(!S.voiceActive||!S.analyser)return;S.analyser.getByteFrequencyData(data);const bars=$$(".voice-wavebar");bars.forEach((b,i)=>{const x=data[Math.min(data.length-1,Math.floor(i*data.length/Math.max(1,bars.length)))]||0;b.style.height=(3+x/255*18)+"px";b.style.opacity=String(.35+x/390);});S.meterFrame=requestAnimationFrame(draw);} $$(".waveform span").forEach(b=>b.classList.add("voice-wavebar"));S.meterFrame=requestAnimationFrame(draw);}
-async function startVoice(){if(S.voiceActive)return;const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){S.voiceError="This browser does not support SpeechRecognition. Use a supported browser or text chat.";$("#view-root").innerHTML=renderVoice();return;}if(S.preferences.voice_enabled===false){toast("Voice features are disabled by preferences.","error");return;}S.voiceError="";try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){S.micStream=await navigator.mediaDevices.getUserMedia({audio:true});const A=window.AudioContext||window.webkitAudioContext;if(A){S.audioContext=new A();const src=S.audioContext.createMediaStreamSource(S.micStream);S.analyser=S.audioContext.createAnalyser();S.analyser.fftSize=64;src.connect(S.analyser);}}}catch(e){S.voiceError=e.name==="NotAllowedError"?"Microphone permission denied.":"Microphone access failed; check browser/OS permission.";$("#view-root").innerHTML=renderVoice();toast(S.voiceError,"error");return;}const r=new R();S.recognition=r;r.lang=S.preferences.voice_input_locale==="hi-IN"?"hi-IN":"en-IN";r.interimResults=true;r.continuous=false;r.maxAlternatives=1;r.onstart=()=>{S.voiceActive=true;setCore("listening","MICROPHONE ACTIVE");if(S.view==="voice"){$("#view-root").innerHTML=renderVoice();meter();}};r.onresult=e=>{let t="";for(let i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript;S.voiceText=t.trim();if($("#voice-transcript"))$("#voice-transcript").value=S.voiceText;};r.onerror=e=>{S.voiceError=e.error==="not-allowed"?"Speech permission denied.":"Speech recognition error: "+String(e.error||"unknown");toast(S.voiceError,"error");};r.onend=()=>{stopVoice(false);if(S.view==="voice")$("#view-root").innerHTML=renderVoice();};try{r.start();}catch(e){S.voiceError="Could not start speech recognition: "+String(e.message||"unknown");stopVoice(false);$("#view-root").innerHTML=renderVoice();}}
-function stopVoice(stopRec){if(stopRec!==false&&S.recognition){const r=S.recognition;S.recognition=null;try{r.stop();}catch{}}else S.recognition=null;S.voiceActive=false;if(S.meterFrame)cancelAnimationFrame(S.meterFrame);S.meterFrame=0;if(S.micStream)S.micStream.getTracks().forEach(t=>{try{t.stop();}catch{}});S.micStream=null;if(S.audioContext){try{S.audioContext.close();}catch{}}S.audioContext=null;S.analyser=null;if(S.coreState==="listening")setCore("idle","READY FOR INPUT");}
-function speakText(t){if(!String(t||"").trim())return;if(!("speechSynthesis"in window)){toast("Browser text-to-speech is unavailable.","error");return;}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(t).slice(0,12000));u.lang=S.preferences.voice_input_locale==="hi-IN"?"hi-IN":"en-IN";u.onstart=()=>setCore("responding","BROWSER SPEECH OUTPUT");u.onend=()=>setCore("idle");u.onerror=()=>{setCore("error","SPEECH OUTPUT FAILED");toast("Speech output failed.","error");};speechSynthesis.speak(u);}
-function renderCommands(){const root=$("#command-results");if(!root)return;const a=[["home","Command center","Energy Core","⌘"],["chat","AI terminal","Live conversation","◉"],["tasks","Autonomous tasks","Task queue","⌁"],["voice","Voice studio","Browser speech","◖"],["coding","Coding agent","Draft assistance","‹›"],["research","Research lab","Source search","⌕"],["files","Document intelligence","Transient extraction","▤"],["memory","Memory vault","Private memory","◈"],["integrations","Integrations","Readiness catalog","⟡"],["automation","Automation","Scheduled routines","◷"],["security","Security & approvals","Task permission gates","⛨"],["system","System health","Read-only diagnostics","⌬"],["settings","Settings","Energy Core","⚙"],["signin",session()?"Account":"Sign in","Manage session","U"],["refresh","Refresh status","Health and capabilities","↻"]].filter(x=>!S.commandQuery||(x[1]+" "+x[2]).toLowerCase().includes(S.commandQuery.toLowerCase()));if(!a.length){root.innerHTML=empty("⌕","No match","Try a workspace name.");return;}S.commandIndex=Math.max(0,Math.min(S.commandIndex,a.length-1));root.innerHTML=a.map((x,i)=>'<button class="command-result '+(i===S.commandIndex?"is-selected":"")+'" data-action="command" data-id="'+x[0]+'"><span class="command-result-icon">'+x[3]+'</span><span class="command-result-copy"><strong>'+esc(x[1])+'</strong><small>'+esc(x[2])+'</small></span><kbd>'+(i===S.commandIndex?"↵":"")+'</kbd></button>').join("");}
-function runCommand(id){closeModal("command-modal");if(V[id])navigate(id);else if(id==="signin")session()?navigate("settings"):openModal("auth-modal");else if(id==="refresh")refreshStatus(true);}
-function mountCore(){
- const canvas=$("#energy-core"),fallback=$("#core-fallback"),label=$("#core-renderer-label");if(!canvas)return;
- const gl=canvas.getContext("webgl",{alpha:true,antialias:true,powerPreference:"low-power",premultipliedAlpha:false})||canvas.getContext("experimental-webgl",{alpha:true,antialias:true});
- if(!gl){canvas.hidden=true;if(fallback)fallback.hidden=false;if(label)label.textContent="WEBGL UNAVAILABLE · CSS FALLBACK";return;}
- let dead=false,frame=0,observer=null,prog=null,pb=null,sb=null,nb=null,rings=[],n=0;const reduced=()=>S.core.reducedMotion||(matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
- const vs=["attribute vec3 aPos;attribute float aSeed;attribute float aSize;uniform float uTime;uniform float uSpeed;uniform float uScale;uniform float uTurb;uniform float uAspect;uniform float uPixel;uniform float uMode;varying float vSeed;","void main(){float t=uTime*uSpeed;vec3 p=aPos;float c=cos(t*.22),s=sin(t*.22);p.xz=vec2(p.x*c-p.z*s,p.x*s+p.z*c);float cy=cos(t*.11),sy=sin(t*.11);p.yz=vec2(p.y*cy-p.z*sy,p.y*sy+p.z*cy);p+=normalize(p)*sin(aSeed*20.0+t*1.7)*.012*uTurb;float d=2.7/max(1.1,3.0-p.z*.45);gl_Position=vec4(p.x*d*uScale/uAspect,p.y*d*uScale,0.0,1.0);gl_PointSize=max(1.0,aSize*d*uPixel*(1.0+.1*sin(t+aSeed*7.0)));vSeed=aSeed;}"].join("\n");
- const fs=["precision mediump float;uniform float uTime;uniform float uMode;uniform float uGlow;uniform float uOrbit;uniform float uState;uniform float uColor;varying float vSeed;","void main(){float r=length(gl_PointCoord-vec2(.5))*2.0;if(r>1.0)discard;vec3 p=vec3(.59,.32,1.0),w=vec3(.88,.79,1.0),red=vec3(1.0,.12,.3),cyan=vec3(.22,.85,1.0),pink=vec3(1.0,.25,.78),green=vec3(.32,1.0,.7),amber=vec3(1.0,.63,.24);vec3 color=mix(p,w,.28+.58*sin(vSeed*29.0+uTime*.45));if(uColor>.5&&uColor<1.5)color=mix(p,w,.55);if(uColor>1.5)color=mix(red,vec3(1.0,.45,.55),.5);if(uColor<.5){if(uState>.5&&uState<1.5)color=mix(color,cyan,.55);else if(uState>2.5&&uState<3.5)color=mix(color,red,.7);else if(uState>3.5&&uState<4.5)color=mix(color,pink,.6);else if(uState>4.5&&uState<5.5)color=mix(color,green,.65);else if(uState>5.5)color=mix(color,amber,.6);}float alpha;if(uMode<.5){float nucleus=1.0-smoothstep(.03,.96,r);alpha=(1.0-smoothstep(.17,1.0,r))*(.12+.68*nucleus)*(.35+uGlow*.75);color=mix(color,w,nucleus*.48);}else if(uMode<1.5){alpha=(.06+uOrbit*.4)*(.7+.3*sin(vSeed*17.0+uTime*.5));}else{alpha=(1.0-smoothstep(.2,1.0,r))*(.14+uOrbit*.6);}gl_FragColor=vec4(color,alpha);}"].join("\n");
- function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){const e=gl.getShaderInfoLog(s)||"Shader failed";gl.deleteShader(s);throw new Error(e);}return s;}
- function buf(data){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);return b;}
- function uni(k,v){const l=gl.getUniformLocation(prog,k);if(l!==null)gl.uniform1f(l,v);}
- function attr(b,k,size){const l=gl.getAttribLocation(prog,k);if(l<0)return;gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,size,gl.FLOAT,false,0,0);}
- function ring(rx,ry,ax,ay,az,num,off){const ps=new Float32Array(num*3),ss=new Float32Array(num),sz=new Float32Array(num);for(let i=0;i<num;i++){const a=i/(num-1)*Math.PI*2,x=Math.cos(a)*rx,y=Math.sin(a)*ry,cz=Math.cos(az),sn=Math.sin(az),cx=Math.cos(ax),sx=Math.sin(ax),cy=Math.cos(ay),sy=Math.sin(ay),x1=x*cz-y*sn,y1=x*sn+y*cz,y2=y1*cx,z2=y1*sx,x3=x1*cy+z2*sy,z3=-x1*sy+z2*cy;ps[i*3]=x3;ps[i*3+1]=y2;ps[i*3+2]=z3;ss[i]=(i/num+off)%1;sz[i]=1.5+(i%7)*.17;}return {p:buf(ps),s:buf(ss),z:buf(sz),count:num};}
- function rebuild(){[pb,sb,nb].forEach(b=>{if(b)gl.deleteBuffer(b);});rings.forEach(r=>[r.p,r.s,r.z].forEach(b=>gl.deleteBuffer(b)));rings=[];const mobile=innerWidth<700;n=S.core.quality==="low"?(mobile?2800:5500):S.core.quality==="medium"?(mobile?7000:14000):(mobile?10000:32000);if(reduced())n=Math.min(n,mobile?2500:6000);const ps=new Float32Array(n*3),ss=new Float32Array(n),sz=new Float32Array(n),gold=Math.PI*(3-Math.sqrt(5));for(let i=0;i<n;i++){const y=1-(i/Math.max(1,n-1))*2,r=Math.sqrt(Math.max(0,1-y*y)),a=gold*i,j=.965+((i*37)%71)/1000;ps[i*3]=Math.cos(a)*r*j;ps[i*3+1]=y*j;ps[i*3+2]=Math.sin(a)*r*j;ss[i]=(i*.61803398875)%1;sz[i]=1+((i*13)%10)*.16;}pb=buf(ps);sb=buf(ss);nb=buf(sz);rings=[ring(1.42,1.12,.62,.22,.13,420,.07),ring(1.2,1.46,1.03,-.58,-.18,380,.38),ring(1.55,1.0,-.72,.65,.47,400,.7)];if(label)label.textContent=n.toLocaleString()+" GPU PARTICLES · WEBGL";}
- function resize(){if(dead)return;const r=canvas.getBoundingClientRect(),ratio=Math.min(devicePixelRatio||1,S.core.quality==="low"?1:S.core.quality==="medium"?1.2:1.5),w=Math.max(1,Math.floor(r.width*ratio)),h=Math.max(1,Math.floor(r.height*ratio));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}}
- try{const a=compile(gl.VERTEX_SHADER,vs),b=compile(gl.FRAGMENT_SHADER,fs);prog=gl.createProgram();gl.attachShader(prog,a);gl.attachShader(prog,b);gl.linkProgram(prog);gl.deleteShader(a);gl.deleteShader(b);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog)||"Program link failed");gl.useProgram(prog);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);gl.clearColor(0,0,0,0);rebuild();if(typeof ResizeObserver==="function"){observer=new ResizeObserver(resize);observer.observe(canvas);}else window.addEventListener("resize",resize);resize();const start=performance.now();function draw(now){if(dead)return;if(document.hidden){frame=requestAnimationFrame(draw);return;}resize();gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(prog);uni("uTime",reduced()?0:(now-start)/1000);uni("uSpeed",Number(S.core.speed)||0);uni("uScale",Number(S.core.scale)||1);uni("uTurb",Number(S.core.turbulence)||0);uni("uAspect",canvas.height?canvas.width/canvas.height:1);uni("uPixel",canvas.width/Math.max(1,canvas.getBoundingClientRect().width));uni("uGlow",Number(S.core.glow)||0);uni("uOrbit",Number(S.core.orbit)||0);uni("uState",({idle:0,listening:1,thinking:2,executing:3,responding:4,success:5,error:6,offline:6})[S.coreState]||0);uni("uColor",S.core.colorMode==="purple"?1:S.core.colorMode==="red"?2:0);uni("uMode",0);attr(pb,"aPos",3);attr(sb,"aSeed",1);attr(nb,"aSize",1);gl.drawArrays(gl.POINTS,0,n);rings.forEach(r=>{uni("uMode",1);attr(r.p,"aPos",3);attr(r.s,"aSeed",1);attr(r.z,"aSize",1);gl.drawArrays(gl.LINE_STRIP,0,r.count);uni("uMode",2);gl.drawArrays(gl.POINTS,0,r.count);});frame=requestAnimationFrame(draw);}frame=requestAnimationFrame(draw);if(fallback)fallback.hidden=true;canvas.hidden=false;}
- catch(e){canvas.hidden=true;if(fallback)fallback.hidden=false;if(label)label.textContent="WEBGL ERROR · CSS FALLBACK";toast("3D renderer unavailable; fallback is active.","error");}
- const onVis=()=>{if(!document.hidden)resize();},lost=e=>{e.preventDefault();canvas.hidden=true;if(fallback)fallback.hidden=false;if(label)label.textContent="WEBGL CONTEXT LOST · FALLBACK";};document.addEventListener("visibilitychange",onVis);canvas.addEventListener("webglcontextlost",lost);S.coreRenderer={rebuild:rebuild};S.coreDestroy=()=>{dead=true;if(frame)cancelAnimationFrame(frame);if(observer)observer.disconnect();else window.removeEventListener("resize",resize);document.removeEventListener("visibilitychange",onVis);canvas.removeEventListener("webglcontextlost",lost);try{[pb,sb,nb].forEach(b=>{if(b)gl.deleteBuffer(b);});rings.forEach(r=>[r.p,r.s,r.z].forEach(b=>gl.deleteBuffer(b)));if(prog)gl.deleteProgram(prog);}catch{}S.coreRenderer=null;};
-}
-document.addEventListener("click",async e=>{
- const nav=e.target.closest("[data-view]");if(nav){navigate(nav.dataset.view);return;}const close=e.target.closest("[data-close-modal]");if(close){closeModal(close.dataset.closeModal);return;}const tab=e.target.closest("[data-auth-mode]");if(tab){setAuthMode(tab.dataset.authMode);return;}const b=e.target.closest("[data-action]");if(!b)return;const a=b.dataset.action,id=b.dataset.id;
- try{switch(a){
- case "open-auth":openModal("auth-modal");break;case "signout":await signOut();break;case "attach-images":$("#image-input").click();break;case "remove-attachment":S.attachments.splice(Number(b.dataset.index),1);attachments(S.view==="home"?"home-attachments":"chat-attachments");break;
- case "new-chat":S.conversationId=null;S.messages=[];await loadConversations();navigate("chat");break;case "clear-chat":if(confirm("Clear this UI view only? Saved messages are not deleted.")){S.messages=[];S.conversationId=null;renderChat();renderChatMessages();}break;case "refresh-conversations":await loadConversations();break;case "select-conversation":await loadConversation(id);break;
- case "suggest-chat":navigate("chat");setTimeout(()=>{const x=$("#chat-prompt");if(x){x.value=b.dataset.prompt||"";x.focus();}},40);break;case "cancel-chat":if(S.controller)S.controller.abort();break;case "copy-message":{const m=S.messages[Number(b.dataset.index)];if(m)await copyText(m.content);break;}case "speak-message":{const m=S.messages[Number(b.dataset.index)];if(m)speakText(m.content);break;}case "copy-code":if(S.coding)await copyText(S.coding.answer);break;case "copy-document":if(S.document)await copyText(S.document.extractedText);break;
- case "refresh-tasks":await loadTasks();break;case "focus-task":$("#task-title").focus();break;case "task-approve":await taskAction("approve",id);break;case "task-cancel":await taskAction("cancel",id);break;case "task-detail":await taskTimeline(id);break;case "close-task":S.selectedTask=null;S.taskProgress=null;S.taskError="";$("#view-root").innerHTML=renderTasks();break;
- case "refresh-memory":await loadMemories();break;case "memory-delete":await memoryAction("delete",id,b);break;case "memory-toggle":await memoryAction("toggle",id,b);break;case "refresh-integrations":await loadIntegrations();break;case "refresh-schedules":await loadSchedules();break;case "load-routines":await loadRoutines($("#schedule-role").value);break;case "schedule-toggle":await scheduleAction("toggle",id,b);break;case "schedule-delete":await scheduleAction("delete",id,b);break;case "schedule-run":await scheduleAction("run",id,b);break;case "refresh-system":await refreshSystem();break;
- case "core-reset":try{localStorage.removeItem("ultron-core-settings");}catch{}S.core=Object.assign({},DEFAULT_CORE);if(S.view==="home"){if(S.coreDestroy)S.coreDestroy();S.coreDestroy=null;mountCore();}else $("#view-root").innerHTML=renderSettings();break;case "toggle-core":S.core[b.dataset.key]=!S.core[b.dataset.key];try{localStorage.setItem("ultron-core-settings",JSON.stringify(S.core));}catch{}b.setAttribute("aria-checked",String(!!S.core[b.dataset.key]));if(S.view==="settings")$("#view-root").innerHTML=renderSettings();if(S.view==="home"&&S.coreRenderer)S.coreRenderer.rebuild();break;case "toggle-pref":await togglePreference(b.dataset.key,b);break;
- case "persona":S.persona=b.dataset.persona==="naya"?"naya":"ultron";try{localStorage.setItem("ultron-persona",S.persona);}catch{}if(S.view==="settings")$("#view-root").innerHTML=renderSettings();if(S.view==="chat"){renderChat();renderChatMessages();}break;case "voice-start":await startVoice();break;case "voice-stop":stopVoice();if(S.view==="voice")$("#view-root").innerHTML=renderVoice();break;case "voice-speak":speakText($("#voice-transcript").value||S.voiceText);break;case "clear-transcript":S.voiceText="";$("#view-root").innerHTML=renderVoice();break;
- case "transcript-to-chat":{const t=$("#voice-transcript").value.trim();if(!t)break;navigate("chat");setTimeout(()=>{const x=$("#chat-prompt");if(x){x.value=t;x.focus();}},50);break;}
- case "choose-document":$("#document-input").click();break;case "save-document-memory":await saveDocumentToMemory();break;case "save-original-document":await saveOriginalDocument();break;case "refresh-documents":await loadSavedDocuments();break;case "document-download":window.location.assign("/api/documents/"+encodeURIComponent(id)+"/download");break;case "document-delete":await deleteSavedDocument(id);break;case "clear-document":S.document=null;S.documentError="";S.documentSaved=false;S.documentMemoryId=null;S.documentFile=null;S.documentOriginalSaved=false;S.documentStorageId=null;$("#view-root").innerHTML=renderFiles();break;case "document-to-chat":if(S.document){navigate("chat");setTimeout(()=>{const x=$("#chat-prompt");if(x){x.value=("Analyze extracted text from "+S.document.filename+":\n\n"+S.document.extractedText).slice(0,110000);x.focus();}},50);}break;
- case "research-to-chat":if(S.research){const q="Discuss search results and keep source attribution.\nQuery: "+S.research.query+"\n\n"+(S.research.results||[]).map((r,i)=>(i+1)+". "+(r.title||"Source")+"\n"+(r.url||"")+"\n"+(r.snippet||"")).join("\n\n");navigate("chat");setTimeout(()=>{const x=$("#chat-prompt");if(x){x.value=q.slice(0,10000);x.focus();}},50);}break;case "command":runCommand(id);break;
- }}catch(err){toast(err.message||"Action failed.","error");}
-});
-document.addEventListener("submit",async e=>{const f=e.target;if(!f||!f.id)return;e.preventDefault();try{switch(f.id){case "home-chat-form":await sendChat($("#home-prompt").value);break;case "chat-form":await sendChat($("#chat-prompt").value);break;case "auth-form":await submitAuth(f);break;case "task-form":await submitTask(f);break;case "research-form":await submitResearch(f);break;case "coding-form":await submitCoding(f);break;case "memory-form":await submitMemory(f);break;case "schedule-form":await submitSchedule(f);break;case "core-form":saveCoreSettings(f);break;case "prefs-form":case "voice-prefs":await savePreferences(f);break;}}catch(err){toast(err.message||"Request failed.","error");}});
-document.addEventListener("change",e=>{const t=e.target;if(!t)return;if(t.id==="image-input"){addImages(t.files);t.value="";}if(t.id==="document-input"){const f=t.files&&t.files[0];t.value="";extractDocument(f);}if(t.id==="model-select"){S.model=t.value||"openrouter/free";try{localStorage.setItem("ultron-selected-model",S.model);}catch{}}if(t.id==="persona-select"){S.persona=t.value==="naya"?"naya":"ultron";try{localStorage.setItem("ultron-persona",S.persona);}catch{}}if(t.id==="task-type"){const wrap=$("#employee-task-fields");if(wrap)wrap.hidden=!["employee","autonomous"].includes(t.value);if(t.value==="autonomous"){if($("#task-role"))$("#task-role").value="chief-of-staff";if($("#task-mode"))$("#task-mode").value="report";}}if(t.id==="schedule-role"&&$("#schedule-routine"))$("#schedule-routine").innerHTML='<option value="">Load routines for this role</option>';if(t.id==="voice-locale"||t.id==="pref-locale")S.preferences.voice_input_locale=t.value;if(t.matches('#core-form input[type="range"]'))updateRange(t);});
-document.addEventListener("input",e=>{const t=e.target;if(!t)return;if(t.matches("textarea")){t.style.height="auto";t.style.height=Math.min(t.scrollHeight,220)+"px";}if(t.id==="command-search"){S.commandQuery=t.value;S.commandIndex=0;renderCommands();}if(t.matches('#core-form input[type="range"]'))updateRange(t);if(t.id==="voice-transcript")S.voiceText=t.value;});
-document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openModal("command-modal");return;}if(e.key==="Escape"){closeModal("auth-modal");closeModal("command-modal");closeMobile();return;}if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&(e.target.id==="home-prompt"||e.target.id==="chat-prompt")){e.preventDefault();const form=$(e.target.id==="home-prompt"?"#home-chat-form":"#chat-form");if(form)form.requestSubmit();}if(e.target&&e.target.id==="command-search"){const items=$$(".command-result");if(e.key==="ArrowDown"){e.preventDefault();S.commandIndex=Math.min(items.length-1,S.commandIndex+1);renderCommands();}if(e.key==="ArrowUp"){e.preventDefault();S.commandIndex=Math.max(0,S.commandIndex-1);renderCommands();}if(e.key==="Enter"){e.preventDefault();if(items[S.commandIndex])runCommand(items[S.commandIndex].dataset.id);}}});
-function renderCommands(){const root=$("#command-results");if(!root)return;const items=[["home","Command center","Living Energy Core","⌘"],["chat","AI terminal","Live chat","◉"],["tasks","Autonomous tasks","Task queue","⌁"],["voice","Voice studio","Browser audio","◖"],["coding","Coding agent","Draft code assistance","‹›"],["research","Research lab","Source search","⌕"],["files","Document intelligence","Transient extraction","▤"],["memory","Memory vault","Private memory","◈"],["integrations","Integrations","Readiness catalog","⟡"],["automation","Automation","Scheduled routines","◷"],["security","Security & approvals","Permission gates","⛨"],["system","System health","Read-only diagnostics","⌬"],["settings","Settings","Core and preferences","⚙"],["signin",hasSession()?"Account":"Sign in","Manage session","U"],["refresh","Refresh status","Check health","↻"]].filter(x=>!S.commandQuery||(x[1]+" "+x[2]).toLowerCase().includes(S.commandQuery.toLowerCase()));if(!items.length){root.innerHTML=empty("⌕","No match","Try a workspace name.");return;}S.commandIndex=Math.max(0,Math.min(S.commandIndex,items.length-1));root.innerHTML=items.map((x,i)=>'<button class="command-result '+(i===S.commandIndex?"is-selected":"")+'" data-action="command" data-id="'+x[0]+'"><span class="command-result-icon">'+x[3]+'</span><span class="command-result-copy"><strong>'+esc(x[1])+'</strong><small>'+esc(x[2])+'</small></span><kbd>'+(i===S.commandIndex?"↵":"")+'</kbd></button>').join("");}
-function runCommand(id){closeModal("command-modal");if(V[id])navigate(id);else if(id==="signin")hasSession()?navigate("settings"):openModal("auth-modal");else if(id==="refresh")refreshStatus(true);}
-function toggleSidebar(){const el=$("#app-shell");if(matchMedia("(max-width: 680px)").matches)el.classList.toggle("sidebar-mobile-open");else{el.classList.toggle("sidebar-expanded");$("#sidebar-collapse").setAttribute("aria-label",el.classList.contains("sidebar-expanded")?"Collapse navigation":"Expand navigation");}}
-$("#sidebar-collapse").addEventListener("click",toggleSidebar);$("#mobile-menu-button").addEventListener("click",toggleSidebar);$("#mobile-scrim").addEventListener("click",closeMobile);
-$("#account-button").addEventListener("click",()=>hasSession()?navigate("settings"):openModal("auth-modal"));$("#top-profile").addEventListener("click",()=>hasSession()?navigate("settings"):openModal("auth-modal"));$("#command-open").addEventListener("click",()=>openModal("command-modal"));$("#google-signin").addEventListener("click",()=>{window.location.href="/api/auth/google";});
-window.addEventListener("hashchange",()=>{const v=String(location.hash||"#home").slice(1);renderView(V[v]?v:"home");});window.addEventListener("pagehide",()=>{if(S.controller)S.controller.abort();stopVoice();if(S.coreDestroy)S.coreDestroy();});
-async function init(){await refreshStatus(false);const route=String(location.hash||"#home").slice(1);renderView(V[route]?route:"home");if(signed())await loadPreferences();}
-init().catch(e=>{setCore("offline","INITIALIZATION INCOMPLETE");toast("Initialization incomplete: "+String(e.message||"unknown"),"error");});
+  "use strict";
+  const $ = (selector, root) => (root || document).querySelector(selector);
+  const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
+  const VIEWS = {
+    home: ["COMMAND CENTER", "Command center"],
+    chat: ["AI TERMINAL", "AI terminal"],
+    tasks: ["AUTONOMOUS TASKS", "Autonomous tasks"],
+    research: ["RESEARCH LAB", "Research lab"],
+    coding: ["CODING AGENT", "Coding agent"],
+    voice: ["VOICE STUDIO", "Voice studio"],
+    files: ["DOCUMENT VAULT", "Document vault"],
+    memory: ["MEMORY VAULT", "Memory vault"],
+    automation: ["AUTOMATION", "Automation"],
+    integrations: ["INTEGRATIONS", "Integrations"],
+    security: ["SECURITY & APPROVALS", "Security & approvals"],
+    system: ["SYSTEM HEALTH", "System health"],
+    settings: ["SETTINGS", "Settings"]
+  };
+  const state = {
+    view: "home",
+    health: null,
+    session: { authenticated: false, configured: false, authType: null, email: null },
+    caps: null,
+    readiness: null,
+    worker: null,
+    models: [{ id: "openrouter/free", label: "Automatic free router" }],
+    model: "openrouter/free",
+    persona: "ultron",
+    coreState: "idle",
+    coreDetail: "READY FOR INPUT",
+    authMode: "signin",
+    messages: [],
+    attachments: [],
+    conversations: [],
+    conversationId: null,
+    busy: false,
+    controller: null,
+    tasks: [],
+    tasksError: "",
+    selectedTask: null,
+    taskProgress: null,
+    memories: [],
+    memoryError: "",
+    research: null,
+    researchError: "",
+    coding: null,
+    codingError: "",
+    document: null,
+    documentError: "",
+    documentFile: null,
+    documentSaved: false,
+    savedDocuments: [],
+    savedDocumentsError: "",
+    integrations: [],
+    integrationError: "",
+    schedules: [],
+    scheduleError: "",
+    roles: [],
+    routines: [],
+    employeeStatus: null,
+    preferences: { voice_enabled: true, voice_input_locale: "en-IN", memory_enabled: true },
+    voiceActive: false,
+    recognition: null,
+    lastAnswer: "",
+    sidebarCollapsed: false
+  };
+
+  const esc = value => String(value == null ? "" : value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[char]));
+  const signedIn = () => state.session.authenticated === true && state.session.authType === "supabase";
+  const hasSession = () => state.session.authenticated === true;
+  const displayDate = value => {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date) : "—";
+  };
+  const safeUrl = value => {
+    try {
+      const url = new URL(String(value || ""));
+      return (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password ? url.href : null;
+    } catch { return null; }
+  };
+  function plainText(value) { return esc(value).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>"); }
+  function chip(value) {
+    const text = String(value || "UNKNOWN").toUpperCase().replace(/_/g, " ");
+    const good = ["OK", "CONNECTED", "COMPLETED", "SUCCESS", "ENABLED", "LIVE", "PASSED", "AUTHENTICATED"].includes(text);
+    const bad = ["ERROR", "FAILED", "BLOCKED", "DISABLED", "OFFLINE", "UNAVAILABLE"].includes(text);
+    const warn = ["UNKNOWN", "PENDING", "QUEUED", "NOT CONFIGURED", "WAITING FOR PERMISSION", "CONFIGURED UNVERIFIED"].includes(text);
+    return '<span class="state-chip ' + (good ? "good" : bad ? "bad" : warn ? "warn" : "purple") + '">' + esc(text) + "</span>";
+  }
+  function toast(message, kind) {
+    const root = $("#toast-stack");
+    if (!root) return;
+    const item = document.createElement("div");
+    item.className = "toast" + (kind ? " " + kind : "");
+    item.textContent = String(message || "Done");
+    root.appendChild(item);
+    window.setTimeout(() => item.remove(), 4200);
+  }
+  async function readPayload(response) {
+    const text = await response.text();
+    if (!text) return {};
+    try { return JSON.parse(text); } catch { return { message: text.slice(0, 500) }; }
+  }
+  async function api(url, options) {
+    const opts = Object.assign({ method: "GET", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } }, options || {});
+    opts.headers = Object.assign({ Accept: "application/json" }, opts.headers || {});
+    if (opts.body !== undefined && typeof opts.body !== "string" && !(opts.body instanceof FormData) && !(opts.body instanceof Blob)) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(opts.body);
+    }
+    const response = await fetch(url, opts);
+    const data = await readPayload(response);
+    if (!response.ok) {
+      const error = new Error(data && data.error && data.error.message || data.message || ("Request failed (" + response.status + ")"));
+      error.status = response.status;
+      error.code = data && data.error && data.error.code;
+      throw error;
+    }
+    return data;
+  }
+  async function maybe(url) {
+    try {
+      const response = await fetch(url, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } });
+      return { ok: response.ok, status: response.status, data: await readPayload(response) };
+    } catch (error) { return { ok: false, status: 0, data: {}, error }; }
+  }
+  function setCore(mode, detail) {
+    state.coreState = mode || "idle";
+    state.coreDetail = detail || "READY FOR INPUT";
+    document.body.dataset.coreState = state.coreState;
+    const footer = $("#footer-state");
+    if (footer) footer.textContent = state.coreDetail;
+    const label = $("#core-state-label");
+    if (label) label.textContent = state.coreState === "thinking" || state.coreState === "responding" ? "PROCESSING" :
+      state.coreState === "offline" ? "CORE UNVERIFIED" : state.coreState === "error" ? "ATTENTION REQUIRED" : "SYSTEM STANDBY";
+    const sideTitle = $("#side-status-title");
+    const sideDetail = $("#side-status-detail");
+    const sideBox = $(".side-status");
+    if (sideTitle) sideTitle.textContent = state.health && state.health.status === "ok" ? "CORE REACHABLE" : "CORE UNVERIFIED";
+    if (sideDetail) sideDetail.textContent = detail || "Checking API health";
+    if (sideBox) sideBox.dataset.state = state.health && state.health.status === "ok" ? "ok" : "unknown";
+  }
+  function updateChrome() {
+    const status = $("#api-status");
+    const statusText = $("#api-status-text");
+    const modelText = $("#model-status-text");
+    const accountName = $("#account-name");
+    const accountDetail = $("#account-detail");
+    const healthOk = state.health && state.health.status === "ok";
+    if (status) status.dataset.state = healthOk ? "ok" : state.health ? "error" : "checking";
+    if (statusText) statusText.textContent = healthOk ? "API ONLINE" : state.health ? "API UNVERIFIED" : "CONNECTING";
+    if (modelText) {
+      const ready = state.readiness && Array.isArray(state.readiness.components)
+        ? state.readiness.components.find(item => item && item.id === "cloud_model") : null;
+      modelText.textContent = ready && ready.state === "configured_unverified" ? "MODEL CONFIGURED" : "MODEL ROUTING";
+    }
+    if (accountName) accountName.textContent = signedIn() ? (state.session.email || "Signed-in operator") : hasSession() ? "Session active" : "Guest operator";
+    if (accountDetail) accountDetail.textContent = signedIn() ? "Private data synchronized" : hasSession() ? "API session active" : "Sign in to sync your data";
+    if ($("#footer-model")) $("#footer-model").textContent = healthOk ? "API REACHABLE · INFERENCE NOT YET PROVEN" : "SECURE API · STATUS UNVERIFIED";
+    setCore(state.coreState, state.coreDetail);
+  }
+  async function refreshStatus(quiet) {
+    const results = await Promise.all([maybe("/api/health"), maybe("/api/session"), maybe("/api/capabilities")]);
+    state.health = results[0].ok ? results[0].data : { status: "unavailable" };
+    state.session = results[1].ok
+      ? { authenticated: results[1].data.authenticated === true, configured: results[1].data.configured !== false, authType: results[1].data.authType || null, email: results[1].data.email || null }
+      : { authenticated: false, configured: results[1].status !== 503 && results[1].status !== 404, authType: null, email: null };
+    state.caps = results[2].ok ? results[2].data : null;
+    if (signedIn()) {
+      const ready = await maybe("/api/runtime/readiness");
+      state.readiness = ready.ok ? ready.data : null;
+      const worker = await maybe("/api/worker/status");
+      state.worker = worker.ok ? worker.data : null;
+    } else {
+      state.readiness = null;
+      state.worker = null;
+    }
+    updateChrome();
+    if (!results[0].ok || !state.health || state.health.status !== "ok") setCore("offline", "API HEALTH UNVERIFIED");
+    else if (state.coreState === "offline") setCore("idle", "CORE REACHABLE · PROVIDER UNVERIFIED");
+    if (!quiet) toast(results[0].ok ? "API status refreshed. A healthy endpoint does not prove live AI inference." : "Could not verify the ULTRON API endpoint.", results[0].ok ? "success" : "error");
+    if (state.view === "home" || state.view === "system" || state.view === "security") renderCurrent();
+  }
+  function openAuth(mode) {
+    state.authMode = mode || "signin";
+    updateAuthMode();
+    const modal = $("#auth-modal");
+    if (modal) modal.hidden = false;
+    if ($("#auth-email")) $("#auth-email").focus();
+  }
+  function closeAuth() { const modal = $("#auth-modal"); if (modal) modal.hidden = true; }
+  function updateAuthMode() {
+    const mode = state.authMode;
+    $$(".auth-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.authMode === mode));
+    const title = $("#auth-title");
+    const passWrap = $("#auth-password-wrap");
+    const pass = $("#auth-password");
+    const submit = $("#auth-submit");
+    if (title) title.textContent = mode === "signup" ? "Create your operator account." : mode === "recovery" ? "Recover your access." : "Welcome back, operator.";
+    if (passWrap) passWrap.hidden = mode === "recovery";
+    if (pass) pass.required = mode !== "recovery";
+    if (submit) submit.innerHTML = (mode === "signup" ? "Create account" : mode === "recovery" ? "Send recovery email" : "Sign in securely") + " <span>↗</span>";
+    if ($("#auth-error")) { $("#auth-error").hidden = true; $("#auth-error").textContent = ""; }
+  }
+  function gate(title, desc) {
+    return '<div class="auth-required-panel"><span class="required-icon">◇</span><div><strong>' + esc(title || "Sign in to unlock private data") + '</strong><p>' + esc(desc || "Private tasks, memory, schedules and conversations require your Supabase account.") + '</p><button class="button button-primary button-small" data-action="open-auth">Sign in securely ↗</button></div></div>';
+  }
+  function pageHead(kicker, title, desc, actions) {
+    return '<div class="page-head"><div><div class="eyebrow">' + esc(kicker) + '</div><h1>' + esc(title) + '</h1><p>' + esc(desc) + '</p></div><div class="page-actions">' + (actions || "") + '</div></div>';
+  }
+  function emptyState(symbol, title, description) {
+    return '<div class="empty-state"><span class="empty-symbol">' + esc(symbol) + '</span><h3>' + esc(title) + '</h3><p>' + esc(description) + '</p></div>';
+  }
+  function apiValue() { return state.health && state.health.status === "ok" ? "ONLINE" : "UNVERIFIED"; }
+  function modelState() {
+    const item = state.readiness && Array.isArray(state.readiness.components) ? state.readiness.components.find(v => v && v.id === "cloud_model") : null;
+    return item ? item.state : "not_verified";
+  }
+
+  function renderHome() {
+    const signedLabel = signedIn() ? "ACCOUNT SYNCED" : hasSession() ? "SESSION ACTIVE" : "PRIVATE DATA LOCKED";
+    const modelLabel = modelState() === "configured_unverified" ? "CONFIGURED · UNVERIFIED" : "LIVE INFERENCE UNVERIFIED";
+    return '<div class="home-hero panel">' +
+      '<div class="hero-copy"><div class="hero-kicker">PERSONAL INTELLIGENCE / SYSTEM 01</div>' +
+      '<h1>Think beyond.<span>Command everything.</span></h1>' +
+      '<p>Your personal AI command layer for reasoning, research, coding and guarded task workflows. Connected status is shown honestly; actions report their real results.</p>' +
+      '<div class="hero-actions"><button class="button button-primary" data-view="chat">Open AI terminal <span>↗</span></button><button class="button" data-view="tasks">Task control <span>⌁</span></button><button class="button button-quiet" data-action="refresh-status">Refresh status ↻</button></div>' +
+      '<div class="hero-footnote"><span>●</span> LIVE STATUS ONLY <span>·</span> NO SIMULATED COMPLETIONS</div></div>' +
+      '<div class="core-stage"><div class="energy-core" aria-label="Decorative animated ULTRON energy core"><div class="core-ring ring-one"></div><div class="core-ring ring-two"></div><div class="core-ring ring-three"></div><div class="core-grid"></div><div class="core-core"></div><div class="core-state"><i></i><span id="core-state-label">SYSTEM STANDBY</span></div><div class="core-label"><strong>ULTRON / CORE</strong>ADAPTIVE ENERGY FIELD</div></div></div>' +
+      '</div>' +
+      '<div class="home-grid"><div class="home-main-stack">' +
+      '<section class="panel prompt-panel"><div class="prompt-head"><strong>Start a conversation</strong><small>MODEL · ' + esc(state.model) + '</small></div>' +
+      '<form class="prompt-box" data-form="home-chat"><textarea name="prompt" id="home-prompt" maxlength="12000" rows="2" placeholder="Ask ULTRON to reason, plan, research or help you build…" required></textarea><button class="button button-primary" type="submit" aria-label="Send prompt">↗</button></form>' +
+      '<div class="prompt-controls"><div class="prompt-hints"><button class="hint-chip" data-prompt="Help me plan my day with clear priorities.">Plan my day</button><button class="hint-chip" data-prompt="Research this topic and cite useful sources: ">Research a topic</button><button class="hint-chip" data-prompt="Review this code and suggest a safe, tested improvement: ">Review code</button></div><span class="prompt-note">AI output depends on configured provider access.</span></div></section>' +
+      '<div class="metric-grid">' +
+      '<article class="metric-card"><div class="metric-top"><span class="metric-icon">⌬</span>' + chip(apiValue()) + '</div><div class="metric-value">' + esc(apiValue()) + '</div><div class="metric-label">Backend API</div><div class="metric-foot"><i></i> Health endpoint check</div></article>' +
+      '<article class="metric-card"><div class="metric-top"><span class="metric-icon">◈</span>' + chip(signedLabel) + '</div><div class="metric-value">' + (signedIn() ? "SYNCED" : hasSession() ? "ACTIVE" : "LOCKED") + '</div><div class="metric-label">Account identity</div><div class="metric-foot"><i></i> ' + esc(signedLabel.toLowerCase()) + '</div></article>' +
+      '<article class="metric-card"><div class="metric-top"><span class="metric-icon">✦</span>' + chip(modelState()) + '</div><div class="metric-value">' + (modelState() === "configured_unverified" ? "READY?" : "PENDING") + '</div><div class="metric-label">AI provider</div><div class="metric-foot"><i></i> ' + esc(modelLabel) + '</div></article>' +
+      '</div>' +
+      '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Workspace launcher</strong><small>Jump directly into a capability</small></div><span class="panel-icon">⌘</span></div><div class="quick-grid">' +
+      '<button class="quick-card" data-view="research"><span>⌕</span><span><strong>Research lab</strong><small>Search and synthesize</small></span></button>' +
+      '<button class="quick-card" data-view="coding"><span>‹›</span><span><strong>Coding agent</strong><small>Plan, review and explain</small></span></button>' +
+      '<button class="quick-card" data-view="files"><span>▤</span><span><strong>Document vault</strong><small>Extract and save privately</small></span></button>' +
+      '<button class="quick-card" data-view="memory"><span>◈</span><span><strong>Memory vault</strong><small>Review your saved context</small></span></button>' +
+      '</div></section></div>' +
+      '<div class="home-side-stack"><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>System snapshot</strong><small>Read-only status summary</small></div><span class="panel-icon">⌬</span></div>' +
+      '<div class="activity-list">' +
+      '<div class="activity-item"><span class="activity-icon">◉</span><div class="activity-copy"><strong>API health</strong><p>' + esc(state.health && state.health.status === "ok" ? "Health route returned an OK status." : "Health status could not be confirmed.") + '</p></div>' + chip(apiValue()) + '</div>' +
+      '<div class="activity-item"><span class="activity-icon">✦</span><div class="activity-copy"><strong>Model inference</strong><p>Provider configuration does not prove that a live model call will succeed.</p></div>' + chip(modelState()) + '</div>' +
+      '<div class="activity-item"><span class="activity-icon">⛨</span><div class="activity-copy"><strong>Protected actions</strong><p>Private records require sign-in. Higher-risk actions retain approval gates.</p></div>' + chip(signedIn() ? "AUTHENTICATED" : "LOCKED") + '</div>' +
+      '<div class="activity-item"><span class="activity-icon">↻</span><div class="activity-copy"><strong>Last refreshed</strong><p>' + esc(displayDate(new Date().toISOString())) + '</p></div></div>' +
+      '</div><div class="section-gap"><button class="button button-quiet full-width" data-view="system">Open system diagnostics ↗</button></div></section>' +
+      '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Operator access</strong><small>Authentication and private storage</small></div><span class="panel-icon">⛨</span></div>' +
+      (signedIn()
+        ? '<p class="muted" class="account-summary">Signed in as <strong>' + esc(state.session.email || "operator") + '</strong>. Private account APIs are available subject to service readiness.</p><button class="button button-quiet full-width" data-action="signout">Sign out securely</button>'
+        : '<p class="muted">Sign in to use private memory, saved conversations, task records, schedules and private document storage.</p><button class="button button-primary full-width" data-action="open-auth">Open identity gate ↗</button>') +
+      '<p class="microcopy">No task, integration or provider success is inferred from the UI itself.</p></section></div></div>';
+  }
+  function renderChatMessages() {
+    if (!state.messages.length) return emptyState("◉", "Your terminal is ready", "Ask a question or give ULTRON a bounded task. Responses require a live provider configuration.");
+    return state.messages.map((message, index) => {
+      const role = message.role === "user" ? "user" : "assistant";
+      const name = role === "user" ? "YOU" : "ULTRON";
+      const content = message.content ? plainText(message.content) : message.streaming ? '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>' : "";
+      const imageNames = Array.isArray(message.attachments) && message.attachments.length
+        ? '<div class="microcopy">Attached images: ' + message.attachments.map(item => esc(item.name)).join(", ") + '</div>' : "";
+      return '<article class="chat-message ' + role + '"><span class="message-avatar">' + (role === "user" ? "U" : "✦") + '</span><div class="message-body"><div class="message-top"><strong>' + name + '</strong><span>' + (message.time ? esc(message.time) : "NOW") + '</span>' + (message.model ? '<span>· ' + esc(message.model) + '</span>' : "") + '</div><div class="message-content">' + content + imageNames + '</div></div></article>';
+    }).join("");
+  }
+  function renderChat() {
+    return pageHead("LIVE REASONING LAYER", "AI terminal", "A streaming chat interface wired to ULTRON's model router. Provider and model availability must be verified by an actual response.", '<button class="button button-quiet" data-action="new-chat">＋ New conversation</button>') +
+      '<div class="chat-layout"><aside class="panel chat-history"><div class="panel-head"><div class="panel-title"><strong>History</strong><small>' + (signedIn() ? "Private conversations" : "Sign in to sync") + '</small></div><span class="panel-icon">◷</span></div>' +
+      (signedIn() ? '<button class="button button-small full-width" data-action="new-chat">＋ New terminal</button><div class="history-list">' +
+        (state.conversations.length ? state.conversations.map(item => '<button class="history-item ' + (item.id === state.conversationId ? "active" : "") + '" data-action="select-conversation" data-id="' + esc(item.id) + '">◉ ' + esc(item.title || "Untitled conversation") + '</button>').join("") : '<div class="microcopy">No saved conversations yet.</div>') +
+        '</div>' : gate("Sign in to load history", "Chat can still run with an active API session; private conversation storage requires Supabase sign-in.")) +
+      '<div class="sidebar-spacer"></div><div class="microcopy">Model choice: automatic free router. The server keeps provider keys private.</div></aside>' +
+      '<section class="panel chat-window"><div class="chat-window-head"><div><strong>ULTRON / INTERACTIVE SESSION</strong><small id="chat-live-status">' + (state.busy ? "Response streaming…" : "Awaiting operator input") + '</small></div><div class="chat-toolbar"><select id="persona-select" class="select-compact" aria-label="Assistant personality"><option value="ultron"' + (state.persona === "ultron" ? " selected" : "") + '>ULTRON</option><option value="naya"' + (state.persona === "naya" ? " selected" : "") + '>NAYA</option></select><select id="model-select" class="select-compact" aria-label="Model selection">' +
+      state.models.map(model => '<option value="' + esc(model.id) + '"' + (model.id === state.model ? " selected" : "") + '>' + esc(model.label) + '</option>').join("") + '</select></div></div>' +
+      '<div class="chat-messages" id="chat-messages" aria-live="polite">' + renderChatMessages() + '</div>' +
+      '<div class="chat-composer"><form class="form-stack" data-form="chat"><textarea id="chat-input" name="prompt" maxlength="12000" rows="3" placeholder="Message ULTRON… (Enter to send · Shift+Enter for a new line)" required></textarea><div id="chat-attachments">' + renderAttachments() + '</div>' +
+      '<div class="chat-composer-bottom"><div class="chat-toolbar"><button class="button button-small button-quiet" type="button" data-action="attach-images">＋ Image</button><button class="button button-small button-quiet" type="button" data-action="speak-last">◖ Read last answer</button><span class="chat-hint">Keep private data out of prompts unless necessary.</span></div><button class="button button-primary" type="submit"' + (state.busy ? " disabled" : "") + '>Send ↗</button></div></form></div></section></div>';
+  }
+  function renderAttachments() {
+    return state.attachments.length ? '<div class="file-chip"><span>' + state.attachments.map(file => esc(file.name)).join(", ") + '</span><button class="text-button" type="button" data-action="clear-images">Remove</button></div>' : "";
+  }
+  function renderTasks() {
+    const content = signedIn()
+      ? '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Create a task record</strong><small>Only allowlisted bounded workflows are handled by the worker</small></div><span class="panel-icon">⌁</span></div>' +
+        '<form class="form-stack" data-form="task-create"><div class="form-row"><div><label for="task-title">Task title</label><input id="task-title" name="title" maxlength="240" required placeholder="Summarize a topic"></div><div><label for="task-type">Workflow</label><select id="task-type" name="taskType"><option value="research">Research</option><option value="manual">Manual record</option><option value="autonomous">Autonomous report draft</option></select></div></div><label for="task-description">Description / goal</label><textarea id="task-description" name="description" maxlength="12000" required placeholder="Describe the outcome you need."></textarea><div class="form-row"><div><label for="task-query">Research query (if applicable)</label><input id="task-query" name="query" maxlength="400" placeholder="Optional research query"></div><div><label for="task-risk">Requested risk level</label><select id="task-risk" name="risk"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div></div><p class="field-help">The server independently infers risk; a low label cannot downgrade a higher-risk request. Saving a task record is not proof it ran.</p><div class="form-actions"><button class="button button-primary" type="submit">Create task record ↗</button><button class="button" type="button" data-action="refresh-tasks">Refresh tasks ↻</button></div></form></section>' +
+        '<section class="panel panel-pad section-gap"><div class="panel-head"><div class="panel-title"><strong>Task ledger</strong><small>Per-account tasks from the backend</small></div><span class="panel-icon">◷</span></div>' +
+        (state.tasksError ? '<div class="error-panel">' + esc(state.tasksError) + '</div>' : "") +
+        (state.tasks.length ? '<div class="list-stack">' + state.tasks.map(task => '<article class="list-row"><span class="list-row-icon">⌁</span><div class="list-row-main"><strong>' + esc(task.title || "Untitled task") + '</strong><p>' + esc(task.input && typeof task.input === "object" ? task.input.description || task.input.goal || JSON.stringify(task.input) : task.input || "No description provided.") + '</p><div class="list-row-meta">' + chip(task.status) + '<span class="microcopy">Updated ' + esc(displayDate(task.updated_at || task.created_at)) + '</span></div>' + (task.result ? '<div class="task-result">' + plainText(typeof task.result === "string" ? task.result : JSON.stringify(task.result, null, 2)) + '</div>' : "") + (task.error_code ? '<p class="microcopy">Error code: ' + esc(task.error_code) + '</p>' : "") + '</div><div class="list-row-actions">' + (["QUEUED", "WAITING_FOR_PERMISSION"].includes(String(task.status || "").toUpperCase()) ? '<button class="button button-small" data-action="approve-task" data-id="' + esc(task.id) + '">Approve</button><button class="button button-small button-danger" data-action="cancel-task" data-id="' + esc(task.id) + '">Cancel</button>' : '<button class="button button-small" data-action="task-progress" data-id="' + esc(task.id) + '">Timeline</button>') + '</div></article>').join("") + '</div>' : emptyState("⌁", "No task records", "Create a bounded task record to see it here.")) +
+        (state.taskProgress ? '<div class="notice-panel"><strong>Selected task timeline</strong><p>State: ' + esc(state.taskProgress.progress && state.taskProgress.progress.state || "unknown") + ' · Checkpoints: ' + esc(state.taskProgress.progress && state.taskProgress.progress.checkpointCount || 0) + '</p>' + (Array.isArray(state.taskProgress.checkpoints) ? state.taskProgress.checkpoints.map(item => '<p>· ' + esc(item.action) + ' — ' + esc(item.outcome) + ' — ' + esc(displayDate(item.timestamp)) + '</p>').join("") : "") + '</div>' : "") +
+        '</section>'
+      : gate("Private task ledger locked", "Sign in with your Supabase account to create, review, approve or cancel task records.");
+    return pageHead("TASK CONTROL / GUARDED EXECUTION", "Autonomous tasks", "Review queued work transparently. ULTRON does not run arbitrary code or treat approval as permission for unrelated external actions.", '<button class="button button-quiet" data-action="refresh-tasks">↻ Refresh</button>') + content;
+  }
+  function renderResearch() {
+    let resultHtml = "";
+    if (state.research) {
+      const results = Array.isArray(state.research.results) ? state.research.results : Array.isArray(state.research.items) ? state.research.items : [];
+      const summary = state.research.summary || state.research.answer || state.research.content || "";
+      resultHtml = (summary ? '<div class="notice-panel">' + plainText(summary) + '</div>' : "");
+      if (results.length) resultHtml += '<div class="result-grid">' + results.map(item => {
+        const url = safeUrl(item.url || item.link || "");
+        return '<article class="result-card"><h3>' + esc(item.title || item.name || "Research result") + '</h3><p>' + plainText(item.snippet || item.description || item.content || "") + '</p>' + (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Open source ↗</a>' : "") + '</article>';
+      }).join("") + '</div>';
+      if (!summary && !results.length) resultHtml = '<pre class="code-output">' + plainText(JSON.stringify(state.research, null, 2)) + '</pre>';
+    } else if (!state.researchError) resultHtml = emptyState("⌕", "Research starts with a question", "Submit a query. Results depend on configured search access and may require source verification.");
+    return pageHead("INTELLIGENCE GATHERING", "Research lab", "Query the connected research adapter and inspect returned sources. No results are invented for display.", "") +
+      '<section class="panel panel-pad"><form class="form-stack" data-form="research"><label for="research-query">Research objective</label><textarea id="research-query" name="query" maxlength="3000" required placeholder="What should ULTRON investigate?"></textarea><div class="form-actions"><button class="button button-primary" type="submit"' + (!hasSession() ? " disabled" : "") + '>Run research ↗</button><span class="field-help">Uses /api/research; availability depends on service/provider status.</span></div></form>' + (state.researchError ? '<div class="error-panel">' + esc(state.researchError) + '</div>' : "") + '</section>' +
+      '<section class="panel panel-pad section-gap"><div class="panel-head"><div class="panel-title"><strong>Research output</strong><small>Latest response from the API</small></div>' + (state.research ? chip("RESPONSE RECEIVED") : chip("AWAITING QUERY")) + '</div>' + resultHtml + '</section>';
+  }
+  function renderCoding() {
+    const output = state.coding ? (state.coding.content || state.coding.answer || state.coding.result || JSON.stringify(state.coding, null, 2)) : "";
+    return pageHead("BOUNDED ENGINEERING SUPPORT", "Coding agent", "Generate plans, explanations and reviews. This interface does not execute generated code or represent a hardened sandbox.", "") +
+      '<div class="two-col"><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Define the coding task</strong><small>Be precise about expected output</small></div><span class="panel-icon">‹›</span></div>' +
+      '<form class="form-stack" data-form="coding"><label for="coding-task">Task</label><textarea id="coding-task" name="task" maxlength="5000" required placeholder="Describe the problem, desired behavior and constraints."></textarea><div class="form-row"><div><label for="coding-mode">Mode</label><select id="coding-mode" name="mode"><option value="plan">Plan</option><option value="review">Review</option><option value="explain">Explain</option><option value="implement">Implementation guidance</option></select></div><div><label for="coding-language">Language</label><input id="coding-language" name="language" maxlength="60" value="JavaScript"></div></div><label for="coding-code">Code / error (optional)</label><textarea id="coding-code" name="code" maxlength="16000" placeholder="Paste relevant code or error output"></textarea><div class="form-actions"><button class="button button-primary" type="submit"' + (!hasSession() ? " disabled" : "") + '>Request coding help ↗</button></div></form></section>' +
+      '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Agent response</strong><small>Generated output is untrusted until reviewed and tested</small></div>' + chip(state.coding ? "RESPONSE RECEIVED" : "AWAITING TASK") + '</div>' + (state.codingError ? '<div class="error-panel">' + esc(state.codingError) + '</div>' : "") + (state.coding ? '<pre class="code-output">' + plainText(output) + '</pre>' : emptyState("‹›", "Ready for a task", "A provider error will be shown explicitly instead of a fake response.")) + '</section></div>';
+  }
+  function renderVoice() {
+    const supported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    return pageHead("VOICE INTERFACE", "Voice studio", "Use browser-native speech input and playback when your browser supports them. Cloud speech adapters require their own configuration.", "") +
+      '<div class="two-col"><section class="panel panel-pad"><div class="core-stage"><div class="energy-core"><div class="core-ring ring-one"></div><div class="core-ring ring-two"></div><div class="core-ring ring-three"></div><div class="core-core"></div><div class="core-label"><strong>' + (state.voiceActive ? "LISTENING" : "VOICE READY") + '</strong>LOCAL BROWSER SPEECH</div></div></div><div class="panel-head"><div class="panel-title"><strong>Talk to ULTRON</strong><small>' + (supported ? "Speech recognition available" : "Speech recognition unavailable in this browser") + '</small></div>' + chip(state.voiceActive ? "LISTENING" : supported ? "READY" : "UNAVAILABLE") + '</div>' +
+      '<div class="form-stack"><label for="voice-text">Recognized or typed request</label><textarea id="voice-text" maxlength="12000" placeholder="Your transcribed words will appear here.">' + esc(state.voiceText) + '</textarea><div class="form-actions"><button class="button button-primary" data-action="voice-toggle" type="button"' + (!supported && !state.voiceActive ? " disabled" : "") + '>' + (state.voiceActive ? "Stop listening" : "Start listening") + '</button><button class="button" data-action="send-voice-text" type="button">Send to AI terminal ↗</button><button class="button button-quiet" data-action="speak-last" type="button">Read last answer ◖</button></div>' +
+      '<p class="field-help">Microphone permission is requested by your browser only after you press Start listening. Speech can be processed locally by the browser; it is not a verified always-on wake-word system.</p></div></section>' +
+      '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Voice readiness</strong><small>Capability constraints</small></div><span class="panel-icon">◖</span></div>' +
+      '<div class="preference-row"><div><strong>Browser speech recognition</strong><small>' + (supported ? "Browser provides the recognition API." : "Try a browser that supports SpeechRecognition.") + '</small></div>' + chip(supported ? "AVAILABLE" : "UNAVAILABLE") + '</div>' +
+      '<div class="preference-row"><div><strong>Browser text-to-speech</strong><small>' + (window.speechSynthesis ? "Speech playback is available on this device." : "Speech playback is not available.") + '</small></div>' + chip(window.speechSynthesis ? "AVAILABLE" : "UNAVAILABLE") + '</div>' +
+      '<div class="preference-row"><div><strong>Premium speech providers</strong><small>Requires server-side provider credentials and live tests.</small></div>' + chip("UNVERIFIED") + '</div>' +
+      '<div class="notice-panel">This page does not keep the microphone open in the background. No audio is recorded until you start a browser-supported speech session.</div></section></div>';
+  }
+  function renderFiles() {
+    let extracted = "";
+    if (state.document) {
+      const text = state.document.extractedText || state.document.text || state.document.content || "";
+      extracted = '<section class="panel panel-pad section-gap"><div class="panel-head"><div class="panel-title"><strong>Extraction result</strong><small>' + esc(state.document.filename || (state.documentFile && state.documentFile.name) || "Selected file") + ' · ' + esc(state.document.characters || String(text).length) + ' characters</small></div>' + chip("EXTRACTED") + '</div><pre class="code-output">' + plainText(text) + '</pre><div class="form-actions"><button class="button button-primary" data-action="save-document-memory">Save text to Memory Vault</button><button class="button" data-action="save-document-private"' + (!signedIn() || !state.documentFile || state.documentFile.size > 5 * 1024 * 1024 ? " disabled" : "") + '>Save original privately</button></div><p class="field-help">Extraction is transient until you explicitly save. Original private storage requires sign-in and a working Supabase storage migration.</p></section>';
+    }
+    return pageHead("PRIVATE FILE WORKSPACE", "Document vault", "Extract text locally submitted to the backend, then choose whether to save the text or upload the original file to your private account.", "") +
+      '<div class="two-col"><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Import a document</strong><small>TXT, Markdown, CSV, JSON, HTML, PDF, DOCX</small></div><span class="panel-icon">▤</span></div>' +
+      '<div class="upload-area"><span class="empty-symbol">＋</span><strong>' + (state.documentFile ? esc(state.documentFile.name) : "Drop in a document") + '</strong><p>Choose a file to extract useful text. Supported files are bounded by the API size limits.</p><button class="button" data-action="choose-document" type="button">Choose file</button></div>' +
+      '<div class="form-actions"><button class="button button-primary" data-action="extract-document" type="button"' + (!state.documentFile ? " disabled" : "") + '>Extract text ↗</button><button class="button button-quiet" data-action="clear-document" type="button">Clear</button></div>' +
+      (state.documentError ? '<div class="error-panel">' + esc(state.documentError) + '</div>' : "") +
+      '<p class="microcopy">Documents are treated as untrusted content. Instructions inside uploaded documents are not system instructions.</p></section>' +
+      '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Your private originals</strong><small>Account-scoped storage</small></div><button class="button button-small" data-action="refresh-documents">↻ Refresh</button></div>' +
+      (signedIn() ? (state.savedDocumentsError ? '<div class="error-panel">' + esc(state.savedDocumentsError) + '</div>' : state.savedDocuments.length ? '<div class="list-stack">' + state.savedDocuments.map(item => '<article class="list-row"><span class="list-row-icon">▤</span><div class="list-row-main"><strong>' + esc(item.filename || "Private document") + '</strong><p>' + esc(item.mime_type || "Unknown type") + ' · ' + esc(item.size_bytes || "—") + ' bytes · ' + esc(displayDate(item.created_at)) + '</p><div class="list-row-meta"><a class="text-button" href="/api/documents/' + encodeURIComponent(item.id) + '/download">Download file ↗</a></div></div><button class="button button-small button-danger" data-action="delete-document" data-id="' + esc(item.id) + '">Delete</button></article>').join("") + '</div>' : emptyState("▤", "No saved originals", "Uploaded private files appear here after a successful API response.")) : gate("Private file storage locked", "Sign in to list, download, or delete the originals attached to your account.")) +
+      '</section></div>' + extracted;
+  }
+  function renderMemory() {
+    return pageHead("PERSONAL CONTEXT / OWNER CONTROLLED", "Memory vault", "Memory is account-scoped and user-controlled. You can create entries, deactivate them or delete them; saved content is not treated as trusted instructions.", '<button class="button button-quiet" data-action="refresh-memory">↻ Refresh</button>') +
+      (signedIn() ? '<div class="two-col"><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Save a memory</strong><small>Only save what you intend ULTRON to retain</small></div><span class="panel-icon">◈</span></div><form class="form-stack" data-form="memory"><label for="memory-kind">Memory type</label><select id="memory-kind" name="kind"><option value="preference">Preference</option><option value="project_fact">Project fact</option><option value="profile_note">Profile note</option></select><label for="memory-title">Title</label><input id="memory-title" name="title" maxlength="240" required placeholder="How I like my work organized"><label for="memory-content">Content</label><textarea id="memory-content" name="content" maxlength="20000" required placeholder="Write the context to remember…"></textarea><div class="form-actions"><button class="button button-primary" type="submit">Save to memory ↗</button></div></form></section>' +
+      '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Your saved context</strong><small>' + state.memories.length + ' entries loaded</small></div>' + chip("PRIVATE") + '</div>' + (state.memoryError ? '<div class="error-panel">' + esc(state.memoryError) + '</div>' : state.memories.length ? '<div class="list-stack">' + state.memories.map(item => '<article class="list-row"><span class="list-row-icon">◈</span><div class="list-row-main"><strong>' + esc(item.title) + '</strong><p>' + plainText(item.content) + '</p><div class="list-row-meta">' + chip(item.kind) + chip(item.is_active ? "ACTIVE" : "INACTIVE") + '<span class="microcopy">' + esc(displayDate(item.updated_at || item.created_at)) + '</span></div></div><div class="list-row-actions"><button class="button button-small" data-action="toggle-memory" data-id="' + esc(item.id) + '" data-active="' + String(item.is_active === true) + '">' + (item.is_active ? "Deactivate" : "Activate") + '</button><button class="button button-small button-danger" data-action="delete-memory" data-id="' + esc(item.id) + '">Delete</button></div></article>').join("") + '</div>' : emptyState("◈", "No memories saved", "Create a preference, project fact or profile note to begin.")) + '</section></div>' : gate("Memory vault locked", "Sign in to read or edit your private memory. The interface never fabricates saved entries."));
+  }
+  function renderIntegrations() {
+    return pageHead("ADAPTER REGISTRY", "Integrations", "This registry distinguishes configured adapters from verified live connectivity. Missing credentials or companion services appear as unavailable, not working.", '<button class="button button-quiet" data-action="refresh-integrations">↻ Refresh</button>') +
+      (state.integrationError ? '<div class="error-panel">' + esc(state.integrationError) + '</div>' : "") +
+      (state.integrations.length ? '<div class="three-col">' + state.integrations.map(item => '<article class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>' + esc(item.name || item.id || "Integration") + '</strong><small>' + esc(item.mode || "API adapter") + '</small></div>' + chip(item.state || (item.configured ? "CONFIGURED UNVERIFIED" : "BLOCKED")) + '</div><p class="muted" class="integration-desc">' + esc(item.capability || item.description || "Capability readiness data") + '</p><p class="microcopy">' + esc(item.note || "Live connectivity not verified.") + '</p></article>').join("") + '</div>' : emptyState("⟡", "No readiness data loaded", "Sign in to request integration readiness from the backend."));
+  }
+  function renderAutomation() {
+    if (!signedIn()) return pageHead("GUARDED ROUTINES", "Automation", "Schedules create plans and drafts. They do not send messages, publish content, spend money, execute shell commands or control devices automatically.", "") + gate("Private schedules locked", "Sign in with your Supabase account to create and manage schedules.");
+    const roles = state.roles.length ? state.roles : [{ id: "chief-of-staff", name: "Chief of Staff" }];
+    const selectedRole = $("#schedule-role") ? $("#schedule-role").value : roles[0].id;
+    const routines = state.routines.filter(item => !Array.isArray(item.roles) || item.roles.includes(selectedRole));
+    const form = '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Create a schedule</strong><small>Run cadences between 1 hour and 7 days</small></div><span class="panel-icon">◷</span></div><form class="form-stack" data-form="schedule"><div class="form-row"><div><label for="schedule-role">AI Employee role</label><select id="schedule-role" name="role">' + roles.map(role => '<option value="' + esc(role.id) + '"' + (role.id === selectedRole ? " selected" : "") + '>' + esc(role.name || role.title || role.id) + '</option>').join("") + '</select></div><div><label for="schedule-routine">Routine</label><select id="schedule-routine" name="routineId">' + (routines.length ? routines.map(item => '<option value="' + esc(item.id) + '">' + esc(item.name || item.title || item.id) + '</option>').join("") : '<option value="">Load available routines</option>') + '</select></div></div><label for="schedule-goal">Goal</label><textarea id="schedule-goal" name="goal" maxlength="2000" required placeholder="Describe the plan or report this routine should prepare."></textarea><label for="schedule-context">Optional context</label><textarea id="schedule-context" name="context" maxlength="4000" placeholder="Relevant non-secret context"></textarea><div><label for="schedule-interval">Repeat interval</label><select id="schedule-interval" name="intervalMinutes"><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440" selected>Daily</option><option value="10080">Weekly</option></select></div><div class="form-actions"><button class="button button-primary" type="submit">Save schedule ↗</button></div></form><p class="field-help">Scheduling runs only when the backend scheduler and worker credentials are enabled. UI save success does not prove a future execution.</p></section>';
+    const scheduleList = '<section class="panel panel-pad section-gap"><div class="panel-head"><div class="panel-title"><strong>Your schedules</strong><small>Per-account recurring routines</small></div><button class="button button-small" data-action="refresh-automation">↻ Refresh</button></div>' +
+      (state.scheduleError ? '<div class="error-panel">' + esc(state.scheduleError) + '</div>' : state.schedules.length ? '<div class="list-stack">' + state.schedules.map(item => '<article class="list-row"><span class="list-row-icon">◷</span><div class="list-row-main"><strong>' + esc(item.goal || item.routine_id || "Scheduled routine") + '</strong><p>Role: ' + esc(item.role_id) + ' · Routine: ' + esc(item.routine_id) + '</p><div class="list-row-meta">' + chip(item.enabled ? "ENABLED" : "DISABLED") + '<span class="microcopy">Next run: ' + esc(displayDate(item.next_run_at)) + '</span></div></div><div class="list-row-actions"><button class="button button-small" data-action="toggle-schedule" data-id="' + esc(item.id) + '" data-enabled="' + String(item.enabled === true) + '">' + (item.enabled ? "Pause" : "Enable") + '</button><button class="button button-small" data-action="run-schedule" data-id="' + esc(item.id) + '">Run report</button><button class="button button-small button-danger" data-action="delete-schedule" data-id="' + esc(item.id) + '">Delete</button></div></article>').join("") + '</div>' : emptyState("◷", "No schedules yet", "Save an approved schedule to see it here.")) +
+      '<div class="notice-panel">' + esc(state.employeeStatus && state.employeeStatus.notice || "Schedule execution status will be shown only after reading the backend.") + '</div></section>';
+    return pageHead("ROUTINES / PLANNING ONLY", "Automation", "Schedule bounded drafts and reports. External side effects and device control are not enabled through these routines.", "") + form + scheduleList;
+  }
+  function renderSecurity() {
+    const healthOk = state.health && state.health.status === "ok";
+    return pageHead("TRUST BOUNDARIES", "Security & approvals", "A clear view of the guards around identity, data and actions. Status reflects API evidence and never implies a full security audit.", '<button class="button button-quiet" data-action="refresh-status">↻ Refresh checks</button>') +
+      '<div class="three-col"><article class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>API exposure</strong><small>Reachability only</small></div><span class="panel-icon">⌬</span></div><div class="metric-value">' + esc(healthOk ? "ONLINE" : "UNVERIFIED") + '</div><p class="microcopy">A successful health check does not validate auth, providers, RLS or task completion.</p>' + chip(healthOk ? "OK" : "UNVERIFIED") + '</article>' +
+      '<article class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Account scope</strong><small>Private APIs</small></div><span class="panel-icon">◈</span></div><div class="metric-value">' + (signedIn() ? "SIGNED IN" : "LOCKED") + '</div><p class="microcopy">Private memory, conversations, documents, tasks and schedules use authenticated endpoints.</p>' + chip(signedIn() ? "AUTHENTICATED" : "SIGN IN REQUIRED") + '</article>' +
+      '<article class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Action approvals</strong><small>Guarded execution</small></div><span class="panel-icon">⛨</span></div><div class="metric-value">GUARDED</div><p class="microcopy">Higher-risk work can require approval. No arbitrary code execution is exposed by this interface.</p>' + chip("POLICY GATED") + '</article></div>' +
+      '<section class="panel panel-pad section-gap"><div class="panel-head"><div class="panel-title"><strong>Operational notes</strong><small>Explicit limitations</small></div><span class="panel-icon">i</span></div><div class="list-stack">' +
+      '<article class="list-row"><span class="list-row-icon">1</span><div class="list-row-main"><strong>Authentication</strong><p>Private endpoints require an authenticated Supabase user. Keep passwords and provider keys in server-side settings only.</p></div></article>' +
+      '<article class="list-row"><span class="list-row-icon">2</span><div class="list-row-main"><strong>Inference</strong><p>Model routing configuration is not evidence of live successful inference. A failed provider call should remain visible.</p></div></article>' +
+      '<article class="list-row"><span class="list-row-icon">3</span><div class="list-row-main"><strong>External tools</strong><p>Integration cards are capability/readiness data. Do not treat configured endpoints as verified or enable unattended consequential actions.</p></div></article>' +
+      '<article class="list-row"><span class="list-row-icon">4</span><div class="list-row-main"><strong>Local device access</strong><p>A hosted API cannot directly control a PC microphone or local desktop without a paired, authenticated companion.</p></div></article></div></section>';
+  }
+  function renderSystem() {
+    const health = state.health || {};
+    const components = state.readiness && Array.isArray(state.readiness.components) ? state.readiness.components : [];
+    return pageHead("OBSERVABILITY / DIAGNOSTICS", "System health", "Inspect returned service and capability readiness data. No secret values are displayed and no upstream work is performed by this page itself.", '<button class="button button-primary" data-action="refresh-status">Refresh diagnostics ↻</button>') +
+      '<div class="three-col"><article class="panel panel-pad"><div class="panel-title"><strong>API health</strong><small>/api/health</small></div><div class="metric-value">' + esc(health.status || "UNVERIFIED") + '</div><div class="section-gap">' + chip(health.status || "UNVERIFIED") + '</div></article>' +
+      '<article class="panel panel-pad"><div class="panel-title"><strong>Authentication</strong><small>/api/session</small></div><div class="metric-value">' + (signedIn() ? "SUPABASE" : hasSession() ? "SESSION" : "GUEST") + '</div><p class="microcopy">' + esc(state.session.email || "No signed-in account returned") + '</p></article>' +
+      '<article class="panel panel-pad"><div class="panel-title"><strong>Worker status</strong><small>Account-gated status route</small></div><div class="metric-value">' + esc(state.worker && state.worker.state || "NOT LOADED") + '</div><p class="microcopy">Queued-task execution needs live verification with a working worker and provider.</p></article></div>' +
+      '<section class="panel panel-pad section-gap"><div class="panel-head"><div class="panel-title"><strong>Capability readiness</strong><small>Configured does not equal live-verified</small></div>' + chip(components.length ? "RESPONSE RECEIVED" : "NOT LOADED") + '</div>' +
+      (components.length ? '<div class="list-stack">' + components.map(item => '<article class="list-row"><span class="list-row-icon">⌬</span><div class="list-row-main"><strong>' + esc(item.label || item.name || item.id || "Capability") + '</strong><p>' + esc(item.note || item.detail || item.description || "No status detail provided.") + '</p></div>' + chip(item.state || "UNKNOWN") + '</article>').join("") + '</div>' : signedIn() ? emptyState("⌬", "No readiness components returned", "The readiness route may be unavailable or return a different schema.") : gate("Sign in for detailed readiness", "Detailed runtime readiness is available to authenticated Supabase accounts.")) +
+      '<pre class="code-output section-gap">' + plainText(JSON.stringify({ health: health, worker: state.worker, session: { authenticated: state.session.authenticated, authType: state.session.authType }, capabilities: state.caps }, null, 2)) + '</pre>';
+  }
+  function renderSettings() {
+    return pageHead("OPERATOR PREFERENCES", "Settings", "Save account preferences to the backend. Provider credentials are intentionally not editable or exposed in the browser.", "") +
+      (signedIn() ? '<div class="two-col"><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Behavior</strong><small>Stored per Supabase account</small></div><span class="panel-icon">⚙</span></div>' +
+      '<form class="form-stack" data-form="settings"><label for="pref-locale">Voice input locale</label><select id="pref-locale" name="voice_input_locale">' +
+      ['en-IN','hi-IN','en-US','en-GB'].map(locale => '<option value="' + locale + '"' + (state.preferences.voice_input_locale === locale ? " selected" : "") + '>' + locale + '</option>').join("") +
+      '</select><div class="preference-row"><div><strong>Voice enabled</strong><small>Store your preference for voice features.</small></div><label class="switch"><input type="checkbox" name="voice_enabled"' + (state.preferences.voice_enabled !== false ? " checked" : "") + '><span></span></label></div>' +
+      '<div class="preference-row"><div><strong>Personal memory retrieval</strong><small>Allow eligible saved memories to inform chat when relevant.</small></div><label class="switch"><input type="checkbox" name="memory_enabled"' + (state.preferences.memory_enabled !== false ? " checked" : "") + '><span></span></label></div>' +
+      '<div class="form-actions"><button class="button button-primary" type="submit">Save preferences ↗</button></div></form></section>' +
+      '<section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Session & local interface</strong><small>Current browser session</small></div><span class="panel-icon">⛨</span></div>' +
+      '<div class="preference-row"><div><strong>Account</strong><small>' + esc(state.session.email || "Authenticated session") + '</small></div>' + chip("SIGNED IN") + '</div>' +
+      '<div class="preference-row"><div><strong>Chat personality</strong><small>Choose ULTRON or NAYA in the AI terminal.</small></div><button class="button button-small" data-view="chat">Open terminal</button></div>' +
+      '<div class="preference-row"><div><strong>Sidebar layout</strong><small>Collapse navigation to maximize workspace.</small></div><button class="button button-small" data-action="toggle-sidebar">Toggle sidebar</button></div>' +
+      '<div class="preference-row"><div><strong>Sign out</strong><small>Clear the server session and cookies.</small></div><button class="button button-small button-danger" data-action="signout">Sign out</button></div></section></div>' :
+      '<div class="panel panel-pad">' + gate("Preferences require sign-in", "Sign in to load and save account-scoped preferences.") + '<div class="form-actions"><button class="button button-primary" data-action="open-auth">Sign in / create account ↗</button></div></div>');
+  }
+
+  const RENDERERS = {
+    home: renderHome, chat: renderChat, tasks: renderTasks, research: renderResearch, coding: renderCoding,
+    voice: renderVoice, files: renderFiles, memory: renderMemory, automation: renderAutomation,
+    integrations: renderIntegrations, security: renderSecurity, system: renderSystem, settings: renderSettings
+  };
+  function renderCurrent() {
+    const root = $("#view-root");
+    if (!root) return;
+    root.innerHTML = (RENDERERS[state.view] || renderHome)();
+    const meta = VIEWS[state.view] || VIEWS.home;
+    if ($("#breadcrumb-current")) $("#breadcrumb-current").textContent = meta[0];
+    $$("[data-view]").forEach(button => {
+      button.classList.toggle("active", button.dataset.view === state.view);
+      button.classList.toggle("is-active", button.dataset.view === state.view);
+    });
+    if (state.view === "chat") {
+      const messages = $("#chat-messages");
+      if (messages) messages.scrollTop = messages.scrollHeight;
+    }
+  }
+  async function navigate(view) {
+    if (!RENDERERS[view]) view = "home";
+    state.view = view;
+    closeMobileNav();
+    renderCurrent();
+    try { await loadViewData(view); } catch (error) { toast(error.message || "Workspace data could not load.", "error"); }
+    if (state.view === view) renderCurrent();
+  }
+  async function loadViewData(view) {
+    if (view === "home" || view === "system" || view === "security") {
+      if (!state.health) await refreshStatus(true);
+      if (signedIn() && !state.readiness) {
+        const data = await maybe("/api/runtime/readiness");
+        state.readiness = data.ok ? data.data : null;
+      }
+    }
+    if (view === "chat") {
+      if (hasSession()) {
+        try {
+          const data = await api("/api/models");
+          const source = Array.isArray(data.models) ? data.models : Array.isArray(data.data) ? data.data : [];
+          state.models = source.map(item => typeof item === "string" ? { id: item, label: item } : { id: item.id || item.model || item.name, label: item.name || item.id || item.model || "Model" }).filter(item => item.id);
+          if (!state.models.some(item => item.id === "openrouter/free")) state.models.unshift({ id: "openrouter/free", label: "Automatic free router" });
+          if (!state.models.some(item => item.id === state.model)) state.model = data.defaultModel || "openrouter/free";
+        } catch { state.models = [{ id: "openrouter/free", label: "Automatic free router" }]; }
+      }
+      if (signedIn()) await loadConversations();
+    }
+    if (view === "tasks") await loadTasks();
+    if (view === "memory") await loadMemories();
+    if (view === "files") { await loadSavedDocuments(); }
+    if (view === "integrations") await loadIntegrations();
+    if (view === "automation") await loadSchedules();
+    if (view === "settings" && signedIn()) await loadPreferences();
+  }
+  async function loadConversations() {
+    if (!signedIn()) { state.conversations = []; return; }
+    try {
+      const data = await api("/api/conversations");
+      state.conversations = Array.isArray(data.conversations) ? data.conversations : [];
+    } catch (error) { toast("Conversation history could not load: " + error.message, "error"); }
+  }
+  async function loadConversation(id) {
+    if (!signedIn()) return;
+    try {
+      const data = await api("/api/conversations/" + encodeURIComponent(id) + "/messages");
+      state.conversationId = id;
+      state.messages = (Array.isArray(data.messages) ? data.messages : []).map(message => ({ role: message.role, content: message.content, time: displayDate(message.created_at), model: message.model || "" }));
+      renderCurrent();
+    } catch (error) { toast("Could not load conversation: " + error.message, "error"); }
+  }
+  async function ensureConversation(title) {
+    if (!signedIn()) return null;
+    if (state.conversationId) return state.conversationId;
+    const data = await api("/api/conversations", { method: "POST", body: { title: String(title || "New conversation").slice(0, 160) } });
+    if (!data.conversation || !data.conversation.id) throw new Error("The API did not return a conversation ID.");
+    state.conversationId = data.conversation.id;
+    await loadConversations();
+    return state.conversationId;
+  }
+  async function saveMessage(id, role, content) {
+    if (!signedIn() || !id || !content) return;
+    await api("/api/conversations/" + encodeURIComponent(id) + "/messages", { method: "POST", body: { role: role, content: String(content).slice(0, 100000) } });
+  }
+  async function sendChat(rawPrompt) {
+    const prompt = String(rawPrompt || "").trim();
+    if (!prompt && !state.attachments.length) return;
+    if (!hasSession()) { toast("Sign in to send a chat request.", "error"); openAuth("signin"); return; }
+    if (state.busy) return;
+    const attachments = state.attachments.slice(0, 2);
+    state.attachments = [];
+    state.messages.push({ role: "user", content: prompt, time: "NOW", attachments: attachments.map(file => ({ name: file.name })) });
+    const assistant = { role: "assistant", content: "", streaming: true, time: "LIVE STREAM", model: state.model };
+    state.messages.push(assistant);
+    state.busy = true;
+    setCore("thinking", "MODEL REQUEST IN PROGRESS");
+    renderCurrent();
+    try {
+      if (signedIn()) {
+        try {
+          const id = await ensureConversation(prompt.slice(0, 160) || "Image analysis");
+          await saveMessage(id, "user", prompt || "Please analyze the attached image.");
+        } catch (error) { toast("Chat is running but conversation persistence is unavailable: " + error.message, "error"); }
+      }
+      const messages = state.messages.filter(item => (item.role === "user" || item.role === "assistant") && item !== assistant).slice(-35).map(item => ({ role: item.role, content: item.content || "" }));
+      const controller = new AbortController();
+      state.controller = controller;
+      const response = await fetch("/api/chat", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: { "Content-Type": "application/json", "Accept": "text/event-stream, application/json" },
+        body: JSON.stringify({ messages: messages, stream: true, model: state.model || "openrouter/free", persona: state.persona, attachments: attachments.map(file => ({ dataUrl: file.dataUrl })) }),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const data = await readPayload(response);
+        throw new Error(data && data.error && data.error.message || "Chat request failed (" + response.status + ").");
+      }
+      if (!response.body || !response.body.getReader) throw new Error("This browser could not read the response stream.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let answer = "";
+      let complete = false;
+      async function processBlock(block) {
+        let eventName = "message";
+        const dataLines = [];
+        block.split(/\r?\n/).forEach(line => {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+        });
+        if (!dataLines.length) return;
+        const raw = dataLines.join("\n");
+        if (eventName === "done" || raw === "[DONE]") { complete = true; return; }
+        if (eventName === "provider_error") {
+          let data = {};
+          try { data = JSON.parse(raw); } catch {}
+          throw new Error(data.error && data.error.message || "The provider interrupted the response.");
+        }
+        let data;
+        try { data = JSON.parse(raw); } catch { return; }
+        if (typeof data.delta === "string") {
+          answer += data.delta;
+          assistant.content = answer;
+          assistant.streaming = true;
+          assistant.model = response.headers.get("X-ULTRON-Model") || state.model;
+          state.lastAnswer = answer;
+          setCore("responding", "RESPONSE STREAMING");
+          const target = $("#chat-messages");
+          if (target) { target.innerHTML = renderChatMessages(); target.scrollTop = target.scrollHeight; }
+          const live = $("#chat-live-status");
+          if (live) live.textContent = "Response streaming…";
+        }
+      }
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const blocks = buffer.split(/\r?\n\r?\n/);
+        buffer = blocks.pop() || "";
+        for (const block of blocks) await processBlock(block);
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) await processBlock(buffer);
+      assistant.streaming = false;
+      if (!answer) throw new Error("The provider finished without returning a text response.");
+      state.lastAnswer = answer;
+      setCore("success", "MODEL RESPONSE RECEIVED");
+      if (signedIn() && state.conversationId) {
+        try { await saveMessage(state.conversationId, "assistant", answer); }
+        catch { toast("Response received, but it could not be saved to conversation history.", "error"); }
+      }
+    } catch (error) {
+      assistant.streaming = false;
+      assistant.content = (error && error.name === "AbortError") ? "Response cancelled by operator." : "Request failed: " + String(error.message || error);
+      setCore("error", "MODEL REQUEST FAILED");
+    } finally {
+      state.busy = false;
+      state.controller = null;
+      state.attachments = [];
+      renderCurrent();
+      if ($("#chat-live-status")) $("#chat-live-status").textContent = "Awaiting operator input";
+      if (state.coreState === "error") toast(assistant.content, "error");
+    }
+  }
+  async function loadTasks() {
+    if (!signedIn()) { state.tasks = []; state.tasksError = "Sign in with Supabase to read private task records."; return; }
+    try { const data = await api("/api/tasks"); state.tasks = Array.isArray(data.tasks) ? data.tasks : []; state.tasksError = ""; }
+    catch (error) { state.tasks = []; state.tasksError = error.message; }
+  }
+  async function createTask(form) {
+    if (!signedIn()) { openAuth("signin"); return; }
+    const values = Object.fromEntries(new FormData(form).entries());
+    const body = { title: String(values.title || "").trim(), description: String(values.description || "").trim(), query: String(values.query || "").trim(), taskType: values.taskType || "research", risk: values.risk || "low" };
+    if (body.taskType === "autonomous") { body.role = "chief-of-staff"; body.goal = body.description; body.mode = "report"; }
+    if (!body.title || !body.description) { toast("Enter a title and description.", "error"); return; }
+    try {
+      const data = await api("/api/tasks", { method: "POST", body: body });
+      toast(data.notice || "Task record saved.", "success");
+      await loadTasks();
+      renderCurrent();
+    } catch (error) { toast(error.message || "Task could not be created.", "error"); }
+  }
+  async function taskAction(action, id) {
+    if (!signedIn()) { openAuth("signin"); return; }
+    const task = state.tasks.find(item => item.id === id);
+    if (!task) { toast("Task not found. Refresh the ledger first.", "error"); return; }
+    try {
+      if (action === "approve-task") {
+        if (!window.confirm("Approve this saved task? Approval only queues supported bounded workflows.\n\n" + String(task.title || id).slice(0, 160))) return;
+        const data = await api("/api/tasks/" + encodeURIComponent(id) + "/approve", { method: "POST", body: { confirm: true } });
+        toast(data.notice || "Approval recorded by the backend.", "success");
+      } else if (action === "cancel-task") {
+        if (!window.confirm("Cancel this queued task?")) return;
+        await api("/api/tasks/" + encodeURIComponent(id) + "/cancel", { method: "POST", body: {} });
+        toast("Cancellation requested.", "success");
+      } else if (action === "task-progress") {
+        state.taskProgress = await api("/api/tasks/" + encodeURIComponent(id) + "/progress");
+      }
+      await loadTasks();
+      renderCurrent();
+    } catch (error) { toast(error.message || "Task action failed.", "error"); }
+  }
+  async function loadMemories() {
+    if (!signedIn()) { state.memories = []; state.memoryError = "Sign in to access private memory."; return; }
+    try { const data = await api("/api/memory"); state.memories = Array.isArray(data.items) ? data.items : []; state.memoryError = ""; }
+    catch (error) { state.memories = []; state.memoryError = error.message; }
+  }
+  async function memoryAction(action, id, button) {
+    if (!signedIn()) { openAuth("signin"); return; }
+    const item = state.memories.find(entry => entry.id === id);
+    if (!item) return;
+    try {
+      if (action === "delete-memory") {
+        if (!window.confirm("Delete this memory permanently?\n\n" + String(item.title || "").slice(0, 180))) return;
+        await api("/api/memory/" + encodeURIComponent(id), { method: "DELETE" });
+      } else {
+        await api("/api/memory/" + encodeURIComponent(id), { method: "PATCH", body: { is_active: button && button.dataset.active !== "true" } });
+      }
+      await loadMemories();
+      renderCurrent();
+      toast(action === "delete-memory" ? "Memory deleted." : "Memory state updated.", "success");
+    } catch (error) { toast(error.message || "Memory action failed.", "error"); }
+  }
+  async function loadSavedDocuments() {
+    if (!signedIn()) { state.savedDocuments = []; state.savedDocumentsError = "Sign in with Supabase to access private files."; return; }
+    try { const data = await api("/api/documents"); state.savedDocuments = Array.isArray(data.documents) ? data.documents : []; state.savedDocumentsError = ""; }
+    catch (error) { state.savedDocuments = []; state.savedDocumentsError = error.message + " — private document storage may need its migration applied."; }
+  }
+  async function loadIntegrations() {
+    if (!hasSession()) { state.integrations = []; state.integrationError = "Sign in to request integration readiness."; return; }
+    try { const data = await api("/api/integrations"); state.integrations = Array.isArray(data.integrations) ? data.integrations : []; state.integrationError = ""; }
+    catch (error) { state.integrations = []; state.integrationError = error.message; }
+  }
+  async function loadSchedules() {
+    if (!signedIn()) { state.schedules = []; state.scheduleError = "Sign in to read private schedules."; return; }
+    try {
+      const results = await Promise.all([api("/api/employees/schedules"), api("/api/employees/status"), api("/api/employees/roles")]);
+      state.schedules = Array.isArray(results[0].schedules) ? results[0].schedules : [];
+      state.employeeStatus = results[1];
+      state.roles = Array.isArray(results[2].roles) ? results[2].roles : [];
+      state.routines = Array.isArray(results[2].routineTemplates) ? results[2].routineTemplates : [];
+      state.scheduleError = "";
+    } catch (error) { state.schedules = []; state.scheduleError = error.message; }
+  }
+  async function loadPreferences() {
+    if (!signedIn()) return;
+    try { const data = await api("/api/preferences"); if (data.preferences) state.preferences = Object.assign(state.preferences, data.preferences); }
+    catch (error) { toast("Preferences not loaded: " + error.message, "error"); }
+  }
+  async function savePreferences(form) {
+    if (!signedIn()) { openAuth("signin"); return; }
+    const values = Object.fromEntries(new FormData(form).entries());
+    const body = {
+      voice_input_locale: values.voice_input_locale || state.preferences.voice_input_locale || "en-IN",
+      voice_enabled: values.voice_enabled === "on",
+      memory_enabled: values.memory_enabled === "on"
+    };
+    try {
+      const data = await api("/api/preferences", { method: "PUT", body: body });
+      state.preferences = Object.assign(state.preferences, data.preferences || body);
+      toast("Preferences saved to your account.", "success");
+      renderCurrent();
+    } catch (error) { toast("Preference update failed: " + error.message, "error"); }
+  }
+  async function submitResearch(form) {
+    if (!hasSession()) { openAuth("signin"); return; }
+    const values = Object.fromEntries(new FormData(form).entries());
+    const query = String(values.query || "").trim();
+    if (query.length < 2) return;
+    state.research = null; state.researchError = "";
+    renderCurrent(); setCore("thinking", "RESEARCH REQUEST IN PROGRESS");
+    try {
+      state.research = await api("/api/research", { method: "POST", body: { query: query } });
+      setCore("success", "RESEARCH RESPONSE RECEIVED");
+    } catch (error) { state.researchError = error.message; setCore("error", "RESEARCH REQUEST FAILED"); }
+    renderCurrent();
+  }
+  async function submitCoding(form) {
+    if (!hasSession()) { openAuth("signin"); return; }
+    const values = Object.fromEntries(new FormData(form).entries());
+    const body = { task: String(values.task || "").trim(), mode: values.mode || "plan", language: String(values.language || "unspecified"), code: String(values.code || "") };
+    if (!body.task) return;
+    state.coding = null; state.codingError = ""; renderCurrent(); setCore("thinking", "CODING REQUEST IN PROGRESS");
+    try { state.coding = await api("/api/coding/assist", { method: "POST", body: body }); setCore("success", "CODING RESPONSE RECEIVED"); }
+    catch (error) { state.codingError = error.message; setCore("error", "CODING REQUEST FAILED"); }
+    renderCurrent();
+  }
+  async function submitSchedule(form) {
+    if (!signedIn()) { openAuth("signin"); return; }
+    const values = Object.fromEntries(new FormData(form).entries());
+    const body = { role: values.role, routineId: values.routineId, goal: String(values.goal || "").trim(), context: String(values.context || "").trim(), intervalMinutes: Number(values.intervalMinutes) };
+    if (!body.routineId) { toast("Choose a routine before saving.", "error"); return; }
+    try {
+      const data = await api("/api/employees/schedules", { method: "POST", body: body });
+      toast(data.notice || "Schedule saved. Actual execution still depends on worker readiness.", "success");
+      await loadSchedules(); renderCurrent();
+    } catch (error) { toast(error.message || "Schedule could not be saved.", "error"); }
+  }
+  async function scheduleAction(action, id, button) {
+    if (!signedIn()) { openAuth("signin"); return; }
+    try {
+      if (action === "toggle-schedule") await api("/api/employees/schedules/" + encodeURIComponent(id), { method: "PATCH", body: { enabled: button.dataset.enabled !== "true" } });
+      else if (action === "delete-schedule") {
+        if (!window.confirm("Delete this schedule? Existing task records remain.")) return;
+        await api("/api/employees/schedules/" + encodeURIComponent(id), { method: "DELETE" });
+      } else {
+        if (!window.confirm("Queue a bounded draft/report now? This does not perform external actions.")) return;
+        const data = await api("/api/employees/schedules/" + encodeURIComponent(id) + "/run", { method: "POST", body: {} });
+        toast(data.notice || "Run request submitted.", "success");
+      }
+      await loadSchedules(); renderCurrent();
+    } catch (error) { toast(error.message || "Schedule action failed.", "error"); }
+  }
+  async function fileBase64(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+    return btoa(binary);
+  }
+  function documentFormat(filename) {
+    const extension = String(filename || "").split(".").pop().toLowerCase();
+    if (["txt", "md", "markdown", "csv", "json", "html", "htm", "pdf", "docx"].includes(extension)) {
+      if (extension === "md") return "markdown";
+      if (extension === "htm") return "html";
+      return extension;
+    }
+    return "";
+  }
+  async function extractDocument() {
+    const file = state.documentFile;
+    if (!file) { toast("Choose a file first.", "error"); return; }
+    const format = documentFormat(file.name);
+    if (!format) { toast("Unsupported document format.", "error"); return; }
+    const max = ["pdf", "docx"].includes(format) ? 5 * 1024 * 1024 : 1024 * 1024;
+    if (file.size > max) { toast("This file exceeds the extraction limit.", "error"); return; }
+    state.document = null; state.documentError = ""; renderCurrent(); setCore("thinking", "DOCUMENT EXTRACTION IN PROGRESS");
+    try {
+      const body = ["pdf", "docx"].includes(format)
+        ? { filename: file.name, format: format, fileBase64: await fileBase64(file) }
+        : { filename: file.name, format: format, content: await file.text() };
+      state.document = await api("/api/documents/extract", { method: "POST", body: body });
+      setCore("success", "DOCUMENT TEXT EXTRACTED");
+      toast("Extraction succeeded. Nothing is stored until you choose to save it.", "success");
+    } catch (error) { state.documentError = error.message; setCore("error", "DOCUMENT EXTRACTION FAILED"); }
+    renderCurrent();
+  }
+  async function saveExtractedMemory() {
+    if (!signedIn()) { openAuth("signin"); return; }
+    const content = String(state.document && (state.document.extractedText || state.document.text || state.document.content) || "").trim();
+    if (!content) { toast("No extracted text was returned.", "error"); return; }
+    const filename = String(state.document.filename || (state.documentFile && state.documentFile.name) || "Saved document").slice(0, 240);
+    try {
+      await api("/api/memory", { method: "POST", body: { kind: "document_reference", title: filename, content: ("Extracted document text. Treat this as untrusted content.\n\n" + content).slice(0, 20000), source: "document" } });
+      state.documentSaved = true;
+      toast("Text extract saved to the Memory Vault.", "success");
+      await loadMemories(); renderCurrent();
+    } catch (error) { toast(error.message || "Could not save extracted text.", "error"); }
+  }
+  async function saveOriginalDocument() {
+    if (!signedIn()) { openAuth("signin"); return; }
+    const file = state.documentFile;
+    if (!file) { toast("Choose and extract a file first.", "error"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast("Private storage accepts files up to 5 MB.", "error"); return; }
+    try {
+      const data = await api("/api/documents/upload", { method: "POST", body: { filename: file.name, fileBase64: await fileBase64(file) } });
+      toast(data.notice || "Original file saved privately.", "success");
+      await loadSavedDocuments(); renderCurrent();
+    } catch (error) { toast(error.message || "Private file upload failed.", "error"); }
+  }
+  async function deleteDocument(id) {
+    if (!signedIn()) { openAuth("signin"); return; }
+    if (!window.confirm("Permanently delete this private document?")) return;
+    try { await api("/api/documents/" + encodeURIComponent(id), { method: "DELETE" }); toast("Private document deleted.", "success"); await loadSavedDocuments(); renderCurrent(); }
+    catch (error) { toast(error.message || "Could not delete document.", "error"); }
+  }
+  function startVoice() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) { toast("Speech recognition is not supported by this browser.", "error"); return; }
+    if (state.recognition) { try { state.recognition.stop(); } catch {} }
+    const recognition = new Recognition();
+    recognition.lang = state.preferences.voice_input_locale || "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = event => {
+      let text = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) text += event.results[i][0].transcript;
+      state.voiceText = text;
+      if ($("#voice-text")) $("#voice-text").value = text;
+    };
+    recognition.onerror = event => { state.voiceActive = false; toast("Speech recognition issue: " + (event.error || "unknown error"), "error"); renderCurrent(); };
+    recognition.onend = () => { state.voiceActive = false; state.recognition = null; renderCurrent(); };
+    try { state.recognition = recognition; state.voiceActive = true; recognition.start(); renderCurrent(); }
+    catch (error) { state.voiceActive = false; toast("Could not start microphone: " + error.message, "error"); renderCurrent(); }
+  }
+  function stopVoice() {
+    if (state.recognition) { try { state.recognition.stop(); } catch {} }
+    state.voiceActive = false; state.recognition = null; renderCurrent();
+  }
+  function speakLast() {
+    if (!window.speechSynthesis) { toast("Text-to-speech is not available in this browser.", "error"); return; }
+    const text = String(state.lastAnswer || state.messages.slice().reverse().find(item => item.role === "assistant" && item.content)?.content || "");
+    if (!text) { toast("There is no assistant answer to read yet.", "info"); return; }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.slice(0, 5000));
+    utterance.lang = state.preferences.voice_input_locale || "en-IN";
+    window.speechSynthesis.speak(utterance);
+  }
+  async function authenticate(form) {
+    const values = Object.fromEntries(new FormData(form).entries());
+    const email = String(values.email || "").trim();
+    const password = String(values.password || "");
+    const errorBox = $("#auth-error");
+    if (errorBox) { errorBox.hidden = true; errorBox.textContent = ""; }
+    const submit = $("#auth-submit");
+    if (submit) { submit.disabled = true; submit.textContent = "Please wait…"; }
+    try {
+      if (state.authMode === "signin") {
+        await api("/api/auth/signin", { method: "POST", body: { email: email, password: password } });
+        toast("Signed in successfully.", "success");
+      } else if (state.authMode === "signup") {
+        const result = await api("/api/auth/signup", { method: "POST", body: { email: email, password: password } });
+        if (result.confirmationRequired) { toast(result.message || "Check your email to confirm your account.", "info"); state.authMode = "signin"; updateAuthMode(); return; }
+        toast("Account created.", "success");
+      } else {
+        const result = await api("/api/auth/recovery", { method: "POST", body: { email: email } });
+        toast(result.message || "If the account exists, recovery instructions were sent.", "success");
+        closeAuth(); return;
+      }
+      await refreshStatus(true);
+      closeAuth();
+      await navigate(state.view);
+    } catch (error) {
+      if (errorBox) { errorBox.textContent = error.message || "Authentication failed."; errorBox.hidden = false; }
+    } finally {
+      if (submit) { submit.disabled = false; updateAuthMode(); }
+    }
+  }
+  async function signOut() {
+    try {
+      await api("/api/auth/signout", { method: "POST", body: {} });
+      await api("/api/logout", { method: "POST", body: {} }).catch(() => ({}));
+      state.session = { authenticated: false, configured: state.session.configured, authType: null, email: null };
+      state.messages = []; state.conversationId = null; state.conversations = [];
+      state.tasks = []; state.memories = []; state.schedules = [];
+      await refreshStatus(true);
+      toast("Signed out.", "success");
+      await navigate("home");
+    } catch (error) { toast("Sign out issue: " + error.message, "error"); }
+  }
+  function closeMobileNav() {
+    const sidebar = $("#sidebar"); const scrim = $("#mobile-scrim");
+    if (sidebar) sidebar.classList.remove("mobile-open");
+    if (scrim) scrim.classList.remove("show");
+  }
+  function toggleMobileNav() {
+    const sidebar = $("#sidebar"); const scrim = $("#mobile-scrim");
+    if (!sidebar || !scrim) return;
+    const open = !sidebar.classList.contains("mobile-open");
+    sidebar.classList.toggle("mobile-open", open);
+    scrim.classList.toggle("show", open);
+  }
+  function toggleSidebar() {
+    if (window.matchMedia("(max-width: 1020px)").matches) { toggleMobileNav(); return; }
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    $("#sidebar").classList.toggle("collapsed", state.sidebarCollapsed);
+  }
+  function readImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, dataUrl: String(reader.result || "") });
+      reader.onerror = () => reject(new Error("Could not read image file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  document.addEventListener("click", async event => {
+    const viewButton = event.target.closest("[data-view]");
+    if (viewButton) { event.preventDefault(); await navigate(viewButton.dataset.view); return; }
+    const promptButton = event.target.closest("[data-prompt]");
+    if (promptButton) {
+      const input = $("#home-prompt");
+      if (input) { input.value = promptButton.dataset.prompt || ""; input.focus(); }
+      else { await navigate("home"); if ($("#home-prompt")) { $("#home-prompt").value = promptButton.dataset.prompt || ""; $("#home-prompt").focus(); } }
+      return;
+    }
+    const closeButton = event.target.closest("[data-close-modal]");
+    if (closeButton) { const modal = $("#" + closeButton.dataset.closeModal); if (modal) modal.hidden = true; return; }
+    const authTab = event.target.closest("[data-auth-mode]");
+    if (authTab) { state.authMode = authTab.dataset.authMode; updateAuthMode(); return; }
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    const action = button.dataset.action;
+    try {
+      if (action === "open-auth" || action === "account") openAuth("signin");
+      else if (action === "refresh-status") await refreshStatus(false);
+      else if (action === "new-chat") { if (state.controller) state.controller.abort(); state.messages = []; state.conversationId = null; state.busy = false; state.attachments = []; if (state.view !== "chat") await navigate("chat"); else renderCurrent(); }
+      else if (action === "select-conversation") await loadConversation(button.dataset.id);
+      else if (action === "attach-images") $("#image-input").click();
+      else if (action === "clear-images") { state.attachments = []; renderCurrent(); }
+      else if (action === "refresh-tasks") { await loadTasks(); renderCurrent(); }
+      else if (action === "approve-task" || action === "cancel-task" || action === "task-progress") await taskAction(action, button.dataset.id);
+      else if (action === "refresh-memory") { await loadMemories(); renderCurrent(); }
+      else if (action === "delete-memory" || action === "toggle-memory") await memoryAction(action, button.dataset.id, button);
+      else if (action === "choose-document") $("#document-input").click();
+      else if (action === "extract-document") await extractDocument();
+      else if (action === "clear-document") { state.document = null; state.documentError = ""; state.documentFile = null; renderCurrent(); }
+      else if (action === "save-document-memory") await saveExtractedMemory();
+      else if (action === "save-document-private") await saveOriginalDocument();
+      else if (action === "refresh-documents") { await loadSavedDocuments(); renderCurrent(); }
+      else if (action === "delete-document") await deleteDocument(button.dataset.id);
+      else if (action === "refresh-integrations") { await loadIntegrations(); renderCurrent(); }
+      else if (action === "refresh-automation") { await loadSchedules(); renderCurrent(); }
+      else if (action === "toggle-schedule" || action === "run-schedule" || action === "delete-schedule") await scheduleAction(action, button.dataset.id, button);
+      else if (action === "voice-toggle") state.voiceActive ? stopVoice() : startVoice();
+      else if (action === "send-voice-text") { const text = $("#voice-text") ? $("#voice-text").value : state.voiceText; state.voiceText = text || ""; await navigate("chat"); await sendChat(state.voiceText); }
+      else if (action === "speak-last") speakLast();
+      else if (action === "signout") await signOut();
+      else if (action === "toggle-sidebar") toggleSidebar();
+    } catch (error) { toast(error.message || "Action failed.", "error"); }
+  });
+
+  document.addEventListener("submit", async event => {
+    const form = event.target;
+    if (!form.matches("form[data-form]")) return;
+    event.preventDefault();
+    const type = form.dataset.form;
+    try {
+      if (type === "home-chat") {
+        const input = $("#home-prompt");
+        const text = input ? input.value : "";
+        if (input) input.value = "";
+        await navigate("chat");
+        await sendChat(text);
+      } else if (type === "chat") {
+        const input = $("#chat-input");
+        const text = input ? input.value : "";
+        if (input) input.value = "";
+        await sendChat(text);
+      } else if (type === "task-create") await createTask(form);
+      else if (type === "research") await submitResearch(form);
+      else if (type === "coding") await submitCoding(form);
+      else if (type === "memory") {
+        if (!signedIn()) { openAuth("signin"); return; }
+        const values = Object.fromEntries(new FormData(form).entries());
+        await api("/api/memory", { method: "POST", body: { kind: values.kind, title: String(values.title || "").trim(), content: String(values.content || "").trim() } });
+        toast("Memory saved to your account.", "success"); form.reset(); await loadMemories(); renderCurrent();
+      } else if (type === "schedule") await submitSchedule(form);
+      else if (type === "settings") await savePreferences(form);
+      else if (type === "auth") await authenticate(form);
+    } catch (error) { toast(error.message || "Request failed.", "error"); }
+  });
+  $("#auth-form").addEventListener("submit", event => { event.preventDefault(); authenticate(event.currentTarget); });
+  $("#account-trigger").addEventListener("click", () => signedIn() ? navigate("settings") : openAuth("signin"));
+  $("#profile-trigger").addEventListener("click", () => signedIn() ? navigate("settings") : openAuth("signin"));
+  $("#google-signin").addEventListener("click", () => { window.location.assign("/api/auth/google"); });
+  $("#mobile-menu").addEventListener("click", toggleMobileNav);
+  $("#mobile-scrim").addEventListener("click", closeMobileNav);
+  $("#sidebar-collapse").addEventListener("click", toggleSidebar);
+  $("#refresh-status").addEventListener("click", () => refreshStatus(false));
+  $("#image-input").addEventListener("change", async event => {
+    const files = Array.from(event.target.files || []).slice(0, 2 - state.attachments.length);
+    try {
+      for (const file of files) {
+        if (file.size > 4 * 1024 * 1024) { toast(file.name + " is over the 4 MB image limit.", "error"); continue; }
+        if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) { toast("Unsupported image format: " + file.name, "error"); continue; }
+        state.attachments.push(await readImage(file));
+      }
+      renderCurrent();
+    } catch (error) { toast(error.message, "error"); }
+    event.target.value = "";
+  });
+  $("#document-input").addEventListener("change", event => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    state.documentFile = file; state.document = null; state.documentError = "";
+    renderCurrent();
+    event.target.value = "";
+  });
+  document.addEventListener("change", event => {
+    if (event.target.id === "model-select") { state.model = event.target.value || "openrouter/free"; }
+    if (event.target.id === "persona-select") state.persona = event.target.value === "naya" ? "naya" : "ultron";
+    if (event.target.id === "schedule-role") {
+      const select = $("#schedule-routine");
+      if (select) {
+        const routines = state.routines.filter(item => !Array.isArray(item.roles) || item.roles.includes(event.target.value));
+        select.innerHTML = routines.map(item => '<option value="' + esc(item.id) + '">' + esc(item.name || item.title || item.id) + '</option>').join("");
+      }
+    }
+  });
+  document.addEventListener("keydown", event => {
+    if (event.target && event.target.matches("#chat-input") && event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault(); const form = event.target.closest("form"); if (form) form.requestSubmit();
+    }
+    if (event.key === "Escape") closeMobileNav();
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault(); openAuth("signin");
+    }
+  });
+
+  function initParticleField() {
+    const canvas = $("#particle-field");
+    if (!canvas || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) return;
+    let width = 0, height = 0, particles = [], frame = 0, visible = true;
+    const reduceDensity = () => window.matchMedia("(max-width: 760px)").matches;
+    function resize() {
+      const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+      width = window.innerWidth; height = window.innerHeight;
+      canvas.width = Math.floor(width * ratio); canvas.height = Math.floor(height * ratio);
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const count = reduceDensity() ? 85 : Math.min(260, Math.floor(width * height / 5500));
+      particles = Array.from({ length: count }, () => ({
+        x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - .5) * .18,
+        vy: (Math.random() - .5) * .18, radius: Math.random() * 1.5 + .25, hue: Math.random() > .76 ? 285 : Math.random() > .47 ? 345 : 195,
+        alpha: Math.random() * .32 + .1
+      }));
+    }
+    function draw() {
+      if (!visible) { frame = requestAnimationFrame(draw); return; }
+      context.clearRect(0, 0, width, height);
+      const reduce = reduceDensity();
+      particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < -5) p.x = width + 5; if (p.x > width + 5) p.x = -5;
+        if (p.y < -5) p.y = height + 5; if (p.y > height + 5) p.y = -5;
+        context.beginPath(); context.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        context.fillStyle = "hsla(" + p.hue + ",85%,75%," + p.alpha + ")"; context.fill();
+      });
+      if (!reduce) {
+        for (let i = 0; i < particles.length; i++) {
+          for (let j = i + 1; j < particles.length; j++) {
+            const a = particles[i], b = particles[j], dx = a.x - b.x, dy = a.y - b.y, distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < 75) {
+              context.strokeStyle = "rgba(156,122,210," + ((1 - distance / 75) * .075) + ")";
+              context.lineWidth = .5; context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+            }
+          }
+        }
+      }
+      frame = requestAnimationFrame(draw);
+    }
+    document.addEventListener("visibilitychange", () => { visible = !document.hidden; });
+    window.addEventListener("resize", resize, { passive: true });
+    resize(); draw();
+    window.addEventListener("pagehide", () => cancelAnimationFrame(frame), { once: true });
+  }
+
+  async function boot() {
+    initParticleField();
+    await refreshStatus(true);
+    renderCurrent();
+    if (state.view === "home" && !state.health) setCore("offline", "API HEALTH UNVERIFIED");
+  }
+  boot().catch(error => { setCore("error", "INITIALIZATION FAILED"); toast(error.message || "Frontend initialization failed.", "error"); });
 })();
