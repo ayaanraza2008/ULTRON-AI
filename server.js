@@ -22,6 +22,14 @@ const SESSION_COOKIE = "ultron_session";
 const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT = 10;
 
+export function isPrivilegedSupabaseOperationAllowed(table, method) {
+  return (table === "agent_tasks" && method === "PATCH") ||
+    (table === "audit_events" && method === "POST") ||
+    (table === "desktop_actions" && ["GET", "POST", "PATCH"].includes(method)) ||
+    (table === "rpc/ultron_claim_next_desktop_action" && method === "POST") ||
+    (table === "rpc/ultron_ack_desktop_action" && method === "POST");
+}
+
 // Small bounded in-process guard for public auth endpoints. Production deployments
 // with multiple instances should additionally enforce limits at a shared edge/store.
 export function createApiRateLimiter({ now = Date.now, windowMs = 60_000, maxRequests = 30, maxBuckets = 5000 } = {}) {
@@ -650,13 +658,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     return payload;
   }
 
-  // This narrow server-role path exists only for task state transitions and audit inserts
-  // intentionally denied to authenticated PostgREST clients by database triggers/grants.
-  // Callers must still provide owner/status predicates; never expose this helper to HTTP input.
+  // This narrow server-role path permits only task transitions, audit inserts, and
+  // the owner-approved desktop queue's exact table operations and two fixed RPCs.
+  // Callers must still enforce owner/status predicates; never expose this helper to HTTP input.
   async function supabasePrivilegedRest(req, table, method, query = "", body, prefer = "return=representation") {
-    const allowed = table === "agent_tasks" && method === "PATCH" ||
-      table === "audit_events" && method === "POST";
-    if (!allowed || typeof query !== "string" || query.length > 4000) {
+    if (!isPrivilegedSupabaseOperationAllowed(table, method) || typeof query !== "string" || query.length > 4000) {
       throw Object.assign(new Error("Privileged database operation is not allowed."), { status: 400, code: "PRIVILEGED_OPERATION_NOT_ALLOWED" });
     }
     const config = supabaseConfig();
