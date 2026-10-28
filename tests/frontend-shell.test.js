@@ -19,18 +19,18 @@ test("command center exposes every primary ULTRON workspace", () => {
 
 test("camera workspace is consent-gated, low-resolution, and stops sampling on exit", () => {
   assert.match(html, /data-view="vision"/);
-  assert.match(app, /cameraContinuousConsent: false/);
-  assert.match(app, /navigator\\.mediaDevices\\.getUserMedia/);
-  assert.match(app, /audio: false/);
-  assert.match(app, /width: \\{ ideal: 640, max: 640 \\}/);
-  assert.match(app, /height: \\{ ideal: 360, max: 360 \\}/);
-  assert.match(app, /Math\\.min\\(1, 640 \\/ sourceWidth, 360 \\/ sourceHeight\\)/);
-  assert.match(app, /if \\(state\\.view === "vision" && view !== "vision"\\) stopCamera\\(\\)/);
-  assert.match(app, /document\\.hidden && state\\.cameraStream/);
-  assert.match(app, /camera-continuous-consent/);
-  assert.match(app, /30 \\* 60 \\* 1000/);
-  assert.match(app, /data-action="camera-stop"/);
-  assert.match(app, /data-action="camera-continuous-stop"/);
+  assert.ok(app.includes("cameraContinuousConsent: false"));
+  assert.ok(app.includes("navigator.mediaDevices.getUserMedia"));
+  assert.ok(app.includes("audio: false"));
+  assert.ok(app.includes("width: { ideal: 640, max: 640 }"));
+  assert.ok(app.includes("height: { ideal: 360, max: 360 }"));
+  assert.ok(app.includes("Math.min(1, 640 / sourceWidth, 360 / sourceHeight)"));
+  assert.ok(app.includes('if (state.view === "vision" && view !== "vision") stopCamera()'));
+  assert.ok(app.includes("document.hidden && state.cameraStream"));
+  assert.ok(app.includes("camera-continuous-consent"));
+  assert.ok(app.includes("30 * 60 * 1000"));
+  assert.ok(app.includes('data-action="camera-stop"'));
+  assert.ok(app.includes('data-action="camera-continuous-stop"'));
 });
 
 test("frontend calls same-origin backend routes instead of exposing provider secrets", () => {
