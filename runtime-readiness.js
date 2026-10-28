@@ -1,4 +1,5 @@
 import { safeServiceBase } from "./network-safety.js";
+import { codingSandboxReadiness } from "./coding-sandbox.js";
 
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -81,8 +82,17 @@ export function buildRuntimeReadiness({
         : "Optional. A cloud-hosted service cannot reach a PC-local localhost endpoint."),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
-    component("safe_code_execution", "Isolated code execution", "not_available",
-      [], "ULTRON does not claim to run arbitrary user code in an isolated sandbox; coding assistance is limited to supported plan, draft, and review workflows.")
+    (() => {
+      const sandbox = codingSandboxReadiness(env);
+      const state = sandbox.configured ? "configured_unverified" : sandbox.enabled ? "blocked" : "not_available";
+      return component("safe_code_execution", "Isolated code execution", state,
+        ["ULTRON_CODING_SANDBOX_ENABLED=true", "ULTRON_INTEGRATION_OWNER_USER_ID", "digest-pinned cached runtime image"],
+        sandbox.configured
+          ? "Owner-only digest-pinned runtimes are configured; Docker availability and real isolated execution remain unverified."
+          : sandbox.enabled
+            ? "Sandbox was explicitly enabled but owner or cached-image configuration is incomplete. Execution remains blocked."
+            : "Disabled by default; arbitrary code execution remains unavailable until explicitly enabled with owner and cached-image safeguards.");
+    })()
   ];
 
   // A deliberately unsupported optional capability is disclosed in the component list,
