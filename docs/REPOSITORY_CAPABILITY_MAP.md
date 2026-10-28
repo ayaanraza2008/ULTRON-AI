@@ -15,7 +15,7 @@ This map covers all 30 registered repository capabilities for ULTRON. The suppli
 
 ## Public API catalog adapter
 
-ULTRON now exposes an authenticated agent tool named `public_api_lookup` for a deliberately small, fixed allowlist of keyless, read-only data APIs: Open-Meteo weather/geocoding, Frankfurter reference exchange rates, REST Countries v3.1, Wikipedia article summaries, Open Library book search, and public GitHub repository metadata. The model can call the tool and the deterministic fallback router recognizes common weather, exchange-rate, country, encyclopedia, book, and repository prompts.
+ULTRON now exposes an authenticated agent tool named `public_api_lookup` for a deliberately small, fixed allowlist of keyless, read-only data APIs: Open-Meteo weather/geocoding, Frankfurter reference exchange rates, World Bank country metadata, Open Library book search, and public GitHub repository metadata. The model can call the tool and the deterministic fallback router recognizes common weather, exchange-rate, country, encyclopedia, book, and repository prompts.
 
 The adapter hard-codes provider hosts, rejects arbitrary service names/URLs, applies timeouts and response-size bounds, disables redirects, normalizes results, and sends requests through ULTRON's pinned-DNS fetch layer. It does not expose or need API secrets. It is a starting set of useful public data tools, **not** an import of every entry in the upstream public-apis directory. Paid/authenticated services must be integrated one-by-one with documented API contracts, owner-scoped credentials, cost limits, and tests; catalog entries do not include API keys.
 
