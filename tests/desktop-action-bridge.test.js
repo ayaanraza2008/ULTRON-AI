@@ -359,6 +359,19 @@ test("owner opt-in queues only allowlisted Windows actions without a separate ap
   assert.equal(claimed.payload.action.payload.app, "calculator");
 });
 
+test("allowlisted mode without a valid bridge token retains per-action approval", async t => {
+  const h = makeHarness({ env: { ...API_ENV, ULTRON_DESKTOP_AUTONOMY_MODE: "allowlisted", ULTRON_DESKTOP_BRIDGE_TOKEN: "too-short" } });
+  t.after(() => h.close());
+  const response = await h.request("POST", "/api/desktop/actions", {
+    body: { actionType: "launch_app", payload: { app: "calculator" } }
+  });
+  assert.equal(response.status, 201);
+  assert.equal(response.payload.requiresApproval, true);
+  assert.equal(response.payload.action.status, "PENDING_APPROVAL");
+  assert.equal(response.payload.bridgeConfigured, false);
+  assert.equal(h.store.get(ACTION_ID).approved_at, null);
+});
+
 test("owner opt-in autonomy never broadens the desktop action allowlist", async t => {
   const h = makeHarness({ env: { ...API_ENV, ULTRON_DESKTOP_AUTONOMY_MODE: "allowlisted" } });
   t.after(() => h.close());
