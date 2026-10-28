@@ -828,7 +828,7 @@ test("chat uses an explicitly selected allowlisted model", async () => {
 test("chat forwards validated image input as multimodal content to the selected model", async () => {
   let forwarded;
   const app = createApp({
-    env: { ...env, ULTRON_AVAILABLE_MODELS: "minimax/minimax-m3.1-flash:free" },
+    env: { ...env, ULTRON_AVAILABLE_MODELS: "vendor/vision-test:free", ULTRON_VISION_MODELS: "vendor/vision-test:free" },
     fetchImpl: async (_url, options) => {
       forwarded = JSON.parse(options.body);
       return new Response(JSON.stringify({ model: forwarded.model, choices: [{ message: { content: "A test image." } }] }), { status: 200 });
@@ -842,7 +842,7 @@ test("chat forwards validated image input as multimodal content to the selected 
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({
         messages: [{ role: "user", content: "Describe this." }],
-        model: "minimax/minimax-m3.1-flash:free",
+        model: "vendor/vision-test:free",
         attachments: [{ name: "sample.png", dataUrl: "data:image/png;base64,aGVsbG8=" }],
         stream: false
       })
