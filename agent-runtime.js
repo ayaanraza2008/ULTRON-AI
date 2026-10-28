@@ -396,7 +396,7 @@ function redactInlineSecrets(value) {
     .replace(/\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\\s*([:=])\\s*(['"]?)[^\\s,;'"]+/gi, "$1$2[redacted]");
 }
 
-const SENSITIVE_RESULT_KEY = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|credential|cookie|private[_-]?key|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|session[_-]?token|signing[_-]?key|jwt|connection[_-]?(?:string|uri)|database[_-]?url)/i;
+const SENSITIVE_RESULT_KEY = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|credential|cookie|private[_-]?key|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|session[_-]?token|signing[_-]?key|jwt|connection[_-]?(?:string|uri)|database[_-]?url|^token$|^auth[_-]?token$|^bearer[_-]?token$|^oauth[_-]?token$|^client[_-]?token$|^api[_-]?token$)/i;
 
 function redactSecretText(value) {
   if (typeof value !== "string") return value;
@@ -404,6 +404,8 @@ function redactSecretText(value) {
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
     .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\b/gi, "[redacted]")
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[redacted]")
+    .replace(/(["'])(token|auth[_-]?token|bearer[_-]?token|oauth[_-]?token|client[_-]?token|api[_-]?token)\1\s*:\s*(['"])[^'"]*\3/gi, "$1$2$1:$3[redacted]$3")
+    .replace(/\b(token|auth[_-]?token|bearer[_-]?token|oauth[_-]?token|client[_-]?token|api[_-]?token)\b\s*([:=])\s*(?!["'])([^\s,;'"&]+)/gi, "$1$2[redacted]")
     .replace(/\b(authorization)\s*([:=])\s*(?:Bearer\s+)?[^\s,;'"]+/gi, "$1$2[redacted]")
     .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?token|service[_-]?role(?:[_-]?key)?|service[_-]?key|client[_-]?secret|signing[_-]?key|connection[_-]?(?:string|uri)|database[_-]?url|password|passwd|secret|credential)\s*([:=])\s*['"]?[^\s,;'"]+/gi, "$1$2[redacted]");
 }
