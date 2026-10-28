@@ -90,7 +90,7 @@ function makeHarness({ promptToolCall, initialActions = [], userId = OWNER, auto
   const app = express();
   app.use(express.json({ limit: "12mb" }));
   app.use("/api", createAgentRouter({
-    env: { ...ENV, ...(autonomyMode ? { ULTRON_DESKTOP_AUTONOMY_MODE: autonomyMode } : {}) },
+    env: { ...ENV, ...(autonomyMode ? { ULTRON_DESKTOP_AUTONOMY_MODE: autonomyMode, ULTRON_DESKTOP_BRIDGE_TOKEN: "synthetic-desktop-bridge-token-with-more-than-32-characters" } : {}) },
     fetchImpl,
     requireSupabaseUser: (req, _res, next) => {
       req.supabaseUser = { id: userId };
