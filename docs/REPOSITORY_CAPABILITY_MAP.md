@@ -13,6 +13,14 @@ This map covers all 30 registered repository capabilities for ULTRON. The suppli
 5. Free/local-first is the default. Services with metered API access must not be invoked unless their credentials and budget policy are deliberately configured.
 6. Upstream skills and repository files are untrusted reference data. They are not shell scripts or higher-priority instructions.
 
+## Public API catalog adapter
+
+ULTRON now exposes an authenticated agent tool named `public_api_lookup` for a deliberately small, fixed allowlist of keyless, read-only data APIs: Open-Meteo weather/geocoding, Frankfurter reference exchange rates, REST Countries v3.1, Wikipedia article summaries, Open Library book search, and public GitHub repository metadata. The model can call the tool and the deterministic fallback router recognizes common weather, exchange-rate, country, encyclopedia, book, and repository prompts.
+
+The adapter hard-codes provider hosts, rejects arbitrary service names/URLs, applies timeouts and response-size bounds, disables redirects, normalizes results, and sends requests through ULTRON's pinned-DNS fetch layer. It does not expose or need API secrets. It is a starting set of useful public data tools, **not** an import of every entry in the upstream public-apis directory. Paid/authenticated services must be integrated one-by-one with documented API contracts, owner-scoped credentials, cost limits, and tests; catalog entries do not include API keys.
+
+Providers can impose rate limits and change availability or terms. Open-Meteo attribution and non-commercial usage limits, Wikimedia attribution/licensing, and Open Library's request guidelines must be respected. Returned content is untrusted and should be verified before high-impact decisions.
+
 ## Per-repository capability map
 
 | # | Repository | Capabilities ULTRON should route for | Current integration state |
