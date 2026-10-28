@@ -73,3 +73,28 @@ Each CI run also reported **0 dependency vulnerabilities** in the audited instal
 ## Release invariant
 
 No merge, migration application, production secret change, infrastructure change or deployment is authorized by this document. Keep #319 and #320 as isolated draft pull requests until their specific live-verification prerequisites are fulfilled and final release authorization is separately given.
+
+
+## Independent read-only confirmation — 2026-10-28, later audit
+
+This section records a separate read-only check of the connected Supabase project after the CI snapshots above. It adds live database observations only; it did not alter rows, schema, migration history, Auth settings, secrets, services or deployment state.
+
+| Check | Observed result | What it proves / does not prove |
+|---|---|---|
+| Project status | Supabase project reports `ACTIVE_HEALTHY` on PostgreSQL 17.11.0.003 | Database control-plane status only; not application E2E success |
+| Public application tables | All 8 listed application tables report RLS enabled: conversations, messages, user_preferences, memory_items, agent_tasks, audit_events, employee_schedules and documents | RLS is enabled; two-user row isolation still needs real-user E2E |
+| Anonymous table access | Read-only privilege query reports `anon` has no table-level SELECT or INSERT on those 8 tables; authenticated SELECT grants exist | Grants are a first layer only; authenticated access remains subject to policies and server guards |
+| Worker claim functions | `ultron_claim_next_task()` and `ultron_claim_due_employee_schedule()` exist as SECURITY DEFINER functions with an empty `search_path`; observed ACL is restricted to `postgres` and `service_role` | Function privilege/search-path properties at audit time; not a successful worker run |
+| Private document storage | The `ultron-private-documents` Storage bucket exists | Bucket existence only; upload/download and cross-user denial still need E2E |
+| Session revocation RPC | `public.ultron_is_current_session_active()` is absent | Candidate session-revocation PR #320 remains source-only and cannot be called live until its migration is safely validated/applied |
+| Windows action queue | `public.desktop_actions` is absent | Candidate PR #317 has not been applied to this database; the companion queue is not live here |
+| Task queue | The live `agent_tasks` table had 0 rows at observation time | No evidence of a real queued task being executed in this audit |
+| Auth security advisor | `auth_leaked_password_protection` reported **WARN — Leaked Password Protection Disabled** | Owner-controlled Auth setting remains a security follow-up; this audit did not change it |
+| Performance advisor | Three indexes were listed as unused: `memory_items_expiry_idx`, `agent_tasks_user_created_idx`, `documents_user_created_idx` | Informational only; do not remove these without workload evidence |
+
+### Consequence for the completion gate
+
+- Live provider text and vision inference remain **unverified**; no real model response is inferred from CI or provider configuration.
+- Signup/sign-in/recovery email, session revocation, two-account data isolation, persistent upload/download, and real worker execution remain **unverified** until opt-in end-to-end checks succeed with disposable test identities and credentials kept in a trusted environment.
+- The migration ledger still has to be reconciled with PR #324 on a disposable non-production database before any migration-history repair. Do not run a broad `supabase db push` or apply candidate migrations to the existing project as part of this audit.
+- Deployment/redeployment, live environment changes and production Auth settings remain out of scope. No Render workspace was selected for this audit, so no Render service/deployment mutations or new deployment claims are made.
