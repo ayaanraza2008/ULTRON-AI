@@ -885,8 +885,21 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       const idempotencyKey = typeof rawIdempotencyKey === "string"
         ? createHash("sha256").update(rawIdempotencyKey, "utf8").digest("hex")
         : "";
+      // Fingerprint the submitted operation, not LLM-generated tool arguments:
+      // model output may vary across retries of the same HTTP request, but retrying
+      // the same client operation must still resolve to the original queued task.
+      const submittedMessages = Array.isArray(req.body?.messages)
+        ? req.body.messages.slice(-12).map(message => ({
+          role: message?.role,
+          content: bounded(message?.content, 6000)
+        }))
+        : [];
       const requestFingerprint = createHash("sha256").update(JSON.stringify({
-        taskType: input.taskType, role: input.role, goal: input.goal, context: input.context, mode: input.mode
+        userId: req.supabaseUser.id,
+        prompt: bounded(req.body?.prompt, 6000),
+        messages: submittedMessages,
+        taskType: input.taskType,
+        confirmBackgroundTask: req.body?.confirmBackgroundTask === true
       }), "utf8").digest("hex");
       if (idempotencyKey) {
         input.idempotencyKey = idempotencyKey;
