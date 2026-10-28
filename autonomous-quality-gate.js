@@ -9,7 +9,7 @@ function isPublicHttpUrl(value) {
   try {
     const url = new URL(value);
     if (!["https:", "http:"].includes(url.protocol) || !url.hostname ||
-        url.username || url.password || url.port && !/^\\d+$/.test(url.port)) return false;
+        url.username || url.password || url.port && !/^\d+$/.test(url.port)) return false;
     return isPublicNetworkHost(url.hostname);
   } catch {
     return false;
@@ -32,12 +32,12 @@ function normalizePublicUrl(value) {
  */
 function extractPublicCitationUrls(answer) {
   const citations = new Set();
-  for (const match of answer.matchAll(/https?:\\/\\/[^\\s<>"'`]+/gi)) {
+  for (const match of answer.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
     const preceding = answer[match.index - 1] || "";
     // Do not treat an HTTP URL embedded in a larger URL/identifier as a citation.
     // Parentheses and square brackets remain valid Markdown link delimiters.
     if (/[A-Za-z0-9._~:/?#@!$&'*;,+%=-]/.test(preceding)) continue;
-    const candidate = match[0].replace(/[.,;:!?)}\\]]+$/g, "");
+    const candidate = match[0].replace(/[.,;:!?)}\]]+$/g, "");
     const normalized = normalizePublicUrl(candidate);
     if (normalized) citations.add(normalized);
   }
