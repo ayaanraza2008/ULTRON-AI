@@ -11,7 +11,7 @@ function jsonResponse(value, status = 200) {
 
 test("catalog contains useful keyless public-data services and never requires secret values", () => {
   const catalog = getPublicApiCatalog();
-  assert.deepEqual(catalog.map(item => item.id), ["weather", "currency", "country", "wikipedia", "books", "github_repo"]);
+  assert.deepEqual(catalog.map(item => item.id), ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes"]);
   assert.ok(catalog.every(item => item.requiresApiKey === false));
   assert.ok(catalog.every(item => Array.isArray(item.capabilities) && item.capabilities.length > 0));
   assert.equal(JSON.stringify(catalog).includes("API_KEY="), false);
