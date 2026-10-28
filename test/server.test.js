@@ -538,6 +538,9 @@ test("Supabase conversation APIs require an authenticated user and respect the c
         assert.equal(options.headers.Authorization, "Bearer test-user-token");
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }), { status: 200 });
       }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
         restRequest = { url, options };
         return new Response(JSON.stringify([{ id: "123e4567-e89b-12d3-a456-426614174001", title: "Hello", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z" }]), { status: 200 });
@@ -594,6 +597,10 @@ test("expired Supabase access tokens refresh before database requests", async ()
           user: { id: "123e4567-e89b-12d3-a456-426614174000", email: "operator@example.test" }
         }), { status: 200 });
       }
+      if (url === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        assert.equal(options.headers.Authorization, "Bearer fresh-access");
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.startsWith("https://ultron-test.supabase.co/rest/v1/conversations")) {
         restAuthorization = options.headers.Authorization;
         return new Response(JSON.stringify([]), { status: 200 });
@@ -642,6 +649,10 @@ test("task creation, approval, cancellation and audit use the correct Supabase r
         assert.equal(authorization, "Bearer " + clientToken);
         assert.equal(options.headers.apikey, "sb_publishable_test");
         return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active" && method === "POST") {
+        assert.equal(authorization, "Bearer " + clientToken);
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/rest/v1/agent_tasks" && method === "POST") {
         assert.equal(authorization, "Bearer " + clientToken, "task insertion remains user-scoped");
@@ -730,6 +741,9 @@ test("document text references persist only with an authenticated owner and corr
         assert.equal(options.headers.Authorization, "Bearer " + token);
         return new Response(JSON.stringify({ id: userId, email: "operator@example.test" }), { status: 200 });
       }
+      if (url.pathname === "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/rest/v1/memory_items" && method === "POST") {
         const body = JSON.parse(options.body);
         received.push({ body, authorization: options.headers.Authorization, apikey: options.headers.apikey });
@@ -772,6 +786,9 @@ test("memory API rejects document provenance for non-document memory items", asy
     fetchImpl: async rawUrl => {
       if (rawUrl === "https://ultron-test.supabase.co/auth/v1/user") {
         return new Response(JSON.stringify({ id: "123e4567-e89b-12d3-a456-426614174000" }), { status: 200 });
+      }
+      if (rawUrl === "https://ultron-test.supabase.co/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       restCalls++;
       throw new Error("invalid provenance must not reach Supabase");
@@ -941,6 +958,9 @@ test("Hermes Agent API is a first-class normal chat provider for its configured 
     fetchImpl: async (url, options = {}) => {
       if (url === supabaseUrl + "/auth/v1/user") {
         return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url === supabaseUrl + "/rest/v1/rpc/ultron_is_current_session_active") {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
         return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
