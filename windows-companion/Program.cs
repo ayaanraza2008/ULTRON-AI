@@ -10,6 +10,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Any(arg => arg.Equals("--verify-network-policy", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = DesktopActionBridge.RunNetworkAddressPolicySelfTestAsync().GetAwaiter().GetResult();
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
         var backgroundLaunch = args.Any(arg => arg.Equals("--background-listen", StringComparison.OrdinalIgnoreCase));
         Application.Run(new CompanionContext(backgroundLaunch));
@@ -29,7 +35,12 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly CheckBox _autoStartCheckBox;
+    private readonly CheckBox _desktopBridgeCheckBox;
     private bool _suppressAutoStartChange;
+    private bool _suppressDesktopBridgeChange;
+    private DesktopActionBridge? _desktopActionBridge;
+    private CancellationTokenSource? _desktopBridgeCancellation;
+    private Task? _desktopBridgeTask;
     private SpeechRecognitionEngine? _recognizer;
     private bool _allowExit;
     private DateTime _lastWakeUtc = DateTime.MinValue;
@@ -40,23 +51,24 @@ internal sealed class CompanionContext : ApplicationContext
         _window = new Form
         {
             Text = "ULTRON Wake Companion",
-            Width = 480,
-            Height = 255,
+            Width = 520,
+            Height = 310,
             StartPosition = FormStartPosition.CenterScreen,
-            MinimumSize = new System.Drawing.Size(430, 230)
+            MinimumSize = new System.Drawing.Size(460, 280)
         };
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(16)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 18));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 22));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 22));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 14));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 17));
 
         var title = new Label
         {
@@ -81,6 +93,14 @@ internal sealed class CompanionContext : ApplicationContext
         };
         _autoStartCheckBox.CheckedChanged += (_, _) => HandleAutoStartChanged();
 
+        _desktopBridgeCheckBox = new CheckBox
+        {
+            Text = "Enable approved PC actions (token + per-action approval required)",
+            AutoSize = true,
+            Checked = false
+        };
+        _desktopBridgeCheckBox.CheckedChanged += (_, _) => HandleDesktopBridgeChanged();
+
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -101,6 +121,7 @@ internal sealed class CompanionContext : ApplicationContext
         layout.Controls.Add(_status, 0, 1);
         layout.Controls.Add(buttons, 0, 2);
         layout.Controls.Add(_autoStartCheckBox, 0, 3);
+        layout.Controls.Add(_desktopBridgeCheckBox, 0, 4);
         _window.Controls.Add(layout);
 
         _startItem = new ToolStripMenuItem("Start wake word", null, (_, _) => StartListening());
@@ -191,6 +212,87 @@ internal sealed class CompanionContext : ApplicationContext
                 ShowStatus("Could not update the Windows startup setting.");
             }
         }
+    }
+
+    private void HandleDesktopBridgeChanged()
+    {
+        if (_suppressDesktopBridgeChange) return;
+        if (!_desktopBridgeCheckBox.Checked)
+        {
+            StopDesktopActionBridge();
+            ShowStatus("PC action bridge paused. No remote PC actions will be polled.");
+            return;
+        }
+
+        var token = Environment.GetEnvironmentVariable("ULTRON_DESKTOP_BRIDGE_TOKEN") ?? "";
+        var baseUrl = Environment.GetEnvironmentVariable("ULTRON_API_BASE_URL");
+        if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = AssistantUrl.TrimEnd('/');
+        if (!DesktopActionBridge.HasValidConfiguration(baseUrl, token))
+        {
+            SetDesktopBridgeChecked(false);
+            ShowStatus("PC action bridge is not configured. Set ULTRON_DESKTOP_BRIDGE_TOKEN (32+ characters) and an HTTPS ULTRON_API_BASE_URL.");
+            MessageBox.Show(_window,
+                "The approved-action bridge needs a high-entropy ULTRON_DESKTOP_BRIDGE_TOKEN configured both on the server and in this Windows user's environment. The URL must be HTTPS. No token is stored by this app.",
+                "PC action bridge not configured",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var consent = MessageBox.Show(
+            _window,
+            "Enable the ULTRON PC action bridge?\n\nThe companion will poll ULTRON for actions that you separately approve in ULTRON. It can only launch Notepad, Calculator, or Explorer without arguments, or return limited Windows system information. It will not run shell commands, read/write files, take screenshots, upload files, or delete data.\n\nKeep this checkbox off when you do not want the PC to receive approved actions.",
+            "PC action bridge consent",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+        if (consent != DialogResult.Yes)
+        {
+            SetDesktopBridgeChecked(false);
+            ShowStatus("PC action bridge remains paused; consent was not granted.");
+            return;
+        }
+
+        StopDesktopActionBridge();
+        var bridge = new DesktopActionBridge();
+        var cancellation = new CancellationTokenSource();
+        _desktopActionBridge = bridge;
+        _desktopBridgeCancellation = cancellation;
+        _desktopBridgeTask = Task.Run(() => bridge.RunAsync(baseUrl, token, ShowStatus, cancellation.Token));
+        ShowStatus("PC action bridge enabled. Only actions explicitly approved for this owner are polled.");
+    }
+
+    private void SetDesktopBridgeChecked(bool value)
+    {
+        _suppressDesktopBridgeChange = true;
+        _desktopBridgeCheckBox.Checked = value;
+        _suppressDesktopBridgeChange = false;
+    }
+
+    private void StopDesktopActionBridge()
+    {
+        var cancellation = _desktopBridgeCancellation;
+        var bridge = _desktopActionBridge;
+        var task = _desktopBridgeTask;
+        _desktopBridgeCancellation = null;
+        _desktopActionBridge = null;
+        _desktopBridgeTask = null;
+        if (cancellation is null)
+        {
+            bridge?.Dispose();
+            return;
+        }
+
+        cancellation.Cancel();
+        if (task is null)
+        {
+            bridge?.Dispose();
+            cancellation.Dispose();
+            return;
+        }
+        _ = task.ContinueWith(_ =>
+        {
+            bridge?.Dispose();
+            cancellation.Dispose();
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     private void SetAutoStartChecked(bool value)
@@ -386,6 +488,7 @@ internal sealed class CompanionContext : ApplicationContext
     private void ExitApplication()
     {
         _allowExit = true;
+        StopDesktopActionBridge();
         StopListening();
         _tray.Visible = false;
         _tray.Dispose();
@@ -397,6 +500,7 @@ internal sealed class CompanionContext : ApplicationContext
     {
         if (disposing)
         {
+            StopDesktopActionBridge();
             StopListening();
             _tray.Visible = false;
             _tray.Dispose();

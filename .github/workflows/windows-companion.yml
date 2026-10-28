@@ -27,6 +27,8 @@ jobs:
         run: dotnet restore windows-companion/Ultron.Companion.csproj
       - name: Compile
         run: dotnet build windows-companion/Ultron.Companion.csproj --configuration Release --no-restore
+      - name: Run Windows network-destination policy self-test
+        run: dotnet run --project windows-companion/Ultron.Companion.csproj --configuration Release --no-build -- --verify-network-policy
       - name: Publish standalone x64 executable
         run: dotnet publish windows-companion/Ultron.Companion.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output artifacts/ultron-windows-companion
       - uses: actions/upload-artifact@v4

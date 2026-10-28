@@ -10,6 +10,7 @@ import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
+import { createDesktopActionRouter } from "./desktop-action-bridge.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
@@ -20,6 +21,14 @@ const SESSION_COOKIE = "ultron_session";
 
 const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT = 10;
+
+export function isPrivilegedSupabaseOperationAllowed(table, method) {
+  return (table === "agent_tasks" && method === "PATCH") ||
+    (table === "audit_events" && method === "POST") ||
+    (table === "desktop_actions" && ["GET", "POST", "PATCH"].includes(method)) ||
+    (table === "rpc/ultron_claim_next_desktop_action" && method === "POST") ||
+    (table === "rpc/ultron_ack_desktop_action" && method === "POST");
+}
 
 // Small bounded in-process guard for public auth endpoints. Production deployments
 // with multiple instances should additionally enforce limits at a shared edge/store.
@@ -643,19 +652,17 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     try { payload = await readResponseJsonLimited(response, 2_000_000); } catch { throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 }); }
     if (!response.ok) {
       logger.warn?.("Supabase data request failed", { table, status: response.status });
-      const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : 502;
+      const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : response.status === 409 ? 409 : 502;
       throw Object.assign(new Error(status === 403 ? "Database access was denied by authentication or row-level security." : "Could not save or load data from Supabase."), { status });
     }
     return payload;
   }
 
-  // This narrow server-role path exists only for task state transitions and audit inserts
-  // intentionally denied to authenticated PostgREST clients by database triggers/grants.
-  // Callers must still provide owner/status predicates; never expose this helper to HTTP input.
+  // This narrow server-role path permits only task transitions, audit inserts, and
+  // the owner-approved desktop queue's exact table operations and two fixed RPCs.
+  // Callers must still enforce owner/status predicates; never expose this helper to HTTP input.
   async function supabasePrivilegedRest(req, table, method, query = "", body, prefer = "return=representation") {
-    const allowed = table === "agent_tasks" && method === "PATCH" ||
-      table === "audit_events" && method === "POST";
-    if (!allowed || typeof query !== "string" || query.length > 4000) {
+    if (!isPrivilegedSupabaseOperationAllowed(table, method) || typeof query !== "string" || query.length > 4000) {
       throw Object.assign(new Error("Privileged database operation is not allowed."), { status: 400, code: "PRIVILEGED_OPERATION_NOT_ALLOWED" });
     }
     const config = supabaseConfig();
@@ -1913,6 +1920,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createDesktopActionRouter({ env, requireSupabaseUser, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.

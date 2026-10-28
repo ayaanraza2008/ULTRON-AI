@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { createApp } from "../server.js";
+import { createApp, isPrivilegedSupabaseOperationAllowed } from "../server.js";
 
 async function withServer(app, fn) {
   const server = createServer(app);
@@ -1018,3 +1018,87 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(providerCalls, 0);
   });
 });
+
+test("server-role database policy allows only the desktop queue's required operations", () => {
+  for (const [table, method] of [
+    ["desktop_actions", "GET"],
+    ["desktop_actions", "POST"],
+    ["desktop_actions", "PATCH"],
+    ["rpc/ultron_claim_next_desktop_action", "POST"],
+    ["rpc/ultron_ack_desktop_action", "POST"],
+    ["agent_tasks", "PATCH"],
+    ["audit_events", "POST"]
+  ]) {
+    assert.equal(isPrivilegedSupabaseOperationAllowed(table, method), true, table + " " + method);
+  }
+
+  for (const [table, method] of [
+    ["desktop_actions", "DELETE"],
+    ["desktop_actions", "PUT"],
+    ["rpc/ultron_claim_next_desktop_action", "GET"],
+    ["rpc/arbitrary_function", "POST"],
+    ["users", "GET"],
+    ["agent_tasks", "DELETE"],
+    ["audit_events", "PATCH"]
+  ]) {
+    assert.equal(isPrivilegedSupabaseOperationAllowed(table, method), false, table + " " + method);
+  }
+});
+
+test("authenticated desktop action requests can reach only the allow-listed server-role store", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const serviceKey = "synthetic-service-role-secret-for-test";
+  const storedId = "00000000-0000-4000-8000-000000000102";
+  const calls = [];
+  const app = createApp({
+    env: {
+      NODE_ENV: "test",
+      SUPABASE_URL: "https://demo-project.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
+      SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      ULTRON_DESKTOP_BRIDGE_TOKEN: "synthetic-desktop-bridge-token-with-more-than-32-characters"
+    },
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/auth/v1/user")) {
+        return new Response(JSON.stringify({ id: ownerId }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/rest/v1/desktop_actions?select=") && options.method === "POST") {
+        assert.equal(options.headers.Authorization, "Bearer " + serviceKey);
+        assert.equal(options.headers.apikey, serviceKey);
+        const body = JSON.parse(options.body);
+        assert.equal(body.user_id, ownerId);
+        assert.equal(body.status, "PENDING_APPROVAL");
+        assert.equal(body.action_type, "system_info");
+        return new Response(JSON.stringify([{
+          id: storedId, user_id: ownerId, action_type: "system_info", payload: {},
+          status: "PENDING_APPROVAL", attempts: 0, approved_at: null, started_at: null,
+          lease_expires_at: null, finished_at: null, result: null, error_code: null,
+          created_at: "2026-10-28T00:00:00.000Z", updated_at: "2026-10-28T00:00:00.000Z"
+        }]), { status: 201, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/desktop/actions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "ultron_sb_access=access-token; ultron_sb_refresh=refresh-token"
+      },
+      body: JSON.stringify({ actionType: "system_info", payload: {} })
+    });
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.action.id, storedId);
+    assert.equal(payload.action.status, "PENDING_APPROVAL");
+    assert.equal(payload.execution, "not_executed");
+    assert.equal(payload.requiresApproval, true);
+    assert.equal(calls.filter(call => call.url.includes("/rest/v1/desktop_actions?select=")).length, 1);
+  });
+});
+
