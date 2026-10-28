@@ -84,6 +84,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .coordinate-two { right: calc(50% + min(30vh, 29vw)); }
 
 .holo-panel { position: fixed; z-index: 6; top: 26%; left: clamp(18px, 3vw, 54px); width: min(335px, 27vw); min-width: 235px; padding: 18px 18px 14px; border: 1px solid rgba(68,190,255,.55); border-radius: 3px 18px 3px 18px; background: linear-gradient(135deg, rgba(3,14,29,.93), rgba(4,7,18,.78)); clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 17px 100%, 0 calc(100% - 17px)); box-shadow: 0 0 28px rgba(35,145,255,.12), inset 0 0 22px rgba(30,95,165,.08); backdrop-filter: blur(18px); animation: panel-in-left .44s var(--ease) both; }
+.holo-panel[hidden] { display: none !important; }
+.holo-panel.panel-fading { opacity: 0; transition: opacity .36s ease; }
 .holo-panel[data-side="right"] { left: auto; right: clamp(18px, 3vw, 54px); border-color: rgba(255,59,139,.48); box-shadow: 0 0 28px rgba(255,42,121,.1), inset 0 0 22px rgba(100,24,75,.08); animation-name: panel-in-right; }
 .panel-top { display: flex; gap: 9px; align-items: center; color: #73dfff; letter-spacing: .13em; font-size: 8px; }
 [data-side="right"] .panel-top { color: #ff8cc8; }
