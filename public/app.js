@@ -130,7 +130,15 @@
       headers
     };
     if (options.body !== undefined) init.body = JSON.stringify(options.body);
-    const response = await fetch(path || UPSTREAM_API_FALLBACK, init);
+    let response;
+    try {
+      response = await fetch(path || UPSTREAM_API_FALLBACK, init);
+    } catch (cause) {
+      const error = new Error("ULTRON CORE could not be reached from the interface. Check the ULTRON CORE backend service and try again.");
+      error.code = "CORE_LINK_FAILED";
+      error.cause = cause;
+      throw error;
+    }
     const contentType = response.headers.get("content-type") || "";
     let payload = null;
     if (contentType.includes("application/json")) {
@@ -421,19 +429,33 @@
   async function checkSession() {
     try {
       const payload = await apiRequest("/api/session");
+      authSetupNeeded = Boolean(payload && payload.configured === false);
       if (payload && payload.authenticated) {
         setAuthVisible(false);
+        if (backendStatus) backendStatus.authenticated = true;
         return true;
       }
       if (payload && payload.configured) {
         setAuthVisible(true);
         return false;
       }
+      // Do not silently hide a setup blocker and leave every command failing.
       setAuthVisible(false);
+      ui.connection.dataset.state = "warning";
+      ui.apiStatus.textContent = "ACCESS SETUP REQUIRED";
+      showToast("The ULTRON CORE backend reports that no login method is configured. Set Supabase Auth or APP_ACCESS_PASSWORD + SESSION_SECRET on the backend service.", 8500);
       return false;
     } catch (error) {
       if (error.status === 401) {
         setAuthVisible(true);
+        return false;
+      }
+      if (error.status === 503 && error.code === "ACCESS_NOT_CONFIGURED") {
+        authSetupNeeded = true;
+        setAuthVisible(false);
+        ui.connection.dataset.state = "warning";
+        ui.apiStatus.textContent = "ACCESS SETUP REQUIRED";
+        showToast(error.message, 8500);
         return false;
       }
       if (error.status === 503) {
@@ -932,15 +954,27 @@
   async function checkBackend() {
     try {
       const payload = await apiRequest("/api/health");
+      backendStatus = payload && typeof payload === "object" ? payload : null;
       if (payload && payload.status === "ok") {
-        ui.apiStatus.textContent = payload.providerConfigured ? "CORE ONLINE" : "CORE ONLINE · MODEL CONFIG NEEDED";
-        ui.connection.dataset.state = payload.providerConfigured ? "ready" : "warning";
+        const providerReady = payload.providerConfigured === true;
+        const accessReady = payload.accessConfigured === true || payload.supabaseConfigured === true;
+        if (!accessReady) {
+          ui.apiStatus.textContent = "ACCESS SETUP REQUIRED";
+          ui.connection.dataset.state = "warning";
+        } else if (!providerReady) {
+          ui.apiStatus.textContent = "MODEL PROVIDER NOT READY";
+          ui.connection.dataset.state = "warning";
+        } else {
+          ui.apiStatus.textContent = "CORE ONLINE";
+          ui.connection.dataset.state = "ready";
+        }
       } else {
         ui.apiStatus.textContent = "CORE RESPONSE UNKNOWN";
         ui.connection.dataset.state = "warning";
       }
-    } catch {
-      ui.apiStatus.textContent = "CORE LINK UNAVAILABLE";
+    } catch (error) {
+      backendStatus = null;
+      ui.apiStatus.textContent = error.code === "CORE_LINK_FAILED" ? "CORE LINK UNAVAILABLE" : "CORE HEALTH CHECK FAILED";
       ui.connection.dataset.state = "error";
     }
   }
