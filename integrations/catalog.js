@@ -3,6 +3,7 @@ import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
 import { getPublicApiCatalog } from "./public-apis.js";
+import { getPublicApiDirectoryStats } from "./public-api-directory.js";
 import { safeServiceBase } from "../network-safety.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
@@ -32,15 +33,16 @@ export function buildIntegrationCatalog(env = process.env) {
   return [
     {
       id: "public-apis",
-      name: "Keyless Public API Catalog",
-      capability: "Fixed allowlist of read-only public data lookups for weather, currency, country facts, Wikipedia, books, and public GitHub repository metadata",
+      name: "Public API Directory + Tested Adapters",
+      capability: "Search the full bundled upstream public-apis directory; execute only fixed, tested keyless data adapters for weather, currencies, country metadata, Wikipedia, books, and public GitHub repositories",
       state: "available",
       configured: true,
-      mode: "fixed_allowlist_public_read_only",
+      mode: "catalog_discovery_plus_fixed_allowlist",
       requiredEnv: [],
-      apiRoutes: ["agent tool: public_api_lookup"],
+      apiRoutes: ["agent tool: search_public_api_catalog", "agent tool: public_api_lookup"],
+      directory: getPublicApiDirectoryStats(),
       services: getPublicApiCatalog().map(item => ({ id: item.id, provider: item.provider, requiresApiKey: item.requiresApiKey })),
-      note: "This registry contains API endpoints, not provider credentials. Providers can rate-limit, change terms, or become unavailable; all returned data is untrusted reference material."
+      note: "The directory contains provider listings and authentication labels, not usable API keys. Listings remain unverified and are never called dynamically."
     },
     {
       id: "heygem",
