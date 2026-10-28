@@ -889,6 +889,37 @@ test("task lease renewal updates only a task that is still RUNNING", async () =>
   assert.ok(Number.isFinite(Date.parse(body.updated_at)));
 });
 
+test("task lease renewal cancels a reclaimed claim when the attempt fence no longer matches", async () => {
+  let query = "";
+  let inactiveSignals = 0;
+  const ok = await renewTaskLease({
+    taskId: "task-reclaimed",
+    attempts: 1,
+    rest: async endpoint => {
+      query = endpoint;
+      // The database returns no row when the task is still RUNNING but attempt 2
+      // has already reclaimed ownership from this attempt-1 worker.
+      return [];
+    },
+    logger: { warn() {} },
+    onInactive: () => { inactiveSignals += 1; }
+  });
+  assert.match(query, /status=eq.RUNNING&attempts=eq.1/);
+  assert.equal(ok, false);
+  assert.equal(inactiveSignals, 1);
+});
+
+test("task lease renewal fails closed when no valid claim attempt is supplied", async () => {
+  let called = false;
+  const ok = await renewTaskLease({
+    taskId: "task-unknown-attempt",
+    rest: async () => { called = true; return [{ id: "task-unknown-attempt" }]; },
+    logger: { warn() {} }
+  });
+  assert.equal(ok, false);
+  assert.equal(called, false);
+});
+
 test("task lease renewal does not report success after a cancellation or state transition", async () => {
   const ok = await renewTaskLease({
     taskId: "task-cancelled",
