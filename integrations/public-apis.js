@@ -52,6 +52,38 @@ const PUBLIC_API_CATALOG = Object.freeze([
     requiresApiKey: false,
     capabilities: ["public repository description", "language", "stars", "forks", "license", "last update"],
     terms: "Unauthenticated GitHub rate limits apply; private repository data is not queried."
+  },
+  {
+    id: "sunrise_sunset",
+    name: "Sunrise, sunset and moon data",
+    provider: "Sunrise-Sunset.org",
+    requiresApiKey: false,
+    capabilities: ["sunrise", "sunset", "twilight", "golden hour", "moonrise", "moonset", "moon phase"],
+    terms: "Free for reasonable use; visible attribution to Sunrise-Sunset.org is required."
+  },
+  {
+    id: "ebooks",
+    name: "Project Gutenberg ebook search",
+    provider: "Gutendex",
+    requiresApiKey: false,
+    capabilities: ["public-domain ebook search", "authors", "subjects", "languages", "download links"],
+    terms: "Metadata API for Project Gutenberg; ebook availability and copyright status vary by jurisdiction."
+  },
+  {
+    id: "trivia",
+    name: "Trivia question generator",
+    provider: "Open Trivia Database",
+    requiresApiKey: false,
+    capabilities: ["general knowledge questions", "subject categories", "difficulty", "multiple choice", "true/false"],
+    terms: "Content is licensed CC BY-SA 4.0; API rate limits apply (documented one request per 5 seconds per IP)."
+  },
+  {
+    id: "earthquakes",
+    name: "Recent earthquake activity",
+    provider: "USGS Earthquake Hazards Program",
+    requiresApiKey: false,
+    capabilities: ["recent earthquake events", "magnitude", "place", "time", "coordinates", "event link"],
+    terms: "Use USGS event feed data with source attribution; event catalogs can be revised."
   }
 ]);
 
@@ -136,7 +168,11 @@ function sourceRecord(id, extra = {}) {
       country: "https://datahelpdesk.worldbank.org/knowledgebase/articles/898590-country-api-queries",
       wikipedia: "https://www.mediawiki.org/wiki/API:REST_API",
       books: "https://openlibrary.org/developers/api",
-      github_repo: "https://docs.github.com/en/rest/repos/repos"
+      github_repo: "https://docs.github.com/en/rest/repos/repos",
+      sunrise_sunset: "https://sunrise-sunset.org/api",
+      ebooks: "https://gutendex.com/",
+      trivia: "https://opentdb.com/api_config.php",
+      earthquakes: "https://earthquake.usgs.gov/data/software/"
     }[id],
     attribution: service.terms,
     ...extra
@@ -302,6 +338,152 @@ export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch }
     });
   }
 
+
+  if (service === "sunrise_sunset") {
+    const query = boundedQuery(args.query);
+    if (query.length < 2) throw apiError("PUBLIC_API_QUERY_REQUIRED", "Provide a city or place name for sunrise/sunset times.", 400);
+    const date = boundedQuery(args.date, 10);
+    if (date && date !== "today" && date !== "tomorrow" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw apiError("PUBLIC_API_DATE_INVALID", "Provide a date as YYYY-MM-DD, today, or tomorrow.", 400);
+    }
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
+      throw apiError("PUBLIC_API_DATE_INVALID", "Provide a valid calendar date.", 400);
+    }
+    const geocodeUrl = new URL("https://geocoding-api.open-meteo.com/v1/search");
+    geocodeUrl.search = new URLSearchParams({ name: query, count: "1", language: "en", format: "json" }).toString();
+    const geocoded = await requestJson(fetchImpl, geocodeUrl.toString());
+    const place = Array.isArray(geocoded?.results) ? geocoded.results[0] : null;
+    if (!place || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))) {
+      throw apiError("PUBLIC_API_NOT_FOUND", "No matching place was found for sunrise/sunset times.", 404);
+    }
+    const url = new URL("https://api.sunrise-sunset.org/v2");
+    const params = { lat: String(place.latitude), lng: String(place.longitude), time_format: "iso8601" };
+    if (date) params.date = date;
+    url.search = new URLSearchParams(params).toString();
+    const solar = await requestJson(fetchImpl, url.toString());
+    if (solar?.status && solar.status !== "OK") throw apiError("PUBLIC_API_UPSTREAM_FAILED", "Sunrise-Sunset.org could not calculate data for this place/date.", 502);
+    return sourceRecord(service, {
+      location: { name: boundedQuery(place.name, 120), region: boundedQuery(place.admin1, 120) || undefined, country: boundedQuery(place.country, 120) || undefined, latitude: Number(place.latitude), longitude: Number(place.longitude) },
+      date: boundedQuery(solar?.date, 20) || date || undefined,
+      timezone: boundedQuery(solar?.tzid, 80) || undefined,
+      sunrise: boundedQuery(solar?.sunrise, 50) || undefined,
+      sunset: boundedQuery(solar?.sunset, 50) || undefined,
+      solarNoon: boundedQuery(solar?.solar_noon, 50) || undefined,
+      dayLengthSeconds: Number.isFinite(Number(solar?.day_length)) ? Number(solar.day_length) : undefined,
+      dawn: boundedQuery(solar?.civil_twilight_begin, 50) || undefined,
+      dusk: boundedQuery(solar?.civil_twilight_end, 50) || undefined,
+      moonrise: boundedQuery(solar?.moonrise, 50) || undefined,
+      moonset: boundedQuery(solar?.moonset, 50) || undefined,
+      moonPhase: boundedQuery(solar?.moon_phase, 60) || undefined,
+      moonIlluminationPercent: Number.isFinite(Number(solar?.moon_illumination)) ? Number(solar.moon_illumination) : undefined,
+      attribution: "Sun data by Sunrise-Sunset.org"
+    });
+  }
+
+  if (service === "ebooks") {
+    const query = boundedQuery(args.query);
+    if (query.length < 2) throw apiError("PUBLIC_API_QUERY_REQUIRED", "Provide a title, author, subject, or topic to search Project Gutenberg books.", 400);
+    const url = new URL("https://gutendex.com/books/");
+    url.search = new URLSearchParams({ search: query }).toString();
+    const data = await requestJson(fetchImpl, url.toString());
+    const results = (Array.isArray(data?.results) ? data.results : []).slice(0, 8).map(book => {
+      const authors = Array.isArray(book?.authors) ? book.authors.slice(0, 5).map(author => ({
+        name: boundedQuery(author?.name, 160),
+        birthYear: Number.isInteger(author?.birth_year) ? author.birth_year : undefined,
+        deathYear: Number.isInteger(author?.death_year) ? author.death_year : undefined
+      })) : [];
+      const formats = book?.formats && typeof book.formats === "object" ? book.formats : {};
+      const textUrl = [formats["text/html"], formats["text/html; charset=utf-8"], formats["application/epub+zip"], formats["text/plain; charset=utf-8"], formats["text/plain"]]
+        .find(value => typeof value === "string" && value.startsWith("https://www.gutenberg.org/"));
+      return {
+        id: Number.isInteger(book?.id) ? book.id : undefined,
+        title: boundedQuery(book?.title, 300),
+        authors,
+        languages: Array.isArray(book?.languages) ? book.languages.slice(0, 8).map(x => boundedQuery(x, 15)) : [],
+        subjects: Array.isArray(book?.subjects) ? book.subjects.slice(0, 8).map(x => boundedQuery(x, 180)) : [],
+        downloadCount: Number.isFinite(Number(book?.download_count)) ? Number(book.download_count) : undefined,
+        copyright: typeof book?.copyright === "boolean" ? book.copyright : null,
+        downloadUrl: textUrl || undefined
+      };
+    });
+    return sourceRecord(service, { query, totalMatches: Number.isFinite(Number(data?.count)) ? Number(data.count) : results.length, results });
+  }
+
+  if (service === "trivia") {
+    const amount = args.amount === undefined ? 5 : Number(args.amount);
+    if (!Number.isInteger(amount) || amount < 1 || amount > 10) {
+      throw apiError("PUBLIC_API_AMOUNT_INVALID", "Trivia amount must be an integer from 1 to 10.", 400);
+    }
+    const difficulty = boundedQuery(args.difficulty, 20).toLowerCase();
+    if (difficulty && !["easy", "medium", "hard"].includes(difficulty)) {
+      throw apiError("PUBLIC_API_DIFFICULTY_INVALID", "Trivia difficulty must be easy, medium, or hard.", 400);
+    }
+    const categoryId = Number.isInteger(args.categoryId) ? args.categoryId : undefined;
+    if (categoryId !== undefined && (categoryId < 9 || categoryId > 32)) {
+      throw apiError("PUBLIC_API_CATEGORY_INVALID", "Open Trivia Database categoryId must be from 9 to 32.", 400);
+    }
+    const url = new URL("https://opentdb.com/api.php");
+    const params = { amount: String(amount), encode: "base64" };
+    if (difficulty) params.difficulty = difficulty;
+    if (categoryId !== undefined) params.category = String(categoryId);
+    if (["multiple", "boolean"].includes(args.questionType)) params.type = args.questionType;
+    url.search = new URLSearchParams(params).toString();
+    const data = await requestJson(fetchImpl, url.toString());
+    if (Number(data?.response_code) !== 0) {
+      const messages = {
+        1: "There are not enough trivia questions for those filters.",
+        2: "The trivia request contains invalid parameters.",
+        3: "The trivia service did not recognize its session token.",
+        4: "The trivia service has exhausted questions for this session.",
+        5: "The trivia service rate limit was reached; wait at least five seconds before retrying."
+      };
+      throw apiError(Number(data?.response_code) === 5 ? "PUBLIC_API_RATE_LIMITED" : "PUBLIC_API_TRIVIA_EMPTY", messages[Number(data?.response_code)] || "The trivia service could not return questions.", Number(data?.response_code) === 5 ? 429 : 502);
+    }
+    const decode = value => {
+      if (typeof value !== "string") return "";
+      try { return Buffer.from(value, "base64").toString("utf8").slice(0, 1000); }
+      catch { return ""; }
+    };
+    const results = (Array.isArray(data?.results) ? data.results : []).slice(0, amount).map(item => ({
+      category: decode(item?.category),
+      type: boundedQuery(item?.type, 20),
+      difficulty: boundedQuery(item?.difficulty, 20),
+      question: decode(item?.question),
+      correctAnswer: decode(item?.correct_answer),
+      incorrectAnswers: Array.isArray(item?.incorrect_answers) ? item.incorrect_answers.slice(0, 4).map(decode) : []
+    }));
+    return sourceRecord(service, { amount: results.length, categoryId: categoryId ?? null, difficulty: difficulty || "any", results, attribution: "Open Trivia Database — CC BY-SA 4.0" });
+  }
+
+  if (service === "earthquakes") {
+    const period = ["hour", "day", "week"].includes(args.period) ? args.period : "day";
+    const significant = args.significant === true;
+    const minMagnitude = args.minMagnitude === undefined ? 0 : Number(args.minMagnitude);
+    if (!Number.isFinite(minMagnitude) || minMagnitude < 0 || minMagnitude > 10) {
+      throw apiError("PUBLIC_API_MAGNITUDE_INVALID", "minMagnitude must be between 0 and 10.", 400);
+    }
+    const feedName = (significant ? "significant_" : "all_") + period;
+    const url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/" + feedName + ".geojson";
+    const data = await requestJson(fetchImpl, url);
+    const features = Array.isArray(data?.features) ? data.features : [];
+    const results = features.filter(item => Number(item?.properties?.mag ?? 0) >= minMagnitude).slice(0, 12).map(item => {
+      const coordinates = Array.isArray(item?.geometry?.coordinates) ? item.geometry.coordinates : [];
+      const eventUrl = typeof item?.properties?.url === "string" && item.properties.url.startsWith("https://earthquake.usgs.gov/") ? item.properties.url : undefined;
+      return {
+        id: boundedQuery(item?.id, 80),
+        magnitude: Number.isFinite(Number(item?.properties?.mag)) ? Number(item.properties.mag) : null,
+        place: boundedQuery(item?.properties?.place, 240),
+        time: Number.isFinite(Number(item?.properties?.time)) ? new Date(Number(item.properties.time)).toISOString() : undefined,
+        updatedAt: Number.isFinite(Number(item?.properties?.updated)) ? new Date(Number(item.properties.updated)).toISOString() : undefined,
+        depthKm: Number.isFinite(Number(coordinates[2])) ? Number(coordinates[2]) : undefined,
+        longitude: Number.isFinite(Number(coordinates[0])) ? Number(coordinates[0]) : undefined,
+        latitude: Number.isFinite(Number(coordinates[1])) ? Number(coordinates[1]) : undefined,
+        url: eventUrl
+      };
+    });
+    return sourceRecord(service, { period, significantOnly: significant, minMagnitude, totalInFeed: features.length, matchingEvents: results.length, events: results, notice: "Preliminary earthquake catalog data can be updated as new reports are reviewed." });
+  }
+
   throw apiError("PUBLIC_API_SERVICE_UNSUPPORTED", "The selected public API service is not supported.", 400);
 }
 
@@ -338,6 +520,45 @@ export function inferPublicApiRequest(text) {
 
   const github = value.match(/\b(?:github repo|github repository|check github repo)\s+([A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100})\b/i);
   if (github) return { service: "github_repo", query: github[1] };
+
+  const solar = value.match(/\b(?:sunrise|sunset|golden hour|moonrise|moonset)\b.{0,50}?\b(?:in|for|at)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,'-]{1,80}?)(?=\s+(?:today|tomorrow|please|batao|dikhao|kya|hai|pls)\b|[?.!,;]|$)/i);
+  if (solar) {
+    const query = boundedQuery(solar[1], 120);
+    const dateMatch = value.match(/\b(today|tomorrow|\d{4}-\d{2}-\d{2})\b/i);
+    if (query.length >= 2) return { service: "sunrise_sunset", query, ...(dateMatch ? { date: dateMatch[1] } : {}) };
+  }
+
+  if (/\b(?:public[- ]domain|project gutenberg|gutendex|ebook search|free ebooks)\b/i.test(value)) {
+    const ebook = value.match(/\b(?:books?|ebooks?)\s+(?:about|on|for|named|called)\s+(.{2,100}?)(?=[?.!,;]|$)/i)
+      || value.match(/\b(?:search|find)\s+(?:project gutenberg|gutendex)?\s*(?:books?|ebooks?)?\s*(?:about|on|for)\s+(.{2,100}?)(?=[?.!,;]|$)/i);
+    const query = ebook ? boundedQuery(ebook[1], 120) : "public domain classics";
+    if (query.length >= 2) return { service: "ebooks", query };
+  }
+
+  if (/\b(?:trivia|quiz questions?|general knowledge quiz)\b/i.test(value) && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
+    const amountMatch = value.match(/\b(\d{1,2})\s+(?:trivia\s+)?questions?\b/i);
+    const categoryMap = [
+      [17, /\b(science|nature)\b/i], [18, /\b(computer|computers|technology|computing)\b/i],
+      [19, /\b(math|mathematics)\b/i], [20, /\b(mythology)\b/i], [21, /\b(sports?)\b/i],
+      [22, /\b(geography|maps?)\b/i], [23, /\b(history)\b/i], [24, /\b(politics|political)\b/i],
+      [25, /\b(art|arts)\b/i], [26, /\b(celebrities|celebrity)\b/i], [27, /\b(animals?)\b/i],
+      [28, /\b(vehicles?|cars?)\b/i], [29, /\b(comics?)\b/i], [30, /\b(gadgets?)\b/i],
+      [31, /\b(anime|manga)\b/i], [32, /\b(cartoon|cartoons|animation)\b/i],
+      [10, /\b(books|literature)\b/i], [11, /\b(films?|movies?)\b/i],
+      [12, /\b(music)\b/i], [14, /\b(television|tv)\b/i], [15, /\b(video games?|gaming)\b/i],
+      [16, /\b(board games?)\b/i], [9, /\b(general knowledge|general trivia)\b/i]
+    ];
+    const category = categoryMap.find(([, pattern]) => pattern.test(value));
+    const difficulty = value.match(/\b(easy|medium|hard)\b/i)?.[1]?.toLowerCase();
+    return { service: "trivia", amount: amountMatch ? Math.max(1, Math.min(10, Number(amountMatch[1]))) : 5, ...(category ? { categoryId: category[0] } : {}), ...(difficulty ? { difficulty } : {}) };
+  }
+
+  if (/\b(?:recent|latest|show|list|any|earthquake activity|seismic activity|earthquakes today|earthquakes in the last)\b.{0,70}\b(?:earthquakes?|seismic)\b|\b(?:recent|latest|show|list)\s+earthquakes?\b/i.test(value)) {
+    const period = /\b(hour|hourly|last hour)\b/i.test(value) ? "hour" : /\b(week|weekly|last week)\b/i.test(value) ? "week" : "day";
+    const magnitude = value.match(/\b(?:magnitude|mag|above|over|greater than)\s*(?:of\s*)?(\d(?:\.\d)?)\b/i);
+    const significant = /\b(significant|major)\b/i.test(value);
+    return { service: "earthquakes", period, ...(magnitude ? { minMagnitude: Number(magnitude[1]) } : {}), ...(significant ? { significant: true } : {}) };
+  }
 
   return null;
 }
