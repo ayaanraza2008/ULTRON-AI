@@ -28,7 +28,9 @@ function boundedOutput(value) {
 }
 function extractUserCode(prompt, lang) {
   const parts = prompt.split(String.fromCharCode(96).repeat(3));
-  if (parts.length !== 3) return null;
+  // A single closing fence is not enough if conflicting prose follows it.
+  // Fail closed rather than guessing which instruction should win.
+  if (parts.length !== 3 || parts[2].trim() !== "") return null;
   const lines = parts[1].split(/\r?\n/);
   const tag = (lines.shift() || "").trim().toLowerCase();
   const tags = lang === "node" ? ["", "js", "javascript", "node", "nodejs"] : ["", "py", "python"];
@@ -41,6 +43,10 @@ export function hasExplicitSandboxAuthorization(prompt, source, lang) {
   const p = prompt.trim();
   const direct = /^(?:please\s+)?(?:run|execute|test)\s+(?:(?:(?:this|the|following|provided)\s+)?(?:code|script|program|snippet)|(?:(?:this|the|following|provided)\s+)?(?:python|javascript|node(?:\.js)?)\s+(?:code|script|program|snippet))\b/i.test(p);
   if (!direct) return false;
+  // Contradictory language before the code fence invalidates authorization.
+  // Inspect instruction prose only, not the code, which may contain these words.
+  const instructionText = p.split(String.fromCharCode(96).repeat(3), 1)[0];
+  if (/\\b(?:don['’]t|do not|never|must not|should not|not to)\\s+(?:(?:actually|really|ever)\\s+)*(?:run|execute|test)\\b/i.test(instructionText)) return false;
   const provided = extractUserCode(p, lang);
   return provided !== null && provided === source.trim();
 }
