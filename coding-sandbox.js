@@ -39,10 +39,8 @@ function extractUserCode(prompt, lang) {
 export function hasExplicitSandboxAuthorization(prompt, source, lang) {
   if (typeof prompt !== "string" || typeof source !== "string" || prompt.length > 40000) return false;
   const p = prompt.trim();
-  const generated = /^(?:please\s+)?(?:run|execute|test)\s+(?:the\s+)?(?:code|script|program)\s+(?:above|you\s+(?:just\s+)?(?:wrote|generated|drafted))\b/i.test(p);
   const direct = /^(?:please\s+)?(?:run|execute|test)\s+(?:(?:(?:this|the|following|provided)\s+)?(?:code|script|program|snippet)|(?:(?:this|the|following|provided)\s+)?(?:python|javascript|node(?:\.js)?)\s+(?:code|script|program|snippet))\b/i.test(p);
-  if (!generated && !direct) return false;
-  if (generated) return Boolean(source.trim());
+  if (!direct) return false;
   const provided = extractUserCode(p, lang);
   return provided !== null && provided === source.trim();
 }
