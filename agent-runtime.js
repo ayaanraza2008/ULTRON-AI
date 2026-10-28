@@ -689,6 +689,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           // This loop attempts each configured provider at most once. Provider-specific
           // auth, quota and model/endpoint errors should fall through to another provider;
           // malformed requests remain non-fallback errors so schema bugs do not get hidden.
+          // We do not inspect upstream error bodies, so cancel the unused stream before
+          // falling back or returning. This releases resources without exposing provider text.
+          try { await response.body?.cancel?.(); } catch {}
           const fallbackAllowed = [401, 402, 403, 404, 408, 429].includes(response.status) || response.status >= 500;
           const error = Object.assign(new Error("AI provider request failed."), {
             status: response.status === 429 ? 429 : 502,
