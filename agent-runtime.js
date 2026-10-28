@@ -353,7 +353,7 @@ function buildFallbackCalls(text) {
   if (freePublicDataRequest) add("get_free_public_data", freePublicDataRequest);
   const intent = extractIntent(text);
   const publicApiRequest = inferPublicApiRequest(text);
-  if (publicApiRequest) add("public_api_lookup", publicApiRequest);
+  if (publicApiRequest && !freePublicDataRequest) add("public_api_lookup", publicApiRequest);
   const publicApiCatalogQuery = !publicApiRequest ? inferPublicApiCatalogQuery(text) : null;
   if (publicApiCatalogQuery) add("search_public_api_catalog", publicApiCatalogQuery);
   const browserGuidance = buildBrowserUseGuidance(text);
