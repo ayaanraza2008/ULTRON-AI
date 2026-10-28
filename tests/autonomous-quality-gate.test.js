@@ -123,8 +123,7 @@ test("quality gate does not count URLs inside Markdown code as citations", () =>
 test("quality gate preserves URL boundary positions after long Markdown code blocks", () => {
   const sourceUrl = "https://example.com/source";
   const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
-  const longCode = "~~~";
-  const fencedCode = "```text\\n" + " ".repeat(300) + "\\n```\\n";
+  const fencedCode = "```text\n" + " ".repeat(300) + "\n```\n";
 
   const nestedUrlAfterCode = verifyAutonomousOutput({
     research: { sources: [{ url: sourceUrl }] },
