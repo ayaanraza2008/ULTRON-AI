@@ -14,6 +14,7 @@ import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
 
@@ -1929,6 +1930,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
   });
+  app.use(express.static(path.join(__dirname, "public"), { index: "index.html", maxAge: env.NODE_ENV === "production" ? "1h" : 0 }));
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();
     if (err?.type === "entity.too.large") return res.status(413).json({ error: { code: "BODY_TOO_LARGE", message: "Request body is too large." } });
