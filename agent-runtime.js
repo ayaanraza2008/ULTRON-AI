@@ -2,6 +2,7 @@ import express from "express";
 import { createHash } from "node:crypto";
 import { hasEmployeeModelProvider } from "./features.js";
 import { isPublicNetworkHost, safePinnedFetch, safeServiceBase as safeBase } from "./network-safety.js";
+import { getPublicBaseUrl } from "./public-base-url.js";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCaptureAgentMemory } from "./agentmemory-integration.js";
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
@@ -679,7 +680,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       try {
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
-          headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
+          headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": getPublicBaseUrl(env), "X-Title": "ULTRON Automatic Tool Router" } : {}) },
           redirect: "error",
           body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
           signal: AbortSignal.any([createTimeoutSignal(45000), totalTimeoutSignal])

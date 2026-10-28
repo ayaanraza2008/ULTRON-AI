@@ -14,6 +14,7 @@ import { createDesktopActionRouter } from "./desktop-action-bridge.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
+import { getPublicBaseUrl } from "./public-base-url.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
@@ -491,7 +492,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
             ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}),
             "Content-Type": "application/json",
             Accept: "application/json",
-            ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
+            ...(provider.isOpenRouter ? { "HTTP-Referer": getPublicBaseUrl(env), "X-Title": "ULTRON AI" } : {})
           },
           body: JSON.stringify({ ...payload, model, stream: false }),
           redirect: "error",
@@ -1627,7 +1628,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
               ...(provider.apiKey ? { "Authorization": `Bearer ${provider.apiKey}` } : {}),
               "Content-Type": "application/json",
               "Accept": stream ? "text/event-stream, application/json" : "application/json",
-              ...(provider.isOpenRouter ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON AI" } : {})
+              ...(provider.isOpenRouter ? { "HTTP-Referer": getPublicBaseUrl(env), "X-Title": "ULTRON AI" } : {})
             },
             body: JSON.stringify({
               model: candidate,

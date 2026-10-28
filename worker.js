@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { isPublicNetworkHost, safePinnedFetch, safeServiceBase } from "./network-safety.js";
+import { getPublicBaseUrl } from "./public-base-url.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
@@ -320,7 +321,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
             Authorization: "Bearer " + provider.apiKey,
             "Content-Type": "application/json",
             Accept: "application/json",
-            ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Scheduled AI Employee" } : {})
+            ...(provider.name === "openrouter" ? { "HTTP-Referer": getPublicBaseUrl(env), "X-Title": "ULTRON Scheduled AI Employee" } : {})
           },
           redirect: "error",
           body: JSON.stringify({
