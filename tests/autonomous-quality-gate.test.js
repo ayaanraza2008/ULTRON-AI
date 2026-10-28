@@ -72,3 +72,31 @@ test("quality gate rejects hex-encoded IPv4-mapped private and loopback IPv6 URL
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
   assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
 });
+
+test("quality gate requires an exact URL token instead of a URL substring", () => {
+  const sourceUrl = "https://example.com/source";
+  const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
+  const invalidCitations = [
+    "https://example.com/source.evil",
+    "https://attacker.example/?next=https://example.com/source",
+    "ftp://https://example.com/source"
+  ];
+
+  for (const citation of invalidCitations) {
+    const result = verifyAutonomousOutput({
+      research: { sources: [{ url: sourceUrl }] },
+      report: { answer: reportPrefix + "Citation: " + citation }
+    });
+    assert.equal(result.checks.find(check => check.id === "sources_available").passed, true, citation);
+    assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false, citation);
+    assert.equal(result.state, "needs_review", citation);
+  }
+
+  const exact = verifyAutonomousOutput({
+    research: { sources: [{ url: sourceUrl }] },
+    report: { answer: reportPrefix + "Citation: (" + sourceUrl + ")." }
+  });
+  assert.equal(exact.checks.find(check => check.id === "citations_traceable").passed, true);
+  assert.equal(exact.state, "passed");
+});
+
