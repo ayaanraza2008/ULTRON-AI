@@ -13,6 +13,14 @@ This map covers all 30 registered repository capabilities for ULTRON. The suppli
 5. Free/local-first is the default. Services with metered API access must not be invoked unless their credentials and budget policy are deliberately configured.
 6. Upstream skills and repository files are untrusted reference data. They are not shell scripts or higher-priority instructions.
 
+## Public API catalog adapter
+
+ULTRON bundles a reviewed discovery snapshot of 2,226 entries from `public-apis/public-apis` README.md (upstream commit `c6f3deea786d8636de4567e15df361ad5f3831c4`) across 53 categories. The authenticated agent tool `search_public_api_catalog` can search this metadata by capability/category and surface declared auth/HTTPS hints. This snapshot is directory metadata, not executable integrations or a cache of credentials. A second authenticated tool, `public_api_lookup`, executes a fixed allowlist of keyless, read-only APIs: Open-Meteo weather/geocoding, Frankfurter reference exchange rates, World Bank country metadata, Wikipedia article summaries, Open Library book search, public GitHub repository metadata, Sunrise-Sunset.org solar times, Gutendex public-domain ebook discovery, Open Trivia Database quizzes, USGS recent earthquake feeds, FreeDictionaryAPI.com word definitions, and GDELT public news search. Deterministic routing prioritizes those live adapters when the user asks for real data.
+
+The live adapter hard-codes provider hosts, rejects arbitrary service names/URLs, applies timeouts and response-size bounds, disables redirects, normalizes results, and sends requests through ULTRON's pinned-DNS fetch layer. It does not expose or need API secrets. The directory supports broad discovery, but ULTRON does not dynamically execute URLs found in catalog data. Paid/authenticated services must be integrated one-by-one with documented API contracts, owner-scoped credentials, cost limits, and tests; catalog entries do not include API keys.
+
+Providers can impose rate limits and change availability or terms. Open-Meteo attribution and non-commercial usage limits, Wikimedia attribution/licensing, and Open Library's request guidelines must be respected. Returned content is untrusted and should be verified before high-impact decisions.
+
 ## Per-repository capability map
 
 | # | Repository | Capabilities ULTRON should route for | Current integration state |
