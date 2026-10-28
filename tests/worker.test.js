@@ -35,6 +35,7 @@ test("lease renewal signals cancellation only when the task is no longer RUNNING
   let inactiveSignals = 0;
   const inactive = await renewTaskLease({
     taskId: "task-cancelled",
+    attempts: 1,
     rest: async () => [],
     logger: { warn() {} },
     onInactive: () => { inactiveSignals += 1; }
@@ -44,6 +45,7 @@ test("lease renewal signals cancellation only when the task is no longer RUNNING
 
   const failed = await renewTaskLease({
     taskId: "task-temporary-db-error",
+    attempts: 1,
     rest: async () => { throw new Error("temporary database failure"); },
     logger: { warn() {} },
     onInactive: () => { inactiveSignals += 1; }
@@ -380,6 +382,49 @@ test("worker does not retry permanent AI provider 4xx responses", async () => {
 });
 
 
+test("worker cannot complete a newer claim using a stale attempt", async () => {
+  let worker;
+  let completionQuery = "";
+  const task = {
+    id: "task-reclaimed-before-completion",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response(JSON.stringify({ model: "test-model", choices: [{ message: { content: "Plan generated." } }] }), { status: 200 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        completionQuery = url;
+        // Simulate the database having reclaimed the task between provider work
+        // and completion. The attempts predicate must reject the stale worker.
+        task.attempts = 2;
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.match(completionQuery, /status=eq.RUNNING&attempts=eq.1/);
+  assert.equal(worker.getStatus().tasksCompleted, 0);
+  assert.equal(worker.getStatus().tasksDiscarded, 1);
+});
+
 test("worker discards provider results when the task was cancelled before completion", async () => {
   let worker;
   const errors = [];
@@ -661,6 +706,48 @@ test("worker blocks tasks that require approval when approval is absent and neve
 });
 
 
+test("worker cannot retry or fail a newer claim using a stale attempt", async () => {
+  let worker;
+  let failureQuery = "";
+  const task = {
+    id: "task-reclaimed-before-failure",
+    user_id: "user-1",
+    created_at: new Date().toISOString(),
+    attempts: 1,
+    input: { taskType: "employee", role: "chief-of-staff", goal: "Create a plan", mode: "plan" }
+  };
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "test-only",
+      OPENROUTER_API_KEY: "test-only",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/rpc/ultron_claim_due_employee_schedule")) return new Response("[]", { status: 200 });
+      if (url.includes("/rpc/ultron_claim_next_task")) return new Response(JSON.stringify([task]), { status: 200 });
+      if (url.includes("/chat/completions")) return new Response(JSON.stringify({ error: { message: "bad request" } }), { status: 400 });
+      if (url.includes("/agent_tasks?") && options.method === "PATCH") {
+        failureQuery = url;
+        task.attempts = 2;
+        return new Response("[]", { status: 200 });
+      }
+      if (url.includes("/audit_events")) {
+        worker.stop();
+        return new Response("[]", { status: 200 });
+      }
+      throw new Error("Unexpected request: " + url);
+    }
+  });
+  await worker.done;
+  assert.match(failureQuery, /status=eq.RUNNING&attempts=eq.1/);
+  assert.equal(worker.getStatus().tasksFailed, 0);
+  assert.equal(worker.getStatus().tasksRetried, 0);
+  assert.equal(worker.getStatus().tasksDiscarded, 1);
+});
+
 test("worker does not count a provider failure after a task was cancelled", async () => {
   let worker;
   const task = {
@@ -787,6 +874,7 @@ test("task lease renewal updates only a task that is still RUNNING", async () =>
   let request;
   const ok = await renewTaskLease({
     taskId: "task/with space",
+    attempts: 1,
     rest: async (endpoint, options) => {
       request = { endpoint, options };
       return [{ id: "task/with space", status: "RUNNING" }];
@@ -794,7 +882,7 @@ test("task lease renewal updates only a task that is still RUNNING", async () =>
     logger: { warn() {} }
   });
   assert.equal(ok, true);
-  assert.equal(request.endpoint, "agent_tasks?id=eq.task%2Fwith%20space&status=eq.RUNNING");
+  assert.equal(request.endpoint, "agent_tasks?id=eq.task%2Fwith%20space&status=eq.RUNNING&attempts=eq.1");
   assert.equal(request.options.method, "PATCH");
   const body = JSON.parse(request.options.body);
   assert.ok(Number.isFinite(Date.parse(body.started_at)));
@@ -804,6 +892,7 @@ test("task lease renewal updates only a task that is still RUNNING", async () =>
 test("task lease renewal does not report success after a cancellation or state transition", async () => {
   const ok = await renewTaskLease({
     taskId: "task-cancelled",
+    attempts: 1,
     rest: async () => [],
     logger: { warn() {} }
   });
@@ -814,6 +903,7 @@ test("task lease renewal degrades safely when the database is unavailable", asyn
   const warnings = [];
   const ok = await renewTaskLease({
     taskId: "task-db-outage",
+    attempts: 1,
     rest: async () => { throw new Error("database unavailable"); },
     logger: { warn: (...args) => warnings.push(args) }
   });
