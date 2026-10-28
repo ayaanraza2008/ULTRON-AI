@@ -751,6 +751,12 @@ export function inferPublicApiRequest(text) {
     }
   }
 
+  const airQuality = value.match(/\b(?:air quality|AQI|pollution level|PM2\.?5)\b.{0,50}?\b(?:in|for|at)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,'-]{1,80}?)(?=\s+(?:today|tomorrow|now|right now|please|batao|dikhao|kya|hai|pls)\b|[?.!,;]|$)/i);
+  if (airQuality && !/\b(?:api|provider|endpoint|integration|documentation|key)\b/i.test(value)) {
+    const query = boundedQuery(airQuality[1], 120);
+    if (query.length >= 2) return { service: "air_quality", query };
+  }
+
   const weather = value.match(/\b(?:weather|forecast|temperature|rainfall|wind speed)\b.{0,50}?\b(?:in|for|at)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,'-]{1,80}?)(?=\s+(?:today|tomorrow|now|right now|please|batao|dikhao|kya|hai|pls)\b|[?.!,;]|$)/i);
   if (weather && !/\b(?:api|provider|endpoint|integration|documentation|key)\b/i.test(value)) {
     const query = boundedQuery(weather[1], 120);
@@ -815,6 +821,43 @@ export function inferPublicApiRequest(text) {
   if (/\b(?:define|definition of|meaning of|dictionary|synonyms? for|antonyms? for|what does .{1,70} mean)\b/i.test(value) && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
     const wordMatch = value.match(/\b(?:define|definition of|meaning of|dictionary(?: entry)? for|synonyms? for|antonyms? for|what does)\s+["“]?([\p{L}\p{M}'’-]{1,80})/iu);
     if (wordMatch) return { service: "dictionary", query: wordMatch[1] };
+  }
+
+  const holidayMatch = value.match(/\b(?:(?:public|national|bank)\s+)?holidays?\b.{0,40}?\b(?:in|for|of)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,50}?)(?=\s+(?:this year|next year|for\s+\d{4}|in\s+\d{4}|please|batao|dikhao|pls)\b|[?.!,;]|$)/i);
+  if (holidayMatch && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
+    const countryName = boundedQuery(holidayMatch[1], 60).toLowerCase();
+    const countryCodes = {
+      india: "IN", "united states": "US", usa: "US", us: "US",
+      "united kingdom": "GB", uk: "GB", britain: "GB",
+      canada: "CA", australia: "AU", "new zealand": "NZ",
+      germany: "DE", france: "FR", japan: "JP", china: "CN",
+      pakistan: "PK", bangladesh: "BD", singapore: "SG",
+      "south africa": "ZA", ireland: "IE", spain: "ES", italy: "IT",
+      "united arab emirates": "AE", uae: "AE", brazil: "BR"
+    };
+    const countryCode = countryCodes[countryName] || (/^[a-z]{2}$/i.test(countryName) ? countryName.toUpperCase() : "");
+    if (countryCode) {
+      const explicitYear = value.match(/\b(19\d{2}|20\d{2}|2100)\b/);
+      const year = explicitYear ? Number(explicitYear[1]) : /\bnext year\b/i.test(value) ? new Date().getUTCFullYear() + 1 : new Date().getUTCFullYear();
+      return { service: "holidays", countryCode, year };
+    }
+  }
+
+  const papersMatch = value.match(/\b(?:research|academic|scientific|scholarly)\s+papers?\s+(?:about|on|for|regarding)\s+(.{3,160}?)(?=[?.!,;]|$)/i)
+    || value.match(/\b(?:find|search|show)\s+(?:me\s+)?(?:research|academic|scientific|scholarly)\s+papers?\s+(?:about|on|for|regarding)\s+(.{3,160}?)(?=[?.!,;]|$)/i);
+  if (papersMatch && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
+    const query = boundedQuery(papersMatch[1], 180);
+    if (query.length >= 3) return { service: "research_papers", query };
+  }
+
+  if (/\b(?:met museum|metropolitan museum(?: of art)?|museum collection|museum artworks?|museum art)\b/i.test(value)
+      && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
+    const artworkMatch = value.match(/\b(?:about|on|for|search(?:\s+for)?)\s+(.{2,120}?)(?=[?.!,;]|$)/i)
+      || value.match(/\b(?:museum artworks?|museum art|museum collection|met museum|metropolitan museum(?: of art)?)\s+(.{2,120}?)(?=[?.!,;]|$)/i);
+    if (artworkMatch) {
+      const query = boundedQuery(artworkMatch[1], 160);
+      if (query.length >= 2) return { service: "museum_art", query };
+    }
   }
 
   if (/\b(?:news|headlines|latest updates|recent articles|news search|what is happening about)\b/i.test(value) && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
