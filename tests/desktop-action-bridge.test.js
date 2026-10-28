@@ -81,7 +81,7 @@ function makeHarness({ env = API_ENV, authUserId = OWNER, ackRace = null } = {})
       const id = sequence === 1 ? ACTION_ID : "00000000-0000-4000-8000-" + String(100 + sequence).padStart(12, "0");
       const row = {
         id, user_id: body.user_id, action_type: body.action_type, payload: structuredClone(body.payload),
-        status: body.status, attempts: body.attempts ?? 0, approved_at: null, started_at: null,
+        status: body.status, attempts: body.attempts ?? 0, approved_at: body.approved_at ?? null, started_at: null,
         lease_expires_at: null, finished_at: null, result: null, error_code: null,
         created_at: now, updated_at: now
       };
@@ -337,3 +337,36 @@ test("atomic database acknowledgement rejects an old worker after a lease is rec
   assert.ok(Date.parse(h.store.get(ACTION_ID).lease_expires_at) > Date.now());
 });
 
+
+test("owner opt-in queues only allowlisted Windows actions without a separate approval prompt", async t => {
+  const h = makeHarness({ env: { ...API_ENV, ULTRON_DESKTOP_AUTONOMY_MODE: "allowlisted" } });
+  t.after(() => h.close());
+
+  const requested = await h.request("POST", "/api/desktop/actions", {
+    body: { actionType: "launch_app", payload: { app: "calculator" } }
+  });
+  assert.equal(requested.status, 201);
+  assert.equal(requested.payload.requiresApproval, false);
+  assert.equal(requested.payload.execution, "queued_not_yet_executed");
+  assert.equal(requested.payload.autonomyMode, "owner_allowlisted");
+  assert.equal(requested.payload.action.status, "QUEUED");
+  assert.ok(requested.payload.action.approvedAt);
+  assert.equal(h.store.get(ACTION_ID).payload.app, "calculator");
+
+  const claimed = await h.request("POST", "/api/desktop/bridge/next", { token: TOKEN, body: {} });
+  assert.equal(claimed.status, 200);
+  assert.equal(claimed.payload.action.id, ACTION_ID);
+  assert.equal(claimed.payload.action.payload.app, "calculator");
+});
+
+test("owner opt-in autonomy never broadens the desktop action allowlist", async t => {
+  const h = makeHarness({ env: { ...API_ENV, ULTRON_DESKTOP_AUTONOMY_MODE: "allowlisted" } });
+  t.after(() => h.close());
+
+  const response = await h.request("POST", "/api/desktop/actions", {
+    body: { actionType: "run_shell", payload: { command: "whoami" } }
+  });
+  assert.equal(response.status, 400);
+  assert.equal(response.payload.error.code, "DESKTOP_ACTION_NOT_ALLOWED");
+  assert.equal(h.store.size, 0);
+});
