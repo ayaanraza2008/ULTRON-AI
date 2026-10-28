@@ -16,6 +16,7 @@ import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 import { findOpenVikingContext, getOpenVikingReadiness, readOpenVikingContext } from "./integrations/openviking.js";
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrations/desktop-companion.js";
 import { getPublicApiCatalog, inferPublicApiRequest, lookupPublicApi } from "./integrations/public-apis.js";
+import { getPublicApiDirectoryStats, inferPublicApiCatalogQuery, searchPublicApiDirectory } from "./integrations/public-api-directory.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
@@ -247,6 +248,7 @@ function extractIntent(text) {
   if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "check_comfyui";
   if (/\b(integration|integrations|connected services|provider status|what tools|capabilities)\b/.test(s) && /\b(check|status|available|configured|show|list|what)\b/.test(s)) return "integration_status";
   if (inferPublicApiRequest(text)) return "public_api_lookup";
+  if (inferPublicApiCatalogQuery(text)) return "search_public_api_catalog";
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) return "research_web";
   if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task|web-dev|review|draft|plan)\b/.test(s)) return "enqueue_employee_task";
   if (/\b(ai employee|employee routine|make a plan|create a plan|draft a|review this|write a report)\b/.test(s)) return "plan_employee";
@@ -270,6 +272,8 @@ function buildFallbackCalls(text) {
   const intent = extractIntent(text);
   const publicApiRequest = inferPublicApiRequest(text);
   if (publicApiRequest) add("public_api_lookup", publicApiRequest);
+  const publicApiCatalogQuery = !publicApiRequest ? inferPublicApiCatalogQuery(text) : null;
+  if (publicApiCatalogQuery) add("search_public_api_catalog", publicApiCatalogQuery);
   const browserGuidance = buildBrowserUseGuidance(text);
   if (intent === "paperclip_read_agent_governance") add("paperclip_read_agent_governance");
   if (intent === "check_hermes_agent") add("check_hermes_agent");
@@ -434,6 +438,7 @@ const SAFE_PREPARATION_TOOLS = new Set([
   // outside this exception.
   "research_web",
   "public_api_lookup",
+  "search_public_api_catalog",
   "create_youtube_production_plan",
   "create_spaceplanner_plan",
   "plan_employee",
@@ -522,6 +527,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "create_youtube_production_plan", description: "Automatically draft a YouTube production package when a user requests a YouTube video/Short, channel content, cinematic story or nature Short. Produces title options, script, scene plan, visual/narration directions, SEO metadata and fact/media-rights checks. Does not generate media, use paid APIs, upload, schedule or publish; human approval remains required.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1500 }, format: { type: "string", enum: ["long_video", "short", "cinematic_mystery", "nature_short"] }, targetSeconds: { type: "integer", minimum: 15, maximum: 1200 }, language: { type: "string", maxLength: 60 }, audience: { type: "string", maxLength: 300 }, style: { type: "string", maxLength: 400 }, sceneCount: { type: "integer", minimum: 2, maximum: 30 } }, required: ["topic", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "public_api_lookup", description: "Read-only lookup from ULTRON’s fixed keyless public API catalog. Use for weather in a named place, currency conversion/rates, country facts, Wikipedia summaries, book searches, or public GitHub repository metadata. Supports only the enumerated services; never accepts arbitrary URLs, never writes data, and requires no API key.", parameters: { type: "object", properties: { service: { type: "string", enum: ["weather", "currency", "country", "wikipedia", "books", "github_repo"] }, query: { type: "string", maxLength: 220 }, baseCurrency: { type: "string", pattern: "^[A-Za-z]{3}$" }, quoteCurrency: { type: "string", pattern: "^[A-Za-z]{3}$" }, amount: { type: "number", exclusiveMinimum: 0, maximum: 1000000000000 } }, required: ["service"], additionalProperties: false } } },
+    { type: "function", function: { name: "search_public_api_catalog", description: "Search ULTRON’s bundled public-apis directory (thousands of service listings) to discover providers, docs URLs, categories, and declared auth/HTTPS metadata. This is offline catalog search only: it does not call any returned endpoint or supply API keys. Prefer public_api_lookup for the six fixed, tested live data adapters.", parameters: { type: "object", properties: { query: { type: "string", maxLength: 220 }, category: { type: "string", maxLength: 120 }, authFilter: { type: "string", enum: ["any", "no_auth", "requires_auth", "unknown"] }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search is off unless explicitly opted into.", parameters: { type: "object", properties: { includeReverseSearch: { type: "boolean", description: "Opt in to sending image-derived information to external reverse-image providers. Defaults to false." } }, additionalProperties: false } } },
@@ -793,6 +799,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     }
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
     if (name === "public_api_lookup") return lookupPublicApi(args, { fetchImpl });
+    if (name === "search_public_api_catalog") return searchPublicApiDirectory(args);
     if (name === "check_openviking") return getOpenVikingReadiness({ env, userId: req.supabaseUser?.id });
     if (name === "openviking_find_context") return findOpenVikingContext({ env, userId: req.supabaseUser?.id, query: args.query, limit: args.limit, targetUri: args.targetUri, fetchImpl });
     if (name === "openviking_read_context") return readOpenVikingContext({ env, userId: req.supabaseUser?.id, uri: args.uri, fetchImpl });
@@ -1211,6 +1218,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "create_youtube_production_plan", available: true, execution: "draft_script_scenes_seo_metadata_and_rights_checklist_no_media_generation_or_publish" },
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
         { name: "public_api_lookup", available: true, requiresApiKey: false, services: getPublicApiCatalog().map(item => item.id), execution: "fixed_allowlist_public_read_only_queries_no_arbitrary_urls" },
+        { name: "search_public_api_catalog", available: true, requiresApiKey: false, ...getPublicApiDirectoryStats(), execution: "local_catalog_metadata_search_no_network_calls" },
         { name: "plan_employee", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env)), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "create_spaceplanner_plan", available: true, execution: "automatic_spaceplanner_compatible_json_and_editor_link_no_external_save" },
