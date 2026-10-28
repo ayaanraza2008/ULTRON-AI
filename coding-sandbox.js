@@ -33,7 +33,7 @@ function extractUserCode(prompt, lang) {
   if (parts.length !== 3 || parts[2].trim() !== "") return null;
   const lines = parts[1].split(/\r?\n/);
   const tag = (lines.shift() || "").trim().toLowerCase();
-  const tags = lang === "node" ? ["", "js", "javascript", "node", "nodejs"] : ["", "py", "python"];
+  const tags = lang === "node" ? ["js", "javascript", "node", "nodejs"] : ["py", "python"];
   if (!tags.includes(tag)) return null;
   return lines.join("\n").trim();
 }
