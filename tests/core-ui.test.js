@@ -145,7 +145,7 @@ test("the proxy serves local assets and does not forward unknown public paths", 
 
 
 test("API gateway errors are retried only when they are non-JSON responses", () => {
-  assert.ok(proxySource.includes('gatewayRetryDelaysMs = [1500, 2500, 4000, 6000, 8000, 10000, 12000]'));
+  assert.ok(proxySource.includes('gatewayRetryDelaysMs = [1500, 3000, 5000, 7000, 9000, 10000, 12000, 12000, 12000]'));
   assert.ok(proxySource.includes('status === 502 ? "CORE_GATEWAY_502"'));
   assert.ok(proxySource.includes('" retries (" + (gatewayRetries + 1) + " attempts)'));
 });
