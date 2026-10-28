@@ -30,9 +30,18 @@ function normalizePublicUrl(value) {
  * a source such as https://example.com/source could be "cited" accidentally by
  * https://example.com/source.evil or nested inside another URL's query string.
  */
+function stripMarkdownCode(answer) {
+  // Links inside code samples are not citations. Treat an unterminated fenced
+  // block as code through end-of-report, preferring a review warning to a false pass.
+  return answer
+    .replace(/```[\\s\\S]*?(?:```|$)/g, " ")
+    .replace(/`[^`\\n]*`/g, " ");
+}
+
 function extractPublicCitationUrls(answer) {
   const citations = new Set();
-  for (const match of answer.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+  const prose = stripMarkdownCode(answer);
+  for (const match of prose.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
     const preceding = answer[match.index - 1] || "";
     // Do not treat an HTTP URL embedded in a larger URL/identifier as a citation.
     // Parentheses and square brackets remain valid Markdown link delimiters.
