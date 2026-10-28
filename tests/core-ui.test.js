@@ -142,3 +142,106 @@ test("the proxy serves local assets and does not forward unknown public paths", 
   assert.equal(calls[0].url, "https://ultron-ai-core.onrender.com/api/health");
   assert.equal(calls[0].init.headers.get("cookie"), "ultron_sb_access=test-cookie");
 });
+
+
+test("API gateway errors are retried only when they are non-JSON responses", () => {
+  assert.ok(proxySource.includes('retryDelayMs = 1200'));
+  assert.ok(proxySource.includes('status === 502 ? "CORE_GATEWAY_502"'));
+  assert.ok(proxySource.includes("after one retry"));
+});
+
+test("proxy retries a transient HTML 502 once and returns the backend response", async (t) => {
+  let calls = 0;
+  const proxy = createUltronCoreProxy({
+    retryDelayMs: 0,
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("<html>502 Bad Gateway</html>", {
+          status: 502,
+          headers: { "Content-Type": "text/html" }
+        });
+      }
+      return new Response(JSON.stringify({ status: "ok", answer: "recovered" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    },
+    logger: { warn() {} }
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once("error", reject);
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
+  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] })
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "ok", answer: "recovered" });
+  assert.equal(calls, 2);
+});
+
+test("proxy turns a persistent non-JSON gateway 502 into an actionable API error", async (t) => {
+  let calls = 0;
+  const proxy = createUltronCoreProxy({
+    retryDelayMs: 0,
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response("<html>502 Bad Gateway</html>", {
+        status: 502,
+        headers: { "Content-Type": "text/html" }
+      });
+    },
+    logger: { warn() {} }
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once("error", reject);
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
+  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] })
+  });
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: "CORE_GATEWAY_502",
+      message: "ULTRON Core returned an upstream 502 gateway response after one retry. The backend may be starting or temporarily unavailable. Please retry in a few seconds."
+    }
+  });
+  assert.equal(calls, 2);
+});
+
+test("proxy does not retry structured JSON model-provider errors", async (t) => {
+  let calls = 0;
+  const expected = { error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" } };
+  const proxy = createUltronCoreProxy({
+    retryDelayMs: 0,
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(JSON.stringify(expected), {
+        status: 502,
+        headers: { "Content-Type": "application/json; charset=utf-8" }
+      });
+    },
+    logger: { warn() {} }
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once("error", reject);
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
+  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] })
+  });
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), expected);
+  assert.equal(calls, 1);
+});
