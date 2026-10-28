@@ -120,6 +120,7 @@ test("non-zero exit is not labelled successful", async () => {
   const result = await runCodeInSandbox({ env, userId: OWNER, language: "python", source: "raise ValueError()", execFileImpl: fake.execFileImpl });
   assert.equal(result.state, "failed");
   assert.equal(result.success, false);
+  assert.equal(result.exitCode, 2);
   assert.equal(result.stderr, "ValueError\n");
 });
 
