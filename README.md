@@ -162,3 +162,15 @@ For account-enumeration resistance, invalid input is rejected, but upstream erro
 ## Opt-in live Supabase isolation test
 
 `npm run test:supabase:e2e` runs the two-account conversation, message, memory, and row-level-security test. It is skipped unless dedicated, confirmed test accounts and all required variables are supplied, including `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`. It is hard-scoped to the configured ULTRON Supabase project and creates/deletes temporary test rows. Read `docs/SUPABASE_E2E_ISOLATION.md` first. Do not use personal/admin accounts or commit secrets. A skipped test is not evidence that live data isolation works.
+
+
+## ULTRON CORE living interface (isolated service)
+
+The `feature/ultron-live-core-interface-20261029` branch contains a standalone cinematic UI:
+- A WebGL 2 particle core draws 20,000 GPU-driven points and changes its energy/color according to listening, reasoning, research, and speech states.
+- Voice Mode starts continuous browser-native speech recognition after the user activates the mode and grants microphone permission. Text Mode opens the composer and alone exposes the spoken-reply mute control. Voice Mode keeps the composer hidden unless the user opens the optional text input.
+- Task holograms are created only while a request runs, use actual research links where available, and fade after completion.
+- `core-ui-proxy.mjs` serves the static UI and proxies same-origin `/api/*` and `/world-intelligence` requests to the existing `https://ultron-ai-core.onrender.com` API service. Backend provider credentials remain on that existing service; the UI service requires no copied API keys.
+- Deploy this branch as `node core-ui-proxy.mjs` in the **Ultron core** Render workspace only. Do not merge this branch into `main` for the workspace-limited rollout, because other Render services in the separate My Workspace also auto-deploy from `main`.
+
+The 20,000-point GPU path requires a browser with WebGL 2. Voice recognition and speech synthesis depend on browser support and microphone permission. The interface falls back to a lighter particle field if WebGL 2 is unavailable; this fallback is not the 20,000-point GPU renderer.
