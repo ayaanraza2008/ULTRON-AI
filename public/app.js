@@ -8,6 +8,7 @@
     tasks: ["AUTONOMOUS TASKS", "Autonomous tasks"],
     research: ["RESEARCH LAB", "Research lab"],
     coding: ["CODING AGENT", "Coding agent"],
+    vision: ["VISION / CAMERA", "Vision & camera"],
     voice: ["VOICE STUDIO", "Voice studio"],
     files: ["DOCUMENT VAULT", "Document vault"],
     memory: ["MEMORY VAULT", "Memory vault"],
@@ -62,6 +63,17 @@
     preferences: { voice_enabled: true, voice_input_locale: "en-IN", memory_enabled: true },
     voiceActive: false,
     recognition: null,
+    cameraStream: null,
+    cameraRequestId: 0,
+    cameraError: "",
+    cameraNotice: "Camera is off. No frames are being captured.",
+    cameraContinuousConsent: false,
+    cameraContinuous: false,
+    cameraIntervalSeconds: 15,
+    cameraTimer: null,
+    cameraRunId: 0,
+    cameraContinuousStartedAt: 0,
+    cameraSummaries: [],
     lastAnswer: "",
     sidebarCollapsed: false
   };
@@ -333,6 +345,30 @@
       '<div class="preference-row"><div><strong>Premium speech providers</strong><small>Requires server-side provider credentials and live tests.</small></div>' + chip("UNVERIFIED") + '</div>' +
       '<div class="notice-panel">This page does not keep the microphone open in the background. No audio is recorded until you start a browser-supported speech session.</div></section></div>';
   }
+  function renderVision() {
+    const supported = Boolean(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    const cameraOn = Boolean(state.cameraStream);
+    const summaries = state.cameraSummaries.length
+      ? '<div class="camera-summary-list">' + state.cameraSummaries.map(item =>
+          '<article class="camera-summary"><div class="list-row-meta"><span>' + esc(displayDate(item.at)) + '</span>' + chip("SUMMARY") + '</div><p>' + plainText(item.text) + '</p></article>'
+        ).join("") + '</div>'
+      : emptyState("◉", "No scene summaries yet", "Analyze one frame or explicitly start continuous summaries to request descriptions from your configured AI model.");
+    return pageHead("CONSENT-CONTROLLED PERCEPTION", "Vision & camera", "Preview your camera locally, then choose whether to send a single low-resolution still frame to ULTRON. Camera startup never sends frames automatically.", "") +
+      '<div class="two-col vision-layout"><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Live camera preview</strong><small>No recording or automatic upload on start</small></div>' + chip(state.cameraContinuous ? "ANALYZING" : cameraOn ? "CAMERA ACTIVE" : "CAMERA OFF") + '</div>' +
+      '<div class="camera-preview-frame' + (cameraOn ? ' is-active' : '') + '"><video id="vision-preview" autoplay muted playsinline aria-label="Live camera preview"></video><div class="camera-preview-placeholder"><span class="empty-symbol">◉</span><strong>Camera offline</strong><span>Start the camera when you are ready.</span></div></div>' +
+      (state.cameraError ? '<div class="error-panel">' + esc(state.cameraError) + '</div>' : '') +
+      '<div class="camera-controls"><button class="button button-primary" data-action="camera-start" type="button"' + (!supported || cameraOn ? " disabled" : "") + '>Start camera</button><button class="button button-danger" data-action="camera-stop" type="button"' + (!cameraOn ? " disabled" : "") + '>Stop camera</button><button class="button" data-action="camera-analyze" type="button"' + (!cameraOn || state.busy ? " disabled" : "") + '>Analyze one frame</button></div>' +
+      '<p class="field-help">' + (supported ? 'Browser camera access is available. Your browser will ask permission after you press Start camera.' : 'Camera access requires a supported browser API and a secure context (HTTPS or trusted localhost).') + '</p>' +
+      '<div class="notice-panel">' + esc(state.cameraNotice) + '</div>' +
+      '<p class="microcopy">A frame is resized to at most 640 × 360 and encoded as JPEG before a request. One-shot analysis sends the still image to the configured model; image bytes are not stored as camera recordings. The returned text may be saved in your chat history when signed in.</p>' +
+      '</section><section class="panel panel-pad"><div class="panel-head"><div class="panel-title"><strong>Continuous scene summaries</strong><small>Opt-in, bounded sampling</small></div>' + chip(state.cameraContinuous ? "RUNNING" : state.cameraContinuousConsent ? "CONSENT GIVEN" : "OFF") + '</div>' +
+      '<label class="camera-consent"><input id="camera-continuous-consent" type="checkbox"' + (state.cameraContinuousConsent ? " checked" : "") + (cameraOn ? "" : " disabled") + '><span><strong>Allow continuous still-frame analysis</strong><small>Explicitly allow a camera still to be sent at the selected interval. This does not record video.</small></span></label>' +
+      '<label for="camera-interval">Sampling interval</label><select id="camera-interval"' + (state.cameraContinuous ? " disabled" : "") + '><option value="15"' + (state.cameraIntervalSeconds === 15 ? " selected" : "") + '>Every 15 seconds</option><option value="30"' + (state.cameraIntervalSeconds === 30 ? " selected" : "") + '>Every 30 seconds</option><option value="60"' + (state.cameraIntervalSeconds === 60 ? " selected" : "") + '>Every 60 seconds</option></select>' +
+      '<div class="form-actions"><button class="button button-primary" data-action="camera-continuous-start" type="button"' + (!cameraOn || !state.cameraContinuousConsent || state.cameraContinuous || !hasSession() ? " disabled" : "") + '>Start continuous summaries</button><button class="button button-danger" data-action="camera-continuous-stop" type="button"' + (!state.cameraContinuous ? " disabled" : "") + '>Stop summaries</button></div>' +
+      '<p class="field-help">Continuous mode requires sign-in and a compatible vision model. It sends no more than one frame at a time, skips samples while another chat request is active, and stops automatically after 30 minutes. Navigating away, hiding this tab, unchecking consent, or stopping the camera halts future sampling.</p>' +
+      '<div class="panel-head camera-summary-heading"><div class="panel-title"><strong>Recent visual observations</strong><small>Newest first · up to 8 summaries</small></div></div>' + summaries + '</section></div>';
+  }
+
   function renderFiles() {
     let extracted = "";
     if (state.document) {
@@ -411,13 +447,20 @@
 
   const RENDERERS = {
     home: renderHome, chat: renderChat, tasks: renderTasks, research: renderResearch, coding: renderCoding,
-    voice: renderVoice, files: renderFiles, memory: renderMemory, automation: renderAutomation,
+    vision: renderVision, voice: renderVoice, files: renderFiles, memory: renderMemory, automation: renderAutomation,
     integrations: renderIntegrations, security: renderSecurity, system: renderSystem, settings: renderSettings
   };
   function renderCurrent() {
     const root = $("#view-root");
     if (!root) return;
     root.innerHTML = (RENDERERS[state.view] || renderHome)();
+    if (state.view === "vision" && state.cameraStream) {
+      const preview = $("#vision-preview");
+      if (preview) {
+        preview.srcObject = state.cameraStream;
+        preview.play().catch(() => {});
+      }
+    }
     const meta = VIEWS[state.view] || VIEWS.home;
     if ($("#breadcrumb-current")) $("#breadcrumb-current").textContent = meta[0];
     $$("[data-view]").forEach(button => {
@@ -431,6 +474,7 @@
   }
   async function navigate(view) {
     if (!RENDERERS[view]) view = "home";
+    if (state.view === "vision" && view !== "vision") stopCamera();
     state.view = view;
     closeMobileNav();
     renderCurrent();
@@ -493,13 +537,15 @@
     if (!signedIn() || !id || !content) return;
     await api("/api/conversations/" + encodeURIComponent(id) + "/messages", { method: "POST", body: { role: role, content: String(content).slice(0, 100000) } });
   }
-  async function sendChat(rawPrompt) {
+  async function sendChat(rawPrompt, options = {}) {
     const prompt = String(rawPrompt || "").trim();
-    if (!prompt && !state.attachments.length) return;
-    if (!hasSession()) { toast("Sign in to send a chat request.", "error"); openAuth("signin"); return; }
-    if (state.busy) return;
-    const attachments = state.attachments.slice(0, 2);
-    state.attachments = [];
+    const preserveAttachments = options.preserveAttachments === true;
+    const attachments = Array.isArray(options.attachments) ? options.attachments.slice(0, 2) : state.attachments.slice(0, 2);
+    if (!prompt && !attachments.length) return null;
+    if (!hasSession()) { toast("Sign in to send a chat request.", "error"); openAuth("signin"); return null; }
+    if (state.busy) return null;
+    if (!preserveAttachments) state.attachments = [];
+    let completedAnswer = null;
     state.messages.push({ role: "user", content: prompt, time: "NOW", attachments: attachments.map(file => ({ name: file.name })) });
     const assistant = { role: "assistant", content: "", streaming: true, time: "LIVE STREAM", model: state.model };
     state.messages.push(assistant);
@@ -575,6 +621,7 @@
       assistant.streaming = false;
       if (!answer) throw new Error("The provider finished without returning a text response.");
       state.lastAnswer = answer;
+      completedAnswer = answer;
       setCore("success", "MODEL RESPONSE RECEIVED");
       if (signedIn() && state.conversationId) {
         try { await saveMessage(state.conversationId, "assistant", answer); }
@@ -587,11 +634,12 @@
     } finally {
       state.busy = false;
       state.controller = null;
-      state.attachments = [];
+      if (!preserveAttachments) state.attachments = [];
       renderCurrent();
       if ($("#chat-live-status")) $("#chat-live-status").textContent = "Awaiting operator input";
       if (state.coreState === "error") toast(assistant.content, "error");
     }
+    return completedAnswer;
   }
   async function loadTasks() {
     if (!signedIn()) { state.tasks = []; state.tasksError = "Sign in with Supabase to read private task records."; return; }
@@ -805,6 +853,175 @@
     try { await api("/api/documents/" + encodeURIComponent(id), { method: "DELETE" }); toast("Private document deleted.", "success"); await loadSavedDocuments(); renderCurrent(); }
     catch (error) { toast(error.message || "Could not delete document.", "error"); }
   }
+  function cameraErrorMessage(error) {
+    if (error && error.name === "NotAllowedError") return "Camera permission was denied. Allow camera access in browser site settings, then retry.";
+    if (error && error.name === "NotFoundError") return "No camera was found on this device.";
+    if (error && error.name === "NotReadableError") return "The camera could not be opened. Check whether another application is using it.";
+    return "The camera could not start. Check browser support, site permissions, and device availability.";
+  }
+  async function startCamera() {
+    if (!window.isSecureContext || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+      state.cameraError = "Camera access requires a supported browser and HTTPS or trusted localhost.";
+      renderCurrent();
+      return;
+    }
+    if (state.cameraStream) return;
+    const requestId = ++state.cameraRequestId;
+    state.cameraError = "";
+    state.cameraNotice = "Requesting camera permission. No frames are sent while the preview is idle.";
+    renderCurrent();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 640, max: 640 },
+          height: { ideal: 360, max: 360 }
+        }
+      });
+      if (requestId !== state.cameraRequestId) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      state.cameraStream = stream;
+      state.cameraError = "";
+      state.cameraNotice = "Camera preview is active. No frames are sent unless you choose one-shot analysis or start continuous summaries.";
+      stream.getVideoTracks().forEach(track => track.addEventListener("ended", () => {
+        if (state.cameraStream === stream) {
+          stopCamera();
+          if (state.view === "vision") renderCurrent();
+        }
+      }, { once: true }));
+      renderCurrent();
+      const preview = $("#vision-preview");
+      if (preview) {
+        preview.srcObject = stream;
+        await preview.play();
+      }
+    } catch (error) {
+      if (requestId !== state.cameraRequestId) return;
+      const message = cameraErrorMessage(error);
+      stopCamera();
+      state.cameraError = message;
+      state.cameraNotice = "Camera is off. No frames are being captured.";
+      renderCurrent();
+      toast(message, "error");
+    }
+  }
+  function stopContinuousCameraAnalysis(updateNotice = true) {
+    state.cameraContinuous = false;
+    state.cameraRunId += 1;
+    if (state.cameraTimer !== null) window.clearTimeout(state.cameraTimer);
+    state.cameraTimer = null;
+    state.cameraContinuousStartedAt = 0;
+    if (updateNotice) state.cameraNotice = "Continuous scene summaries are stopped. No more frames will be sampled.";
+  }
+  function stopCamera() {
+    state.cameraRequestId += 1;
+    stopContinuousCameraAnalysis(false);
+    state.cameraContinuousConsent = false;
+    const stream = state.cameraStream;
+    state.cameraStream = null;
+    if (stream) stream.getTracks().forEach(track => {
+      try { track.stop(); } catch {}
+    });
+    const preview = $("#vision-preview");
+    if (preview) {
+      try { preview.pause(); } catch {}
+      preview.srcObject = null;
+    }
+    state.cameraNotice = "Camera is off. No frames are being captured.";
+  }
+  function captureCameraFrame() {
+    const preview = $("#vision-preview");
+    if (!state.cameraStream || !preview || preview.readyState < 2 || !preview.videoWidth || !preview.videoHeight) {
+      throw new Error("The camera preview is not ready yet. Wait for the image to appear, then retry.");
+    }
+    const sourceWidth = preview.videoWidth;
+    const sourceHeight = preview.videoHeight;
+    const scale = Math.min(1, 640 / sourceWidth, 360 / sourceHeight);
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("The browser could not prepare a camera still frame.");
+    context.drawImage(preview, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
+    if (!dataUrl.startsWith("data:image/jpeg;base64,") || dataUrl.length > 750_000) {
+      throw new Error("This camera frame exceeds the safe upload size limit. Retry or adjust the camera scene.");
+    }
+    return { name: "camera-frame.jpg", dataUrl };
+  }
+  async function analyzeCameraFrame() {
+    if (!state.cameraStream) throw new Error("Start the camera before requesting a frame analysis.");
+    if (state.busy) { toast("ULTRON is already processing a request. Wait for it to finish before analyzing a frame.", "error"); return; }
+    const frame = captureCameraFrame();
+    state.cameraNotice = "Sending one still frame to the configured AI model. The camera itself is not recorded.";
+    renderCurrent();
+    const answer = await sendChat(
+      "Analyze this camera still. Describe visible objects, the scene, and any readable text. Separate observations from uncertainty and do not identify people.",
+      { attachments: [frame], preserveAttachments: true }
+    );
+    if (answer) {
+      state.cameraSummaries.unshift({ at: new Date().toISOString(), text: answer });
+      state.cameraSummaries = state.cameraSummaries.slice(0, 8);
+      state.cameraNotice = "One frame was analyzed. The image is not stored as a recording; response text may be saved to signed-in conversation history.";
+    } else {
+      state.cameraNotice = "The frame was not successfully analyzed. Review the response/error in the AI terminal and check vision-provider readiness.";
+    }
+    if (state.view === "vision") renderCurrent();
+  }
+  function scheduleContinuousCameraSummary(runId) {
+    if (!state.cameraContinuous || !state.cameraStream || runId !== state.cameraRunId) return;
+    state.cameraTimer = window.setTimeout(async () => {
+      state.cameraTimer = null;
+      if (!state.cameraContinuous || !state.cameraStream || runId !== state.cameraRunId) return;
+      if (Date.now() - state.cameraContinuousStartedAt >= 30 * 60 * 1000) {
+        stopContinuousCameraAnalysis(false);
+        state.cameraNotice = "Continuous summaries stopped at the 30-minute session limit.";
+        if (state.view === "vision") renderCurrent();
+        return;
+      }
+      if (!state.busy) {
+        try {
+          const frame = captureCameraFrame();
+          state.cameraNotice = "Sending one low-resolution still frame to the configured AI model.";
+          const answer = await sendChat(
+            "Describe the current camera still in 1–3 concise sentences. Mention only visible evidence and clearly state uncertainty.",
+            { attachments: [frame], preserveAttachments: true }
+          );
+          if (answer) {
+            state.cameraSummaries.unshift({ at: new Date().toISOString(), text: answer });
+            state.cameraSummaries = state.cameraSummaries.slice(0, 8);
+            state.cameraNotice = "Latest frame analyzed. Continuous sampling remains active until you stop it or the 30-minute limit is reached.";
+          } else {
+            state.cameraNotice = "The latest frame did not produce a verified description. Check chat errors and vision-provider readiness.";
+          }
+        } catch (error) {
+          state.cameraNotice = error.message || "The latest frame could not be analyzed.";
+        }
+      } else {
+        state.cameraNotice = "Sample skipped because another chat request is active.";
+      }
+      if (state.view === "vision") renderCurrent();
+      if (state.cameraContinuous && state.cameraStream && runId === state.cameraRunId) scheduleContinuousCameraSummary(runId);
+    }, Math.max(15, Math.min(60, Number(state.cameraIntervalSeconds) || 15)) * 1000);
+  }
+  function startContinuousCameraAnalysis() {
+    if (!state.cameraStream) { toast("Start the camera before enabling continuous summaries.", "error"); return; }
+    if (!state.cameraContinuousConsent) { toast("Enable the explicit continuous-frame consent checkbox first.", "error"); return; }
+    if (!hasSession()) { state.cameraNotice = "Sign in before sending continuous camera frames to the AI model."; openAuth("signin"); renderCurrent(); return; }
+    if (state.cameraContinuous) return;
+    state.cameraContinuous = true;
+    state.cameraContinuousStartedAt = Date.now();
+    const runId = ++state.cameraRunId;
+    state.cameraNotice = "Continuous summaries are active. One still frame will be sampled per interval; maximum session length is 30 minutes.";
+    scheduleContinuousCameraSummary(runId);
+    renderCurrent();
+  }
+
   function startVoice() {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) { toast("Speech recognition is not supported by this browser.", "error"); return; }
@@ -943,6 +1160,11 @@
       else if (action === "refresh-integrations") { await loadIntegrations(); renderCurrent(); }
       else if (action === "refresh-automation") { await loadSchedules(); renderCurrent(); }
       else if (action === "toggle-schedule" || action === "run-schedule" || action === "delete-schedule") await scheduleAction(action, button.dataset.id, button);
+      else if (action === "camera-start") await startCamera();
+      else if (action === "camera-stop") { stopCamera(); renderCurrent(); }
+      else if (action === "camera-analyze") await analyzeCameraFrame();
+      else if (action === "camera-continuous-start") startContinuousCameraAnalysis();
+      else if (action === "camera-continuous-stop") { stopContinuousCameraAnalysis(); renderCurrent(); }
       else if (action === "voice-toggle") state.voiceActive ? stopVoice() : startVoice();
       else if (action === "send-voice-text") { const text = $("#voice-text") ? $("#voice-text").value : state.voiceText; state.voiceText = text || ""; await navigate("chat"); await sendChat(state.voiceText); }
       else if (action === "speak-last") speakLast();
@@ -1011,6 +1233,15 @@
   document.addEventListener("change", event => {
     if (event.target.id === "model-select") { state.model = event.target.value || "openrouter/free"; }
     if (event.target.id === "persona-select") state.persona = event.target.value === "naya" ? "naya" : "ultron";
+    if (event.target.id === "camera-continuous-consent") {
+      state.cameraContinuousConsent = event.target.checked === true;
+      if (!state.cameraContinuousConsent && state.cameraContinuous) stopContinuousCameraAnalysis();
+      renderCurrent();
+    }
+    if (event.target.id === "camera-interval") {
+      const value = Number(event.target.value);
+      state.cameraIntervalSeconds = [15, 30, 60].includes(value) ? value : 15;
+    }
     if (event.target.id === "schedule-role") {
       const select = $("#schedule-routine");
       if (select) {
@@ -1019,6 +1250,14 @@
       }
     }
   });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state.cameraStream) {
+      stopCamera();
+      if (state.view === "vision") renderCurrent();
+    }
+  });
+  window.addEventListener("pagehide", stopCamera, { once: true });
+
   document.addEventListener("keydown", event => {
     if (event.target && event.target.matches("#chat-input") && event.key === "Enter" && !event.shiftKey) {
       event.preventDefault(); const form = event.target.closest("form"); if (form) form.requestSubmit();
