@@ -23,7 +23,7 @@ async function withServer(env, fetchImpl, run) {
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
 
-test("agent exposes and executes the fixed public API lookup tool for an ordinary weather request", async () => {
+test("agent exposes and executes the fixed public API lookup tool for an earthquake request", async () => {
   let modelCalls = 0;
   const externalUrls = [];
   await withServer({ OPENROUTER_API_KEY: "test-only", OPENROUTER_DEFAULT_MODEL: "openrouter/free" }, async (url, options) => {
@@ -34,14 +34,13 @@ test("agent exposes and executes the fixed public API lookup tool for an ordinar
       if (modelCalls === 1) {
         return jsonResponse({ choices: [{ message: { role: "assistant", content: "I will check that." } }] });
       }
-      return jsonResponse({ choices: [{ message: { role: "assistant", content: "Open-Meteo reports 31.2°C in Agra. Weather data is attributed to Open-Meteo." } }] });
+      return jsonResponse({ choices: [{ message: { role: "assistant", content: "USGS lists a magnitude 4.8 earthquake. Preliminary earthquake feed data can be revised." } }] });
     }
     externalUrls.push(String(url));
-    if (String(url).startsWith("https://geocoding-api.open-meteo.com/")) {
-      return jsonResponse({ results: [{ name: "Agra", country: "India", admin1: "Uttar Pradesh", latitude: 27.1767, longitude: 78.0081 }] });
-    }
-    if (String(url).startsWith("https://api.open-meteo.com/v1/forecast?")) {
-      return jsonResponse({ timezone: "Asia/Kolkata", current: { temperature_2m: 31.2, time: "2026-10-29T12:00" }, current_units: { temperature_2m: "°C" } });
+    if (String(url) === "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson") {
+      return jsonResponse({ features: [
+        { id: "event-1", properties: { mag: 4.8, place: "10 km NE of Sample Town", time: 1793250000000, url: "https://earthquake.usgs.gov/earthquakes/eventpage/event-1" }, geometry: { coordinates: [78.1, 27.2, 12.4] } }
+      ] });
     }
     throw new Error("Unexpected external URL: " + url);
   }, async base => {
@@ -56,16 +55,16 @@ test("agent exposes and executes the fixed public API lookup tool for an ordinar
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "What's the weather in Agra today?" })
+      body: JSON.stringify({ prompt: "Latest earthquakes for the last hour above magnitude 4" })
     });
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.match(body.content, /31\.2°C/);
     assert.ok(body.toolsUsed.some(item => item.name === "public_api_lookup" && item.ok));
     const result = body.toolResults.find(item => item.name === "public_api_lookup")?.result;
-    assert.equal(result.location.name, "Agra");
-    assert.equal(result.current.temperature_2m, 31.2);
-    assert.equal(externalUrls.length, 2);
+    assert.equal(result.events[0].magnitude, 4.8);
+    assert.equal(result.matchingEvents, 1);
+    assert.equal(externalUrls.length, 1);
   });
 });
 
