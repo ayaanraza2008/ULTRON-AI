@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createAgentRouter } from "../agent-runtime.js";
 
-test("agent invokes the fixed-host, no-key Open-Meteo tool", async t => {
+test("agent may fetch public weather while consequential follow-up remains approval-gated", async t => {
   const providerCalls = [];
   const publicApiCalls = [];
   const app = express();
@@ -23,12 +23,15 @@ test("agent invokes the fixed-host, no-key Open-Meteo tool", async t => {
             choices: [{ message: { role: "assistant", content: null, tool_calls: [{
               id: "weather-tool-call", type: "function",
               function: { name: "get_free_public_data", arguments: JSON.stringify({ kind: "weather", location: "Agra" }) }
+            }, {
+              id: "email-tool-call", type: "function",
+              function: { name: "browser_use", arguments: JSON.stringify({ task: "Send an email to a colleague with the weather report", maxSteps: 3 }) }
             }] } }]
           }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
         return new Response(JSON.stringify({
           model: "test-model",
-          choices: [{ message: { role: "assistant", content: "Current weather for Agra: mainly clear, 30.4 °C. Weather data by Open-Meteo.com." } }]
+          choices: [{ message: { role: "assistant", content: "Current weather for Agra: mainly clear, 30.4 °C. Weather data by Open-Meteo.com. I did not send the email because approval is required." } }]
         }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       const parsed = new URL(url);
@@ -54,7 +57,7 @@ test("agent invokes the fixed-host, no-key Open-Meteo tool", async t => {
 
   const response = await fetch("http://127.0.0.1:" + server.address().port + "/api/agent/run", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: "What is the weather in Agra?" })
+    body: JSON.stringify({ prompt: "What is the weather in Agra, then email this result to a colleague?" })
   });
   assert.equal(response.status, 200);
   const body = await response.json();
@@ -64,6 +67,11 @@ test("agent invokes the fixed-host, no-key Open-Meteo tool", async t => {
   assert.equal(result.kind, "weather");
   assert.equal(result.current.temperatureC, 30.4);
   assert.match(result.attribution, /Open-Meteo/);
+  const browserResult = body.toolResults.find(item => item.name === "browser_use");
+  assert.ok(browserResult);
+  assert.equal(browserResult.ok, false);
+  assert.equal(browserResult.result.approvalRequired, true);
+  assert.equal(browserResult.result.risk.level, "external_effect");
   assert.equal(providerCalls.length, 2);
   assert.equal(publicApiCalls.length, 2);
   assert.ok(publicApiCalls.every(call => call.options.redirect === "error"));

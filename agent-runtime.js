@@ -483,6 +483,7 @@ const SAFE_PREPARATION_TOOLS = new Set([
   // tasks (including durable queueing, media jobs, publishing, or messaging)
   // outside this exception.
   "research_web",
+  "get_free_public_data",
   "create_youtube_production_plan",
   "create_spaceplanner_plan",
   "plan_employee",
