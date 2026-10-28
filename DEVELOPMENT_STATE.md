@@ -24,7 +24,7 @@ Last verified: 2026-10-27 UTC (source changes verified; production deployment bl
 - PR #122: server-side multi-provider fallback registry and regression coverage merged.
 - PR #123: empty/malformed assistant completions trigger provider fallback in the main agent runtime; regression test merged.
 - PR #124: Browser Use model proxy now rejects malformed/empty HTTP 200 completions and tries the next approved model; regression tests added. CI test job and world-intelligence build passed. Render deployment was queued at last check, not yet verified live.
-- Render service `https://ultron-ai-zvd7.onrender.com` is configured for automatic deployment from `main`. Verified live deployment on 2026-10-24: commit `56583bb56c438fa00cec917edd3166a1e053894a` (PR #130), status `live`.
+- Render service `https://ultron-ai-core.onrender.com` is configured for automatic deployment from `main`. Verified live deployment on 2026-10-24: commit `56583bb56c438fa00cec917edd3166a1e053894a` (PR #130), status `live`.
 - Backend worker has an allowlist for research, AI Employee drafts, and bounded research-to-report workflows. It does not execute arbitrary code or perform external consequential actions.
 - Readiness endpoint is intentionally a configuration/process snapshot, not proof of live provider, database, or device functionality.
 - Supabase RLS policies and revocation of anonymous table grants have been applied, but two-account isolation still needs authenticated end-to-end testing.
