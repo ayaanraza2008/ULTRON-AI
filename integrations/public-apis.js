@@ -614,7 +614,7 @@ export async function lookupPublicApi(args = {}, { fetchImpl = safePinnedFetch }
   }
 
   if (service === "holidays") {
-    const countryCode = boundedQuery(args.countryCode, 2).toUpperCase();
+    const countryCode = boundedQuery(args.countryCode, 8).toUpperCase();
     const year = args.year === undefined ? new Date().getUTCFullYear() : Number(args.year);
     if (!/^[A-Z]{2}$/.test(countryCode)) {
       throw apiError("PUBLIC_API_COUNTRY_CODE_INVALID", "Provide a two-letter ISO country code, such as IN, US, or GB.", 400);
@@ -852,7 +852,7 @@ export function inferPublicApiRequest(text) {
 
   if (/\b(?:met museum|metropolitan museum(?: of art)?|museum collection|museum artworks?|museum art)\b/i.test(value)
       && !/\b(?:api|provider|endpoint|documentation|integration)\b/i.test(value)) {
-    const artworkMatch = value.match(/\b(?:about|on|for|search(?:\s+for)?)\s+(.{2,120}?)(?=[?.!,;]|$)/i)
+    const artworkMatch = value.match(/\b(?:about|on|for)\s+(.{2,120}?)(?=[?.!,;]|$)/i)
       || value.match(/\b(?:museum artworks?|museum art|museum collection|met museum|metropolitan museum(?: of art)?)\s+(.{2,120}?)(?=[?.!,;]|$)/i);
     if (artworkMatch) {
       const query = boundedQuery(artworkMatch[1], 160);
