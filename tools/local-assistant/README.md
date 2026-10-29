@@ -56,6 +56,9 @@ To explicitly download the recommended small model, use `ultron-local model pull
 ## Agents and commands
 
 ~~~powershell
+# Read local CPU, RAM, and disk use without network requests or process inventory.
+ultron-local health
+
 # Detect hardware and installed local models; no download.
 ultron-local doctor
 ultron-local model list
