@@ -453,13 +453,16 @@ function withTimeout(ms, parentSignal) {
 export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedFetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
   const router = express.Router();
 
-  router.post("/reports/pdf", requireSupabaseUser, (req, res) => {
+  router.post("/reports/pdf", requireSupabaseUser, async (req, res) => {
     const body = req.body;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return res.status(400).json({ error: { code: "INVALID_REPORT", message: "Report data must be a JSON object." } });
     }
-    const result = generateReportPdf({ title: body.title, content: body.content, sections: body.sections });
-    if (!result.ok) return res.status(400).json({ error: { code: result.code, message: result.message } });
+    const result = await generateReportPdf({ title: body.title, content: body.content, sections: body.sections });
+    if (!result.ok) {
+      const status = result.code === "REPORT_GENERATION_FAILED" ? 500 : 400;
+      return res.status(status).json({ error: { code: result.code, message: result.message } });
+    }
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", "attachment; filename=\"ultron-report.pdf\"");
     res.setHeader("Cache-Control", "no-store");
