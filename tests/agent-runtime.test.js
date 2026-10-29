@@ -2138,7 +2138,8 @@ test("agent automatically advertises and consumes locally bundled pinned ECC gui
       eccNetworkCalls += 1;
       throw new Error("Bundled ECC skills must not require runtime network access.");
     }
-    if (url.startsWith("https://github.com/codecrafters-io/build-your-own-x/") || url.startsWith("https://raw.githubusercontent.com/codecrafters-io/build-your-own-x/")) {
+    if (url.startsWith("https://github.com/codecrafters-io/build-your-own-x/")
+      || url.startsWith("https://raw.githubusercontent.com/codecrafters-io/build-your-own-x/")) {
       tutorialNetworkCalls += 1;
       throw new Error("Build Your Own X references must not trigger runtime network access.");
     }
@@ -2264,7 +2265,7 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 59, "the compound route should expose the current complete allowlist, including OpenSEO");
+    assert.equal(compoundTools.length, 71);
   });
 });
 

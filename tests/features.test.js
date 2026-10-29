@@ -1218,6 +1218,426 @@ test("STT JSON response is bounded and cancelled when declared oversized", async
   }), { status: 200, headers: { "content-length": "1000001", "content-type": "application/json" } }) });
 });
 
+
+const STUDY_PACK_TEST_ID = "10000000-0000-4000-8000-000000000001";
+const STUDY_PACK_USER_ID = "00000000-0000-4000-8000-000000000001";
+const validStudyPack = () => ({
+  state: "completed",
+  topic: "Photosynthesis",
+  format: "mixed",
+  level: "beginner",
+  language: "English",
+  sourceMode: "general_knowledge_draft",
+  generatedAt: "2026-10-29T00:00:00.000Z",
+  model: "test-model",
+  learningObjectives: ["Explain photosynthesis"],
+  summary: "Photosynthesis converts light energy to stored chemical energy.",
+  flashcards: [{ question: "What pigment absorbs light?", answer: "Chlorophyll." }],
+  quiz: [{
+    question: "What gas is taken in?",
+    options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"],
+    answerIndex: 1,
+    explanation: "Carbon dioxide supplies carbon for sugars."
+  }],
+  revisionChecklist: ["Remember the inputs and products"],
+  sourceNotes: "General-knowledge draft.",
+  notice: "AI-generated study aid."
+});
+
+test("study pack library saves only validated user-owned content", async () => {
+  const calls = [];
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Photosynthesis Revision", user_id: "99999999-9999-4999-8999-999999999999", pack: validStudyPack() })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.studyPack.id, STUDY_PACK_TEST_ID);
+    assert.equal(body.studyPack.user_id, STUDY_PACK_USER_ID);
+    assert.equal(body.studyPack.title, "Photosynthesis Revision");
+    assert.equal(body.studyPack.content.quiz[0].answerIndex, 1);
+  }, {
+    supabaseRest: async (_req, table, method, query, body) => {
+      calls.push({ table, method, query, body });
+      assert.equal(table, "study_packs");
+      assert.equal(method, "POST");
+      assert.equal(query, "");
+      return [{ ...body, id: STUDY_PACK_TEST_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" }];
+    }
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.user_id, STUDY_PACK_USER_ID, "owner ID must come from the authenticated session, not JSON");
+  assert.equal(calls[0].body.source_mode, "general_knowledge_draft");
+});
+
+test("study pack library rejects malformed quiz content before database writes", async () => {
+  let calls = 0;
+  const pack = validStudyPack();
+  pack.quiz[0].answerIndex = 9;
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pack })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_STUDY_PACK");
+    assert.equal(calls, 0);
+  }, { supabaseRest: async () => { calls++; return []; } });
+});
+
+test("study pack library list/detail/delete use explicit authenticated-owner filters", async () => {
+  const calls = [];
+  const packRow = {
+    id: STUDY_PACK_TEST_ID,
+    user_id: STUDY_PACK_USER_ID,
+    title: "Photosynthesis",
+    topic: "Photosynthesis",
+    format: "mixed",
+    level: "beginner",
+    language: "English",
+    source_mode: "general_knowledge_draft",
+    content: { summary: validStudyPack().summary },
+    created_at: "2026-10-29T00:00:00.000Z",
+    updated_at: "2026-10-29T00:00:00.000Z"
+  };
+  await withServer({}, async base => {
+    const listResponse = await fetch(base + "/api/study-packs?limit=1000");
+    assert.equal(listResponse.status, 200);
+    assert.equal((await listResponse.json()).studyPacks[0].id, STUDY_PACK_TEST_ID);
+
+    const detailResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID);
+    assert.equal(detailResponse.status, 200);
+    assert.equal((await detailResponse.json()).studyPack.content.summary, validStudyPack().summary);
+
+    const deleteResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, { method: "DELETE" });
+    assert.equal(deleteResponse.status, 200);
+    assert.deepEqual(await deleteResponse.json(), { deleted: true, id: STUDY_PACK_TEST_ID });
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls.push({ table, method, query });
+      assert.equal(table, "study_packs");
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID), "every operation must filter by the authenticated user");
+      if (method === "DELETE") return [packRow];
+      if (query.includes("id=eq.")) return [packRow];
+      return [packRow];
+    }
+  });
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].query.endsWith("&limit=50"), "list limit must be clamped to 50");
+  assert.ok(calls[1].query.includes("id=eq." + STUDY_PACK_TEST_ID));
+  assert.equal(calls[2].method, "DELETE");
+});
+
+
+const USER_NOTE_TEST_ID = "20000000-0000-4000-8000-000000000001";
+const USER_NOTE_OWNER_ID = "00000000-0000-4000-8000-000000000001";
+const validNoteInput = () => ({
+  title: "Quantum Physics Revision",
+  body: "Energy bands describe allowed electron energies in solids.",
+  tags: ["physics", "revision"]
+});
+
+
+test("study pack Markdown export is owner-scoped and includes revision content", async () => {
+  const calls = [];
+  const exportRow = {
+    id: STUDY_PACK_TEST_ID,
+    user_id: STUDY_PACK_USER_ID,
+    title: "Photosynthesis Exam Pack",
+    topic: "Photosynthesis",
+    format: "mixed",
+    level: "exam",
+    language: "English",
+    source_mode: "based_on_user_supplied_content",
+    content: {
+      learningObjectives: ["Explain photosynthesis"],
+      summary: "Photosynthesis stores light energy in chemical bonds.",
+      flashcards: [{ question: "Which pigment absorbs light?", answer: "Chlorophyll." }],
+      quiz: [{
+        question: "Which gas is taken in?",
+        options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"],
+        answerIndex: 1,
+        explanation: "Carbon dioxide supplies carbon for sugar production."
+      }],
+      revisionChecklist: ["Review inputs and products"],
+      sourceNotes: "Based on user-provided course notes.",
+      notice: "Check this study aid against the lecturer's syllabus."
+    }
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID + "/export");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /text\/markdown/);
+    assert.match(response.headers.get("content-disposition"), /attachment; filename="Photosynthesis-Exam-Pack\.md"/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const markdown = await response.text();
+    assert.match(markdown, /^# Photosynthesis Exam Pack/);
+    assert.match(markdown, /Which pigment absorbs light/);
+    assert.match(markdown, /\*\*Correct:\*\* Carbon dioxide/);
+    assert.match(markdown, /Review inputs and products/);
+    assert.match(markdown, /Based on user-provided course notes/);
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls.push({ table, method, query });
+      assert.equal(table, "study_packs");
+      assert.equal(method, "GET");
+      assert.ok(query.includes("id=eq." + STUDY_PACK_TEST_ID));
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID));
+      return [exportRow];
+    }
+  });
+  assert.equal(calls.length, 1);
+});
+
+test("study pack Markdown export returns not-found for records outside the owner's scope", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID + "/export");
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).error.code, "STUDY_PACK_NOT_FOUND");
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls++;
+      assert.equal(table, "study_packs");
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID));
+      return [];
+    }
+  });
+  assert.equal(calls, 1);
+});
+
+
+test("study pack update supports title edits and validated content replacement", async () => {
+  const calls = [];
+  const initial = {
+    id: STUDY_PACK_TEST_ID,
+    user_id: STUDY_PACK_USER_ID,
+    title: "Old title",
+    topic: "Photosynthesis",
+    format: "mixed",
+    level: "beginner",
+    language: "English",
+    source_mode: "general_knowledge_draft",
+    content: { summary: "Old summary" }
+  };
+  await withServer({}, async base => {
+    const titleResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New title" })
+    });
+    assert.equal(titleResponse.status, 200);
+    assert.equal((await titleResponse.json()).studyPack.title, "New title");
+
+    const changedPack = {
+      ...validStudyPack(),
+      topic: "Photosynthesis updated",
+      summary: "Updated course summary."
+    };
+    const contentResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Final title", pack: changedPack, user_id: "99999999-9999-4999-8999-999999999999" })
+    });
+    assert.equal(contentResponse.status, 400, "unknown caller fields must be rejected");
+    const validContentResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Final title", pack: changedPack })
+    });
+    assert.equal(validContentResponse.status, 200);
+    const result = await validContentResponse.json();
+    assert.equal(result.studyPack.title, "Final title");
+    assert.equal(result.studyPack.content.summary, "Updated course summary.");
+  }, {
+    supabaseRest: async (_req, table, method, query, patch) => {
+      calls.push({ table, method, query, patch });
+      assert.equal(table, "study_packs");
+      assert.equal(method, "PATCH");
+      assert.ok(query.includes("id=eq." + STUDY_PACK_TEST_ID));
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID));
+      return [{ ...initial, ...patch, id: STUDY_PACK_TEST_ID, user_id: STUDY_PACK_USER_ID }];
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].patch, { title: "New title" });
+  assert.equal(calls[1].patch.title, "Final title");
+  assert.equal(calls[1].patch.content.summary, "Updated course summary.");
+});
+
+test("study pack update rejects invalid IDs and malformed packs before database writes", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    const invalidId = await fetch(base + "/api/study-packs/not-a-uuid", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New title" })
+    });
+    assert.equal(invalidId.status, 400);
+
+    const invalidPack = { ...validStudyPack(), quiz: [{ question: "Bad answer", options: ["A", "B", "C", "D"], answerIndex: 99, explanation: "invalid index" }] };
+    const response = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pack: invalidPack })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_STUDY_PACK");
+  }, { supabaseRest: async () => { calls++; return []; } });
+  assert.equal(calls, 0);
+});
+
+test("notes library saves only authenticated-owner data", async () => {
+  const calls = [];
+  const note = { ...validNoteInput(), id: USER_NOTE_TEST_ID, user_id: USER_NOTE_OWNER_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validNoteInput(), user_id: "99999999-9999-4999-8999-999999999999" })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.note.id, USER_NOTE_TEST_ID);
+    assert.equal(body.note.user_id, USER_NOTE_OWNER_ID);
+    assert.deepEqual(body.note.tags, ["physics", "revision"]);
+  }, {
+    supabaseRest: async (_req, table, method, query, body) => {
+      calls.push({ table, method, query, body });
+      assert.equal(table, "user_notes");
+      assert.equal(method, "POST");
+      assert.equal(query, "");
+      return [{ ...body, id: USER_NOTE_TEST_ID, created_at: note.created_at, updated_at: note.updated_at }];
+    }
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.user_id, USER_NOTE_OWNER_ID);
+});
+
+test("notes library rejects oversized, empty and malformed note input before database writes", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    for (const body of [
+      { title: " ", body: "valid body" },
+      { title: "valid title", body: " " },
+      { title: "valid title", body: "valid body", tags: "not-an-array" },
+      { title: "valid title", body: "valid body", tags: Array.from({ length: 21 }, (_, i) => "tag" + i) },
+      { title: "valid title", body: "valid body", tags: ["x".repeat(41)] },
+      { title: "valid title", body: "x".repeat(30001) }
+    ]) {
+      const response = await fetch(base + "/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, "INVALID_NOTE");
+    }
+  }, { supabaseRest: async () => { calls++; return []; } });
+  assert.equal(calls, 0);
+});
+
+test("notes library list/detail/update/delete are filtered to the authenticated owner", async () => {
+  const calls = [];
+  const note = { ...validNoteInput(), id: USER_NOTE_TEST_ID, user_id: USER_NOTE_OWNER_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" };
+  await withServer({}, async base => {
+    const list = await fetch(base + "/api/notes?limit=999");
+    assert.equal(list.status, 200);
+    assert.equal((await list.json()).notes[0].id, USER_NOTE_TEST_ID);
+
+    const detail = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID);
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).note.body, note.body);
+
+    const exported = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID + "/export");
+    assert.equal(exported.status, 200);
+    assert.match(exported.headers.get("content-type"), /text\/markdown/);
+    assert.match(exported.headers.get("content-disposition"), /attachment; filename="Quantum-Physics-Revision\.md"/);
+    const markdown = await exported.text();
+    assert.match(markdown, /^# Quantum Physics Revision/);
+    assert.match(markdown, /Energy bands describe allowed electron energies/);
+    assert.match(markdown, /Tags: physics, revision/);
+
+    const update = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Updated title", tags: ["updated"] })
+    });
+    assert.equal(update.status, 200);
+    assert.equal((await update.json()).note.title, "Updated title");
+
+    const deletion = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID, { method: "DELETE" });
+    assert.equal(deletion.status, 200);
+    assert.deepEqual(await deletion.json(), { deleted: true, id: USER_NOTE_TEST_ID });
+  }, {
+    supabaseRest: async (_req, table, method, query, body) => {
+      calls.push({ table, method, query, body });
+      assert.equal(table, "user_notes");
+      assert.ok(query.includes("user_id=eq." + USER_NOTE_OWNER_ID), "all operations must be owner-filtered");
+      if (method === "DELETE") return [note];
+      if (method === "PATCH") return [{ ...note, ...body }];
+      return [note];
+    }
+  });
+  assert.equal(calls.length, 5);
+  assert.ok(calls[0].query.endsWith("&limit=50"));
+  assert.ok(calls[1].query.includes("id=eq." + USER_NOTE_TEST_ID));
+  assert.ok(calls[2].query.includes("id=eq." + USER_NOTE_TEST_ID));
+  assert.equal(calls[3].method, "PATCH");
+  assert.deepEqual(calls[3].body, { title: "Updated title", tags: ["updated"] });
+  assert.equal(calls[4].method, "DELETE");
+});
+
+
+test("notes search accepts only literal safe terms", async () => {
+  const calls = [];
+  await withServer({}, async base => {
+    const valid = await fetch(base + "/api/notes?search=quantum%20physics");
+    assert.equal(valid.status, 200);
+    assert.deepEqual((await valid.json()).notes, []);
+
+    for (const search of ["", "a,b", "x*)&user_id=neq.000", "title.ilike.*"]) {
+      const response = await fetch(base + "/api/notes?search=" + encodeURIComponent(search));
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, "INVALID_NOTE_SEARCH");
+    }
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls.push({ table, method, query });
+      assert.equal(table, "user_notes");
+      assert.ok(query.includes("user_id=eq." + USER_NOTE_OWNER_ID));
+      return [];
+    }
+  });
+  assert.equal(calls.length, 1, "unsafe search strings must be rejected before database access");
+  assert.ok(decodeURIComponent(calls[0].query).includes("title.ilike.*quantum physics*"));
+  assert.ok(decodeURIComponent(calls[0].query).includes("body.ilike.*quantum physics*"));
+});
+
+test("notes library rejects invalid IDs and returns not-found without leaking cross-user records", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    const invalid = await fetch(base + "/api/notes/not-a-uuid");
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).error.code, "INVALID_NOTE_ID");
+
+    const missing = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID);
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).error.code, "NOTE_NOT_FOUND");
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls++;
+      assert.equal(table, "user_notes");
+      assert.ok(query.includes("user_id=eq." + USER_NOTE_OWNER_ID));
+      return [];
+    }
+  });
+  assert.equal(calls, 1);
+});
+
 test("configured Ollama model listing rejects upstream redirects", async () => {
   await withServer({ OLLAMA_BASE_URL: "https://ollama.example.com" }, async base => {
     const response = await fetch(base + "/api/local/models");
