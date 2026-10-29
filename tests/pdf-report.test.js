@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { generateReportPdf } from "../reports/pdf-report.js";
+
+function exactArrayBuffer(buffer) {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+}
 
 function assertPdfStructure(pdf) {
   assert.ok(Buffer.isBuffer(pdf));
@@ -39,6 +44,10 @@ test("PDF report generator produces a readable, multi-section PDF without persis
   assert.equal(report.filename, "ultron-report.pdf");
   assert.equal(report.pages, 1);
   assert.ok(report.pdf.length > 500);
+  const parsed = await pdfParse(exactArrayBuffer(report.pdf), { version: "v2.0.550" });
+  assert.match(parsed.text, /ULTRON Project Review/);
+  assert.match(parsed.text, /Source-level verification passed/);
+  assert.match(parsed.text, /physical device integrations/);
 });
 
 test("PDF report generator paginates long text and retains the final section", async () => {
@@ -54,6 +63,8 @@ test("PDF report generator marks glyph substitutions for unsupported scripts", a
   assert.equal(report.ok, true);
   assert.ok(report.unsupportedCharacterCount > 0);
   assertPdfStructure(report.pdf);
+  const parsed = await pdfParse(exactArrayBuffer(report.pdf), { version: "v2.0.550" });
+  assert.match(parsed.text, /unsupported script characters/);
 });
 
 test("PDF report generator rejects empty, oversized, and over-section-limit input", async () => {
