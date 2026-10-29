@@ -72,6 +72,23 @@ class LocalFirstCoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 resolve_workspace_file(root, "../" + Path(outside).name + "/private.txt")
 
+    def test_workspace_path_blocks_symlink_files_and_directories(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            real = root / "real.py"
+            real.write_text("print('safe')", encoding="utf-8")
+            alias = root / "alias.py"
+            alias.symlink_to(real)
+            folder = root / "actual-folder"
+            folder.mkdir()
+            (folder / "note.md").write_text("local note", encoding="utf-8")
+            folder_alias = root / "folder-alias"
+            folder_alias.symlink_to(folder, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                resolve_workspace_file(root, "alias.py")
+            with self.assertRaises(ValueError):
+                resolve_workspace_file(root, "folder-alias/note.md")
+
     def test_shell_guard_blocks_shell_operators_downloads_and_inline_code(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
