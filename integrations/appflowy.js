@@ -45,7 +45,7 @@ export function getAppFlowyReadiness(env = process.env, userId = "") {
               : "configured_unverified",
     requiredEnv: ["APPFLOWY_ENABLED=true", "APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
     optionalEnv: ["APPFLOWY_CLIENT_VERSION", "APPFLOWY_DEVICE_ID"],
-    capabilities: ["list accessible workspaces", "read a workspace page/folder tree", "search workspace documents"],
+    capabilities: ["list accessible workspaces", "read a workspace page/folder tree", "read bounded document/page/database collab JSON", "search workspace documents"],
     note: !c.enabled
       ? "AppFlowy connector is disabled by default. Enable it only after configuring a secured AppFlowy Cloud API URL, user access token and owner guard."
       : !c.configured
