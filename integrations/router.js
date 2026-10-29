@@ -2,6 +2,7 @@ import express from "express";
 import { buildIntegrationCatalog } from "./catalog.js";
 import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 import { getOpenHiggsfieldReadiness, listOpenHiggsfieldModels, runOpenHiggsfieldAction } from "./open-higgsfield.js";
+import { getOpenDesignReadiness, runOpenDesignAction } from "./open-design.js";
 
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024;
 
@@ -318,6 +319,46 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = safePin
       });
       return res.json(result);
     } catch (error) { safeError(res, error, "OpenHiggsfield job status"); }
+  });
+
+
+  // OpenDesign is a separate daemon and execution workspace. Access is owner-only;
+  // the selected project, BYOK provider and model come from server configuration,
+  // never from caller-supplied URLs or credentials.
+  router.get("/integrations/open-design/status", requireSupabaseUser, (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(getOpenDesignReadiness(env, req.supabaseUser?.id));
+  });
+
+  router.get("/integrations/open-design/projects", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      const result = await runOpenDesignAction({ env, fetchImpl, userId: req.supabaseUser?.id, action: "projects" });
+      return res.json(result);
+    } catch (error) { safeError(res, error, "OpenDesign project listing"); }
+  });
+
+  router.post("/integrations/open-design/runs", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      const result = await runOpenDesignAction({
+        env, fetchImpl, userId: req.supabaseUser?.id, action: "submit",
+        prompt: bounded(req.body?.prompt, 6000),
+        approveRun: req.body?.confirmPaidRun === true,
+        confirmationText: bounded(req.body?.confirmationText, 300),
+        userPrompt: bounded(req.body?.userPrompt, 1200)
+      });
+      if (result.state === "approval_required") return res.status(409).json(result);
+      return res.status(202).json(result);
+    } catch (error) { safeError(res, error, "OpenDesign run submission"); }
+  });
+
+  router.get("/integrations/open-design/runs/:runId", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      const result = await runOpenDesignAction({
+        env, fetchImpl, userId: req.supabaseUser?.id, action: "status",
+        requestId: req.params.runId
+      });
+      return res.json(result);
+    } catch (error) { safeError(res, error, "OpenDesign run status"); }
   });
 
   return router;
