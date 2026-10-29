@@ -61,11 +61,63 @@ class ModelLabScoringTests(unittest.TestCase):
         profile = {
             "format_version": lab.FORMAT_VERSION,
             "base_model": "org/example-model",
-            "calibration": {"eligible": False},
+            "calibration": {
+                "eligible": False,
+                "selected_parameters": {"temperature": 0.0, "top_p": 1.0},
+            },
         }
         with tempfile.TemporaryDirectory() as tmp:
             path = lab.write_json(Path(tmp) / "profile.json", profile)
             self.assertEqual(lab.load_json(path), profile)
+
+    def test_profile_loader_rejects_malformed_decoding_parameters(self):
+        invalid_profiles = [
+            {
+                "format_version": lab.FORMAT_VERSION,
+                "base_model": "org/example-model",
+                "calibration": {"eligible": True, "selected_parameters": {"temperature": 99, "top_p": 0.9}},
+            },
+            {
+                "format_version": lab.FORMAT_VERSION,
+                "base_model": "org/example-model",
+                "calibration": {"eligible": True, "selected_parameters": {"temperature": 0.2, "top_p": 0}},
+            },
+            {
+                "format_version": lab.FORMAT_VERSION,
+                "base_model": "org/example-model",
+                "calibration": {"eligible": True, "selected_parameters": {"temperature": 0.2}},
+            },
+            {
+                "format_version": lab.FORMAT_VERSION,
+                "base_model": "org/example-model",
+                "calibration": "not-an-object",
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.json"
+            for profile in invalid_profiles:
+                path.write_text(__import__("json").dumps(profile), encoding="utf-8")
+                with self.subTest(profile=profile):
+                    with self.assertRaises(ValueError):
+                        lab.load_json(path)
+
+    def test_profile_loader_rejects_non_finite_json_numbers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.json"
+            path.write_text(
+                '{"format_version":1,"base_model":"org/example-model",'
+                '"calibration":{"eligible":true,"selected_parameters":{"temperature":NaN,"top_p":1}}}',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "Non-finite JSON number"):
+                lab.load_json(path)
+
+    def test_profile_loader_enforces_size_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.json"
+            path.write_bytes(b" " * (lab.MAX_PROFILE_BYTES + 1))
+            with self.assertRaisesRegex(ValueError, "size limit"):
+                lab.load_json(path)
 
     def test_cli_parser_exposes_safe_calibration_controls(self):
         args = lab.build_parser().parse_args([
