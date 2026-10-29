@@ -2,6 +2,7 @@ import { getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { getCactusReadiness } from "./integrations/cactus.js";
 import { getPaperclipReadiness } from "./integrations/paperclip-services.js";
 import { getHermesAgentReadiness } from "./integrations/hermes-agent.js";
+import { getChromeDevToolsReadiness } from "./integrations/chrome-devtools.js";
 
 /**
  * Task-matched capability catalog for the user's 30 upstream repository domains.
@@ -269,6 +270,103 @@ const REPOSITORIES = [
     limits: ["Hermes is a separately installed runtime. Each feature depends on Hermes-side provider, toolset, plugin, messaging and sandbox configuration. ULTRON only invokes its authenticated API; it does not automatically install Hermes, enable all tools, launch cron jobs or send messages."],
     envKeys: ["HERMES_AGENT_ENABLED", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_CHAT_PROVIDER"], license: "MIT", source: "https://github.com/NousResearch/hermes-agent"
   }
+
+  {
+    id: "heretic", repo: "p-e-w/heretic", domain: "local_model_experimentation",
+    match: /\b(heretic|abliteration|model refusal behavior|modify local model weights|model alignment experiment)\b/i,
+    integration: "local_model_tool_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Optional local research on model behavior and controlled model-weight experiments", "Compare model variants with a task-specific evaluation set before and after any offline experiment"],
+    limits: ["No upstream code has been imported or executed by ULTRON. This workflow is not enabled as an automatic runtime feature; it requires source/license review, an explicit model and offline evaluation plan, and manual approval before modifying weights. ULTRON never downloads model weights automatically."],
+    envKeys: [], license: "Review upstream LICENSE and model licenses before reuse", source: "https://github.com/p-e-w/heretic"
+  },
+  {
+    id: "atticus-mac", repo: "SaarthurR/atticus-mac", domain: "desktop_voice_agent",
+    match: /\b(atticus|mac voice assistant|macos desktop agent|screen-aware desktop assistant|mac window automation|meeting copilot)\b/i,
+    integration: "desktop_app", status: "desktop_companion_required",
+    abilities: ["Local voice assistant and on-device dictation", "Screen-aware desktop guidance, window management, overlay annotations and background agent workflow patterns", "Meeting transcript/notes and local memory workflow patterns"],
+    limits: ["Atticus is a separate native macOS app and its README specifies newer macOS requirements. It is not executable in ULTRON's Node backend or on the user's Windows PC. A Windows companion would need its own reviewed implementation; ULTRON does not install or run Mac code."],
+    envKeys: [], license: "MIT; review bundled third-party components separately", source: "https://github.com/SaarthurR/atticus-mac"
+  },
+  {
+    id: "ecc", repo: "affaan-m/ECC", domain: "engineering_workflow",
+    match: /\b(ecc|everything claude code|engineering harness|plan test implement review|coding workflow|agent hooks|coding agent rules|engineering quality loop)\b/i,
+    integration: "engineering_workflow_guidance", status: "guidance_only",
+    abilities: ["Plan-test-implement-review-verify engineering loops", "Reusable code-review, testing, security and context-management practices", "Harness-specific setup guidance for supported coding-agent environments"],
+    limits: ["ULTRON adapts reviewed workflow practices rather than blindly installing hooks, shell scripts, MCP configuration or executable repository files. Full ECC setup is not run automatically, duplicate hooks are avoided, and each upstream file/license must be reviewed before reuse."],
+    envKeys: [], license: "MIT per upstream README", source: "https://github.com/affaan-m/ECC"
+  },
+  {
+    id: "free-cloud-code", repo: "Alahshyari/free-cloud-code", domain: "coding_agent",
+    match: /\b(free cloud code|cloud code agent|free coding agent|code assistant with free models)\b/i,
+    integration: "upstream_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Candidate coding-agent workflow to evaluate for ULTRON's existing coding-assistance and provider-routing surfaces"],
+    limits: ["The screenshot identifies this repository, but its source/README could not be verified from the connected repository source during this pass. No behavior is claimed as integrated. Confirm the exact upstream URL, license, API contract, secret handling and tests before importing or delegating work."],
+    envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/Alahshyari/free-cloud-code"
+  },
+  {
+    id: "strata", repo: "Niko1221/Strata", domain: "local_inference",
+    match: /\b(strata|local qwen inference|local model server|anthropic compatible local model|openai compatible local model)\b/i,
+    integration: "openai_compatible_provider_router", status: "available_via_provider_router",
+    abilities: ["Potential local provider route through ULTRON's existing OpenAI-compatible fallback configuration when a Strata server is already running", "Local model chat/coding and optional image input when the selected model and host support them"],
+    limits: ["ULTRON does not install Strata, download model weights, or launch a GPU runtime automatically. The current 8 GB RAM/integrated-graphics PC does not meet Strata's currently documented high-end VRAM/RAM requirements for its default large model; do not attempt a large model download on this device. Verify Strata's own API compatibility and use a suitably provisioned host before routing to it."],
+    envKeys: [], license: "MIT for Strata; model and included components have separate licenses", source: "https://github.com/Niko1221/Strata"
+  },
+  {
+    id: "not-ai", repo: "udayjhamadav/Not-AI", domain: "desktop_coding_agent",
+    match: /\b(not-ai|not ai desktop agent|not ai coding agent|local desktop coding workflow)\b/i,
+    integration: "upstream_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Candidate desktop/coding workflow for evaluation against ULTRON's coding and desktop-companion capabilities"],
+    limits: ["The screenshot identifies this repository, but the README/API contract could not be verified from the connected source during this pass. No source was imported and no live feature is claimed. Confirm the exact repository identity and license before integration."],
+    envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/udayjhamadav/Not-AI"
+  },
+  {
+    id: "jcode", repo: "Jjchuang/jcode", domain: "coding_agent",
+    match: /\b(jcode|jcode coding agent|jcode repo|coding agent workflow)\b/i,
+    integration: "upstream_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Candidate coding-agent workflows to compare with ULTRON's existing agent runtime and browser-debugging tools"],
+    limits: ["The screenshot identifies this repository, but its README/API contract could not be verified from the connected source during this pass. No code is claimed as integrated. Confirm exact URL, supported runtime, licensing, security boundaries and tests before importing."],
+    envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/Jjchuang/jcode"
+  },
+  {
+    id: "open-generative-ai", repo: "Anti-matcha/Open-Generative-AI", domain: "generative_media",
+    match: /\b(open-generative-ai|open generative ai|image and video generation platform|generative media studio)\b/i,
+    integration: "upstream_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Candidate image/video generation workflows to evaluate alongside the existing ComfyUI and media-planning capabilities"],
+    limits: ["The screenshot suggests a generative-media project, but the repository contents, API, model requirements and license were not verifiable through the connected source in this pass. No provider access or rendering is claimed; review the exact upstream before integrating."],
+    envKeys: [], license: "Unknown until upstream source and model licenses are verified", source: "https://github.com/Anti-matcha/Open-Generative-AI"
+  },
+  {
+    id: "dramadaw", repo: "dramadaw/dramadaw", domain: "video_creation",
+    match: /\b(dramadaw|ai drama video|drama generation|script to drama|story to video)\b/i,
+    integration: "upstream_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Candidate story/video production workflows to evaluate beside ULTRON's YouTube production planner"],
+    limits: ["The screenshot identifies this repository, but its source, execution contract and license could not be verified here. No video generation or publishing capability is claimed as integrated."],
+    envKeys: [], license: "Unknown until upstream source and model licenses are verified", source: "https://github.com/dramadaw/dramadaw"
+  },
+  {
+    id: "opendudley", repo: "TechyCSR/OpenDudley", domain: "desktop_agent",
+    match: /\b(opendudley|open dudley|desktop ai agent|local browser desktop agent)\b/i,
+    integration: "upstream_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Candidate desktop/browser automation workflow for review against the existing Chrome DevTools bridge and Windows companion"],
+    limits: ["The screenshot identifies this repository, but the source and permissions model were not verifiable through the connected source in this pass. Do not grant it browser, shell, filesystem or desktop authority until the exact code and action boundaries are audited."],
+    envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/TechyCSR/OpenDudley"
+  },
+  {
+    id: "agency-agents", repo: "mditazwadi/agency-agents", domain: "agent_roles",
+    match: /\b(agency agents|agency-agents|agent persona|role-based agents|multi-agent team|agent team templates)\b/i,
+    integration: "upstream_review_required", status: "review_required_upstream_unverified",
+    abilities: ["Candidate role/persona templates to compare with ULTRON's existing AI Employee roles, task routing, and Hermes delegation"],
+    limits: ["The screenshot identifies this repository, but the exact source and LICENSE could not be verified from the connected repository tool. No upstream personas or prompts have been imported. Review prompt provenance, tool permissions, source license and security assumptions before use."],
+    envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/mditazwadi/agency-agents"
+  },
+  {
+    id: "chrome-devtools", repo: "ayaanraza2008/ULTRON-AI/chrome-devtools", domain: "browser_debugging",
+    match: /\b(chrome devtools|chrome debugger|browser performance trace|console errors|network requests|inspect chrome|web app browser test|chrome screenshot)\b/i,
+    integration: "owner_scoped_local_cdp_bridge", status: "adapter_present_unverified_live",
+    abilities: ["Attach to local Chrome/Chromium with CDP", "Navigate pages, click unique selectors and fill non-secret fields", "Capture screenshots, bounded console and network metadata, and page snapshots", "Collect short performance traces with long-event/layout/heap metrics and actionable hints"],
+    limits: ["Package build and security CI passed, but live Chrome/CDP attachment is not verified. Hosted ULTRON cannot access a developer PC's localhost without an explicitly configured private authenticated gateway. Chrome's CDP port must remain private."],
+    envKeys: ["ULTRON_CHROME_DEVTOOLS_URL", "ULTRON_CHROME_DEVTOOLS_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: [], license: "ULTRON integration source; inspect upstream dependencies separately", source: "https://github.com/ayaanraza2008/ULTRON-AI/tree/main/chrome-devtools"
+  }
 ];
 
 const ROUTING_RULES = [
@@ -297,6 +395,12 @@ function stateFor(record, env) {
   }
   if (record.id === "paperclip") return getPaperclipReadiness(env).state;
   if (record.id === "hermes-agent") return getHermesAgentReadiness(env).state;
+  if (record.id === "chrome-devtools") {
+    const readiness = getChromeDevToolsReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
+    return readiness.configured ? "configured_unverified" : readiness.state;
+  }
+  if (record.status === "review_required_upstream_unverified") return record.status;
+  if (record.status === "available_via_provider_router") return record.status;
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
   if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
   if (!record.envKeys.length && record.status === "bounded_security_routes_present") return record.status;
