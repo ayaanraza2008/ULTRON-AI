@@ -82,11 +82,9 @@ test("REA calls the allowlisted analysis tool with a rooted relative path", asyn
   assert.equal(result.state, "completed");
   assert.equal(result.upstreamTool, "analyze_javascript_application");
   assert.equal(result.contentUntrusted, true);
-  const openCall = calls.find(call => call.payload.method === "tools/call" && call.payload.params.name === "open_binary");
   const toolCall = calls.find(call => call.payload.method === "tools/call" && call.payload.params.name === "analyze_javascript_application");
-  assert.deepEqual(openCall.payload.params.arguments, { path: "/srv/rea/targets/demo-app/app.asar" });
   assert.deepEqual(toolCall.payload.params.arguments, { input_path: "/srv/rea/targets/demo-app/app.asar", format: "auto", integrity_policy: "fail", detail: "complete" });
-  assert.deepEqual(calls.filter(call => call.payload.method === "tools/call").map(call => call.payload.params.name), ["open_binary", "analyze_javascript_application", "close_binary"]);
+  assert.deepEqual(calls.filter(call => call.payload.method === "tools/call").map(call => call.payload.params.name), ["analyze_javascript_application"]);
   assert.equal(toolCall.options.headers.Authorization, "Bearer synthetic-rea-token");
   assert.equal(toolCall.options.headers["Mcp-Session-Id"], "rea-session-test");
   assert.equal(toolCall.options.headers["Mcp-Protocol-Version"], "2025-03-26");
@@ -180,7 +178,7 @@ test("REA analyzes and traces a requested application feature within one MCP ses
   assert.equal(result.result.applicationEvidenceId, "ev_app_test");
   const toolCalls = calls.filter(call => call.payload.method === "tools/call");
   assert.deepEqual(toolCalls.map(call => call.payload.params.name), [
-    "open_binary", "analyze_javascript_application", "trace_application_feature", "close_binary"
+    "analyze_javascript_application", "trace_application_feature"
   ]);
   const analyze = toolCalls.find(call => call.payload.params.name === "analyze_javascript_application");
   assert.deepEqual(analyze.payload.params.arguments, {

@@ -7,13 +7,13 @@ const MAX_PATH_LENGTH = 500;
 const NATIVE_CODE_OPERATIONS = new Set(["file_headers", "section_headers", "symbols", "relocations", "dwarf", "disassemble", "disassemble_all"]);
 const TOOL_SPECS = Object.freeze({
   rea_analyze_application: {
-    upstreamTool: "analyze_javascript_application", pathRequired: true, requiresActiveTarget: true,
+    upstreamTool: "analyze_javascript_application", pathRequired: true,
     args: path => ({ input_path: path, format: "auto", integrity_policy: "fail", detail: "complete" })
   },
   rea_investigate_application_feature: {
     // Analyze and trace in one MCP session so the evidence remains valid for the follow-up.
     upstreamTool: "trace_application_feature", sourceTool: "analyze_javascript_application",
-    pathRequired: true, requiresActiveTarget: true,
+    pathRequired: true,
     args: path => ({ input_path: path, format: "auto", integrity_policy: "fail", detail: "complete" })
   },
   rea_inspect_native_code: {
