@@ -1340,6 +1340,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       diagramType: guidance.diagramType,
       scientificTask: guidance.scientificTask,
       scienceSkills: guidance.scienceSkills,
+      buildYourOwnX: guidance.buildYourOwnX,
       rules: guidance.rules
     });
   });
