@@ -69,7 +69,13 @@ function assemble(pages) {
   for (let i=1; i<offsets.length; i++) xref.push(String(offsets[i]).padStart(10,"0") + " 00000 n \n");
   xref.push("trailer\n<< /Size " + (objects.length+1) + " /Root 1 0 R >>\nstartxref\n" + xrefOffset + "\n%%EOF\n");
   chunks.push(Buffer.from(xref.join(""),"ascii"));
-  return Buffer.concat(chunks);
+  const combined = Buffer.concat(chunks);
+  // Buffer.concat may return a view into Node's shared slab for small PDFs. Keep
+  // the returned document on its own exact-size ArrayBuffer so PDF readers that
+  // consume typed-array backing storage cannot mistake slab bytes for file data.
+  const output = Buffer.allocUnsafeSlow(combined.length);
+  combined.copy(output);
+  return output;
 }
 export function generateReportPdf(input = {}) {
   const title = cleanText(input.title || "ULTRON Report", 120).trim() || "ULTRON Report";
