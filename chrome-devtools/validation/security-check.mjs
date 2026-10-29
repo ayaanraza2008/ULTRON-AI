@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateBrowserUrl, validateCdpEndpoint, validateChromeActionInput, isPublicIpAddress } from "../dist/security.js";
+import { validateBrowserUrl, validateCdpEndpoint, validateChromeActionInput, isPublicIpAddress, safeDisplayUrl } from "../dist/security.js";
 
 test("navigation accepts HTTPS public domains and local development URLs", () => {
   assert.equal(validateBrowserUrl("https://example.com/app").hostname, "example.com");
@@ -36,6 +36,12 @@ test("CDP endpoint is restricted to loopback HTTP", () => {
   assert.throws(() => validateCdpEndpoint("https://example.com:9222"));
   assert.throws(() => validateCdpEndpoint("http://192.168.1.2:9222"));
 });
+
+test("debug output redacts inline data/blob URLs", () => {
+  assert.equal(safeDisplayUrl("data:text/plain,private-content"), "[data resource omitted]");
+  assert.equal(safeDisplayUrl("blob:https://example.com/1234"), "[blob resource omitted]");
+  assert.equal(safeDisplayUrl("https://example.com/path?token=secret#fragment"), "https://example.com/path");
+ });
 
 test("action validation bounds selectors, inputs, limits and trace durations", () => {
   assert.deepEqual(validateChromeActionInput({ action: "navigate", url: "https://example.com" }).action, "navigate");
