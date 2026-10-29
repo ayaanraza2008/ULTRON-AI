@@ -25,12 +25,13 @@ export const ULTRON_FREE_VOICE_PROFILE = Object.freeze({
 
 function normalizeLocale(language) {
   const raw = typeof language === "string" ? language.trim().replace(/_/g, "-") : "";
+  if (!raw || /^auto$/i.test(raw)) return "en-US";
   if (/^hinglish$/i.test(raw)) return "en-IN";
   if (/^(hi|hindi)(-|$)/i.test(raw)) return "hi-IN";
   if (/^english$/i.test(raw)) return "en-US";
   if (/^en(-[a-z0-9]+)?$/i.test(raw)) return raw.toLowerCase() === "en" ? "en-US" : raw;
   if (/^hi(-[a-z0-9]+)?$/i.test(raw)) return raw.toLowerCase() === "hi" ? "hi-IN" : raw;
-  return raw || "en-US";
+  return raw;
 }
 
 function boundedNumber(value, fallback, min, max) {
