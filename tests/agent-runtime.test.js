@@ -2345,19 +2345,19 @@ test("safe deterministic fallback selects explicit repository adapters when mode
       prompt: "Check OpenHiggsfield readiness",
       env: {},
       expected: "openhiggsfield",
-      expectAction: "readiness"
+      expectState: "disabled_by_config"
     },
     {
       prompt: "Show Open Generative AI model catalog",
       env: {},
       expected: "open_generative_ai",
-      expectAction: "catalog"
+      expectExecution: "static_model_catalog_only"
     },
     {
       prompt: "Check OpenDesign readiness",
       env: {},
       expected: "open_design",
-      expectAction: "readiness"
+      expectState: "disabled_by_config"
     },
     {
       prompt: "Search AppFlowy for deployment notes",
@@ -2393,8 +2393,8 @@ test("safe deterministic fallback selects explicit repository adapters when mode
       assert.ok(body.toolsUsed.some(tool => tool.name === item.expected), item.prompt);
       const result = body.toolResults.find(tool => tool.name === item.expected)?.result;
       assert.ok(result, item.prompt);
-      if (item.expectAction) assert.equal(result.state || result.execution, item.expectAction === "catalog" ? "static_model_catalog_only" : undefined, item.prompt);
-      if (item.expectOperation) assert.equal(result.operation, item.expectOperation, item.prompt);
+      if (item.expectState) assert.equal(result.state, item.expectState, item.prompt);
+      if (item.expectExecution) assert.equal(result.execution, item.expectExecution, item.prompt);
       assert.equal(providerCalls, 0, "test must not make model/provider calls when credentials are absent");
     });
   }
