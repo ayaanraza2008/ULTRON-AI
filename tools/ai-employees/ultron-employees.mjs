@@ -50,9 +50,12 @@ export function resolveRole(value) {
 
 export function isCloudSyncedPath(value) {
   const normalized = path.resolve(value).replace(/\\/g, "/").toLowerCase();
-  return CLOUD_SYNC_MARKERS.some((marker) =>
-    normalized === marker || normalized.includes("/" + marker + "/") ||
-    normalized.endsWith("/" + marker)
+  const segments = normalized.split("/").filter(Boolean);
+  return segments.some((segment) =>
+    CLOUD_SYNC_MARKERS.some((marker) =>
+      segment === marker || segment.startsWith(marker + " ") ||
+      segment.startsWith(marker + "-") || segment.startsWith(marker + "(")
+    )
   );
 }
 
