@@ -706,15 +706,15 @@
     const scoreVoice = (voice) => {
       const lang = String(voice.lang || "").toLowerCase().replaceAll("_", "-");
       let score = 0;
-      if (lang === preferredLocale) score += 120;
-      else if (lang.startsWith(base + "-")) score += 75;
-      else if (lang === base) score += 65;
-      else if (base === "en" && /^en-(gb|us|au|ca)/.test(lang)) score += 45;
-      else score -= 35;
-      if (naturalVoiceName.test(voice.name || "")) score += 35;
-      if (maleVoiceName.test(voice.name || "")) score += 45;
-      if (femaleVoiceName.test(voice.name || "")) score -= 70;
-      if (voice.localService === false) score += 12;
+      // Preserve the user's language first, then prefer a clearly identified male voice.
+      if (lang === preferredLocale) score += 160;
+      else if (lang.startsWith(base + "-")) score += 110;
+      else if (lang === base) score += 95;
+      else score -= 40;
+      if (naturalVoiceName.test(voice.name || "")) score += 25;
+      if (maleVoiceName.test(voice.name || "")) score += 65;
+      if (femaleVoiceName.test(voice.name || "")) score -= 80;
+      if (voice.localService === false) score += 8;
       if (voice.default) score += 2;
       return score;
     };
@@ -880,8 +880,8 @@
         const utterance = new Utterance(segment.text);
         utterance.lang = segment.lang;
         utterance.voice = chooseSpeechVoice(segment.lang);
-        utterance.rate = 0.94;
-        utterance.pitch = 0.86;
+        utterance.rate = 1.08;
+        utterance.pitch = 0.80;
         utterance.volume = 1;
         utterance.onstart = () => {
           if (epoch === speechEpoch) setCoreState("speaking");
@@ -1471,9 +1471,9 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        if (!force && streamSpeechBuffer.length >= 52) {
-          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 46);
-          if (cutoff >= 28) {
+        if (!force && streamSpeechBuffer.length >= 36) {
+          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 32);
+          if (cutoff >= 20) {
             enqueueStreamSpeech(streamSpeechBuffer.slice(0, cutoff).trim());
             streamSpeechBuffer = streamSpeechBuffer.slice(cutoff + 1);
             continue;
@@ -1516,7 +1516,7 @@
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const voicePrompt = streamVoiceReply
-        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 20–35 words). Start with the answer; no greeting, filler, or preamble. Mirror the user's language and style.\n\nUser request: " + outgoingPrompt
+        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 12–24 words when possible). Lead with the answer; no greeting, filler, or preamble. Use a calm, confident, direct tone and mirror the user's language.\n\nUser request: " + outgoingPrompt
         : outgoingPrompt;
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
