@@ -60,3 +60,34 @@ test("all categories use known, unique tool names", () => {
   assert.ok(categories.includes("desktop"));
   for (const name of categories) assert.ok(typeof name === "string" && name.length > 0);
 });
+
+test("recognizes Unicode God’s Eye spelling and combined voice requests", () => {
+  const globe = classifyTaskRoute("Show satellites in God’s Eye");
+  assert.equal(globe.categories.includes("world_intelligence"), true);
+  assert.ok(globe.toolNames.includes("world_intelligence_command"));
+
+  const combined = classifyTaskRoute("Show satellites in God’s Eye and read aloud: hello world");
+  assert.equal(combined.tier, "complex");
+  assert.equal(combined.filtered, false);
+  assert.equal(combined.toolNames, null);
+});
+
+test("retains tools for background report queueing and read-aloud requests", () => {
+  const employee = classifyTaskRoute("Queue a web-dev review in the background");
+  assert.equal(employee.categories.includes("planning"), true);
+  assert.ok(employee.toolNames.includes("enqueue_employee_task"));
+
+  const report = classifyTaskRoute("Queue a background research report");
+  assert.equal(report.tier, "complex");
+  assert.equal(report.filtered, false);
+
+  const voice = classifyTaskRoute("Read this aloud: Hello world");
+  assert.equal(voice.categories.includes("voice"), true);
+  assert.ok(voice.toolNames.includes("synthesize_speech"));
+});
+
+test("routes explicit durable decisions to a non-empty safe tool set", () => {
+  const route = classifyTaskRoute("We decided: keep the worker isolated from the API process.");
+  assert.equal(route.categories.includes("memory"), true);
+  assert.ok(route.toolNames.length > 0);
+});
