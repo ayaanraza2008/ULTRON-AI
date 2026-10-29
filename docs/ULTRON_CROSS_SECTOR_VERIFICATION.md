@@ -6,6 +6,7 @@ Last inspected: 2026-10-29 UTC. This matrix separates source/CI evidence from li
 
 | Sector | Result | Evidence / limit |
 |---|---|---|
+| Video Studio outbound HTTP | PASS — source CI and regression coverage | `video-studio/server.mjs` routes its model, stock-search, research and approved media-download requests through the shared DNS-pinned `safePinnedFetch` by default. Targeted transport-routing regression is included in [CI run 40946612120](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40946612120), which passed 794 tests, 0 failures, 1 intentionally skipped; the World Intelligence build/bridge and Windows installer parse also passed. This is source/CI evidence only; no live external provider request or production rollout was performed. |
 | Source and regression tests | PASS | Main commit `6b7f09d97508fc2be2085695d862a921e1ae8487`; [CI run 40909210938](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40909210938); 653 tests, 652 pass, 0 fail, 1 skipped. |
 | World Intelligence build | PASS | Same CI run; build and ULTRON bridge injection passed, with large-chunk warnings. |
 | Production revision workflow | PASS, narrow scope | [Run 40909211008](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40909211008) confirmed health, required configuration flags and revision match for its configured URL; not a full provider/auth/worker/device E2E test. |
