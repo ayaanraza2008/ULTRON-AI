@@ -87,7 +87,7 @@ Repository code, a capability catalog entry, or a mocked test does not by itself
 | 66 | YouTube and media tools | PARTIAL | create_youtube_production_plan, ComfyUI, VoiceStudio and related adapters exist. | Production planning is not a published video. Video Studio PR #375 is open and not part of mainline until reviewed/merged. |
 | 67 | Google Classroom | NOT IMPLEMENTED | No Classroom-specific API tool was found in the mainline tool registry. | Needs explicit OAuth scopes, course/assignment tests and student-data protection. |
 | 68 | Stock market information | NOT IMPLEMENTED | No dedicated market-data adapter was confirmed. | Add sourced, timestamped data and distinguish delayed from real-time quotes. |
-| 69 | Weather | IMPLEMENTED | agent-runtime.js adds a bounded Open-Meteo geocoding/forecast tool with WMO weather-code descriptions, local timestamps and attribution. | CI is pending for the new tool; real public-service connectivity and forecast freshness still require a controlled live smoke test. Ambiguous locations return candidates rather than guessing. |
+| 69 | Weather | VERIFIED | Bounded Open-Meteo geocoding/forecast tool, WMO weather-code mapping and ambiguous-location handling passed mocked agent integration tests in GitHub Actions run [40900409207](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40900409207). | Forecasts use public API responses with attribution; real public-service connectivity/freshness still needs a separate live smoke test. Ambiguous locations return candidates rather than guessing. |
 | 70 | Maps and navigation | NOT IMPLEMENTED | World Intelligence has an external globe action contract; no validated directions/ETA service was confirmed. | Add geocoding/routing and source-backed route/ETA handling. |
 | 71 | Integration directory | IMPLEMENTED | integrations/catalog.js, check_integrations and capability-readiness tools exist. | Catalog/readiness is not live connectivity; validate adapters separately and show absent credentials as unconfigured. |
 | 72 | Android device control | PARTIAL | Android companion project exists under android-companion/. | Actual pairing, supported actions and secure result reporting are not verified end-to-end. |
@@ -117,5 +117,5 @@ Repository code, a capability catalog entry, or a mocked test does not by itself
 ## Change record
 
 - This matrix separates source existence from feature completeness and live verification.
-- World Clock (48) and Wikipedia lookup (60) have unit and agent-dispatch integration coverage. GitHub Actions run [40899260072](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40899260072) passed npm run check, npm test (653 passed, 0 failed, 1 skipped), and the World Intelligence build.
+- World Clock (48), Wikipedia lookup (60), and weather lookup (69) have unit and mocked agent-dispatch integration coverage. GitHub Actions run [40900409207](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40900409207) passed npm run check, npm test (657 passed, 0 failed, 1 skipped), and the World Intelligence build.
 - Open Video Studio and voice PRs are documented as work in progress, not merged capabilities.
