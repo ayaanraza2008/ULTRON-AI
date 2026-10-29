@@ -3,6 +3,7 @@ import { getCactusReadiness } from "./integrations/cactus.js";
 import { getPaperclipReadiness } from "./integrations/paperclip-services.js";
 import { getHermesAgentReadiness } from "./integrations/hermes-agent.js";
 import { getChromeDevToolsReadiness } from "./integrations/chrome-devtools.js";
+import { getStrataReadiness } from "./integrations/strata.js";
 
 /**
  * Task-matched capability catalog for the user's 30 upstream repository domains.
@@ -306,7 +307,7 @@ const REPOSITORIES = [
   {
     id: "strata", repo: "Niko1221/Strata", domain: "local_inference",
     match: /\b(strata|local qwen inference|local model server|anthropic compatible local model|openai compatible local model)\b/i,
-    integration: "openai_compatible_provider_router", status: "available_via_provider_router",
+    integration: "openai_compatible_provider_router", status: "optional",
     abilities: ["Potential local provider route through ULTRON's existing OpenAI-compatible fallback configuration when a Strata server is already running", "Local model chat/coding and optional image input when the selected model and host support them"],
     limits: ["ULTRON does not install Strata, download model weights, or launch a GPU runtime automatically. The current 8 GB RAM/integrated-graphics PC does not meet Strata's currently documented high-end VRAM/RAM requirements for its default large model; do not attempt a large model download on this device. Verify Strata's own API compatibility and use a suitably provisioned host before routing to it."],
     envKeys: [], license: "MIT for Strata; model and included components have separate licenses", source: "https://github.com/Niko1221/Strata"
@@ -379,6 +380,7 @@ const ROUTING_RULES = [
 ];
 
 function configured(record, env) {
+  if (record.id === "strata") return getStrataReadiness(env).configured;
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
   if (!keys.length) return null;
   return keys.every(key => typeof env[key] === "string" && env[key].trim().length > 0 && (!["GEO_SLEUTH_ENABLED"].includes(key) || env[key] === "true"));
@@ -399,8 +401,8 @@ function stateFor(record, env) {
     const readiness = getChromeDevToolsReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
     return readiness.configured ? "configured_unverified" : readiness.state;
   }
+  if (record.id === "strata") return getStrataReadiness(env).state;
   if (record.status === "review_required_upstream_unverified") return record.status;
-  if (record.status === "available_via_provider_router") return record.status;
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
   if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
   if (!record.envKeys.length && record.status === "bounded_security_routes_present") return record.status;
