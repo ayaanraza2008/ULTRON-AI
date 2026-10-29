@@ -256,9 +256,10 @@ def list_local_models(url: str | None = None) -> list[dict[str, Any]]:
 
 def load_relevant_skill_context(query: str, *, max_skills: int = 3, max_chars: int = 12000) -> str:
     """Load relevant installed Markdown guidance as untrusted context; never execute it."""
-    root = (app_data_dir() / "skills").resolve()
-    if not root.is_dir():
+    skills_root = app_data_dir() / "skills"
+    if skills_root.is_symlink() or not skills_root.is_dir():
         return ""
+    root = skills_root.resolve()
     terms = {word.lower() for word in re.findall(r"[A-Za-z0-9_'-]{3,}", query) if len(word) >= 3}
     if not terms:
         return ""
@@ -267,7 +268,14 @@ def load_relevant_skill_context(query: str, *, max_skills: int = 3, max_chars: i
         try:
             # Refuse symlinks anywhere in the installed skill path.
             relative = path.relative_to(root)
-            if any((root / part).is_symlink() for part in relative.parts) or not path.is_file():
+            probe = root
+            symlinked = False
+            for part in relative.parts:
+                probe = probe / part
+                if probe.is_symlink():
+                    symlinked = True
+                    break
+            if symlinked or not path.is_file():
                 continue
             if path.stat().st_size < 1 or path.stat().st_size > 30000:
                 continue
