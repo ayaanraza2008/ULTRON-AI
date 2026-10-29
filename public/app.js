@@ -444,11 +444,25 @@
     ui.authMessage.textContent = "";
   }
 
+  async function refreshSavedPreferences() {
+    try {
+      const payload = await apiRequest("/api/preferences");
+      const prefs = payload?.preferences || {};
+      preferredRecognitionLocale = ["en-IN", "hi-IN", "hinglish"].includes(prefs.voice_input_locale) ? prefs.voice_input_locale : "en-IN";
+      preferredVoiceEnabled = prefs.voice_enabled !== false;
+      preferredMemoryEnabled = prefs.memory_enabled !== false;
+    } catch {
+      // Legacy access-code sessions and offline mode may not have account preferences.
+      // Keep safe local defaults without blocking chat.
+    }
+  }
+
   async function checkSession() {
     try {
       const payload = await apiRequest("/api/session");
       authSetupNeeded = Boolean(payload && payload.configured === false);
       if (payload && payload.authenticated) {
+        await refreshSavedPreferences();
         setAuthVisible(false);
         if (backendStatus) backendStatus.authenticated = true;
         return true;
