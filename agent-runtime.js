@@ -1086,6 +1086,30 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         }
         return { state: "created", note: responseNote(rows[0]), notice: "Private note saved for the signed-in user." };
       }
+      if (name === "notes_read") {
+        if (!validNoteId(args.id)) {
+          throw Object.assign(new Error("A valid note UUID is required."), { code: "INVALID_NOTE_ID", status: 400 });
+        }
+        const rows = await supabaseRest(req, "user_notes", "GET",
+          "?select=id,title,body,tags,created_at,updated_at&id=eq." + encodeURIComponent(args.id)
+          + "&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+        if (!Array.isArray(rows) || !rows[0]) {
+          return { state: "not_found", message: "No note with that ID is visible to the signed-in user." };
+        }
+        const row = rows[0];
+        return {
+          state: "completed",
+          note: {
+            id: row.id,
+            title: bounded(row.title, 200),
+            body: bounded(row.body, 30000),
+            tags: Array.isArray(row.tags) ? row.tags.slice(0, 20).map(tag => bounded(tag, 40)).filter(Boolean) : [],
+            createdAt: bounded(row.created_at, 40),
+            updatedAt: bounded(row.updated_at, 40)
+          },
+          sourceContentTrust: "user_saved_content"
+        };
+      }
       if (!validNoteId(args.id)) {
         throw Object.assign(new Error("A valid note UUID is required."), { code: "INVALID_NOTE_ID", status: 400 });
       }
