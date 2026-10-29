@@ -6,7 +6,7 @@ import { getChromeDevToolsReadiness } from "./integrations/chrome-devtools.js";
 import { getStrataReadiness } from "./integrations/strata.js";
 
 /**
- * Task-matched capability catalog for the user's 30 upstream repository domains.
+ * Task-matched capability catalog for 43 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
  *
  * This is a routing/readiness manifest, not an installer or claim that the upstream
  * applications are embedded in ULTRON. It never executes repository scripts.
