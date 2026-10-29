@@ -27,7 +27,7 @@ test("RAG and web API tasks select relevant first-principles references", () => 
   assert.ok(ids.includes("ai-model"));
   assert.ok(ids.includes("search-engine"));
   assert.ok(ids.includes("web-server"));
-  assert.ok(result.rules.some(rule => rule.includes("do not fetch and execute tutorial code")));
+  assert.ok(result.rules.some(rule => rule.toLowerCase().includes("do not fetch and execute tutorial code")));
   assert.ok(result.matched.some(topic => topic.references.some(reference => reference.url.includes("rag-from-scratch"))));
 });
 
