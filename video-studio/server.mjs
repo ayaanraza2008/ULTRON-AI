@@ -256,7 +256,13 @@ export function createVideoStudioServer({ env = process.env, logger = console, d
       if (jobs.has(p.id)) return res.status(409).json({ error: { code: "VIDEO_JOB_RUNNING", message: "Wait for the active job." } });
       res.status(202).json({ accepted: true });
       launch(p.id, async () => {
-        const now = await store.get(p.id); let plan = null, contactSheet = null; try { contactSheet = await referenceImageDataUrl(now, store); } catch {} try { plan = await generatePlan(now, env, contactSheet); } catch (e) { logger.warn && logger.warn("Plan refresh failed", { code: e.code || "PLAN_FAILED" }); }
+        let now = await store.get(p.id);
+        if (now.referenceUrl || now.referenceAsset) {
+          const info = await analyzeReference(now, store, env);
+          await store.update(p.id, q => { q.referenceAnalysis = info; return event(q, "research", "Reference rechecked before plan regeneration."); });
+          now = await store.get(p.id);
+        }
+        let plan = null, contactSheet = null; try { contactSheet = await referenceImageDataUrl(now, store); } catch {} try { plan = await generatePlan(now, env, contactSheet); } catch (e) { logger.warn && logger.warn("Plan refresh failed", { code: e.code || "PLAN_FAILED" }); }
         const concepts = plan ? plan.concepts : makeFallbackConcepts(now), selected = concepts.find(c => c.id === bounded(req.body && req.body.conceptId, 80)) || concepts[0];
         const scenes = plan && selected.id === concepts[0].id ? plan.scenes : makeFallbackScenes(now, selected);
         await store.update(p.id, q => {
