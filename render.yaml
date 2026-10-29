@@ -101,6 +101,10 @@ services:
         value: "90"
       - key: TAVILY_API_KEY
         sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: PIXABAY_API_KEY
+        sync: false
       - key: FISH_API_KEY
         sync: false
       - key: FISH_AUDIO_VOICE_MODEL_ID
