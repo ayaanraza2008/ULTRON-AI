@@ -1340,6 +1340,75 @@ const validNoteInput = () => ({
   tags: ["physics", "revision"]
 });
 
+
+test("study pack Markdown export is owner-scoped and includes revision content", async () => {
+  const calls = [];
+  const exportRow = {
+    id: STUDY_PACK_TEST_ID,
+    user_id: STUDY_PACK_USER_ID,
+    title: "Photosynthesis Exam Pack",
+    topic: "Photosynthesis",
+    format: "mixed",
+    level: "exam",
+    language: "English",
+    source_mode: "based_on_user_supplied_content",
+    content: {
+      learningObjectives: ["Explain photosynthesis"],
+      summary: "Photosynthesis stores light energy in chemical bonds.",
+      flashcards: [{ question: "Which pigment absorbs light?", answer: "Chlorophyll." }],
+      quiz: [{
+        question: "Which gas is taken in?",
+        options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"],
+        answerIndex: 1,
+        explanation: "Carbon dioxide supplies carbon for sugar production."
+      }],
+      revisionChecklist: ["Review inputs and products"],
+      sourceNotes: "Based on user-provided course notes.",
+      notice: "Check this study aid against the lecturer's syllabus."
+    }
+  };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID + "/export");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /text\/markdown/);
+    assert.match(response.headers.get("content-disposition"), /attachment; filename="Photosynthesis-Exam-Pack\.md"/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const markdown = await response.text();
+    assert.match(markdown, /^# Photosynthesis Exam Pack/);
+    assert.match(markdown, /Which pigment absorbs light/);
+    assert.match(markdown, /\*\*Correct:\*\* Carbon dioxide/);
+    assert.match(markdown, /Review inputs and products/);
+    assert.match(markdown, /Based on user-provided course notes/);
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls.push({ table, method, query });
+      assert.equal(table, "study_packs");
+      assert.equal(method, "GET");
+      assert.ok(query.includes("id=eq." + STUDY_PACK_TEST_ID));
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID));
+      return [exportRow];
+    }
+  });
+  assert.equal(calls.length, 1);
+});
+
+test("study pack Markdown export returns not-found for records outside the owner's scope", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID + "/export");
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).error.code, "STUDY_PACK_NOT_FOUND");
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls++;
+      assert.equal(table, "study_packs");
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID));
+      return [];
+    }
+  });
+  assert.equal(calls, 1);
+});
+
 test("notes library saves only authenticated-owner data", async () => {
   const calls = [];
   const note = { ...validNoteInput(), id: USER_NOTE_TEST_ID, user_id: USER_NOTE_OWNER_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" };
