@@ -73,7 +73,7 @@ def _find_skill_files(repo_dir: Path) -> tuple[list[tuple[Path, str]], list[str]
     file_count = 0
     total_size = 0
     for current, dirs, files in os.walk(repo_dir, followlinks=False):
-        dirs[:] = [d for d in dirs if d != ".git" and not d.startswith(".")]
+        dirs[:] = [d for d in dirs if d != ".git" and not d.startswith(".") and not (Path(current) / d).is_symlink()]
         for name in files:
             candidate = Path(current) / name
             if candidate.is_symlink():
@@ -144,13 +144,18 @@ def install_skill_repository(repository: str, *, confirm: bool = False, expected
             if actual != expected_hashes:
                 raise RuntimeError("The repository's SKILL.md content changed after review; nothing was installed. Review it again.")
         install_root = app_data_dir() / "skills" / f"{owner}--{name}"
-        installed = []
+        # Preflight every destination before writing any files to avoid partial installs.
+        destinations = []
         for source, content in selected:
             relative = source.relative_to(clone_dir)
             destination = install_root / relative.parent / "SKILL.md"
-            # Never replace a previously installed skill implicitly.
-            if destination.exists():
+            metadata_path = destination.with_suffix(".metadata.json")
+            if destination.exists() or destination.is_symlink() or metadata_path.exists() or metadata_path.is_symlink():
                 raise FileExistsError(f"Skill already exists at {destination}. Remove it manually before reinstalling.")
+            destinations.append((source, content, destination, metadata_path))
+        installed = []
+        for source, content, destination, metadata_path in destinations:
+            relative = source.relative_to(clone_dir)
             secure_write(destination, content)
             metadata = {
                 "repository": f"{owner}/{name}",
@@ -160,7 +165,7 @@ def install_skill_repository(repository: str, *, confirm: bool = False, expected
                 "warnings": scan_skill_text(content),
                 "executable_files_installed": False,
             }
-            secure_write(destination.with_suffix(".metadata.json"), json.dumps(metadata, indent=2))
+            secure_write(metadata_path, json.dumps(metadata, indent=2))
             installed.append({"path": str(destination), "source_path": relative.as_posix()})
         return {"repository": f"{owner}/{name}", "installed": installed, "warnings": warnings[:100],
                 "note": "Only Markdown instructions were copied. Repository scripts and binaries were not installed or executed."}
