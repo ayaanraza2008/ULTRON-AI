@@ -369,3 +369,56 @@ test("automatic OpenRouter fallback ignores invalid, paid, and duplicate model I
     assert.deepEqual(calls, ["openrouter/free", "openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
   });
 });
+
+test("direct Groq and Gemini keys activate ordered fallbacks without registry JSON", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "primary-test-secret",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    GROQ_API_KEY: "groq-test-secret",
+    GROQ_DEFAULT_MODEL: "openai/gpt-oss-20b",
+    GEMINI_API_KEY: "gemini-test-secret",
+    GEMINI_DEFAULT_MODEL: "gemini-3.8-flash"
+  };
+  await withServer(env, async (url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push({ url, authorization: options.headers.Authorization, model: body.model, body });
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+    }
+    if (url === "https://api.groq.com/openai/v1/chat/completions") {
+      return new Response(JSON.stringify({ error: { message: "temporarily unavailable" } }), { status: 503 });
+    }
+    assert.equal(url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    return new Response(JSON.stringify({
+      model: "gemini-3.8-flash",
+      choices: [{ message: { role: "assistant", content: "Gemini fallback completed." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello", apiKey: "untrusted-client-key" })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Gemini fallback completed/);
+    assert.deepEqual(calls.map(call => call.url), [
+      "https://openrouter.ai/api/v1/chat/completions",
+      "https://api.groq.com/openai/v1/chat/completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    ]);
+    assert.deepEqual(calls.map(call => call.authorization), [
+      "Bearer primary-test-secret",
+      "Bearer groq-test-secret",
+      "Bearer gemini-test-secret"
+    ]);
+    assert.deepEqual(calls.map(call => call.model), [
+      "openrouter/free",
+      "openai/gpt-oss-20b",
+      "gemini-3.8-flash"
+    ]);
+    assert.equal(JSON.stringify(calls.map(call => call.body)).includes("untrusted-client-key"), false);
+  });
+});
+
