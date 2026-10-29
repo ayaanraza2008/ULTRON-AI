@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101015">
+  <title>ULTRON Video Studio</title>
+  <link rel="stylesheet" href="/studio/static/studio.css">
+  <script defer src="/studio/static/studio.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/studio" aria-label="ULTRON Video Studio home">
+      <span class="brand-mark">U</span>
+      <span><strong>ULTRON</strong><small>VIDEO STUDIO</small></span>
+    </a>
+    <div class="topbar-right">
+      <span id="connectionState" class="status-pill">Checking local runtime…</span>
+      <button id="refreshButton" class="button ghost small" type="button">Refresh</button>
+    </div>
+  </header>
+  <main>
+    <section id="loginPane" class="login-pane" hidden>
+      <div class="eyebrow">ACCOUNT SESSION</div>
+      <h1>Sign in to ULTRON</h1>
+      <p>This hosted studio uses your existing ULTRON account. For a private local workspace, start it with <code>npm run studio:local</code> and open <code>http://127.0.0.1:10000/studio</code>.</p>
+      <form id="loginForm" class="form-grid">
+        <label>Email<input name="email" type="email" autocomplete="username" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+        <button class="button primary" type="submit">Sign in</button>
+      </form>
+      <p id="loginMessage" class="message" role="status"></p>
+    </section>
+
+    <section id="appShell" hidden>
+      <div class="hero-row">
+        <div>
+          <div class="eyebrow">CREATIVE PIPELINE / LOCAL-FIRST</div>
+          <h1>Your small video production studio.</h1>
+          <p class="hero-copy">Brief it. Plan it. Gather rights-cleared media. Review the board. Approve before rendering.</p>
+        </div>
+        <div class="hero-actions">
+          <span id="engineSummary" class="subtle-chip">Local workspace</span>
+          <a href="/api/studio/status" class="text-link" target="_blank" rel="noreferrer">Runtime status ↗</a>
+        </div>
+      </div>
+
+      <div class="studio-layout">
+        <aside class="sidebar panel">
+          <div class="section-heading"><div><div class="eyebrow">WORKSPACE</div><h2>Projects</h2></div><span id="projectCount" class="count">0</span></div>
+          <div id="projectList" class="project-list"></div>
+          <div class="sidebar-note"><span class="dot"></span><span>Project files stay in your configured local workspace. Keys never go to the browser.</span></div>
+          <details class="setup-details">
+            <summary>Setup checklist</summary>
+            <ul id="toolChecklist" class="checklist"></ul>
+            <p class="muted tiny">FFmpeg is required for final rendering. Stock search, live research, AI planning and voiceover require their respective optional providers.</p>
+          </details>
+        </aside>
+
+        <section class="main-column">
+          <section class="panel create-panel">
+            <div class="section-heading"><div><div class="eyebrow">01 / START A PRODUCTION</div><h2>Describe the video</h2></div><span class="free-label">LOCAL-FIRST</span></div>
+            <form id="newProjectForm" class="create-grid">
+              <label class="wide">Video brief
+                <textarea name="prompt" rows="3" required minlength="3" maxlength="4000" placeholder="Example: Make a 45-second cinematic mystery Short about a deserted railway platform where the station clock loses exactly 17 minutes. Moody crimson lights, slow opening, escalating cuts, English narration."></textarea>
+              </label>
+              <label>Reference URL <span class="optional">optional</span>
+                <input name="referenceUrl" type="url" placeholder="YouTube, Short, Reel, TikTok or Vimeo link">
+              </label>
+              <label>Format
+                <select name="format"><option value="hybrid">Hybrid footage + stills</option><option value="motion-footage">Real motion footage</option><option value="cinematic-stills">Cinematic stills with movement</option></select>
+              </label>
+              <label>Aspect ratio
+                <select name="aspectRatio"><option value="9:16">9:16 · Shorts / Reels</option><option value="16:9">16:9 · YouTube</option><option value="1:1">1:1 · Square</option></select>
+              </label>
+              <label>Target duration
+                <select name="durationSeconds"><option value="30">30 seconds</option><option value="45" selected>45 seconds</option><option value="60">60 seconds</option><option value="90">90 seconds</option><option value="180">3 minutes</option><option value="300">5 minutes</option></select>
+              </label>
+              <label>Language
+                <select name="language"><option>English</option><option>Hindi</option><option>Hinglish</option><option>Auto-detect</option></select>
+              </label>
+              <label class="wide upload-line">Local reference clip <span class="optional">optional · 8 MB per upload</span>
+                <input id="referenceFile" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska">
+              </label>
+              <label class="wide rights-check"><input name="referenceRightsConfirmed" type="checkbox"><span>I own this reference or have permission to analyze it. This permits local metadata extraction through yt-dlp if installed; no source video is downloaded automatically.</span></label>
+              <button class="button primary wide" type="submit">Create production board <span aria-hidden="true">→</span></button>
+            </form>
+            <p id="createMessage" class="message" role="status"></p>
+          </section>
+
+          <section id="projectWorkspace" class="project-workspace" hidden>
+            <div class="project-header panel">
+              <div class="project-title-block"><div class="eyebrow">ACTIVE PRODUCTION</div><h2 id="activeTitle">Untitled production</h2><p id="activeMeta" class="muted"></p></div>
+              <div class="project-state"><span id="activeStage" class="stage-badge">IDEA</span><button id="deleteProject" class="button danger ghost small" type="button">Delete</button></div>
+            </div>
+            <div class="stage-track panel" id="stageTrack" aria-label="Production stages"></div>
+
+            <section class="panel">
+              <div class="section-heading"><div><div class="eyebrow">02 / REFERENCE ANALYSIS</div><h3>Style, pacing & transcript</h3></div><button id="analyzeReference" class="button secondary small" type="button">Analyze reference</button></div>
+              <p id="referenceSummary" class="muted">No reference attached. A URL alone can reveal limited metadata; upload an authorized clip for local scene-change analysis.</p>
+              <label>Transcript / notes <span class="optional">optional</span>
+                <textarea id="referenceTranscript" rows="3" maxlength="30000" placeholder="Paste the transcript, dialogue notes, or timing observations from your reference."></textarea>
+              </label>
+              <div id="referenceAnalysis" class="analysis-grid"></div>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading"><div><div class="eyebrow">03 / CONCEPTS & PLAN</div><h3>Choose a direction</h3></div><button id="generatePlan" class="button secondary small" type="button">Generate 3 concepts</button></div>
+              <div id="conceptList" class="concept-grid"></div>
+              <div id="productionPlan" class="production-plan"></div>
+              <div class="approval-row"><div><strong>Plan approval</strong><p class="muted tiny">Review the concept, script, source tasks and scene plan before continuing.</p></div><button id="approvePlan" class="button primary" type="button" disabled>Approve plan</button></div>
+              <p id="planMessage" class="message" role="status"></p>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading"><div><div class="eyebrow">04 / SCRIPT & STORYBOARD</div><h3>Script and timed scenes</h3></div><button id="saveScript" class="button secondary small" type="button">Save script edits</button></div>
+              <label>Editable narration script<textarea id="scriptEditor" rows="7" maxlength="20000" placeholder="Generate a plan or write your narration here."></textarea></label>
+              <div id="sceneList" class="scene-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading"><div><div class="eyebrow">05 / RESEARCH</div><h3>Source notebook</h3></div><button id="runResearch" class="button secondary small" type="button">Research brief</button></div>
+              <p id="researchNote" class="muted">Research is opt-in. Configure TAVILY_API_KEY to search the current web; the app never pretends a missing research provider ran.</p>
+              <div id="researchSources" class="source-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading"><div><div class="eyebrow">06 / ASSET LIBRARY</div><h3>Gather footage & stills</h3></div><span id="assetCount" class="count">0 assets</span></div>
+              <form id="stockSearchForm" class="search-row">
+                <input name="query" type="search" placeholder="Search: empty railway station, rainy neon street…" required minlength="2" maxlength="120">
+                <select name="kind" aria-label="Asset type"><option value="video">Motion footage</option><option value="image">Still images</option></select>
+                <button class="button secondary" type="submit">Search stock</button>
+              </form>
+              <p class="muted tiny">Uses optional Pexels/Pixabay API keys. Source links and creator credits are retained; check each item's licence before publishing.</p>
+              <div id="stockResults" class="asset-grid"></div>
+              <div class="upload-assets">
+                <label>Import a local media asset (max 8 MB)<input id="assetFile" type="file" accept="video/*,image/jpeg,image/png,image/webp,audio/*"></label>
+                <label>Audio type
+                  <select id="audioKind"><option value="audio">Audio</option><option value="music">Background music</option></select>
+                </label>
+                <button id="uploadAsset" class="button secondary" type="button">Import local file</button>
+              </div>
+              <div id="assetLibrary" class="asset-library"></div>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading"><div><div class="eyebrow">07 / AUDIO & CAPTIONS</div><h3>Polish the cut</h3></div></div>
+              <div class="action-grid">
+                <div class="action-card"><div class="action-icon">♫</div><strong>Voiceover</strong><p class="muted tiny">Uses configured VoiceStudio or an OpenAI-compatible TTS endpoint.</p><button id="generateVoiceover" class="button secondary" type="button">Create voiceover</button></div>
+                <div class="action-card"><div class="action-icon">CC</div><strong>Captions</strong><p class="muted tiny">Builds a draft SRT sidecar from scene narration; review timing before use.</p><button id="generateCaptions" class="button secondary" type="button">Generate SRT</button><a id="downloadCaptions" class="text-link" hidden>Download captions</a></div>
+              </div>
+              <p id="audioMessage" class="message" role="status"></p>
+            </section>
+
+            <section class="panel render-panel">
+              <div class="section-heading"><div><div class="eyebrow">08 / FINAL REVIEW</div><h3>Approve & render</h3></div><span id="costState" class="stage-badge">COST PARTIAL</span></div>
+              <div id="costEstimate" class="cost-grid"></div>
+              <p class="muted tiny">Budget excludes unknown provider charges, music/media licences and any third-party generation. Configure per-unit rates to improve estimates.</p>
+              <div class="approval-row"><div><strong>Final-render approval</strong><p class="muted tiny">The render button stays blocked until you approve the plan, review imported assets and explicitly authorize the render.</p></div><button id="approveRender" class="button warning" type="button" disabled>Approve final render</button></div>
+              <div class="render-launch"><button id="renderButton" class="button primary" type="button" disabled>Render final MP4</button><a id="downloadRender" class="button secondary" hidden>Download final MP4</a></div>
+              <div class="progress-shell"><div id="renderProgressBar" class="progress-bar"></div></div>
+              <p id="renderMessage" class="message" role="status"></p>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading"><div><div class="eyebrow">PRODUCTION LOG</div><h3>Live activity</h3></div><button id="refreshProject" class="button ghost small" type="button">Refresh board</button></div>
+              <div id="activityLog" class="activity-log"></div>
+            </section>
+          </section>
+        </section>
+      </div>
+    </section>
+  </main>
+  <footer><span>ULTRON VIDEO STUDIO</span><span>Local-first · human approval before final render</span></footer>
+</body>
+</html>
