@@ -1,4 +1,6 @@
 import sys
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ultron_local_assistant.core import (
-    DEFAULT_OLLAMA_URL, detect_hardware, load_relevant_skill_context, recommend_models, resolve_workspace_file,
+    DEFAULT_OLLAMA_URL, apply_workspace_draft, detect_hardware, load_relevant_skill_context, recommend_models, resolve_workspace_file,
     safe_shell_argv, search_documents, validate_local_ollama_url,
     run_approved_command,
 )
@@ -115,6 +117,58 @@ class LocalFirstCoreTests(unittest.TestCase):
             self.assertIn("Never send email", context)
             self.assertEqual(unrelated, "")
 
+    def test_apply_draft_requires_confirmation_and_creates_backup(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "workspace"
+            root.mkdir()
+            app_data = Path(temp) / "app-data"
+            source = root / "main.py"
+            original = "print('before')\\n"
+            revised = "print('after')\\n"
+            source.write_text(original, encoding="utf-8")
+            drafts = app_data / "drafts"
+            drafts.mkdir(parents=True)
+            draft = drafts / "revision-main.py.draft"
+            draft.write_text(revised, encoding="utf-8")
+            metadata = {
+                "workspace_root": str(root.resolve()),
+                "source_relative": "main.py",
+                "source_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+                "draft_sha256": hashlib.sha256(revised.encode("utf-8")).hexdigest(),
+            }
+            Path(str(draft) + ".json").write_text(json.dumps(metadata), encoding="utf-8")
+            with patch("ultron_local_assistant.core.app_data_dir", return_value=app_data):
+                with self.assertRaises(PermissionError):
+                    apply_workspace_draft(draft, root, confirm=False)
+                result = apply_workspace_draft(draft, root, confirm=True)
+            self.assertEqual(source.read_text(encoding="utf-8"), revised)
+            self.assertEqual(Path(result["backup"]).read_text(encoding="utf-8"), original)
+
+    def test_apply_draft_refuses_to_overwrite_a_changed_source(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "workspace"
+            root.mkdir()
+            app_data = Path(temp) / "app-data"
+            source = root / "main.py"
+            original = "print('before')\\n"
+            revised = "print('draft')\\n"
+            source.write_text(original, encoding="utf-8")
+            drafts = app_data / "drafts"
+            drafts.mkdir(parents=True)
+            draft = drafts / "revision-main.py.draft"
+            draft.write_text(revised, encoding="utf-8")
+            Path(str(draft) + ".json").write_text(json.dumps({
+                "workspace_root": str(root.resolve()),
+                "source_relative": "main.py",
+                "source_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+                "draft_sha256": hashlib.sha256(revised.encode("utf-8")).hexdigest(),
+            }), encoding="utf-8")
+            source.write_text("print('newer manual work')\\n", encoding="utf-8")
+            with patch("ultron_local_assistant.core.app_data_dir", return_value=app_data):
+                with self.assertRaisesRegex(RuntimeError, "changed since the draft"):
+                    apply_workspace_draft(draft, root, confirm=True)
+            self.assertEqual(source.read_text(encoding="utf-8"), "print('newer manual work')\\n")
+
     def test_shell_execution_requires_explicit_confirmation(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaises(PermissionError):
@@ -139,6 +193,7 @@ class LocalFirstCoreTests(unittest.TestCase):
         self.assertEqual(parser.parse_args(["research", "explain", "bands", "--root", "."]).question, ["explain", "bands"])
         args = parser.parse_args(["code", "revise", "main.py", "--request", "add tests"])
         self.assertEqual(args.code_command, "revise")
+        self.assertEqual(parser.parse_args(["code", "apply", ".local/drafts/a.draft"]).code_command, "apply")
         self.assertEqual(parser.parse_args(["skills", "review", "owner/repo"]).skills_command, "review")
 
 
