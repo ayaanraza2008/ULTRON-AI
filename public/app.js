@@ -73,6 +73,7 @@
   let fallbackRecorderStarting = false;
   let speechCapabilities = {};
   let speechCapabilitiesLoaded = false;
+  let speechCapabilitiesPromise = null;
   let speechLanguageMode = "auto";
   let recognitionStartPending = false;
   let activeSpeechAudio = null;
@@ -1036,16 +1037,21 @@
 
   async function ensureSpeechCapabilities() {
     if (speechCapabilitiesLoaded) return speechCapabilities;
-    try {
-      const payload = await apiRequest("/api/capabilities");
-      speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
-        ? payload.providers.speech : {};
-      speechCapabilitiesLoaded = true;
-    } catch {
-      speechCapabilities = {};
-      speechCapabilitiesLoaded = true;
-    }
-    return speechCapabilities;
+    if (speechCapabilitiesPromise) return speechCapabilitiesPromise;
+    speechCapabilitiesPromise = (async () => {
+      try {
+        const payload = await apiRequest("/api/capabilities");
+        speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
+          ? payload.providers.speech : {};
+      } catch {
+        speechCapabilities = {};
+      } finally {
+        speechCapabilitiesLoaded = true;
+        speechCapabilitiesPromise = null;
+      }
+      return speechCapabilities;
+    })();
+    return speechCapabilitiesPromise;
   }
 
   async function startFallbackRecognition() {
@@ -2503,6 +2509,8 @@
   renderMode();
   setCoreState("idle");
   startParticleCore();
+  // Warm speech capability detection before the user first enters Voice Mode.
+  void ensureSpeechCapabilities();
   void checkSession();
   void checkBackend();
   window.setInterval(() => { void checkBackend(); }, 60000);
