@@ -66,6 +66,14 @@
   let busy = false;
   let recognition = null;
   let restartTimer = null;
+  let forceFallbackRecognition = false;
+  let fallbackRecorderSession = null;
+  let fallbackRecorderStarting = false;
+  let speechCapabilities = {};
+  let speechCapabilitiesLoaded = false;
+  let activeSpeechAudio = null;
+  let activeSpeechObjectUrl = null;
+  let finishActiveSpeechAudio = null;
   let toastTimer = null;
   let panelTimer = null;
   let panelIsComplete = false;
@@ -676,9 +684,99 @@
     return segments.map(segment => ({ ...segment, text: segment.text.trim() })).filter(segment => segment.text);
   }
 
+  function stopFishAudioPlayback() {
+    if (finishActiveSpeechAudio) {
+      finishActiveSpeechAudio(false);
+      return;
+    }
+    if (activeSpeechAudio) {
+      try { activeSpeechAudio.pause(); } catch { /* ignore */ }
+    }
+    if (activeSpeechObjectUrl) {
+      try { URL.revokeObjectURL(activeSpeechObjectUrl); } catch { /* ignore */ }
+    }
+    activeSpeechAudio = null;
+    activeSpeechObjectUrl = null;
+    finishActiveSpeechAudio = null;
+  }
+
+  async function requestFishAudioSpeech(text) {
+    const response = await fetch("/api/speech/synthesize", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text: String(text || "").trim().slice(0, 4000) }),
+      ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(60000) } : {})
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const details = payload && typeof payload === "object" ? payload.error : null;
+      throw new Error(details && typeof details.message === "string" ? details.message : "Fish Audio synthesis failed (" + response.status + ").");
+    }
+    const blob = await response.blob();
+    if (!blob.size || (blob.type && !blob.type.startsWith("audio/"))) throw new Error("Fish Audio returned an empty or invalid audio response.");
+    return blob;
+  }
+
+  function playFishAudioBlob(blob, epoch) {
+    if (epoch !== speechEpoch || !blob || !blob.size) return Promise.resolve(false);
+    stopFishAudioPlayback();
+    const objectUrl = URL.createObjectURL(blob);
+    const player = new window.Audio(objectUrl);
+    activeSpeechAudio = player;
+    activeSpeechObjectUrl = objectUrl;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (played) => {
+        if (settled) return;
+        settled = true;
+        player.onended = null;
+        player.onerror = null;
+        player.onplay = null;
+        try { player.pause(); } catch { /* ignore */ }
+        try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ }
+        if (activeSpeechAudio === player) activeSpeechAudio = null;
+        if (activeSpeechObjectUrl === objectUrl) activeSpeechObjectUrl = null;
+        if (finishActiveSpeechAudio === finish) finishActiveSpeechAudio = null;
+        resolve(Boolean(played));
+      };
+      finishActiveSpeechAudio = finish;
+      player.onplay = () => {
+        if (epoch === speechEpoch) setCoreState("speaking");
+      };
+      player.onended = () => finish(true);
+      player.onerror = () => finish(false);
+      Promise.resolve(player.play()).catch(() => finish(false));
+    });
+  }
+
   function speakResponse(text, force = false) {
     const shouldSpeak = force || (mode === "text" && !mutedInTextMode);
     if (!shouldSpeak) return Promise.resolve(false);
+    speechEpoch += 1;
+    const epoch = speechEpoch;
+    stopFishAudioPlayback();
+    try { window.speechSynthesis?.cancel?.(); } catch { /* use a fresh response */ }
+    if (speechCapabilities.premiumTtsConfigured) {
+      return requestFishAudioSpeech(text)
+        .then(blob => {
+          if (epoch !== speechEpoch) return false;
+          return playFishAudioBlob(blob, epoch).then(played => {
+            if (played || epoch !== speechEpoch) return played;
+            return speakResponseBrowser(text, epoch);
+          });
+        })
+        .catch(() => {
+          if (epoch !== speechEpoch) return false;
+          showToast("Fish Audio voice is unavailable right now. Falling back to your browser's installed voice.", 3000);
+          return speakResponseBrowser(text, epoch);
+        });
+    }
+    return speakResponseBrowser(text, epoch);
+  }
+
+  function speakResponseBrowser(text, epoch) {
     const synth = window.speechSynthesis;
     const Utterance = window.SpeechSynthesisUtterance;
     if (!synth || !Utterance) {
@@ -687,9 +785,6 @@
     }
     const segments = splitSpeechSegments(text);
     if (!segments.length) return Promise.resolve(false);
-    speechEpoch += 1;
-    const epoch = speechEpoch;
-    try { synth.cancel(); } catch { /* continue with a fresh utterance */ }
     return new Promise((resolve) => {
       let pending = segments.length;
       let anySpoken = false;
@@ -707,6 +802,10 @@
         }
       };
       for (const segment of segments) {
+        if (epoch !== speechEpoch) {
+          if (!settled) { settled = true; resolve(anySpoken); }
+          return;
+        }
         const utterance = new Utterance(segment.text);
         utterance.lang = segment.lang;
         utterance.voice = chooseSpeechVoice(segment.lang);
@@ -773,9 +872,190 @@
     return window.SpeechRecognition || window.webkitSpeechRecognition || null;
   }
 
+  function stopFallbackRecognition({ transcribe = false } = {}) {
+    const session = fallbackRecorderSession;
+    if (!session) return;
+    fallbackRecorderSession = null;
+    session.transcribeOnStop = Boolean(transcribe);
+    if (session.monitorTimer) window.clearInterval(session.monitorTimer);
+    session.monitorTimer = null;
+    try {
+      if (session.recorder.state !== "inactive") session.recorder.stop();
+      else void finishFallbackRecording(session);
+    } catch {
+      void finishFallbackRecording(session);
+    }
+  }
+
+  async function finishFallbackRecording(session) {
+    if (session.finished) return;
+    session.finished = true;
+    if (session.monitorTimer) window.clearInterval(session.monitorTimer);
+    session.monitorTimer = null;
+    if (!session.transcribeOnStop || !session.heardSpeech || !session.chunks.length) {
+      if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+      return;
+    }
+    ui.captionText.textContent = "TRANSCRIBING · FISH AUDIO";
+    ui.voiceSubtitle.textContent = "Transcribing your speech…";
+    const blob = new Blob(session.chunks, { type: session.recorder.mimeType || "audio/webm" });
+    const submitted = await transcribeRecordedAudio(blob);
+    if (!submitted && voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+  }
+
+  async function transcribeRecordedAudio(blob) {
+    if (!blob || !blob.size || blob.size > 7 * 1024 * 1024) {
+      if (blob && blob.size > 7 * 1024 * 1024) showToast("That recording is too large. Please speak in shorter phrases.");
+      return false;
+    }
+    if (!voiceActive || mode !== "voice" || busy || textInputOpen) return false;
+    try {
+      const data = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      const stride = 0x8000;
+      for (let offset = 0; offset < data.length; offset += stride) {
+        binary += String.fromCharCode(...data.subarray(offset, Math.min(data.length, offset + stride)));
+      }
+      const audioBase64 = window.btoa(binary);
+      const mimeType = String(blob.type || "audio/webm").split(";")[0];
+      const payload = await apiRequest("/api/speech/transcribe", {
+        method: "POST",
+        body: { audioBase64, mimeType }
+      });
+      const command = String(payload?.text || "").trim();
+      if (!command) {
+        ui.captionText.textContent = "DID NOT CATCH THAT · TRY AGAIN";
+        ui.voiceSubtitle.textContent = "Didn't catch that · speak again";
+        return false;
+      }
+      if (!voiceActive || mode !== "voice" || textInputOpen) return false;
+      ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
+      await sendPrompt(command, "voice");
+      return true;
+    } catch (error) {
+      ui.captionText.textContent = "VOICE TRANSCRIPTION FAILED";
+      showToast(error.message || "Speech recognition failed. Check the Fish Audio connection and try again.", 6500);
+      return false;
+    }
+  }
+
+  async function ensureSpeechCapabilities() {
+    if (speechCapabilitiesLoaded) return speechCapabilities;
+    try {
+      const payload = await apiRequest("/api/capabilities");
+      speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
+        ? payload.providers.speech : {};
+      speechCapabilitiesLoaded = true;
+    } catch {
+      speechCapabilities = {};
+    }
+    return speechCapabilities;
+  }
+
+  async function startFallbackRecognition() {
+    if (fallbackRecorderStarting || fallbackRecorderSession || !voiceActive || mode !== "voice" || busy || textInputOpen) return;
+    fallbackRecorderStarting = true;
+    try {
+      await ensureSpeechCapabilities();
+      if (!speechCapabilities.premiumSttConfigured) {
+        voiceActive = false;
+        stopFallbackRecognition({ transcribe: false });
+        stopRecognition();
+        releaseMicVisualizer();
+        renderMode();
+        setCoreState("error");
+        showToast("Browser speech recognition is unavailable, and ULTRON has no server-side transcription provider configured. Configure FISH_API_KEY on the backend.");
+        return;
+      }
+      if (typeof window.MediaRecorder !== "function") {
+        voiceActive = false;
+        stopRecognition();
+        releaseMicVisualizer();
+        renderMode();
+        setCoreState("error");
+        showToast("This browser cannot record microphone audio for server-side transcription. Try the latest Chrome or Edge.");
+        return;
+      }
+      if (!micStream || !analyser || !audioSamples) {
+        const ready = await startMicVisualizer();
+        if (!ready || !micStream || !analyser || !audioSamples) {
+          voiceActive = false;
+          stopRecognition();
+          releaseMicVisualizer();
+          renderMode();
+          setCoreState("error");
+          showToast("Microphone access is unavailable. Allow microphone access for this secure site and try again.");
+          return;
+        }
+      }
+      if (!voiceActive || mode !== "voice" || busy || textInputOpen) return;
+      const supportedTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = supportedTypes.find(type => window.MediaRecorder.isTypeSupported?.(type)) || "";
+      const recorder = new window.MediaRecorder(micStream, mimeType ? { mimeType } : undefined);
+      const session = {
+        recorder,
+        chunks: [],
+        monitorTimer: null,
+        startedAt: Date.now(),
+        lastVoiceAt: 0,
+        heardSpeech: false,
+        transcribeOnStop: false,
+        finished: false
+      };
+      fallbackRecorderSession = session;
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size) session.chunks.push(event.data);
+      };
+      recorder.onstop = () => { void finishFallbackRecording(session); };
+      recorder.onerror = () => {
+        session.transcribeOnStop = false;
+        if (fallbackRecorderSession === session) fallbackRecorderSession = null;
+        if (session.monitorTimer) window.clearInterval(session.monitorTimer);
+        session.monitorTimer = null;
+        ui.captionText.textContent = "MICROPHONE RECORDING INTERRUPTED";
+        if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+      };
+      recorder.start(250);
+      setCoreState("listening");
+      ui.voiceSubtitle.textContent = "Listening · Fish Audio transcription";
+      ui.captionText.textContent = "LISTENING · SPEAK NATURALLY";
+      session.monitorTimer = window.setInterval(() => {
+        if (fallbackRecorderSession !== session || recorder.state !== "recording") return;
+        if (analyser && audioSamples) {
+          analyser.getByteTimeDomainData(audioSamples);
+          let total = 0;
+          for (let i = 0; i < audioSamples.length; i += 1) {
+            const sample = (audioSamples[i] - 128) / 128;
+            total += sample * sample;
+          }
+          const rms = Math.sqrt(total / audioSamples.length);
+          const now = Date.now();
+          if (rms > 0.018) {
+            session.heardSpeech = true;
+            session.lastVoiceAt = now;
+          }
+          if (session.heardSpeech && now - session.lastVoiceAt >= 1100) {
+            stopFallbackRecognition({ transcribe: true });
+          } else if (now - session.startedAt >= 18000) {
+            stopFallbackRecognition({ transcribe: session.heardSpeech });
+          } else if (!session.heardSpeech && now - session.startedAt >= 12000) {
+            stopFallbackRecognition({ transcribe: false });
+          }
+        }
+      }, 160);
+    } catch {
+      ui.captionText.textContent = "VOICE RECORDING FAILED";
+      showToast("Could not start microphone recording. Check microphone permission and try again.");
+      if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+    } finally {
+      fallbackRecorderStarting = false;
+    }
+  }
+
   function stopRecognition() {
     if (restartTimer) window.clearTimeout(restartTimer);
     restartTimer = null;
+    stopFallbackRecognition({ transcribe: false });
     const current = recognition;
     recognition = null;
     if (!current) return;
@@ -795,9 +1075,20 @@
   }
 
   function startRecognition() {
+    if (!voiceActive || mode !== "voice" || busy || textInputOpen) return;
     const Recognition = speechRecognitionConstructor();
-    if (!Recognition || !voiceActive || mode !== "voice" || busy || textInputOpen || recognition) return;
-    const instance = new Recognition();
+    if (forceFallbackRecognition || !Recognition) {
+      void startFallbackRecognition();
+      return;
+    }
+    if (recognition) return;
+    let instance;
+    try { instance = new Recognition(); }
+    catch {
+      forceFallbackRecognition = true;
+      void startFallbackRecognition();
+      return;
+    }
     recognition = instance;
     instance.continuous = true;
     instance.interimResults = true;
@@ -818,9 +1109,7 @@
         if (result && result.isFinal) finalText += transcript + " ";
         else interimText += transcript;
       }
-      if (interimText.trim()) {
-        ui.captionText.textContent = "HEARING · " + interimText.trim().slice(0, 110);
-      }
+      if (interimText.trim()) ui.captionText.textContent = "HEARING · " + interimText.trim().slice(0, 110);
       if (finalText.trim()) {
         const command = finalText.trim();
         stopRecognition();
@@ -830,16 +1119,20 @@
     instance.onerror = (event) => {
       if (recognition !== instance) return;
       const code = event && event.error ? event.error : "voice-error";
+      if (code === "no-speech" || code === "aborted") return;
+      forceFallbackRecognition = true;
+      recognition = null;
+      instance.onend = null;
+      instance.onresult = null;
+      instance.onerror = null;
+      try { instance.stop(); } catch { /* it may already be stopped */ }
+      ui.captionText.textContent = "SWITCHING TO SERVER SPEECH RECOGNITION";
       if (code === "not-allowed" || code === "service-not-allowed") {
-        voiceActive = false;
-        stopRecognition();
-        releaseMicVisualizer();
-        renderMode();
-        setCoreState("error");
-        showToast("Microphone permission was denied. Allow microphone access in your browser, then select Voice Mode again.");
-      } else if (code !== "no-speech" && code !== "aborted") {
-        ui.captionText.textContent = "VOICE INPUT INTERRUPTED · RETRYING";
+        showToast("Browser speech recognition was blocked. Switching to Fish Audio transcription.");
+      } else {
+        showToast("Browser speech recognition failed. Switching to Fish Audio transcription.");
       }
+      scheduleRecognitionRestart();
     };
     instance.onend = () => {
       if (recognition === instance) recognition = null;
@@ -849,6 +1142,7 @@
       instance.start();
     } catch {
       if (recognition === instance) recognition = null;
+      forceFallbackRecognition = true;
       scheduleRecognitionRestart();
     }
   }
