@@ -2143,3 +2143,45 @@ test("short confirmation inherits the task for automatic ECC skill selection", a
     assert.equal(providerCalls, 1);
   });
 });
+
+
+test("task router narrows one clear domain and retains the full allowlist for compound tasks", async () => {
+  const providerRequests = [];
+  await withServer({ OPENROUTER_API_KEY: "task-router-test-key" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    const request = JSON.parse(options.body);
+    providerRequests.push(request);
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "The task route is ready." } }]
+    }), { status: 200 });
+  }, async base => {
+    const voiceResponse = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "List VoiceStudio voices" })
+    });
+    assert.equal(voiceResponse.status, 200);
+    const voiceBody = await voiceResponse.json();
+    const voiceTools = providerRequests[0].tools.map(tool => tool.function.name);
+    assert.equal(voiceBody.routing.tier, "medium");
+    assert.equal(voiceBody.routing.toolSchemasFiltered, true);
+    assert.ok(voiceTools.includes("list_speech_voices"));
+    assert.ok(voiceTools.includes("synthesize_speech"));
+    assert.ok(!voiceTools.includes("research_web"));
+    assert.ok(voiceTools.length < 35);
+
+    const compoundResponse = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research this topic and then create a YouTube production plan" })
+    });
+    assert.equal(compoundResponse.status, 200);
+    const compoundBody = await compoundResponse.json();
+    const compoundTools = providerRequests[1].tools.map(tool => tool.function.name);
+    assert.equal(compoundBody.routing.tier, "complex");
+    assert.equal(compoundBody.routing.toolSchemasFiltered, false);
+    assert.ok(compoundTools.includes("research_web"));
+    assert.ok(compoundTools.includes("create_youtube_production_plan"));
+    assert.equal(compoundTools.length, 35);
+  });
+});
