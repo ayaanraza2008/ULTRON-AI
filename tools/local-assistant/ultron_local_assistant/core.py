@@ -17,14 +17,15 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_LOCAL_MODEL = os.environ.get("ULTRON_LOCAL_MODEL", "qwen2.5:1.5b")
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-MAX_DOCUMENT_BYTES = 1_000_000
-ALLOWED_DOCUMENT_SUFFIXES = {".md", ".txt", ".rst", ".py", ".js", ".ts", ".json", ".csv", ".html", ".yaml", ".yml"}
+MAX_DOCUMENT_BYTES = 5_000_000
+ALLOWED_DOCUMENT_SUFFIXES = {".md", ".txt", ".rst", ".py", ".js", ".ts", ".json", ".csv", ".html", ".yaml", ".yml", ".pdf", ".docx"}
 SKIP_DIR_NAMES = {".git", ".venv", "venv", "node_modules", "__pycache__", "models", ".local", "dist", "build", ".ultron-drafts"}
 SENSITIVE_NAMES = {".env", ".env.local", ".env.production", "credentials.json", "token.json", "secrets.json", "id_rsa", "id_ed25519"}
 SECRET_NAME_RE = re.compile(r"(?:secret|credential|password|token|private[-_]?key)", re.I)
@@ -344,6 +345,62 @@ def resolve_workspace_file(root: str | Path, relative_path: str, *, allow_missin
     return target
 
 
+def read_document_text(path: str | Path) -> str:
+    """Read supported local text files; PDF/DOCX readers are optional extras."""
+    source = Path(path)
+    suffix = source.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:
+            raise RuntimeError("PDF search needs optional dependencies: pip install -e \"tools/local-assistant[documents]\".") from exc
+        try:
+            reader = PdfReader(str(source), strict=False)
+            if len(reader.pages) > 200:
+                raise ValueError("PDF contains more than 200 pages; split it into smaller files.")
+            parts = []
+            total_chars = 0
+            for index, page in enumerate(reader.pages):
+                text = page.extract_text() or ""
+                total_chars += len(text)
+                if total_chars > 2_000_000:
+                    raise ValueError("Extracted PDF text exceeds the 2 MB limit.")
+                parts.append(f"[PDF page {index + 1}]\\n{text}")
+            return "\\n".join(parts)
+        except (OSError, ValueError):
+            raise
+        except Exception as exc:
+            raise ValueError("Could not safely extract text from this PDF.") from exc
+    if suffix == ".docx":
+        try:
+            with zipfile.ZipFile(source) as archive:
+                members = archive.infolist()
+                if len(members) > 2000 or sum(info.file_size for info in members) > 20_000_000:
+                    raise ValueError("DOCX archive exceeds the safe extraction limits.")
+            from docx import Document
+        except ImportError as exc:
+            raise RuntimeError("DOCX search needs optional dependencies: pip install -e \"tools/local-assistant[documents]\".") from exc
+        except zipfile.BadZipFile as exc:
+            raise ValueError("DOCX file is not a valid ZIP-based document.") from exc
+        try:
+            document = Document(str(source))
+            lines = [paragraph.text for paragraph in document.paragraphs[:5000] if paragraph.text.strip()]
+            for table in document.tables[:100]:
+                for row in table.rows[:500]:
+                    cells = [cell.text.strip() for cell in row.cells[:50] if cell.text.strip()]
+                    if cells:
+                        lines.append(" | ".join(cells))
+            text = "\\n".join(lines)
+            if len(text) > 2_000_000:
+                raise ValueError("Extracted DOCX text exceeds the 2 MB limit.")
+            return text
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError("Could not safely extract text from this DOCX file.") from exc
+    return source.read_text(encoding="utf-8", errors="replace")
+
+
 def search_documents(root: str | Path, query: str, *, max_sources: int = 6) -> list[dict[str, Any]]:
     """Keyword retrieval over local text files with stable line-range citations."""
     base = Path(root).expanduser().resolve()
@@ -367,7 +424,7 @@ def search_documents(root: str | Path, query: str, *, max_sources: int = 6) -> l
                 file_count += 1
                 if file_count > 5000:
                     return sorted(hits, key=lambda hit: hit["score"], reverse=True)[:max_sources]
-                content = path.read_text(encoding="utf-8", errors="replace")
+                content = read_document_text(path)
             except (OSError, ValueError):
                 continue
             lines = content.splitlines()
