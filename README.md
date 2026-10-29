@@ -157,6 +157,12 @@ All endpoints require a signed-in Supabase user. Audio inputs are capped at 8 MB
 
 **Important deployment boundary:** the public Render service cannot connect to `localhost:3900` on your Windows PC. For a PC-local VoiceStudio installation, ULTRON needs a later authenticated Windows companion/bridge to call the local service. Alternatively, use a secured, reachable HTTPS VoiceStudio host. Do not expose VoiceStudio's admin API to the public internet. VoiceStudio is AGPL-3.0; if modified VoiceStudio is provided over a network, comply with its source-offer obligations. Voice/model weights and voice likeness permissions have separate terms. See [VoiceStudio license notice](https://github.com/debpalash/VoiceStudio/blob/main/LICENSE-NOTICE.md).
 
+## Optional Strata local model provider
+
+ULTRON can route ordinary text chat through an already-running Strata OpenAI-compatible server. Set `STRATA_BASE_URL` and `STRATA_MODEL`; a loopback HTTP URL is allowed only when ULTRON and Strata run on the same machine. Remote access requires HTTPS and a server-only `STRATA_API_KEY`. Tool calling and vision default to disabled and must be explicitly enabled only after verifying the selected model's support. ULTRON never installs Strata or downloads model weights.
+
+The Strata repository currently documents a large-model setup that exceeds the user's 8 GB RAM/integrated-graphics PC. Do not install or download that large model on this device. For the exact compatibility state, see the 43-entry [repository capability map](docs/REPOSITORY_CAPABILITY_MAP.md).
+
 ## Explicit live model smoke check
 
 Use this command only when you intentionally want ULTRON to send a tiny real completion to configured model providers:
