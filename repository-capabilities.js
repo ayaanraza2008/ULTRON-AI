@@ -228,7 +228,7 @@ const REPOSITORIES = [
   },
   {
     id: "rea", repo: "morluto/rea", domain: "reverse_engineering",
-    match: /\b(\brea\b|reverse engineer|reverse engineering|binary analysis|inspect executable|decompile|runtime behavior analysis|analyze binary|feature trace|disassemble native code)\b/i,
+    match: /\b(\brea\b|reverse engineer(?:ing)?|binary analysis|inspect executable|decompile|runtime behavior analysis|analy[sz]e (?:the )?(?:binary|native code)|feature trac(?:e|ing)|trace how .{1,120} work(?:s)?|trace application feature|disassembl(?:e|y)|disassemble native code)\b/i,
     integration: "owner_scoped_mcp_adapter", status: "adapter_present_unverified_live",
     abilities: [
       "Evidence-backed JavaScript/Electron application analysis and feature tracing",
