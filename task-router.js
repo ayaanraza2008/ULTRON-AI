@@ -52,7 +52,7 @@ const CATEGORY_TOOLS = Object.freeze({
 const CATEGORY_PATTERNS = Object.freeze([
   ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read (?:this|it|that) aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
   ["browser", /\b(?:browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
-  ["reverse_engineering", /\\b(?:reverse engineer(?:ing)?|trace how .{1,120} works|trace application feature|inspect (?:this |an? )?(?:binary|executable|firmware|apk|electron app|desktop application|wasm)|analy[sz]e (?:the )?(?:binary|executable|firmware|apk|electron app|native code)|decompile|disassembl(?:e|y)|\\brea\\b)\\b/i],
+  ["reverse_engineering", /\b(?:reverse engineer(?:ing)?|trace how .{1,120} works|trace application feature|inspect (?:this |an? )?(?:binary|executable|firmware|apk|electron app|desktop application|wasm)|analy[sz]e (?:the )?(?:binary|executable|firmware|apk|electron app|native code)|decompile|disassembl(?:e|y)|\brea\b)\b/i],
   ["geolocation", /\b(?:geolocat(?:e|ion)|where was this photo taken|photo location|identify (?:this )?location from (?:the )?(?:photo|image)|geo[- ]sleuth)\b/i],
   ["spaceplanner", /\b(?:floor plan|house plan|room layout|interior layout|spaceplanner|space planner)\b/i],
   ["world_intelligence", /\b(?:god[’']?s eye|world intelligence|live globe|earthquake map|live flights|vessel tracking)\b/i],
