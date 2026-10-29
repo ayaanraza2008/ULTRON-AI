@@ -15,7 +15,7 @@ test("PDF report generator produces a readable, multi-section PDF without persis
   assert.match(report.pdf.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d$/);
   assert.equal(report.filename, "ultron-report.pdf");
   assert.equal(report.pages, 1);
-  const parsed = await pdfParse(report.pdf);
+  const parsed = await pdfParse(report.pdf, { version: "v2.0.550" });
   assert.match(parsed.text, /ULTRON Project Review/);
   assert.match(parsed.text, /Source-level verification passed/);
   assert.match(parsed.text, /physical device integrations/);
@@ -27,7 +27,7 @@ test("PDF report generator paginates long text and retains the final section", a
   const report = await generateReportPdf({ title: "Long Verification Report", content });
   assert.equal(report.ok, true);
   assert.ok(report.pages > 5);
-  const parsed = await pdfParse(report.pdf);
+  const parsed = await pdfParse(report.pdf, { version: "v2.0.550" });
   assert.match(parsed.text, /Paragraph 299/);
   assert.match(parsed.text, /Long Verification Report/);
 });
@@ -36,7 +36,7 @@ test("PDF report generator marks glyph substitutions for unsupported scripts", a
   const report = await generateReportPdf({ title: "Language Check", content: "Hindi sample: नमस्ते. English sample: hello." });
   assert.equal(report.ok, true);
   assert.ok(report.unsupportedCharacterCount > 0);
-  const parsed = await pdfParse(report.pdf);
+  const parsed = await pdfParse(report.pdf, { version: "v2.0.550" });
   assert.match(parsed.text, /unsupported script characters/);
 });
 
