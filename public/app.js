@@ -1268,6 +1268,99 @@
       }
     });
     ui.drawerContent.appendChild(headerForm);
+
+    const httpRule = document.createElement("div");
+    httpRule.className = "drawer-rule";
+    ui.drawerContent.appendChild(httpRule);
+    drawerHeading("HTTP response and cookie evidence", "Analyze a response captured by you. Redact cookie values and secrets; cookie names/attributes are enough for flag checks.");
+    const responseForm = document.createElement("form");
+    const statusCode = addDrawerField(responseForm, "OBSERVED HTTP STATUS CODE", "security-http-status", { required: true, type: "number", value: "200", min: "100" });
+    statusCode.max = "599";
+    const responseHeaders = addDrawerField(responseForm, "RESPONSE HEADERS JSON", "security-http-headers", {
+      required: true, maxLength: 12000, multiline: true, rows: 4,
+      placeholder: '{"strict-transport-security":"max-age=31536000","content-security-policy":"default-src \'self\'"}'
+    });
+    const cookieInput = addDrawerField(responseForm, "REDACTED SET-COOKIE VALUES AS JSON ARRAY (OPTIONAL)", "security-http-cookies", {
+      maxLength: 12000, multiline: true, rows: 3,
+      placeholder: '["session=REDACTED; Path=/; Secure; HttpOnly; SameSite=Lax"]'
+    });
+    const responseSubmit = document.createElement("button");
+    responseSubmit.type = "submit";
+    responseSubmit.className = "drawer-action secondary";
+    responseSubmit.textContent = "ANALYZE RESPONSE + COOKIE FLAGS";
+    responseForm.appendChild(responseSubmit);
+    responseForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      let headers, cookies;
+      try {
+        headers = JSON.parse(responseHeaders.value);
+        cookies = cookieInput.value.trim() ? JSON.parse(cookieInput.value) : [];
+      } catch { showToast("Headers must be a JSON object; Set-Cookie values must be a JSON array."); return; }
+      if (!headers || typeof headers !== "object" || Array.isArray(headers) || !Array.isArray(cookies)) {
+        showToast("Use a JSON object for headers and a JSON array for cookie evidence.");
+        return;
+      }
+      const numericStatus = Number(statusCode.value);
+      if (!Number.isInteger(numericStatus) || numericStatus < 100 || numericStatus > 599 || cookies.some(item => typeof item !== "string")) {
+        showToast("Enter an HTTP status from 100 to 599 and provide only string values in the cookie array.");
+        return;
+      }
+      responseSubmit.disabled = true;
+      try {
+        const result = await apiRequest("/api/kaligpt/security/http-evidence/analyze", {
+          method: "POST", body: { statusCode: numericStatus, headers, setCookie: cookies }
+        });
+        drawerCard("HTTP evidence summary", String(result?.notice || "Submitted evidence only; no request was sent."), String(result?.headerCount ?? 0) + " HEADERS", "warning");
+        for (const finding of (Array.isArray(result?.findings) ? result.findings : []).slice(0, 20)) {
+          drawerCard(String(finding.title || finding.id || "Finding").slice(0, 150), String(finding.detail || "").slice(0, 700), String(finding.severity || "info").toUpperCase(), /high|medium/i.test(String(finding.severity || "")) ? "warning" : "ready");
+        }
+        for (const finding of (Array.isArray(result?.cookieFindings) ? result.cookieFindings : []).slice(0, 30)) {
+          drawerCard("Cookie: " + String(finding.name || "unknown").slice(0, 100), String(finding.detail || "").slice(0, 400), String(finding.severity || "info").toUpperCase(), /high|medium/i.test(String(finding.severity || "")) ? "warning" : "ready");
+        }
+      } catch (error) {
+        drawerCard("HTTP evidence review failed", error.message, error.code || "REQUEST FAILED", "error");
+      } finally { responseSubmit.disabled = false; }
+    });
+    ui.drawerContent.appendChild(responseForm);
+
+    const dnsRule = document.createElement("div");
+    dnsRule.className = "drawer-rule";
+    ui.drawerContent.appendChild(dnsRule);
+    drawerHeading("DNS and email-security evidence", "Paste records you have already collected for a domain you are authorized to review. ULTRON performs no DNS lookup.");
+    const dnsForm = document.createElement("form");
+    const domain = addDrawerField(dnsForm, "DOMAIN", "security-dns-domain", { required: true, maxLength: 253, placeholder: "example.com" });
+    const dnsRecords = addDrawerField(dnsForm, "DNS RECORDS AS JSON ARRAY", "security-dns-records", {
+      required: true, maxLength: 16000, multiline: true, rows: 5,
+      placeholder: '[{"type":"TXT","name":"example.com","value":"v=spf1 -all"},{"type":"TXT","name":"_dmarc.example.com","value":"v=DMARC1; p=reject"}]'
+    });
+    const dnsSubmit = document.createElement("button");
+    dnsSubmit.type = "submit";
+    dnsSubmit.className = "drawer-action secondary";
+    dnsSubmit.textContent = "REVIEW SUBMITTED DNS RECORDS";
+    dnsForm.appendChild(dnsSubmit);
+    dnsForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      let records;
+      try { records = JSON.parse(dnsRecords.value); }
+      catch { showToast("Enter valid JSON for the DNS record array."); return; }
+      if (!Array.isArray(records) || records.some(record => !record || typeof record !== "object" || Array.isArray(record))) {
+        showToast("DNS evidence must be an array of objects containing type, name and value.");
+        return;
+      }
+      dnsSubmit.disabled = true;
+      try {
+        const result = await apiRequest("/api/kaligpt/security/dns-evidence/analyze", {
+          method: "POST", body: { domain: domain.value.trim(), records }
+        });
+        drawerCard("DNS evidence summary", String(result?.notice || "Submitted DNS data only; no lookup performed."), String(result?.recordsAnalyzed ?? 0) + " RECORDS", "warning");
+        for (const finding of (Array.isArray(result?.findings) ? result.findings : []).slice(0, 30)) {
+          drawerCard(String(finding.title || finding.id || "Finding").slice(0, 150), String(finding.detail || "").slice(0, 700), String(finding.severity || "info").toUpperCase(), /high|medium/i.test(String(finding.severity || "")) ? "warning" : "ready");
+        }
+      } catch (error) {
+        drawerCard("DNS evidence review failed", error.message, error.code || "REQUEST FAILED", "error");
+      } finally { dnsSubmit.disabled = false; }
+    });
+    ui.drawerContent.appendChild(dnsForm);
   }
 
   function taskResultText(value) {
