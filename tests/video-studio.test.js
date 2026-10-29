@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { buildSrt, createProjectStore, makeFallbackConcepts, makeFallbackScenes, normalizeScenes, newProject, safeAssetFilename, safeProjectId, validateProjectInput, validateReferenceUrl } from "../video-studio/core.mjs";
@@ -72,8 +73,23 @@ test("local HTTP API creates projects and cannot bypass render approval", async 
   assert.equal(render.status, 409);
   const approval = await fetch(base + "/api/projects/" + body.project.id + "/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved: true }) });
   assert.equal(approval.status, 409);
-  const hostileHost = await fetch(base + "/api/projects", { headers: { Host: "not-local.example" } });
-  assert.equal(hostileHost.status, 403);
+  // Fetch implementations may normalize or ignore a custom Host header. Use node:http
+  // directly so this regression test proves the server sees an untrusted Host value.
+  const hostileHostStatus = await new Promise((resolve, reject) => {
+    const request = http.request({
+      hostname: "127.0.0.1",
+      port: address.port,
+      path: "/api/projects",
+      method: "GET",
+      headers: { Host: "not-local.example" }
+    }, response => {
+      response.resume();
+      response.once("end", () => resolve(response.statusCode));
+    });
+    request.once("error", reject);
+    request.end();
+  });
+  assert.equal(hostileHostStatus, 403);
   for (let i = 0; i < 80; i++) {
     const state = await fetch(base + "/api/projects/" + body.project.id).then(response => response.json());
     if (state.job === "idle") break;
