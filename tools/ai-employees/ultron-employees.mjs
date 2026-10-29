@@ -236,6 +236,52 @@ export function buildMorningBrief({ root, date = new Date(), employees = findIns
   return lines.join("\n");
 }
 
+export function planHireAll(root, employees = findInstalledEmployees(root)) {
+  const installed = new Set(employees.map((item) => item.role?.id ?? resolveRole(item.manifest?.roleId)?.id).filter(Boolean));
+  return ROLE_CATALOG.map((role) => {
+    const target = path.join(root, role.id);
+    if (installed.has(role.id)) return { role, target, state: "already-installed" };
+    if (fs.existsSync(target)) return { role, target, state: "blocked-existing-folder" };
+    return { role, target, state: "install" };
+  });
+}
+
+async function hireAll(root) {
+  fs.mkdirSync(root, { recursive: true });
+  const plan = planHireAll(root);
+  const installed = [];
+  const skipped = [];
+  const failed = [];
+
+  for (const item of plan) {
+    if (item.state === "already-installed") {
+      console.log(`[skip] ${item.role.name}: already installed at ${item.target}`);
+      skipped.push(item.role.id);
+      continue;
+    }
+    if (item.state === "blocked-existing-folder") {
+      const message = `${item.role.name}: destination already exists but is not recognized as an ULTRON-installed kit; leaving it untouched: ${item.target}`;
+      console.error(`[blocked] ${message}`);
+      failed.push(message);
+      continue;
+    }
+    try {
+      await hire(item.role, root);
+      installed.push(item.role.id);
+    } catch (error) {
+      const message = `${item.role.name}: ${error instanceof Error ? error.message : "unknown installer failure"}`;
+      console.error(`[failed] ${message}`);
+      failed.push(message);
+    }
+  }
+
+  console.log(`\nFleet install summary: ${installed.length} installed, ${skipped.length} already installed, ${failed.length} blocked/failed.`);
+  if (failed.length) {
+    throw new Error(`Fleet installation was partial. Existing folders were never overwritten. Review the messages above and workspace: ${root}`);
+  }
+  console.log("All role kits are present as local files. Their harness schedules are not registered by this wrapper.");
+}
+
 function usage() {
   console.log(`ULTRON AI Employees local runtime
 
@@ -243,15 +289,17 @@ Usage:
   npm run employees -- list [--root <folder>]
   npm run employees -- doctor
   npm run employees -- hire <role> [--root <folder>]
+  npm run employees -- hire-all [--root <folder>]
   npm run employees -- status [--root <folder>]
   npm run employees -- brief [--root <folder>]
   npm run employees -- new-routine <role> <routine-id> [--root <folder>]
 
 Roles: ${ROLE_CATALOG.map((r) => r.id).join(", ")}
 
-One role is installed at a time. The selected MIT kit is downloaded only when you run "hire".
+One role is installed at a time with "hire"; "hire-all" installs every missing role kit sequentially.
+The selected MIT kit is downloaded only when needed. Existing and unrecognized folders are never overwritten.
 The agent's INSTALL-PROMPT.md still needs to be opened in your chosen harness to configure
-the business context and register its local schedule. No schedule is silently enabled by hire.
+the business context and register its local schedule. No schedule is silently enabled by these commands.
 `);
 }
 
@@ -377,6 +425,7 @@ async function main(argv = process.argv.slice(2)) {
     if (!role) throw new Error(`Unknown role "${roleArg ?? ""}". Run "list" to see the eight supported roles.`);
     return hire(role, parseRoot(argv.slice(2)));
   }
+  if (command === "hire-all") return hireAll(parseRoot(argv.slice(1)));
   const root = parseRoot(argv.slice(1));
   if (command === "list" || command === "status") {
     const installed = new Set(findInstalledEmployees(root).map((item) => item.role.id));
