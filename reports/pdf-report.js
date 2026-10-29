@@ -63,11 +63,9 @@ function assemble(pages) {
   });
 
   // Compute offsets from serialized buffers, never JavaScript string indices.
-  const header = Buffer.concat([
-    Buffer.from("%PDF-1.4" + eol + "%", "ascii"),
-    Buffer.from([0xE2, 0xE3, 0xCF, 0xD3]),
-    Buffer.from(eol, "ascii")
-  ]);
+  // Use the minimal ASCII header for compatibility with older PDF.js versions.
+  // All reported xref positions are still computed from serialized Buffer lengths.
+  const header = Buffer.from("%PDF-1.4" + eol, "ascii");
   const chunks = [header];
   const offsets = [0];
   let offset = header.length;
