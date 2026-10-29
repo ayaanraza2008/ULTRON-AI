@@ -2393,8 +2393,8 @@ test("safe deterministic fallback selects explicit repository adapters when mode
       assert.ok(body.toolsUsed.some(tool => tool.name === item.expected), item.prompt);
       const result = body.toolResults.find(tool => tool.name === item.expected)?.result;
       assert.ok(result, item.prompt);
-      if (item.expectState) assert.equal(result.state, item.expectState, item.prompt);
-      if (item.expectExecution) assert.equal(result.execution, item.expectExecution, item.prompt);
+      if (item.expectState) assert.equal(result.state, item.expectState, item.prompt + " result=" + JSON.stringify(result));
+      if (item.expectExecution) assert.equal(result.execution, item.expectExecution, item.prompt + " result=" + JSON.stringify(result));
       assert.equal(providerCalls, 0, "test must not make model/provider calls when credentials are absent");
     });
   }
