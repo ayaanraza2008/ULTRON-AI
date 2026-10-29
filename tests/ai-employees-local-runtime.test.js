@@ -61,6 +61,54 @@ test("workspace path rejects cloud-synced directories and home/root", () => {
   fs.rmSync(temp, { recursive: true, force: true });
 });
 
+test("workspace path resolves symlinked ancestors before checking cloud-sync locations", () => {
+  if (process.platform === "win32") return;
+  const root = tempDir();
+  const cloud = path.join(root, "OneDrive", "agent-data");
+  const alias = path.join(root, "local-workspace");
+  fs.mkdirSync(cloud, { recursive: true });
+  fs.symlinkSync(cloud, alias, "dir");
+  try {
+    assert.equal(isCloudSyncedPath(alias), true);
+    assert.throws(() => resolveWorkspaceRoot(path.join(alias, "future")), /cloud/i);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("employee discovery ignores symlinked manifests", () => {
+  if (process.platform === "win32") return;
+  const root = tempDir();
+  const roleFolder = path.join(root, "sales");
+  const outside = path.join(root, "outside-manifest.json");
+  fs.mkdirSync(roleFolder, { recursive: true });
+  fs.writeFileSync(outside, JSON.stringify({ roleId: "sales" }));
+  fs.symlinkSync(outside, path.join(roleFolder, ".ultron-employee.json"));
+  try {
+    assert.equal(findInstalledEmployees(root).length, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("morning brief ignores linked files outside an employee workspace", () => {
+  if (process.platform === "win32") return;
+  const root = tempDir();
+  const folder = path.join(root, "gtm-engineer");
+  const outside = path.join(root, "private-outside-file.md");
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, ".ultron-employee.json"), JSON.stringify({ roleId: "gtm-engineer" }));
+  fs.writeFileSync(outside, "PRIVATE_OUTSIDE_SENTINEL");
+  fs.symlinkSync(outside, path.join(folder, "brief-latest.md"));
+  try {
+    const brief = buildMorningBrief({ root });
+    assert.equal(brief.includes("PRIVATE_OUTSIDE_SENTINEL"), false);
+    assert.match(brief, /No standard latest brief was found/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("new routine ID must be namespaced to its role", () => {
   const role = resolveRole("sales");
   assert.equal(validateRoutineId("sales-next-step-review", role), "sales-next-step-review");
