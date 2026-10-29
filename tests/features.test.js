@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { deflateRawSync } from "node:zlib";
 import { createFeatureRouter } from "../features.js";
 
@@ -1664,4 +1665,47 @@ test("configured Ollama chat rejects upstream redirects before sending prompt co
     assert.equal(options.redirect, "error");
     return new Response(JSON.stringify({ model: "tiny-test-model", message: { content: "Local response ready." } }), { status: 200, headers: { "content-type": "application/json" } });
   } });
+});
+
+
+test("authenticated report PDF endpoint returns a readable transient attachment", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/reports/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "ULTRON Verification Report",
+        sections: [
+          { heading: "Verified", content: "The source test suite passed." },
+          { heading: "Pending", content: "Live provider and two-account database checks remain." }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /application\/pdf/);
+    assert.match(response.headers.get("content-disposition") || "", /ultron-report\.pdf/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.subarray(0, 8).toString("ascii"), "%PDF-1.4");
+    const parsed = await pdfParse(bytes);
+    assert.match(parsed.text, /ULTRON Verification Report/);
+    assert.match(parsed.text, /source test suite passed/);
+    assert.match(parsed.text, /two-account database checks remain/);
+  });
+});
+
+test("report PDF endpoint rejects empty and oversized reports without generating a file", async () => {
+  await withServer({}, async base => {
+    const empty = await fetch(base + "/api/reports/pdf", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Empty" })
+    });
+    assert.equal(empty.status, 400);
+    assert.equal((await empty.json()).error.code, "REPORT_CONTENT_REQUIRED");
+    const oversized = await fetch(base + "/api/reports/pdf", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: "x".repeat(40001) })
+    });
+    assert.equal(oversized.status, 400);
+    assert.equal((await oversized.json()).error.code, "REPORT_TOO_LARGE");
+  });
 });
