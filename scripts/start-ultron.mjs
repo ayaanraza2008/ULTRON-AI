@@ -43,11 +43,21 @@ export function launchUltron({ spawnImpl = spawn, processObject = process, env =
 
 
 function safeSmokeSummary(result) {
-  const safeCode = value => typeof value === "string" && /^[A-Z0-9_]{1,60}$/.test(value) ? value : undefined;
+  const safeCode = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,60}$/.test(value) ? value : undefined;
   const safeModel = value => typeof value === "string" && /^[a-zA-Z0-9._:/-]{1,180}$/.test(value) ? value : undefined;
   const attempts = Array.isArray(result?.attempts) ? result.attempts.slice(0, 7).map(attempt => ({
     ...(safeModel(attempt?.model) ? { model: safeModel(attempt.model) } : {}),
     ...(safeCode(attempt?.code) ? { code: safeCode(attempt.code) } : {}),
+    ...(safeCode(attempt?.finishReason) ? { finishReason: safeCode(attempt.finishReason) } : {}),
+    ...(attempt?.contentShape === "string" || attempt?.contentShape === "array" || attempt?.contentShape === "missing" || attempt?.contentShape === "other"
+      ? { contentShape: attempt.contentShape } : {}),
+    ...(Number.isInteger(attempt?.contentLength) && attempt.contentLength >= 0
+      ? { contentLength: Math.min(attempt.contentLength, 100_000) } : {}),
+    ...(typeof attempt?.reasoningPresent === "boolean" ? { reasoningPresent: attempt.reasoningPresent } : {}),
+    ...(Number.isInteger(attempt?.toolCallCount) && attempt.toolCallCount >= 0
+      ? { toolCallCount: Math.min(attempt.toolCallCount, 100) } : {}),
+    ...(typeof attempt?.contentType === "string" && /^[a-z0-9][a-z0-9.+-]{0,60}\/[a-z0-9][a-z0-9.+-]{0,60}$/.test(attempt.contentType)
+      ? { contentType: attempt.contentType } : {}),
     ...(Number.isInteger(attempt?.httpStatus) && attempt.httpStatus >= 100 && attempt.httpStatus <= 599
       ? { httpStatus: attempt.httpStatus } : {})
   })) : [];
