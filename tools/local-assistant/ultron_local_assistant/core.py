@@ -51,6 +51,31 @@ def app_data_dir() -> Path:
     return base / "ULTRON" / "local-assistant"
 
 
+def secure_write_bytes(path: Path, content: bytes) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    temp = Path(temp_name)
+    try:
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(content)
+        temp.replace(path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        return path
+    except Exception:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def secure_write(path: Path, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Create a unique temporary file in the same directory to avoid following a pre-existing .tmp symlink.
@@ -566,8 +591,12 @@ def apply_workspace_draft(draft_path: str | Path, root: str | Path, *, confirm: 
     target = resolve_workspace_file(base, relative)
     if target.stat().st_size > 100_000 or draft.stat().st_size > 100_000:
         raise ValueError("Source or draft exceeds the 100 KB apply limit.")
-    original = target.read_text(encoding="utf-8")
-    revised = draft.read_text(encoding="utf-8")
+    original_bytes = target.read_bytes()
+    try:
+        original = original_bytes.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        revised = draft.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        raise ValueError("Source or draft is not readable UTF-8 text.") from exc
     if hashlib.sha256(original.encode("utf-8")).hexdigest() != expected_source_hash:
         raise RuntimeError("Source file changed since the draft was created; refusing to overwrite newer work.")
     if hashlib.sha256(revised.encode("utf-8")).hexdigest() != expected_draft_hash:
@@ -577,12 +606,15 @@ def apply_workspace_draft(draft_path: str | Path, root: str | Path, *, confirm: 
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     backup = drafts_root / "backups" / f"{timestamp}-{target.name}.bak"
-    secure_write(backup, original)
+    secure_write_bytes(backup, original_bytes)
     fd, temp_name = tempfile.mkstemp(prefix=target.name + ".", suffix=".ultron-tmp", dir=str(target.parent))
     temp = Path(temp_name)
     try:
+        normalized_revised = revised.replace("\r\n", "\n").replace("\r", "\n")
+        line_ending = "\r\n" if b"\r\n" in original_bytes else "\n"
+        write_content = normalized_revised.replace("\n", line_ending) if line_ending != "\n" else normalized_revised
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-            handle.write(revised)
+            handle.write(write_content)
         try:
             os.chmod(temp, stat.S_IMODE(target.stat().st_mode))
         except OSError:
