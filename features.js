@@ -1288,6 +1288,110 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     }
   });
 
+
+  function normalizeNotePayload(body, { partial = false } = {}) {
+    const patch = {};
+    const has = key => Object.prototype.hasOwnProperty.call(body || {}, key);
+    if (!partial || has("title")) {
+      const title = boundedString(body?.title, 200);
+      if (!title) return { error: "A note title is required." };
+      patch.title = title;
+    }
+    if (!partial || has("body")) {
+      const content = boundedString(body?.body, 30_000);
+      if (!content) return { error: "Note content is required and must be at most 30,000 characters." };
+      patch.body = content;
+    }
+    if (!partial || has("tags")) {
+      if (body?.tags !== undefined && !Array.isArray(body.tags)) return { error: "Note tags must be a list of strings." };
+      const rawTags = Array.isArray(body?.tags) ? body.tags : [];
+      if (rawTags.length > 20 || rawTags.some(tag => typeof tag !== "string" || tag.trim().length > 40)) {
+        return { error: "A note can have at most 20 tags, each no longer than 40 characters." };
+      }
+      patch.tags = [...new Set(rawTags.map(tag => tag.trim()).filter(Boolean))];
+    }
+    if (partial && Object.keys(patch).length === 0) return { error: "Provide at least one supported note field to update." };
+    return { patch };
+  }
+
+  // Notes are private, account-owned data. RLS is authoritative; each REST call
+  // also includes the authenticated owner ID and never accepts user_id from JSON.
+  router.get("/notes", requireSupabaseUser, async (req, res) => {
+    const rawLimit = Number.parseInt(String(req.query.limit || "30"), 10);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 50)) : 30;
+    try {
+      const rows = await supabaseRest(req, "user_notes", "GET",
+        "?select=id,title,body,tags,created_at,updated_at&user_id=eq."
+        + encodeURIComponent(req.supabaseUser.id) + "&order=updated_at.desc&limit=" + limit);
+      return res.json({ notes: Array.isArray(rows) ? rows : [] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "NOTES_READ_FAILED", message: "Notes are temporarily unavailable." } });
+    }
+  });
+
+  router.post("/notes", requireSupabaseUser, async (req, res) => {
+    const normalized = normalizeNotePayload(req.body);
+    if (normalized.error) return res.status(400).json({ error: { code: "INVALID_NOTE", message: normalized.error } });
+    try {
+      const rows = await supabaseRest(req, "user_notes", "POST", "", {
+        ...normalized.patch,
+        user_id: req.supabaseUser.id
+      });
+      if (!Array.isArray(rows) || !rows[0] || !rows[0].id) {
+        return res.status(502).json({ error: { code: "NOTE_SAVE_UNCONFIRMED", message: "The database did not confirm that the note was saved." } });
+      }
+      return res.status(201).json({ note: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "NOTE_SAVE_FAILED", message: "The note could not be saved." } });
+    }
+  });
+
+  router.get("/notes/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_NOTE_ID", message: "Note ID is invalid." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "user_notes", "GET",
+        "?select=id,title,body,tags,created_at,updated_at&id=eq." + encodeURIComponent(req.params.id)
+        + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "NOTE_NOT_FOUND", message: "Note was not found." } });
+      return res.json({ note: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "NOTE_READ_FAILED", message: "The note is temporarily unavailable." } });
+    }
+  });
+
+  router.patch("/notes/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_NOTE_ID", message: "Note ID is invalid." } });
+    }
+    const normalized = normalizeNotePayload(req.body, { partial: true });
+    if (normalized.error) return res.status(400).json({ error: { code: "INVALID_NOTE", message: normalized.error } });
+    try {
+      const rows = await supabaseRest(req, "user_notes", "PATCH",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id),
+        normalized.patch);
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "NOTE_NOT_FOUND", message: "Note was not found." } });
+      return res.json({ note: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "NOTE_UPDATE_FAILED", message: "The note could not be updated." } });
+    }
+  });
+
+  router.delete("/notes/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_NOTE_ID", message: "Note ID is invalid." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "user_notes", "DELETE",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id));
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "NOTE_NOT_FOUND", message: "Note was not found." } });
+      return res.json({ deleted: true, id: rows[0].id });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "NOTE_DELETE_FAILED", message: "The note could not be deleted." } });
+    }
+  });
+
   router.get("/tasks", requireSupabaseUser, async (req, res) => {
     try {
       const rows = await supabaseRest(req, "agent_tasks", "GET", "?select=id,title,input,status,result,error_code,started_at,finished_at,created_at,updated_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&order=created_at.desc&limit=50");
