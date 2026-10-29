@@ -90,6 +90,20 @@ test("REA calls the allowlisted analysis tool with a rooted relative path", asyn
   assert.equal(toolCall.options.headers["Mcp-Protocol-Version"], "2025-03-26");
   assert.equal(JSON.stringify(result).includes("synthetic-rea-token"), false);
 });
+test("REA selects directory format for JavaScript application folders", async () => {
+  const calls = [];
+  const result = await runReaTool({
+    env: readyEnv(), userId: ownerId, toolName: "rea_analyze_application",
+    path: "demo-app",
+    fetchImpl: fakeReaFetch({ calls, output: { normalized_result: { application_graph: {} }, evidence_id: "ev_directory" } })
+  });
+  assert.equal(result.state, "completed");
+  const analysis = calls.find(call => call.payload.method === "tools/call" && call.payload.params.name === "analyze_javascript_application");
+  assert.deepEqual(analysis.payload.params.arguments, {
+    input_path: "/srv/rea/targets/demo-app", format: "directory", integrity_policy: "fail", detail: "complete"
+  });
+});
+
 test("REA routes static ELF, WASM and firmware tools to their specific upstream operations", async () => {
   const cases = [
     ["rea_inspect_binary_layout", "app/program.elf", "inspect_binary_layout", { path: "/srv/rea/targets/app/program.elf", detail: "complete" }],
