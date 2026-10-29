@@ -310,7 +310,7 @@ const REPOSITORIES = [
     integration: "openai_compatible_provider_router", status: "optional",
     abilities: ["Potential local provider route through ULTRON's existing OpenAI-compatible fallback configuration when a Strata server is already running", "Local model chat/coding and optional image input when the selected model and host support them"],
     limits: ["ULTRON does not install Strata, download model weights, or launch a GPU runtime automatically. The current 8 GB RAM/integrated-graphics PC does not meet Strata's currently documented high-end VRAM/RAM requirements for its default large model; do not attempt a large model download on this device. Verify Strata's own API compatibility and use a suitably provisioned host before routing to it."],
-    envKeys: [], license: "MIT for Strata; model and included components have separate licenses", source: "https://github.com/Niko1221/Strata"
+    envKeys: ["STRATA_BASE_URL", "STRATA_MODEL"], optionalEnv: ["STRATA_API_KEY", "STRATA_SUPPORTS_TOOLS", "STRATA_SUPPORTS_VISION"], license: "MIT for Strata; model and included components have separate licenses", source: "https://github.com/Niko1221/Strata"
   },
   {
     id: "not-ai", repo: "udayjhamadav/Not-AI", domain: "desktop_coding_agent",
