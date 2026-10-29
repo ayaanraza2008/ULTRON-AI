@@ -1009,7 +1009,11 @@
       const mimeType = String(blob.type || "audio/webm").split(";")[0];
       const payload = await apiRequest("/api/speech/transcribe", {
         method: "POST",
-        body: { audioBase64, mimeType }
+        body: {
+          audioBase64,
+          mimeType,
+          ...(speechLanguageMode === "hi-IN" ? { language: "hi" } : speechLanguageMode === "en-IN" ? { language: "en" } : {})
+        }
       });
       const command = String(payload?.text || "").trim();
       if (!command) {
