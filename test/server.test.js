@@ -63,7 +63,7 @@ test("integration catalog reports readiness without exposing secret values", asy
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 18);
+    assert.equal(payload.integrations.length, 19);
     assert.equal(payload.integrations.find(item => item.id === "rea-reverse-engineering").state, "disabled");
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
@@ -73,6 +73,7 @@ test("integration catalog reports readiness without exposing secret values", asy
     assert.equal(payload.integrations.find(item => item.id === "geo-sleuth").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "obscura").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "chrome-devtools").state, "blocked");
+    assert.equal(payload.integrations.find(item => item.id === "strata").state, "optional");
     assert.equal(payload.integrations.find(item => item.id === "cactus-compute").state, "configured_unverified");
     assert.equal(payload.integrations.find(item => item.id === "paperclip").state, "configured_unverified");
     const serialized = JSON.stringify(payload);
