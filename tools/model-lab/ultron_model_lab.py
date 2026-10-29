@@ -591,7 +591,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Benchmark decoding presets and save a safety-gated local JSON profile.",
     )
     calibrate.add_argument("model", help="Hugging Face model id, e.g. organization/model.")
-    calibrate.add_argument("--output", default="ultron-model-profile.json")
+    calibrate.add_argument("--output", default=".local/ultron-model-profile.json")
     calibrate.add_argument("--revision", default=None)
     calibrate.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
     calibrate.add_argument("--load-in-4bit", action="store_true", help="Use bitsandbytes 4-bit inference on a compatible CUDA GPU.")
