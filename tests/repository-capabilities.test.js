@@ -9,13 +9,18 @@ import {
 
 test("registry contains every requested repository exactly once", () => {
   const items = listRepositoryCapabilities();
-  assert.equal(items.length, 31);
-  assert.equal(new Set(items.map(item => item.id)).size, 31);
+  assert.equal(items.length, 43);
+  assert.equal(new Set(items.map(item => item.id)).size, 43);
   assert.ok(items.some(item => item.repo === "darkzOGx/youtube-automation-agent"));
   assert.ok(items.some(item => item.repo === "morluto/rea"));
   assert.ok(items.some(item => item.repo === "h4ckf0r0day/obscura"));
   assert.ok(items.some(item => item.repo === "cactus-compute/cactus"));
   assert.ok(items.some(item => item.repo === "NousResearch/hermes-agent"));
+  assert.ok(items.some(item => item.repo === "p-e-w/heretic"));
+  assert.ok(items.some(item => item.repo === "SaarthurR/atticus-mac"));
+  assert.ok(items.some(item => item.repo === "affaan-m/ECC"));
+  assert.ok(items.some(item => item.repo === "Niko1221/Strata"));
+  assert.ok(items.some(item => item.id === "chrome-devtools"));
 });
 
 test("capability router matches distinct task domains automatically", () => {
@@ -25,6 +30,27 @@ test("capability router matches distinct task domains automatically", () => {
   assert.ok(ids.includes("chatwoot"));
   const hermes = matchRepositoryCapabilities("Use Hermes Agent to delegate work to subagents and create reusable skills");
   assert.ok(hermes.some(item => item.id === "hermes-agent"));
+});
+
+test("new screenshot repositories have explicit safe/unverified states", () => {
+  const status = getRepositoryCapabilityStatus({});
+  const byId = Object.fromEntries(status.integrations.map(item => [item.id, item]));
+  assert.equal(byId["heretic"].state, "review_required_upstream_unverified");
+  assert.equal(byId["atticus-mac"].state, "desktop_companion_required");
+  assert.equal(byId["ecc"].state, "guidance_only");
+  assert.equal(byId["strata"].state, "available_via_provider_router");
+  for (const id of ["free-cloud-code", "not-ai", "jcode", "open-generative-ai", "dramadaw", "opendudley", "agency-agents"]) {
+    assert.equal(byId[id].state, "review_required_upstream_unverified", id);
+  }
+  assert.equal(byId["chrome-devtools"].state, "blocked");
+  assert.equal(status.verification, "configuration_and_capability_registry_only");
+});
+
+test("new repo topics route to their documented capability entries", () => {
+  assert.ok(matchRepositoryCapabilities("Review the ECC engineering workflow for coding agents").some(item => item.id === "ecc"));
+  assert.ok(matchRepositoryCapabilities("Can Strata run a local OpenAI-compatible model server?").some(item => item.id === "strata"));
+  assert.ok(matchRepositoryCapabilities("collect Chrome DevTools console errors and performance trace").some(item => item.id === "chrome-devtools"));
+  assert.ok(matchRepositoryCapabilities("review Heretic model-weight experiments").some(item => item.id === "heretic"));
 });
 
 test("matching is bounded and empty tasks do not pick arbitrary repositories", () => {
