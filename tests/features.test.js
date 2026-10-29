@@ -491,7 +491,7 @@ test("premium speech endpoints fail clearly when no provider is configured", asy
   });
 });
 
-test("Fish Audio synthesis uses the configured voice model ID and server-only key", async () => {
+test("Fish Audio synthesis defaults to the bilingual male voice and keeps its key server-side", async () => {
   const calls = [];
   const env = {
     FISH_API_KEY: "synthetic-fish-secret"
@@ -566,7 +566,7 @@ test("Fish Audio transcription sends recorded audio as multipart audio and retur
 test("capabilities report Fish Audio speech configuration without exposing its API key", async () => {
   await withServer({
     FISH_API_KEY: "synthetic-fish-secret",
-    FISH_AUDIO_VOICE_MODEL_ID: "7a18a1851d2649108c48ec9f2c80eb2c"
+    FISH_AUDIO_VOICE_MODEL_ID: "db9ad6eb7fb84294b2046cf05ef64718"
   }, async base => {
     const response = await fetch(base + "/api/capabilities");
     assert.equal(response.status, 200);
