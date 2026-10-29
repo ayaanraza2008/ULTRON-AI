@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const migrationPath = new URL("../supabase/migrations/20261023170000_harden_worker_rpc_search_path.sql", import.meta.url);
+const migrationPath = new URL("../supabase/migrations/20261023205350_harden_worker_rpc_search_path.sql", import.meta.url);
 
 test("SECURITY DEFINER worker RPCs use an empty search_path", async () => {
   const sql = await readFile(migrationPath, "utf8");
