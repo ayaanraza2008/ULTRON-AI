@@ -1327,10 +1327,19 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
   router.get("/notes", requireSupabaseUser, async (req, res) => {
     const rawLimit = Number.parseInt(String(req.query.limit || "30"), 10);
     const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 50)) : 30;
+    let searchFilter = "";
+    if (req.query.search !== undefined) {
+      const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+      // Whitelist literal terms only; PostgREST filter punctuation must not be user-controlled.
+      if (!/^[\\p{L}\\p{N} _-]{1,80}$/u.test(search)) {
+        return res.status(400).json({ error: { code: "INVALID_NOTE_SEARCH", message: "Search must be 1-80 letters, numbers, spaces, underscores or hyphens." } });
+      }
+      searchFilter = "&or=" + encodeURIComponent("(title.ilike.*" + search + "*,body.ilike.*" + search + "*)");
+    }
     try {
-      const rows = await supabaseRest(req, "user_notes", "GET",
-        "?select=id,title,body,tags,created_at,updated_at&user_id=eq."
-        + encodeURIComponent(req.supabaseUser.id) + "&order=updated_at.desc&limit=" + limit);
+      const query = "?select=id,title,body,tags,created_at,updated_at&user_id=eq."
+        + encodeURIComponent(req.supabaseUser.id) + searchFilter + "&order=updated_at.desc&limit=" + limit;
+      const rows = await supabaseRest(req, "user_notes", "GET", query);
       return res.json({ notes: Array.isArray(rows) ? rows : [] });
     } catch (error) {
       return res.status(error.status || 502).json({ error: { code: "NOTES_READ_FAILED", message: "Notes are temporarily unavailable." } });
@@ -1366,6 +1375,30 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
       return res.json({ note: rows[0] });
     } catch (error) {
       return res.status(error.status || 502).json({ error: { code: "NOTE_READ_FAILED", message: "The note is temporarily unavailable." } });
+    }
+  });
+
+
+  router.get("/notes/:id/export", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_NOTE_ID", message: "Note ID is invalid." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "user_notes", "GET",
+        "?select=id,title,body,tags&id=eq." + encodeURIComponent(req.params.id)
+        + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "NOTE_NOT_FOUND", message: "Note was not found." } });
+      const note = rows[0];
+      const stem = boundedString(note.title, 200).replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\\s+/g, "-").slice(0, 80) || "ultron-note";
+      const tags = Array.isArray(note.tags) ? note.tags.filter(tag => typeof tag === "string").slice(0, 20) : [];
+      const markdown = "# " + boundedString(note.title, 200) + "\\n\\n" + boundedString(note.body, 30_000)
+        + (tags.length ? "\\n\\nTags: " + tags.map(tag => boundedString(tag, 40)).join(", ") + "\\n" : "\\n");
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="' + stem + '.md"');
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).send(markdown);
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "NOTE_EXPORT_FAILED", message: "The note could not be exported." } });
     }
   });
 
