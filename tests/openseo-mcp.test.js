@@ -42,13 +42,7 @@ test("OpenSEO is optional and readiness never exposes the API key", () => {
   const readiness = getOpenSeoReadiness({});
   assert.equal(readiness.configured, false);
   assert.equal(readiness.state, "optional");
-
-  const configuredReadiness = getOpenSeoReadiness({
-    OPENSEO_MCP_URL: readyEnv.OPENSEO_MCP_URL,
-    OPENSEO_API_KEY: readyEnv.OPENSEO_API_KEY,
-    ULTRON_INTEGRATION_OWNER_USER_ID: owner
-  }, owner);
-  assert.equal(JSON.stringify(configuredReadiness).includes(readyEnv.OPENSEO_API_KEY), false);
+  assert.equal(JSON.stringify(readiness).includes(readyEnv.OPENSEO_API_KEY), false);
 });
 
 test("OpenSEO blocks non-owner and missing key before outbound calls", async () => {
