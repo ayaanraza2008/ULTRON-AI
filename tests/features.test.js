@@ -514,11 +514,13 @@ test("Fish Audio synthesis defaults to the bilingual male voice and keeps its ke
     assert.equal(options.headers.Authorization, "Bearer synthetic-fish-secret");
     assert.equal(options.headers.model, "s2.1-pro-free");
     const body = JSON.parse(options.body);
-    assert.equal(body.text, "[natural conversational delivery, deep warm Indian male voice, resonant baritone, calm and authoritative, precise Hindi and English pronunciation, measured pace, natural pauses, subtle emphasis] Hello ULTRON");
+    assert.equal(body.text, "Hello ULTRON");
+    assert.equal(body.language, "en");
     assert.equal(body.reference_id, "db9ad6eb7fb84294b2046cf05ef64718");
     assert.equal(body.format, "mp3");
     assert.equal(body.latency, "balanced");
-    assert.deepEqual(body.prosody, { speed: 1.05, volume: 0, normalize_loudness: true });
+    assert.equal(body.normalize, true);
+    assert.deepEqual(body.prosody, { speed: 1, volume: 0, normalize_loudness: true });
     assert.equal(JSON.stringify(body).includes("synthetic-fish-secret"), false);
     return new Response(Buffer.from("fake-fish-mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
   }});
