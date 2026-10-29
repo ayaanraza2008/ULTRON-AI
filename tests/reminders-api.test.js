@@ -35,7 +35,7 @@ test("reminder API creates future ISO-timestamp reminders under the authenticate
     const response = await fetch(base + "/api/reminders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Call dentist", body: "Ask about the appointment", dueAt, user_id: USER_ID })
+      body: JSON.stringify({ title: "Call dentist", body: "Ask about the appointment", dueAt })
     });
     assert.equal(response.status, 201);
     const body = await response.json();
