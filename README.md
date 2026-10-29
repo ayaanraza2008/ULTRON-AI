@@ -47,11 +47,11 @@ Projects and assets default to `.local/video-studio/`. The local runner binds to
 - AI planning uses the configured OpenRouter/Groq/Gemini or other OpenAI-compatible providers. With no usable provider key, the app uses a local template planner and does not claim it called a model.
 - `TAVILY_API_KEY` enables live research. If it is absent, the app records that research was not run.
 - `PEXELS_API_KEY` and `PIXABAY_API_KEY` enable stock-media search. Each result retains a source link and creator/source metadata; check the current terms/licence before publishing.
-- Voiceover uses a separately installed local VoiceStudio endpoint or a configured compatible endpoint using the existing `TTS_API_BASE_URL`, `TTS_API_KEY`, `TTS_MODEL`, and `TTS_DEFAULT_VOICE` settings.
+- Voiceover uses a separately installed local VoiceStudio endpoint or a configured compatible endpoint using the existing `TTS_API_BASE_URL`, `TTS_API_KEY`, `TTS_MODEL`, and `TTS_DEFAULT_VOICE` settings. Local reference transcription is available when VoiceStudio or an OpenAI-compatible STT endpoint (`STT_API_BASE_URL`, `STT_API_KEY`, `STT_MODEL`) is configured; otherwise paste the transcript manually.
 
 ### Current boundaries
 
-- A link alone does not reveal full scene cuts or reliably provide a transcript. Upload an authorized local clip to inspect duration, dimensions and scene-change timestamps; paste a transcript manually. `yt-dlp` metadata access is opt-in in local mode only when the user confirms rights; the app does not automatically download the source video.
+- A link alone does not reveal full scene cuts or reliably provide a transcript. Upload an authorized local clip to inspect duration, dimensions and scene-change timestamps. If an STT/VoiceStudio endpoint is configured, the board can extract up to 210 seconds of audio locally and request a transcript; otherwise paste one manually. `yt-dlp` metadata access is opt-in in local mode only when the user confirms rights; the app does not automatically download the source video.
 - Local reference clip and direct local asset uploads are capped at 8 MB per file in this UI; stock media imports are capped at 40 MB. Short samples are recommended.
 - The renderer uses licensed/imported footage and still images. Stills receive a slow zoom/pan effect; imported motion footage is cut to fit the requested duration. Captions are an editable/downloadable `.srt` sidecar and are not burned into the MP4. No video/image generation service is silently installed or called.
 - Cost values are estimates based on optional user-configured unit rates. Provider quota, commercial usage terms, music/media licences and third-party generation costs remain separate and may be unknown.
