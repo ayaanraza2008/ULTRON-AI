@@ -62,7 +62,7 @@ function assemble(pages) {
   });
   const xrefOffset = Buffer.byteLength(output, "latin1");
   output += "xref" + eol + "0 " + (objects.length + 1) + eol + "0000000000 65535 f " + eol;
-  for (let i = 1; i < offsets.length; i++) output += String(offsets[i]).padStart(10, "0") + " 00000 n " + eol;
+  for (let i = 1; i < offsets.length; i++) output += String(offsets[i]).padStart(10, "0") + " 00000 n" + eol;
   output += "trailer" + eol + "<< /Size " + (objects.length + 1) + " /Root 1 0 R >>" + eol + "startxref" + eol + xrefOffset + eol + "%%EOF" + eol;
   return Buffer.from(output, "latin1");
 }
