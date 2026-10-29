@@ -37,7 +37,7 @@ Project data defaults to .local/video-studio/; override it with ULTRON_VIDEO_STU
 ## Workflow
 
 1. **Brief and reference.** Write a plain-English brief and optionally add a YouTube, TikTok, Instagram/Reel, Vimeo, or local clip reference.
-2. **Analyze.** A local uploaded clip can be inspected with FFprobe and FFmpeg for duration, dimensions, frame rate, audio presence and scene-change timestamps. Paste the transcript into the transcript box to include it. A URL is only limited metadata unless a supported local extractor is available.
+2. **Analyze.** A local uploaded clip can be inspected with FFprobe and FFmpeg for duration, dimensions, frame rate, audio presence and scene-change timestamps. If VoiceStudio or an OpenAI-compatible STT endpoint is configured, choose **Transcribe local clip** to extract up to 210 seconds of audio locally and request a transcript. Otherwise paste a transcript manually. A URL is only limited metadata unless a supported local extractor is available.
 3. **Plan.** ULTRON tries its configured server-side model providers and falls back to a local template if no usable provider is configured. Review three directions, script, timed scenes, transitions, continuity, and tasks.
 4. **Research.** Configure TAVILY_API_KEY to enable live research. Otherwise the board records that research was not run. Always verify important claims against primary sources.
 5. **Gather assets.** Upload local media or search optional stock libraries with PEXELS_API_KEY and/or PIXABAY_API_KEY. Asset records keep the provider, title, source page and contributor when available. Read the actual licence and any attribution requirements before publishing.
@@ -54,7 +54,7 @@ Project data defaults to .local/video-studio/; override it with ULTRON_VIDEO_STU
 | OPENROUTER_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, ULTRON_MODEL_PROVIDERS_JSON | Optional model providers for production concepts and scripts |
 | TAVILY_API_KEY | Enables web research |
 | PEXELS_API_KEY, PIXABAY_API_KEY | Enable stock-video and still-image search |
-| VOICESTUDIO_BASE_URL, VOICESTUDIO_API_KEY | VoiceStudio TTS endpoint. On the same PC, local mode can call http://localhost:3900. |
+| VOICESTUDIO_BASE_URL, VOICESTUDIO_API_KEY | VoiceStudio TTS and transcription endpoint. On the same PC, local mode can call http://localhost:3900. |\n| STT_API_BASE_URL, STT_API_KEY, STT_MODEL | OpenAI-compatible STT base URL (usually ending in /v1), key, and model when VoiceStudio isn't used |
 | TTS_API_BASE_URL, TTS_API_KEY, TTS_MODEL, TTS_DEFAULT_VOICE | Compatible OpenAI-style speech endpoint when VoiceStudio is not used |
 | ULTRON_STUDIO_AI_COST_PER_1K_TOKENS_USD | Optional configured unit rate used to estimate AI cost |
 | ULTRON_STUDIO_TTS_COST_PER_1K_CHARS_USD | Optional configured unit rate used to estimate TTS cost |
@@ -75,7 +75,7 @@ Only configure third-party services you accept for the content you send them. A 
 ## Limits and honest verification
 
 - UI file uploads are capped at 8 MB per file to fit the existing bounded JSON API request. Stock imports are capped at 40 MB.
-- A URL is not the same as full reference video access. Platform restrictions can prevent metadata retrieval. The app never fabricates a transcript or claims that URL-only metadata provides measured scene cuts.
+- A URL is not the same as full reference video access. Platform restrictions can prevent metadata retrieval. The app never fabricates a transcript or claims that URL-only metadata provides measured scene cuts. Automatic transcription only applies to an uploaded local clip with a configured STT/VoiceStudio endpoint and is capped at 210 seconds/7 MB extracted audio.
 - Local yt-dlp use is only invoked in local mode and after the user checks that they have rights/permission. It requests metadata only; it does not download the reference movie.
 - The media tools do not automatically generate new video footage, AI images, or music. The pipeline uses stock or local media and still-image motion. New image/video generation adapters can be connected later, when their APIs, cost controls and license terms are known.
 - The SRT captions file is not burned into the final MP4. Review caption timing and text in an editor if you need hard subtitles.
