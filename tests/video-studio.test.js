@@ -74,4 +74,9 @@ test("local HTTP API creates projects and cannot bypass render approval", async 
   assert.equal(approval.status, 409);
   const hostileHost = await fetch(base + "/api/projects", { headers: { Host: "not-local.example" } });
   assert.equal(hostileHost.status, 403);
+  for (let i = 0; i < 80; i++) {
+    const state = await fetch(base + "/api/projects/" + body.project.id).then(response => response.json());
+    if (state.job === "idle") break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
 });
