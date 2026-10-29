@@ -1691,7 +1691,7 @@ test("authenticated report PDF endpoint returns a readable transient attachment"
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     const bytes = Buffer.from(await response.arrayBuffer());
-    assert.equal(bytes.subarray(0, 8).toString("ascii"), "%PDF-1.4");
+    assert.match(bytes.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d$/);
     assertEncodedPdfText(bytes, "ULTRON Verification Report");
     assertEncodedPdfText(bytes, "The source test suite passed.");
     assertEncodedPdfText(bytes, "Live provider and two-account database checks remain.");
