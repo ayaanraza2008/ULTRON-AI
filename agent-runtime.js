@@ -1474,19 +1474,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       }
       let assistantMessage = first?.choices?.[0]?.message;
       let calls = Array.isArray(assistantMessage?.tool_calls) ? assistantMessage.tool_calls : [];
-      // Treat the routing result as an execution boundary, not merely a prompt hint:
-      // providers may hallucinate tool calls that were not included in their schema.
-      if (taskRoute.filtered) {
-        calls = calls.filter(call => taskRoute.toolNames.includes(call?.function?.name));
-      }
+      // A route with no tool schemas must not execute provider-invented calls.
+      // Single-domain off-route calls are left for the dispatch guard so it can
+      // return a clear denial or the autonomy policy's higher-priority approval result.
+      if (taskRoute.filtered && taskRoute.toolNames.length === 0) calls = [];
       calls = calls.slice(0, 3);
-      // Some free models do not implement function calling. Use a conservative intent
-      // fallback only when this task tier is allowed to use tools.
-      if (!calls.length && routeAllowsTools) {
-        const fallbackCalls = buildFallbackCalls(userText);
-        calls = (taskRoute.filtered
-          ? fallbackCalls.filter(call => taskRoute.toolNames.includes(call?.function?.name))
-          : fallbackCalls).slice(0, 3);
+      // Server-side intent fallbacks use narrow deterministic patterns and remain
+      // available when a model cannot call tools or the classifier misses an intent.
+      if (!calls.length) {
+        calls = buildFallbackCalls(userText).slice(0, 3)
+          .map(call => ({ ...call, _ultronDeterministicFallback: true }));
       }
       if (!calls.length) {
         const content = typeof assistantMessage?.content === "string" ? assistantMessage.content : "I couldn't produce a response. Please try again.";
@@ -1547,6 +1544,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
+          } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name) && call?._ultronDeterministicFallback !== true) {
+            result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated tool is outside the task router's allowed tool set; no action was executed." } };
           } else {
             result = await executeTool(name, args, req.body || {}, req);
           }
@@ -1575,9 +1574,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         let followCalls = Array.isArray(final?.choices?.[0]?.message?.tool_calls)
           ? final.choices[0].message.tool_calls
           : [];
-        if (taskRoute.filtered) {
-          followCalls = followCalls.filter(call => taskRoute.toolNames.includes(call?.function?.name));
-        }
+        // Do not accept provider-invented calls when no tool schema was offered.
+        // For a non-empty narrowed route, the dispatch boundary below rejects
+        // off-route calls unless the autonomy policy requires approval first.
+        if (taskRoute.filtered && taskRoute.toolNames.length === 0) followCalls = [];
         followCalls = followCalls.slice(0, 3);
         if (followCalls.length) {
           const followToolMessages = [];
@@ -1597,6 +1597,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
               const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
+              } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name)) {
+                result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated follow-up tool is outside the task router's allowed tool set; no action was executed." } };
               } else {
                 result = await executeTool(name, args, req.body || {}, req);
               }
