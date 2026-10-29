@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ultron_local_assistant.core import (
-    DEFAULT_OLLAMA_URL, detect_hardware, recommend_models, resolve_workspace_file,
+    DEFAULT_OLLAMA_URL, detect_hardware, load_relevant_skill_context, recommend_models, resolve_workspace_file,
     safe_shell_argv, search_documents, validate_local_ollama_url,
     run_approved_command,
 )
@@ -81,6 +81,22 @@ class LocalFirstCoreTests(unittest.TestCase):
             for command in ["git status && whoami", "curl https://example.com", "python -c 'print(1)'", "rm -rf ."]:
                 with self.subTest(command=command), self.assertRaises(ValueError):
                     safe_shell_argv(command, root)
+
+    def test_installed_markdown_skills_are_selected_by_relevance_without_execution(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = Path(temp)
+            skill = data / "skills" / "gmail-digest" / "SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text(
+                "# Gmail digest\nFor a morning digest, summarize unread Gmail subject lines and calendar priorities. Never send email.",
+                encoding="utf-8",
+            )
+            with patch("ultron_local_assistant.core.app_data_dir", return_value=data):
+                context = load_relevant_skill_context("summarize unread Gmail and calendar for my morning digest")
+                unrelated = load_relevant_skill_context("explain matrix multiplication in C")
+            self.assertIn("LOCAL SKILL [gmail-digest/SKILL.md]", context)
+            self.assertIn("Never send email", context)
+            self.assertEqual(unrelated, "")
 
     def test_shell_execution_requires_explicit_confirmation(self):
         with tempfile.TemporaryDirectory() as temp:
