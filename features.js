@@ -25,7 +25,8 @@ function boundedString(value, max = 12000) {
 }
 
 const FISH_AUDIO_BASE_URL = "https://api.fish.audio";
-const FISH_AUDIO_DEFAULT_VOICE_MODEL_ID = "7a18a1851d2649108c48ec9f2c80eb2c";
+// Public Fish Audio voice marked for deep, professional Hinglish / Indian-accented male delivery.
+const FISH_AUDIO_DEFAULT_VOICE_MODEL_ID = "db9ad6eb7fb84294b2046cf05ef64718";
 const FISH_AUDIO_TTS_MODELS = new Set(["s1", "s2-pro", "s2.1-pro", "s2.1-pro-free", "drama-3"]);
 const FISH_AUDIO_STT_MODELS = new Set(["transcribe-1", "transcribe-1-pro"]);
 
@@ -892,12 +893,12 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
             model: fish.ttsModel
           },
           body: JSON.stringify({
-            text: "[confident][calm, deep male voice, resonant baritone, authoritative, smooth and controlled delivery, crisp diction] " + text,
+            text: "[natural conversational delivery, deep warm Indian male voice, resonant baritone, calm and authoritative, precise Hindi and English pronunciation, measured pace, natural pauses, subtle emphasis] " + text,
             reference_id: fish.voiceModelId,
             format: "mp3",
             latency: "balanced",
             normalize: true,
-            prosody: { speed: 1.12, volume: 0, normalize_loudness: true }
+            prosody: { speed: 1.05, volume: 0, normalize_loudness: true }
           })
         });
         if (!response.ok) {
