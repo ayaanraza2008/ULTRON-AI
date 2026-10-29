@@ -838,7 +838,7 @@ test("agent automatically uses active user memories when memory is enabled", asy
   }, async base => {
     const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Explain this briefly" }) });
     assert.equal(response.status, 200);
-    const memoryMessage = capturedMessages.find(m => m.role === "system" && String(m.content).includes("User-approved memory context"));
+    const memoryMessage = capturedMessages.find(m => m.role === "system" && String(m.content).includes("ULTRON layered cognitive-memory context"));
     assert.ok(memoryMessage);
     assert.match(memoryMessage.content, /Prefer concise Hinglish answers/);
     assert.deepEqual(supabaseCalls.map(x => x.table), ["user_preferences", "memory_items"]);
