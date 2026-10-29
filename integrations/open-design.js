@@ -64,7 +64,6 @@ export function getOpenDesignReadiness(env = process.env, userId = "") {
     ],
     optionalEnv: ["OPEN_DESIGN_BYOK_PROTOCOL=openai"],
     executionPrerequisites: ["reachable OpenDesign daemon", "valid daemon token", "existing configured project", "OpenCode executable installed inside the OpenDesign daemon environment", "valid model-provider API key and model access"],
-    projectId: /^[A-Za-z0-9_-]{1,120}$/.test(config.projectId) ? config.projectId : null,
     model: config.model || null,
     protocol: config.protocol,
     note: !config.enabled
