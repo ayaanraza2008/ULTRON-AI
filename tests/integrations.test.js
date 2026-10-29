@@ -728,3 +728,91 @@ test("Open Generative AI status route polls only a validated job ID and sanitize
     assert.equal(JSON.stringify(result).includes("127.0.0.1"), false);
   });
 });
+
+
+const appFlowyEnv = {
+  APPFLOWY_ENABLED: "true",
+  APPFLOWY_BASE_URL: "https://appflowy.example.com",
+  APPFLOWY_API_TOKEN: "appflowy-route-token-synthetic-123456",
+  APPFLOWY_CLIENT_VERSION: "0.9.24",
+  APPFLOWY_DEVICE_ID: "00000000-0000-4000-8000-000000000002",
+  ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+};
+
+test("AppFlowy status stays disabled by default and exposes no credentials", async () => {
+  await withServer({}, async () => {
+    throw new Error("AppFlowy status must not call an upstream API.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/appflowy/status");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.configured, false);
+    assert.equal(result.state, "disabled_by_config");
+    assert.equal(JSON.stringify(result).includes("appflowy-route-token"), false);
+  });
+});
+
+test("AppFlowy workspace route is owner-scoped and sends bearer plus client identity headers", async () => {
+  let request;
+  await withServer(appFlowyEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ data: [
+      { workspace_id: "00000000-0000-4000-8000-000000000010", name: "Engineering", role: "owner" }
+    ] }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/appflowy/workspaces");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(request.url, "https://appflowy.example.com/api/workspace");
+    assert.equal(request.options.headers.Authorization, "Bearer " + appFlowyEnv.APPFLOWY_API_TOKEN);
+    assert.equal(request.options.headers["client-version"], "0.9.24");
+    assert.equal(request.options.headers["device-id"], appFlowyEnv.APPFLOWY_DEVICE_ID);
+    assert.equal(result.workspaces[0].name, "Engineering");
+    assert.equal(JSON.stringify(result).includes(appFlowyEnv.APPFLOWY_API_TOKEN), false);
+  });
+});
+
+test("AppFlowy folder and search routes validate parameters and return read-only results", async () => {
+  const requests = [];
+  await withServer(appFlowyEnv, async (url, options) => {
+    requests.push({ url, options });
+    if (url.includes("/folder?")) return new Response(JSON.stringify({ data: {
+      view_id: "00000000-0000-4000-8000-000000000010", name: "Engineering", layout: 0,
+      children: [{ view_id: "00000000-0000-4000-8000-000000000011", name: "Planning", layout: 0, children: [] }]
+    } }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ data: [
+      { view_id: "00000000-0000-4000-8000-000000000011", name: "Planning", preview: "Current sprint plan", score: 0.9 }
+    ] }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const workspaceId = "00000000-0000-4000-8000-000000000010";
+    const folder = await fetch(base + "/api/integrations/appflowy/workspaces/" + workspaceId + "/folder?depth=3");
+    assert.equal(folder.status, 200);
+    const folderBody = await folder.json();
+    assert.equal(folderBody.tree.name, "Engineering");
+    assert.equal(folderBody.tree.children[0].name, "Planning");
+
+    const search = await fetch(base + "/api/integrations/appflowy/workspaces/" + workspaceId + "/search?q=planning%20sprint&limit=5");
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.results[0].name, "Planning");
+    assert.equal(searchBody.results[0].excerpt, "Current sprint plan");
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].url, "https://appflowy.example.com/api/search/" + workspaceId + "?query=planning+sprint&limit=5&preview_size=80");
+  });
+});
+
+test("AppFlowy rejects non-owner workspace access before upstream calls", async () => {
+  let calls = 0;
+  await withServer({
+    ...appFlowyEnv,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000099"
+  }, async () => {
+    calls++;
+    throw new Error("Non-owner must not invoke AppFlowy.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/appflowy/workspaces");
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "INTEGRATION_OWNER_ONLY");
+    assert.equal(calls, 0);
+  });
+});
