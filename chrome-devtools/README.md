@@ -53,7 +53,7 @@ $env:CHROME_BRIDGE_PORT = "4783"
 npm start
 ```
 
-The service binds to `127.0.0.1` by default and exposes only `GET /healthz` and token-protected `POST /action`. ULTRON's backend adapter uses these server-side settings:
+The service binds to `127.0.0.1` by default and exposes only `GET /healthz` and token-protected `POST /action`. ULTRON's authenticated agent router exposes the `chrome_devtools` action and the integration catalog reports configuration as `configured_unverified`; neither state is a live connectivity check. The runtime readiness endpoint also reports the bridge separately. The backend adapter uses these server-side settings:
 
 - `ULTRON_CHROME_DEVTOOLS_URL`
 - `ULTRON_CHROME_DEVTOOLS_TOKEN`
