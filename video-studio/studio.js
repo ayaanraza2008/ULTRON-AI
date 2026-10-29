@@ -121,7 +121,7 @@
       ["FFmpeg renderer", Boolean(tools.ffmpeg?.available), tools.ffmpeg?.version || "install FFmpeg"],
       ["FFprobe analysis", Boolean(tools.ffprobe?.available), tools.ffprobe?.version || "install FFmpeg"],
       ["Reference metadata", Boolean(tools.ytDlp?.available), tools.ytDlp?.version || "optional yt-dlp"],
-      ["Stock search", Boolean(tools.pexels || tools.pixabay), "optional Pexels/Pixabay keys"],
+      ["Stock search", Boolean(tools.pexels || tools.pixabay || tools.wikimediaCommons), "Wikimedia Commons fallback; optional Pexels/Pixabay keys"],
       ["Live research", Boolean(tools.research), "optional Tavily key"],
       ["Voiceover", Boolean(tools.voiceover), "VoiceStudio or compatible TTS"],
       ["Transcription", Boolean(tools.transcription), "compatible STT endpoint"]
@@ -311,6 +311,10 @@
       metadata.append(node("strong", "", asset.title || asset.filename));
       metadata.append(node("small", "asset-kind", asset.kind + " · " + asset.provider));
       metadata.append(node("small", "", formatBytes(asset.bytes) + (asset.author ? " · by " + asset.author : "")));
+      if (asset.license) metadata.append(node("small", "asset-kind", "Licence: " + asset.license));
+      if (asset.licenseUrl && /^https:\/\/(creativecommons\.org|www\.gnu\.org)\//i.test(asset.licenseUrl)) {
+        const license = node("a", "text-link", "Licence details ↗"); license.href = asset.licenseUrl; license.target = "_blank"; license.rel = "noopener noreferrer"; metadata.append(license);
+      }
       if (asset.sourcePage && /^https:\/\//i.test(asset.sourcePage)) {
         const link = node("a", "", "Source / creator credit ↗"); link.href = asset.sourcePage; link.target = "_blank"; link.rel = "noreferrer noopener"; metadata.append(link);
       }
@@ -492,7 +496,7 @@
         method: "POST", body: JSON.stringify({ query: form.get("query"), kind: form.get("kind") })
       });
       ui.stockResults.replaceChildren();
-      if (!result.results?.length) ui.stockResults.append(node("p", "muted tiny", "No results returned. Check your keys, provider quota or try another query."));
+      if (!result.results?.length) ui.stockResults.append(node("p", "muted tiny", "No matching archive or stock media found. Try another query."));
       (result.results || []).forEach(item => {
         const card = node("article", "asset-result");
         if (item.thumbnailUrl && /^https:\/\//i.test(item.thumbnailUrl)) {
@@ -501,8 +505,12 @@
         } else card.append(node("div", "asset-thumb-placeholder", item.kind === "video" ? "▶" : "▧"));
         const body = node("div", "asset-result-body");
         body.append(node("h4", "", item.title), node("p", "", item.provider + (item.author ? " · " + item.author : "")));
-        const source = node("a", "text-link", "Source / licence ↗"); source.href = item.sourcePage; source.target = "_blank"; source.rel = "noopener noreferrer";
+        body.append(node("small", "asset-kind", item.license ? "Licence: " + item.license : "Check licence on source page"));
+        const source = node("a", "text-link", "Source / creator ↗"); source.href = item.sourcePage; source.target = "_blank"; source.rel = "noopener noreferrer";
         body.append(source);
+        if (item.licenseUrl && /^https:\/\/(creativecommons\.org|www\.gnu\.org)\//i.test(item.licenseUrl)) {
+          const license = node("a", "text-link", "Licence details ↗"); license.href = item.licenseUrl; license.target = "_blank"; license.rel = "noopener noreferrer"; body.append(license);
+        }
         const importButton = button("Import to project", "secondary", async () => {
           importButton.disabled = true; importButton.textContent = "Importing…";
           try {
