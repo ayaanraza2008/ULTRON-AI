@@ -55,6 +55,7 @@
     taskDescription: byId("task-description"),
     taskDetail: byId("task-detail"),
     taskStageLabel: byId("task-stage-label"),
+    taskCancel: byId("task-cancel"),
     toast: byId("toast"),
     authGate: byId("auth-gate"),
     authForm: byId("auth-form"),
@@ -80,6 +81,7 @@
   let panelIsComplete = false;
   let taskProgressTimer = null;
   let activeTaskProgressId = null;
+  let activeRequestController = null;
   let history = [];
   let currentConversationId = null;
   let conversationPersistenceUnavailable = false;
@@ -168,10 +170,18 @@
       headers
     };
     if (options.body !== undefined) init.body = JSON.stringify(options.body);
+    if (options.signal) init.signal = options.signal;
     let response;
     try {
       response = await fetch(path || UPSTREAM_API_FALLBACK, init);
     } catch (cause) {
+      if (cause?.name === "AbortError" || options.signal?.aborted) {
+        const error = new Error("Stopped waiting for this response. A server-side tool may still complete; check Task activity or History before retrying.");
+        error.code = "REQUEST_ABORTED";
+        error.name = "AbortError";
+        error.cause = cause;
+        throw error;
+      }
       const error = new Error("ULTRON CORE could not be reached from the interface. Check the ULTRON CORE backend service and try again.");
       error.code = "CORE_LINK_FAILED";
       error.cause = cause;
@@ -586,6 +596,7 @@
     ui.taskStageLabel.textContent = task.stage || "PROCESSING";
     ui.taskDetail.replaceChildren();
     ui.taskDetail.hidden = true;
+    if (ui.taskCancel) { ui.taskCancel.hidden = true; ui.taskCancel.disabled = false; ui.taskCancel.textContent = "STOP WAITING"; }
   }
 
   function updateTaskPanel(description, stage, results = []) {
@@ -2293,11 +2304,14 @@
       return;
     }
     busy = true;
+    const requestController = new AbortController();
+    activeRequestController = requestController;
     ui.sendButton.disabled = true;
     const task = attachments.length
       ? { kind: source === "camera-auto" ? "LIVE EYES" : "VISION ANALYSIS", title: source === "camera-auto" ? "Observing the current camera view" : "Analyzing what the camera sees", side: "right", stage: source === "camera-auto" ? "OBSERVING FRAME" : "ANALYZING IMAGE" }
       : guessTask(prompt);
     openTaskPanel(task);
+    if (ui.taskCancel) { ui.taskCancel.hidden = false; ui.taskCancel.disabled = false; }
     setCoreState(source === "camera-auto" ? "thinking" : wantsResearch(prompt) ? "research" : "thinking");
     updateTaskPanel("Routing: " + prompt.slice(0, 190), task.stage);
     let researchData = null;
@@ -2310,11 +2324,12 @@
         setCoreState("research");
         updateTaskPanel("Searching for current public references…", "SEARCHING REFERENCES");
         try {
-          researchData = await apiRequest("/api/research", { method: "POST", body: { query: prompt.slice(0, 500) } });
+          researchData = await apiRequest("/api/research", { method: "POST", body: { query: prompt.slice(0, 500) }, signal: requestController.signal });
           if (researchData && Array.isArray(researchData.results)) sources = researchData.results.slice(0, 5);
           if (sources.length) updateTaskPanel("Found " + sources.length + " public references. ULTRON is comparing the available information.", "EVALUATING SOURCES", sources);
           else updateTaskPanel("Search completed without usable source links. ULTRON will answer with this limitation in mind.", "SOURCES LIMITED");
         } catch (researchError) {
+          if (researchError?.code === "REQUEST_ABORTED") throw researchError;
           updateTaskPanel("Live search is unavailable for this request. ULTRON will continue using its configured model. " + researchError.message, "SEARCH FALLBACK");
           researchData = null;
         }
@@ -2337,7 +2352,7 @@
                 .slice(-12)
                 .map(item => ({ role: item.role, content: item.content.slice(0, 6000) })),
               persona: preferredPersona
-            }
+            }, signal: requestController.signal
           });
         } catch (agentError) {
           // Preserve the legacy access-gate path only when the agent endpoint is
@@ -2350,15 +2365,17 @@
           updateTaskPanel("The signed-in session cannot use the account-scoped tool agent. Falling back to normal direct chat; no agent tool was executed.", "DIRECT CHAT FALLBACK", sources);
           payload = await apiRequest("/api/chat", {
             method: "POST",
-            body: { messages, stream: false, persona: preferredPersona, ...(attachments.length ? { attachments } : {}) }
+            body: { messages, stream: false, persona: preferredPersona, ...(attachments.length ? { attachments } : {}) }, signal: requestController.signal
           });
         }
       } else {
         payload = await apiRequest("/api/chat", {
           method: "POST",
-          body: { messages, stream: false, persona: preferredPersona, ...(chatMode === "direct" && selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
+          body: { messages, stream: false, persona: preferredPersona, ...(chatMode === "direct" && selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }, signal: requestController.signal
         });
       }
+      if (activeRequestController === requestController) activeRequestController = null;
+      if (ui.taskCancel) ui.taskCancel.hidden = true;
       answer = payload && typeof payload.content === "string" ? payload.content.trim() : "";
       if (!answer) throw new Error("The model returned an empty response.");
       await persistConversationExchange(prompt, answer);
@@ -2376,9 +2393,15 @@
       }
       if (!shouldSpeak) schedulePanelHide(6500);
     } catch (error) {
-      markTaskError(error.message);
-      setCoreState("error");
-      showToast(error.message || "ULTRON could not complete the request.");
+      if (error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") {
+        markTaskError("Stopped waiting for the response. A server-side tool may still complete; check Task activity or History before retrying.");
+        setCoreState("idle");
+        showToast("Stopped waiting. An already accepted server-side tool may still complete; check Task activity or History before retrying.", 8500);
+        schedulePanelHide(7000);
+      } else {
+        markTaskError(error.message);
+        setCoreState("error");
+        showToast(error.message || "ULTRON could not complete the request.");
       if (error.status === 401 && ["AUTH_REQUIRED", "SUPABASE_AUTH_REQUIRED"].includes(error.code)) {
         await checkSession();
         if (ui.authGate.hidden) showToast("Your session is not accepted by the backend. Sign in again from the secure access panel.", 7000);
@@ -2399,8 +2422,11 @@
       if (mode === "voice" && voiceActive && source !== "camera-auto" && !mutedInTextMode && error.status !== 401) {
         await speakResponse(error.message || "I could not complete that request.", true);
       }
-      schedulePanelHide(5000);
+      if (error?.code !== "REQUEST_ABORTED" && error?.name !== "AbortError") schedulePanelHide(5000);
+      }
     } finally {
+      if (activeRequestController === requestController) activeRequestController = null;
+      if (ui.taskCancel) { ui.taskCancel.hidden = true; ui.taskCancel.disabled = false; ui.taskCancel.textContent = "STOP WAITING"; }
       busy = false;
       ui.sendButton.disabled = false;
       if (mode === "voice" && voiceActive) {
@@ -3835,6 +3861,13 @@
     }
   }
 
+  ui.taskCancel.addEventListener("click", () => {
+    if (!activeRequestController || activeRequestController.signal.aborted) return;
+    ui.taskCancel.disabled = true;
+    ui.taskCancel.textContent = "STOPPING…";
+    showToast("Stopping the browser wait. An accepted server-side tool may still finish; check Task activity or History before retrying.", 8500);
+    activeRequestController.abort();
+  });
   ui.voiceMode.addEventListener("click", toggleVoiceMode);
   ui.textMode.addEventListener("click", switchToTextMode);
   ui.openInput.addEventListener("click", openOptionalTextInput);
