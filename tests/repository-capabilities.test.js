@@ -36,7 +36,7 @@ test("new screenshot repositories have explicit safe/unverified states", () => {
   const status = getRepositoryCapabilityStatus({});
   const byId = Object.fromEntries(status.integrations.map(item => [item.id, item]));
   assert.equal(byId["heretic"].state, "review_required_license_and_resource_gate");
-  assert.equal(byId["open-generative-ai"].state, "adapter_not_implemented");
+  assert.equal(byId["open-generative-ai"].state, "disabled_by_config");
   assert.equal(byId["agency-agents"].state, "guidance_only");
   assert.equal(byId["jcode"].state, "local_cli_runtime_required");
   assert.equal(byId["open-generative-ai"].repo, "Anil-matcha/Open-Generative-AI");
@@ -48,6 +48,16 @@ test("new screenshot repositories have explicit safe/unverified states", () => {
   assert.equal(byId["open-seo"].state, "missing_configuration");
   assert.equal(byId["open-higgsfield"].state, "disabled_by_config");
   assert.equal(byId["open-design"].state, "disabled_by_config");
+  assert.equal(byId["open-generative-ai"].state, "disabled_by_config");
+  const muapiKey = "muapi-test-secret-123456";
+  const configuredMuApi = getRepositoryCapabilityStatus({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: muapiKey,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "open-generative-ai");
+  assert.equal(configuredMuApi.state, "configured_unverified");
+  assert.equal(configuredMuApi.configured, true);
+  assert.equal(JSON.stringify(configuredMuApi).includes(muapiKey), false);
   const openDesignSecret = "synthetic-open-design-daemon-token";
   const configuredOpenDesign = getRepositoryCapabilityStatus({
     OPEN_DESIGN_ENABLED: "true",
