@@ -104,3 +104,33 @@ test("routes reverse-engineering investigations to REA's bounded tool family", (
   assert.ok(native.categories.includes("reverse_engineering"));
   assert.ok(native.toolNames.includes("rea_inspect_native_code"));
 });
+
+
+test("routes every newly integrated repository adapter to its dedicated agent tool", () => {
+  const cases = [
+    ["Use OpenHiggsfield to generate a cinematic video", "open_higgsfield", "openhiggsfield"],
+    ["Generate an image with Open Generative AI", "open_generative_ai", "open_generative_ai"],
+    ["Start an OpenDesign workspace run for this UI", "open_design", "open_design"],
+    ["Search my AppFlowy workspace for deployment notes", "appflowy", "appflowy"],
+    ["Use OpenSEO to look up saved keywords for my project", "open_seo", "openseo"]
+  ];
+
+  for (const [prompt, category, tool] of cases) {
+    const route = classifyTaskRoute(prompt);
+    assert.equal(route.tier, "medium", prompt);
+    assert.deepEqual(route.categories, [category], prompt);
+    assert.equal(route.filtered, true, prompt);
+    assert.ok(route.toolNames.includes(tool), prompt);
+    assert.ok(route.toolNames.includes("check_repository_capabilities"), prompt);
+  }
+});
+
+test("provider-specific media routing does not accidentally hide the selected adapter", () => {
+  const higgsfield = classifyTaskRoute("Generate a cinematic image using OpenHiggsfield");
+  assert.deepEqual(higgsfield.categories, ["open_higgsfield"]);
+  assert.ok(higgsfield.toolNames.includes("openhiggsfield"));
+
+  const muapi = classifyTaskRoute("Generate a video using Open Generative AI");
+  assert.deepEqual(muapi.categories, ["open_generative_ai"]);
+  assert.ok(muapi.toolNames.includes("open_generative_ai"));
+});
