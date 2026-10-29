@@ -60,7 +60,7 @@ const CATEGORY_PATTERNS = Object.freeze([
 ]);
 
 const COMPLEX_PATTERN = /\b(?:then|after that|step by step|multi[- ]step|end to end|from scratch|complete project|across multiple|and also|and then|first .* then|workflow|autonomously)\b/i;
-const ACTION_PATTERN = /\b(?:build|create|write|fix|debug|implement|run|execute|schedule|send|publish|book|delete|change|update|research|search|open|inspect|transcribe|generate|plan|connect|integrate|check|analyze|analyse|summarize|compare|calculate|find)\b/i;
+const ACTION_PATTERN = /\b(?:build|create|write|fix|debug|implement|run|execute|schedule|send|publish|book|delete|change|update|research|search|open|inspect|transcribe|generate|plan|connect|integrate|check|analyze|analyse|summarize|compare|calculate|find|coordinate|migrate|migration|report|audit|verify|test)\b/i;
 const SIMPLE_PATTERN = /^(?:hi|hello|hey|good morning|good afternoon|good evening|thanks|thank you|who are you|what can you do|what is [\s\S]+|what's [\s\S]+|define [\s\S]+|explain [\s\S]+|tell me about [\s\S]+|how does [\s\S]+ work|why is [\s\S]+)\??[.! ]*$/i;
 const VAGUE_PATTERN = /^(?:help|help me|do it|continue|go ahead|make it better|fix it|start|proceed|do the needful|handle it)[.! ]*$/i;
 
@@ -78,6 +78,7 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   const complex = COMPLEX_PATTERN.test(text);
   let tier = "medium";
   if (!text || (!hasHistory && VAGUE_PATTERN.test(text))) tier = "clarify";
+  else if (hasHistory && VAGUE_PATTERN.test(text)) tier = "medium";
   else if (complex || categories.length > 1 || /\b(?:project|application|repository|repo|platform|system)\b/i.test(text) && ACTION_PATTERN.test(text)) tier = "complex";
   else if (categories.length === 1) tier = "medium";
   else if (!ACTION_PATTERN.test(text) || SIMPLE_PATTERN.test(text)) tier = "simple";
