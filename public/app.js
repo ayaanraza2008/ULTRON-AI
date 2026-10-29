@@ -2604,7 +2604,7 @@
     exportPdf.className = "drawer-action secondary";
     exportPdf.textContent = "EXPORT CURRENT DRAFT AS PDF";
     exportPdf.addEventListener("click", () => {
-      void exportReportPdf(title.value.trim() || "ULTRON Note", body.value, [
+      void exportReportPdf(title.value.trim() || "ULTRON Note", "", [
         { heading: "Tags", content: tags.value.trim() || "No tags" },
         { heading: "Note", content: body.value }
       ]);
