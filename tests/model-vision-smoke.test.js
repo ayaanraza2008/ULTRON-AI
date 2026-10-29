@@ -77,7 +77,8 @@ test("vision smoke verifies a real image payload and falls back through free vis
       assert.deepEqual([...pixels.subarray(1 + 31 * 3, 1 + 32 * 3)], [255, 0, 0], "left half must be red");
       assert.deepEqual([...pixels.subarray(1 + 32 * 3, 1 + 33 * 3)], [0, 0, 255], "right half must be blue");
       assert.match(body.messages[0].content, /ULTRON_VISION_SMOKE_OK/);
-      assert.equal(body.max_tokens, 96);
+      assert.equal(body.max_tokens, 512);
+      assert.deepEqual(body.reasoning, { effort: "low" });
       assert.equal(body.stream, false);
       if (body.model === "openrouter/free") return new Response("{}", { status: 429 });
       return response("ULTRON_VISION_SMOKE_OK");
