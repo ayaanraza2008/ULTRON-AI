@@ -19,3 +19,8 @@
 **Decision:** Keep avatar, image/video generation, and local model runtimes optional and separately hosted where necessary.
 **Reason:** Target PC has 8 GB RAM and integrated AMD graphics; GPU and model requirements vary significantly.
 **Status:** Accepted.
+
+## ADR-005 — Keep personal assistant inference and documents local-first
+**Decision:** Add the Python terminal assistant as a separate local subsystem. Local prompts/documents may only be sent to Ollama at loopback addresses; Google account access is explicitly opt-in with read-only scopes; script execution requires confirmation; imported skills are Markdown-only.
+**Reason:** The hosted ULTRON backend cannot safely reach a user's private device, local files, or credentials. A separate process keeps private data out of cloud model calls while preserving the existing backend.
+**Status:** Accepted for the local companion; device-level OAuth, installed voice/model availability, and script execution require verification on the user's PC.

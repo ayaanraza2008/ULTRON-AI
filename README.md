@@ -231,3 +231,11 @@ Use a small model first on low-memory hardware. 4-bit bitsandbytes inference req
 ULTRON includes an optional local-first video production studio for planning original videos, analyzing a reference URL or local clip, finding licensed media candidates, and rendering a reviewed edit with local FFmpeg tools. Start it separately with `npm run video-studio`; by default it binds only to `127.0.0.1:4174` and rejects non-loopback Host/Origin headers. It stores workspace media under `.runtime/video-studio/` unless `ULTRON_VIDEO_STUDIO_DATA_DIR` is set.
 
 Install FFmpeg/FFprobe and yt-dlp locally, and configure server-side `OPENROUTER_API_KEY` for AI planning. `TAVILY_API_KEY` enables current research and `PEXELS_API_KEY` enables optional stock-video search. The studio does not publish, upload or schedule content. Review media licenses, narration and music rights before rendering or sharing. See [docs/VIDEO_STUDIO.md](docs/VIDEO_STUDIO.md).
+
+## Local-first Python personal assistant
+
+A private terminal companion now lives in [tools/local-assistant](tools/local-assistant/README.md). It adds specialist morning-digest, local-document research, and code-assistant agents; hardware/model recommendations; local system speech; and a reviewed Markdown-only skill library. It runs separately from the hosted API so local files and prompts are processed by local Ollama, not ULTRON's cloud API.
+
+Install it with Python 3.10+ and Ollama, then run 'ultron-local doctor'. Hardware recommendations are advisory and model downloads require explicit typed confirmation. Gmail and Calendar are opt-in integrations that use read-only OAuth scopes and call Google's APIs to retrieve data; digest generation and speech remain local. Scripts run only after confirmation but are not OS-sandboxed, so review them first. Only reviewed SKILL.md Markdown is copied from public GitHub repositories; repository code is never executed.
+
+See the [local assistant guide](tools/local-assistant/README.md) for setup, privacy boundaries, supported commands, Google OAuth, and tests.

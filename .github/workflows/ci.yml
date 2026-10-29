@@ -29,12 +29,35 @@ jobs:
         run: |
           python -m py_compile tools/model-lab/ultron_model_lab.py
           python -m unittest discover -s tools/model-lab -p 'test_*.py'
+      - name: Verify local-first Python personal assistant
+        run: |
+          python -m py_compile tools/local-assistant/ultron_local_assistant/__init__.py tools/local-assistant/ultron_local_assistant/__main__.py tools/local-assistant/ultron_local_assistant/core.py tools/local-assistant/ultron_local_assistant/google_workspace.py tools/local-assistant/ultron_local_assistant/skills.py tools/local-assistant/ultron_local_assistant/cli.py tools/local-assistant/tests/test_local_assistant.py
+          python -m unittest discover -s tools/local-assistant/tests -p 'test_*.py'
       - run: npm install --ignore-scripts
       - name: Report high-severity runtime dependency advisories
         run: |
           npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: npm test
+  local-assistant-windows-script:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse guided PowerShell installer without executing it
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "tools/local-assistant/setup.ps1",
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
