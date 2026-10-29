@@ -1348,6 +1348,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     const userText = prompt || history.filter(m => m.role === "user").at(-1)?.content || "";
     const correctionLesson = extractCorrectionLesson(userText);
     const taskRoute = classifyTaskRoute(userText, { hasHistory: history.length > 0 });
+    // Empty filtered tool lists are meaningful: simple/underspecified tasks must
+    // not advertise or execute tools. Null means the router intentionally kept
+    // the full allowlist for a compound or uncertain task.
+    const routeAllowsTools = !taskRoute.filtered || taskRoute.toolNames.length > 0;
     const autonomyIntent = resolveAutonomyIntent(prompt, history);
     const autonomyPlan = buildAutonomyPlan(autonomyIntent);
     const taskSkillsGuidance = buildTaskSkillsGuidance(autonomyIntent);
@@ -1453,7 +1457,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     try {
       let first;
       try {
-        first = await requestModel(messages, { useTools: true, userId: req.supabaseUser?.id, allowedToolNames: taskRoute.toolNames });
+        first = await requestModel(messages, { useTools: routeAllowsTools, userId: req.supabaseUser?.id, allowedToolNames: taskRoute.toolNames });
       } catch (toolModeError) {
         // Some free-model routes reject tool schemas. Retry plain chat first; if that
         // also fails, deterministic safe intents can still execute non-model tools.
@@ -1469,9 +1473,21 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         }
       }
       let assistantMessage = first?.choices?.[0]?.message;
-      let calls = Array.isArray(assistantMessage?.tool_calls) ? assistantMessage.tool_calls.slice(0, 3) : [];
-      // Some free models do not implement function calling. Use a conservative intent fallback.
-      if (!calls.length) calls = buildFallbackCalls(userText);
+      let calls = Array.isArray(assistantMessage?.tool_calls) ? assistantMessage.tool_calls : [];
+      // Treat the routing result as an execution boundary, not merely a prompt hint:
+      // providers may hallucinate tool calls that were not included in their schema.
+      if (taskRoute.filtered) {
+        calls = calls.filter(call => taskRoute.toolNames.includes(call?.function?.name));
+      }
+      calls = calls.slice(0, 3);
+      // Some free models do not implement function calling. Use a conservative intent
+      // fallback only when this task tier is allowed to use tools.
+      if (!calls.length && routeAllowsTools) {
+        const fallbackCalls = buildFallbackCalls(userText);
+        calls = (taskRoute.filtered
+          ? fallbackCalls.filter(call => taskRoute.toolNames.includes(call?.function?.name))
+          : fallbackCalls).slice(0, 3);
+      }
       if (!calls.length) {
         const content = typeof assistantMessage?.content === "string" ? assistantMessage.content : "I couldn't produce a response. Please try again.";
         if (correctionLesson && !userMemoryEnabled) correctionLearningState = "memory_disabled";
@@ -1551,14 +1567,18 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         // Tool execution remains allowlisted and capped at three calls per round.
         let final;
         try {
-          final = await requestModel(finalMessages, { useTools: true, userId: req.supabaseUser?.id, allowedToolNames: taskRoute.toolNames });
+          final = await requestModel(finalMessages, { useTools: routeAllowsTools, userId: req.supabaseUser?.id, allowedToolNames: taskRoute.toolNames });
         } catch (toolSynthesisError) {
           if (toolSynthesisError?.code === "PROVIDER_TOTAL_TIMEOUT") throw toolSynthesisError;
           final = await requestModel(finalMessages, { userId: req.supabaseUser?.id });
         }
-        const followCalls = Array.isArray(final?.choices?.[0]?.message?.tool_calls)
-          ? final.choices[0].message.tool_calls.slice(0, 3)
+        let followCalls = Array.isArray(final?.choices?.[0]?.message?.tool_calls)
+          ? final.choices[0].message.tool_calls
           : [];
+        if (taskRoute.filtered) {
+          followCalls = followCalls.filter(call => taskRoute.toolNames.includes(call?.function?.name));
+        }
+        followCalls = followCalls.slice(0, 3);
         if (followCalls.length) {
           const followToolMessages = [];
           for (const call of followCalls) {
