@@ -5,12 +5,14 @@ This module uses only the Python standard library. It never falls back to cloud 
 from __future__ import annotations
 
 import ipaddress
+import hashlib
 import json
 import os
 import platform
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -528,6 +530,70 @@ def safe_shell_argv(command: str, root: str | Path) -> list[str]:
             raise ValueError("Only a workspace-local Python or JavaScript file can be run this way.")
         return [argv[0], str(target), *argv[2:]]
     raise ValueError("Command is not allowlisted. Use code run for an explicit Python/JavaScript file, or a supported read-only/test command.")
+
+
+def apply_workspace_draft(draft_path: str | Path, root: str | Path, *, confirm: bool = False) -> dict[str, str]:
+    """Apply an assistant-generated draft only if the source is unchanged since drafting."""
+    if not confirm:
+        raise PermissionError("Applying a draft requires explicit confirmation.")
+    drafts_root = (app_data_dir() / "drafts").resolve()
+    candidate = Path(draft_path).expanduser()
+    if candidate.is_symlink() or not candidate.is_file():
+        raise ValueError("Select a regular draft file in ULTRON's private drafts folder.")
+    draft = candidate.resolve()
+    try:
+        draft.relative_to(drafts_root)
+    except ValueError as exc:
+        raise ValueError("Draft must be inside ULTRON's private drafts folder.") from exc
+    metadata_path = Path(str(draft) + ".json")
+    if metadata_path.is_symlink() or not metadata_path.is_file() or metadata_path.stat().st_size > 100_000:
+        raise ValueError("Draft metadata is missing, linked, or too large.")
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Draft metadata is invalid.") from exc
+    if not isinstance(metadata, dict):
+        raise ValueError("Draft metadata must be a JSON object.")
+    base = Path(root).expanduser().resolve()
+    if metadata.get("workspace_root") != str(base):
+        raise ValueError("The selected workspace does not match the workspace used to create this draft.")
+    relative = metadata.get("source_relative")
+    expected_source_hash = metadata.get("source_sha256")
+    expected_draft_hash = metadata.get("draft_sha256")
+    if not isinstance(relative, str) or not isinstance(expected_source_hash, str) or not isinstance(expected_draft_hash, str):
+        raise ValueError("Draft metadata is incomplete.")
+    target = resolve_workspace_file(base, relative)
+    if target.stat().st_size > 100_000 or draft.stat().st_size > 100_000:
+        raise ValueError("Source or draft exceeds the 100 KB apply limit.")
+    original = target.read_text(encoding="utf-8")
+    revised = draft.read_text(encoding="utf-8")
+    if hashlib.sha256(original.encode("utf-8")).hexdigest() != expected_source_hash:
+        raise RuntimeError("Source file changed since the draft was created; refusing to overwrite newer work.")
+    if hashlib.sha256(revised.encode("utf-8")).hexdigest() != expected_draft_hash:
+        raise RuntimeError("Draft content changed after it was reviewed; refusing to apply.")
+    if revised.lstrip().startswith(chr(96) * 3):
+        raise ValueError("Markdown-fenced responses cannot be applied as source files.")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+    backup = drafts_root / "backups" / f"{timestamp}-{target.name}.bak"
+    secure_write(backup, original)
+    fd, temp_name = tempfile.mkstemp(prefix=target.name + ".", suffix=".ultron-tmp", dir=str(target.parent))
+    temp = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(revised)
+        try:
+            os.chmod(temp, stat.S_IMODE(target.stat().st_mode))
+        except OSError:
+            pass
+        os.replace(temp, target)
+    except Exception:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    return {"applied_to": str(target), "backup": str(backup), "draft": str(draft)}
 
 
 def run_script(path: str | Path, root: str | Path, *, confirm: bool = False) -> subprocess.CompletedProcess[str]:
