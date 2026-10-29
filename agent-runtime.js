@@ -884,7 +884,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
   }
 
-  async function requestModel(messages, { useTools = false, userId = null, allowedToolNames = null } = {}) {
+  async function requestModel(messages, { useTools = false, userId = null, allowedToolNames = null, maxTokens = 1800 } = {}) {
+    const requestedMaxTokens = Number.isInteger(maxTokens) ? Math.max(256, Math.min(maxTokens, 5000)) : 1800;
     const providers = configuredModelProviders(userId).filter(provider => !useTools || provider.supportsTools);
     if (!providers.length) throw Object.assign(new Error("No configured AI provider is available. Add OPENROUTER_API_KEY or a valid provider entry with its server-side API key."), { status: 503, code: "PROVIDER_NOT_CONFIGURED" });
     let lastError;
@@ -898,7 +899,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           method: "POST",
           headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
           redirect: "error",
-          body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools: selectedTools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
+          body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools: selectedTools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: requestedMaxTokens }),
           signal: AbortSignal.any([createTimeoutSignal(45000), totalTimeoutSignal])
         });
         if (!response.ok) {
@@ -987,7 +988,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       const generated = await requestModel([
         { role: "system", content: instructions },
         { role: "user", content: JSON.stringify({ topic, level, format, language, questionCount, sourceContent: sourceContent || null }) }
-      ], { userId: req.supabaseUser?.id });
+      ], { userId: req.supabaseUser?.id, maxTokens: 3600 });
       const generatedText = generated?.choices?.[0]?.message?.content;
       if (typeof generatedText !== "string" || !generatedText.trim()) {
         throw Object.assign(new Error("The configured AI provider did not return a study pack."), { code: "STUDY_PACK_EMPTY", status: 502 });
