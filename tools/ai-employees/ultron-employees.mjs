@@ -48,8 +48,35 @@ export function resolveRole(value) {
   ) ?? null;
 }
 
+function resolveThroughExistingSymlinks(value) {
+  const requested = path.resolve(value);
+  const missingSegments = [];
+  let existing = requested;
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) {
+      throw new Error("Could not resolve the employee workspace path safely.");
+    }
+    missingSegments.unshift(path.basename(existing));
+    existing = parent;
+  }
+
+  let existingStat;
+  let realExisting;
+  try {
+    existingStat = fs.statSync(existing);
+    realExisting = fs.realpathSync.native(existing);
+  } catch {
+    throw new Error("Could not resolve the employee workspace path safely.");
+  }
+  if (missingSegments.length && !existingStat.isDirectory()) {
+    throw new Error("The employee workspace parent path is not a directory.");
+  }
+  return path.resolve(realExisting, ...missingSegments);
+}
+
 export function isCloudSyncedPath(value) {
-  const normalized = path.resolve(value).replace(/\\/g, "/").toLowerCase();
+  const normalized = resolveThroughExistingSymlinks(value).replace(/\\/g, "/").toLowerCase();
   const segments = normalized.split("/").filter(Boolean);
   return segments.some((segment) =>
     CLOUD_SYNC_MARKERS.some((marker) =>
@@ -60,10 +87,14 @@ export function isCloudSyncedPath(value) {
 }
 
 export function resolveWorkspaceRoot(value) {
-  const root = path.resolve(value || DEFAULT_ROOT);
-  const home = path.resolve(os.homedir());
+  const requested = path.resolve(value || DEFAULT_ROOT);
+  const root = resolveThroughExistingSymlinks(requested);
+  const home = resolveThroughExistingSymlinks(os.homedir());
   if (root === path.parse(root).root || root === home) {
     throw new Error("Choose a dedicated employee workspace folder, not a filesystem root or your home folder.");
+  }
+  if (fs.existsSync(requested) && !fs.statSync(requested).isDirectory()) {
+    throw new Error("Choose a directory for the employee workspace, not a file.");
   }
   if (isCloudSyncedPath(root)) {
     throw new Error("Choose a local folder outside OneDrive, Dropbox, Google Drive and iCloud.");
@@ -133,12 +164,18 @@ function isInside(parent, child) {
 }
 
 function readJson(file) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size > 16_384) return null;
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch { return null; }
 }
 
 function readSmallText(file) {
   try {
-    const stat = fs.statSync(file);
+    // lstat intentionally refuses symbolic links: a brief must be a regular file
+    // in the employee workspace, not a link to unrelated/private external content.
+    const stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.size > MAX_BRIEF_BYTES) return "";
     return fs.readFileSync(file, "utf8").trim();
   } catch { return ""; }
