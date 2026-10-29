@@ -42,7 +42,7 @@ function wrap(value, width = 92) {
 }
 function assemble(pages) {
   const objects = [];
-  const add = text => objects.push(Buffer.from(text, "ascii"));
+  const add = text => objects.push(text);
   add("<< /Type /Catalog /Pages 2 0 R >>");
   const pageIds = pages.map((_, i) => 5 + i * 2);
   add("<< /Type /Pages /Kids [" + pageIds.map(id => id + " 0 R").join(" ") + "] /Count " + pages.length + " >>");
@@ -51,26 +51,21 @@ function assemble(pages) {
   pages.forEach((content, i) => {
     const pageId = 5 + i * 2, streamId = pageId + 1;
     add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + PAGE_WIDTH + " " + PAGE_HEIGHT + "] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents " + streamId + " 0 R >>");
-    const stream = Buffer.from(content, "ascii");
-    objects.push(Buffer.concat([Buffer.from("<< /Length " + stream.length + " >>\nstream\n","ascii"), stream, Buffer.from("\nendstream","ascii")]));
+    add("<< /Length " + Buffer.byteLength(content, "ascii") + " >>\nstream\n" + content + "\nendstream");
   });
-  const chunks = [Buffer.from("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n","binary")];
+  let output = "%PDF-1.4\n";
   const offsets = [0];
-  let offset = chunks[0].length;
-  objects.forEach((obj, i) => {
-    offsets.push(offset);
-    const pre = Buffer.from((i+1) + " 0 obj\n","ascii");
-    const post = Buffer.from("\nendobj\n","ascii");
-    chunks.push(pre, obj, post);
-    offset += pre.length + obj.length + post.length;
+  objects.forEach((object, i) => {
+    offsets.push(Buffer.byteLength(output, "ascii"));
+    output += (i + 1) + " 0 obj\n" + object + "\nendobj\n";
   });
-  const xrefOffset = offset;
-  const xref = ["xref\n0 " + (objects.length+1) + "\n","0000000000 65535 f \n"];
-  for (let i=1; i<offsets.length; i++) xref.push(String(offsets[i]).padStart(10,"0") + " 00000 n \n");
-  xref.push("trailer\n<< /Size " + (objects.length+1) + " /Root 1 0 R >>\nstartxref\n" + xrefOffset + "\n%%EOF\n");
-  chunks.push(Buffer.from(xref.join(""),"ascii"));
-  return Buffer.concat(chunks);
+  const xrefOffset = Buffer.byteLength(output, "ascii");
+  output += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
+  for (let i = 1; i < offsets.length; i++) output += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
+  output += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xrefOffset + "\n%%EOF\n";
+  return Buffer.from(output, "ascii");
 }
+
 export function generateReportPdf(input = {}) {
   const title = cleanText(input.title || "ULTRON Report", 120).trim() || "ULTRON Report";
   const content = cleanText(input.content || "", MAX_CHARS + 1);
