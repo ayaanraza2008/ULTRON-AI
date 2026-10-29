@@ -81,6 +81,10 @@
   let history = [];
   let currentConversationId = null;
   let conversationPersistenceUnavailable = false;
+  let selectedModel = (() => {
+    try { return String(window.localStorage.getItem("ultron-selected-model") || "").slice(0, 180); }
+    catch { return ""; }
+  })();
   let preferredRecognitionLocale = "en-IN";
   let preferredVoiceEnabled = true;
   let preferredMemoryEnabled = true;
@@ -1349,6 +1353,62 @@
     return checkbox;
   }
 
+  async function showModelsView() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("AI model routing", "Choose a model reported by the configured ULTRON backend. Free-model availability and limits can change; this does not add a new API key or guarantee provider reachability.");
+    drawerCard("Model catalog", "Loading server-reported model IDs…", "CHECKING", "warning");
+    try {
+      const payload = await apiRequest("/api/models");
+      const models = Array.isArray(payload?.models)
+        ? [...new Set(payload.models.filter(value => typeof value === "string" && /^[A-Za-z0-9._/-]{1,154}(?::free)?$/.test(value) || value === "openrouter/free"))].slice(0, 100)
+        : [];
+      if (!models.length) throw new Error("The backend returned no eligible model IDs.");
+      const backendDefault = typeof payload.defaultModel === "string" && models.includes(payload.defaultModel) ? payload.defaultModel : (models.includes("openrouter/free") ? "openrouter/free" : models[0]);
+      const requested = selectedModel && models.includes(selectedModel) ? selectedModel : backendDefault;
+      selectedModel = requested;
+      try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
+      ui.drawerContent.replaceChildren();
+      drawerHeading("AI model routing", "The selected model is sent to the backend per request. The server still validates model IDs and applies vision-specific routing.");
+      drawerCard("Current selection", selectedModel, selectedModel === "openrouter/free" ? "AUTO FREE ROUTER" : "EXPLICIT MODEL", "ready");
+      const form = document.createElement("form");
+      const select = addDrawerField(form, "AVAILABLE MODEL", "selected-ai-model", { required: true, select: true, value: requested });
+      for (const model of models) {
+        const option = document.createElement("option");
+        option.value = model;
+        option.textContent = model;
+        select.appendChild(option);
+      }
+      select.value = requested;
+      const submit = document.createElement("button");
+      submit.type = "submit";
+      submit.className = "drawer-action";
+      submit.textContent = "APPLY MODEL";
+      form.appendChild(submit);
+      form.addEventListener("submit", event => {
+        event.preventDefault();
+        if (!models.includes(select.value)) { showToast("Choose a model from the server-reported list."); return; }
+        selectedModel = select.value;
+        try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
+        drawerCard("Model selection saved", selectedModel + " will be requested for subsequent chat messages. Image prompts may be routed to a compatible configured vision model.", "READY", "ready");
+        showToast("Model selection saved for this browser.");
+      });
+      ui.drawerContent.appendChild(form);
+      drawerCard("Free-model notes", "The OpenRouter free router can choose from currently available free models automatically. Specific free models may be rate-limited, unavailable, or lack the capability needed by a request. Keep an automatic/fallback path available.", "AVAILABILITY NOT GUARANTEED", "warning");
+      drawerButton("REFRESH MODEL CATALOG", () => { void showDrawerView("models"); }, true);
+    } catch (error) {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("AI model routing", "The model list could not be loaded. The backend's configured default can still be used when no explicit model is selected.");
+      drawerCard("Model catalog unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      drawerButton("USE BACKEND DEFAULT", () => {
+        selectedModel = "";
+        try { window.localStorage.removeItem("ultron-selected-model"); } catch {}
+        showToast("ULTRON will use the backend-selected default model.");
+        setDrawerOpen(false);
+      });
+      drawerButton("RETRY", () => { void showDrawerView("models"); }, true);
+    }
+  }
+
   async function showPreferencesView() {
     ui.drawerContent.replaceChildren();
     drawerHeading("Preferences & privacy", "These settings are saved for the authenticated account. Turning memory off changes future recall; it does not delete existing saved memories.");
@@ -1524,7 +1584,7 @@
       const messages = context.concat([{ role: "user", content: outgoingPrompt }]).slice(-40);
       const payload = await apiRequest("/api/chat", {
         method: "POST",
-        body: { messages, stream: false, persona: "ultron", ...(attachments.length ? { attachments } : {}) }
+        body: { messages, stream: false, persona: "ultron", ...(selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
       });
       answer = payload && typeof payload.content === "string" ? payload.content.trim() : "";
       if (!answer) throw new Error("The model returned an empty response.");
@@ -2114,6 +2174,10 @@
     }
     if (name === "memory") {
       await showMemoryVault();
+      return;
+    }
+    if (name === "models") {
+      await showModelsView();
       return;
     }
     if (name === "preferences") {
