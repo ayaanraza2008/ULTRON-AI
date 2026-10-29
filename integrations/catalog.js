@@ -279,13 +279,13 @@ export function buildIntegrationCatalog(env = process.env) {
     {
       id: "appflowy",
       name: "AppFlowy Workspace Knowledge",
-      capability: "Owner-scoped workspace listing, recursive page/folder tree reads and document search",
+      capability: "Owner-scoped workspace listing, bounded page/folder tree and document collab JSON reads, and document search",
       state: appFlowyReadiness.state,
       configured: Boolean(appFlowyReadiness.configured),
       mode: "owner_scoped_read_only_cloud_api",
       requiredEnv: ["APPFLOWY_ENABLED=true", "APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       optionalEnv: ["APPFLOWY_CLIENT_VERSION", "APPFLOWY_DEVICE_ID"],
-      apiRoutes: ["GET /api/integrations/appflowy/status", "GET /api/integrations/appflowy/workspaces", "GET /api/integrations/appflowy/workspaces/:workspaceId/folder", "GET /api/integrations/appflowy/workspaces/:workspaceId/search", "agent tool: appflowy"],
+      apiRoutes: ["GET /api/integrations/appflowy/status", "GET /api/integrations/appflowy/workspaces", "GET /api/integrations/appflowy/workspaces/:workspaceId/folder", "GET /api/integrations/appflowy/workspaces/:workspaceId/documents/:viewId", "GET /api/integrations/appflowy/workspaces/:workspaceId/search", "agent tool: appflowy"],
       note: appFlowyReadiness.note
     },
     {
