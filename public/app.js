@@ -95,6 +95,12 @@
       return stored === "__agent__" ? "" : stored;
     } catch { return ""; }
   })();
+  // The autonomous tool agent is the default. A direct model only takes over
+  // after the user explicitly selects direct-chat mode in the model panel.
+  let chatMode = (() => {
+    try { return window.localStorage.getItem("ultron-chat-mode") === "direct" ? "direct" : "agent"; }
+    catch { return "agent"; }
+  })();
   let preferredRecognitionLocale = "en-IN";
   let preferredVoiceEnabled = true;
   let preferredMemoryEnabled = true;
@@ -2031,7 +2037,7 @@
       const backendDefault = typeof payload?.defaultModel === "string" && models.includes(payload.defaultModel)
         ? payload.defaultModel
         : (models.includes("openrouter/free") ? "openrouter/free" : models[0] || "");
-      const requested = selectedModel && models.includes(selectedModel) ? selectedModel : "__agent__";
+      const requested = chatMode === "direct" && selectedModel && models.includes(selectedModel) ? selectedModel : "__agent__";
       selectedModel = requested === "__agent__" ? "" : requested;
       try { window.localStorage.setItem("ultron-selected-model", requested); } catch {}
       ui.drawerContent.replaceChildren();
@@ -2067,13 +2073,15 @@
           return;
         }
         if (select.value === "__agent__") {
+          chatMode = "agent";
           selectedModel = "";
-          try { window.localStorage.setItem("ultron-selected-model", "__agent__"); } catch {}
+          try { window.localStorage.setItem("ultron-selected-model", "__agent__"); window.localStorage.setItem("ultron-chat-mode", "agent"); } catch {}
           drawerCard("Autonomous tool agent enabled", "Ordinary text and voice requests will use ULTRON's task router and allowlisted agent tools when useful. Explicit approvals, account permissions, and side-effect restrictions remain enforced.", "AUTO AGENT", "ready");
           showToast("ULTRON autonomous tool agent enabled.");
         } else {
+          chatMode = "direct";
           selectedModel = select.value;
-          try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
+          try { window.localStorage.setItem("ultron-selected-model", selectedModel); window.localStorage.setItem("ultron-chat-mode", "direct"); } catch {}
           drawerCard("Direct model selected", selectedModel + " will be requested for subsequent ordinary text/voice chat; tool-agent routing is off for those requests. Image, camera and file paths keep their existing handling.", "DIRECT CHAT", "warning");
           showToast("Direct model selection saved for this browser.");
         }
@@ -2093,14 +2101,16 @@
       drawerHeading("AI model routing", "The model catalog could not be loaded. Autonomous mode can still use the tool agent's server-configured provider.");
       drawerCard("Model catalog unavailable", error.message, error.code || "REQUEST FAILED", "error");
       drawerButton("USE AUTONOMOUS TOOL AGENT", () => {
+        chatMode = "agent";
         selectedModel = "";
-        try { window.localStorage.setItem("ultron-selected-model", "__agent__"); } catch {}
+        try { window.localStorage.setItem("ultron-selected-model", "__agent__"); window.localStorage.setItem("ultron-chat-mode", "agent"); } catch {}
         showToast("ULTRON autonomous tool agent selected.");
         setDrawerOpen(false);
       });
       drawerButton("USE BACKEND DEFAULT DIRECT CHAT", () => {
-        selectedModel = "openrouter/free";
-        try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
+        chatMode = "direct";
+        selectedModel = "";
+        try { window.localStorage.setItem("ultron-selected-model", ""); window.localStorage.setItem("ultron-chat-mode", "direct"); } catch {}
         showToast("Direct chat selected. Verify that the backend has access to the free router.");
         setDrawerOpen(false);
       }, true);
@@ -2272,7 +2282,7 @@
     let sources = [];
     let answer = "";
     let shouldSpeak = preferredVoiceEnabled && source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
-    const useAgentTools = (source === "text" || source === "voice") && attachments.length === 0 && !selectedModel && prompt.length <= 5000;
+    const useAgentTools = (source === "text" || source === "voice") && attachments.length === 0 && chatMode === "agent" && prompt.length <= 5000;
     try {
       if (wantsResearch(prompt) && !attachments.length && !useAgentTools) {
         setCoreState("research");
@@ -2324,7 +2334,7 @@
       } else {
         payload = await apiRequest("/api/chat", {
           method: "POST",
-          body: { messages, stream: false, persona: preferredPersona, ...(selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
+          body: { messages, stream: false, persona: preferredPersona, ...(chatMode === "direct" && selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
         });
       }
       answer = payload && typeof payload.content === "string" ? payload.content.trim() : "";
