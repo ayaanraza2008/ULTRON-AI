@@ -22,7 +22,7 @@ function fakeReaFetch({ output, calls = [], failTool = false } = {}) {
     }
     if (payload.method === "notifications/initialized") return new Response(null, { status: 202, headers: { "Mcp-Session-Id": "rea-session-test" } });
     if (payload.method === "tools/call") {
-      const result = failTool
+      const result = failTool && payload.params.name !== "open_binary"
         ? { isError: true, content: [{ type: "text", text: "sensitive internal detail" }] }
         : { structuredContent: output || { evidence: { operation: payload.params.name } }, content: [{ type: "text", text: "REA analysis completed." }] };
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result }), { status: 200, headers: {
@@ -82,10 +82,11 @@ test("REA calls the allowlisted analysis tool with a rooted relative path", asyn
   assert.equal(result.state, "completed");
   assert.equal(result.upstreamTool, "analyze_javascript_application");
   assert.equal(result.contentUntrusted, true);
-  const toolCall = calls.find(call => call.payload.method === "tools/call");
-  assert.equal(toolCall.payload.params.name, "analyze_javascript_application");
-  assert.equal(toolCall.payload.params.arguments.path, "/srv/rea/targets/demo-app/app.asar");
-  assert.equal(toolCall.payload.params.arguments.detail, "complete");
+  const openCall = calls.find(call => call.payload.method === "tools/call" && call.payload.params.name === "open_binary");
+  const toolCall = calls.find(call => call.payload.method === "tools/call" && call.payload.params.name === "analyze_javascript_application");
+  assert.deepEqual(openCall.payload.params.arguments, { path: "/srv/rea/targets/demo-app/app.asar" });
+  assert.deepEqual(toolCall.payload.params.arguments, { input_path: "/srv/rea/targets/demo-app/app.asar", format: "auto", integrity_policy: "fail", detail: "complete" });
+  assert.deepEqual(calls.filter(call => call.payload.method === "tools/call").map(call => call.payload.params.name), ["open_binary", "analyze_javascript_application"]);
   assert.equal(toolCall.options.headers.Authorization, "Bearer synthetic-rea-token");
   assert.equal(toolCall.options.headers["Mcp-Session-Id"], "rea-session-test");
   assert.equal(JSON.stringify(result).includes("synthetic-rea-token"), false);
@@ -93,6 +94,7 @@ test("REA calls the allowlisted analysis tool with a rooted relative path", asyn
 test("REA routes static ELF, WASM and firmware tools to their specific upstream operations", async () => {
   const cases = [
     ["rea_inspect_binary_layout", "app/program.elf", "inspect_binary_layout", { path: "/srv/rea/targets/app/program.elf", detail: "complete" }],
+    ["rea_inspect_artifact", "app/package.zip", "inspect_artifact", { detail: "complete" }],
     ["rea_inspect_wasm_artifact", "app/module.wasm", "inspect_wasm_artifact", { path: "/srv/rea/targets/app/module.wasm", glue_paths: [], candidate_paths: [], detail: "complete" }],
     ["rea_inspect_firmware_regions", "firmware/router.bin", "inspect_firmware_regions", { path: "/srv/rea/targets/firmware/router.bin" }]
   ];
@@ -100,8 +102,11 @@ test("REA routes static ELF, WASM and firmware tools to their specific upstream 
     const calls = [];
     const result = await runReaTool({ env: readyEnv(), userId: ownerId, toolName, path, fetchImpl: fakeReaFetch({ calls }) });
     assert.equal(result.state, "completed", toolName);
-    const toolCall = calls.find(call => call.payload.method === "tools/call");
-    assert.equal(toolCall.payload.params.name, upstreamName, toolName);
+    const toolCall = calls.find(call => call.payload.method === "tools/call" && call.payload.params.name === upstreamName);
+    assert.ok(toolCall, toolName);
+    if (["rea_inspect_artifact", "rea_inspect_wasm_artifact"].includes(toolName)) {
+      assert.equal(calls.some(call => call.payload.method === "tools/call" && call.payload.params.name === "open_binary"), true, toolName);
+    }
     assert.deepEqual(toolCall.payload.params.arguments, expectedArgs, toolName);
   }
 });
