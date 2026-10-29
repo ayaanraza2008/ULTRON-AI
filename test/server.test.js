@@ -1094,3 +1094,49 @@ test("chat tries registry providers before direct-key billing-dependent fallback
     ]);
   });
 });
+
+test("model discovery preserves multiple configured models sharing one API base URL", async () => {
+  const registryEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "nemotron-lightning-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "nvidia/nemotron-3.5-lightning:free",
+        priority: 10,
+        supportsVision: false
+      },
+      {
+        name: "north-mini-code-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "cohere/north-mini-code:free",
+        priority: 20,
+        supportsVision: false
+      }
+    ])
+  };
+  const app = createApp({
+    env: registryEnv,
+    fetchImpl: async url => {
+      assert.equal(url, "https://openrouter.ai/api/v1/models");
+      return new Response(JSON.stringify({ data: [{ id: "provider-discovered:free" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.ok(payload.models.includes("provider-discovered:free"));
+    assert.ok(payload.models.includes("ultron/nemotron-lightning-free/nvidia/nemotron-3.5-lightning:free"));
+    assert.ok(payload.models.includes("ultron/north-mini-code-free/cohere/north-mini-code:free"));
+    assert.equal(new Set(payload.models).size, payload.models.length, "model discovery must not duplicate choices");
+  });
+});
+
