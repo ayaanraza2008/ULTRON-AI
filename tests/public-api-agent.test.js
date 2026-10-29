@@ -60,7 +60,7 @@ test("agent exposes and executes the fixed public API lookup tool for an ordinar
     });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.match(body.content, /31\.2°C/);
+    assert.match(body.content, /"temperature_2m":\s*31\.2/);
     assert.ok(body.toolsUsed.some(item => item.name === "public_api_lookup" && item.ok));
     const result = body.toolResults.find(item => item.name === "public_api_lookup")?.result;
     assert.equal(result.location.name, "Agra");
