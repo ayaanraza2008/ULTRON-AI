@@ -159,3 +159,9 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Studio uses per-user hashed project directories in hosted mode; local-only mode binds to loopback via `npm run studio:local`. The CSP remains self-only for API connections and permits only the explicit public-media hosts needed for preview assets.
 - FFmpeg/FFprobe, reference clip metadata/scene cues, optional stock search, generated planning, SRT sidecars and approval-gated rendering are implemented in source. This is not a generative-video model; it assembles assets the user has rights to use. No real local render, media license check, provider auth, or production deployment is claimed yet.
 - Render Blueprint changes are source-only and do not change live Render environment settings or trigger deployment.
+
+## 2026-10-29 Living Core UI integration candidate
+
+- Added the first-party `public/` Living Core interface and same-origin static serving on `integration/ultron-completion-20261029`. The UI uses the existing API origin; no separate frontend deployment or production environment change was made.
+- Added `tests/frontend-serving.test.js` to cover root/asset serving, dotfile denial, security headers, and health-route fallthrough. The originating UI PR’s previous CI failure was a missing test file referenced by `npm run check`; the staging candidate includes that file and check.
+- Browser-level authentication, microphone/speech behavior, device/accessibility review, and a deployed end-to-end session are still pending.
