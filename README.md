@@ -1,16 +1,16 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; this API service does not serve a user-facing static web application at its root URL.
 
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-zvd7.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
+- **Hosted API verification:** the `Ultron core` workspace's `ultron-ai-core` service (`https://ultron-ai-core.onrender.com`) is live at commit `6b7f09d97508fc2be2085695d862a921e1ae8487`; the production-revision workflow checks this service. Separately, `My Workspace` has the Blueprint's `ultron-ai` service (`https://ultron-ai-zvd7.onrender.com`); its 10 most recent deploy attempts returned by Render on 2026-10-29 failed before build because of the `pipeline_minutes_exhausted` event. The release must identify which URL is canonical before claiming all deployments are healthy.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **Frontend status:** this API service does not serve the user-facing UI at its root. Treat UI hosting, API wiring, browser-level behavior, and live deployment as a separate release surface that must be verified independently.
 
 ## Backend-only capability integration phase
 
@@ -24,7 +24,7 @@ Backend additions on the feature branch:
 - `GET /api/preferences` and `PUT /api/preferences`: persist supported language, voice, memory, personality, model-provider, and voice-selection preferences per account.
 - `POST /api/speech/synthesize` and `POST /api/speech/transcribe`: optional OpenAI-compatible TTS/STT adapters using server-only keys; browser-native speech remains the free fallback. Premium routes require a compatible provider and are not enabled until configured.
 - `POST /api/documents/extract`: bounded text extraction for TXT, Markdown, CSV, JSON, HTML, PDF, and DOCX. Extraction is transient; signed-in users can explicitly save up to 20,000 characters of extracted text as an account-scoped `document_reference` in the Memory Vault.
-- Private binary document storage is implemented in source with `GET /api/documents`, `POST /api/documents/upload`, `GET /api/documents/:id/download`, and `DELETE /api/documents/:id`. The additive migration creates a private 5 MB bucket, owner-scoped Storage/table RLS, UUID-only object paths, SHA-256/size verification on download, and immutable metadata permissions. Apply `supabase/migrations/20261027181000_private_document_storage.sql` before enabling these endpoints; original files remain private and are stored only after an explicit user action.
+- Private binary document storage is implemented in source with `GET /api/documents`, `POST /api/documents/upload`, `GET /api/documents/:id/download`, and `DELETE /api/documents/:id`. The additive migration creates a private 5 MB bucket, owner-scoped Storage/table RLS, UUID-only object paths, SHA-256/size verification on download, and immutable metadata permissions. Apply `supabase/migrations/20261027185203_private_document_storage.sql` before enabling these endpoints; original files remain private and are stored only after an explicit user action.
 - `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
 
 These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. The private original-file storage implementation requires its additive Supabase migration to be applied and live upload/download/delete E2E verification. A hardened coding sandbox, Windows PC-control action runner, live external-account integrations, and real provider/database end-to-end tests remain incomplete. Premium speech endpoints need a compatible provider configuration. The user-facing frontend and full Windows PC-control UI remain deferred. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.

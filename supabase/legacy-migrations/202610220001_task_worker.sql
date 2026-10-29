@@ -1,3 +1,9 @@
+-- ARCHIVED HISTORICAL SCAFFOLD — DO NOT APPLY DIRECTLY.
+-- This duplicate-version file is not present in the inspected remote migration ledger.
+-- Its purpose is superseded by the active ai_employee_scheduler,
+-- durable_task_retry_backoff, recover_stale_running_tasks, and worker RPC hardening
+-- migrations. Kept outside supabase/migrations/ so standard migration tooling skips it.
+--
 -- Safe queue claim RPC. Only the server-side service role may claim work.\nalter table public.agent_tasks add column if not exists attempts integer not null default 0 check (attempts >= 0 and attempts <= 10);
 create or replace function public.ultron_claim_next_task()
 returns setof public.agent_tasks
