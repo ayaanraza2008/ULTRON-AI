@@ -313,7 +313,7 @@ test("voice listening starts without waiting for backend readiness and submits s
   assert.ok(app.includes('const cutoff = streamSpeechBuffer.lastIndexOf(" ", 46)'));
   assert.ok(app.includes("const fishAudioBlobPromise = streamSpeechUsesFish"));
   assert.ok(app.includes("about 20–35 words"));
-  assert.ok(app.includes("You are replying aloud. Lead with the direct answer"));
+  assert.ok(app.includes("You are replying aloud. Answer immediately in 1–2 short sentences"));
 });
 
 test("spoken prompts skip unnecessary pre-search and use a smaller conversational context", () => {
