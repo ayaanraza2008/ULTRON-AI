@@ -70,6 +70,8 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   assert.match(app, /ultron-preferred-persona/);
   assert.match(app, /kaligpt\/security\/assist/);
   assert.match(app, /kaligpt\/tools\/headers\/analyze/);
+  assert.match(app, /kaligpt\/security\/http-evidence\/analyze/);
+  assert.match(app, /kaligpt\/security\/dns-evidence\/analyze/);
   assert.match(app, /api\/preferences/);
   assert.match(app, /api\/conversations/);
   assert.match(app, /api\/notes/);
