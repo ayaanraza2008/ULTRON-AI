@@ -205,8 +205,14 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     const reply = await mcpExchange({ port: upstreamPort, payload, sessionId });
     sessionId = reply.sessionId;
     if (notification) return reply.rpc;
-    if (!reply.rpc || reply.rpc.id !== payload.id || reply.rpc.error) {
-      throw new Error("REA MCP probe received an invalid RPC result.");
+    if (!reply.rpc) {
+      throw Object.assign(new Error("REA MCP probe received no RPC envelope."), { probeCode: "missing_rpc_envelope" });
+    }
+    if (reply.rpc.id !== payload.id) {
+      throw Object.assign(new Error("REA MCP probe response ID did not match."), { probeCode: "rpc_id_mismatch" });
+    }
+    if (reply.rpc.error) {
+      throw Object.assign(new Error("REA MCP probe returned an RPC error."), { probeCode: "rpc_error" });
     }
     return reply.rpc.result;
   };
@@ -260,7 +266,8 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     const knownReasons = new Set([
       "http_status_400", "http_status_401", "http_status_404", "http_status_405",
       "http_status_406", "http_status_415", "http_status_429", "http_status_500",
-      "http_status_503", "connection_failed", "timeout", "invalid_rpc_response"
+      "http_status_503", "connection_failed", "timeout", "invalid_rpc_response",
+      "missing_rpc_envelope", "rpc_id_mismatch", "rpc_error"
     ]);
     return { ok: false, stage, reason: knownReasons.has(error?.probeCode) ? error.probeCode : "tool_check_failed" };
   } finally {
