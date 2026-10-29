@@ -47,6 +47,22 @@ test("new screenshot repositories have explicit safe/unverified states", () => {
   assert.equal(byId["strata"].state, "optional");
   assert.equal(byId["open-seo"].state, "missing_configuration");
   assert.equal(byId["open-higgsfield"].state, "disabled_by_config");
+  assert.equal(byId["open-design"].state, "disabled_by_config");
+  const openDesignSecret = "synthetic-open-design-daemon-token";
+  const configuredOpenDesign = getRepositoryCapabilityStatus({
+    OPEN_DESIGN_ENABLED: "true",
+    OPEN_DESIGN_BASE_URL: "https://design.example.com",
+    OPEN_DESIGN_API_TOKEN: openDesignSecret,
+    OPEN_DESIGN_PROJECT_ID: "personal_project_123",
+    OPEN_DESIGN_BYOK_BASE_URL: "https://openrouter.ai/api/v1",
+    OPEN_DESIGN_BYOK_API_KEY: "synthetic-provider-token",
+    OPEN_DESIGN_BYOK_MODEL: "openrouter/free",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "open-design");
+  assert.equal(configuredOpenDesign.state, "configured_unverified");
+  assert.equal(configuredOpenDesign.configured, true);
+  assert.equal(JSON.stringify(configuredOpenDesign).includes(openDesignSecret), false);
+  assert.equal(JSON.stringify(configuredOpenDesign).includes("synthetic-provider-token"), false);
   const hfConfigured = getRepositoryCapabilityStatus({
     ULTRON_OPEN_HIGGSFIELD_ENABLED: "true",
     HF_API_BASE_URL: "https://api.higgsfield.ai",
