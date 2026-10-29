@@ -1,9 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import express from "express";
 import JSZip from "jszip";
 import { deflateRawSync } from "node:zlib";
 import { createFeatureRouter } from "../features.js";
+
+function exactArrayBuffer(buffer) {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+}
 
 function assertPdfStructure(pdf) {
   assert.ok(Buffer.isBuffer(pdf));
@@ -1713,7 +1718,10 @@ test("authenticated report PDF endpoint returns a readable transient attachment"
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.match(bytes.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d$/);
     assertPdfStructure(bytes);
-    assert.ok(bytes.toString("latin1").includes("ULTRON Verification Report"));
+    const parsed = await pdfParse(exactArrayBuffer(bytes), { version: "v2.0.550" });
+    assert.match(parsed.text, /ULTRON Verification Report/);
+    assert.match(parsed.text, /source test suite passed/);
+    assert.match(parsed.text, /two-account database checks remain/);
   });
 });
 
