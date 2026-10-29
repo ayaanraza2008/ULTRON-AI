@@ -515,9 +515,11 @@ test("Fish Audio synthesis uses the configured voice model ID and server-only ke
     assert.equal(options.headers.Authorization, "Bearer synthetic-fish-secret");
     assert.equal(options.headers.model, "s2.1-pro-free");
     const body = JSON.parse(options.body);
-    assert.equal(body.text, "Hello ULTRON");
+    assert.equal(body.text, "[confident][calm, deep male voice, resonant baritone, authoritative, smooth and controlled delivery, crisp diction] Hello ULTRON");
     assert.equal(body.reference_id, "7a18a1851d2649108c48ec9f2c80eb2c");
     assert.equal(body.format, "mp3");
+    assert.equal(body.latency, "balanced");
+    assert.deepEqual(body.prosody, { speed: 1.12, volume: 0, normalize_loudness: true });
     assert.equal(JSON.stringify(body).includes("synthetic-fish-secret"), false);
     return new Response(Buffer.from("fake-fish-mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
   }});
