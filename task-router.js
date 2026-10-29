@@ -7,6 +7,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "list_speech_voices", "synthesize_speech", "transcribe_audio",
     "create_talking_avatar"
   ],
+  weather: ["weather_lookup"],
   wikipedia: ["wikipedia_lookup"],
   time: ["world_clock"],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
@@ -52,6 +53,7 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
+  ["weather", /\b(?:weather\s+(?:in|for|forecast)|current weather|forecast\s+(?:in|for)|temperature\s+(?:outside|in)|rain chance\s+in|local weather)\b/i],
   ["wikipedia", /\b(?:wikipedia|wiki article|wikipedia page)\b/i],
   ["time", /\b(?:world clock|time zones?|timezones?|utc offset|time difference|what\s+time\b|current time in\b|local time in\b|time in\s+[a-z][a-z .'-]{1,60})\b/i],
   ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read (?:this|it|that) aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
