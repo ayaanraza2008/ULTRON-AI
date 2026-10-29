@@ -237,11 +237,29 @@ async function invokeRea(config, fetchImpl, toolName, upstreamArgs, targetPath =
   await call("notifications/initialized", {}, true);
   // REA checks requiresActiveTarget for several analyzers. Open the already
   // authorized local artifact first, in this same MCP session, without executing it.
+  let targetOpened = false;
   if (requiresActiveTarget) {
     if (!targetPath) throw Object.assign(new Error("An active REA target path is required."), { code: "REA_ACTIVE_TARGET_PATH_REQUIRED", status: 400 });
     extractToolOutput(await call("tools/call", { name: "open_binary", arguments: { path: targetPath } }));
+    targetOpened = true;
   }
-  return extractToolOutput(await call("tools/call", { name: toolName, arguments: upstreamArgs }));
+  let output, operationError;
+  try {
+    output = extractToolOutput(await call("tools/call", { name: toolName, arguments: upstreamArgs }));
+  } catch (error) {
+    operationError = error;
+  }
+  if (targetOpened) {
+    try {
+      extractToolOutput(await call("tools/call", { name: "close_binary", arguments: {} }));
+    } catch {
+      throw Object.assign(new Error("REA could not close the active analysis target after inspection."), {
+        code: "REA_SESSION_CLEANUP_FAILED", status: 502
+      });
+    }
+  }
+  if (operationError) throw operationError;
+  return output;
 }
 
 /** Call one allowlisted REA inspection/guidance tool; arbitrary MCP tools are unavailable. */
