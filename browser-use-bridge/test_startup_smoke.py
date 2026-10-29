@@ -14,7 +14,7 @@ class BrowserStartupSmokeTests(unittest.TestCase):
     def test_smoke_task_is_public_and_read_only(self):
         self.assertIn("https://example.com", SMOKE_TASK)
         self.assertIn("do not click links", SMOKE_TASK.lower())
-        self.assertNotRegex(SMOKE_TASK.lower(), r"\\b(send|submit|purchase|delete|publish|post|email|buy)\\b")
+        self.assertNotRegex(SMOKE_TASK.lower(), r"\b(send|submit|purchase|delete|publish|post|email|buy)\b")
 
     def test_summarizer_does_not_return_page_content(self):
         raw_page = "Example Domain — PRIVATE PAGE CONTENT MUST NOT BE LOGGED"
