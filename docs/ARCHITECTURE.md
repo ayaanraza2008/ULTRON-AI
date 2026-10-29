@@ -23,3 +23,11 @@
 
 ## Deployment
 The Render service `ultron-ai` is hosted at https://ultron-ai-zvd7.onrender.com. Render Blueprint contains only the backend API service in this phase.
+
+
+## Local-first Python companion
+- 'tools/local-assistant' is a per-user terminal application, not part of the hosted request path. It talks to Ollama on loopback only and does not use the cloud model provider adapter.
+- Local document Q&A returns source paths and line ranges. Secret-like file names and hidden/build/dependency folders are excluded by default.
+- Gmail/Calendar access is opt-in and read-only. Google APIs are contacted to retrieve the digest inputs; only local Ollama and the local OS voice engine process the digest content after retrieval.
+- Code execution is an explicit local user action, limited to selected Python/JavaScript scripts or a small command allowlist. This is not a hard sandbox and must not be exposed through the public API.
+- Online skills are treated as untrusted data: only Markdown 'SKILL.md' instructions may be installed; imported repository code is not run.
