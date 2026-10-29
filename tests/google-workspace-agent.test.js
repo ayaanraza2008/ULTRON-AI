@@ -86,7 +86,7 @@ test("agent routes Gmail requests to the owner-scoped read-only bridge and summa
     const response = await fetch("http://127.0.0.1:" + server.address().port + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Search Gmail for unread project emails from school.edu" })
+      body: JSON.stringify({ prompt: "Search Gmail for unread emails from school.edu" })
     });
     assert.equal(response.status, 200);
     const result = await response.json();
