@@ -184,13 +184,24 @@ def validate_local_ollama_url(value: str | None = None) -> str:
     return f"http://{host if ':' not in host else '[' + host + ']'}:{port or 11434}"
 
 
+class _LocalOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # A loopback service must never redirect private prompts to another host.
+        return None
+
+
+def _local_opener():
+    # Ignore proxy environment variables so a misconfigured proxy cannot see local prompts.
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _LocalOnlyRedirectHandler())
+
+
 def _local_json_request(url: str, payload: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
     safe_url = validate_local_ollama_url(url)
     endpoint = safe_url + ("/api/tags" if payload is None else "/api/chat")
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(endpoint, data=data, headers={"Accept": "application/json", **({"Content-Type": "application/json"} if data is not None else {})}, method="GET" if data is None else "POST")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _local_opener().open(request, timeout=timeout) as response:
             raw = response.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise RuntimeError("Local model response exceeded the size limit.")
@@ -217,7 +228,7 @@ def pull_local_model(model: str, url: str | None = None, timeout: int = 1800) ->
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _local_opener().open(request, timeout=timeout) as response:
             raw = response.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise RuntimeError("Model pull response exceeded the response size limit.")
