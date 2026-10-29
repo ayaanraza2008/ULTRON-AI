@@ -18,6 +18,14 @@ test("free voice profile prefers an installed authoritative male-style English v
   assert.equal(ULTRON_FREE_VOICE_PROFILE.provider, "browser-native");
 });
 
+test("automatic language falls back to the default authoritative English voice", () => {
+  const voices = [
+    { name: "Microsoft Zira Desktop", lang: "en-US" },
+    { name: "Microsoft David Desktop", lang: "en-US" }
+  ];
+  assert.equal(chooseUltronVoice(voices, { language: "auto" }).name, "Microsoft David Desktop");
+});
+
 test("voice selection follows Hindi locale when a matching voice is installed", () => {
   const voices = [
     { name: "Microsoft David Desktop", lang: "en-US" },
