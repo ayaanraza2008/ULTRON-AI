@@ -240,10 +240,17 @@
         card.append(node("p", "", "Visuals: " + (concept.style || "—")));
         card.append(node("p", "", "Pacing: " + (concept.pacing || "—")));
         card.append(node("p", "concept-meta", "Assets: " + (concept.approach || "—")));
-        card.addEventListener("click", () => {
-          p.selectedConceptId = concept.id;
-          renderConcepts(p);
-          setMessage(ui.planMessage, "Selected concept: " + concept.title + ". Regenerate or edit the script if you want the plan rewritten around this concept.", "success");
+        card.addEventListener("click", async () => {
+          if (concept.id === state.project?.selectedConceptId) return;
+          setMessage(ui.planMessage, "Applying “" + concept.title + "” and rebuilding the script and scene plan…");
+          try {
+            const result = await api("/studio/projects/" + encodeURIComponent(state.project.id) + "/concept", {
+              method: "POST", body: JSON.stringify({ conceptId: concept.id })
+            });
+            state.project = result.project;
+            renderProject();
+            setMessage(ui.planMessage, "Direction applied: " + concept.title + ". Review the new script/scenes and approve the updated plan.", "success");
+          } catch (error) { setMessage(ui.planMessage, error.message, "error"); }
         });
         ui.conceptList.append(card);
       });
