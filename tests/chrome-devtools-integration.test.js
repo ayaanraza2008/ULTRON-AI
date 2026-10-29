@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getChromeDevToolsReadiness, runChromeDevToolsAction } from "../integrations/chrome-devtools.js";
+import { buildIntegrationCatalog } from "../integrations/catalog.js";
 
 const owner = "00000000-0000-4000-8000-000000000001";
 const env = {
@@ -61,6 +62,15 @@ test("Chrome DevTools adapter rejects unsupported actions before network access"
   }), /Unsupported Chrome DevTools action/);
   assert.equal(calls, 0);
 });
+
+test("integration catalog reports Chrome DevTools configuration without exposing its token", () => {
+  const catalog = buildIntegrationCatalog(env);
+  const item = catalog.find((entry) => entry.id === "chrome-devtools");
+  assert.ok(item);
+  assert.equal(item.state, "configured_unverified");
+  assert.equal(item.configured, true);
+  assert.equal(JSON.stringify(item).includes(env.ULTRON_CHROME_DEVTOOLS_TOKEN), false);
+ });
 
 test("Chrome DevTools is unavailable without a strong token or secure endpoint", () => {
   assert.equal(getChromeDevToolsReadiness({ ...env, ULTRON_CHROME_DEVTOOLS_TOKEN: "short" }, owner).configured, false);
