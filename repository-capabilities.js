@@ -228,11 +228,22 @@ const REPOSITORIES = [
   },
   {
     id: "rea", repo: "morluto/rea", domain: "reverse_engineering",
-    match: /\b(\brea\b|reverse engineer|reverse engineering|binary analysis|inspect executable|decompile|runtime behavior analysis|analyze binary)\b/i,
-    integration: "local_mcp_service", status: "local_mcp_required",
-    abilities: ["MCP-driven reverse engineering across binaries/applications/runtime behavior", "feature tracing and architecture analysis"],
-    limits: ["Use only on software the user owns or is authorized to inspect; sandbox local tools and never execute unknown binaries automatically."],
-    envKeys: ["REA_MCP_URL"], license: "MIT per upstream README", source: "https://github.com/morluto/rea"
+    match: /\b(\brea\b|reverse engineer(?:ing)?|binary analysis|inspect executable|decompile|runtime behavior analysis|analy[sz]e (?:the )?(?:binary|native code)|feature trac(?:e|ing)|trace how .{1,120} work(?:s)?|trace application feature|disassembl(?:e|y)|disassemble native code)\b/i,
+    integration: "owner_scoped_mcp_adapter", status: "adapter_present_unverified_live",
+    abilities: [
+      "Evidence-backed JavaScript/Electron application analysis and feature tracing",
+      "Read-only native binary headers, sections, symbols, relocations and disassembly when objdump is installed",
+      "Static archive/package, WASM, firmware-region, model-artifact, .NET assembly, Android APK/signature and saved network-capture inspection",
+      "Search REA workflow guidance and list supported guided workflows"
+    ],
+    limits: [
+      "The connector is disabled by default; a separate REA MCP server and approved analysis root must be configured.",
+      "Targets must already exist under REA_ANALYSIS_ROOT on the REA host; ULTRON does not download or execute target code.",
+      "Native providers and optional platform tools must be installed on the REA host; configured status alone does not prove live connectivity.",
+      "Use only on software the user owns or is authorized to inspect; treat all target-derived findings as untrusted evidence."
+    ],
+    envKeys: ["REA_MCP_ENABLED", "REA_MCP_URL", "REA_ANALYSIS_ROOT", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+    optionalEnv: ["REA_MCP_TOKEN"], license: "MIT per upstream README", source: "https://github.com/morluto/rea"
   },
   {
     id: "obscura", repo: "h4ckf0r0day/obscura", domain: "browser_rendering",

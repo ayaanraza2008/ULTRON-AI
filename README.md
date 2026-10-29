@@ -91,6 +91,31 @@ Example request body:
 The endpoint requires a signed-in Supabase user. Model-selected tool calls are validated server-side; web results are treated as untrusted input. Plans and code remain drafts. Explicitly requested background AI Employee tasks are automatically queued when the worker and storage are configured; they are limited to draft-only plans, reviews, and reports. ComfyUI generation requires the exact workflow to be attached and `confirmExternalAction: true`. HeyGem requires `media.imageBase64` and `media.audioBase64`; Handy requires `audioBase64` and a reachable authenticated desktop bridge. OmniVoice, HeyGem, and Handy require explicit compatible endpoint paths and working external services. Readiness does not imply those services are deployed or live-verified. This API is a backend capability; a user-facing frontend is still deferred.
 
 
+
+## REA reverse-engineering integration
+
+ULTRON has an optional, owner-scoped adapter for [REA — Reverse Engineer Anything](https://github.com/morluto/rea). It can use a separately running REA MCP service to gather evidence about authorized application and software artifacts. The adapter stays disabled until explicitly enabled; having the code and tests in this repository does **not** mean an REA service, decompiler, or native analysis engine is installed or reachable.
+
+Available agent tools include:
+
+- `rea_investigate_application_feature`: analyze an authorized JavaScript/Electron app or ASAR, then trace a named feature in the same MCP session.
+- `rea_analyze_application`, `rea_inspect_artifact`, and `rea_inspect_desktop_application`: bounded application/package inspection.
+- `rea_inspect_native_code` and `rea_inspect_binary_layout`: read-only header, section, symbol, relocation and disassembly inspection when caller-installed providers are available.
+- `rea_inspect_wasm_artifact`, `rea_inspect_firmware_regions`, `rea_inspect_model_artifact`, `rea_inspect_managed_artifact`, `rea_inspect_android_package`, and `rea_inspect_apk_signature`: format-specific static analysis.
+- `rea_inspect_web_network_capture`: offline analysis of supported saved network captures; it does not replay or contact recorded URLs.
+- `rea_search_guidance` and `rea_list_guided_workflows`: discover REA-provided workflow guidance.
+
+Configure these backend-only environment values on the ULTRON host:
+
+- `REA_MCP_ENABLED=true` to opt in.
+- `REA_MCP_URL` pointing at the REA server's `/mcp` endpoint.
+- `REA_ANALYSIS_ROOT` set to a dedicated absolute directory on the REA host, containing targets that are authorized for inspection.
+- `ULTRON_INTEGRATION_OWNER_USER_ID` set to the allowed ULTRON owner's Supabase user UUID.
+- For remote use, `REA_MCP_TOKEN` must be validated by a private HTTPS gateway in front of REA. Loopback HTTP is allowed only when ULTRON and REA are on the same host.
+
+ULTRON accepts only relative target paths beneath the configured root, allowlists exposed operations, bounds response sizes and timeouts, and treats returned evidence as untrusted. It does not download targets, install optional REA providers, expose generic MCP tools, or execute inspected artifacts. REA itself supports additional tools and workflows that are **not yet exposed through this ULTRON adapter**, so this is a selective integration rather than full feature parity. Verify the installed REA version and provider prerequisites on the REA host before use. Configuration status is not proof of live connectivity; run a controlled end-to-end check against a disposable, authorized target before relying on results.
+
+
 ## Automatic AgentMemory
 
 ULTRON can automatically recall relevant prior project decisions and coding context from a separately hosted [AgentMemory](https://github.com/rohitg00/agentmemory) service. Recall runs only for relevant continuation, repository, coding, and memory-context tasks; bounded durable decisions/preferences are captured automatically when the service is configured. ULTRON respects the existing account memory preference and isolates project namespaces by authenticated user. Configure `AGENTMEMORY_URL` and `AGENTMEMORY_SECRET` on the backend, then follow [docs/AGENTMEMORY_INTEGRATION.md](docs/AGENTMEMORY_INTEGRATION.md). The service must be deployed with persistent storage; configuration alone is not proof of live connectivity.

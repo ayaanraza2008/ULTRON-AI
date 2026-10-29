@@ -161,3 +161,76 @@ test("REA tool errors are sanitized", async () => {
   assert.equal(result.error.code, "REA_MCP_TOOL_ERROR");
   assert.equal(JSON.stringify(result).includes("sensitive internal detail"), false);
 });
+
+
+test("REA analyzes and traces a requested application feature within one MCP session", async () => {
+  const calls = [];
+  const applicationEvidence = {
+    evidence_id: "ev_app_test",
+    normalized_result: { application_graph: { nodes: [{ id: "search", label: "search-result" }] } }
+  };
+  const result = await runReaTool({
+    env: readyEnv(), userId: ownerId, toolName: "rea_investigate_application_feature",
+    path: "demo-app/app.asar", seed: "search results",
+    fetchImpl: fakeReaFetch({ calls, output: applicationEvidence })
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.upstreamTool, "trace_application_feature");
+  assert.equal(result.result.applicationEvidenceId, "ev_app_test");
+  const toolCalls = calls.filter(call => call.payload.method === "tools/call");
+  assert.deepEqual(toolCalls.map(call => call.payload.params.name), [
+    "open_binary", "analyze_javascript_application", "trace_application_feature", "close_binary"
+  ]);
+  const analyze = toolCalls.find(call => call.payload.params.name === "analyze_javascript_application");
+  assert.deepEqual(analyze.payload.params.arguments, {
+    input_path: "/srv/rea/targets/demo-app/app.asar", format: "auto", integrity_policy: "fail", detail: "complete"
+  });
+  const trace = toolCalls.find(call => call.payload.params.name === "trace_application_feature");
+  assert.deepEqual(trace.payload.params.arguments, {
+    application: applicationEvidence, seed: { kind: "string", value: "search results" }, direction: "both"
+  });
+});
+
+test("REA feature tracing requires a meaningful feature seed before contacting upstream", async () => {
+  let called = false;
+  const result = await runReaTool({
+    env: readyEnv(), userId: ownerId, toolName: "rea_investigate_application_feature",
+    path: "demo-app/app.asar", seed: " ",
+    fetchImpl: async () => { called = true; throw new Error("must not be called"); }
+  });
+  assert.equal(result.state, "blocked");
+  assert.equal(result.error.code, "REA_FEATURE_SEED_REQUIRED");
+  assert.equal(called, false);
+});
+
+test("REA native-code inspection allows only explicit read-only objdump operations", async () => {
+  const calls = [];
+  const result = await runReaTool({
+    env: readyEnv(), userId: ownerId, toolName: "rea_inspect_native_code",
+    path: "app/program.elf", operation: "disassemble", symbol: "main",
+    fetchImpl: fakeReaFetch({ calls, output: { operation: "disassemble", output: "main: ..." } })
+  });
+  assert.equal(result.state, "completed");
+  const toolCalls = calls.filter(call => call.payload.method === "tools/call");
+  assert.deepEqual(toolCalls.map(call => call.payload.params.name), ["inspect_with_objdump"]);
+  assert.deepEqual(toolCalls[0].payload.params.arguments, {
+    path: "/srv/rea/targets/app/program.elf", operation: "disassemble", symbol: "main"
+  });
+});
+
+test("REA native-code inspection rejects arbitrary operations and invalid symbol selectors", async () => {
+  for (const input of [
+    { operation: "execute_shell_command" },
+    { operation: "symbols", symbol: "main" },
+    { operation: "disassemble", symbol: "bad\u0000symbol" }
+  ]) {
+    let called = false;
+    const result = await runReaTool({
+      env: readyEnv(), userId: ownerId, toolName: "rea_inspect_native_code",
+      path: "app/program.elf", ...input,
+      fetchImpl: async () => { called = true; throw new Error("must not be called"); }
+    });
+    assert.equal(result.state, "blocked");
+    assert.equal(called, false);
+  }
+});

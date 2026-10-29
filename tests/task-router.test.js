@@ -91,3 +91,16 @@ test("routes explicit durable decisions to a non-empty safe tool set", () => {
   assert.equal(route.categories.includes("memory"), true);
   assert.ok(route.toolNames.length > 0);
 });
+
+
+test("routes reverse-engineering investigations to REA's bounded tool family", () => {
+  const feature = classifyTaskRoute("Trace how search results work in this Electron app");
+  assert.ok(feature.categories.includes("reverse_engineering"));
+  assert.ok(feature.toolNames.includes("rea_investigate_application_feature"));
+  assert.ok(feature.toolNames.includes("rea_analyze_application"));
+  assert.ok(!feature.toolNames.includes("run_comfyui_workflow"));
+
+  const native = classifyTaskRoute("Inspect the native binary and disassemble main");
+  assert.ok(native.categories.includes("reverse_engineering"));
+  assert.ok(native.toolNames.includes("rea_inspect_native_code"));
+});

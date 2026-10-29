@@ -156,13 +156,13 @@ export function buildIntegrationCatalog(env = process.env) {
     {
       id: "rea-reverse-engineering",
       name: "REA Reverse Engineering",
-      capability: "Owner-scoped static analysis of authorized application and software artifacts through REA MCP",
+      capability: "Evidence-backed feature tracing and read-only reverse engineering of authorized application and software artifacts through REA MCP",
       state: reaReadiness.state,
       configured: Boolean(reaReadiness.configured),
       mode: "owner_scoped_mcp",
       requiredEnv: ["REA_MCP_ENABLED=true", "REA_MCP_URL", "REA_ANALYSIS_ROOT", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       optionalEnv: ["REA_MCP_TOKEN"],
-      apiRoutes: ["agent tools: rea_analyze_application, rea_inspect_artifact, rea_inspect_desktop_application, rea_inspect_model_artifact, rea_inspect_managed_artifact, rea_inspect_apk_signature, rea_inspect_android_package, rea_search_guidance, rea_list_guided_workflows"],
+      apiRoutes: ["agent tools: rea_investigate_application_feature, rea_analyze_application, rea_inspect_native_code, rea_inspect_artifact, rea_inspect_binary_layout, rea_inspect_wasm_artifact, rea_inspect_firmware_regions, rea_inspect_web_network_capture, rea_inspect_desktop_application, rea_inspect_model_artifact, rea_inspect_managed_artifact, rea_inspect_apk_signature, rea_inspect_android_package, rea_search_guidance, rea_list_guided_workflows"],
       note: reaReadiness.note
     },
     {
