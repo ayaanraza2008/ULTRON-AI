@@ -6,7 +6,7 @@ This audit tracks the 41 repository names shown in the supplied screenshots, the
 
 ## What is present in ULTRON source
 
-- **Existing API/service adapters:** Chatwoot, Cal.diy, OpenProject, VoiceStudio, Geo-Sleuth, HeyGem, ComfyUI, OmniVoice, Handy, OpenViking, AgentMemory, Browser Use, God's Eye View action contract, Paperclip read-only connector, REA MCP connector, Obscura MCP connector, Cactus/Needle, Hermes Agent, and read-only Google Workspace integrations.
+- **Existing API/service adapters:** OpenSEO MCP (with explicit credit-spend gates), Chatwoot, Cal.diy, OpenProject, Geo-Sleuth, HeyGem, ComfyUI, OmniVoice, Handy, OpenViking, AgentMemory, Browser Use, God's Eye View action contract, Paperclip read-only connector, REA MCP connector, Obscura MCP connector, Cactus/Needle, Hermes Agent, and read-only Google Workspace integrations.
 - **Existing task-aware/reference workflows:** ECC skill selection (TDD, security review, backend patterns, research and verification), awesome-harness-engineering guidance, cybersecurity skills, diagram design, scientific-agent skills, YouTube production-plan drafting, and a curated public-API reference.
 - **New capability wiring in this work:** Chrome DevTools CDP bridge (TypeScript HTTP + MCP) and an optional Strata OpenAI-compatible model provider. Strata provider routing is opt-in; it never installs Strata or downloads models. Tool-call and vision compatibility default to disabled.
 - **Separate services / native apps:** Cap, OpenWhispr, AppFlowy, OpenSEO, OpenHiggsfield, OpenDesign, and macOS-only Atticus cannot be made operational merely by copying their README files. They require a supported service API/MCP contract, desktop companion, provider keys, and/or model assets.
