@@ -377,7 +377,7 @@ export function createVideoStudioRouter({
     const id = uuid(), now = new Date().toISOString();
     const project = {
       id, title: bounded(body.title, 120) || prompt.split(/\s+/).slice(0, 8).join(" ").slice(0, 120), prompt,
-      format, aspectRatio: ratio, durationSeconds: duration, sceneCount: Math.max(3, Math.min(30, Math.round(Number(body.sceneCount) || Math.ceil(duration / 6))),
+      format, aspectRatio: ratio, durationSeconds: duration, sceneCount: Math.max(3, Math.min(30, Math.round(Number(body.sceneCount) || Math.ceil(duration / 6)))),
       language: bounded(body.language, 60) || "English", createdAt: now, updatedAt: now, stage: "idea",
       plan: null, concepts: [], selectedConceptId: null, script: "", scenes: [], productionPlan: null,
       research: { state: "not_run", sources: [] },
