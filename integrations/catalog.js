@@ -3,6 +3,7 @@ import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
 import { safeServiceBase } from "../network-safety.js";
+import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -24,6 +25,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasChatwoot = hasIntegrationOwner && safeBaseUrl(env.CHATWOOT_BASE_URL) && Boolean(env.CHATWOOT_API_TOKEN) && /^\d+$/.test(String(env.CHATWOOT_ACCOUNT_ID || ""));
   const hasOpenProject = hasIntegrationOwner && safeBaseUrl(env.OPENPROJECT_BASE_URL) && Boolean(env.OPENPROJECT_API_TOKEN);
   const hasCalDiy = hasIntegrationOwner && safeBaseUrl(env.CALDIY_BASE_URL) && Boolean(env.CALDIY_API_TOKEN);
+  const hasGoogleWorkspace = isGoogleWorkspaceConfigured(env);
   const paperclipReadiness = getPaperclipReadiness(env);
   const obscuraReadiness = getObscuraReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
@@ -203,6 +205,19 @@ export function buildIntegrationCatalog(env = process.env) {
       note: paperclipReadiness.configured
         ? "Endpoint/token/company and owner guard are present; live roster, dashboard, and cost compatibility remain unverified. Read-only tool only."
         : "Requires a separately hosted Paperclip service, bearer API token, company ID, and exact owner UUID guard. It cannot create, hire, assign, pause, terminate, or change budgets."
+    },
+    {
+      id: "google-workspace",
+      name: "Google Workspace Read-Only Bridge",
+      capability: "Owner-scoped read-only Gmail, Calendar, Drive, Docs and Sheets access",
+      state: hasGoogleWorkspace ? "configured_unverified" : "blocked",
+      configured: Boolean(hasGoogleWorkspace),
+      mode: "owner_scoped_read_only_apps_script_bridge",
+      requiredEnv: ["GOOGLE_WORKSPACE_BRIDGE_URL", "GOOGLE_WORKSPACE_BRIDGE_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tools: google_gmail_list_unread, google_gmail_search, google_calendar_get_events, google_drive_list_files, google_drive_read_doc, google_sheets_read"],
+      note: hasGoogleWorkspace
+        ? "The HTTPS bridge URL, shared token and owner guard are present; live Google account access remains unverified. Sending email, editing Sheets, creating events and deleting/moving files are disabled."
+        : "Configure a fixed Google Apps Script /exec URL, a strong Script Properties token mirrored in the backend environment, and the exact owner UUID. Only bounded read actions will be available."
     },
     {
       id: "ai-employees",

@@ -838,7 +838,7 @@ test("agent automatically uses active user memories when memory is enabled", asy
   }, async base => {
     const response = await fetch(base + "/api/agent/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "Explain this briefly" }) });
     assert.equal(response.status, 200);
-    const memoryMessage = capturedMessages.find(m => m.role === "system" && String(m.content).includes("User-approved memory context"));
+    const memoryMessage = capturedMessages.find(m => m.role === "system" && String(m.content).includes("ULTRON layered cognitive-memory context"));
     assert.ok(memoryMessage);
     assert.match(memoryMessage.content, /Prefer concise Hinglish answers/);
     assert.deepEqual(supabaseCalls.map(x => x.table), ["user_preferences", "memory_items"]);
@@ -2142,4 +2142,101 @@ test("short confirmation inherits the task for automatic ECC skill selection", a
     assert.match((await response.json()).content, /backend fix/i);
     assert.equal(providerCalls, 1);
   });
+});
+
+
+test("task router narrows one clear domain and retains the full allowlist for compound tasks", async () => {
+  const providerRequests = { voice: [], compound: [] };
+  await withServer({ OPENROUTER_API_KEY: "task-router-test-key" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    const request = JSON.parse(options.body);
+    const requestMessages = Array.isArray(request.messages) ? request.messages : [];
+    const isVoiceRequest = requestMessages.some(message =>
+      message.role === "user" && typeof message.content === "string" && message.content.includes("List VoiceStudio voices")
+    );
+    const isCompoundRequest = requestMessages.some(message =>
+      message.role === "user" && typeof message.content === "string" && message.content.includes("Research this topic and then create a YouTube production plan")
+    );
+    if (isVoiceRequest) providerRequests.voice.push(request);
+    if (isCompoundRequest) providerRequests.compound.push(request);
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "The task route is ready." } }]
+    }), { status: 200 });
+  }, async base => {
+    const voiceResponse = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "List VoiceStudio voices" })
+    });
+    assert.equal(voiceResponse.status, 200);
+    const voiceBody = await voiceResponse.json();
+    const voiceTools = providerRequests.voice[0].tools.map(tool => tool.function.name);
+    assert.equal(voiceBody.routing.tier, "medium");
+    assert.equal(voiceBody.routing.toolSchemasFiltered, true);
+    assert.ok(voiceTools.includes("list_speech_voices"));
+    assert.ok(voiceTools.includes("synthesize_speech"));
+    assert.ok(!voiceTools.includes("research_web"));
+    assert.ok(voiceTools.length < 35);
+
+    const compoundResponse = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Research this topic and then create a YouTube production plan" })
+    });
+    assert.equal(compoundResponse.status, 200);
+    const compoundBody = await compoundResponse.json();
+    const compoundTools = providerRequests.compound[0].tools.map(tool => tool.function.name);
+    assert.equal(compoundBody.routing.tier, "complex");
+    assert.equal(compoundBody.routing.toolSchemasFiltered, false);
+    assert.ok(compoundTools.includes("research_web"));
+    assert.ok(compoundTools.includes("create_youtube_production_plan"));
+    assert.equal(compoundTools.length, 42);
+  });
+});
+
+
+test("simple task routing sends no tool schemas and blocks provider-invented tool calls", async () => {
+  let providerCalls = 0;
+  let bridgeCalls = 0;
+  const bridgeUrl = "https://script.google.com/macros/s/AKfycbx0123456789abcdefghijklmnopqrstuv/exec";
+  await withServer({
+    OPENROUTER_API_KEY: "no-tool-routing-test-key",
+    GOOGLE_WORKSPACE_BRIDGE_URL: bridgeUrl,
+    GOOGLE_WORKSPACE_BRIDGE_TOKEN: "workspace-test-token-that-is-at-least-32-characters",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async (url, options) => {
+    if (url !== "https://openrouter.ai/api/v1/chat/completions") {
+      bridgeCalls += 1;
+      throw new Error("A simple explanatory task must never call Google Workspace.");
+    }
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    assert.equal(Object.hasOwn(payload, "tools"), false, "simple tasks must omit tool schemas");
+    return new Response(JSON.stringify({
+      choices: [{ message: {
+        role: "assistant",
+        content: "Energy bands are allowed ranges of electron energies in a solid.",
+        // A provider may hallucinate a call even when no tools were advertised.
+        tool_calls: [{
+          id: "hallucinated-google-call",
+          type: "function",
+          function: { name: "google_gmail_list_unread", arguments: JSON.stringify({ limit: 5 }) }
+        }]
+      } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Explain energy bands in simple English" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /allowed ranges of electron energies/i);
+    assert.deepEqual(body.toolsUsed, []);
+    assert.equal(body.routing.tier, "simple");
+    assert.equal(body.routing.toolSchemasFiltered, true);
+  });
+  assert.equal(providerCalls, 1);
+  assert.equal(bridgeCalls, 0);
 });

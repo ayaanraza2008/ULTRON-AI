@@ -5,6 +5,7 @@ on:
       - main
       - feat/kaligpt-capability-integration
       - feat/ultron-capability-integration
+      - feat/**
   pull_request:
   workflow_dispatch:
 

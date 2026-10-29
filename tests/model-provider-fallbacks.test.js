@@ -286,7 +286,7 @@ test("agent model routing retries plain chat after HTTP 400 without switching pr
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Refactor this module" })
     });
     assert.equal(response.status, 502);
     assert.equal(calls.length, 2, "tool-mode 400 should trigger one plain-chat retry");
@@ -327,7 +327,7 @@ test("agent automatically falls back through configured free OpenRouter models w
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Refactor this module" })
     });
     assert.equal(response.status, 200);
     assert.match(await response.text(), /automatically configured free fallback/);
@@ -363,7 +363,7 @@ test("automatic OpenRouter fallback ignores invalid, paid, and duplicate model I
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Refactor this module" })
     });
     assert.equal(response.status, 200);
     assert.deepEqual(calls, ["openrouter/free", "openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
