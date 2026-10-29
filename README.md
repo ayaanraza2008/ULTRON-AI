@@ -1,16 +1,16 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is a personal-assistant backend and same-origin Living Core web interface. The consolidated source candidate adds a responsive interface served from `/`, keeps authenticated APIs under `/api/*`, and includes fixed public-data tools plus a local AI Employees kit runtime. This branch is a source candidate—not a claim that the current production release already contains these changes.
 
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-zvd7.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
+- **Core service target:** https://ultron-ai-core.onrender.com. The production verification workflow checks its health/configuration/revision; the consolidated source candidate is not considered live until that deployed revision and its UI asset checks pass.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **Frontend status:** this source candidate includes the Living Core interface under `public/` and same-origin static serving. Camera/microphone access remains browser-permission controlled and user-triggered; live production serving is not claimed until verified.
 
 ## Backend-only capability integration phase
 
