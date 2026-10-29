@@ -84,7 +84,7 @@ function assemble(pages) {
     "0000000000 65535 f " + eol
   ];
   for (let i = 1; i < offsets.length; i++) {
-    xref.push(String(offsets[i]).padStart(10, "0") + " 00000 n " + eol);
+    xref.push(String(offsets[i]).padStart(10, "0") + " 00000 n" + eol);
   }
   xref.push(
     "trailer" + eol + "<< /Size " + (objects.length + 1) + " /Root 1 0 R >>" + eol +
