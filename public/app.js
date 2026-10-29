@@ -81,6 +81,12 @@
   let history = [];
   let currentConversationId = null;
   let conversationPersistenceUnavailable = false;
+  let preferredPersona = (() => {
+    try {
+      const stored = window.localStorage.getItem("ultron-preferred-persona");
+      return stored === "naya" ? "naya" : "ultron";
+    } catch { return "ultron"; }
+  })();
   let selectedModel = (() => {
     try { return String(window.localStorage.getItem("ultron-selected-model") || "").slice(0, 180); }
     catch { return ""; }
@@ -1811,6 +1817,14 @@
       ui.drawerContent.replaceChildren();
       drawerHeading("Preferences & privacy", "Saved settings apply to this account when the relevant browser/provider capabilities are available.");
       const form = document.createElement("form");
+      const persona = addDrawerField(form, "ASSISTANT PERSONALITY", "preference-assistant-persona", { required: true, select: true, value: preferredPersona });
+      for (const [value, labelText] of [["ultron", "ULTRON — strategic, direct, confident"], ["naya", "NAYA — warm, perceptive, supportive"]]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = labelText;
+        persona.appendChild(option);
+      }
+      persona.value = preferredPersona;
       const locale = addDrawerField(form, "VOICE RECOGNITION LANGUAGE", "preference-voice-locale", { required: true, select: true, value: preferredRecognitionLocale });
       for (const [value, labelText] of [["en-IN", "English (India)"], ["hi-IN", "Hindi (India)"], ["hinglish", "Hinglish — English/Hindi mix"]]) {
         const option = document.createElement("option");
@@ -1823,7 +1837,7 @@
       const memoryEnabled = addPreferenceCheckbox(form, "preference-memory-enabled", "Use saved memory", "Allow relevant, active saved memories to be retrieved for future assistant requests.", preferredMemoryEnabled);
       const privacyNote = document.createElement("p");
       privacyNote.className = "drawer-view-description";
-      privacyNote.textContent = "Voice language selection is stored as a preference. The actual recognition and speech quality still depends on browser/device support. Disabling memory does not erase saved entries.";
+      privacyNote.textContent = "Voice locale and voice/memory toggles are stored on your account. ULTRON/NAYA personality is saved in this browser only; it is not yet account-synced. Recognition and speech quality depend on device/browser support. Turning memory off does not delete saved entries.";
       form.appendChild(privacyNote);
       const submit = document.createElement("button");
       submit.type = "submit";
@@ -1844,6 +1858,8 @@
           });
           const updated = saved?.preferences || {};
           preferredRecognitionLocale = ["en-IN", "hi-IN", "hinglish"].includes(updated.voice_input_locale) ? updated.voice_input_locale : locale.value;
+          preferredPersona = persona.value === "naya" ? "naya" : "ultron";
+          try { window.localStorage.setItem("ultron-preferred-persona", preferredPersona); } catch {}
           preferredVoiceEnabled = updated.voice_enabled !== false;
           preferredMemoryEnabled = updated.memory_enabled !== false;
           if (voiceActive && mode === "voice") {
@@ -1973,7 +1989,7 @@
       const messages = context.concat([{ role: "user", content: outgoingPrompt }]).slice(-40);
       const payload = await apiRequest("/api/chat", {
         method: "POST",
-        body: { messages, stream: false, persona: "ultron", ...(selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
+        body: { messages, stream: false, persona: preferredPersona, ...(selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
       });
       answer = payload && typeof payload.content === "string" ? payload.content.trim() : "";
       if (!answer) throw new Error("The model returned an empty response.");
