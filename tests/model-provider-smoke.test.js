@@ -13,6 +13,7 @@ test("smoke check proves a real non-empty completion without returning text or s
     fetchImpl: async (url, options) => {
       assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
       assert.equal(options.headers.Authorization, "Bearer " + secret);
+      assert.equal(JSON.parse(options.body).max_tokens, 128);
       return success();
     },
     now: () => "fixed-time"
@@ -160,4 +161,24 @@ test("smoke check rejects HTTPS private, loopback, and metadata destinations bef
     assert.equal(called, false, baseUrl);
     assert.equal(JSON.stringify(report).includes("private-target-test-secret"), false);
   }
+});
+
+
+test("smoke diagnostics identify token-truncated reasoning-only responses without logging private text", async () => {
+  const privateReasoning = "PRIVATE_PROVIDER_REASONING_MUST_NOT_BE_RETURNED";
+  const report = await runModelProviderSmoke({
+    env: { OPENROUTER_API_KEY: "test-secret", OPENROUTER_DEFAULT_MODEL: "openrouter/free" },
+    fetchImpl: async () => new Response(JSON.stringify({
+      choices: [{ finish_reason: "length", message: { content: null, reasoning: privateReasoning } }]
+    }), { status: 200, headers: { "content-type": "application/json; charset=utf-8" } })
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(report.attempts[0].code, "COMPLETION_TRUNCATED");
+  assert.equal(report.attempts[0].finishReason, "length");
+  assert.equal(report.attempts[0].contentShape, "missing");
+  assert.equal(report.attempts[0].contentLength, 0);
+  assert.equal(report.attempts[0].reasoningPresent, true);
+  assert.equal(report.attempts[0].contentType, "application/json");
+  assert.equal(JSON.stringify(report).includes(privateReasoning), false);
+  assert.equal(JSON.stringify(report).includes("test-secret"), false);
 });
