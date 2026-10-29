@@ -49,6 +49,7 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   const html = await (await fetch(base + "/")).text();
   assert.match(html, /data-drawer-view="documents"/);
   assert.match(html, /data-drawer-view="memory"/);
+  assert.match(html, /data-drawer-view="models"/);
   assert.match(html, /data-drawer-view="preferences"/);
   assert.match(html, /data-drawer-view="history"/);
   assert.match(html, /data-drawer-view="notes"/);
@@ -58,6 +59,7 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   assert.match(app, /api\/documents\/upload/);
   assert.match(app, /api\/documents\/.*\/download/);
   assert.match(app, /api\/memory/);
+  assert.match(app, /api\/models/);
   assert.match(app, /api\/preferences/);
   assert.match(app, /api\/conversations/);
   assert.match(app, /api\/notes/);
