@@ -21,11 +21,11 @@ function assertPdfCrossReference(pdf) {
   assert.equal(entries.length, count - 1);
   for (let objectId = 1; objectId < count; objectId++) {
     const entry = entries[objectId - 1];
-    assert.match(entry || "", /^\d{10} 00000 n$/, "xref entry must be a ten-digit in-use offset with no extra padding");
-    const eol = raw.includes("\r\n") ? "\r\n" : "\n";
+    assert.match(entry || "", /^\d{10} 00000 n $/, "xref entry must include fixed-width trailing padding");
+    const eol = "\n";
     assert.equal(Buffer.byteLength(entry + eol, "latin1"), 20, "every xref row must be exactly 20 bytes");
     const position = Number(entry.slice(0, 10));
-    const objectHeader = String(objectId) + " 0 obj\r\n";
+    const objectHeader = String(objectId) + " 0 obj\n";
     assert.equal(raw.slice(position, position + objectHeader.length), objectHeader, "xref offset must point to the matching object header");
   }
 }
