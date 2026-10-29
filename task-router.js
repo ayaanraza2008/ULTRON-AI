@@ -53,7 +53,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
   ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
   ["research", /\b(?:research|look up|search the web|search online|latest (?:news|information|release)|find sources|fact check|current information)\b/i],
-  ["integrations", /\b(?:integration status|check integrations|what integrations|connected services|capability status|provider status|list capabilities)\b/i],
+  ["integrations", /\b(?:integration status|check integrations|what integrations|connected services|capability status|provider status|list capabilities|which tools are available|tools available for|connector readiness|repository readiness)\b/i],
   ["planning", /\b(?:plan (?:my|the|a|an)|create a plan|multi[- ]step task|schedule (?:a|an|the) (?:task|employee|routine)|background task|enqueue task|run this in the background)\b/i],
   ["browser", /\b(?:obscura|public web page snapshot|capture this public page)\b/i],
   ["media", /\b(?:talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
