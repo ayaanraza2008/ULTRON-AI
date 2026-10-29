@@ -4,6 +4,7 @@ import { getPaperclipReadiness } from "./integrations/paperclip-services.js";
 import { getHermesAgentReadiness } from "./integrations/hermes-agent.js";
 import { getChromeDevToolsReadiness } from "./integrations/chrome-devtools.js";
 import { getStrataReadiness } from "./integrations/strata.js";
+import { getOpenSeoReadiness } from "./integrations/openseo-mcp.js";
 
 /**
  * Task-matched capability catalog for 43 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
@@ -71,10 +72,10 @@ const REPOSITORIES = [
   {
     id: "open-seo", repo: "every-app/open-seo", domain: "seo",
     match: /\b(openseo|open seo|keyword research|seo audit|search ranking|rank tracking|backlink analysis|competitor seo|ai visibility|search engine optimization)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["keyword research", "rank tracking", "competitor and backlink insights", "site audits", "AI answer visibility"],
-    limits: ["The upstream README requires a DataForSEO key for SEO data; costs may apply. Do not make paid calls unless configured and within an approved budget."],
-    envKeys: ["OPENSEO_BASE_URL", "OPENSEO_API_TOKEN"], optionalEnv: ["DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"], license: "Review repository LICENSE; data provider usage is separate", source: "https://github.com/every-app/open-seo"
+    integration: "owner_scoped_mcp_adapter", status: "adapter_present_unverified_live",
+    abilities: ["list OpenSEO projects and read project context", "list saved keywords and estimate existing rank-tracker costs", "run explicitly credit-gated keyword research, domain overview/suggestions and SERP lookup"],
+    limits: ["An owner-scoped MCP adapter is implemented. Requires OPENSEO_API_KEY and ULTRON_INTEGRATION_OWNER_USER_ID; OPENSEO_MCP_URL is optional. Credit-consuming lookups require explicit per-call approval and a credit ceiling, and upstream authentication/quota remain unverified."],
+    envKeys: ["OPENSEO_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["OPENSEO_MCP_URL"], license: "Review repository LICENSE and upstream service/provider terms separately", source: "https://github.com/every-app/open-seo"
   },
   {
     id: "open-higgsfield", repo: "wide-trace/open-higgsfield", domain: "media_generation",
@@ -380,12 +381,17 @@ const ROUTING_RULES = [
 
 function configured(record, env) {
   if (record.id === "strata") return getStrataReadiness(env).configured;
+  if (record.id === "open-seo") return getOpenSeoReadiness(env).configured;
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
   if (!keys.length) return null;
   return keys.every(key => typeof env[key] === "string" && env[key].trim().length > 0 && (!["GEO_SLEUTH_ENABLED"].includes(key) || env[key] === "true"));
 }
 
 function stateFor(record, env) {
+  if (record.id === "open-seo") {
+    const readiness = getOpenSeoReadiness(env);
+    return readiness.configured ? "configured_unverified" : "missing_configuration";
+  }
   if (record.id === "obscura") {
     const readiness = getObscuraReadiness(env);
     return readiness.configured ? "configured_unverified" : readiness.state;
