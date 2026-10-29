@@ -22,6 +22,10 @@ import { classifyTaskRoute } from "./task-router.js";
 import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./integrations/google-workspace.js";
 import { getChromeDevToolsReadiness, runChromeDevToolsAction } from "./integrations/chrome-devtools.js";
 import { getOpenSeoReadiness, runOpenSeoTool } from "./integrations/openseo-mcp.js";
+import { getOpenHiggsfieldReadiness, runOpenHiggsfieldAction, listOpenHiggsfieldModels } from "./integrations/open-higgsfield.js";
+import { getOpenDesignReadiness, runOpenDesignAction } from "./integrations/open-design.js";
+import { getOpenGenerativeAIReadiness, listOpenGenerativeAIModels, runOpenGenerativeAIAction } from "./integrations/open-generative-ai.js";
+import { getAppFlowyReadiness, runAppFlowyAction } from "./integrations/appflowy.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
@@ -817,6 +821,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "browser_use", description: "Use the optional Browser Use bridge for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, and website tests. Include explicit public HTTPS URL(s) in task; only those exact hosts can be reached. Read-only only; consequential actions are blocked.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 2500 }, maxSteps: { type: "integer", minimum: 1, maximum: 12 } }, required: ["task"], additionalProperties: false } } },
     { type: "function", function: { name: "chrome_devtools", description: "Use the authenticated local Chrome DevTools bridge to navigate, click/fill non-secret fields, capture screenshots, inspect DOM/console/network logs, and run a performance trace. Supports only allowlisted actions; no arbitrary JavaScript. Shared bridge credentials are restricted to the configured owner account.", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "navigate", "click", "fill", "screenshot", "page_snapshot", "console_logs", "network_requests", "performance_trace"] }, url: { type: "string", maxLength: 2048 }, selector: { type: "string", maxLength: 600 }, text: { type: "string", maxLength: 5000 }, limit: { type: "integer", minimum: 1, maximum: 100 }, durationMs: { type: "integer", minimum: 1000, maximum: 10000 }, confirmExternalAction: { type: "boolean" } }, required: ["action"], additionalProperties: false } } },
     { type: "function", function: { name: "openseo", description: "Use the owner-scoped OpenSEO MCP integration. Free operations include listing projects, reading project context, listing saved keywords and estimating existing rank-tracker costs. Keyword research/domain overview/SERP operations consume credits and require approvePaidLookup=true plus a maxEstimatedCredits ceiling; never spend credits without those exact fields. Tool calls are limited to the fixed allowlist and the current upstream MCP catalog.", parameters: { type: "object", properties: { operation: { type: "string", enum: ["list_projects", "get_project_context", "list_saved_keywords", "estimate_rank_tracker_cost", "research_keywords", "get_domain_overview", "get_domain_keyword_suggestions", "get_serp_results"] }, args: { type: "object" }, approvePaidLookup: { type: "boolean" }, maxEstimatedCredits: { type: "number", minimum: 1, maximum: 5000 } }, required: ["operation"], additionalProperties: false } } },
+    { type: "function", function: { name: "openhiggsfield", description: "Access ULTRON's allowlisted 38-model OpenHiggsfield image/video adapter. Use action=catalog/readiness for free metadata; action=generate creates a provider job and can consume credits, so generation requires explicit user approval in the raw user prompt, approvePaidGeneration=true, and the exact confirmationText returned by the adapter. Status polls a previously returned requestId. Only public HTTPS media URLs are accepted; provider pricing is not estimated or capped.", parameters: { type: "object", properties: { action: { type: "string", enum: ["catalog", "readiness", "generate", "status"] }, model: { type: "string", enum: ["soul-cinema", "soul-2", "seedance-2.5", "seedance-2.5-edit", "seedance-2.5-extend", "seedance-2", "seedance-2-fast", "seedance-2-mini", "kling-3-turbo", "kling-3-std", "kling-3-pro", "kling-3-4k", "kling-3-motion-std", "kling-3-motion-pro", "flux-2", "grok-imagine-2", "ideogram-4", "recraft-4.1", "qwen-image-3", "z-image-turbo", "wan-3", "wan-3-prime", "wan-2.7", "wan-2.6", "flux-3", "minimax-h3", "minimax-hailuo-2.3", "happy-horse-1", "happy-horse-1.1", "kling-2.6", "kling-2.5", "kling-o3", "kling-o1", "ltx-2.5-fast", "ltx-2.5-pro", "grok-imagine-video-1.5", "pixverse-6", "dop"] }, prompt: { type: "string", maxLength: 8000 }, requestId: { type: "string", maxLength: 180 }, media: { type: "object", properties: { start: { type: "array", maxItems: 1, items: { type: "string", maxLength: 2048 } }, end: { type: "array", maxItems: 1, items: { type: "string", maxLength: 2048 } }, reference: { type: "array", maxItems: 30, items: { type: "string", maxLength: 2048 } }, video: { type: "array", maxItems: 10, items: { type: "string", maxLength: 2048 } }, audio: { type: "array", maxItems: 10, items: { type: "string", maxLength: 2048 } } }, additionalProperties: false }, settings: { type: "object", properties: { aspectRatio: { type: "string", maxLength: 8 }, resolution: { type: "string", maxLength: 8 }, duration: { type: "number", minimum: 3, maximum: 30 }, sound: { type: "boolean" }, cfgScale: { type: "number", minimum: 0, maximum: 1 }, multiShots: { type: "boolean" }, keepOriginalSound: { type: "boolean" }, characterOrientation: { type: "string", enum: ["video", "image"] }, batchSize: { type: "integer", enum: [1, 4] }, enhancePrompt: { type: "boolean" }, generateAudio: { type: "boolean" }, outputFormat: { type: "string", enum: ["mp4", "mov"] } }, additionalProperties: false }, approvePaidGeneration: { type: "boolean" }, confirmationText: { type: "string", maxLength: 300 } }, required: ["action"], additionalProperties: false } } },
+    { type: "function", function: { name: "open_design", description: "Access the configured owner-scoped OpenDesign daemon. Actions: catalog/readiness/projects are non-mutating; submit starts a headless BYOK OpenCode run that can consume model-provider credits and modify files inside the one configured OpenDesign project, so it requires explicit approval in the raw user prompt, approveRun=true, and the exact confirmationText returned by the adapter. status polls a run ID. Requires a separate live OpenDesign daemon with OpenCode installed inside that daemon; this tool does not install or launch it.", parameters: { type: "object", properties: { action: { type: "string", enum: ["catalog", "readiness", "projects", "submit", "status"] }, prompt: { type: "string", minLength: 2, maxLength: 6000 }, requestId: { type: "string", maxLength: 180 }, approveRun: { type: "boolean" }, confirmationText: { type: "string", maxLength: 300 } }, required: ["action"], additionalProperties: false } } },
+    { type: "function", function: { name: "open_generative_ai", description: "Use ULTRON's fixed allowlist of 38 MuAPI image/video endpoint variants from Open Generative AI. Supports text-to-image, selected image edits, text/image/reference-to-video and selected video edit/extend. Metadata actions are free; generate may consume credits and requires explicit approval in the raw user prompt, approvePaidGeneration=true and the exact confirmationText returned by the adapter. Poll status using action=status. Provider key stays server-side; URLs must be public HTTPS; actual credit price is not estimated/capped.", parameters: { type: "object", properties: { action: { type: "string", enum: ["catalog", "readiness", "models", "generate", "status"] }, model: { type: "string", enum: ["nano-banana", "nano-banana-pro", "flux-schnell", "flux-dev", "minimax-image-01", "gpt-image-2", "gpt-image-2.5", "gpt-image-2.5-edit", "gpt4o-text-to-image", "gpt4o-image-to-image", "google-imagen4", "google-imagen4-fast", "google-imagen4-ultra", "ideogram-v3-t2i", "qwen2-1-text-to-image", "qwen2-1-image-to-image", "veo3.1-text-to-video", "veo3.1-fast-text-to-video", "veo3.1-image-to-video", "veo3.1-reference-to-video", "seedance-2.5-text-to-video", "seedance-2.5-image-to-video", "seedance-2.5-omni-reference-to-video", "kling-v3.0-pro-text-to-video", "kling-v3.0-pro-image-to-video", "wan3.0-text-to-video", "wan3.0-image-to-video", "wan3.0-reference-to-video", "wan2.7-video-edit", "wan2.7-video-extend", "ltx-2.5-text-to-video", "ltx-2.5-image-to-video", "pixverse-v6-t2v", "pixverse-v6-i2v", "openai-sora-2-text-to-video", "openai-sora-2-image-to-video", "minimax-h3-max-text-to-video", "minimax-h3-max-image-to-video"] }, prompt: { type: "string", maxLength: 8000 }, requestId: { type: "string", maxLength: 180 }, media: { type: "object", properties: { imageUrl: { type: "string", maxLength: 2048 }, imageUrls: { type: "array", maxItems: 9, items: { type: "string", maxLength: 2048 } }, videoUrl: { type: "string", maxLength: 2048 }, videoUrls: { type: "array", maxItems: 3, items: { type: "string", maxLength: 2048 } }, audioUrls: { type: "array", maxItems: 3, items: { type: "string", maxLength: 2048 } } }, additionalProperties: false }, settings: { type: "object", properties: { aspectRatio: { type: "string", maxLength: 8 }, resolution: { type: "string", maxLength: 8 }, width: { type: "integer", minimum: 256, maximum: 2048 }, height: { type: "integer", minimum: 256, maximum: 2048 }, num_images: { type: "integer", enum: [1, 2] }, quality: { type: "string", enum: ["standard", "high", "hd"] }, strength: { type: "number", minimum: 0, maximum: 1 }, seed: { type: "integer", minimum: 0 }, negative_prompt: { type: "string", maxLength: 1500 }, generate_audio: { type: "boolean" }, duration: { type: "number", minimum: 3, maximum: 15 }, style: { type: "string", enum: ["Auto", "General", "Realistic", "Design"] }, render_speed: { type: "string", enum: ["Turbo", "Balanced", "Quality"] } }, additionalProperties: false }, approvePaidGeneration: { type: "boolean" }, confirmationText: { type: "string", maxLength: 300 } }, required: ["action"], additionalProperties: false } } },
+    { type: "function", function: { name: "appflowy", description: "Read-only, owner-scoped AppFlowy Cloud workspace integration. Actions: catalog/readiness/workspaces/folder/read_document/search. Requires a separate AppFlowy Cloud deployment and a server-side user access token. Document/page/database collab JSON is bounded and read-only; no writes, publishing, member changes, invitation, deletion or arbitrary API URL access is exposed.", parameters: { type: "object", properties: { action: { type: "string", enum: ["catalog", "readiness", "workspaces", "folder", "read_document", "search"] }, workspaceId: { type: "string", maxLength: 80 }, viewId: { type: "string", maxLength: 80 }, documentType: { type: "string", enum: ["document", "database", "workspace_database", "folder", "database_row"] }, query: { type: "string", minLength: 2, maxLength: 300 }, depth: { type: "integer", minimum: 1, maximum: 5 }, limit: { type: "integer", minimum: 1, maximum: 10 } }, required: ["action"], additionalProperties: false } } },
     { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
 
@@ -1543,6 +1551,47 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       }
       throw Object.assign(new Error("Unsupported God’s Eye action. Try: show satellites, turn on earthquakes, zoom in, fly to London, set thermal style, or stop tracking."), { code: "WORLD_TOOL_NOT_SUPPORTED", status: 400 });
     }
+    if (name === "openhiggsfield") {
+      return runOpenHiggsfieldAction({
+        env, fetchImpl, userId: req.supabaseUser?.id,
+        action: bounded(args.action, 40), model: bounded(args.model, 120),
+        prompt: bounded(args.prompt, 8000), requestId: bounded(args.requestId, 180),
+        media: isObject(args.media) ? args.media : undefined,
+        settings: isObject(args.settings) ? args.settings : undefined,
+        approvePaidGeneration: args.approvePaidGeneration === true,
+        confirmationText: bounded(args.confirmationText, 300),
+        userPrompt: bounded(requestBody.prompt || requestBody.message || "", 1200)
+      });
+    }
+    if (name === "appflowy") {
+      return runAppFlowyAction({
+        env, fetchImpl, userId: req.supabaseUser?.id,
+        action: bounded(args.action, 40), workspaceId: bounded(args.workspaceId, 80), viewId: bounded(args.viewId, 80),
+        documentType: bounded(args.documentType, 40), query: bounded(args.query, 300), depth: Number.isInteger(args.depth) ? args.depth : 2,
+        limit: Number.isInteger(args.limit) ? args.limit : 10
+      });
+    }
+    if (name === "open_generative_ai") {
+      return runOpenGenerativeAIAction({
+        env, fetchImpl, userId: req.supabaseUser?.id,
+        action: bounded(args.action, 40), model: bounded(args.model, 160),
+        prompt: bounded(args.prompt, 8000), requestId: bounded(args.requestId, 180),
+        media: isObject(args.media) ? args.media : {},
+        settings: isObject(args.settings) ? args.settings : {},
+        approvePaidGeneration: args.approvePaidGeneration === true,
+        confirmationText: bounded(args.confirmationText, 300),
+        userPrompt: bounded(requestBody.prompt || requestBody.message || "", 1200)
+      });
+    }
+    if (name === "open_design") {
+      return runOpenDesignAction({
+        env, fetchImpl, userId: req.supabaseUser?.id,
+        action: bounded(args.action, 40), prompt: bounded(args.prompt, 6000),
+        requestId: bounded(args.requestId, 180), approveRun: args.approveRun === true,
+        confirmationText: bounded(args.confirmationText, 300),
+        userPrompt: bounded(requestBody.prompt || requestBody.message || "", 1200)
+      });
+    }
     if (name === "openseo") {
       return runOpenSeoTool({
         env,
@@ -2046,6 +2095,10 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
         { name: "chrome_devtools", available: (() => { const readiness = getChromeDevToolsReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getChromeDevToolsReadiness(env, req.supabaseUser?.id).state, execution: "owner_scoped_live_chrome_cdp_console_network_screenshot_performance_trace" },
         { name: "openseo", available: (() => { const readiness = getOpenSeoReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getOpenSeoReadiness(env, req.supabaseUser?.id).state, execution: "owner_scoped_open_seo_mcp_free_reads_and_explicitly_spend_gated_research" },
+        { name: "openhiggsfield", available: (() => { const readiness = getOpenHiggsfieldReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getOpenHiggsfieldReadiness(env, req.supabaseUser?.id).state, models: listOpenHiggsfieldModels().length, execution: "owner_scoped_allowlisted_image_video_generation_and_job_polling_requires_per_request_paid_confirmation" },
+        { name: "open_design", available: (() => { const readiness = getOpenDesignReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getOpenDesignReadiness(env, req.supabaseUser?.id).state, execution: "owner_scoped_headless_BYOK_design_coding_runs_and_status_requires_per_request_paid_confirmation" },
+        { name: "open_generative_ai", available: (() => { const readiness = getOpenGenerativeAIReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getOpenGenerativeAIReadiness(env, req.supabaseUser?.id).state, models: listOpenGenerativeAIModels().length, execution: "owner_scoped_allowlisted_MuAPI_image_video_generation_and_polling_requires_per_request_paid_confirmation" },
+        { name: "appflowy", available: (() => { const readiness = getAppFlowyReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getAppFlowyReadiness(env, req.supabaseUser?.id).state, execution: "owner_scoped_read_only_AppFlowy_workspace_tree_and_search" },
         { name: "check_desktop_companion", available: Boolean(desktopCompanionReadiness.configured && desktopCompanionReadiness.ownerAuthorized), state: desktopCompanionReadiness.state, execution: "owner_scoped_read_only_device_status_no_command_execution" },
         { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_28_repository_domains" },
         { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_43_tracked_capabilities; read configuration-only status at /api/agent/repositories" },
@@ -2391,7 +2444,24 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       } catch (error) {
         logger.warn?.("Agent synthesis failed", { code: error.code || "AGENT_SYNTHESIS_FAILED" });
       }
-      if (!content) content = used.map(item => "**" + item.name + "**\n" + JSON.stringify(item.result, null, 2)).join("\n\n");
+      if (!content) {
+        // The integration-catalog result can be much larger than a following
+        // research result. Bound each tool independently so one early result
+        // cannot consume the whole response and hide later executed tools.
+        const perResultLimit = Math.max(800, Math.min(5000, Math.floor(14000 / Math.max(used.length, 1))));
+        content = used.map(item => {
+          let detail;
+          try {
+            detail = JSON.stringify(sanitizeToolResultForClient(item.result), null, 2);
+          } catch {
+            detail = "{\"error\":\"Tool result could not be summarized safely.\"}";
+          }
+          const clipped = detail.length > perResultLimit
+            ? detail.slice(0, perResultLimit) + "\n[This tool result was truncated to preserve the remaining results.]"
+            : detail;
+          return "**" + item.name + "** (" + (item.ok ? "completed" : "failed") + ")\n" + clipped;
+        }).join("\n\n");
+      }
       if (correctionLesson && !userMemoryEnabled) correctionLearningState = "memory_disabled";
       if (userMemoryEnabled) {
         try { await captureSupabaseMemory(userText, req); }
