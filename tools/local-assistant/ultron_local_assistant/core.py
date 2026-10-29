@@ -365,8 +365,8 @@ def read_document_text(path: str | Path) -> str:
                 total_chars += len(text)
                 if total_chars > 2_000_000:
                     raise ValueError("Extracted PDF text exceeds the 2 MB limit.")
-                parts.append(f"[PDF page {index + 1}]\\n{text}")
-            return "\\n".join(parts)
+                parts.append(f"[PDF page {index + 1}]\n{text}")
+            return "\n".join(parts)
         except (OSError, ValueError):
             raise
         except Exception as exc:
@@ -390,7 +390,7 @@ def read_document_text(path: str | Path) -> str:
                     cells = [cell.text.strip() for cell in row.cells[:50] if cell.text.strip()]
                     if cells:
                         lines.append(" | ".join(cells))
-            text = "\\n".join(lines)
+            text = "\n".join(lines)
             if len(text) > 2_000_000:
                 raise ValueError("Extracted DOCX text exceeds the 2 MB limit.")
             return text
