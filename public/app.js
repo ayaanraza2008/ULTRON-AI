@@ -66,6 +66,15 @@
   let busy = false;
   let recognition = null;
   let restartTimer = null;
+  let forceFallbackRecognition = false;
+  let nativeRecognitionEmptyRuns = 0;
+  let fallbackRecorderSession = null;
+  let fallbackRecorderStarting = false;
+  let speechCapabilities = {};
+  let speechCapabilitiesLoaded = false;
+  let activeSpeechAudio = null;
+  let activeSpeechObjectUrl = null;
+  let finishActiveSpeechAudio = null;
   let toastTimer = null;
   let panelTimer = null;
   let panelIsComplete = false;
@@ -676,9 +685,97 @@
     return segments.map(segment => ({ ...segment, text: segment.text.trim() })).filter(segment => segment.text);
   }
 
-  function speakResponse(text, force = false) {
+  function stopFishAudioPlayback() {
+    if (finishActiveSpeechAudio) {
+      finishActiveSpeechAudio(false);
+      return;
+    }
+    if (activeSpeechAudio) {
+      try { activeSpeechAudio.pause(); } catch { /* ignore */ }
+    }
+    if (activeSpeechObjectUrl) {
+      try { URL.revokeObjectURL(activeSpeechObjectUrl); } catch { /* ignore */ }
+    }
+    activeSpeechAudio = null;
+    activeSpeechObjectUrl = null;
+    finishActiveSpeechAudio = null;
+  }
+
+  async function requestFishAudioSpeech(text) {
+    const response = await fetch("/api/speech/synthesize", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text: String(text || "").trim().slice(0, 4000) }),
+      ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(60000) } : {})
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const details = payload && typeof payload === "object" ? payload.error : null;
+      throw new Error(details && typeof details.message === "string" ? details.message : "Fish Audio synthesis failed (" + response.status + ").");
+    }
+    const blob = await response.blob();
+    if (!blob.size || (blob.type && !blob.type.startsWith("audio/"))) throw new Error("Fish Audio returned an empty or invalid audio response.");
+    return blob;
+  }
+
+  function playFishAudioBlob(blob, epoch) {
+    if (epoch !== speechEpoch || !blob || !blob.size) return Promise.resolve(false);
+    stopFishAudioPlayback();
+    const objectUrl = URL.createObjectURL(blob);
+    const player = new window.Audio(objectUrl);
+    activeSpeechAudio = player;
+    activeSpeechObjectUrl = objectUrl;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (played) => {
+        if (settled) return;
+        settled = true;
+        player.onended = null;
+        player.onerror = null;
+        player.onplay = null;
+        try { player.pause(); } catch { /* ignore */ }
+        try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ }
+        if (activeSpeechAudio === player) activeSpeechAudio = null;
+        if (activeSpeechObjectUrl === objectUrl) activeSpeechObjectUrl = null;
+        if (finishActiveSpeechAudio === finish) finishActiveSpeechAudio = null;
+        resolve(Boolean(played));
+      };
+      finishActiveSpeechAudio = finish;
+      player.onplay = () => {
+        if (epoch === speechEpoch) setCoreState("speaking");
+      };
+      player.onended = () => finish(true);
+      player.onerror = () => finish(false);
+      Promise.resolve(player.play()).catch(() => finish(false));
+    });
+  }
+
+  async function speakResponse(text, force = false) {
     const shouldSpeak = force || (mode === "text" && !mutedInTextMode);
-    if (!shouldSpeak) return Promise.resolve(false);
+    if (!shouldSpeak) return false;
+    speechEpoch += 1;
+    const epoch = speechEpoch;
+    stopFishAudioPlayback();
+    try { window.speechSynthesis?.cancel?.(); } catch { /* use a fresh response */ }
+    await ensureSpeechCapabilities();
+    if (epoch !== speechEpoch) return false;
+    if (speechCapabilities.premiumTtsConfigured) {
+      try {
+        const blob = await requestFishAudioSpeech(text);
+        if (epoch !== speechEpoch) return false;
+        const played = await playFishAudioBlob(blob, epoch);
+        if (played || epoch !== speechEpoch) return played;
+      } catch {
+        if (epoch !== speechEpoch) return false;
+        showToast("Fish Audio voice is unavailable right now. Falling back to your browser's installed voice.", 3000);
+      }
+    }
+    return speakResponseBrowser(text, epoch);
+  }
+
+  function speakResponseBrowser(text, epoch) {
     const synth = window.speechSynthesis;
     const Utterance = window.SpeechSynthesisUtterance;
     if (!synth || !Utterance) {
@@ -687,9 +784,6 @@
     }
     const segments = splitSpeechSegments(text);
     if (!segments.length) return Promise.resolve(false);
-    speechEpoch += 1;
-    const epoch = speechEpoch;
-    try { synth.cancel(); } catch { /* continue with a fresh utterance */ }
     return new Promise((resolve) => {
       let pending = segments.length;
       let anySpoken = false;
@@ -707,6 +801,10 @@
         }
       };
       for (const segment of segments) {
+        if (epoch !== speechEpoch) {
+          if (!settled) { settled = true; resolve(anySpoken); }
+          return;
+        }
         const utterance = new Utterance(segment.text);
         utterance.lang = segment.lang;
         utterance.voice = chooseSpeechVoice(segment.lang);
@@ -773,9 +871,190 @@
     return window.SpeechRecognition || window.webkitSpeechRecognition || null;
   }
 
+  function stopFallbackRecognition({ transcribe = false } = {}) {
+    const session = fallbackRecorderSession;
+    if (!session) return;
+    fallbackRecorderSession = null;
+    session.transcribeOnStop = Boolean(transcribe);
+    if (session.monitorTimer) window.clearInterval(session.monitorTimer);
+    session.monitorTimer = null;
+    try {
+      if (session.recorder.state !== "inactive") session.recorder.stop();
+      else void finishFallbackRecording(session);
+    } catch {
+      void finishFallbackRecording(session);
+    }
+  }
+
+  async function finishFallbackRecording(session) {
+    if (session.finished) return;
+    session.finished = true;
+    if (session.monitorTimer) window.clearInterval(session.monitorTimer);
+    session.monitorTimer = null;
+    if (!session.transcribeOnStop || !session.heardSpeech || !session.chunks.length) {
+      if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+      return;
+    }
+    ui.captionText.textContent = "TRANSCRIBING · FISH AUDIO";
+    ui.voiceSubtitle.textContent = "Transcribing your speech…";
+    const blob = new Blob(session.chunks, { type: session.recorder.mimeType || "audio/webm" });
+    const submitted = await transcribeRecordedAudio(blob);
+    if (!submitted && voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+  }
+
+  async function transcribeRecordedAudio(blob) {
+    if (!blob || !blob.size || blob.size > 7 * 1024 * 1024) {
+      if (blob && blob.size > 7 * 1024 * 1024) showToast("That recording is too large. Please speak in shorter phrases.");
+      return false;
+    }
+    if (!voiceActive || mode !== "voice" || busy || textInputOpen) return false;
+    try {
+      const data = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      const stride = 0x8000;
+      for (let offset = 0; offset < data.length; offset += stride) {
+        binary += String.fromCharCode(...data.subarray(offset, Math.min(data.length, offset + stride)));
+      }
+      const audioBase64 = window.btoa(binary);
+      const mimeType = String(blob.type || "audio/webm").split(";")[0];
+      const payload = await apiRequest("/api/speech/transcribe", {
+        method: "POST",
+        body: { audioBase64, mimeType }
+      });
+      const command = String(payload?.text || "").trim();
+      if (!command) {
+        ui.captionText.textContent = "DID NOT CATCH THAT · TRY AGAIN";
+        ui.voiceSubtitle.textContent = "Didn't catch that · speak again";
+        return false;
+      }
+      if (!voiceActive || mode !== "voice" || textInputOpen) return false;
+      ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
+      await sendPrompt(command, "voice");
+      return true;
+    } catch (error) {
+      ui.captionText.textContent = "VOICE TRANSCRIPTION FAILED";
+      showToast(error.message || "Speech recognition failed. Check the Fish Audio connection and try again.", 6500);
+      return false;
+    }
+  }
+
+  async function ensureSpeechCapabilities() {
+    if (speechCapabilitiesLoaded) return speechCapabilities;
+    try {
+      const payload = await apiRequest("/api/capabilities");
+      speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
+        ? payload.providers.speech : {};
+      speechCapabilitiesLoaded = true;
+    } catch {
+      speechCapabilities = {};
+    }
+    return speechCapabilities;
+  }
+
+  async function startFallbackRecognition() {
+    if (fallbackRecorderStarting || fallbackRecorderSession || !voiceActive || mode !== "voice" || busy || textInputOpen) return;
+    fallbackRecorderStarting = true;
+    try {
+      await ensureSpeechCapabilities();
+      if (!speechCapabilities.premiumSttConfigured) {
+        voiceActive = false;
+        stopFallbackRecognition({ transcribe: false });
+        stopRecognition();
+        releaseMicVisualizer();
+        renderMode();
+        setCoreState("error");
+        showToast("Browser speech recognition is unavailable, and ULTRON has no server-side transcription provider configured. Configure FISH_API_KEY on the backend.");
+        return;
+      }
+      if (typeof window.MediaRecorder !== "function") {
+        voiceActive = false;
+        stopRecognition();
+        releaseMicVisualizer();
+        renderMode();
+        setCoreState("error");
+        showToast("This browser cannot record microphone audio for server-side transcription. Try the latest Chrome or Edge.");
+        return;
+      }
+      if (!micStream || !analyser || !audioSamples) {
+        const ready = await startMicVisualizer();
+        if (!ready || !micStream || !analyser || !audioSamples) {
+          voiceActive = false;
+          stopRecognition();
+          releaseMicVisualizer();
+          renderMode();
+          setCoreState("error");
+          showToast("Microphone access is unavailable. Allow microphone access for this secure site and try again.");
+          return;
+        }
+      }
+      if (!voiceActive || mode !== "voice" || busy || textInputOpen) return;
+      const supportedTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = supportedTypes.find(type => window.MediaRecorder.isTypeSupported?.(type)) || "";
+      const recorder = new window.MediaRecorder(micStream, mimeType ? { mimeType } : undefined);
+      const session = {
+        recorder,
+        chunks: [],
+        monitorTimer: null,
+        startedAt: Date.now(),
+        lastVoiceAt: 0,
+        heardSpeech: false,
+        transcribeOnStop: false,
+        finished: false
+      };
+      fallbackRecorderSession = session;
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size) session.chunks.push(event.data);
+      };
+      recorder.onstop = () => { void finishFallbackRecording(session); };
+      recorder.onerror = () => {
+        session.transcribeOnStop = false;
+        if (fallbackRecorderSession === session) fallbackRecorderSession = null;
+        if (session.monitorTimer) window.clearInterval(session.monitorTimer);
+        session.monitorTimer = null;
+        ui.captionText.textContent = "MICROPHONE RECORDING INTERRUPTED";
+        if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+      };
+      recorder.start(250);
+      setCoreState("listening");
+      ui.voiceSubtitle.textContent = "Listening · Fish Audio transcription";
+      ui.captionText.textContent = "LISTENING · SPEAK NATURALLY";
+      session.monitorTimer = window.setInterval(() => {
+        if (fallbackRecorderSession !== session || recorder.state !== "recording") return;
+        if (analyser && audioSamples) {
+          analyser.getByteTimeDomainData(audioSamples);
+          let total = 0;
+          for (let i = 0; i < audioSamples.length; i += 1) {
+            const sample = (audioSamples[i] - 128) / 128;
+            total += sample * sample;
+          }
+          const rms = Math.sqrt(total / audioSamples.length);
+          const now = Date.now();
+          if (rms > 0.018) {
+            session.heardSpeech = true;
+            session.lastVoiceAt = now;
+          }
+          if (session.heardSpeech && now - session.lastVoiceAt >= 1100) {
+            stopFallbackRecognition({ transcribe: true });
+          } else if (now - session.startedAt >= 18000) {
+            stopFallbackRecognition({ transcribe: session.heardSpeech });
+          } else if (!session.heardSpeech && now - session.startedAt >= 12000) {
+            stopFallbackRecognition({ transcribe: false });
+          }
+        }
+      }, 160);
+    } catch {
+      ui.captionText.textContent = "VOICE RECORDING FAILED";
+      showToast("Could not start microphone recording. Check microphone permission and try again.");
+      if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+    } finally {
+      fallbackRecorderStarting = false;
+    }
+  }
+
   function stopRecognition() {
     if (restartTimer) window.clearTimeout(restartTimer);
     restartTimer = null;
+    stopFallbackRecognition({ transcribe: false });
     const current = recognition;
     recognition = null;
     if (!current) return;
@@ -795,14 +1074,26 @@
   }
 
   function startRecognition() {
+    if (!voiceActive || mode !== "voice" || busy || textInputOpen) return;
     const Recognition = speechRecognitionConstructor();
-    if (!Recognition || !voiceActive || mode !== "voice" || busy || textInputOpen || recognition) return;
-    const instance = new Recognition();
+    if (forceFallbackRecognition || !Recognition) {
+      void startFallbackRecognition();
+      return;
+    }
+    if (recognition) return;
+    let instance;
+    try { instance = new Recognition(); }
+    catch {
+      forceFallbackRecognition = true;
+      void startFallbackRecognition();
+      return;
+    }
     recognition = instance;
     instance.continuous = true;
     instance.interimResults = true;
     instance.maxAlternatives = 1;
     instance.lang = "en-IN";
+    let hadAnyResult = false;
     instance.onstart = () => {
       if (recognition !== instance) return;
       setCoreState("listening");
@@ -818,9 +1109,11 @@
         if (result && result.isFinal) finalText += transcript + " ";
         else interimText += transcript;
       }
-      if (interimText.trim()) {
-        ui.captionText.textContent = "HEARING · " + interimText.trim().slice(0, 110);
+      if (finalText.trim() || interimText.trim()) {
+        hadAnyResult = true;
+        nativeRecognitionEmptyRuns = 0;
       }
+      if (interimText.trim()) ui.captionText.textContent = "HEARING · " + interimText.trim().slice(0, 110);
       if (finalText.trim()) {
         const command = finalText.trim();
         stopRecognition();
@@ -830,25 +1123,38 @@
     instance.onerror = (event) => {
       if (recognition !== instance) return;
       const code = event && event.error ? event.error : "voice-error";
-      if (code === "not-allowed" || code === "service-not-allowed") {
-        voiceActive = false;
-        stopRecognition();
-        releaseMicVisualizer();
-        renderMode();
-        setCoreState("error");
-        showToast("Microphone permission was denied. Allow microphone access in your browser, then select Voice Mode again.");
-      } else if (code !== "no-speech" && code !== "aborted") {
-        ui.captionText.textContent = "VOICE INPUT INTERRUPTED · RETRYING";
+      if (code === "aborted") return;
+      if (code === "no-speech") {
+        ui.captionText.textContent = "NO SPEECH DETECTED · RETRYING";
+        return;
       }
+      forceFallbackRecognition = true;
+      recognition = null;
+      instance.onend = null;
+      instance.onresult = null;
+      instance.onerror = null;
+      try { instance.stop(); } catch { /* it may already be stopped */ }
+      ui.captionText.textContent = "SWITCHING TO SERVER SPEECH RECOGNITION";
+      showToast(code === "not-allowed" || code === "service-not-allowed"
+        ? "Browser speech recognition was blocked. Switching to server transcription."
+        : "Browser speech recognition failed. Switching to server transcription.");
+      scheduleRecognitionRestart();
     };
     instance.onend = () => {
       if (recognition === instance) recognition = null;
+      if (!hadAnyResult) nativeRecognitionEmptyRuns += 1;
+      else nativeRecognitionEmptyRuns = 0;
+      if (nativeRecognitionEmptyRuns >= 2) {
+        forceFallbackRecognition = true;
+        ui.captionText.textContent = "SWITCHING TO SERVER SPEECH RECOGNITION";
+      }
       if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
     };
     try {
       instance.start();
     } catch {
       if (recognition === instance) recognition = null;
+      forceFallbackRecognition = true;
       scheduleRecognitionRestart();
     }
   }
@@ -857,22 +1163,28 @@
     mode = "voice";
     textInputOpen = false;
     voiceActive = true;
+    forceFallbackRecognition = false;
+    nativeRecognitionEmptyRuns = 0;
     renderMode();
     setCoreState("listening");
-    const Recognition = speechRecognitionConstructor();
-    if (!Recognition) {
-      voiceActive = false;
-      renderMode();
-      setCoreState("error");
-      showToast("This browser does not support continuous speech recognition. Try the latest Chrome or Edge.");
-      return;
-    }
-    await startMicVisualizer();
+    await ensureSpeechCapabilities();
     if (!voiceActive || mode !== "voice") return;
-    startRecognition();
+    const micReady = await startMicVisualizer();
+    if (!voiceActive || mode !== "voice") return;
+    const Recognition = speechRecognitionConstructor();
+    if (!Recognition || !micReady) {
+      forceFallbackRecognition = true;
+      if (!Recognition) {
+        ui.captionText.textContent = "SERVER SPEECH RECOGNITION";
+        ui.voiceSubtitle.textContent = "Using server transcription";
+      }
+      startRecognition();
+    } else {
+      startRecognition();
+    }
     if (voiceActive) {
-      ui.voiceSubtitle.textContent = "Listening · tap to pause";
-      ui.captionText.textContent = "LISTENING · SPEAK NATURALLY";
+      ui.voiceSubtitle.textContent = forceFallbackRecognition ? "Listening · Fish Audio transcription" : "Listening · tap to pause";
+      ui.captionText.textContent = forceFallbackRecognition ? "LISTENING · SERVER TRANSCRIPTION" : "LISTENING · SPEAK NATURALLY";
     }
   }
 
@@ -880,10 +1192,9 @@
     voiceActive = false;
     stopRecognition();
     releaseMicVisualizer();
-    if (window.speechSynthesis && window.speechSynthesis.speaking && mode !== "text") {
-      try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
-      speechEpoch += 1;
-    }
+    speechEpoch += 1;
+    stopFishAudioPlayback();
+    try { window.speechSynthesis?.cancel?.(); } catch { /* ignore */ }
     renderMode();
     if (!busy) setCoreState("idle");
   }
@@ -944,9 +1255,10 @@
     ui.muteToggle.setAttribute("aria-pressed", String(mutedInTextMode));
     ui.muteLabel.textContent = mutedInTextMode ? "UNMUTE VOICE" : "MUTE VOICE";
     ui.muteToggle.title = mutedInTextMode ? "Allow ULTRON to speak in Text Mode" : "Mute spoken replies in Text Mode";
-    if (mutedInTextMode && window.speechSynthesis) {
-      try { window.speechSynthesis.cancel(); } catch { /* no active utterance */ }
+    if (mutedInTextMode) {
       speechEpoch += 1;
+      stopFishAudioPlayback();
+      try { window.speechSynthesis?.cancel?.(); } catch { /* no active utterance */ }
       if (coreState === "speaking") setCoreState("idle");
     }
     showToast(mutedInTextMode ? "Voice replies muted in Text Mode." : "Voice replies unmuted in Text Mode.", 1900);
@@ -1145,18 +1457,28 @@
       return;
     }
     if (name === "voice-quality") {
-      drawerHeading("Voice quality & pronunciation", "ULTRON selects the best installed male-leaning Indian English and Hindi voices available in this browser. The final sound depends on the voices provided by Windows and the browser.");
-      drawerCard("Hindi voice", speechVoiceLabel("hi-IN"), /browser default/i.test(speechVoiceLabel("hi-IN")) ? "VOICE LIST NOT READY" : "SELECTED AUTOMATICALLY", /browser default/i.test(speechVoiceLabel("hi-IN")) ? "warning" : "ready");
-      drawerCard("English voice", speechVoiceLabel("en-IN"), /browser default/i.test(speechVoiceLabel("en-IN")) ? "VOICE LIST NOT READY" : "SELECTED AUTOMATICALLY", /browser default/i.test(speechVoiceLabel("en-IN")) ? "warning" : "ready");
-      drawerCard("Delivery profile", "Sentence-by-sentence Hindi/English routing, a slightly slower speaking rate, and a lower pitch for a fuller male presentation. Punctuation is retained for pauses.", "LOCAL SPEECH");
-      drawerCard("Naturalness limit", "No extra paid voice API is added. For the most human-sounding result, install a Natural/Neural male voice for Hindi (India) and English (India) in Windows speech settings, then reload this page.", "DEVICE DEPENDENT", "warning");
+      await ensureSpeechCapabilities();
+      drawerHeading("Voice quality & pronunciation", "ULTRON uses Fish Audio voice synthesis and server-side transcription when configured, with browser speech as a fallback.");
+      drawerCard("Fish Audio synthesis",
+        speechCapabilities.premiumTtsConfigured ? "The backend reports a speech output provider. A real response still depends on the key, voice model, and available quota." : "No server-side synthesis is configured; ULTRON will use browser-installed voices.",
+        speechCapabilities.premiumTtsConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER FALLBACK",
+        speechCapabilities.premiumTtsConfigured ? "ready" : "warning");
+      drawerCard("Fish Audio recognition",
+        speechCapabilities.premiumSttConfigured ? "The backend reports a transcription provider for recorded-microphone fallback." : "Server transcription is unavailable; this browser must support its native speech-recognition service.",
+        speechCapabilities.premiumSttConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER ONLY",
+        speechCapabilities.premiumSttConfigured ? "ready" : "warning");
+      drawerCard("Voice reference", "7a18a1851d2649108c48ec9f2c80eb2c", "FISH AUDIO MODEL ID");
+      drawerCard("Browser fallback voices", "Hindi: " + speechVoiceLabel("hi-IN") + " · English: " + speechVoiceLabel("en-IN"), "DEVICE DEPENDENT");
       drawerButton("PREVIEW HINDI + ENGLISH VOICE", () => {
         const wasListening = voiceActive && mode === "voice";
         if (wasListening) stopRecognition();
         void speakResponse("Hello, I am ULTRON. नमस्ते, मैं ULTRON हूँ। मैं हिंदी और English दोनों में जवाब दूँगा।", true)
           .finally(() => { if (wasListening) scheduleRecognitionRestart(); });
       });
-      drawerButton("REFRESH AVAILABLE VOICES", () => { void showDrawerView("voice-quality"); }, true);
+      drawerButton("REFRESH VOICE STATUS", () => {
+        speechCapabilitiesLoaded = false;
+        void showDrawerView("voice-quality");
+      }, true);
       return;
     }
     if (name === "tasks") {
@@ -1802,6 +2124,7 @@
   }
 
   async function checkBackend() {
+    void ensureSpeechCapabilities();
     try {
       const payload = await apiRequest("/api/health");
       backendStatus = payload && typeof payload === "object" ? payload : null;
