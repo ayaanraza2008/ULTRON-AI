@@ -394,3 +394,8 @@ body.composer-open .core-coordinate { opacity: .2; }
 .drawer-quiz-options .device-scope { align-items: flex-start; }
 .drawer-quiz-options .device-scope > span { color: #8da0bd; font-size: 9px; line-height: 1.45; }
 .drawer-quiz-options input { accent-color: #68d9ff; }
+
+.task-cancel-control { flex: 0 0 auto; margin-left: auto; padding: 6px 9px; border: 1px solid rgba(255,118,139,.45); border-radius: 7px; background: rgba(92,18,35,.2); color: #ffb2c0; font: inherit; font-size: 8px; letter-spacing: .12em; cursor: pointer; }
+.task-cancel-control:hover:not(:disabled) { border-color: rgba(255,148,166,.8); background: rgba(92,18,35,.42); }
+.task-cancel-control:disabled { opacity: .52; cursor: wait; }
+@media (max-width: 560px) { .task-cancel-control { padding: 5px 6px; font-size: 7px; } }
