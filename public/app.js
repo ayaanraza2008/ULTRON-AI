@@ -1524,17 +1524,10 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        const minimumBuffer = streamSpeechUsesFish ? 72 : 22;
-        const preferredCutoff = streamSpeechUsesFish ? 64 : 19;
-        const minimumCutoff = streamSpeechUsesFish ? 48 : 12;
-        if (!force && streamSpeechBuffer.length >= minimumBuffer) {
-          const cutoff = streamSpeechBuffer.lastIndexOf(" ", preferredCutoff);
-          if (cutoff >= minimumCutoff) {
-            enqueueStreamSpeech(streamSpeechBuffer.slice(0, cutoff).trim());
-            streamSpeechBuffer = streamSpeechBuffer.slice(cutoff + 1);
-            continue;
-          }
-        }
+        // Never cut Fish Audio or browser speech at an arbitrary word count.
+        // Sentence-boundary synthesis avoids abrupt timbre/pitch resets between tiny clips.
+        // Voice answers are instructed to be one short English sentence, so this
+        // normally produces one continuous audio clip while still starting early.
         if (force) {
           enqueueStreamSpeech(streamSpeechBuffer.trim());
           streamSpeechBuffer = "";
@@ -1572,7 +1565,7 @@
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const voicePrompt = streamVoiceReply
-        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 12–24 words when possible). Lead with the answer; no greeting, filler, or preamble. Use a calm, confident, natural Indian male-assistant tone. Mirror the user's language. For Hindi-English replies, write Hindi words in Devanagari and English words in Latin script; do not phonetic-transliterate English or Hinglish into Roman Hindi. Preserve proper nouns and technical spelling.\n\nUser request: " + outgoingPrompt
+        ? "Understand the user's request whether they speak Hindi, English, or Hinglish. ALWAYS reply in clear, natural English, regardless of the input language. Do not reply in Hindi or Hinglish. For voice, answer in one short, complete English sentence (ideally 8–18 words); use a second sentence only when essential. Start with the answer. No greeting, filler, markdown, bullets, stage directions, or pronunciation spellings. Use natural grammar, contractions, and punctuation for smooth spoken delivery.\n\nUser request: " + outgoingPrompt
         : outgoingPrompt;
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
