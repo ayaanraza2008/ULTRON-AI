@@ -265,7 +265,7 @@ test("voice quality panel reports Fish Audio readiness and can preview Hindi and
   assert.ok(app.includes('drawerButton("PREVIEW HINDI + ENGLISH VOICE"'));
   assert.ok(app.includes("speechCapabilities.premiumTtsConfigured"));
   assert.ok(app.includes("speechCapabilities.premiumSttConfigured"));
-  assert.ok(app.includes("db9ad6eb7fb84294b2046cf05ef64718"));
+  assert.doesNotMatch(app, /db9ad6eb7fb84294b2046cf05ef64718/); // voice IDs are kept server-side
   assert.ok(app.includes("Kamal · deep Indian male · Hindi-English"));
   assert.ok(app.includes('drawerButton("AUTO · HINDI + ENGLISH"'));
   assert.ok(app.includes('drawerButton("HINDI · hi-IN"'));
