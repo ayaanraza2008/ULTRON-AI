@@ -30,6 +30,11 @@ async function withAgent({ memoryEnabled = true, memoryRows = [] } = {}, run) {
     fetchImpl: async (url, options) => {
       assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
       const request = JSON.parse(options.body);
+      if (request.messages) {
+        assert.ok(request.messages.some(message =>
+          message.role === "system" && String(message.content).includes("keep the response concise and focused")
+        ), "ranked cognitive memory should be injected into the model context");
+      }
       return new Response(JSON.stringify({
         choices: [{ message: { role: "assistant", content: "I understand. I will answer the corrected request directly." } }]
       }), { status: 200, headers: { "content-type": "application/json" } });
