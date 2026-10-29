@@ -38,8 +38,7 @@ class LocalFirstCoreTests(unittest.TestCase):
         import os
         if os.name == "nt":
             self.skipTest("Linux /proc memory accounting is not used on Windows.")
-        with patch("builtins.open", mock_open(read_data="MemTotal: 8000 kB\\nMemAvailable: 5000 kB\\n")), \\
-             patch("ultron_local_assistant.core.os.sysconf", return_value=4096):
+        with patch("builtins.open", mock_open(read_data="MemTotal: 8000 kB\nMemAvailable: 5000 kB\n")), patch("ultron_local_assistant.core.os.sysconf", return_value=4096):
             self.assertEqual(_available_memory_bytes(), 5000 * 1024)
 
     def test_system_health_reports_local_metrics_and_high_disk_usage(self):
