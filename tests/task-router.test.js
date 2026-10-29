@@ -2,6 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { classifyTaskRoute, getToolCategories } from "../task-router.js";
 
+test("explicit fenced-code run requests route only to the opt-in sandbox", () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const direct = classifyTaskRoute("Run this code:\n" + fence + "python\nprint('ok')\n" + fence);
+  assert.deepEqual(direct.categories, ["coding_sandbox"]);
+  assert.deepEqual(direct.toolNames, ["coding_sandbox_run"]);
+  const indirect = classifyTaskRoute("Review this code, but do not run it:\n" + fence + "python\nprint('ok')\n" + fence);
+  assert.ok(!indirect.categories.includes("coding_sandbox"));
+  assert.ok(!indirect.toolNames?.includes("coding_sandbox_run"));
+});
+
 test("routes an ordinary greeting or explanation without sending tool schemas", () => {
   for (const prompt of ["Hello", "Explain energy bands in simple English", "Explain this briefly"]) {
     const route = classifyTaskRoute(prompt);
