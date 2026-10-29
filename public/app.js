@@ -2860,26 +2860,52 @@
       return;
     }
     if (name === "system") {
-      drawerHeading("System readiness", "Live status from the existing ULTRON CORE backend. A healthy HTTP service does not by itself guarantee a working AI provider.");
-      drawerCard("Backend API", "Checking health, access and model configuration…", "CHECKING", "warning");
+      drawerHeading("System readiness", "Secret-free configuration and process status. A configured integration is not proof of successful inference or end-to-end execution.");
+      drawerCard("Backend API", "Checking core health, access and model configuration…", "CHECKING", "warning");
       try {
-        const [health, capabilities] = await Promise.all([
+        const [health, capabilities, runtime, worker] = await Promise.all([
           apiRequest("/api/health"),
-          apiRequest("/api/capabilities")
+          apiRequest("/api/capabilities"),
+          apiRequest("/api/runtime/readiness").catch(() => null),
+          apiRequest("/api/worker/status").catch(() => null)
         ]);
         backendStatus = health;
         ui.drawerContent.replaceChildren();
-        drawerHeading("System readiness", "The following statuses came from backend APIs; external integrations may still need live tests.");
+        drawerHeading("System readiness", "Configuration checks and process status only. Live provider/database/device actions must be verified separately.");
         drawerCard("ULTRON CORE API", health.status === "ok" ? "HTTP health endpoint responded." : "The health endpoint did not report ready.", health.status || "UNKNOWN", health.status === "ok" ? "ready" : "error");
-        drawerCard("Model provider", health.providerConfigured ? "At least one supported model provider is configured." : "No model provider is reported as configured. Text and vision replies cannot work until a provider key/model is configured in the backend.", health.providerConfigured ? "CONFIGURED" : "MISSING", health.providerConfigured ? "ready" : "error");
-        drawerCard("Authentication", health.accessConfigured || health.supabaseConfigured ? "An access or Supabase authentication setup is present." : "No supported login configuration is reported by the backend. This blocks protected chat routes.", health.accessConfigured || health.supabaseConfigured ? "CONFIGURED" : "MISSING", health.accessConfigured || health.supabaseConfigured ? "ready" : "error");
+        drawerCard("Model provider", health.providerConfigured ? "At least one supported model provider is configured. Make a real test request to verify key, quota, model availability and response quality." : "No supported model provider is reported as configured. Text and vision responses will not work until a provider is configured server-side.", health.providerConfigured ? "CONFIGURED · UNVERIFIED" : "MISSING", health.providerConfigured ? "warning" : "error");
+        drawerCard("Authentication and persistence", health.accessConfigured || health.supabaseConfigured ? "A login or Supabase configuration is present. Signup, account recovery, writes, and two-account data isolation still require live checks." : "No supported login configuration is reported by the backend.", health.accessConfigured || health.supabaseConfigured ? "CONFIGURED · UNVERIFIED" : "MISSING", health.accessConfigured || health.supabaseConfigured ? "warning" : "error");
         const speech = capabilities?.providers?.speech || {};
-        drawerCard("Browser voice", speech.browserSpeechAvailable ? "Speech recognition and synthesis depend on this browser's support and permission." : "The backend does not report browser speech capability.", speech.browserSpeechAvailable ? "BROWSER CONTROLLED" : "UNAVAILABLE", speech.browserSpeechAvailable ? "ready" : "warning");
-        drawerCard("Premium speech", speech.premiumTtsConfigured ? "A premium text-to-speech endpoint is configured." : "No premium TTS is configured; browser-native speech is used as the free fallback.", speech.premiumTtsConfigured ? "CONFIGURED" : "BROWSER FALLBACK", "warning");
+        drawerCard("Browser voice", speech.browserSpeechAvailable ? "Recognition and synthesis depend on this browser's support, installed voices and permission." : "The backend does not report browser speech capability.", speech.browserSpeechAvailable ? "BROWSER CONTROLLED" : "UNAVAILABLE", speech.browserSpeechAvailable ? "ready" : "warning");
+        drawerCard("Premium speech", speech.premiumTtsConfigured ? "A premium TTS endpoint is configured, but reachability and quality are not verified." : "No premium TTS is configured; browser-native speech remains the free fallback.", speech.premiumTtsConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER FALLBACK", "warning");
+        const workerState = worker?.worker?.state || runtime?.worker?.state || "unknown";
+        const workerInfo = worker?.worker || runtime?.worker || {};
+        drawerCard("Background task worker", [
+          "State: " + workerState,
+          Number.isFinite(Number(workerInfo.tasksCompleted)) ? "Completed: " + Number(workerInfo.tasksCompleted) : "",
+          Number.isFinite(Number(workerInfo.tasksFailed)) ? "Failed: " + Number(workerInfo.tasksFailed) : "",
+          workerInfo.lastCycleAt ? "Last cycle: " + new Date(workerInfo.lastCycleAt).toLocaleString() : "",
+          "A running process still does not prove a specific queued task completed."
+        ].filter(Boolean).join("\n"), "WORKER STATUS", workerState === "running" ? "ready" : "warning");
         drawerCard("Last health response", health.timestamp || "Timestamp not returned.", health.build?.commit ? "BUILD " + String(health.build.commit).slice(0, 8) : "BUILD UNKNOWN");
+
+        if (runtime && Array.isArray(runtime.components)) {
+          drawerHeading("Capability readiness matrix", String(runtime.summary?.configuredOrAvailableCount ?? 0) + " configured/available of " + String(runtime.summary?.componentCount ?? runtime.components.length) + " components. This endpoint makes no network probes and returns no secrets.");
+          for (const component of runtime.components.slice(0, 24)) {
+            const state = String(component.state || "unknown").replaceAll("_", " ").toUpperCase().slice(0, 70);
+            const required = Array.isArray(component.requiredEnv) && component.requiredEnv.length ? "\nNeeds: " + component.requiredEnv.slice(0, 5).join(", ") : "";
+            const details = (String(component.note || "").slice(0, 420) + required).slice(0, 650);
+            const kind = /blocked|disabled|failed/.test(state) ? "error"
+              : /optional|not started|unverified|fallback/.test(state) ? "warning" : "ready";
+            drawerCard(String(component.label || component.id || "Component").slice(0, 140), details, state, kind);
+          }
+        } else {
+          drawerCard("Detailed readiness", "The detailed component snapshot requires the signed-in Supabase account. The basic health and capability endpoints remain available.", "NOT AVAILABLE IN THIS SESSION", "warning");
+        }
+        drawerCard("Verification boundary", "ULTRON reports code/configuration separately from live verification. The isolated coding sandbox, external integrations, provider inference, database isolation, queued-task completion and physical device workflows must each pass their own live tests before they can be marked verified.", "NO FALSE COMPLETION CLAIMS", "warning");
       } catch (error) {
         ui.drawerContent.replaceChildren();
-        drawerHeading("System readiness", "Could not get a complete live health snapshot.");
+        drawerHeading("System readiness", "Could not get a complete health snapshot.");
         drawerCard("Readiness request failed", error.message, error.code || "REQUEST FAILED", "error");
       }
       return;
