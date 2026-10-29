@@ -1,6 +1,7 @@
 import { inflateRawSync } from "node:zlib";
 import { isIP } from "node:net";
 import express from "express";
+import { generateReportPdf } from "./reports/pdf-report.js";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
@@ -451,6 +452,22 @@ function withTimeout(ms, parentSignal) {
 
 export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedFetch, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console }) {
   const router = express.Router();
+
+  router.post("/reports/pdf", requireSupabaseUser, (req, res) => {
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return res.status(400).json({ error: { code: "INVALID_REPORT", message: "Report data must be a JSON object." } });
+    }
+    const result = generateReportPdf({ title: body.title, content: body.content, sections: body.sections });
+    if (!result.ok) return res.status(400).json({ error: { code: result.code, message: result.message } });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "attachment; filename=\"ultron-report.pdf\"");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Length", String(result.pdf.byteLength));
+    return res.status(200).end(result.pdf);
+  });
+
   async function recordAuditEvent(req, event) {
     try {
       await privilegedSupabaseRest(req, "audit_events", "POST", "", event, "return=minimal");
@@ -822,6 +839,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         documents: "authenticated_txt_md_csv_json_html_pdf_docx_extraction; transient_only",
         notes: "authenticated_user_scoped_crud_requires_user_notes_migration",
         studyPacks: "authenticated_user_scoped_library_requires_study_packs_migration",
+        pdfReports: "authenticated_transient_report_pdf_export",
         desktopAutomation: "local_companion_required",
         voice: "browser_native_available; premium_services_optional",
         integrations: "configuration_readiness_only"
