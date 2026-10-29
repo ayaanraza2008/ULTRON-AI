@@ -8,6 +8,7 @@ import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { isPublicNetworkHost, safePinnedFetch, safeServiceBase } from "./network-safety.js";
 import { classifyAutonomyRisk } from "./autonomy-policy.js";
+import { ULTRON_FREE_VOICE_PROFILE } from "./voice/browser-native-voice.js";
 
 function safeBaseUrl(value) {
   return safeServiceBase(value);
@@ -24,25 +25,7 @@ function boundedString(value, max = 12000) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-const FISH_AUDIO_BASE_URL = "https://api.fish.audio";
-const FISH_AUDIO_DEFAULT_VOICE_MODEL_ID = "7a18a1851d2649108c48ec9f2c80eb2c";
-const FISH_AUDIO_TTS_MODELS = new Set(["s1", "s2-pro", "s2.1-pro", "s2.1-pro-free", "drama-3"]);
-const FISH_AUDIO_STT_MODELS = new Set(["transcribe-1", "transcribe-1-pro"]);
-
-function fishAudioConfig(env = {}) {
-  const apiKey = boundedString(env.FISH_API_KEY, 2000);
-  const configuredTtsModel = boundedString(env.FISH_AUDIO_TTS_MODEL, 80);
-  const configuredSttModel = boundedString(env.FISH_AUDIO_STT_MODEL, 80);
-  return {
-    configured: Boolean(apiKey),
-    apiKey,
-    voiceModelId: boundedString(env.FISH_AUDIO_VOICE_MODEL_ID, 160) || FISH_AUDIO_DEFAULT_VOICE_MODEL_ID,
-    ttsModel: FISH_AUDIO_TTS_MODELS.has(configuredTtsModel) ? configuredTtsModel : "s2.1-pro-free",
-    sttModel: FISH_AUDIO_STT_MODELS.has(configuredSttModel) ? configuredSttModel : "transcribe-1"
-  };
-}
-
-function fishAudioFileDetails(mimeType) {
+function speechAudioFileDetails(mimeType) {
   const mime = boundedString(mimeType, 100).split(";")[0].trim().toLowerCase();
   const extensions = {
     "audio/mpeg": "mp3", "audio/mp3": "mp3",
@@ -52,19 +35,6 @@ function fishAudioFileDetails(mimeType) {
     "audio/aac": "aac", "audio/flac": "flac", "audio/x-flac": "flac"
   };
   return extensions[mime] ? { mime, extension: extensions[mime] } : null;
-}
-
-function fishAudioUpstreamError(res, operation, upstreamStatus) {
-  if (upstreamStatus === 429) {
-    return res.status(429).json({ error: { code: "FISH_AUDIO_RATE_LIMITED", message: "Fish Audio rate-limited this request. Try again shortly." } });
-  }
-  if (upstreamStatus === 401 || upstreamStatus === 403) {
-    return res.status(503).json({ error: { code: "FISH_AUDIO_AUTH_FAILED", message: "Fish Audio rejected the server-side API key or its access to this model." } });
-  }
-  if (upstreamStatus === 402) {
-    return res.status(503).json({ error: { code: "FISH_AUDIO_QUOTA_EXCEEDED", message: "Fish Audio reports that the account has no available quota for this request." } });
-  }
-  return res.status(502).json({ error: { code: operation === "synthesis" ? "FISH_AUDIO_TTS_PROVIDER_FAILED" : "FISH_AUDIO_STT_PROVIDER_FAILED", message: "Fish Audio could not complete the " + operation + " request (HTTP " + upstreamStatus + ")." } });
 }
 
 async function readLimitedResponseBytes(response, maxBytes, label = "Provider response") {
@@ -803,10 +773,12 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         local: { configured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)), provider: "Ollama", baseUrlConfigured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)) },
         speech: {
           browserSpeechAvailable: true,
-          premiumTtsConfigured: Boolean(fishAudioConfig(env).configured || (env.TTS_API_BASE_URL && env.TTS_API_KEY)),
-          premiumSttConfigured: Boolean(fishAudioConfig(env).configured || (env.STT_API_BASE_URL && env.STT_API_KEY)),
-          provider: fishAudioConfig(env).configured ? "fish-audio" : (env.TTS_API_BASE_URL && env.TTS_API_KEY) || (env.STT_API_BASE_URL && env.STT_API_KEY) ? "openai-compatible" : "browser-fallback",
-          fishAudioConfigured: fishAudioConfig(env).configured
+          freeVoicePreset: ULTRON_FREE_VOICE_PROFILE,
+          premiumTtsConfigured: Boolean(safeBaseUrl(env.TTS_API_BASE_URL) && env.TTS_API_KEY?.trim()),
+          premiumSttConfigured: Boolean(safeBaseUrl(env.STT_API_BASE_URL) && env.STT_API_KEY?.trim()),
+          provider: (safeBaseUrl(env.TTS_API_BASE_URL) && env.TTS_API_KEY?.trim()) ||
+            (safeBaseUrl(env.STT_API_BASE_URL) && env.STT_API_KEY?.trim())
+            ? "openai-compatible" : "browser-fallback"
         },
         research: { configured: Boolean(env.TAVILY_API_KEY), mode: env.TAVILY_API_KEY ? "tavily" : "public-html-fallback" },
         desktop: { localAgentConfigured: Boolean(env.ULTRON_DESKTOP_AGENT_URL && env.ULTRON_DESKTOP_AGENT_TOKEN), requiresLocalCompanion: true }
@@ -877,54 +849,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const text = boundedString(req.body?.text, 4000);
     if (!text) return res.status(400).json({ error: { code: "INVALID_SPEECH_TEXT", message: "Provide text to synthesize." } });
 
-    const fish = fishAudioConfig(env);
-    if (fish.configured) {
-      const timeout = withTimeout(60000);
-      try {
-        const response = await fetchImpl(FISH_AUDIO_BASE_URL + "/v1/tts", {
-          method: "POST",
-          redirect: "error",
-          signal: timeout.signal,
-          headers: {
-            Authorization: "Bearer " + fish.apiKey,
-            "Content-Type": "application/json",
-            Accept: "audio/mpeg",
-            model: fish.ttsModel
-          },
-          body: JSON.stringify({
-            text,
-            reference_id: fish.voiceModelId,
-            format: "mp3",
-            latency: "balanced",
-            normalize: true
-          })
-        });
-        if (!response.ok) {
-          const upstreamStatus = response.status;
-          try { await response.body?.cancel?.(); } catch {}
-          return fishAudioUpstreamError(res, "synthesis", upstreamStatus);
-        }
-        const bytes = await readLimitedResponseBytes(response, 12_000_000, "Fish Audio synthesis response");
-        if (!bytes.length || bytes.length > 12_000_000) {
-          return res.status(502).json({ error: { code: "FISH_AUDIO_INVALID_AUDIO", message: "Fish Audio returned empty or oversized audio." } });
-        }
-        res.setHeader("Content-Type", response.headers.get("content-type")?.startsWith("audio/") ? response.headers.get("content-type") : "audio/mpeg");
-        res.setHeader("Cache-Control", "no-store");
-        res.setHeader("Content-Length", String(bytes.length));
-        res.setHeader("X-ULTRON-Speech-Provider", "fish-audio");
-        return res.send(bytes);
-      } catch (error) {
-        const unsafeResponse = error?.code === "PROVIDER_RESPONSE_TOO_LARGE" || error?.code === "PROVIDER_RESPONSE_UNBOUNDED";
-        return res.status(timeout.signal.aborted ? 504 : 502).json({
-          error: {
-            code: timeout.signal.aborted ? "FISH_AUDIO_TTS_TIMEOUT" : unsafeResponse ? "FISH_AUDIO_INVALID_AUDIO" : "FISH_AUDIO_TTS_UNAVAILABLE",
-            message: unsafeResponse ? "Fish Audio returned an unsafe or oversized audio response." : "Fish Audio synthesis failed or timed out."
-          }
-        });
-      } finally { timeout.close(); }
-    }
-
-    if (!env.TTS_API_BASE_URL || !env.TTS_API_KEY) return res.status(503).json({ error: { code: "TTS_NOT_CONFIGURED", message: "Speech synthesis is not configured. Configure FISH_API_KEY or an OpenAI-compatible TTS provider." } });
+    if (!env.TTS_API_BASE_URL || !env.TTS_API_KEY) return res.status(503).json({ error: { code: "TTS_NOT_CONFIGURED", message: "Server-side speech synthesis is not configured. Use the free browser-native voice preset, or configure TTS_API_BASE_URL and TTS_API_KEY for generated audio." } });
     const base = safeBaseUrl(env.TTS_API_BASE_URL);
     if (!base) return res.status(503).json({ error: { code: "TTS_ENDPOINT_INVALID", message: "TTS_API_BASE_URL must be a valid HTTPS endpoint." } });
     const voice = boundedString(req.body?.voice, 120);
@@ -961,57 +886,13 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     if (!bytes.length || bytes.length > 7_000_000 || bytes.toString("base64") !== audio) {
       return res.status(413).json({ error: { code: "AUDIO_TOO_LARGE", message: "Decoded audio must be valid base64 and under the 7 MB upload limit." } });
     }
-    const fish = fishAudioConfig(env);
-    if (fish.configured) {
-      const fileDetails = fishAudioFileDetails(mimeType);
-      if (!fileDetails) return res.status(400).json({ error: { code: "FISH_AUDIO_UNSUPPORTED_AUDIO_TYPE", message: "This audio format is not supported by Fish Audio transcription." } });
-      const timeout = withTimeout(60000);
-      try {
-        const form = new FormData();
-        form.append("audio", new Blob([bytes], { type: fileDetails.mime }), "ultron-recording." + fileDetails.extension);
-        form.append("ignore_timestamps", "true");
-        const language = boundedString(req.body?.language, 32);
-        if (language && /^[A-Za-z0-9_-]+$/.test(language)) form.append("language", language);
-        const response = await fetchImpl(FISH_AUDIO_BASE_URL + "/v1/asr", {
-          method: "POST",
-          redirect: "error",
-          signal: timeout.signal,
-          headers: { Authorization: "Bearer " + fish.apiKey, model: fish.sttModel },
-          body: form
-        });
-        if (!response.ok) {
-          const upstreamStatus = response.status;
-          try { await response.body?.cancel?.(); } catch {}
-          return fishAudioUpstreamError(res, "transcription", upstreamStatus);
-        }
-        const payload = await readLimitedResponseJson(response, 1_000_000, "Fish Audio transcription response");
-        if (typeof payload.text !== "string") {
-          return res.status(502).json({ error: { code: "FISH_AUDIO_INVALID_TRANSCRIPTION", message: "Fish Audio returned an unexpected transcription response." } });
-        }
-        res.setHeader("Cache-Control", "no-store");
-        return res.json({
-          text: payload.text.slice(0, 12000),
-          language: boundedString(payload.language_code || payload.language, 40) || null,
-          provider: "fish-audio"
-        });
-      } catch (error) {
-        const unsafeResponse = error?.code === "PROVIDER_RESPONSE_TOO_LARGE" || error?.code === "PROVIDER_RESPONSE_UNBOUNDED" || error?.code === "PROVIDER_RESPONSE_INVALID";
-        return res.status(timeout.signal.aborted ? 504 : 502).json({
-          error: {
-            code: timeout.signal.aborted ? "FISH_AUDIO_STT_TIMEOUT" : unsafeResponse ? "FISH_AUDIO_INVALID_TRANSCRIPTION" : "FISH_AUDIO_STT_UNAVAILABLE",
-            message: unsafeResponse ? "Fish Audio returned an unsafe or invalid transcription response." : "Fish Audio transcription failed or timed out."
-          }
-        });
-      } finally { timeout.close(); }
-    }
-
-    if (!env.STT_API_BASE_URL || !env.STT_API_KEY) return res.status(503).json({ error: { code: "STT_NOT_CONFIGURED", message: "Speech recognition is not configured. Configure FISH_API_KEY or an OpenAI-compatible STT provider." } });
+    if (!env.STT_API_BASE_URL || !env.STT_API_KEY) return res.status(503).json({ error: { code: "STT_NOT_CONFIGURED", message: "Server-side speech recognition is not configured. Use browser-native recognition for free input, or configure STT_API_BASE_URL and STT_API_KEY for server transcription." } });
     const base = safeBaseUrl(env.STT_API_BASE_URL);
     if (!base) return res.status(503).json({ error: { code: "STT_ENDPOINT_INVALID", message: "STT_API_BASE_URL must be a valid HTTPS endpoint." } });
     const timeout = withTimeout(30000);
     try {
       const form = new FormData();
-      const fileDetails = fishAudioFileDetails(mimeType);
+      const fileDetails = speechAudioFileDetails(mimeType);
       form.append("file", new Blob([bytes], { type: fileDetails?.mime || mimeType.split(";")[0] }), "recording." + (fileDetails?.extension || "audio"));
       form.append("model", boundedString(env.STT_MODEL, 120) || "whisper-1");
       const response = await fetchImpl(base + "/audio/transcriptions", {

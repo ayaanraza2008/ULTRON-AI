@@ -210,8 +210,10 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
 
-## Fish Audio speech integration
+## Free browser-native voice
 
-ULTRON's authenticated speech endpoints support Fish Audio's native REST API for **both voice synthesis and speech recognition**. Configure `FISH_API_KEY` on the backend and keep it secret. The requested voice/reference model ID is set to `7a18a1851d2649108c48ec9f2c80eb2c`; TTS defaults to the `s2.1-pro-free` engine, while STT defaults to `transcribe-1`. A Fish Audio key takes priority over the optional legacy OpenAI-compatible speech settings.
+Fish Audio and its reference/model ID have been removed. By default, `GET /api/capabilities` advertises a free `ultron-authoritative-male` browser voice profile. The client-side helper is `voice/browser-native-voice.js`; it prefers installed male-sounding English voices, then falls back to an available voice for the requested language. Its default delivery is slightly faster, low-pitched, calm, and authoritative-style.
 
-See [docs/FISH_AUDIO_INTEGRATION.md](docs/FISH_AUDIO_INTEGRATION.md) for Render/local environment settings, the two endpoints, browser recording fallback, security limits, and live verification guidance. The backend includes mocked API-contract tests; live requests still require a valid server-side key and account quota.
+This is a **free system-voice preset**, not a bundled premium neural voice model. Voice names, naturalness, and availability depend on the browser and operating system, and the preset does not download models or send speech text to a third-party TTS provider. The backend repository does not contain the separate ULTRON frontend, so that frontend must call the helper to apply this profile in its voice UI.
+
+The authenticated `POST /api/speech/synthesize` and `POST /api/speech/transcribe` routes remain optional server-side adapters for OpenAI-compatible providers. They are not needed for browser-native speech. Configure `TTS_API_BASE_URL`/`TTS_API_KEY` or `STT_API_BASE_URL`/`STT_API_KEY` only when server-generated audio or server-side transcription is required.
