@@ -2254,7 +2254,10 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 58);
+    assert.equal(compoundTools.length, 62);
+    assert.ok(compoundTools.includes("openhiggsfield"));
+    assert.ok(compoundTools.includes("open_design"));
+    assert.ok(compoundTools.includes("open_generative_ai"));
   });
 });
 
@@ -2303,4 +2306,29 @@ test("simple task routing sends no tool schemas and blocks provider-invented too
   });
   assert.equal(providerCalls, 1);
   assert.equal(bridgeCalls, 0);
+});
+
+
+test("agent tools expose OpenHiggsfield model catalog and disabled-by-default readiness", async () => {
+  await withServer({}, async () => {
+    throw new Error("The agent tools endpoint does not call a model provider.");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/tools");
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const mediaTool = payload.tools.find(tool => tool.name === "openhiggsfield");
+    assert.ok(mediaTool);
+    assert.equal(mediaTool.available, false);
+    assert.equal(mediaTool.state, "disabled_by_config");
+    assert.equal(mediaTool.models, 38);
+    const designTool = payload.tools.find(tool => tool.name === "open_design");
+    assert.ok(designTool);
+    assert.equal(designTool.available, false);
+    assert.equal(designTool.state, "disabled_by_config");
+    const openGenTool = payload.tools.find(tool => tool.name === "open_generative_ai");
+    assert.ok(openGenTool);
+    assert.equal(openGenTool.available, false);
+    assert.equal(openGenTool.state, "disabled_by_config");
+    assert.equal(openGenTool.models, 38);
+  });
 });

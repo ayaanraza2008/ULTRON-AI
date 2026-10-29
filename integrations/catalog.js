@@ -6,6 +6,10 @@ import { getHermesAgentReadiness } from "./hermes-agent.js";
 import { safeServiceBase } from "../network-safety.js";
 import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
 import { getStrataReadiness } from "./strata.js";
+import { getOpenSeoReadiness } from "./openseo-mcp.js";
+import { getOpenDesignReadiness } from "./open-design.js";
+import { getOpenHiggsfieldReadiness } from "./open-higgsfield.js";
+import { getOpenGenerativeAIReadiness } from "./open-generative-ai.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -34,6 +38,10 @@ export function buildIntegrationCatalog(env = process.env) {
   const reaReadiness = getReaReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
   const strataReadiness = getStrataReadiness(env);
+  const openSeoReadiness = getOpenSeoReadiness(env);
+  const openDesignReadiness = getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
+  const openHiggsfieldReadiness = getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
+  const openGenerativeAIReadiness = getOpenGenerativeAIReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
 
   return [
     {
@@ -220,6 +228,51 @@ export function buildIntegrationCatalog(env = process.env) {
       optionalEnv: ["STRATA_API_KEY", "STRATA_SUPPORTS_TOOLS", "STRATA_SUPPORTS_VISION"],
       apiRoutes: ["model provider fallback: /chat/completions"],
       note: strataReadiness.note
+    },
+    {
+      id: "open-seo",
+      name: "OpenSEO SEO Research",
+      capability: "Owner-scoped MCP project/context/keyword reads and explicitly credit-gated keyword/domain/SERP research",
+      state: openSeoReadiness.configured ? "configured_unverified" : "optional",
+      configured: Boolean(openSeoReadiness.configured),
+      mode: "owner_scoped_mcp",
+      requiredEnv: ["OPENSEO_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["OPENSEO_MCP_URL"],
+      apiRoutes: ["agent tool: openseo (list_projects, get_project_context, list_saved_keywords, estimate_rank_tracker_cost, research_keywords, get_domain_overview, get_domain_keyword_suggestions, get_serp_results)"],
+      note: openSeoReadiness.note
+    },
+    {
+      id: "open-higgsfield",
+      name: "OpenHiggsfield Image/Video Studio",
+      capability: "Allowlisted 38-model image/video generation, reference inputs, queue submission and job-status polling",
+      state: openHiggsfieldReadiness.state,
+      configured: Boolean(openHiggsfieldReadiness.configured),
+      mode: "owner_scoped_metered_media_api",
+      requiredEnv: ["ULTRON_OPEN_HIGGSFIELD_ENABLED=true", "HF_API_BASE_URL", "OPEN_HIGGSFIELD_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["GET /api/integrations/open-higgsfield/models", "POST /api/integrations/open-higgsfield/generate", "GET /api/integrations/open-higgsfield/jobs/:requestId", "agent tool: openhiggsfield"],
+      note: openHiggsfieldReadiness.note
+    },
+    {
+      id: "open-design",
+      name: "OpenDesign Headless Design Agent",
+      capability: "Owner-scoped project discovery, BYOK design/coding task submission and run status/deliverable validation",
+      state: openDesignReadiness.state,
+      configured: Boolean(openDesignReadiness.configured),
+      mode: "owner_scoped_headless_daemon",
+      requiredEnv: ["OPEN_DESIGN_ENABLED=true", "OPEN_DESIGN_BASE_URL", "OPEN_DESIGN_API_TOKEN", "OPEN_DESIGN_PROJECT_ID", "OPEN_DESIGN_BYOK_BASE_URL", "OPEN_DESIGN_BYOK_API_KEY", "OPEN_DESIGN_BYOK_MODEL", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["GET /api/integrations/open-design/status", "GET /api/integrations/open-design/projects", "POST /api/integrations/open-design/runs", "GET /api/integrations/open-design/runs/:runId", "agent tool: open_design"],
+      note: openDesignReadiness.note
+    },
+    {
+      id: "open-generative-ai",
+      name: "Open Generative AI / MuAPI Studio",
+      capability: "Allowlisted image generation/editing and video text/image/reference/edit/extend workflows with asynchronous status polling",
+      state: openGenerativeAIReadiness.state,
+      configured: Boolean(openGenerativeAIReadiness.configured),
+      mode: "owner_scoped_metered_media_api",
+      requiredEnv: ["ULTRON_OPEN_GENERATIVE_AI_ENABLED=true", "MUAPI_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["GET /api/integrations/open-generative-ai/status", "GET /api/integrations/open-generative-ai/models", "POST /api/integrations/open-generative-ai/generate", "GET /api/integrations/open-generative-ai/jobs/:requestId", "agent tool: open_generative_ai"],
+      note: openGenerativeAIReadiness.note
     },
     {
       id: "hermes-agent",

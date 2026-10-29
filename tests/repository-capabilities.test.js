@@ -35,14 +35,65 @@ test("capability router matches distinct task domains automatically", () => {
 test("new screenshot repositories have explicit safe/unverified states", () => {
   const status = getRepositoryCapabilityStatus({});
   const byId = Object.fromEntries(status.integrations.map(item => [item.id, item]));
-  assert.equal(byId["heretic"].state, "review_required_upstream_unverified");
+  assert.equal(byId["heretic"].state, "review_required_license_and_resource_gate");
+  assert.equal(byId["open-generative-ai"].state, "disabled_by_config");
+  assert.equal(byId["agency-agents"].state, "guidance_only");
+  assert.equal(byId["jcode"].state, "local_cli_runtime_required");
+  assert.equal(byId["open-generative-ai"].repo, "Anil-matcha/Open-Generative-AI");
+  assert.equal(byId["agency-agents"].repo, "msitarzewski/agency-agents");
+  assert.equal(byId["jcode"].repo, "1jehuang/jcode");
   assert.equal(byId["atticus-mac"].state, "desktop_companion_required");
   assert.equal(byId["ecc"].state, "task_aware_skill_selector");
   assert.equal(byId["strata"].state, "optional");
+  assert.equal(byId["open-seo"].state, "missing_configuration");
+  assert.equal(byId["open-higgsfield"].state, "disabled_by_config");
+  assert.equal(byId["open-design"].state, "disabled_by_config");
+  assert.equal(byId["open-generative-ai"].state, "disabled_by_config");
+  const muapiKey = "muapi-test-secret-123456";
+  const configuredMuApi = getRepositoryCapabilityStatus({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: muapiKey,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "open-generative-ai");
+  assert.equal(configuredMuApi.state, "configured_unverified");
+  assert.equal(configuredMuApi.configured, true);
+  assert.equal(JSON.stringify(configuredMuApi).includes(muapiKey), false);
+  const openDesignSecret = "synthetic-open-design-daemon-token";
+  const configuredOpenDesign = getRepositoryCapabilityStatus({
+    OPEN_DESIGN_ENABLED: "true",
+    OPEN_DESIGN_BASE_URL: "https://design.example.com",
+    OPEN_DESIGN_API_TOKEN: openDesignSecret,
+    OPEN_DESIGN_PROJECT_ID: "personal_project_123",
+    OPEN_DESIGN_BYOK_BASE_URL: "https://openrouter.ai/api/v1",
+    OPEN_DESIGN_BYOK_API_KEY: "synthetic-provider-token",
+    OPEN_DESIGN_BYOK_MODEL: "openrouter/free",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "open-design");
+  assert.equal(configuredOpenDesign.state, "configured_unverified");
+  assert.equal(configuredOpenDesign.configured, true);
+  assert.equal(JSON.stringify(configuredOpenDesign).includes(openDesignSecret), false);
+  assert.equal(JSON.stringify(configuredOpenDesign).includes("synthetic-provider-token"), false);
+  const hfConfigured = getRepositoryCapabilityStatus({
+    ULTRON_OPEN_HIGGSFIELD_ENABLED: "true",
+    HF_API_BASE_URL: "https://api.higgsfield.ai",
+    OPEN_HIGGSFIELD_API_KEY: "synthetic-id:synthetic-secret-12345",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "open-higgsfield");
+  assert.equal(hfConfigured.state, "configured_unverified");
+  assert.equal(hfConfigured.configured, true);
+  assert.equal(JSON.stringify(hfConfigured).includes("synthetic-secret-12345"), false);
+  const openSeoSecret = "oseo_test-key-abcdef123456";
+  const configuredOpenSeo = getRepositoryCapabilityStatus({
+    OPENSEO_API_KEY: openSeoSecret,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "open-seo");
+  assert.equal(configuredOpenSeo.state, "configured_unverified");
+  assert.equal(configuredOpenSeo.configured, true);
+  assert.equal(JSON.stringify(configuredOpenSeo).includes(openSeoSecret), false);
   const configuredStrata = getRepositoryCapabilityStatus({ STRATA_BASE_URL: "http://127.0.0.1:8080/v1", STRATA_MODEL: "local-model" }).integrations.find(item => item.id === "strata");
   assert.equal(configuredStrata.state, "configured_unverified");
   assert.equal(configuredStrata.configured, true);
-  for (const id of ["free-cloud-code", "not-ai", "jcode", "open-generative-ai", "dramadaw", "opendudley", "agency-agents"]) {
+  for (const id of ["free-cloud-code", "not-ai", "dramadaw", "opendudley"]) {
     assert.equal(byId[id].state, "review_required_upstream_unverified", id);
   }
   assert.equal(byId["chrome-devtools"].state, "blocked");

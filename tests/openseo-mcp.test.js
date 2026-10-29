@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getOpenSeoReadiness, runOpenSeoTool } from "../integrations/openseo-mcp.js";
+import { buildIntegrationCatalog } from "../integrations/catalog.js";
 
 const owner = "00000000-0000-4000-8000-000000000001";
 const readyEnv = {
@@ -42,7 +43,7 @@ test("OpenSEO is optional and readiness never exposes the API key", () => {
   const readiness = getOpenSeoReadiness({});
   assert.equal(readiness.configured, false);
   assert.equal(readiness.state, "optional");
-  assert.equal(JSON.stringify(readiness).includes("oseo_"), false);
+  assert.equal(JSON.stringify(readiness).includes(readyEnv.OPENSEO_API_KEY), false);
 });
 
 test("OpenSEO blocks non-owner and missing key before outbound calls", async () => {
@@ -119,4 +120,32 @@ test("OpenSEO blocks invalid operations, arguments and unsafe endpoints", async 
   assert.equal(badOperation.error.code, "OPENSEO_OPERATION_NOT_SUPPORTED");
   assert.equal(badArgs.state, "blocked");
   assert.equal(badUrl.configured, false);
+});
+
+
+test("OpenSEO is represented accurately in ULTRON integration readiness", () => {
+  const optional = buildIntegrationCatalog({}).find(item => item.id === "open-seo");
+  assert.ok(optional, "OpenSEO should appear in the integration catalog");
+  assert.equal(optional.state, "optional");
+  assert.equal(optional.configured, false);
+
+  const configured = buildIntegrationCatalog(readyEnv).find(item => item.id === "open-seo");
+  assert.equal(configured.state, "configured_unverified");
+  assert.equal(configured.configured, true);
+  assert.ok(configured.requiredEnv.includes("OPENSEO_API_KEY"));
+  assert.equal(JSON.stringify(configured).includes(readyEnv.OPENSEO_API_KEY), false);
+});
+
+
+test("OpenSEO is represented accurately in ULTRON integration readiness", () => {
+  const optional = buildIntegrationCatalog({}).find(item => item.id === "open-seo");
+  assert.ok(optional, "OpenSEO should appear in the integration catalog");
+  assert.equal(optional.state, "optional");
+  assert.equal(optional.configured, false);
+
+  const configured = buildIntegrationCatalog(readyEnv).find(item => item.id === "open-seo");
+  assert.equal(configured.state, "configured_unverified");
+  assert.equal(configured.configured, true);
+  assert.ok(configured.requiredEnv.includes("OPENSEO_API_KEY"));
+  assert.equal(JSON.stringify(configured).includes(readyEnv.OPENSEO_API_KEY), false);
 });
