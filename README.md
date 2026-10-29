@@ -226,6 +226,10 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
 
+## Living Core workspaces
+
+The integration candidate includes same-origin chat history/resumption, a per-browser ULTRON/NAYA persona selector, model selection from the backend-reported catalog, voice/memory preferences, Memory Vault, private Notes, Reminders, Study Library, private document storage, AI Employee schedules, task lifecycle/approval controls, a secret-free readiness matrix, and defensive security guidance with passive HTTP-header evidence analysis. These panels call existing account-scoped backend APIs; any missing Supabase migration or unavailable provider is reported instead of being treated as success. Browser/device E2E and production deployment remain unverified.
+
 ## Isolated coding sandbox (opt-in)
 
 ULTRON's agent exposes a `coding_sandbox_run` tool for the exact Python or JavaScript source in a direct request such as `Run this code:` followed by one fenced code block. It does not provide a general shell or modify repositories. The raw request must match the code exactly; model-generated substitutions are rejected.
