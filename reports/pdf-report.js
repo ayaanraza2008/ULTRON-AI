@@ -41,7 +41,9 @@ function wrap(value, width = 92) {
   return lines;
 }
 function assemble(pages) {
-  const eol = "\r\n";
+  // Classic PDF xref tables use fixed 20-byte entries. LF + one padding
+  // space keeps each record exactly 20 bytes for older PDF.js parsers.
+  const eol = "\n";
   const objects = [];
   const add = text => objects.push(Buffer.from(text, "ascii"));
   add("<< /Type /Catalog /Pages 2 0 R >>");
@@ -60,9 +62,7 @@ function assemble(pages) {
     ]));
   });
 
-  // Compute offsets from the exact byte buffers written to the file. PDF xref
-  // offsets are bytes, not JavaScript string indices; keep one serialization path
-  // for every object, xref entry and startxref position.
+  // Compute offsets from serialized buffers, never JavaScript string indices.
   const header = Buffer.concat([
     Buffer.from("%PDF-1.4" + eol + "%", "ascii"),
     Buffer.from([0xE2, 0xE3, 0xCF, 0xD3]),
@@ -81,10 +81,10 @@ function assemble(pages) {
   const xrefOffset = offset;
   const xref = [
     "xref" + eol + "0 " + (objects.length + 1) + eol,
-    "0000000000 65535 f" + eol
+    "0000000000 65535 f " + eol
   ];
   for (let i = 1; i < offsets.length; i++) {
-    xref.push(String(offsets[i]).padStart(10, "0") + " 00000 n" + eol);
+    xref.push(String(offsets[i]).padStart(10, "0") + " 00000 n " + eol);
   }
   xref.push(
     "trailer" + eol + "<< /Size " + (objects.length + 1) + " /Root 1 0 R >>" + eol +
