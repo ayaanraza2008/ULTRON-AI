@@ -1,5 +1,6 @@
 import { safeServiceBase } from "./network-safety.js";
 import { getStrataReadiness } from "./integrations/strata.js";
+import { codingSandboxReadiness } from "./coding-sandbox.js";
 
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -40,6 +41,14 @@ export function buildRuntimeReadiness({
   const phoneOtpConfigured = supabaseConfigured;
   const workerEnabled = env.ULTRON_EMPLOYEES_ENABLED === "true";
   const workerState = workerStatus?.state || (workerEnabled ? "not_started" : "disabled");
+  const sandboxReadiness = codingSandboxReadiness(env);
+  const sandboxState = sandboxReadiness.configured ? "configured_unverified"
+    : sandboxReadiness.enabled ? "blocked" : "optional";
+  const sandboxNote = sandboxReadiness.configured
+    ? "An opt-in, owner-only, digest-pinned container runner is configured. Actual Docker/image execution, timeout enforcement and cleanup still require a deliberate local smoke test; configuration does not prove isolation."
+    : sandboxReadiness.enabled
+      ? "Sandbox activation was requested but required owner/runtime settings are missing or invalid. Execution remains blocked."
+      : "Isolated code execution is disabled by default. Plan/review coding assistance remains available; enable only on a reviewed host with a trusted, cached digest-pinned image.";
 
   const components = [
     component("cloud_model", "Cloud model inference", modelProviderConfigured ? "configured_unverified" : "blocked",
@@ -90,8 +99,8 @@ export function buildRuntimeReadiness({
       ["STRATA_BASE_URL", "STRATA_MODEL"], strataReadiness.note),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
-    component("safe_code_execution", "Isolated code execution", "not_available",
-      [], "ULTRON does not claim to run arbitrary user code in an isolated sandbox; coding assistance is limited to supported plan, draft, and review workflows.")
+    component("safe_code_execution", "Isolated code execution", sandboxState,
+      ["ULTRON_CODING_SANDBOX_ENABLED=true", "ULTRON_INTEGRATION_OWNER_USER_ID", "trusted cached digest-pinned runtime image"], sandboxNote)
   ];
 
   // A deliberately unsupported optional capability is disclosed in the component list,
