@@ -1140,3 +1140,60 @@ test("model discovery preserves multiple configured models sharing one API base 
   });
 });
 
+test("chat dispatches an explicitly selected registry model sharing the OpenRouter base URL", async () => {
+  const calls = [];
+  const registryEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "nemotron-lightning-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "nvidia/nemotron-3.5-lightning:free",
+        priority: 10,
+        supportsVision: false
+      },
+      {
+        name: "north-mini-code-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "cohere/north-mini-code:free",
+        priority: 20,
+        supportsVision: false
+      }
+    ])
+  };
+  const app = createApp({
+    env: registryEnv,
+    fetchImpl: async (url, options = {}) => {
+      const model = JSON.parse(options.body || "{}").model;
+      calls.push({ url, authorization: options.headers?.Authorization, model });
+      assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+      assert.equal(options.headers.Authorization, "Bearer test-key");
+      assert.equal(model, "cohere/north-mini-code:free");
+      return new Response(JSON.stringify({
+        model,
+        choices: [{ message: { role: "assistant", content: "Selected free registry model responded." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        model: "ultron/north-mini-code-free/cohere/north-mini-code:free",
+        messages: [{ role: "user", content: "Say hello." }]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Selected free registry model responded.");
+    assert.equal(response.headers.get("x-ultron-provider"), "north-mini-code-free");
+    assert.equal(response.headers.get("x-ultron-model"), "cohere/north-mini-code:free");
+  });
+  assert.equal(calls.length, 1);
+});
+
