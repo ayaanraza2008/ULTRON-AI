@@ -1,7 +1,7 @@
 # ULTRON AI Architecture
 
-## Current phase: backend only
-- Full frontend/UI work remains deferred until the final phase. A minimal source-controlled Windows wake-word companion and an Android on-device wake-word companion now exist; their CI builds do not constitute physical-device verification.
+## Current phase: backend + candidate frontend; production verification pending
+- The integration candidate serves a first-party Living Core UI from `public/` on the same origin; source checks and static-serving tests are included. This does not prove a deployed UI or real browser/device workflow. Windows and Android wake-word companions still require physical-device testing.
 - API server: server-side provider adapter, validation, rate limits, timeout/cancellation handling, health/readiness endpoints, structured logs.
 - Provider gateway: OpenAI-compatible OpenRouter API; keep API keys exclusively server-side.
 - Persistence: dedicated Supabase project `ULTRON-AI`, ref `opdjfhwepmcprbqojpat`, region `ap-south-1`.
