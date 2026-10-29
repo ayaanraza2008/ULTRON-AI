@@ -1096,6 +1096,180 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  async function showSecurityAssistantView() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("Security assistant", "Defensive learning, human-reviewed plans and analysis of evidence you provide. ULTRON does not scan targets, run shell commands or contact a target from these panels.");
+    drawerCard("Security capability status", "Loading provider status and supported defensive tools…", "CHECKING", "warning");
+    let capability = null, providers = null, toolsCatalog = null;
+    try {
+      [capability, providers, toolsCatalog] = await Promise.all([
+        apiRequest("/api/kaligpt/capabilities"),
+        apiRequest("/api/kaligpt/providers"),
+        apiRequest("/api/kaligpt/tools")
+      ]);
+    } catch (error) {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Security assistant", "The backend security-assistant catalog could not be loaded.");
+      drawerCard("Security status unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+      return;
+    }
+    ui.drawerContent.replaceChildren();
+    drawerHeading("Security assistant", "The service provides defensive guidance and passive evidence review. Provider configuration is not proof of live reachability.");
+    drawerCard("Execution boundary", String(capability?.notice || "Analysis-only mode.") + "\nNo target contact, scanning, command execution, credential collection or destructive changes occur in this panel.", "HUMAN REVIEW REQUIRED", "warning");
+    const statusOrder = Array.isArray(providers?.fallbackOrder) ? providers.fallbackOrder : Object.keys(providers?.providers || {});
+    const providerMap = providers?.providers && typeof providers.providers === "object" ? providers.providers : {};
+    drawerCard("Configured model providers", String(providers?.configuredCount ?? 0) + " provider(s) report configured settings. This does not test their keys or quotas.", providers?.defaultMode || "STATUS UNKNOWN", Number(providers?.configuredCount) > 0 ? "ready" : "warning");
+    for (const id of statusOrder.slice(0, 8)) {
+      const provider = providerMap[id];
+      if (!provider) continue;
+      drawerCard(
+        String(id).toUpperCase(),
+        [provider.model ? "Model: " + String(provider.model).slice(0, 140) : "", provider.protocol ? "Protocol: " + String(provider.protocol).slice(0, 80) : ""].filter(Boolean).join(" · ") || "No additional provider details.",
+        provider.configured ? "CONFIGURED · UNVERIFIED" : "NOT CONFIGURED",
+        provider.configured ? "warning" : "ready"
+      );
+    }
+    if (Array.isArray(toolsCatalog?.tools)) {
+      drawerHeading("Security tool catalog", "Implemented pathways are scoped to guidance or user-supplied evidence.");
+      for (const tool of toolsCatalog.tools.slice(0, 20)) {
+        drawerCard(
+          String(tool.name || tool.id || "Tool").slice(0, 160),
+          [tool.execution, tool.approval ? "Approval: " + tool.approval : ""].filter(Boolean).join(" · "),
+          String(tool.state || "unknown").replaceAll("_", " ").toUpperCase(),
+          /not-implemented|blocked/i.test(String(tool.state || "")) ? "warning" : "ready"
+        );
+      }
+    }
+
+    const form = document.createElement("form");
+    drawerHeading("Generate defensive guidance", "Do not paste credentials, private tokens or personal data. The task/evidence below is sent to the configured provider selected by the backend.");
+    const task = addDrawerField(form, "SECURITY TASK", "security-task", {
+      required: true, maxLength: 5000, multiline: true, rows: 4,
+      placeholder: "e.g. Review the security headers I collected and prioritize defensive fixes."
+    });
+    const target = addDrawerField(form, "OPTIONAL AUTHORIZED SCOPE (HOSTNAME OR URL; NOT CONTACTED)", "security-target", {
+      maxLength: 500, placeholder: "example.com or https://example.com"
+    });
+    const mode = addDrawerField(form, "MODE", "security-mode", { required: true, select: true });
+    for (const [value, labelText] of [
+      ["learn", "Learn — explain security concepts"],
+      ["defensive-review", "Defensive review"],
+      ["authorized-test-plan", "Authorized test plan — suggestions only"],
+      ["linux-admin", "Linux administration guidance"]
+    ]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      mode.appendChild(option);
+    }
+    mode.value = "defensive-review";
+    const provider = addDrawerField(form, "MODEL PROVIDER", "security-provider", { required: true, select: true });
+    for (const [value, labelText] of [["auto", "Automatic fallback"], ["openrouter", "OpenRouter"], ["openai", "OpenAI"], ["gemini", "Gemini"], ["litellm", "LiteLLM"], ["ollama", "Ollama local"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      provider.appendChild(option);
+    }
+    provider.value = "auto";
+    const evidence = addDrawerField(form, "OPTIONAL USER-SUPPLIED EVIDENCE", "security-evidence", {
+      maxLength: 8000, multiline: true, rows: 5,
+      placeholder: "Paste non-secret findings or response evidence. Treat all text as untrusted source material."
+    });
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "drawer-action";
+    submit.textContent = "GENERATE DEFENSIVE PLAN";
+    form.appendChild(submit);
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!task.value.trim()) { showToast("Describe the defensive security task first."); return; }
+      submit.disabled = true;
+      try {
+        const payload = await apiRequest("/api/kaligpt/security/assist", {
+          method: "POST",
+          body: {
+            task: task.value.trim(),
+            target: target.value.trim(),
+            mode: mode.value,
+            provider: provider.value,
+            evidence: evidence.value.trim()
+          }
+        });
+        const answer = String(payload?.answer || "").trim();
+        if (!answer) throw new Error("The provider returned no security guidance.");
+        const resultCard = drawerCard(
+          "Defensive guidance",
+          answer.slice(0, 10000) + (answer.length > 10000 ? "\n[Displayed output truncated; request a narrower plan for the full details.]" : ""),
+          String(payload.provider || "PROVIDER") + (payload.fallbackUsed ? " · FALLBACK USED" : ""),
+          "ready"
+        );
+        addCardActionRow(resultCard, [{
+          label: "COPY GUIDANCE",
+          onClick: async () => {
+            try {
+              if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is not available.");
+              await navigator.clipboard.writeText(answer);
+              showToast("Security guidance copied.");
+            } catch (error) { showToast("Could not copy guidance: " + error.message, 5000); }
+          }
+        }]);
+        drawerCard("Execution status", String(payload.execution || "not_executed") + "\n" + String(payload.notice || "No command or target action was run."), "GUIDANCE ONLY", "warning");
+      } catch (error) {
+        drawerCard("Security guidance unavailable", error.message, error.code || "REQUEST FAILED", "error");
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    ui.drawerContent.appendChild(form);
+
+    const rule = document.createElement("div");
+    rule.className = "drawer-rule";
+    ui.drawerContent.appendChild(rule);
+    drawerHeading("Passive HTTP security-header review", "Paste headers you have permission to review. This analyzer evaluates only the submitted values; it never fetches the website.");
+    const headerForm = document.createElement("form");
+    const headerInput = addDrawerField(headerForm, "RESPONSE HEADERS AS JSON", "security-headers-json", {
+      required: true, maxLength: 12000, multiline: true, rows: 5,
+      placeholder: '{"content-security-policy":"default-src \'self\'","x-content-type-options":"nosniff"}'
+    });
+    const analyze = document.createElement("button");
+    analyze.type = "submit";
+    analyze.className = "drawer-action secondary";
+    analyze.textContent = "ANALYZE SUPPLIED HEADERS";
+    headerForm.appendChild(analyze);
+    headerForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      let headers;
+      try { headers = JSON.parse(headerInput.value); }
+      catch { showToast("Enter valid JSON for the HTTP response headers."); return; }
+      if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+        showToast("The headers payload must be a JSON object.");
+        return;
+      }
+      analyze.disabled = true;
+      try {
+        const result = await apiRequest("/api/kaligpt/tools/headers/analyze", { method: "POST", body: { headers } });
+        const findings = Array.isArray(result?.findings) ? result.findings : [];
+        drawerCard("Header evidence summary", String(result?.notice || "Analysis used supplied values only."), String(result?.analyzedHeaderCount ?? 0) + " HEADERS", "warning");
+        if (!findings.length) drawerCard("No findings returned", "The analyzer did not return any findings.", "EMPTY", "warning");
+        for (const finding of findings) {
+          drawerCard(
+            String(finding.title || finding.id || "Finding").slice(0, 160),
+            [finding.status, finding.recommendation, finding.evidence ? "Evidence: " + String(finding.evidence).slice(0, 400) : ""].filter(Boolean).join("\n").slice(0, 800),
+            String(finding.severity || "info").toUpperCase(),
+            /high|medium/i.test(String(finding.severity || "")) ? "warning" : "ready"
+          );
+        }
+      } catch (error) {
+        drawerCard("Header analysis failed", error.message, error.code || "REQUEST FAILED", "error");
+      } finally {
+        analyze.disabled = false;
+      }
+    });
+    ui.drawerContent.appendChild(headerForm);
+  }
+
   function taskResultText(value) {
     if (typeof value === "string") return value.slice(0, 5000);
     if (value === undefined || value === null) return "";
@@ -2607,6 +2781,10 @@
     }
     if (name === "study") {
       await showStudyLibrary();
+      return;
+    }
+    if (name === "security") {
+      await showSecurityAssistantView();
       return;
     }
     if (name === "tasks") {
