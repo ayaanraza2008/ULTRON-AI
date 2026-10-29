@@ -871,11 +871,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100, supportsTools: item.supportsTools !== false });
     }
 
-    // Direct-key fallbacks are appended after registry entries so an explicit
-    // registry entry with the same name or endpoint retains its configured model.
+    // Direct-key providers are billable or account-tier-dependent fallbacks.
+    // Keep explicit provider registry entries and configured OpenRouter free models
+    // ahead of these defaults; an explicit registry entry still controls its own priority.
     for (const entry of [
-      { name: "groq", key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1", modelEnv: "GROQ_DEFAULT_MODEL", model: "openai/gpt-oss-20b", priority: 1 },
-      { name: "gemini", key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai", modelEnv: "GEMINI_DEFAULT_MODEL", model: "gemini-3.8-flash", priority: 2 }
+      { name: "groq", key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1", modelEnv: "GROQ_DEFAULT_MODEL", model: "openai/gpt-oss-20b", priority: 1000 },
+      { name: "gemini", key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai", modelEnv: "GEMINI_DEFAULT_MODEL", model: "gemini-3.8-flash", priority: 1001 }
     ]) {
       const apiKey = typeof env[entry.key] === "string" ? env[entry.key].trim() : "";
       if (!apiKey || seen.has(entry.name)) continue;
