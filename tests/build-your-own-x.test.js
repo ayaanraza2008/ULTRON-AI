@@ -51,7 +51,7 @@ test("ordinary conversation does not receive unrelated build-from-scratch refere
 
 test("reference result limits are bounded and invalid input is handled", () => {
   assert.deepEqual(buildBuildYourOwnXGuidance(null).matched, []);
-  assert.deepEqual(buildBuildYourOwnXGuidance("Build a RAG search engine", null).matched.length > 0, true);
+  assert.ok(buildBuildYourOwnXGuidance("Build a RAG search engine", null).matched.length > 0);
   const one = buildBuildYourOwnXGuidance(
     "Build a RAG document search engine with an Express API endpoint",
     { limit: 1 }
