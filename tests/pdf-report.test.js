@@ -5,21 +5,21 @@ import { generateReportPdf } from "../reports/pdf-report.js";
 
 function assertPdfCrossReference(pdf) {
   const raw = pdf.toString("ascii");
-  const match = /startxref\\s+(\\d+)\\s+%%EOF/.exec(raw);
+  const match = /startxref\s+(\d+)\s+%%EOF/.exec(raw);
   assert.ok(match, "PDF must include startxref and EOF markers");
   const xrefOffset = Number(match[1]);
   assert.equal(raw.slice(xrefOffset, xrefOffset + 4), "xref", "startxref must point to xref table");
   const xref = raw.slice(xrefOffset);
-  const size = /^xref\\n0 (\\d+)\\n/.exec(xref);
+  const size = /^xref\n0 (\d+)\n/.exec(xref);
   assert.ok(size, "xref table must declare its object count");
   const count = Number(size[1]);
-  const entries = xref.split("\\n").slice(2, 2 + count - 1);
+  const entries = xref.split("\n").slice(3, 3 + count - 1);
   assert.equal(entries.length, count - 1);
   for (let objectId = 1; objectId < count; objectId++) {
     const entry = entries[objectId - 1];
-    assert.match(entry || "", /^\\d{10} 00000 n ?$/, "xref entry must be a ten-digit in-use offset");
+    assert.match(entry || "", /^\d{10} 00000 n ?$/, "xref entry must be a ten-digit in-use offset");
     const position = Number(entry.slice(0, 10));
-    assert.equal(raw.slice(position, position + String(objectId).length + 7), String(objectId) + " 0 obj\\n", "xref offset must point to the matching object header");
+    assert.equal(raw.slice(position, position + String(objectId).length + 8), String(objectId) + " 0 obj\n", "xref offset must point to the matching object header");
   }
 }
 
