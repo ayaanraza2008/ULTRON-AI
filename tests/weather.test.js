@@ -173,6 +173,7 @@ test("weather tool returns sourced current conditions and a short forecast", asy
     assert.equal(result.dailyForecast.length, 3);
     assert.equal(result.dailyForecast[1].condition, "Slight rain");
     assert.match(result.attribution, /Open-Meteo/);
+    assert.equal(result.sourceContentTrust, "untrusted_external_weather_data");
   });
 
   assert.equal(providerCalls, 2);
