@@ -463,3 +463,7 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## ULTRON Living Core interface
+
+The repository includes the first-party command interface under `public/`, served by the same Core origin as its authenticated API routes. Open `/` for the Living Core UI; its JavaScript and CSS load from `/app.js` and `/styles.css`. Authentication uses same-origin requests and secure server-managed cookies. Static serving denies dotfiles, does not expose directory listings, and falls through to the existing `/api/*` routes. See [Core UI notes](docs/CORE_UI.md).
