@@ -7,6 +7,7 @@ import { safeServiceBase } from "../network-safety.js";
 import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
 import { getStrataReadiness } from "./strata.js";
 import { getOpenSeoReadiness } from "./openseo-mcp.js";
+import { getOpenDesignReadiness } from "./open-design.js";
 import { getOpenHiggsfieldReadiness } from "./open-higgsfield.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
@@ -37,6 +38,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const cactusReadiness = getCactusReadiness(env);
   const strataReadiness = getStrataReadiness(env);
   const openSeoReadiness = getOpenSeoReadiness(env);
+  const openDesignReadiness = getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const openHiggsfieldReadiness = getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
 
   return [
@@ -247,6 +249,17 @@ export function buildIntegrationCatalog(env = process.env) {
       requiredEnv: ["ULTRON_OPEN_HIGGSFIELD_ENABLED=true", "HF_API_BASE_URL", "OPEN_HIGGSFIELD_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       apiRoutes: ["GET /api/integrations/open-higgsfield/models", "POST /api/integrations/open-higgsfield/generate", "GET /api/integrations/open-higgsfield/jobs/:requestId", "agent tool: openhiggsfield"],
       note: openHiggsfieldReadiness.note
+    },
+    {
+      id: "open-design",
+      name: "OpenDesign Headless Design Agent",
+      capability: "Owner-scoped project discovery, BYOK design/coding task submission and run status/deliverable validation",
+      state: openDesignReadiness.state,
+      configured: Boolean(openDesignReadiness.configured),
+      mode: "owner_scoped_headless_daemon",
+      requiredEnv: ["OPEN_DESIGN_ENABLED=true", "OPEN_DESIGN_BASE_URL", "OPEN_DESIGN_API_TOKEN", "OPEN_DESIGN_PROJECT_ID", "OPEN_DESIGN_BYOK_BASE_URL", "OPEN_DESIGN_BYOK_API_KEY", "OPEN_DESIGN_BYOK_MODEL", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["GET /api/integrations/open-design/status", "GET /api/integrations/open-design/projects", "POST /api/integrations/open-design/runs", "GET /api/integrations/open-design/runs/:runId", "agent tool: open_design"],
+      note: openDesignReadiness.note
     },
     {
       id: "hermes-agent",
