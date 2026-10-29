@@ -252,7 +252,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     stage = "analyze_demo_target";
     const evidence = getStructuredToolOutput(await call("tools/call", {
       name: "analyze_javascript_application",
-      arguments: { input_path: targetPath, format: "auto", integrity_policy: "fail", detail: "complete" }
+      arguments: { input_path: targetPath, format: "directory", integrity_policy: "fail", detail: "complete" }
     }));
     if (typeof evidence.evidence_id !== "string" || !evidence.normalized_result) {
       return { ok: false, stage: "analyze_demo_target", reason: "evidence_missing" };

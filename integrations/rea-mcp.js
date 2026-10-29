@@ -5,10 +5,14 @@ const MAX_RESPONSE_BYTES = 1_500_000;
 const MAX_RESULT_BYTES = 800_000;
 const MAX_PATH_LENGTH = 500;
 const NATIVE_CODE_OPERATIONS = new Set(["file_headers", "section_headers", "symbols", "relocations", "dwarf", "disassemble", "disassemble_all"]);
+function applicationAnalysisFormat(path) {
+  // REA expects directory mode for folder roots; ASAR files are detected via auto.
+  return /\.asar$/i.test(path) ? "auto" : "directory";
+}
 const TOOL_SPECS = Object.freeze({
   rea_analyze_application: {
     upstreamTool: "analyze_javascript_application", pathRequired: true,
-    args: path => ({ input_path: path, format: "auto", integrity_policy: "fail", detail: "complete" })
+    args: path => ({ input_path: path, format: applicationAnalysisFormat(path), integrity_policy: "fail", detail: "complete" })
   },
   rea_investigate_application_feature: {
     // Analyze and trace in one MCP session so the evidence remains valid for the follow-up.
