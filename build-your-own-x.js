@@ -27,7 +27,7 @@ const TOPICS = [
   {
     id: "ai-model", title: "AI Model and RAG", tutorialCount: 3, fit: "core",
     anchor: "build-your-own-ai-model",
-    matches: /\b(ultron ai|ai model|large language model|llm|tokenizer|transformer|model inference|fine[- ]?tun(?:e|ing)|diffusion model|build (?:an? )?(?:ai|language|llm|generative) model|rag|retrieval[- ]?augmented generation|vector store|embedding model|embeddings?)\b/i,
+    matches: /\b(ai model|large language model|llm|tokenizer|transformer|model inference|fine[- ]?tun(?:e|ing)|diffusion model|build (?:an? )?(?:ai|language|llm|generative) model|rag|retrieval[- ]?augmented generation|vector store|embedding model|embeddings?)\b/i,
     guidance: "Understand tokenizer/context limits, provider capability differences, structured tool calls, retrieval-augmented generation, citation grounding, evaluation, and fallback semantics. Reuse mature model libraries and existing ULTRON provider adapters; do not train or download a large model by default.",
     references: [
       { title: "LLMs from scratch", url: "https://github.com/rasbt/LLMs-from-scratch" },
