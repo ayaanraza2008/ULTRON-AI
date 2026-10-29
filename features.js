@@ -1331,7 +1331,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     if (req.query.search !== undefined) {
       const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
       // Whitelist literal terms only; PostgREST filter punctuation must not be user-controlled.
-      if (!/^[\\p{L}\\p{N} _-]{1,80}$/u.test(search)) {
+      if (!/^[\p{L}\p{N} _-]{1,80}$/u.test(search)) {
         return res.status(400).json({ error: { code: "INVALID_NOTE_SEARCH", message: "Search must be 1-80 letters, numbers, spaces, underscores or hyphens." } });
       }
       searchFilter = "&or=" + encodeURIComponent("(title.ilike.*" + search + "*,body.ilike.*" + search + "*)");
@@ -1389,10 +1389,10 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
       if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "NOTE_NOT_FOUND", message: "Note was not found." } });
       const note = rows[0];
-      const stem = boundedString(note.title, 200).replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\\s+/g, "-").slice(0, 80) || "ultron-note";
+      const stem = boundedString(note.title, 200).replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "-").slice(0, 80) || "ultron-note";
       const tags = Array.isArray(note.tags) ? note.tags.filter(tag => typeof tag === "string").slice(0, 20) : [];
-      const markdown = "# " + boundedString(note.title, 200) + "\\n\\n" + boundedString(note.body, 30_000)
-        + (tags.length ? "\\n\\nTags: " + tags.map(tag => boundedString(tag, 40)).join(", ") + "\\n" : "\\n");
+      const markdown = "# " + boundedString(note.title, 200) + "\n\n" + boundedString(note.body, 30_000)
+        + (tags.length ? "\n\nTags: " + tags.map(tag => boundedString(tag, 40)).join(", ") + "\n" : "\n");
       res.setHeader("Content-Type", "text/markdown; charset=utf-8");
       res.setHeader("Content-Disposition", 'attachment; filename="' + stem + '.md"');
       res.setHeader("Cache-Control", "no-store");
