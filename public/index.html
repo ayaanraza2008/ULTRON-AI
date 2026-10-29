@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#020205">
+  <meta name="description" content="ULTRON AI — a living core, voice-first command experience, and task-triggered holographic interface.">
+  <title>ULTRON AI — Living Core</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="universe" aria-hidden="true">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="scanline"></div>
+    <div class="star-noise"></div>
+  </div>
+
+  <header class="topline">
+    <a class="brand" href="/" aria-label="ULTRON AI home">
+      <span class="brand-mark" aria-hidden="true">◉</span>
+      <span class="brand-copy"><span class="brand-name">ULTRON <b>AI</b></span><span class="brand-caption">THINK · ANALYZE · CREATE · EXECUTE</span></span>
+    </a>
+    <div class="header-actions">
+      <div class="connection" role="status" aria-live="polite">
+        <span class="connection-dot"></span>
+        <span id="api-status">CONNECTING TO CORE</span>
+      </div>
+      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-expanded="false" aria-controls="feature-drawer" aria-label="Open ULTRON features" title="ULTRON features">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main-interface">
+    <section id="core-stage" class="core-stage" data-state="idle" aria-label="ULTRON living energy core">
+      <canvas id="core-canvas" aria-label="Animated 3D particle core containing 20,000 GPU-driven particles"></canvas>
+      <div class="core-halo halo-a" aria-hidden="true"></div>
+      <div class="core-halo halo-b" aria-hidden="true"></div>
+      <div class="core-orbit orbit-a" aria-hidden="true"></div>
+      <div class="core-orbit orbit-b" aria-hidden="true"></div>
+      <div class="core-orbit orbit-c" aria-hidden="true"></div>
+      <div class="core-orbit orbit-d" aria-hidden="true"></div>
+      <div class="core-beam beam-top" aria-hidden="true"></div>
+      <div class="core-beam beam-bottom" aria-hidden="true"></div>
+      <div class="core-coordinate coordinate-one" aria-hidden="true">FIELD 20K <i>●</i></div>
+      <div class="core-coordinate coordinate-two" aria-hidden="true">ENERGY <i id="energy-indicator">ACTIVE</i></div>
+    </section>
+
+    <button id="drawer-scrim" class="drawer-scrim" type="button" aria-label="Close features panel" hidden></button>
+    <aside id="feature-drawer" class="feature-drawer" aria-label="ULTRON feature panel" hidden>
+      <div class="drawer-header">
+        <div><p class="drawer-eyebrow">ULTRON INTERFACE</p><h2>Capabilities</h2><p class="drawer-subtitle">One core. Context-aware tools.</p></div>
+        <button id="drawer-close" class="drawer-close" type="button" aria-label="Close features panel">×</button>
+      </div>
+      <nav class="drawer-nav" aria-label="ULTRON features">
+        <button type="button" data-drawer-view="eyes"><span class="nav-icon">◎</span><span><strong>Eyes / Camera</strong><small>See and analyze your view</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-action="voice"><span class="nav-icon">∿</span><span><strong>Voice mode</strong><small>Listen and respond aloud</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="voice-quality"><span class="nav-icon">♫</span><span><strong>Voice quality & pronunciation</strong><small>Hindi + English · male voice</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-action="text"><span class="nav-icon">▤</span><span><strong>Text mode</strong><small>Chat with voice mute control</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-action="research"><span class="nav-icon">⌕</span><span><strong>Research</strong><small>Find and compare sources</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-action="files"><span class="nav-icon">▧</span><span><strong>Analyze a file</strong><small>Read a local document</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="tasks"><span class="nav-icon">◷</span><span><strong>Tasks</strong><small>Queue and task status</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="apps"><span class="nav-icon">⌘</span><span><strong>Connect apps</strong><small>Integrations and access scopes</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="devices"><span class="nav-icon">▣</span><span><strong>PC / mobile devices</strong><small>Pairing and permissions</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="control" class="system-control-nav"><span class="nav-icon">⏻</span><span><strong>Full system control</strong><small>Request a paired control session</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="system"><span class="nav-icon">⦿</span><span><strong>System readiness</strong><small>Backend, model, and voice</small></span><span class="nav-chevron">›</span></button>
+      </nav>
+      <div id="drawer-content" class="drawer-content" aria-live="polite">
+        <div class="drawer-welcome"><span class="drawer-welcome-mark">◉</span><p class="drawer-eyebrow">LIVING CORE</p><p>Choose a capability. ULTRON will keep the core on screen and bring up tools only when needed.</p></div>
+      </div>
+      <p class="drawer-footnote">Device access is always visible, permission-based, and limited to paired connectors.</p>
+    </aside>
+    <input id="local-file-input" type="file" accept=".txt,.md,.csv,.json,.html,.htm,.pdf,.docx,text/plain,text/markdown,text/csv,application/json,text/html,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+
+    <section id="task-panel" class="holo-panel" data-side="left" aria-live="polite" aria-atomic="true" hidden>
+      <div class="panel-top"><span class="panel-glyph" aria-hidden="true">⌘</span><span id="task-kind" class="panel-kind">COGNITIVE TASK</span><span id="task-status" class="panel-status">RUNNING</span></div>
+      <h2 id="task-title">Working on your request</h2>
+      <p id="task-description" class="panel-description">ULTRON is processing the request.</p>
+      <div id="task-detail" class="panel-detail" hidden></div>
+      <div class="panel-line"><span id="task-stage-label">PROCESSING</span><span class="pulse-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
+    </section>
+
+    <section id="camera-panel" class="camera-panel" aria-label="ULTRON eyes camera" hidden>
+      <div class="camera-topline"><span class="camera-live-dot"></span><span id="camera-status">EYES OFFLINE</span><button id="camera-close" type="button" aria-label="Close camera view">×</button></div>
+      <div class="camera-preview"><video id="eye-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder"><span>◎</span><b>CAMERA OFF</b><small>Enable Eyes to request camera permission</small></div><span id="camera-rec-badge" class="camera-rec-badge" hidden>● LIVE</span></div>
+      <div class="camera-buttons"><button id="camera-toggle" type="button" class="camera-primary">ENABLE EYES</button><button id="camera-analyze" type="button" disabled>ANALYZE VIEW</button></div>
+      <label class="live-observe-toggle"><input id="camera-live-observe" type="checkbox" disabled><span><strong>Live observation</strong><small>Analyze one frame every 12 seconds while enabled</small></span></label>
+      <p class="camera-privacy-note">Camera access starts only after you enable it. Frames are sent to the configured vision model only when you analyze or enable live observation; this interface does not store video.</p>
+    </section>
+    <section class="interaction-dock" aria-label="Choose how to interact with ULTRON">
+      <button id="voice-mode" class="mode-card voice-card" type="button" aria-pressed="false">
+        <span class="mode-icon mic-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"></path></svg></span>
+        <span class="mode-text"><strong>VOICE MODE</strong><small id="voice-subtitle">Tap once to start listening</small></span>
+        <span class="mode-indicator" aria-hidden="true"></span>
+      </button>
+      <span class="mode-divider" aria-hidden="true">OR</span>
+      <button id="text-mode" class="mode-card text-card" type="button" aria-pressed="false">
+        <span class="mode-icon text-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5z"></path><path d="M8 8h8M8 11.5h5"></path></svg></span>
+        <span class="mode-text"><strong>TEXT MODE</strong><small>Open the text console</small></span>
+        <span class="mode-indicator" aria-hidden="true"></span>
+      </button>
+      <button id="open-text-input" class="glass-icon-button open-input" type="button" aria-label="Open text input while staying in voice mode" title="Open text input">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5"></path></svg><span class="open-input-label">OPEN TEXT INPUT</span>
+      </button>
+    </section>
+
+    <form id="message-form" class="message-shell" hidden>
+      <div class="composer-topline"><span class="composer-indicator"></span><span id="composer-label">TEXT INPUT</span><span class="composer-hint">ENTER TO SEND · SHIFT+ENTER FOR NEW LINE</span><button id="close-input" class="close-input" type="button" aria-label="Close text input" hidden>×</button></div>
+      <div class="composer-row">
+        <label class="visually-hidden" for="message-input">Message to ULTRON</label>
+        <textarea id="message-input" name="message" rows="1" maxlength="12000" placeholder="Transmit a command to ULTRON…" autocomplete="off" spellcheck="true"></textarea>
+        <button id="mute-toggle" class="mute-control" type="button" aria-pressed="false" hidden><span class="mute-symbol" aria-hidden="true">◖</span><span id="mute-label">MUTE VOICE</span></button>
+        <button id="send-message" class="send-control" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-6.5 18-3.4-7.1zM11.1 13.9 21 3"></path></svg></button>
+      </div>
+    </form>
+
+    <div id="voice-caption" class="voice-caption" role="status" aria-live="polite"><span class="caption-dot"></span><span id="voice-caption-text">YOUR CORE IS AWAKE · READY WHEN YOU ARE</span><span id="voice-wave" class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </main>
+
+  <section id="auth-gate" class="auth-gate" hidden aria-labelledby="auth-title">
+    <div class="auth-card glass-card">
+      <div class="auth-emblem" aria-hidden="true">◉</div>
+      <p class="eyebrow">SECURE ACCESS</p>
+      <h1 id="auth-title">Connect to ULTRON</h1>
+      <p class="auth-intro">Sign in to use the AI core. Your credentials go only to the ULTRON CORE backend.</p>
+      <div class="auth-tabs" role="group" aria-label="Authentication method">
+        <button type="button" data-auth-tab="signin" class="auth-tab active" aria-pressed="true">ACCOUNT</button>
+        <button type="button" data-auth-tab="signup" class="auth-tab" aria-pressed="false">CREATE ACCOUNT</button>
+        <button type="button" data-auth-tab="access" class="auth-tab" aria-pressed="false">ACCESS CODE</button>
+      </div>
+      <form id="auth-form" class="auth-form">
+        <label id="auth-email-label" for="auth-email">EMAIL</label>
+        <input id="auth-email" name="email" type="email" autocomplete="username" maxlength="320" placeholder="you@example.com" required>
+        <label id="auth-password-label" for="auth-password">PASSWORD</label>
+        <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="256" placeholder="Your password" required>
+        <p id="auth-message" class="auth-message" role="status" aria-live="polite"></p>
+        <button id="auth-submit" class="auth-submit" type="submit">SIGN IN SECURELY <span aria-hidden="true">↗</span></button>
+      </form>
+      <p class="auth-note">Browser-native voice works for free on supported browsers. AI responses depend on the server-side provider being configured.</p>
+    </div>
+  </section>
+
+  <footer class="bottomline"><span>ULTRON · AUTONOMOUS INTERFACE</span><span class="footer-separator">/</span><span id="field-mode">GPU PARTICLE FIELD · INITIALIZING</span><span class="bottomline-right">VOICE · TEXT · HOLOGRAPHIC TASKS</span></footer>
+</body>
+</html>
