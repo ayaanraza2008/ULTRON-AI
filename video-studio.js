@@ -274,7 +274,7 @@ function safeAssetRemoteUrl(value) {
 }
 function mapPexelsVideo(video) {
   const files = Array.isArray(video.video_files) ? video.video_files.filter(f => typeof f.link === "string" && safeAssetRemoteUrl(f.link)) : [];
-  const file = files.filter(f => (Number(f.width) || 0) <= 1920).sort((a, b) => (Number(b.width) || 0) - (Number(a.width) || 0)[0] || files[0];
+  const file = files.filter(f => (Number(f.width) || 0) <= 1920).sort((a, b) => (Number(b.width) || 0) - (Number(a.width) || 0))[0] || files[0];
   if (!file) return null;
   return { id: uuid(), provider: "pexels", kind: "video", title: "Pexels video " + String(video.id || ""), author: bounded(video.user?.name, 120),
     sourcePage: bounded(video.url, 1000), thumbnailUrl: bounded(video.image, 1000), downloadUrl: bounded(file.link, 2000),
