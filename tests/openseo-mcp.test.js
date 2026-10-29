@@ -42,7 +42,7 @@ test("OpenSEO is optional and readiness never exposes the API key", () => {
   const readiness = getOpenSeoReadiness({});
   assert.equal(readiness.configured, false);
   assert.equal(readiness.state, "optional");
-  assert.equal(JSON.stringify(readiness).includes("oseo_"), false);
+  assert.equal(JSON.stringify(readiness).includes(readyEnv.OPENSEO_API_KEY), false);
 });
 
 test("OpenSEO blocks non-owner and missing key before outbound calls", async () => {

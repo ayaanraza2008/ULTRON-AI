@@ -7,6 +7,12 @@ const CATEGORY_TOOLS = Object.freeze({
     "list_speech_voices", "synthesize_speech", "transcribe_audio",
     "create_talking_avatar"
   ],
+  weather: ["weather_lookup"],
+  study: ["create_study_pack"],
+  notes: ["notes_search", "notes_create", "notes_update"],
+  github: ["github_public_repo"],
+  wikipedia: ["wikipedia_lookup"],
+  time: ["world_clock"],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
   browser: ["browser_use", "chrome_devtools", "research_web", "obscura_inspect_public_page", "obscura_capture_public_page"],
   reverse_engineering: [
@@ -50,6 +56,12 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
+  ["github", /\b(?:github|git hub|github\.com|readme (?:from|on) github|latest commits for|open issues for|public github repository)\b/i],
+  ["notes", /\b(?:notes? library|saved notes?|search (?:my )?notes?|find (?:my )?notes?|create (?:a )?note|write (?:a )?note|save (?:a |this |the )?note|update (?:my |the )?note)\b/i],
+  ["study", /\b(?:study mode|study pack|study guide|exam mode|revision sheet|revision notes|flashcards?|make (?:me )?(?:a )?quiz|create (?:a )?quiz|generate (?:a )?quiz|practice questions|practice test|mock test|self.?test|quiz me|test me on)\b/i],
+  ["weather", /\b(?:weather\s+(?:in|for|forecast)|current weather|forecast\s+(?:in|for)|temperature\s+(?:outside|in)|rain chance\s+in|local weather)\b/i],
+  ["wikipedia", /\b(?:wikipedia|wiki article|wikipedia page)\b/i],
+  ["time", /\b(?:world clock|time zones?|timezones?|utc offset|time difference|what\s+time\b|current time in\b|local time in\b|time in\s+[a-z][a-z .'-]{1,60})\b/i],
   ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read (?:this|it|that) aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
   ["browser", /\b(?:chrome devtools|devtools|performance trace|browser performance|console logs|network requests|inspect chrome|browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
   ["reverse_engineering", /\b(?:reverse engineer(?:ing)?|trace how .{1,120} work(?:s)?|trace application feature|inspect (?:this |an? )?(?:binary|executable|firmware|apk|electron app|desktop application|wasm)|analy[sz]e (?:the )?(?:binary|executable|firmware|apk|electron app|native code)|decompile|disassembl(?:e|y)|\brea\b)\b/i],
@@ -87,6 +99,18 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   const categories = [];
   for (const [category, pattern] of CATEGORY_PATTERNS) {
     if (pattern.test(text) && !categories.includes(category)) categories.push(category);
+  }
+  // Prefer the public GitHub adapter over generic web research when the user
+  // names GitHub; its actions are fixed, read-only and repository-scoped.
+  if (categories.includes("github")) {
+    const genericResearchIndex = categories.indexOf("research");
+    if (genericResearchIndex >= 0) categories.splice(genericResearchIndex, 1);
+  }
+  // A specific Wikipedia lookup should not be widened by the generic "look up"
+  // research matcher; the narrow route keeps it on the dedicated read-only tool.
+  if (categories.includes("wikipedia")) {
+    const genericResearchIndex = categories.indexOf("research");
+    if (genericResearchIndex >= 0) categories.splice(genericResearchIndex, 1);
   }
 
   const complex = COMPLEX_PATTERN.test(text);
