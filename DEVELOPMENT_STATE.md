@@ -144,3 +144,11 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Supabase project `opdjfhwepmcprbqojpat` remains `ACTIVE_HEALTHY`. Migration `private_document_storage` is applied at version `20261027185203`; read-only checks confirm private bucket, 5 MiB limit, RLS, and authenticated grants. Real authenticated file E2E is still unverified.
 - Latest code changes improve source-level safety and test coverage; they do not resolve the external blockers for Render build quota, live provider inference, dedicated Auth/RLS E2E accounts, the leaked-password-protection dashboard setting, or physical Windows companion verification.
 - Autonomy regression coverage includes SMS/texts, replies/messages to personal recipients, forwarded notes, and an explicit draft-only exception; a mixed request that also asks to publish remains confirmation-gated.
+
+## 2026-10-29 Google Gemini and Groq model providers
+
+- Added first-class optional OpenAI-compatible fallbacks in `agent-runtime.js`: Groq is auto-enabled by server-side `GROQ_API_KEY`; Google Gemini is auto-enabled by `GEMINI_API_KEY`. OpenRouter stays first. Models and base URLs can be overridden through backend environment variables.
+- Added a regression test for OpenRouter → Groq → Gemini fallback order, server-side Authorization headers, and ignored client-supplied API key values.
+- Added `.env.example`, Render Blueprint secret placeholders, and provider setup/fallback documentation. The real credentials are not stored in the repository.
+- **Verification status:** source/test changes are on feature branch `feat/gemini-groq-provider-support`. Mocked regression test is added; CI results and real provider completions still need verification. No Render environment values were changed, no deployment was triggered by this work, and live inference is not claimed.
+- **Credential dependency:** a valid `GROQ_API_KEY` and/or `GEMINI_API_KEY` must be created in the respective provider console and entered privately in the backend environment. Provider-specific rates, free-tier rules, model availability, and quotas apply.
