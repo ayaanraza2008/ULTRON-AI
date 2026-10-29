@@ -131,6 +131,36 @@ function extractText(message) {
   return "";
 }
 
+function visionCompletionDiagnostics(data, response) {
+  const choice = data?.choices?.[0];
+  const message = choice?.message;
+  const content = message?.content;
+  const finishReasonRaw = choice?.finish_reason;
+  const finishReason = typeof finishReasonRaw === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(finishReasonRaw)
+    ? finishReasonRaw
+    : undefined;
+  const contentShape = typeof content === "string" ? "string"
+    : Array.isArray(content) ? "array"
+    : content == null ? "missing" : "other";
+  const contentLength = typeof content === "string" ? Math.min(content.length, 100_000)
+    : Array.isArray(content) ? Math.min(content.reduce((total, part) => total + (typeof part?.text === "string" ? part.text.length : 0), 0), 100_000)
+    : 0;
+  const reasoningPresent = [message?.reasoning, message?.analysis, message?.reasoning_details]
+    .some(value => typeof value === "string" ? value.trim().length > 0 : Array.isArray(value) ? value.length > 0 : Boolean(value && typeof value === "object"));
+  const toolCallCount = Array.isArray(message?.tool_calls) ? Math.min(message.tool_calls.length, 100) : 0;
+  const rawContentType = response?.headers?.get?.("content-type");
+  const mime = typeof rawContentType === "string" ? rawContentType.split(";")[0].trim().toLowerCase() : "";
+  const contentType = /^[a-z0-9][a-z0-9.+-]{0,60}\/[a-z0-9][a-z0-9.+-]{0,60}$/.test(mime) ? mime : undefined;
+  return {
+    ...(finishReason ? { finishReason } : {}),
+    contentShape,
+    contentLength,
+    reasoningPresent,
+    toolCallCount,
+    ...(contentType ? { contentType } : {})
+  };
+}
+
 function safeFailureCode(error, status) {
   if (status === 401 || status === 403) return "PROVIDER_AUTH_REJECTED";
   if (status === 402) return "PROVIDER_PAYMENT_REQUIRED";
@@ -177,7 +207,8 @@ export async function runVisionProviderSmoke({
         body: JSON.stringify({
           model,
           temperature: 0,
-          max_tokens: 20,
+          reasoning: { effort: "low" },
+          max_tokens: 512,
           stream: false,
           messages: [{
             role: "system",
@@ -210,9 +241,10 @@ export async function runVisionProviderSmoke({
       attempts.push({ model, code: safeFailureCode(error, response.status), httpStatus: response.status });
       continue;
     }
+    const diagnostics = visionCompletionDiagnostics(data, response);
     const text = extractText(data?.choices?.[0]?.message);
     if (/^ULTRON_VISION_SMOKE_OK[.!]?$/i.test(text)) {
-      attempts.push({ model, code: "VISION_CHALLENGE_PASSED", httpStatus: response.status });
+      attempts.push({ model, code: "VISION_CHALLENGE_PASSED", httpStatus: response.status, ...diagnostics });
       return report("passed", {
         provider: "openrouter",
         model,
@@ -222,7 +254,12 @@ export async function runVisionProviderSmoke({
         attempts
       }, now);
     }
-    attempts.push({ model, code: text ? "VISION_CHALLENGE_FAILED" : "EMPTY_COMPLETION", httpStatus: response.status });
+    attempts.push({
+      model,
+      code: text ? "VISION_CHALLENGE_FAILED" : diagnostics.finishReason === "length" ? "COMPLETION_TRUNCATED" : "EMPTY_COMPLETION",
+      httpStatus: response.status,
+      ...diagnostics
+    });
   }
   return report("failed", {
     reason: "ALL_FREE_VISION_MODELS_FAILED",
