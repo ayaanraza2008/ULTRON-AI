@@ -157,3 +157,12 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Deprecated Fish Audio placeholders remained in `render.yaml`; this branch removes those stale Blueprint keys without modifying hosted environment variables.
 - Remaining live blockers: actual text/vision provider completions, dedicated two-user Auth/RLS E2E, worker completion with credentials/test user, signup/recovery/Google/phone delivery, voice/browser integrations, and physical Windows companion pairing. Arbitrary code execution remains unavailable until a suitable sandbox is built and tested.
 - World Intelligence CI passes, but build output reported large chunks; performance and device/browser checks remain separate.
+
+
+## Render inventory clarification — 2026-10-29
+
+Read-only Render inventory found two different ULTRON backend services connected to this repository in separate workspaces:
+- `ultron-ai-core` in workspace `Ultron core`, URL `https://ultron-ai-core.onrender.com`: latest observed deploy for commit `6b7f09d97508fc2be2085695d862a921e1ae8487` is `live`; the production-revision workflow checked this same hostname and commit.
+- `ultron-ai` in workspace `My Workspace`, URL `https://ultron-ai-zvd7.onrender.com`: the 10 most recent deploy records returned by Render during this audit were all `build_failed`, including attempts for the same main commit.
+
+The CI workflow's passing production-revision result therefore confirms the `ultron-ai-core` service only, not both services. The Blueprint still names `ultron-ai`. Do not silently repoint, delete, reconfigure, or trigger either service as part of backend source work; designate the canonical service during a separately authorized deployment phase.

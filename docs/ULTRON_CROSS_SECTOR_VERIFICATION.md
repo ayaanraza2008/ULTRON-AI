@@ -29,10 +29,17 @@ Last inspected: 2026-10-29 UTC. This matrix separates source/CI evidence from li
 | Browser/external integrations | NOT LIVE-VERIFIED | Require owner-scoped credentials and safe live read-only requests. |
 | Windows companion | NOT COMPLETE | Status protocol/adapter is not proof of a paired runtime. Authenticated permission-scoped companion and physical-device tests are needed. |
 | Coding sandbox | NOT AVAILABLE | Arbitrary code execution stays disabled until a suitable isolated sandbox and resource/network/filesystem limits are implemented and tested. |
-| Deployment identity | NEEDS RECONCILIATION | Workflow uses `ultron-ai-core.onrender.com`, README historically used `ultron-ai-zvd7.onrender.com`, and `render.yaml` declares `ultron-ai`. Confirm active Render workspace/service mapping before changes/deploys. |
+| Deployment identity | MIXED | Read-only Render inventory: `ultron-ai-core` in `Ultron core` is live at main SHA `6b7f09d97508fc2be2085695d862a921e1ae8487` and matches the production-check workflow. `ultron-ai` in `My Workspace` has 10 latest deploy records reported as `build_failed`. `render.yaml` declares the older `ultron-ai` service. Canonical target must be resolved before changing or triggering deployments. |
 | Performance/accessibility | NEEDS DEVICE/BROWSER CHECKS | CI succeeds but map/globe chunks are large. Measure load time and verify keyboard, reduced-motion, screen-reader, mobile and desktop behavior. |
 
 ## Release boundaries
 
 - No database migration, Render deploy, hosted environment variable, billing limit, or Auth plan setting was changed.
 - Do not report overall 100% until each live blocker has its own passing evidence. Mock tests do not replace live provider/API or physical-device tests.
+
+
+## Observed Render deployment split
+
+- `Ultron core / ultron-ai-core` — `https://ultron-ai-core.onrender.com`; latest observed deploy for `6b7f09d97508fc2be2085695d862a921e1ae8487` is `live`.
+- `My Workspace / ultron-ai` — `https://ultron-ai-zvd7.onrender.com`; the latest 10 deploy records returned on 2026-10-29 show `build_failed`, including a deployment attempt for that same main SHA.
+- The green production-revision workflow validates only the first service. No Render setting, environment variable, deploy, restart, deletion, or service repointing was performed during this audit.
