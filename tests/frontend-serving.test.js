@@ -77,6 +77,10 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   assert.match(app, /api\/notes/);
   assert.match(app, /api\/reminders/);
   assert.match(app, /api\/study-packs/);
+  assert.match(app, /api\/agent\/run/);
+  assert.match(app, /create_study_pack/);
+  assert.match(app, /pack.saveStatus === "saved"/);
+  assert.match(app, /No study pack is being marked as saved/);
   assert.match(app, /GENERATE \+ SAVE STUDY PACK/);
 });
 
