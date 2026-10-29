@@ -38,7 +38,7 @@ test("agent model routing falls back after rate limiting and keeps credentials s
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello", apiKey: "untrusted-client-key" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices", apiKey: "untrusted-client-key" })
     });
     assert.equal(response.status, 200);
     assert.match((await response.text()), /Completed through fallback/);
@@ -70,7 +70,7 @@ test("agent model routing rejects insecure provider URLs and skips providers wit
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     assert.deepEqual(calls, ["https://openrouter.ai/api/v1/chat/completions"]);
@@ -98,7 +98,7 @@ test("agent model routing fails over when a provider returns HTTP 200 with an em
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     assert.match((await response.text()), /Recovered from an empty completion/);
@@ -128,7 +128,7 @@ test("agent model routing falls back after malformed JSON from an HTTP 200 provi
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     assert.match(await response.text(), /Recovered from malformed JSON/);
@@ -150,7 +150,7 @@ test("agent model routing returns a bounded failure when every provider returns 
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 502);
     const body = await response.text();
@@ -185,7 +185,7 @@ test("agent model routing fails over after a provider timeout without exposing p
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     const body = await response.text();
@@ -222,7 +222,7 @@ test("agent model routing falls back after an upstream HTTP 408 timeout response
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     assert.match(await response.text(), /Recovered after HTTP 408/);
@@ -257,7 +257,7 @@ test("agent fallback supports multiple free OpenRouter models on the same API en
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     assert.match(await response.text(), /Recovered on a free fallback model/);
@@ -286,7 +286,7 @@ test("agent model routing retries plain chat after HTTP 400 without switching pr
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 502);
     assert.equal(calls.length, 2, "tool-mode 400 should trigger one plain-chat retry");
@@ -327,7 +327,7 @@ test("agent automatically falls back through configured free OpenRouter models w
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     assert.match(await response.text(), /automatically configured free fallback/);
@@ -363,7 +363,7 @@ test("automatic OpenRouter fallback ignores invalid, paid, and duplicate model I
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Say hello" })
+      body: JSON.stringify({ prompt: "Search the web for AI security best practices" })
     });
     assert.equal(response.status, 200);
     assert.deepEqual(calls, ["openrouter/free", "openrouter/free", "nvidia/nemotron-3.5-lightning:free"]);
