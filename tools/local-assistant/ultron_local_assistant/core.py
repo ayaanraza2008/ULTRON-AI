@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,7 +29,7 @@ SKIP_DIR_NAMES = {".git", ".venv", "venv", "node_modules", "__pycache__", "model
 SENSITIVE_NAMES = {".env", ".env.local", ".env.production", "credentials.json", "token.json", "secrets.json", "id_rsa", "id_ed25519"}
 SECRET_NAME_RE = re.compile(r"(?:secret|credential|password|token|private[-_]?key)", re.I)
 FORBIDDEN_COMMAND_TOKENS = {
-    "&&", "||", ";", "|", ">", ">>", "<", "$(", "sudo", "rm", "del",
+    "&&", "||", ";", "|", ">", ">>", "<", "$(", "&", "sudo", "rm", "del",
     "format", "shutdown", "reboot", "curl", "wget", "invoke-webrequest", "powershell",
     "cmd.exe", "bash", "sh", "zsh", "fish", "eval", "exec",
 }
@@ -48,18 +49,28 @@ def app_data_dir() -> Path:
 
 def secure_write(path: Path, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(content, encoding="utf-8")
+    # Create a unique temporary file in the same directory to avoid following a pre-existing .tmp symlink.
+    fd, temp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    temp = Path(temp_name)
     try:
-        os.chmod(temp, 0o600)
-    except OSError:
-        pass
-    temp.replace(path)
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
-    return path
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        temp.replace(path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        return path
+    except Exception:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def _physical_memory_bytes() -> int | None:
@@ -127,7 +138,7 @@ def detect_hardware() -> dict[str, Any]:
 def recommend_models(hardware: dict[str, Any]) -> list[dict[str, str]]:
     ram = hardware.get("ram_gib")
     has_nvidia = "nvidia" in str(hardware.get("gpu", "")).lower() and "no supported" not in str(hardware.get("gpu", "")).lower()
-    if isinstance(ram, (int, float)) and ram < 6:
+    if not isinstance(ram, (int, float)) or ram < 6:
         candidates = [
             ("llama3.2:1b", "Smallest general assistant option; conserve RAM."),
             ("qwen2.5:1.5b", "Small multilingual assistant; CPU use may be slow."),
@@ -196,7 +207,7 @@ def _local_json_request(url: str, payload: dict[str, Any] | None = None, timeout
 def pull_local_model(model: str, url: str | None = None, timeout: int = 1800) -> dict[str, Any]:
     """Download a model only when the caller has already confirmed the exact tag."""
     model = (model or "").strip()
-    if not model or len(model) > 200 or any(char in model for char in "\\r\\n") or model.startswith("-"):
+    if not model or len(model) > 200 or any(char in model for char in "\r\n") or model.startswith("-"):
         raise ValueError("Enter a valid Ollama model tag.")
     base = validate_local_ollama_url(url)
     payload = json.dumps({"name": model, "stream": False}).encode("utf-8")
@@ -381,6 +392,28 @@ def safe_shell_argv(command: str, root: str | Path) -> list[str]:
             raise ValueError("Only a workspace-local Python or JavaScript file can be run this way.")
         return [argv[0], str(target), *argv[2:]]
     raise ValueError("Command is not allowlisted. Use code run for an explicit Python/JavaScript file, or a supported read-only/test command.")
+
+
+def run_script(path: str | Path, root: str | Path, *, confirm: bool = False) -> subprocess.CompletedProcess[str]:
+    """Run one selected local source file without invoking a shell."""
+    if not confirm:
+        raise PermissionError("Execution requires explicit confirmation from the interactive user.")
+    base = Path(root).expanduser().resolve()
+    target = resolve_workspace_file(base, str(path))
+    suffix = target.suffix.lower()
+    if suffix == ".py":
+        argv = [sys.executable, str(target)]
+    elif suffix in {".js", ".mjs", ".cjs"}:
+        node = shutil.which("node")
+        if not node:
+            raise RuntimeError("Node.js is not installed.")
+        argv = [node, str(target)]
+    else:
+        raise ValueError("Only Python or JavaScript workspace files may be run.")
+    try:
+        return subprocess.run(argv, cwd=base, capture_output=True, text=True, timeout=60, check=False)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Script exceeded the 60-second time limit.") from exc
 
 
 def run_approved_command(command: str, root: str | Path, *, confirm: bool = False) -> subprocess.CompletedProcess[str]:
