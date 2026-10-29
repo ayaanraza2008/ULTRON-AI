@@ -1,7 +1,16 @@
 (() => {
   "use strict";
 
-  const PARTICLE_COUNT = 20000;
+  const PREFERS_REDUCED_MOTION = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  const PARTICLE_COUNT = (() => {
+    if (PREFERS_REDUCED_MOTION) return 1200;
+    const lowMemory = Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) <= 4;
+    const lowCores = Number(navigator.hardwareConcurrency) > 0 && Number(navigator.hardwareConcurrency) <= 4;
+    const compactViewport = window.matchMedia?.("(max-width: 720px)")?.matches === true;
+    if (lowMemory || lowCores) return 6000;
+    if (compactViewport) return 10000;
+    return 20000;
+  })();
   const UPSTREAM_API_FALLBACK = "/api";
   const byId = (id) => document.getElementById(id);
   const ui = {
@@ -288,7 +297,7 @@
       };
       resize();
       window.addEventListener("resize", resize, { passive: true });
-      ui.fieldMode.textContent = "WEBGL2 · 20,000 GPU PARTICLES";
+      ui.fieldMode.textContent = `WEBGL2 · ${PARTICLE_COUNT.toLocaleString()} GPU PARTICLES`;
       const frame = (timestamp) => {
         if (!gl) return;
         const seconds = timestamp * 0.001;
@@ -316,9 +325,10 @@
         gl.uniform1f(glUniforms.state, stateCodes[coreState] || 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.POINTS, 0, PARTICLE_COUNT);
-        window.requestAnimationFrame(frame);
+        if (!PREFERS_REDUCED_MOTION) window.requestAnimationFrame(frame);
       };
-      window.requestAnimationFrame(frame);
+      if (PREFERS_REDUCED_MOTION) frame(0);
+      else window.requestAnimationFrame(frame);
     } catch (error) {
       gl = null;
       glUniforms = null;
@@ -369,9 +379,10 @@
         ctx.fillStyle = index % 7 === 0 ? "rgba(75,190,255," + a + ")" : index % 3 === 0 ? "rgba(178,58,255," + a + ")" : "rgba(255,45,112," + a + ")";
         ctx.fillRect(w / 2 + px, h * 0.48 + py, 1.2, 1.2);
       }
-      window.requestAnimationFrame(frame);
+      if (!PREFERS_REDUCED_MOTION) window.requestAnimationFrame(frame);
     }
-    window.requestAnimationFrame(frame);
+    if (PREFERS_REDUCED_MOTION) frame(0);
+    else window.requestAnimationFrame(frame);
   }
 
   function renderMode() {
