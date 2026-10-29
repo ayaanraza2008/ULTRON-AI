@@ -46,6 +46,16 @@ test("new screenshot repositories have explicit safe/unverified states", () => {
   assert.equal(byId["ecc"].state, "task_aware_skill_selector");
   assert.equal(byId["strata"].state, "optional");
   assert.equal(byId["open-seo"].state, "missing_configuration");
+  assert.equal(byId["open-higgsfield"].state, "disabled_by_config");
+  const hfConfigured = getRepositoryCapabilityStatus({
+    ULTRON_OPEN_HIGGSFIELD_ENABLED: "true",
+    HF_API_BASE_URL: "https://api.higgsfield.ai",
+    OPEN_HIGGSFIELD_API_KEY: "synthetic-id:synthetic-secret-12345",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "open-higgsfield");
+  assert.equal(hfConfigured.state, "configured_unverified");
+  assert.equal(hfConfigured.configured, true);
+  assert.equal(JSON.stringify(hfConfigured).includes("synthetic-secret-12345"), false);
   const openSeoSecret = "oseo_test-key-abcdef123456";
   const configuredOpenSeo = getRepositoryCapabilityStatus({
     OPENSEO_API_KEY: openSeoSecret,
