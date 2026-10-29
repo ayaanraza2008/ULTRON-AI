@@ -28,6 +28,7 @@ async function withGateway(run, { maxRequestBytes = 1024, isReady } = {}) {
         url: req.url,
         authorization: req.headers.authorization,
         sessionId: req.headers["mcp-session-id"],
+        protocolVersion: req.headers["mcp-protocol-version"],
         contentType: req.headers["content-type"],
         body: Buffer.concat(chunks).toString("utf8")
       });
@@ -96,7 +97,8 @@ test("REA gateway forwards MCP session headers and body but never forwards the g
         Authorization: "Bearer " + token,
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
-        "Mcp-Session-Id": "rea-session-client"
+        "Mcp-Session-Id": "rea-session-client",
+        "Mcp-Protocol-Version": "2025-03-26"
       },
       body
     });
@@ -107,6 +109,7 @@ test("REA gateway forwards MCP session headers and body but never forwards the g
     assert.equal(seen[0].url, "/mcp");
     assert.equal(seen[0].authorization, undefined);
     assert.equal(seen[0].sessionId, "rea-session-client");
+    assert.equal(seen[0].protocolVersion, "2025-03-26");
     assert.equal(seen[0].body, body);
   });
 });
