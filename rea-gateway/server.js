@@ -392,6 +392,44 @@ function positivePort(value, fallback) {
   return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
 }
 
+
+function safeDiagnosticCode(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null;
+}
+
+function observeReaChildStderr(child) {
+  let pending = "";
+  child.stderr?.on("data", chunk => {
+    pending += chunk.toString("utf8");
+    // Logs are line-delimited. Keep only a small tail in case a provider emits
+    // one unusually large record; never forward the raw content to Render logs.
+    if (pending.length > 8192) pending = pending.slice(-8192);
+    while (true) {
+      const newline = pending.indexOf("\n");
+      if (newline < 0) break;
+      const line = pending.slice(0, newline).trim();
+      pending = pending.slice(newline + 1);
+      if (!line) continue;
+      let event;
+      try { event = JSON.parse(line); } catch {}
+      if (event?.msg === "MCP transport listening") {
+        console.log("REA child reports its MCP listener started.");
+        continue;
+      }
+      const level = event?.level;
+      const isError = level === "error" || (typeof level === "number" && level >= 50);
+      if (isError || (!event && /\b(?:error|failed|exception|unable to|cannot)\b/i.test(line))) {
+        const code = safeDiagnosticCode(event?.code ?? event?.err?.code ?? event?.error?.code);
+        console.error("REA child emitted a startup error diagnostic" + (code ? "; code=" + code : "") + "; details withheld.");
+      }
+    }
+  });
+  child.on("error", error => {
+    const code = safeDiagnosticCode(error?.code);
+    console.error("REA child could not start" + (code ? "; code=" + code : "") + ".");
+  });
+}
+
 export async function startGateway(env = process.env) {
   const token = env.REA_MCP_TOKEN;
   if (!validToken(token)) {
@@ -414,13 +452,16 @@ export async function startGateway(env = process.env) {
     windowsHide: true
   });
 
-  // Drain diagnostics so a full stderr pipe cannot stall REA. Do not log target
-  // content, provider output, credentials, or raw exceptions.
-  child.stderr?.on("data", () => {});
-  child.on("error", () => {});
-  child.on("exit", () => {
+  // Retain only safe startup signals and diagnostic codes; never write raw
+  // target-derived content or upstream error messages into Render logs.
+  observeReaChildStderr(child);
+  child.on("exit", (code, signal) => {
     mcpReady = false;
-    console.error("REA child process stopped; gateway readiness is degraded.");
+    const exitCode = Number.isInteger(code) && code >= 0 ? String(code) : null;
+    const safeSignal = safeDiagnosticCode(signal);
+    console.error("REA child process stopped; gateway readiness is degraded." +
+      (exitCode ? " exit_code=" + exitCode : "") +
+      (safeSignal ? " signal=" + safeSignal : ""));
   });
 
   const server = createGatewayServer({ token, upstreamPort: childPort, isReady: () => mcpReady });
