@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createVideoStudioRouter } from "../video-studio.js";
 
 async function withStudio({ env: overrides = {}, commandRunner, fetchImpl, authenticated = false } = {}, run) {
@@ -199,3 +199,48 @@ test("unsupported reference URL schemes and unknown project IDs are rejected", a
     assert.equal(missing.status, 404);
   });
 });
+
+test("local reference audio can be transcribed using a configured OpenAI-compatible STT provider", async () => {
+  const upstreamCalls = [];
+  await withStudio({
+    env: { STT_API_BASE_URL: "https://speech.example.com/v1", STT_API_KEY: "synthetic-stt-secret" },
+    commandRunner: async (command, args) => {
+      if (args.includes("-version")) return { stdout: command + " version test\n", stderr: "" };
+      if (command === "ffprobe") return { stdout: JSON.stringify({ format: { duration: "10" }, streams: [{ codec_type: "video", width: 720, height: 1280 }] }), stderr: "" };
+      if (command === "ffmpeg" && args.includes("-c:a")) {
+        await writeFile(args.at(-1), Buffer.concat([Buffer.alloc(44), Buffer.from("mock extracted audio")]));
+        return { stdout: "", stderr: "" };
+      }
+      return { stdout: "", stderr: "pts_time:2.0\n" };
+    },
+    fetchImpl: async (url, options) => {
+      upstreamCalls.push({ url, options });
+      assert.equal(url, "https://speech.example.com/v1/audio/transcriptions");
+      assert.equal(options.headers.Authorization, "Bearer synthetic-stt-secret");
+      assert.ok(options.body instanceof FormData);
+      assert.equal(options.body.get("model"), "whisper-1");
+      assert.equal(options.body.get("file").type, "audio/wav");
+      return new Response(JSON.stringify({ text: "The station clock loses seventeen minutes.", language: "en" }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      });
+    }
+  }, async ({ base }) => {
+    const project = await createProject(base);
+    const upload = await request(base, "/api/studio/projects/" + project.id + "/reference/upload", {
+      method: "POST",
+      body: JSON.stringify({ filename: "reference.mp4", fileBase64: Buffer.from("synthetic-video").toString("base64") })
+    });
+    assert.equal(upload.status, 201);
+    const response = await request(base, "/api/studio/projects/" + project.id + "/reference/transcribe", {
+      method: "POST", body: JSON.stringify({ language: "English" })
+    });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.transcript, "The station clock loses seventeen minutes.");
+    assert.equal(data.project.reference.transcript, data.transcript);
+    assert.equal(data.project.approvals.plan, false);
+    assert.equal(upstreamCalls.length, 1);
+    assert.equal(JSON.stringify(data).includes("synthetic-stt-secret"), false);
+  });
+});
+
