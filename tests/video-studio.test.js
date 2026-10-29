@@ -140,6 +140,14 @@ test("approval gates block rendering until both the plan and visual assets are a
     assert.equal(result.approvals.plan, true);
     assert.equal(result.approvals.render, true);
     assert.equal(result.stage, "ready_to_render");
+
+    const changedAsset = await request(base, "/api/studio/projects/" + project.id + "/assets/upload", {
+      method: "POST", body: JSON.stringify({ filename: "second.png", fileBase64: Buffer.from("another-synthetic-image").toString("base64") })
+    });
+    assert.equal(changedAsset.status, 201);
+    const changedProject = (await changedAsset.json()).project;
+    assert.equal(changedProject.approvals.plan, true);
+    assert.equal(changedProject.approvals.render, false);
   });
 });
 
