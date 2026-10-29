@@ -291,7 +291,7 @@ const REPOSITORIES = [
   {
     id: "ecc", repo: "affaan-m/ECC", domain: "engineering_workflow",
     match: /\b(ecc|everything claude code|engineering harness|plan test implement review|coding workflow|agent hooks|coding agent rules|engineering quality loop)\b/i,
-    integration: "engineering_workflow_guidance", status: "guidance_only",
+    integration: "pinned_ecc_skill_selector", status: "task_aware_skill_selector",
     abilities: ["Plan-test-implement-review-verify engineering loops", "Reusable code-review, testing, security and context-management practices", "Harness-specific setup guidance for supported coding-agent environments"],
     limits: ["ULTRON adapts reviewed workflow practices rather than blindly installing hooks, shell scripts, MCP configuration or executable repository files. Full ECC setup is not run automatically, duplicate hooks are avoided, and each upstream file/license must be reviewed before reuse."],
     envKeys: [], license: "MIT per upstream README", source: "https://github.com/affaan-m/ECC"
