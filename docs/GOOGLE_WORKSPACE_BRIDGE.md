@@ -32,3 +32,21 @@ Email sending, archiving/modifying messages, creating/canceling events, creating
 ## Verification and limits
 
 The Node unit/agent tests use a mocked Google endpoint; they do not verify the user's real account, scopes, Apps Script deployment, Google quota, or production DNS/network access. The readiness state remains `configured_unverified` until live checks are performed. The bridge deliberately returns bounded fields rather than raw provider objects and does not return the token.
+
+
+## Live smoke check (read-only)
+
+After the Apps Script web app and all three backend environment variables are configured, run this command in a trusted terminal where those variables are set:
+
+```bash
+ULTRON_GOOGLE_WORKSPACE_SMOKE_CONFIRM=READ_ONLY_GMAIL_PROBE npm run smoke:google-workspace
+```
+
+PowerShell:
+
+```powershell
+$env:ULTRON_GOOGLE_WORKSPACE_SMOKE_CONFIRM = "READ_ONLY_GMAIL_PROBE"
+npm run smoke:google-workspace
+```
+
+This performs exactly one read-only Gmail list request with a limit of one. It prints only pass/fail metadata and never logs message subjects, senders, snippets, or the bridge token. Without the explicit confirmation flag, it exits as skipped and makes no network request. A passing smoke check verifies the deployed bridge, token, current Apps Script authorization and network path; it does not enable write actions or validate the other five actions.
