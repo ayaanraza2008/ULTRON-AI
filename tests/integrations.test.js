@@ -816,3 +816,25 @@ test("AppFlowy rejects non-owner workspace access before upstream calls", async 
     assert.equal(calls, 0);
   });
 });
+
+
+test("AppFlowy document route returns bounded collab JSON without exposing provider tokens", async () => {
+  let request;
+  await withServer(appFlowyEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ data: {
+      collab: { document: { root: { children: [{ text: "Runbook content" }] } } },
+      apiToken: "must-not-return"
+    } }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const workspaceId = "00000000-0000-4000-8000-000000000010";
+    const viewId = "00000000-0000-4000-8000-000000000011";
+    const response = await fetch(base + "/api/integrations/appflowy/workspaces/" + workspaceId + "/documents/" + viewId + "?type=document");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(request.url, "https://appflowy.example.com/api/workspace/v1/" + workspaceId + "/collab/" + viewId + "/json?collab_type=0");
+    assert.equal(result.documentType, "document");
+    assert.equal(result.collab.document.root.children[0].text, "Runbook content");
+    assert.equal(JSON.stringify(result).includes("apiToken"), false);
+  });
+});
