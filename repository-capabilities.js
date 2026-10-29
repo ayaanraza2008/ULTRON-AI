@@ -270,8 +270,7 @@ const REPOSITORIES = [
     abilities: ["tool-enabled delegated agent tasks", "persistent memory and session search", "self-improving skills and reusable procedural memory", "subagents and parallel work", "scheduled routines/cron", "MCP and plugin tools", "web/browser, terminal/files, vision/media and messaging when configured upstream"],
     limits: ["Hermes is a separately installed runtime. Each feature depends on Hermes-side provider, toolset, plugin, messaging and sandbox configuration. ULTRON only invokes its authenticated API; it does not automatically install Hermes, enable all tools, launch cron jobs or send messages."],
     envKeys: ["HERMES_AGENT_ENABLED", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_CHAT_PROVIDER"], license: "MIT", source: "https://github.com/NousResearch/hermes-agent"
-  }
-
+  },
   {
     id: "heretic", repo: "p-e-w/heretic", domain: "local_model_experimentation",
     match: /\b(heretic|abliteration|model refusal behavior|modify local model weights|model alignment experiment)\b/i,
