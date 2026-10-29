@@ -36,6 +36,25 @@ jobs:
   production-revision:
     runs-on: ubuntu-latest
     steps:
+      - name: Verify same-origin frontend assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://ultron-ai-core.onrender.com"
+          for i in $(seq 1 10); do
+            if curl --fail --silent --show-error "$base/" -o /tmp/ultron-index.html &&
+               curl --fail --silent --show-error "$base/app.js" -o /tmp/ultron-app.js &&
+               curl --fail --silent --show-error "$base/styles.css" -o /tmp/ultron-styles.css &&
+               grep -q "ULTRON AI — Living Core" /tmp/ultron-index.html &&
+               grep -q "UPSTREAM_API_FALLBACK" /tmp/ultron-app.js; then
+              echo "Same-origin UI assets verified."
+              exit 0
+            fi
+            echo "Same-origin UI assets not ready (attempt $i/10); retrying."
+            sleep 8
+          done
+          echo "Same-origin UI asset verification failed."
+          exit 1
       - name: Verify health, required configuration, and deployed revision
         shell: bash
         run: |
