@@ -200,3 +200,25 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## Living-core frontend
+
+The same-origin living-core interface is served by the existing Express backend from `public/`. Open the root path (`/`) when running ULTRON; the interface keeps `/api/*` on the same origin, uses the existing auth/session routes, and requests camera or microphone access only after a user gesture. UI source and serving tests live in `public/` and `tests/frontend-serving.test.js`. See [the UI serving notes](docs/CORE_UI_SAME_ORIGIN.md). The frontend build and mocked route tests do not prove that production chat, physical camera access, or user-account flows are working end-to-end.
+
+## Fixed public-data adapters
+
+ULTRON includes an offline searchable public-API directory and a fixed set of keyless, read-only data adapters. The agent may search the bundled directory with `search_public_api_catalog` or call `public_api_lookup` for supported services such as weather, air quality, public holidays, scholarly papers, museum objects, currency reference rates, country data, Wikipedia, books, public GitHub metadata, sunrise/sunset, public-domain ebooks, trivia, earthquakes, dictionary definitions, and public news. Returned directory URLs are metadata only; they are never executed dynamically. See [the repository capability map](docs/REPOSITORY_CAPABILITY_MAP.md) for provenance, terms notes and limits.
+
+## Local AI Employees
+
+The optional [local AI Employees runtime](docs/AI_EMPLOYEES_LOCAL_RUNTIME.md) installs eight role kits into a dedicated local workspace. Use the repository CLI to inspect the available roles, install all missing kits, and generate a local fleet brief:
+
+```bash
+npm run employees -- list
+npm run employees -- hire-all
+npm run employees -- status
+npm run employees -- brief
+```
+
+`hire-all` installs kit files sequentially, skips recognized installations, and refuses to overwrite unrecognized folders. This installer does not by itself register jobs in your coding-agent harness or enable browser-control permissions. Actual scheduled execution depends on the chosen local harness, its supported scheduler/skills interface, configured business context and any approved browser bridge. Do not treat installed kit files as proof that the role routines have run.
+
