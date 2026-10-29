@@ -122,13 +122,26 @@ test("OpenDesign submits a headless BYOK run only to the configured project", as
 
 test("OpenDesign refuses a caller-supplied project override and disallows invalid model configuration", async () => {
   let calls = 0;
-  const result = await runOpenDesignAction({
-    env: { ...readyEnv, OPEN_DESIGN_PROJECT_ID: "../other-project" },
-    userId: owner, action: "submit", prompt: "Do work",
-    approveRun: true, confirmationText: OPEN_DESIGN_PAID_CONFIRMATION, userPrompt: approvedPrompt,
-    fetchImpl: async () => { calls++; return jsonResponse({ runId: "run_123" }, 202); }
-  });
-  assert.equal(result, undefined); // placeholder replaced below by the rejection assertion
+  await assert.rejects(
+    runOpenDesignAction({
+      env: { ...readyEnv, OPEN_DESIGN_PROJECT_ID: "../other-project" },
+      userId: owner, action: "submit", prompt: "Do work",
+      approveRun: true, confirmationText: OPEN_DESIGN_PAID_CONFIRMATION, userPrompt: approvedPrompt,
+      fetchImpl: async () => { calls++; return jsonResponse({ runId: "run_123" }, 202); }
+    }),
+    error => error.code === "OPEN_DESIGN_NOT_CONFIGURED"
+  );
+  assert.equal(calls, 0);
+
+  await assert.rejects(
+    runOpenDesignAction({
+      env: { ...readyEnv, OPEN_DESIGN_BYOK_MODEL: "default" },
+      userId: owner, action: "submit", prompt: "Do work",
+      approveRun: true, confirmationText: OPEN_DESIGN_PAID_CONFIRMATION, userPrompt: approvedPrompt,
+      fetchImpl: async () => { calls++; return jsonResponse({ runId: "run_123" }, 202); }
+    }),
+    error => error.code === "OPEN_DESIGN_NOT_CONFIGURED"
+  );
   assert.equal(calls, 0);
 });
 
