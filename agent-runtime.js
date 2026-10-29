@@ -792,7 +792,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "check_hermes_agent", description: "Read-only: check the configured Hermes Agent API server model list and capability endpoint. Does not execute an agent task.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "hermes_agent_task", description: "Delegate a bounded task to the configured Hermes Agent runtime, which may use its own configured tools, skills, memory, subagents and terminal backend. Owner-scoped; consequential actions are blocked pending task-specific approval.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 8000 }, conversationId: { type: "string", maxLength: 160 } }, required: ["task"], additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
-    { type: "function", function: { name: "create_study_pack", description: "Generate a structured study aid using the configured AI provider: flashcards, multiple-choice quiz, revision sheet, or mixed pack. Uses bounded supplied source material if given; otherwise marks output as a general-knowledge draft. Does not claim syllabus/source verification.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1200 }, level: { type: "string", enum: ["beginner", "intermediate", "advanced", "exam"] }, format: { type: "string", enum: ["mixed", "flashcards", "quiz", "revision_sheet"] }, language: { type: "string", maxLength: 60 }, questionCount: { type: "integer", minimum: 3, maximum: 12 }, sourceContent: { type: "string", maxLength: 8000 } }, required: ["topic", "format"], additionalProperties: false } } },
+    { type: "function", function: { name: "create_study_pack", description: "Generate a structured study aid using the configured AI provider: flashcards, multiple-choice quiz, revision sheet, or mixed pack. Persist it only when the user explicitly asks to save the study pack; storage is per-user and requires the study_packs migration. Uses bounded supplied source material if given; otherwise marks output as a general-knowledge draft. Does not claim syllabus/source verification.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1200 }, level: { type: "string", enum: ["beginner", "intermediate", "advanced", "exam"] }, format: { type: "string", enum: ["mixed", "flashcards", "quiz", "revision_sheet"] }, language: { type: "string", maxLength: 60 }, questionCount: { type: "integer", minimum: 3, maximum: 12 }, sourceContent: { type: "string", maxLength: 8000 }, save: { type: "boolean" } }, required: ["topic", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "notes_search", description: "Search only the signed-in user's private ULTRON notes by a literal title/body term. Does not search other users or external services.", parameters: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 80 }, limit: { type: "integer", minimum: 1, maximum: 10 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "notes_create", description: "Create a private ULTRON note for the signed-in user. This writes only to that user's notes table and never accepts a user_id from the model.", parameters: { type: "object", properties: { title: { type: "string", minLength: 1, maxLength: 200 }, body: { type: "string", minLength: 1, maxLength: 30000 }, tags: { type: "array", maxItems: 20, items: { type: "string", maxLength: 40 } } }, required: ["title", "body"], additionalProperties: false } } },
     { type: "function", function: { name: "notes_update", description: "Update the title, body or tags of one of the signed-in user's private ULTRON notes by UUID. Does not change ownership or delete notes.", parameters: { type: "object", properties: { id: { type: "string", minLength: 36, maxLength: 36 }, title: { type: "string", minLength: 1, maxLength: 200 }, body: { type: "string", minLength: 1, maxLength: 30000 }, tags: { type: "array", maxItems: 20, items: { type: "string", maxLength: 40 } } }, required: ["id"], additionalProperties: false } } },
@@ -996,7 +996,44 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       if (typeof generatedText !== "string" || !generatedText.trim()) {
         throw Object.assign(new Error("The configured AI provider did not return a study pack."), { code: "STUDY_PACK_EMPTY", status: 502 });
       }
-      return normalizeStudyPackResult(generatedText, studyRequest, { model: generated?.model });
+      const pack = normalizeStudyPackResult(generatedText, studyRequest, { model: generated?.model });
+      // Persistence is based on the signed-in user's explicit request text, not a
+      // provider-generated tool argument alone. A model cannot silently save packs.
+      const saveIntentText = bounded(requestBody.prompt || requestBody.message || "", 6000);
+      const explicitSaveIntent = /\b(?:save|store|add to (?:my )?(?:study library|saved study packs)|save (?:this|it|the) (?:study )?pack|study pack.{0,40}(?:save|store)|(?:save|store).{0,40}study pack)\b/i.test(saveIntentText);
+      if (!explicitSaveIntent) return { ...pack, saveStatus: "not_requested" };
+      if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) {
+        return { ...pack, saveStatus: "unavailable", saveMessage: "Study-pack storage requires authenticated storage and the study_packs database migration." };
+      }
+      const storageContent = {
+        learningObjectives: pack.learningObjectives,
+        summary: pack.summary,
+        flashcards: pack.flashcards,
+        quiz: pack.quiz,
+        revisionChecklist: pack.revisionChecklist,
+        sourceNotes: pack.sourceNotes,
+        notice: pack.notice,
+        generatedAt: pack.generatedAt,
+        model: pack.model
+      };
+      try {
+        const rows = await supabaseRest(req, "study_packs", "POST", "", {
+          user_id: req.supabaseUser.id,
+          title: bounded(pack.topic, 200) || "Study pack",
+          topic: pack.topic,
+          format: pack.format,
+          level: pack.level,
+          language: pack.language,
+          source_mode: pack.sourceMode,
+          content: storageContent
+        });
+        if (!Array.isArray(rows) || !rows[0]?.id) {
+          return { ...pack, saveStatus: "unconfirmed", saveMessage: "The database did not confirm persistence; the generated pack is returned but must not be treated as saved." };
+        }
+        return { ...pack, saveStatus: "saved", studyPackId: bounded(rows[0].id, 80), saveMessage: "Saved to the signed-in user's private study library." };
+      } catch {
+        return { ...pack, saveStatus: "failed", saveMessage: "The pack was generated, but the database did not save it. Check that the study_packs migration is applied." };
+      }
     }
 
     if (name === "notes_search" || name === "notes_create" || name === "notes_update") {
