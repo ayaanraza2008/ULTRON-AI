@@ -4,11 +4,12 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ultron_local_assistant.core import (
-    DEFAULT_OLLAMA_URL, apply_workspace_draft, detect_hardware, load_relevant_skill_context, recommend_models, resolve_workspace_file,
+    DEFAULT_OLLAMA_URL, apply_workspace_draft, detect_hardware, get_system_health, load_relevant_skill_context, recommend_models, resolve_workspace_file,
     safe_shell_argv, search_documents, validate_local_ollama_url,
     run_approved_command,
 )
@@ -32,6 +33,18 @@ class LocalFirstCoreTests(unittest.TestCase):
         ]:
             with self.subTest(url=url), self.assertRaises(ValueError):
                 validate_local_ollama_url(url)
+
+    def test_system_health_reports_local_metrics_and_high_disk_usage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with patch("ultron_local_assistant.core._physical_memory_bytes", return_value=100), \
+                 patch("ultron_local_assistant.core._available_memory_bytes", return_value=20), \
+                 patch("ultron_local_assistant.core.shutil.disk_usage", return_value=SimpleNamespace(total=1000, used=950, free=50)):
+                report = get_system_health(temp)
+        self.assertEqual(report["status"], "warning")
+        self.assertEqual(report["memory"]["used_percent"], 80.0)
+        self.assertEqual(report["disk"]["used_percent"], 95.0)
+        self.assertIn("low_disk_space", report["warnings"])
+        self.assertIn("no network requests", report["privacy"])
 
     def test_recommendation_for_eight_gib_is_cpu_first_and_small(self):
         recommendations = recommend_models({"ram_gib": 8, "gpu": "No supported discrete GPU query detected"})
@@ -190,6 +203,8 @@ class LocalFirstCoreTests(unittest.TestCase):
     def test_cli_parser_has_expected_local_agents(self):
         parser = build_parser()
         self.assertEqual(parser.parse_args(["doctor"]).command, "doctor")
+        self.assertEqual(parser.parse_args(["health"]).command, "health")
+        self.assertEqual(parser.parse_args(["health", "--path", "."]).path, ".")
         self.assertEqual(parser.parse_args(["research", "explain", "bands", "--root", "."]).question, ["explain", "bands"])
         args = parser.parse_args(["code", "revise", "main.py", "--request", "add tests"])
         self.assertEqual(args.code_command, "revise")
