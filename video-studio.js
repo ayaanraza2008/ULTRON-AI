@@ -830,10 +830,15 @@ export function createVideoStudioRouter({
     const reqContext = { studioOwnerKey: ownerKey };
     const { project, folder } = await ensureProject(reqContext, id);
     const renderDir = path.join(folder, "renders"), assetsDir = path.join(folder, "assets");
-    const media = (project.assets || []).filter(a => ["video", "image"].includes(a.kind) && (!selectedIds || selectedIds.includes(a.id))).slice(0, 30);
+    const duration = Math.max(15, Math.min(600, Number(project.durationSeconds) || 45));
+    const media = (project.assets || []).filter(a => ["video", "image"].includes(a.kind) && (!selectedIds || selectedIds.includes(a.id)))
+      .slice(0, Math.min(30, Math.max(1, Math.floor(duration))));
     if (!media.length) throw Object.assign(new Error("No visual assets"), { status: 400, code: "VISUAL_ASSETS_REQUIRED" });
     if (!(await commandAvailable(commandRunner, "ffmpeg")).available) throw Object.assign(new Error("FFmpeg missing"), { status: 503, code: "FFMPEG_NOT_INSTALLED" });
-    const size = mediaSize(project.aspectRatio), duration = Math.max(15, Math.min(600, Number(project.durationSeconds) || 45)), perScene = duration / media.length;
+    const size = mediaSize(project.aspectRatio);
+    const baseSceneDuration = duration / media.length;
+    const fadeDuration = media.length > 1 ? Math.min(0.35, Math.max(0.15, baseSceneDuration * 0.2)) : 0;
+    const perScene = (duration + fadeDuration * Math.max(0, media.length - 1)) / media.length;
     await mkdir(renderDir, { recursive: true });
     const segments = [];
     project.stage = "rendering"; project.renderError = null;
@@ -865,8 +870,7 @@ export function createVideoStudioRouter({
     try {
       await writeFile(concatFile, segments.map(file => "file '" + quoteConcatPath(file) + "'").join("\n") + "\n", { mode: 0o600 });
       if (segments.length > 1) {
-        const fadeDuration = Math.min(0.35, Math.max(0.15, perScene * 0.2));
-        const segmentDuration = Math.max(1, Math.round(perScene * 100) / 100);
+        const segmentDuration = Math.round(perScene * 100) / 100;
         const inputs = segments.flatMap(file => ["-i", file]);
         const graph = segments.map((_, index) => "[" + index + ":v]settb=AVTB,setpts=PTS-STARTPTS[v" + index + "]").join(";");
         let current = "v0";
