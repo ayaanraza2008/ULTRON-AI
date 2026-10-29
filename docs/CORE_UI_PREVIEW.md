@@ -11,6 +11,7 @@ The regular backend entry point remains `npm start`. No new production service, 
 ## Security notes
 
 - Browser requests use the UI origin; the proxy does not accept arbitrary upstream URLs.
+- The living core adapts its particle count to reduced-motion preferences, reported memory/CPU, and compact viewports; reduced-motion mode draws a static core instead of running a continuous animation loop.
 - Static asset paths are an explicit allowlist; unknown paths return 404.
 - HTTP methods and request body size are bounded. The proxy forwards only selected headers and removes an upstream cookie's Domain attribute so the browser cookie is scoped to the UI host.
 - Security headers include a restrictive content security policy, `nosniff`, same-origin camera/microphone permissions, referrer policy, and frame denial.
