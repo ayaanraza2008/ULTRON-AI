@@ -7,6 +7,7 @@ import { safeServiceBase } from "../network-safety.js";
 import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
 import { getStrataReadiness } from "./strata.js";
 import { getOpenSeoReadiness } from "./openseo-mcp.js";
+import { getOpenHiggsfieldReadiness } from "./open-higgsfield.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -36,6 +37,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const cactusReadiness = getCactusReadiness(env);
   const strataReadiness = getStrataReadiness(env);
   const openSeoReadiness = getOpenSeoReadiness(env);
+  const openHiggsfieldReadiness = getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
 
   return [
     {
@@ -234,6 +236,17 @@ export function buildIntegrationCatalog(env = process.env) {
       optionalEnv: ["OPENSEO_MCP_URL"],
       apiRoutes: ["agent tool: openseo (list_projects, get_project_context, list_saved_keywords, estimate_rank_tracker_cost, research_keywords, get_domain_overview, get_domain_keyword_suggestions, get_serp_results)"],
       note: openSeoReadiness.note
+    },
+    {
+      id: "open-higgsfield",
+      name: "OpenHiggsfield Image/Video Studio",
+      capability: "Allowlisted 38-model image/video generation, reference inputs, queue submission and job-status polling",
+      state: openHiggsfieldReadiness.state,
+      configured: Boolean(openHiggsfieldReadiness.configured),
+      mode: "owner_scoped_metered_media_api",
+      requiredEnv: ["ULTRON_OPEN_HIGGSFIELD_ENABLED=true", "HF_API_BASE_URL", "OPEN_HIGGSFIELD_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["GET /api/integrations/open-higgsfield/models", "POST /api/integrations/open-higgsfield/generate", "GET /api/integrations/open-higgsfield/jobs/:requestId", "agent tool: openhiggsfield"],
+      note: openHiggsfieldReadiness.note
     },
     {
       id: "hermes-agent",
