@@ -158,7 +158,9 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
       redirect: "error",
       headers: {
         apikey: serviceKey,
-        Authorization: "Bearer " + serviceKey,
+        // Supabase's new sb_secret_ keys are opaque API keys, not JWTs.
+        // Send them only as apikey; legacy service_role JWTs still use Bearer.
+        ...(serviceKey.startsWith("sb_secret_") ? {} : { Authorization: "Bearer " + serviceKey }),
         "Content-Type": "application/json",
         ...(options.body ? { Prefer: "return=representation" } : {}),
         ...options.headers
