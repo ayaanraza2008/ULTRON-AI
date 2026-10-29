@@ -18,9 +18,7 @@
     "smoke:worker": "node scripts/worker-smoke.mjs",
     "diagnose:auth": "node scripts/supabase-auth-diagnostics.mjs",
     "test:supabase:e2e": "node --test tests/supabase-isolation.e2e.test.js",
-    "smoke:google-workspace": "node scripts/google-workspace-smoke.mjs",
-    "model-lab": "python tools/model-lab/ultron_model_lab.py",
-    "test:model-lab": "python -m unittest discover -s tools/model-lab -p test_*.py"
+    "smoke:google-workspace": "node scripts/google-workspace-smoke.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",
