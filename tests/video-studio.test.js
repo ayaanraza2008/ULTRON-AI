@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import { request as httpRequest } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -22,7 +23,7 @@ async function withStudio({ env: overrides = {}, commandRunner, fetchImpl, authe
       if (command === "ffprobe") return { stdout: JSON.stringify({ format: { duration: "10.0" }, streams: [
         { codec_type: "video", width: 720, height: 1280, avg_frame_rate: "30/1" }, { codec_type: "audio" }
       ] }), stderr: "" };
-      if (command === "ffmpeg" && args.includes("showinfo")) return { stdout: "", stderr: "pts_time:2.1\npts_time:5.0\n" };
+      if (command === "ffmpeg" && args.some(arg => String(arg).includes("showinfo"))) return { stdout: "", stderr: "pts_time:2.1\npts_time:5.0\n" };
       return { stdout: "", stderr: "" };
     }),
     fetchImpl: fetchImpl || (async () => { throw new Error("Unexpected network call in test"); }),
@@ -178,13 +179,25 @@ test("non-local mode enforces authenticated account access", async () => {
 
 test("local mode rejects requests that use a non-loopback Host header", async () => {
   await withStudio({}, async ({ base }) => {
-    const response = await request(base, "/api/studio/projects", {
-      method: "POST",
-      headers: { host: "attacker.example" },
-      body: JSON.stringify({ prompt: "This should be blocked." })
+    const url = new URL(base);
+    const body = JSON.stringify({ prompt: "This should be blocked." });
+    const result = await new Promise((resolve, reject) => {
+      const req = httpRequest({
+        hostname: url.hostname,
+        port: Number(url.port),
+        path: "/api/studio/projects",
+        method: "POST",
+        headers: { Host: "attacker.example", "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+      }, response => {
+        const chunks = [];
+        response.on("data", chunk => chunks.push(Buffer.from(chunk)));
+        response.on("end", () => resolve({ status: response.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+      });
+      req.on("error", reject);
+      req.end(body);
     });
-    assert.equal(response.status, 403);
-    assert.equal((await response.json()).error.code, "LOCAL_STUDIO_LOOPBACK_ONLY");
+    assert.equal(result.status, 403);
+    assert.equal(JSON.parse(result.body).error.code, "LOCAL_STUDIO_LOOPBACK_ONLY");
   });
 });
 
