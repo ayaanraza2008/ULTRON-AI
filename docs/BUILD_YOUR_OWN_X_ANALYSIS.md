@@ -2,18 +2,18 @@
 
 **Analysis snapshot:** 2026-10-29  
 **Upstream:** https://github.com/codecrafters-io/build-your-own-x  
-**Pinned README revision:** \`aa17439b62f384511a5561ce308e9598b94d8989\`  
-**ULTRON baseline:** \`main\` at \`47e011a86db8ced0d9edd7a881e98de3a085f048\` when this branch was created.
+**Pinned README revision:** `aa17439b62f384511a5561ce308e9598b94d8989`  
+**ULTRON baseline:** `main` at `47e011a86db8ced0d9edd7a881e98de3a085f048` when this branch was created.
 
 ## Executive finding
 
-\`codecrafters-io/build-your-own-x\` is a curated Markdown catalogue of external tutorials about recreating technologies from first principles. It is not an application, AI framework, installable package, API service, or single implementation that can be merged into ULTRON.
+`codecrafters-io/build-your-own-x` is a curated Markdown catalogue of external tutorials about recreating technologies from first principles. It is not an application, AI framework, installable package, API service, or single implementation that can be merged into ULTRON.
 
 At the pinned snapshot, the repository contains four tracked paths: the README, a banner, an issue template, and Git attributes. The README organizes **30 named technology categories plus an Uncategorized group**, with **359 top-level tutorial entries counted from its category lists** (297 across the 30 named groups and 62 in Uncategorized). These are catalogue counts, not guarantees that all links remain available or up-to-date.
 
 The upstream README states a CC0 dedication for the curated index. That does not transfer the license of every linked tutorial or code repository: inspect the license and terms of each target before reusing its implementation.
 
-This analysis uses the public README and repository metadata. A local \`git clone\` attempt in the current execution environment failed because DNS could not resolve GitHub; the remote files and tree were still inspected through the connected GitHub interface. No tutorial code was executed.
+This analysis uses the public README and repository metadata. A local `git clone` attempt in the current execution environment failed because DNS could not resolve GitHub; the remote files and tree were still inspected through the connected GitHub interface. No tutorial code was executed.
 
 ## Complete category inventory
 
@@ -129,7 +129,7 @@ Use the existing OpenViking/AgentMemory/cognitive-memory components where they a
 
 The OS and shell material reinforces the need for a narrow desktop bridge:
 - Use supported Windows APIs and a paired, authenticated local companion when local device access is needed.
-- Never assume a remote hosted backend can access the user's local \`localhost\`, camera, clipboard, display or microphone.
+- Never assume a remote hosted backend can access the user's local `localhost`, camera, clipboard, display or microphone.
 - Keep privileged actions off the web-facing process.
 - Validate all filesystem paths and application identifiers.
 - Restrict terminal work to approved commands/workspaces with timeouts and bounded output.
@@ -183,12 +183,12 @@ A new frontend framework, custom text editor or template engine should only be c
 This branch adds a **local task-aware Build Your Own X reference catalogue** and connects it to ULTRON's existing task-skill guidance.
 
 Files changed/added:
-- \`build-your-own-x.js\`: pinned metadata for all 31 index groups; deterministic keyword matching; relevant engineering guidance; optional primary tutorial links; a maximum of five references per task; no runtime network calls.
-- \`task-aware-skills.js\`: selects relevant Build Your Own X guidance as part of the existing task-aware skill rules.
-- \`agent-runtime.js\`: exposes the selected reference summary from the authenticated task-skills readiness endpoint so it can be inspected.
-- \`tests/build-your-own-x.test.js\`: coverage for full catalogue counts, relevant selection, desktop/shell safety guidance, non-matching requests and bounded selection.
-- \`tests/task-aware-skills.test.js\`: extended to validate integration into the task-aware rules.
-- \`package.json\`: adds syntax checks for the new module and test.
+- `build-your-own-x.js`: pinned metadata for all 31 index groups; deterministic keyword matching; relevant engineering guidance; optional primary tutorial links; a maximum of five references per task; no runtime network calls.
+- `task-aware-skills.js`: selects relevant Build Your Own X guidance as part of the existing task-aware skill rules.
+- `agent-runtime.js`: exposes the selected reference summary from the authenticated task-skills readiness endpoint so it can be inspected.
+- `tests/build-your-own-x.test.js`: coverage for full catalogue counts, relevant selection, desktop/shell safety guidance, non-matching requests and bounded selection.
+- `tests/task-aware-skills.test.js`: extended to validate integration into the task-aware rules.
+- `package.json`: adds syntax checks for the new module and test.
 
 This is a focused integration, not an import of all tutorial implementations. ULTRON receives relevant design guidance when processing tasks; it does not fetch tutorial code, execute upstream scripts, install dependencies, or mark unrelated features as implemented.
 
@@ -197,9 +197,9 @@ This is a focused integration, not an import of all tutorial implementations. UL
 The tests have been authored but must still be run in a working checkout/CI before this change is considered verified. The local clone attempt could not resolve GitHub DNS in the current execution environment. Do not interpret source creation or GitHub API commits as a test pass.
 
 The integration should be considered complete only after:
-1. \`npm test\` runs and passes on the branch.
-2. \`npm run check\` passes.
-3. The authenticated \`GET /api/agent/task-skills?task=...\` response includes task-matched references without returning secrets.
+1. `npm test` runs and passes on the branch.
+2. `npm run check` passes.
+3. The authenticated `GET /api/agent/task-skills?task=...` response includes task-matched references without returning secrets.
 4. A code task proves that only relevant reference rules are injected and ordinary chat receives none.
 5. The diff is reviewed for unrelated changes and CI status is checked.
 
