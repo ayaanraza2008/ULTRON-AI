@@ -405,7 +405,7 @@ export function createVideoStudioRouter({
         ffmpeg, ffprobe, ytDlp, modelProviders: listModelProviders(env).map(p => ({ name: p.name, model: p.model })),
         research: Boolean(env.TAVILY_API_KEY), pexels: Boolean(env.PEXELS_API_KEY), pixabay: Boolean(env.PIXABAY_API_KEY),
         voiceover: Boolean((env.VOICESTUDIO_BASE_URL && (env.VOICESTUDIO_API_KEY || env.ULTRON_VIDEO_STUDIO_LOCAL_MODE === "true")) || (env.TTS_API_BASE_URL && env.TTS_API_KEY)),
-        transcription: Boolean(env.STT_API_BASE_URL && env.STT_API_KEY)
+        transcription: Boolean((safeProviderBase(env.VOICESTUDIO_BASE_URL) && (env.VOICESTUDIO_API_KEY || env.ULTRON_VIDEO_STUDIO_LOCAL_MODE === "true")) || (safeProviderBase(env.STT_API_BASE_URL) && env.STT_API_KEY))
       },
       limits: { uploadBytes: MAX_UPLOAD_BYTES, stockImportBytes: MAX_IMPORT_BYTES, maxDurationSeconds: 600 },
       note: "Readiness shows configuration and command availability, not live provider access, licence clearance, or a successful render."
@@ -589,6 +589,65 @@ export function createVideoStudioRouter({
       await saveProject(folder, project);
       return res.json({ project: sanitizedProject(project), analysis });
     } catch (error) { return respondError(res, error, "Reference analysis could not be completed."); }
+  });
+
+  router.post("/studio/projects/:id/reference/transcribe", async (req, res) => {
+    let temporaryAudio = "";
+    try {
+      const { project, folder } = await ensureProject(req, req.params.id);
+      if (!project.reference?.fileName) return errorResult(res, 409, "LOCAL_REFERENCE_REQUIRED", "Upload a local reference clip before transcribing its audio.");
+      const voiceBase = safeProviderBase(env.VOICESTUDIO_BASE_URL);
+      const genericBase = safeProviderBase(env.STT_API_BASE_URL);
+      const useVoiceStudio = Boolean(voiceBase);
+      const base = useVoiceStudio ? voiceBase : genericBase;
+      const key = useVoiceStudio ? bounded(env.VOICESTUDIO_API_KEY, 1000) : bounded(env.STT_API_KEY, 1000);
+      if (!base || (!key && !(useVoiceStudio && env.ULTRON_VIDEO_STUDIO_LOCAL_MODE === "true"))) {
+        return errorResult(res, 503, "TRANSCRIPTION_NOT_CONFIGURED", "Configure a local VoiceStudio endpoint or STT_API_BASE_URL plus STT_API_KEY.");
+      }
+      const sourcePath = path.join(folder, "references", path.basename(project.reference.fileName));
+      temporaryAudio = path.join(folder, "references", "transcript-" + uuid() + ".wav");
+      try {
+        await commandRunner("ffmpeg", [
+          "-y", "-hide_banner", "-i", sourcePath, "-vn", "-t", "210", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", temporaryAudio
+        ], { timeout: 120000, maxBuffer: 2 * 1024 * 1024, windowsHide: true });
+      } catch {
+        return errorResult(res, 422, "REFERENCE_AUDIO_EXTRACTION_FAILED", "FFmpeg could not extract audio. Confirm the clip has an audio track and FFmpeg is installed.");
+      }
+      const audioStats = await stat(temporaryAudio).catch(() => null);
+      if (!audioStats?.isFile() || audioStats.size < 44) return errorResult(res, 422, "REFERENCE_AUDIO_EMPTY", "The reference has no readable audio track to transcribe.");
+      if (audioStats.size > 7_000_000) return errorResult(res, 413, "REFERENCE_AUDIO_TOO_LARGE", "Extracted audio exceeds 7 MB. Use a shorter reference clip.");
+      const audio = await readFile(temporaryAudio);
+      const form = new FormData();
+      form.append("file", new Blob([audio], { type: "audio/wav" }), "ultron-reference.wav");
+      form.append("model", bounded(env.STT_MODEL, 160) || "whisper-1");
+      form.append("response_format", "json");
+      const language = bounded(req.body?.language, 32);
+      if (language && /^[A-Za-z0-9_-]+$/.test(language)) form.append("language", language);
+      const endpoint = useVoiceStudio ? base + "/v1/audio/transcriptions" : base.replace(/\/+$/, "") + "/audio/transcriptions";
+      const response = await fetchImpl(endpoint, {
+        method: "POST", redirect: "error",
+        headers: { ...(key ? { Authorization: "Bearer " + key } : {}), Accept: "application/json" },
+        body: form, signal: AbortSignal.timeout(120000)
+      });
+      if (!response.ok) {
+        try { await response.body?.cancel?.(); } catch {}
+        return errorResult(res, response.status === 429 ? 429 : 502, "TRANSCRIPTION_PROVIDER_FAILED", "The transcription provider failed. Check access, model, endpoint and quota.");
+      }
+      const data = await responseJson(response, 1_000_000);
+      const transcript = bounded(data.text || data.transcript, 30000);
+      if (!transcript) return errorResult(res, 502, "TRANSCRIPTION_EMPTY", "The transcription provider returned no text.");
+      project.reference.transcript = transcript;
+      if (project.reference.analysis) {
+        project.reference.analysis.transcript = transcript;
+        project.reference.analysis.notes = (project.reference.analysis.notes || []).filter(note => !/No transcript was supplied|Paste one|transcription provider/i.test(note));
+      }
+      project.approvals.plan = false;
+      project.approvals.render = false;
+      addActivity(project, "Reference transcript created", "Transcribed local audio using " + (useVoiceStudio ? "VoiceStudio" : "configured STT") + ".");
+      await saveProject(folder, project);
+      return res.json({ transcript, provider: useVoiceStudio ? "voicestudio" : "configured-stt", project: sanitizedProject(project) });
+    } catch (error) { return respondError(res, error, "Reference transcription failed."); }
+    finally { if (temporaryAudio) await rm(temporaryAudio, { force: true }).catch(() => {}); }
   });
 
   router.post("/studio/projects/:id/assets/upload", async (req, res) => {
