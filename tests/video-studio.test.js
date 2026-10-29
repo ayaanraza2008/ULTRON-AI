@@ -90,6 +90,27 @@ test("local HTTP API creates projects and cannot bypass render approval", async 
     request.end();
   });
   assert.equal(hostileHostStatus, 403);
+
+  const localHost = "127.0.0.1:" + address.port;
+  const originStatus = async origin => new Promise((resolve, reject) => {
+    const request = http.request({
+      hostname: "127.0.0.1",
+      port: address.port,
+      path: "/api/projects",
+      method: "GET",
+      headers: { Host: localHost, Origin: origin }
+    }, response => {
+      response.resume();
+      response.once("end", () => resolve(response.statusCode));
+    });
+    request.once("error", reject);
+    request.end();
+  });
+  assert.equal(await originStatus("http://" + localHost), 200, "same local origin should be accepted");
+  assert.equal(await originStatus("http://127.0.0.1:1"), 403, "a different loopback port is a different origin");
+  assert.equal(await originStatus("https://" + localHost), 403, "HTTPS is not the local HTTP server origin");
+  assert.equal(await originStatus("https://evil.example"), 403, "remote origins are rejected");
+
   for (let i = 0; i < 80; i++) {
     const state = await fetch(base + "/api/projects/" + body.project.id).then(response => response.json());
     if (state.job === "idle") break;
