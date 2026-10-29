@@ -12,7 +12,7 @@ test("PDF report generator produces a readable, multi-section PDF without persis
     ]
   });
   assert.equal(report.ok, true);
-  assert.equal(report.pdf.subarray(0, 8).toString("ascii"), "%PDF-");
+  assert.match(report.pdf.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d$/);
   assert.equal(report.filename, "ultron-report.pdf");
   assert.equal(report.pages, 1);
   const parsed = await pdfParse(report.pdf);
