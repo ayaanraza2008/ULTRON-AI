@@ -2854,10 +2854,10 @@
           { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\n") }
         ];
         (Array.isArray(content.flashcards) ? content.flashcards : []).slice(0, 12).forEach((item, index) => {
-          sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\\nAnswer: " + String(item.answer || "") });
+          sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\nAnswer: " + String(item.answer || "") });
         });
         (Array.isArray(content.quiz) ? content.quiz : []).slice(0, 12).forEach((item, index) => {
-          sections.push({ heading: "Quiz " + (index + 1), content: "Question: " + String(item.question || "") + "\\nOptions: " + (Array.isArray(item.options) ? item.options.map(String).join("; ") : "") + "\\nAnswer: " + String(item.answer || item.correctAnswer || "Not available") });
+          sections.push({ heading: "Quiz " + (index + 1), content: "Question: " + String(item.question || "") + "\nOptions: " + (Array.isArray(item.options) ? item.options.map(String).join("; ") : "") + "\nAnswer: " + String(item.answer || item.correctAnswer || "Not available") });
         });
         void exportReportPdf(pack.title || "ULTRON Study Pack", "", sections.slice(0, 26));
       });
@@ -2867,10 +2867,10 @@
           { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\n") }
         ];
         (Array.isArray(content.flashcards) ? content.flashcards : []).slice(0, 10).forEach((item, index) => {
-          sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\\nAnswer: " + String(item.answer || "") });
+          sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\nAnswer: " + String(item.answer || "") });
         });
         (Array.isArray(content.quiz) ? content.quiz : []).slice(0, 10).forEach((item, index) => {
-          sections.push({ heading: "Quiz " + (index + 1), content: "Question: " + String(item.question || "") + "\\nOptions: " + (Array.isArray(item.options) ? item.options.map(String).join("; ") : "") + "\\nAnswer: " + String(item.answer || item.correctAnswer || "Not available") });
+          sections.push({ heading: "Quiz " + (index + 1), content: "Question: " + String(item.question || "") + "\nOptions: " + (Array.isArray(item.options) ? item.options.map(String).join("; ") : "") + "\nAnswer: " + String(item.answer || item.correctAnswer || "Not available") });
         });
         void exportPresentationPptx(pack.title || "ULTRON Study Pack", "", sections.slice(0, 24));
       });
