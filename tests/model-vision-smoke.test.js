@@ -77,7 +77,7 @@ test("vision smoke verifies a real image payload and falls back through free vis
       assert.deepEqual([...pixels.subarray(1 + 31 * 3, 1 + 32 * 3)], [255, 0, 0], "left half must be red");
       assert.deepEqual([...pixels.subarray(1 + 32 * 3, 1 + 33 * 3)], [0, 0, 255], "right half must be blue");
       assert.match(body.messages[0].content, /ULTRON_VISION_SMOKE_OK/);
-      assert.equal(body.max_tokens, 20);
+      assert.equal(body.max_tokens, 96);
       assert.equal(body.stream, false);
       if (body.model === "openrouter/free") return new Response("{}", { status: 429 });
       return response("ULTRON_VISION_SMOKE_OK");
@@ -130,4 +130,22 @@ test("vision smoke never forwards credentials to private or loopback OpenRouter 
     assert.equal(calls, 0, baseUrl);
     assert.equal(JSON.stringify(result).includes("vision-smoke-secret"), false);
   }
+});
+
+
+test("vision diagnostics identify token-truncated responses without exposing model reasoning", async () => {
+  const privateReasoning = "PRIVATE_VISION_REASONING_MUST_NOT_BE_RETURNED";
+  const result = await runVisionProviderSmoke({
+    env: { ...env, ULTRON_VISION_MODELS: "openrouter/free" },
+    fetchImpl: async () => new Response(JSON.stringify({
+      choices: [{ finish_reason: "length", message: { content: null, reasoning: privateReasoning } }]
+    }), { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } })
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.attempts[0].code, "COMPLETION_TRUNCATED");
+  assert.equal(result.attempts[0].finishReason, "length");
+  assert.equal(result.attempts[0].contentShape, "missing");
+  assert.equal(result.attempts[0].reasoningPresent, true);
+  assert.equal(JSON.stringify(result).includes(privateReasoning), false);
+  assert.equal(JSON.stringify(result).includes("vision-smoke-secret"), false);
 });
