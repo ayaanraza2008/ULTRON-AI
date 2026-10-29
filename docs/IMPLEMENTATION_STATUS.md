@@ -1,5 +1,22 @@
 # Implementation Status
 
+## Current verified snapshot — 2026-10-29
+
+### Consolidated source candidate
+- Consolidated candidate: [PR #364](https://github.com/ayaanraza2008/ULTRON-AI/pull/364), current head `d61fbd2262e275d92a0416ec6cfb3af081b851a0` at the latest verified CI run.
+- CI run [40872968790](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40872968790) passed both jobs: **669 Node tests total, 668 passed, 0 failed, 1 skipped**, and the pinned World Intelligence build/injected bridge verification succeeded.
+- The candidate integrates the Living Core UI from `public/` into the same Express origin as `/api/*`, the fixed keyless public API lookup tools and offline metadata directory, the local AI Employees CLI/role kits, and the current authenticated REA gateway/self-test. New files are included in `npm run check` and the ordinary Node test discovery.
+- The candidate remains a source PR. It has **not** been merged or deployed from this checkpoint. The read-only production verification workflow now checks the root UI and static assets before health/configuration/revision checks on a future deployment.
+
+### Remaining live-only verification
+- Real OpenRouter text and image/vision inference must be exercised against the configured production key/model; CI uses mocked provider responses.
+- Supabase signup/sign-in/email confirmation/recovery, conversation/history RLS isolation using two disposable accounts, and real queued employee task execution still need end-to-end checks.
+- Render must serve the exact intended commit and pass the UI asset + health/revision workflow before this candidate can be called live. A CI-green source branch is not deployment evidence.
+- The local AI Employees CLI installs kit files and prepares local briefs/routine templates. It does not automatically register every schedule in an arbitrary coding-agent harness or prove that browser actions were run.
+- Physical Windows/Android voice wake, camera/microphone interaction, local companion pairing, and external service quality require real devices/services; no physical-device test is implied by the automated build.
+- Supabase leaked-password protection remains an owner-controlled Auth setting; source code cannot enable or verify that dashboard-level control by itself.
+
+
 ## Current phase
 Phase 3 — Integrated frontend and backend live verification. The empty-repository audit below is historical. `main` contains the Node/Express API, Supabase-backed auth/chat/preferences/memory/task routes, provider fallback, bounded document extraction, an allowlisted task worker, guarded integration adapters, the cinematic command-center frontend, and private original-file storage routes. Source CI passed on main commit `5811ba00fc78065b33c06f171801c39ad5194aad`, but Render's latest build failed before compilation due to `pipeline_minutes_exhausted`; do not claim that commit is live. The private-document-storage migration was applied to Supabase and its private bucket/RLS/grants were verified read-only. Live model inference, authenticated cross-account isolation, worker execution with a dedicated test user, and authenticated file-storage E2E remain unverified. The Windows companion still needs physical-device pairing and testing.
 
