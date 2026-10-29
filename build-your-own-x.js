@@ -13,7 +13,7 @@ const TOPICS = [
   {
     id: "distributed-systems", title: "Distributed Systems", tutorialCount: 1, fit: "core",
     anchor: "build-your-own-distributed-systems",
-    matches: /\b(distributed system|message broker|event stream|pub\s*\/\s*sub|kafka|consumer group|queue partition|replication|idempotenc\\w*|retry storm)\b/i,
+    matches: /\b(distributed system|message broker|event stream|pub\s*\/\s*sub|kafka|consumer group|queue partition|replication|idempotenc[a-z]*|retry storm)\b/i,
     guidance: "Apply durable task states, idempotent retries, bounded queues, explicit cancellation, backpressure, and observable worker failures. Do not introduce a distributed system where the current single-service architecture is sufficient.",
     references: [{ title: "Build your own Kafka-like system", url: "https://github.com/buildthingsuseful/build-your-own-kafka" }]
   },
