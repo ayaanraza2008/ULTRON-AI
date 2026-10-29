@@ -17,6 +17,7 @@ import { findOpenVikingContext, getOpenVikingReadiness, readOpenVikingContext } 
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrations/desktop-companion.js";
 import { cognitiveLayerLabel, extractCorrectionLesson, rankCognitiveMemories } from "./cognitive-memory.js";
 import { classifyTaskRoute } from "./task-router.js";
+import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./integrations/google-workspace.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
@@ -126,7 +127,13 @@ const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
   "transcribe_audio",
   "check_openviking",
   "openviking_find_context",
-  "openviking_read_context"
+  "openviking_read_context",
+  "google_gmail_list_unread",
+  "google_gmail_search",
+  "google_calendar_get_events",
+  "google_drive_list_files",
+  "google_drive_read_doc",
+  "google_sheets_read"
 ]);
 
 function sharedIntegrationOwnerDenial(env, userId) {
@@ -566,6 +573,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "openproject_list_work_packages", description: "Read-only: list OpenProject work packages, optionally filtered by numeric project ID. Does not create or edit tasks.", parameters: { type: "object", properties: { projectId: { type: "integer", minimum: 1 }, limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
     { type: "function", function: { name: "caldiy_list_event_types", description: "Read-only: list meeting event types from the configured Cal.diy/Cal.com-compatible API. Does not book meetings.", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
     { type: "function", function: { name: "caldiy_check_availability", description: "Read-only: check time slots for a Cal.diy event type across a maximum 14-day ISO date-time range. Never books or cancels a meeting.", parameters: { type: "object", properties: { eventTypeId: { type: "integer", minimum: 1 }, start: { type: "string", minLength: 10, maxLength: 40 }, end: { type: "string", minLength: 10, maxLength: 40 }, timeZone: { type: "string", maxLength: 80 } }, required: ["eventTypeId", "start", "end"], additionalProperties: false } } },
+    { type: "function", function: { name: "google_workspace_status", description: "Check configuration-only readiness of ULTRON's owner-scoped Google Workspace read-only bridge. Does not read inbox or documents.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "google_gmail_list_unread", description: "Read a bounded list of unread inbox email summaries for the configured ULTRON owner. Read-only; cannot send email or modify Gmail.", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 20 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "google_gmail_search", description: "Search the configured owner's Gmail with a bounded Gmail query and return limited summaries. Read-only; cannot send, archive or modify emails.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 300 }, limit: { type: "integer", minimum: 1, maximum: 20 } }, required: ["query"], additionalProperties: false } } },
+    { type: "function", function: { name: "google_calendar_get_events", description: "Read Google Calendar events over a bounded date range (maximum 90 days). Read-only; cannot create or cancel events.", parameters: { type: "object", properties: { timeMin: { type: "string", maxLength: 40 }, timeMax: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "google_drive_list_files", description: "List bounded Google Drive file metadata by a short name query and optional allowed file type. Read-only; cannot move or delete files.", parameters: { type: "object", properties: { query: { type: "string", maxLength: 80 }, fileType: { type: "string", enum: ["document", "spreadsheet", "presentation", "pdf", "folder"] }, limit: { type: "integer", minimum: 1, maximum: 20 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "google_drive_read_doc", description: "Read at most 12,000 characters from a Google Docs document identified by its file ID. Read-only; cannot create, rename or delete files.", parameters: { type: "object", properties: { documentId: { type: "string", minLength: 10, maxLength: 120 } }, required: ["documentId"], additionalProperties: false } } },
+    { type: "function", function: { name: "google_sheets_read", description: "Read a bounded Google Sheets A1 range (maximum 40 rows by 20 columns). Read-only; cannot write or append rows.", parameters: { type: "object", properties: { spreadsheetId: { type: "string", minLength: 10, maxLength: 120 }, sheetName: { type: "string", maxLength: 100 }, range: { type: "string", maxLength: 80 } }, required: ["spreadsheetId"], additionalProperties: false } } },
     { type: "function", function: { name: "create_youtube_production_plan", description: "Automatically draft a YouTube production package when a user requests a YouTube video/Short, channel content, cinematic story or nature Short. Produces title options, script, scene plan, visual/narration directions, SEO metadata and fact/media-rights checks. Does not generate media, use paid APIs, upload, schedule or publish; human approval remains required.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1500 }, format: { type: "string", enum: ["long_video", "short", "cinematic_mystery", "nature_short"] }, targetSeconds: { type: "integer", minimum: 15, maximum: 1200 }, language: { type: "string", maxLength: 60 }, audience: { type: "string", maxLength: 300 }, style: { type: "string", maxLength: 400 }, sceneCount: { type: "integer", minimum: 2, maximum: 30 } }, required: ["topic", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
@@ -856,6 +870,24 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         state: status.integrations.find(integration => integration.id === item.id)?.state || item.state
       })) : [];
       return { ...status, taskMatches, notice: "Readiness is configuration-only, not proof of live upstream connectivity. Never call a missing adapter or pretend that a separate application ran." };
+    }
+    if (name === "google_workspace_status") return getGoogleWorkspaceReadiness({ env, userId: req.supabaseUser?.id });
+    const googleWorkspaceActions = {
+      google_gmail_list_unread: "gmail_list_unread",
+      google_gmail_search: "gmail_search",
+      google_calendar_get_events: "calendar_get_events",
+      google_drive_list_files: "drive_list_files",
+      google_drive_read_doc: "drive_read_doc",
+      google_sheets_read: "sheets_read"
+    };
+    if (Object.hasOwn(googleWorkspaceActions, name)) {
+      return runGoogleWorkspaceReadAction({
+        env,
+        fetchImpl,
+        userId: req.supabaseUser?.id,
+        action: googleWorkspaceActions[name],
+        params: args
+      });
     }
     if (name === "check_cactus") return checkCactusService({ env, fetchImpl, userId: req.supabaseUser?.id });
     if (name === "check_desktop_companion") return checkDesktopCompanion({ env, fetchImpl, userId: req.supabaseUser?.id });
