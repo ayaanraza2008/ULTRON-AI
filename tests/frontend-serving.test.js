@@ -71,6 +71,9 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   assert.match(app, /ultron-chat-mode/);
   assert.match(app, /chatMode === "agent"/);
   assert.match(app, /ULTRON autonomous tool agent/);
+  assert.match(app, /persona: preferredPersona/);
+  assert.match(app, /DIRECT MODEL · TOOL USE DISABLED/);
+  assert.match(app, /AUTONOMOUS TOOL ROUTING/);
   assert.match(app, /kaligpt\/security\/assist/);
   assert.match(app, /kaligpt\/tools\/headers\/analyze/);
   assert.match(app, /kaligpt\/security\/http-evidence\/analyze/);
