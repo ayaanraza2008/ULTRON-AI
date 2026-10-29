@@ -13,7 +13,7 @@ const TOPICS = [
   {
     id: "distributed-systems", title: "Distributed Systems", tutorialCount: 1, fit: "core",
     anchor: "build-your-own-distributed-systems",
-    matches: /\b(distributed system|message broker|event stream|pub\s*\/\s*sub|kafka|consumer group|queue partition|replication|idempotenc|retry storm)\b/i,
+    matches: /\b(distributed system|message broker|event stream|pub\s*\/\s*sub|kafka|consumer group|queue partition|replication|idempotenc\\w*|retry storm)\b/i,
     guidance: "Apply durable task states, idempotent retries, bounded queues, explicit cancellation, backpressure, and observable worker failures. Do not introduce a distributed system where the current single-service architecture is sufficient.",
     references: [{ title: "Build your own Kafka-like system", url: "https://github.com/buildthingsuseful/build-your-own-kafka" }]
   },
@@ -241,8 +241,9 @@ export function listBuildYourOwnXTopics() {
 
 export function buildBuildYourOwnXGuidance(task, options = {}) {
   const text = typeof task === "string" ? task.slice(0, 4000) : "";
-  const requestedLimit = Number.isFinite(Number(options.limit)) ? Math.trunc(Number(options.limit)) : 4;
-  const limit = Math.max(1, Math.min(5, requestedLimit || 4));
+  const limitValue = options && typeof options === "object" ? options.limit : undefined;
+  const parsedLimit = Number(limitValue);
+  const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(5, Math.trunc(parsedLimit))) : 4;
   const matched = TOPICS
     .filter(topic => topic.matches.test(text))
     .sort((a, b) => (FIT_RANK[b.fit] - FIT_RANK[a.fit]) || TOPICS.indexOf(a) - TOPICS.indexOf(b))
