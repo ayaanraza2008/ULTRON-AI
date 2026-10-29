@@ -117,3 +117,70 @@ test("local HTTP API creates projects and cannot bypass render approval", async 
     await new Promise(resolve => setTimeout(resolve, 25));
   }
 });
+
+test("Video Studio sends stock search and media downloads through its outbound transport", async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-video-outbound-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const calls = [];
+  const fetchImpl = async (input, options = {}) => {
+    const url = new URL(input);
+    calls.push({ host: url.hostname, pathname: url.pathname, redirect: options.redirect, signal: Boolean(options.signal) });
+    if (url.hostname === "api.pexels.com" && url.pathname === "/v1/videos/search") {
+      return new Response(JSON.stringify({
+        videos: [{
+          id: 123,
+          url: "https://www.pexels.com/video/demo/",
+          user: { name: "ULTRON Test Creator" },
+          video_files: [{ link: "https://videos.pexels.com/video-files/demo.mp4", width: 640 }]
+        }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.hostname === "videos.pexels.com" && url.pathname === "/video-files/demo.mp4") {
+      return new Response(Buffer.from("test-video-bytes"), { status: 200, headers: { "Content-Type": "video/mp4" } });
+    }
+    throw new Error("Unexpected outbound request in regression test.");
+  };
+  const app = createVideoStudioServer({
+    env: { VIDEO_STUDIO_HOST: "127.0.0.1", PEXELS_API_KEY: "test-only-key" },
+    dataDir: dir, fetchImpl, logger: { warn() {} }
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const address = server.address();
+  const base = "http://127.0.0.1:" + address.port;
+  const created = await fetch(base + "/api/projects", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brief: "A quiet cinematic view of a storm over the sea.", durationSeconds: 30, sourceMode: "motion" })
+  });
+  assert.equal(created.status, 201);
+  const { project: initial } = await created.json();
+  let project;
+  for (let i = 0; i < 80; i++) {
+    const state = await fetch(base + "/api/projects/" + initial.id).then(response => response.json());
+    project = state.project;
+    if (state.job === "idle" && project.scenes.length) break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  assert.ok(project.scenes.length, "local fallback plan should provide a scene for the search");
+  const sceneId = project.scenes[0].id;
+  const searched = await fetch(base + "/api/projects/" + project.id + "/assets/search", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sceneId, query: "storm clouds" })
+  });
+  assert.equal(searched.status, 200);
+  const searchData = await searched.json();
+  assert.equal(searchData.provider, "Pexels");
+  assert.equal(searchData.results[0].downloadUrl, "https://videos.pexels.com/video-files/demo.mp4");
+  const imported = await fetch(base + "/api/projects/" + project.id + "/assets/import", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sceneId, candidateId: searchData.results[0].id })
+  });
+  assert.equal(imported.status, 201);
+  const importedData = await imported.json();
+  assert.equal(importedData.asset.mimeType, "video/mp4");
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls.map(call => call.host), ["api.pexels.com", "videos.pexels.com"]);
+  assert.ok(calls.every(call => call.redirect === "error" && call.signal), "outbound calls must disable redirects and use bounded abort signals");
+});
+
