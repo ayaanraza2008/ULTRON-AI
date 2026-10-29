@@ -6,6 +6,7 @@ import { getHermesAgentReadiness } from "./hermes-agent.js";
 import { safeServiceBase } from "../network-safety.js";
 import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
 import { getStrataReadiness } from "./strata.js";
+import { getOpenSeoReadiness } from "./openseo-mcp.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -34,6 +35,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const reaReadiness = getReaReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
   const strataReadiness = getStrataReadiness(env);
+  const openSeoReadiness = getOpenSeoReadiness(env);
 
   return [
     {
@@ -220,6 +222,18 @@ export function buildIntegrationCatalog(env = process.env) {
       optionalEnv: ["STRATA_API_KEY", "STRATA_SUPPORTS_TOOLS", "STRATA_SUPPORTS_VISION"],
       apiRoutes: ["model provider fallback: /chat/completions"],
       note: strataReadiness.note
+    },
+    {
+      id: "open-seo",
+      name: "OpenSEO SEO Research",
+      capability: "Owner-scoped MCP project/context/keyword reads and explicitly credit-gated keyword/domain/SERP research",
+      state: openSeoReadiness.configured ? "configured_unverified" : "optional",
+      configured: Boolean(openSeoReadiness.configured),
+      mode: "owner_scoped_mcp",
+      requiredEnv: ["OPENSEO_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["OPENSEO_MCP_URL"],
+      apiRoutes: ["agent tool: openseo (list_projects, get_project_context, list_saved_keywords, estimate_rank_tracker_cost, research_keywords, get_domain_overview, get_domain_keyword_suggestions, get_serp_results)"],
+      note: openSeoReadiness.note
     },
     {
       id: "hermes-agent",
