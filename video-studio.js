@@ -479,7 +479,7 @@ export function createVideoStudioRouter({
       workspace: env.ULTRON_VIDEO_STUDIO_DIR ? "custom local directory" : ".local/video-studio",
       tools: {
         ffmpeg, ffprobe, ytDlp, modelProviders: listModelProviders(env).map(p => ({ name: p.name, model: p.model })),
-        research: Boolean(env.TAVILY_API_KEY), pexels: Boolean(env.PEXELS_API_KEY), pixabay: Boolean(env.PIXABAY_API_KEY),
+        research: Boolean(env.TAVILY_API_KEY), pexels: Boolean(env.PEXELS_API_KEY), pixabay: Boolean(env.PIXABAY_API_KEY), wikimediaCommons: true,
         voiceover: Boolean((env.VOICESTUDIO_BASE_URL && (env.VOICESTUDIO_API_KEY || env.ULTRON_VIDEO_STUDIO_LOCAL_MODE === "true")) || (env.TTS_API_BASE_URL && env.TTS_API_KEY)),
         transcription: Boolean((safeProviderBase(env.VOICESTUDIO_BASE_URL) && (env.VOICESTUDIO_API_KEY || env.ULTRON_VIDEO_STUDIO_LOCAL_MODE === "true")) || (safeProviderBase(env.STT_API_BASE_URL) && env.STT_API_KEY))
       },
