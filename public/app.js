@@ -3071,6 +3071,75 @@
     }
   }
 
+  async function showPdfReportView() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("PDF report generator", "Create a PDF from the text you submit. Generation is transient: the report is returned as a download and is not automatically stored in your account.");
+    drawerCard("Privacy and limits", "Keep passwords, API keys and private third-party data out of reports. The backend enforces a 40,000-character limit, bounded section count and text-only PDF export. Unsupported scripts may be replaced by '?' in the built-in font.", "TRANSIENT · NO PERSISTENCE", "warning");
+    const form = document.createElement("form");
+    const title = addDrawerField(form, "REPORT TITLE", "pdf-report-title", {
+      maxLength: 120, value: "ULTRON Report", placeholder: "e.g. Project verification report"
+    });
+    const content = addDrawerField(form, "REPORT CONTENT (UP TO 40,000 CHARACTERS)", "pdf-report-content", {
+      required: true, maxLength: 40000, multiline: true, rows: 12,
+      placeholder: "Paste report text, evidence, findings or a structured summary…"
+    });
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "drawer-action";
+    submit.textContent = "GENERATE + DOWNLOAD PDF";
+    form.appendChild(submit);
+    const status = document.createElement("p");
+    status.className = "drawer-view-description";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    form.appendChild(status);
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const text = content.value.trim();
+      if (!text) { showToast("Enter report content first."); return; }
+      if (text.length > 40000) { showToast("Report content must be 40,000 characters or fewer."); return; }
+      submit.disabled = true;
+      status.textContent = "Generating a bounded PDF. No file has been saved to the account.";
+      try {
+        const response = await fetch("/api/reports/pdf", {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json", "Accept": "application/pdf, application/json" },
+          body: JSON.stringify({ title: title.value.trim().slice(0, 120) || "ULTRON Report", content: text })
+        });
+        if (!response.ok) {
+          let message = "PDF generation failed (HTTP " + response.status + ").";
+          try {
+            const payload = await response.json();
+            if (payload?.error?.message) message = payload.error.message;
+          } catch {}
+          const error = new Error(message);
+          error.status = response.status;
+          throw error;
+        }
+        const type = response.headers.get("content-type") || "";
+        if (!/application\/pdf/i.test(type)) throw new Error("The endpoint did not return a PDF attachment.");
+        const blob = await response.blob();
+        if (blob.size < 500 || blob.size > 3 * 1024 * 1024) throw new Error("The generated PDF is empty or outside the expected output-size bounds.");
+        downloadBlob("ultron-report.pdf", blob);
+        status.textContent = "PDF generated and downloaded. It was not persisted by this action.";
+        drawerCard("Report ready", "The report was returned as a download. Store it locally or upload it to the private document library only if you explicitly choose to.", "DOWNLOAD COMPLETE · NOT STORED", "ready");
+        showToast("PDF report downloaded; no account copy was saved.");
+      } catch (error) {
+        status.textContent = "No PDF download was confirmed.";
+        drawerCard("PDF report unavailable", error.message, error.code || "GENERATION FAILED", "error");
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        if (/REPORT_CONTENT_REQUIRED|REPORT_TOO_LARGE|REPORT_TOO_MANY_SECTIONS/i.test(error.message)) {
+          drawerCard("Report limits", "Provide content up to 40,000 characters and avoid excessive section counts. The report generator does not persist or silently truncate a successful report.", "INPUT NEEDS REVIEW", "warning");
+        }
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    ui.drawerContent.appendChild(form);
+  }
+
   async function showStudyLibrary() {
     ui.drawerContent.replaceChildren();
     drawerHeading("Study library", "Generate study material through the ULTRON agent, explicitly save it, then review flashcards and quizzes here.");
@@ -3238,6 +3307,10 @@
     }
     if (name === "reminders") {
       await showRemindersView();
+      return;
+    }
+    if (name === "reports") {
+      await showPdfReportView();
       return;
     }
     if (name === "study") {
