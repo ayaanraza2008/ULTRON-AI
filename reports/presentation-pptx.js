@@ -263,7 +263,7 @@ export async function generatePresentationPptx(input = {}) {
     return { ok: false, code: "PPTX_TOO_MANY_SLIDES", message: "This content would create more than " + (MAX_SLIDES - 1) + " content slides. Shorten the report and try again." };
   }
 
-  const slides = [slideXml(coverSlide(title)), ...slideSections.map(contentSlide)];
+  const slides = [slideXml(coverSlide(title)), ...slideSections.map((section, index) => slideXml(contentSlide(section, index)))];
   const buffer = await buildPackage(slides, title);
   if (buffer.length < 500 || buffer.length > 8 * 1024 * 1024 || buffer.toString("ascii", 0, 2) !== "PK") {
     return { ok: false, code: "PPTX_GENERATION_FAILED", message: "Presentation generation did not return a valid bounded OpenXML package." };
