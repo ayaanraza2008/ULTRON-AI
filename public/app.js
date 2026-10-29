@@ -1090,6 +1090,224 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function taskResultText(value) {
+    if (typeof value === "string") return value.slice(0, 5000);
+    if (value === undefined || value === null) return "";
+    try { return JSON.stringify(value, null, 2).slice(0, 5000); }
+    catch { return String(value).slice(0, 5000); }
+  }
+
+  async function showTaskProgress(taskId) {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("Task progress", "Loading lifecycle status and the account-scoped checkpoint timeline…");
+    try {
+      const [detailPayload, progressPayload] = await Promise.all([
+        apiRequest("/api/tasks/" + encodeURIComponent(taskId)),
+        apiRequest("/api/tasks/" + encodeURIComponent(taskId) + "/progress")
+      ]);
+      const task = detailPayload?.task || {};
+      const progress = progressPayload?.progress || {};
+      const checkpoints = Array.isArray(progressPayload?.checkpoints) ? progressPayload.checkpoints : [];
+      ui.drawerContent.replaceChildren();
+      drawerHeading(String(task.title || "Task progress").slice(0, 240), "Lifecycle data is reported by the backend. A queued or running state is not a completed result.");
+      drawerButton("BACK TO TASKS", () => { void showDrawerView("tasks"); }, true);
+      const status = String(task.status || progress.state || "UNKNOWN").toUpperCase();
+      drawerCard("Current status", [
+        status,
+        task.created_at ? "Created " + new Date(task.created_at).toLocaleString() : "",
+        task.started_at ? "Started " + new Date(task.started_at).toLocaleString() : "",
+        task.finished_at ? "Finished " + new Date(task.finished_at).toLocaleString() : ""
+      ].filter(Boolean).join("\n"), "PROGRESS " + (progress.percent === 100 ? "100%" : progress.state || "UNKNOWN"), /FAILED|BLOCKED|CANCELLED/.test(status) ? "error" : /QUEUED|RUNNING|WAITING/.test(status) ? "warning" : "ready");
+      if (task.error_code) drawerCard("Reported error code", String(task.error_code).slice(0, 120), "TASK ERROR", "error");
+      const resultText = taskResultText(task.result);
+      if (resultText) drawerCard("Saved result", resultText, status === "COMPLETED" ? "COMPLETED RESULT" : "RECORDED RESULT", "ready");
+      const input = task.input && typeof task.input === "object" && !Array.isArray(task.input) ? task.input : {};
+      drawerCard("Execution boundary",
+        "Task type: " + String(input.taskType || "unknown") + "\nExecution mode: " + String(input.executionMode || "unknown") + "\nApproval required: " + String(input.requiresApproval === true) + "\nApproved: " + String(input.approved === true) + "\nExternal actions and PC commands remain blocked by design.",
+        "BOUNDED EXECUTION", "warning");
+      if (!checkpoints.length) {
+        drawerCard("No checkpoints recorded", "The task may be queued, the audit timeline may not be installed, or no worker lifecycle event has been recorded yet.", "TIMELINE EMPTY", "warning");
+      } else {
+        for (const point of checkpoints.slice(-25)) {
+          const at = point.timestamp ? new Date(point.timestamp) : null;
+          drawerCard(String(point.stage || point.action || "Checkpoint").replaceAll("_", " ").slice(0, 120),
+            [point.outcome, at && Number.isFinite(at.getTime()) ? at.toLocaleString() : ""].filter(Boolean).join(" · "),
+            "CHECKPOINT", point.outcome === "denied" || point.outcome === "failed" ? "error" : "ready");
+        }
+      }
+      if (status === "WAITING_FOR_PERMISSION") {
+        drawerButton("APPROVE BOUNDED TASK", async () => {
+          if (!window.confirm("Approve this task for the backend's allowlisted research or draft/report workflow? Approval does not permit publishing, spending, destructive changes or PC commands.")) return;
+          try {
+            const approved = await apiRequest("/api/tasks/" + encodeURIComponent(taskId) + "/approve", { method: "POST", body: { confirm: true } });
+            showToast(approved?.notice || "Approval recorded; worker execution remains dependent on configuration.", 7000);
+            await showTaskProgress(taskId);
+          } catch (error) { showToast("Could not approve task: " + error.message, 7000); }
+        });
+      }
+      if (["QUEUED", "WAITING_FOR_PERMISSION"].includes(status)) {
+        drawerButton("CANCEL TASK", async () => {
+          if (!window.confirm("Cancel this queued task? A task that has already started cannot be cancelled through this endpoint.")) return;
+          try {
+            await apiRequest("/api/tasks/" + encodeURIComponent(taskId) + "/cancel", { method: "POST", body: {} });
+            showToast("Task cancellation recorded.");
+            await showTaskProgress(taskId);
+          } catch (error) { showToast("Could not cancel task: " + error.message, 6500); }
+        }, true);
+      }
+      drawerButton("REFRESH PROGRESS", () => { void showTaskProgress(taskId); }, true);
+    } catch (error) {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Task progress unavailable", "The task record or progress endpoint could not be read.");
+      drawerCard("Progress request failed", error.message, error.code || "REQUEST FAILED", "error");
+      drawerButton("BACK TO TASKS", () => { void showDrawerView("tasks"); }, true);
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+    }
+  }
+
+  async function showTaskActivity() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("Task activity", "Create bounded tasks, review approvals, track real lifecycle checkpoints, and inspect saved results. Manual tasks are review-only; actual execution is limited to supported allowlisted workers.");
+    const form = document.createElement("form");
+    const title = addDrawerField(form, "TASK TITLE", "task-create-title", { required: true, maxLength: 240, placeholder: "e.g. Research free vision models" });
+    const description = addDrawerField(form, "TASK DESCRIPTION / REQUEST", "task-create-description", { required: true, maxLength: 12000, multiline: true, rows: 4, placeholder: "Describe the intended result and relevant constraints." });
+    const taskType = addDrawerField(form, "TASK TYPE", "task-create-type", { required: true, select: true, value: "research" });
+    for (const [value, labelText] of [
+      ["research", "Research — allowlisted worker"],
+      ["autonomous", "Autonomous — bounded draft/report"],
+      ["employee", "AI Employee — bounded draft/report"],
+      ["manual", "Manual — save for review only"]
+    ]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      taskType.appendChild(option);
+    }
+    const risk = addDrawerField(form, "REQUESTED RISK (SERVER RE-EVALUATES INTENT)", "task-create-risk", { required: true, select: true, value: "low" });
+    for (const [value, labelText] of [["low","Routine"],["medium","Private-data / medium"],["high","High / external or sensitive"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      risk.appendChild(option);
+    }
+    const draftOptions = document.createElement("div");
+    const role = addDrawerField(draftOptions, "EMPLOYEE ROLE (DRAFT/REPORT TASKS)", "task-create-role", { required: false, select: true, value: "chief-of-staff" });
+    for (const [value, labelText] of [
+      ["chief-of-staff","Chief of Staff"],["web-dev","Web Development"],["gtm-engineer","GTM Engineer"],["seo-aeo","SEO/AEO"],["social-media","Social Media"],["ad-manager","Ads Manager"],["sales","Sales"],["customer-satisfaction","Customer Satisfaction"]
+    ]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      role.appendChild(option);
+    }
+    const mode = addDrawerField(draftOptions, "DRAFT/REPORT MODE", "task-create-mode", { required: false, select: true, value: "report" });
+    for (const [value, labelText] of [["plan","Plan only"],["draft","Draft"],["review","Review"],["report","Report"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      mode.appendChild(option);
+    }
+    form.appendChild(draftOptions);
+    const hint = document.createElement("p");
+    hint.className = "drawer-view-description";
+    hint.textContent = "Server-side policy may require approval regardless of your requested risk. Approving permits only eligible allowlisted research or draft/report work; it does not enable external side effects.";
+    form.appendChild(hint);
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "drawer-action";
+    submit.textContent = "CREATE TASK";
+    form.appendChild(submit);
+    function updateDraftControls() {
+      const needsDraft = ["employee", "autonomous"].includes(taskType.value);
+      draftOptions.hidden = !needsDraft;
+      role.required = needsDraft && taskType.value === "employee";
+      if (taskType.value === "autonomous" && !role.value) role.value = "chief-of-staff";
+    }
+    taskType.addEventListener("change", updateDraftControls);
+    updateDraftControls();
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const type = taskType.value;
+      const body = {
+        title: title.value.trim(),
+        description: description.value.trim(),
+        taskType: type,
+        risk: risk.value
+      };
+      if (["employee", "autonomous"].includes(type)) {
+        body.role = role.value || (type === "autonomous" ? "chief-of-staff" : "");
+        body.mode = mode.value;
+        body.goal = description.value.trim();
+      }
+      if (type === "research" || type === "autonomous") body.query = description.value.trim().slice(0, 400);
+      if (!body.title || !body.description) { showToast("Provide a task title and description."); return; }
+      if (!window.confirm("Create this task record? The server evaluates risk and may require approval. No external action will be permitted by this task form.")) return;
+      submit.disabled = true;
+      try {
+        const response = await apiRequest("/api/tasks", { method: "POST", body });
+        const task = response?.task;
+        showToast(response?.notice || "Task saved; worker completion is not implied.", 7500);
+        if (task?.id) await showTaskProgress(task.id);
+        else await showTaskActivity();
+      } catch (error) {
+        drawerCard("Task not created", error.message, error.code || "CREATE FAILED", "error");
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        submit.disabled = false;
+      }
+    });
+    ui.drawerContent.appendChild(form);
+    const separator = document.createElement("div");
+    separator.className = "drawer-rule";
+    ui.drawerContent.appendChild(separator);
+    drawerHeading("Saved task queue", "Loading task records for this signed-in account…");
+    try {
+      const payload = await apiRequest("/api/tasks");
+      const tasks = Array.isArray(payload?.tasks) ? payload.tasks : [];
+      if (!tasks.length) {
+        drawerCard("No tasks returned", "The service returned no visible task records, or this account has no saved tasks.", "EMPTY", "warning");
+        return;
+      }
+      for (const task of tasks.slice(0, 20)) {
+        const status = String(task.status || "unknown").toUpperCase();
+        const input = task.input && typeof task.input === "object" && !Array.isArray(task.input) ? task.input : {};
+        const resultText = taskResultText(task.result);
+        const descriptionText = [
+          String(task.description || task.goal || input.description || input.goal || "").slice(0, 250),
+          input.executionMode ? "Mode: " + String(input.executionMode).slice(0, 80) : "",
+          task.error_code ? "Error code: " + String(task.error_code).slice(0, 80) : "",
+          resultText ? "Result: " + resultText.slice(0, 220) : ""
+        ].filter(Boolean).join("\n");
+        const card = drawerCard(
+          String(task.title || task.name || "Task").slice(0, 200),
+          descriptionText || "Task returned by the backend. Open progress to see the actual lifecycle checkpoints.",
+          status,
+          /FAILED|ERROR|BLOCKED|CANCELLED/.test(status) ? "error" : /QUEUED|PENDING|RUNNING|WAITING/.test(status) ? "warning" : "ready"
+        );
+        const actions = [{ label: "PROGRESS", onClick: () => { void showTaskProgress(task.id); } }];
+        if (status === "WAITING_FOR_PERMISSION") actions.push({ label: "APPROVE", secondary: true, onClick: async () => {
+          if (!window.confirm("Approve this task for its bounded allowlisted worker? This never authorizes publishing, spending, destructive changes or PC control.")) return;
+          try {
+            const result = await apiRequest("/api/tasks/" + encodeURIComponent(task.id) + "/approve", { method: "POST", body: { confirm: true } });
+            showToast(result?.notice || "Approval recorded; worker execution is not verified.", 7500);
+            await showTaskActivity();
+          } catch (error) { showToast("Could not approve task: " + error.message, 6500); }
+        }});
+        if (["QUEUED", "WAITING_FOR_PERMISSION"].includes(status)) actions.push({ label: "CANCEL", secondary: true, onClick: async () => {
+          if (!window.confirm("Cancel this queued task? Already-running tasks cannot be cancelled by this action.")) return;
+          try {
+            await apiRequest("/api/tasks/" + encodeURIComponent(task.id) + "/cancel", { method: "POST", body: {} });
+            showToast("Task cancellation recorded.");
+            await showTaskActivity();
+          } catch (error) { showToast("Could not cancel task: " + error.message, 6500); }
+        }});
+        addCardActionRow(card, actions);
+      }
+    } catch (error) {
+      drawerCard("Task list unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+    }
+  }
+
   async function showEmployeeAutomationView() {
     ui.drawerContent.replaceChildren();
     drawerHeading("AI Employees & automations", "Choose a supported role and routine to save a recurring draft/report workflow. A schedule is not proof that the worker is running.");
@@ -2376,26 +2594,7 @@
       return;
     }
     if (name === "tasks") {
-      drawerHeading("Task activity", "View task records returned by the ULTRON backend. A queue is not proof that a task has completed.");
-      drawerCard("Task service", "Loading your account-scoped task list…", "CHECKING", "warning");
-      try {
-        const payload = await apiRequest("/api/tasks");
-        ui.drawerContent.replaceChildren();
-        drawerHeading("Task activity", "Task information returned by the backend.");
-        const tasks = Array.isArray(payload) ? payload : Array.isArray(payload?.tasks) ? payload.tasks : Array.isArray(payload?.items) ? payload.items : [];
-        if (!tasks.length) drawerCard("No tasks returned", "The service returned no visible task records, or this account has no saved tasks.", "EMPTY", "warning");
-        for (const task of tasks.slice(0, 12)) {
-          drawerCard(String(task.title || task.name || task.type || "Task").slice(0, 120),
-            String(task.description || task.goal || task.status || "Task returned by the backend.").slice(0, 320),
-            String(task.status || "status unavailable").slice(0, 40),
-            /fail|error|cancel/i.test(String(task.status || "")) ? "error" : /queued|pending|running/i.test(String(task.status || "")) ? "warning" : "ready");
-        }
-      } catch (error) {
-        ui.drawerContent.replaceChildren();
-        drawerHeading("Task activity", "The real task endpoint could not return this account's queue.");
-        drawerCard("Task list unavailable", error.message, error.code || "REQUEST FAILED", "error");
-        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
-      }
+      await showTaskActivity();
       return;
     }
     if (name === "apps") {
