@@ -1121,7 +1121,7 @@
             session.heardSpeech = true;
             session.lastVoiceAt = now;
           }
-          if (session.heardSpeech && now - session.lastVoiceAt >= 450) {
+          if (session.heardSpeech && now - session.lastVoiceAt >= 300) {
             stopFallbackRecognition({ transcribe: true });
           } else if (now - session.startedAt >= 18000) {
             stopFallbackRecognition({ transcribe: session.heardSpeech });
@@ -1129,7 +1129,7 @@
             stopFallbackRecognition({ transcribe: false });
           }
         }
-      }, 100);
+      }, 75);
     } catch {
       ui.captionText.textContent = "VOICE RECORDING FAILED";
       showToast("Could not start microphone recording. Check microphone permission and try again.");
@@ -1223,7 +1223,7 @@
           stopRecognition();
           ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
           void sendPrompt(command, "voice");
-        }, 500);
+        }, 300);
       }
     };
     instance.onerror = (event) => {
@@ -1471,9 +1471,9 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        if (!force && streamSpeechBuffer.length >= 36) {
-          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 32);
-          if (cutoff >= 20) {
+        if (!force && streamSpeechBuffer.length >= 22) {
+          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 19);
+          if (cutoff >= 12) {
             enqueueStreamSpeech(streamSpeechBuffer.slice(0, cutoff).trim());
             streamSpeechBuffer = streamSpeechBuffer.slice(cutoff + 1);
             continue;
