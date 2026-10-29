@@ -87,9 +87,13 @@
       return stored === "naya" ? "naya" : "ultron";
     } catch { return "ultron"; }
   })();
+  // Empty means the default autonomous tool-using agent. A concrete model ID
+  // opts into direct-model chat; "__agent__" is the UI's explicit auto-agent marker.
   let selectedModel = (() => {
-    try { return String(window.localStorage.getItem("ultron-selected-model") || "").slice(0, 180); }
-    catch { return ""; }
+    try {
+      const stored = String(window.localStorage.getItem("ultron-selected-model") || "").slice(0, 180);
+      return stored === "__agent__" ? "" : stored;
+    } catch { return ""; }
   })();
   let preferredRecognitionLocale = "en-IN";
   let preferredVoiceEnabled = true;
@@ -2017,56 +2021,89 @@
 
   async function showModelsView() {
     ui.drawerContent.replaceChildren();
-    drawerHeading("AI model routing", "Choose a model reported by the configured ULTRON backend. Free-model availability and limits can change; this does not add a new API key or guarantee provider reachability.");
+    drawerHeading("AI model routing", "Choose ULTRON's autonomous tool agent (recommended), or pin a backend-reported model for direct chat. The agent calls only allowlisted tools and follows task-specific safety gates.");
     drawerCard("Model catalog", "Loading server-reported model IDs…", "CHECKING", "warning");
     try {
       const payload = await apiRequest("/api/models");
       const models = Array.isArray(payload?.models)
-        ? [...new Set(payload.models.filter(value => typeof value === "string" && /^[A-Za-z0-9._/-]{1,154}(?::free)?$/.test(value) || value === "openrouter/free"))].slice(0, 100)
+        ? [...new Set(payload.models.filter(value => typeof value === "string" && (/^[A-Za-z0-9._/-]{1,154}(?::free)?$/.test(value) || value === "openrouter/free")))].slice(0, 100)
         : [];
-      if (!models.length) throw new Error("The backend returned no eligible model IDs.");
-      const backendDefault = typeof payload.defaultModel === "string" && models.includes(payload.defaultModel) ? payload.defaultModel : (models.includes("openrouter/free") ? "openrouter/free" : models[0]);
-      const requested = selectedModel && models.includes(selectedModel) ? selectedModel : backendDefault;
-      selectedModel = requested;
-      try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
+      const backendDefault = typeof payload?.defaultModel === "string" && models.includes(payload.defaultModel)
+        ? payload.defaultModel
+        : (models.includes("openrouter/free") ? "openrouter/free" : models[0] || "");
+      const requested = selectedModel && models.includes(selectedModel) ? selectedModel : "__agent__";
+      selectedModel = requested === "__agent__" ? "" : requested;
+      try { window.localStorage.setItem("ultron-selected-model", requested); } catch {}
       ui.drawerContent.replaceChildren();
-      drawerHeading("AI model routing", "The selected model is sent to the backend per request. The server still validates model IDs and applies vision-specific routing.");
-      drawerCard("Current selection", selectedModel, selectedModel === "openrouter/free" ? "AUTO FREE ROUTER" : "EXPLICIT MODEL", "ready");
+      drawerHeading("AI model routing", "Autonomous mode uses /api/agent/run for safe task routing and tool use. Picking a concrete model uses direct chat; images, camera and file-analysis paths remain direct and permission-scoped.");
+      drawerCard(
+        "Current selection",
+        selectedModel || "ULTRON autonomous tool agent",
+        selectedModel ? "DIRECT MODEL · TOOL USE DISABLED" : "AUTONOMOUS AGENT · ALLOWLISTED TOOLS",
+        "ready"
+      );
       const form = document.createElement("form");
-      const select = addDrawerField(form, "AVAILABLE MODEL", "selected-ai-model", { required: true, select: true, value: requested });
+      const select = addDrawerField(form, "CHAT MODE", "selected-ai-model", { required: true, select: true, value: requested });
+      const automatic = document.createElement("option");
+      automatic.value = "__agent__";
+      automatic.textContent = "ULTRON autonomous tool agent (recommended)";
+      select.appendChild(automatic);
       for (const model of models) {
         const option = document.createElement("option");
         option.value = model;
-        option.textContent = model;
+        option.textContent = model + (model === backendDefault ? " (backend default)" : "");
         select.appendChild(option);
       }
       select.value = requested;
       const submit = document.createElement("button");
       submit.type = "submit";
       submit.className = "drawer-action";
-      submit.textContent = "APPLY MODEL";
+      submit.textContent = "APPLY CHAT MODE";
       form.appendChild(submit);
       form.addEventListener("submit", event => {
         event.preventDefault();
-        if (!models.includes(select.value)) { showToast("Choose a model from the server-reported list."); return; }
-        selectedModel = select.value;
-        try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
-        drawerCard("Model selection saved", selectedModel + " will be requested for subsequent chat messages. Image prompts may be routed to a compatible configured vision model.", "READY", "ready");
-        showToast("Model selection saved for this browser.");
+        if (select.value !== "__agent__" && !models.includes(select.value)) {
+          showToast("Choose the autonomous agent or a model from the server-reported list.");
+          return;
+        }
+        if (select.value === "__agent__") {
+          selectedModel = "";
+          try { window.localStorage.setItem("ultron-selected-model", "__agent__"); } catch {}
+          drawerCard("Autonomous tool agent enabled", "Ordinary text and voice requests will use ULTRON's task router and allowlisted agent tools when useful. Explicit approvals, account permissions, and side-effect restrictions remain enforced.", "AUTO AGENT", "ready");
+          showToast("ULTRON autonomous tool agent enabled.");
+        } else {
+          selectedModel = select.value;
+          try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
+          drawerCard("Direct model selected", selectedModel + " will be requested for subsequent ordinary text/voice chat; tool-agent routing is off for those requests. Image, camera and file paths keep their existing handling.", "DIRECT CHAT", "warning");
+          showToast("Direct model selection saved for this browser.");
+        }
       });
       ui.drawerContent.appendChild(form);
-      drawerCard("Free-model notes", "The OpenRouter free router can choose from currently available free models automatically. Specific free models may be rate-limited, unavailable, or lack the capability needed by a request. Keep an automatic/fallback path available.", "AVAILABILITY NOT GUARANTEED", "warning");
+      drawerCard(
+        "Agent safety",
+        "The tool agent can research, manage account-owned notes/reminders/study packs, inspect configured integrations and prepare drafts. External publishing, spending, destructive changes, unauthorized scanning and PC control are not enabled by choosing this mode.",
+        "BOUNDED AUTONOMY",
+        "warning"
+      );
+      if (!models.length) drawerCard("No explicit model IDs returned", "Autonomous mode is still available through the backend's configured provider. Direct-model mode will remain empty until an eligible model is reported.", "AUTO AGENT AVAILABLE", "warning");
+      else drawerCard("Model availability", "Configured model IDs and free-router access can change. A catalog entry is not proof of live reachability, quota, tool support or vision capability.", "UNVERIFIED", "warning");
       drawerButton("REFRESH MODEL CATALOG", () => { void showDrawerView("models"); }, true);
     } catch (error) {
       ui.drawerContent.replaceChildren();
-      drawerHeading("AI model routing", "The model list could not be loaded. The backend's configured default can still be used when no explicit model is selected.");
+      drawerHeading("AI model routing", "The model catalog could not be loaded. Autonomous mode can still use the tool agent's server-configured provider.");
       drawerCard("Model catalog unavailable", error.message, error.code || "REQUEST FAILED", "error");
-      drawerButton("USE BACKEND DEFAULT", () => {
+      drawerButton("USE AUTONOMOUS TOOL AGENT", () => {
         selectedModel = "";
-        try { window.localStorage.removeItem("ultron-selected-model"); } catch {}
-        showToast("ULTRON will use the backend-selected default model.");
+        try { window.localStorage.setItem("ultron-selected-model", "__agent__"); } catch {}
+        showToast("ULTRON autonomous tool agent selected.");
         setDrawerOpen(false);
       });
+      drawerButton("USE BACKEND DEFAULT DIRECT CHAT", () => {
+        selectedModel = "openrouter/free";
+        try { window.localStorage.setItem("ultron-selected-model", selectedModel); } catch {}
+        showToast("Direct chat selected. Verify that the backend has access to the free router.");
+        setDrawerOpen(false);
+      }, true);
       drawerButton("RETRY", () => { void showDrawerView("models"); }, true);
     }
   }
@@ -2235,8 +2272,9 @@
     let sources = [];
     let answer = "";
     let shouldSpeak = preferredVoiceEnabled && source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
+    const useAgentTools = (source === "text" || source === "voice") && attachments.length === 0 && !selectedModel && prompt.length <= 5000;
     try {
-      if (wantsResearch(prompt) && !attachments.length) {
+      if (wantsResearch(prompt) && !attachments.length && !useAgentTools) {
         setCoreState("research");
         updateTaskPanel("Searching for current public references…", "SEARCHING REFERENCES");
         try {
@@ -2254,16 +2292,51 @@
       const context = history.slice(-18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const messages = context.concat([{ role: "user", content: outgoingPrompt }]).slice(-40);
-      const payload = await apiRequest("/api/chat", {
-        method: "POST",
-        body: { messages, stream: false, persona: preferredPersona, ...(selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
-      });
+      let payload;
+      if (useAgentTools) {
+        updateTaskPanel("ULTRON is selecting relevant allowlisted tools and executing safe parts of the request.", "AUTONOMOUS TOOL ROUTING", sources);
+        try {
+          payload = await apiRequest("/api/agent/run", {
+            method: "POST",
+            body: {
+              prompt: outgoingPrompt.slice(0, 6000),
+              messages: context
+                .filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string")
+                .slice(-12)
+                .map(item => ({ role: item.role, content: item.content.slice(0, 6000) })),
+              persona: preferredPersona
+            }
+          });
+        } catch (agentError) {
+          // Preserve the legacy access-gate path only when the agent endpoint is
+          // absent or rejects the request before tool execution. Never retry a
+          // provider/tool execution failure through another endpoint.
+          const canUseLegacyChat = agentError.status === 404
+            || (agentError.status === 401 && ["AUTH_REQUIRED", "SUPABASE_AUTH_REQUIRED"].includes(agentError.code))
+            || ["INVALID_AGENT_HISTORY", "AGENT_PROMPT_REQUIRED"].includes(agentError.code);
+          if (!canUseLegacyChat) throw agentError;
+          updateTaskPanel("The signed-in session cannot use the account-scoped tool agent. Falling back to normal direct chat; no agent tool was executed.", "DIRECT CHAT FALLBACK", sources);
+          payload = await apiRequest("/api/chat", {
+            method: "POST",
+            body: { messages, stream: false, persona: preferredPersona, ...(attachments.length ? { attachments } : {}) }
+          });
+        }
+      } else {
+        payload = await apiRequest("/api/chat", {
+          method: "POST",
+          body: { messages, stream: false, persona: preferredPersona, ...(selectedModel ? { model: selectedModel } : {}), ...(attachments.length ? { attachments } : {}) }
+        });
+      }
       answer = payload && typeof payload.content === "string" ? payload.content.trim() : "";
       if (!answer) throw new Error("The model returned an empty response.");
       await persistConversationExchange(prompt, answer);
       history.push({ role: "user", content: prompt }, { role: "assistant", content: answer });
       if (history.length > 30) history = history.slice(-30);
       markTaskComplete(answer, sources, shouldSpeak);
+      if (useAgentTools && Array.isArray(payload?.toolsUsed) && payload.toolsUsed.length) {
+        const usedLabel = payload.toolsUsed.slice(0, 4).map(item => String(item?.name || "tool").slice(0, 36) + (item?.ok === false ? " (failed)" : "")).join(", ");
+        ui.taskStageLabel.textContent = "TOOLS: " + usedLabel.toUpperCase().slice(0, 110);
+      }
       setCoreState(shouldSpeak ? "speaking" : "idle");
       if (shouldSpeak) {
         const spoke = await speakResponse(answer, true);
