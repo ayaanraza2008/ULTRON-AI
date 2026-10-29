@@ -1277,6 +1277,39 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
   });
 
 
+
+  router.patch("/study-packs/:id", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_STUDY_PACK_ID", message: "Study-pack ID is invalid." } });
+    }
+    const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+    const supported = new Set(["title", "pack"]);
+    if (!Object.keys(body).length || Object.keys(body).some(key => !supported.has(key))) {
+      return res.status(400).json({ error: { code: "INVALID_STUDY_PACK_UPDATE", message: "Provide only a title and/or a completed study pack to update." } });
+    }
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(body, "title")) {
+      if (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 200) {
+        return res.status(400).json({ error: { code: "INVALID_STUDY_PACK_TITLE", message: "Study-pack title must be 1-200 characters." } });
+      }
+      patch.title = body.title.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "pack")) {
+      const normalized = normalizeStudyPackForStorage({ title: patch.title || body.pack?.topic, pack: body.pack });
+      if (normalized.error) return res.status(400).json({ error: { code: "INVALID_STUDY_PACK", message: normalized.error } });
+      Object.assign(patch, normalized.row);
+    }
+    try {
+      const rows = await supabaseRest(req, "study_packs", "PATCH",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id),
+        patch);
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "STUDY_PACK_NOT_FOUND", message: "Saved study pack was not found." } });
+      return res.json({ studyPack: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "STUDY_PACK_UPDATE_FAILED", message: "The saved study pack could not be updated." } });
+    }
+  });
+
   router.get("/study-packs/:id/export", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
       return res.status(400).json({ error: { code: "INVALID_STUDY_PACK_ID", message: "Study-pack ID is invalid." } });
