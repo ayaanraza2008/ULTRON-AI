@@ -81,6 +81,9 @@
   let history = [];
   let currentConversationId = null;
   let conversationPersistenceUnavailable = false;
+  let preferredRecognitionLocale = "en-IN";
+  let preferredVoiceEnabled = true;
+  let preferredMemoryEnabled = true;
   let persistenceNoticeShown = false;
   let speechEpoch = 0;
   let audioContext = null;
@@ -816,7 +819,7 @@
     instance.continuous = true;
     instance.interimResults = true;
     instance.maxAlternatives = 1;
-    instance.lang = "en-IN";
+    instance.lang = preferredRecognitionLocale === "hinglish" ? "en-IN" : preferredRecognitionLocale;
     instance.onstart = () => {
       if (recognition !== instance) return;
       setCoreState("listening");
@@ -1023,6 +1026,229 @@
     }
   }
 
+  async function showMemoryEditor(item = null) {
+    ui.drawerContent.replaceChildren();
+    drawerHeading(item ? "Edit saved memory" : "Save a memory",
+      "Memory is private to the signed-in account. Store only information you deliberately want ULTRON to reuse; never store passwords or API keys.");
+    drawerButton("BACK TO MEMORY VAULT", () => { void showDrawerView("memory"); }, true);
+    const form = document.createElement("form");
+    const kind = addDrawerField(form, "MEMORY TYPE", "memory-kind", { required: true, select: true, value: item?.kind || "preference" });
+    for (const [value, labelText] of [
+      ["preference", "Preference"], ["project_fact", "Project fact"], ["profile_note", "Profile note"], ["document_reference", "Document reference"]
+    ]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      kind.appendChild(option);
+    }
+    kind.value = item?.kind || "preference";
+    kind.disabled = Boolean(item);
+    const title = addDrawerField(form, "TITLE", "memory-title", {
+      required: true, maxLength: 240, value: item?.title || "", placeholder: "e.g. ULTRON project preferences"
+    });
+    const content = addDrawerField(form, "CONTENT", "memory-content", {
+      required: true, maxLength: 20000, multiline: true, rows: 7, value: item?.content || "",
+      placeholder: "The detail you want ULTRON to remember…"
+    });
+    const expiryDefault = (() => {
+      if (!item?.expires_at) return "";
+      const parsed = new Date(item.expires_at);
+      if (!Number.isFinite(parsed.getTime()) || parsed.getTime() <= Date.now()) return "";
+      return new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    })();
+    const expiry = addDrawerField(form, "OPTIONAL EXPIRY (LOCAL TIME; BLANK = NO EXPIRY)", "memory-expiry", {
+      type: "datetime-local", value: expiryDefault
+    });
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "drawer-action";
+    submit.textContent = item ? "SAVE MEMORY CHANGES" : "SAVE MEMORY";
+    form.appendChild(submit);
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!preferredMemoryEnabled) {
+        showToast("Memory is currently turned off in Preferences. Turn memory on before adding an item.");
+        return;
+      }
+      if (expiry.value) {
+        const due = new Date(expiry.value);
+        if (!Number.isFinite(due.getTime()) || due.getTime() <= Date.now()) {
+          showToast("Expiry must be a future local date and time, or leave it blank.");
+          return;
+        }
+      }
+      submit.disabled = true;
+      try {
+        const body = {
+          title: title.value.trim(),
+          content: content.value.trim(),
+          expires_at: expiry.value ? new Date(expiry.value).toISOString() : null
+        };
+        if (!item) body.kind = kind.value;
+        await apiRequest(item ? "/api/memory/" + encodeURIComponent(item.id) : "/api/memory", {
+          method: item ? "PATCH" : "POST", body
+        });
+        showToast(item ? "Memory updated." : "Memory saved.");
+        await showDrawerView("memory");
+      } catch (error) {
+        drawerCard("Memory not saved", error.message, error.code || "SAVE FAILED", "error");
+        if (/relation .*memory_items|memory_items.*does not exist|schema cache/i.test(error.message)) {
+          drawerCard("Database setup required", "The memory_items table is unavailable in the connected database. Review the migration and RLS policy before enabling persistent memory.", "MIGRATION REQUIRED", "warning");
+        }
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        submit.disabled = false;
+      }
+    });
+    ui.drawerContent.appendChild(form);
+  }
+
+  async function showMemoryVault() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("Memory vault", "Inspect, edit, deactivate or delete saved memories. The backend uses owner-scoped queries; memory recall also respects the saved memory preference.");
+    if (!preferredMemoryEnabled) drawerCard("Memory disabled", "ULTRON memory is turned off. Existing saved items remain until you explicitly delete them; re-enable memory in Preferences to add or use remembered context.", "PRIVACY SETTING", "warning");
+    drawerButton("ADD MEMORY", () => { void showMemoryEditor(); });
+    drawerCard("Saved memories", "Loading your account-owned memory vault…", "CHECKING", "warning");
+    try {
+      const payload = await apiRequest("/api/memory");
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Memory vault", "Manage only memories stored for this signed-in account.");
+      if (!preferredMemoryEnabled) drawerCard("Memory disabled", "Current preference prevents memory recall. Saved items are not automatically deleted.", "PRIVACY SETTING", "warning");
+      drawerButton("ADD MEMORY", () => { void showMemoryEditor(); });
+      if (!items.length) {
+        drawerCard("No saved memories", "Save a project fact, preference or profile note that ULTRON may reuse when memory is enabled.", "EMPTY", "warning");
+        return;
+      }
+      for (const item of items.slice(0, 100)) {
+        const expiry = item.expires_at ? new Date(item.expires_at) : null;
+        const expiryText = expiry && Number.isFinite(expiry.getTime()) ? "Expires " + expiry.toLocaleString() : "No expiry";
+        const active = item.is_active === true && (!expiry || !Number.isFinite(expiry.getTime()) || expiry.getTime() > Date.now());
+        const card = drawerCard(
+          String(item.title || "Untitled memory").slice(0, 240),
+          [String(item.content || "").slice(0, 420), "Type: " + String(item.kind || "unknown").replaceAll("_", " "), expiryText, "Source: " + String(item.source || "unknown").replaceAll("_", " ")].join("\n"),
+          active ? "ACTIVE" : "INACTIVE / EXPIRED",
+          active ? "ready" : "warning"
+        );
+        addCardActionRow(card, [
+          { label: "EDIT", onClick: () => { void showMemoryEditor(item); } },
+          { label: active ? "DEACTIVATE" : "ACTIVATE", secondary: true, onClick: async () => {
+            try {
+              await apiRequest("/api/memory/" + encodeURIComponent(item.id), { method: "PATCH", body: { is_active: !active } });
+              showToast(active ? "Memory deactivated." : "Memory activated.");
+              await showDrawerView("memory");
+            } catch (error) { showToast("Could not update memory: " + error.message, 6500); }
+          }},
+          { label: "DELETE", secondary: true, onClick: async () => {
+            if (!window.confirm("Delete this saved memory permanently?")) return;
+            try {
+              await apiRequest("/api/memory/" + encodeURIComponent(item.id), { method: "DELETE" });
+              showToast("Memory deleted.");
+              await showDrawerView("memory");
+            } catch (error) { showToast("Could not delete memory: " + error.message, 6500); }
+          }}
+        ]);
+      }
+    } catch (error) {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Memory vault", "The memory API could not return this account's saved items.");
+      drawerCard("Memory unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (/relation .*memory_items|memory_items.*does not exist|schema cache/i.test(error.message)) {
+        drawerCard("Database setup required", "The memory_items table is unavailable in this database. Do not assume memory is persistent until the migration and RLS checks pass.", "MIGRATION REQUIRED", "warning");
+      }
+      drawerButton("RETRY", () => { void showDrawerView("memory"); }, true);
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+    }
+  }
+
+  function addPreferenceCheckbox(form, id, labelText, description, checked) {
+    const label = document.createElement("label");
+    label.className = "device-scope";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = id;
+    checkbox.name = id;
+    checkbox.checked = checked;
+    const text = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = labelText;
+    const small = document.createElement("small");
+    small.textContent = description;
+    text.append(strong, small);
+    label.append(checkbox, text);
+    form.appendChild(label);
+    return checkbox;
+  }
+
+  async function showPreferencesView() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("Preferences & privacy", "These settings are saved for the authenticated account. Turning memory off changes future recall; it does not delete existing saved memories.");
+    drawerCard("Account preferences", "Loading saved preferences…", "CHECKING", "warning");
+    try {
+      const payload = await apiRequest("/api/preferences");
+      const prefs = payload?.preferences || {};
+      preferredRecognitionLocale = ["en-IN", "hi-IN", "hinglish"].includes(prefs.voice_input_locale) ? prefs.voice_input_locale : "en-IN";
+      preferredVoiceEnabled = prefs.voice_enabled !== false;
+      preferredMemoryEnabled = prefs.memory_enabled !== false;
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Preferences & privacy", "Saved settings apply to this account when the relevant browser/provider capabilities are available.");
+      const form = document.createElement("form");
+      const locale = addDrawerField(form, "VOICE RECOGNITION LANGUAGE", "preference-voice-locale", { required: true, select: true, value: preferredRecognitionLocale });
+      for (const [value, labelText] of [["en-IN", "English (India)"], ["hi-IN", "Hindi (India)"], ["hinglish", "Hinglish — English/Hindi mix"]]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = labelText;
+        locale.appendChild(option);
+      }
+      locale.value = preferredRecognitionLocale;
+      const voiceEnabled = addPreferenceCheckbox(form, "preference-voice-enabled", "Voice output", "Speak assistant replies when voice output is enabled in the current mode.", preferredVoiceEnabled);
+      const memoryEnabled = addPreferenceCheckbox(form, "preference-memory-enabled", "Use saved memory", "Allow relevant, active saved memories to be retrieved for future assistant requests.", preferredMemoryEnabled);
+      const privacyNote = document.createElement("p");
+      privacyNote.className = "drawer-view-description";
+      privacyNote.textContent = "Voice language selection is stored as a preference. The actual recognition and speech quality still depends on browser/device support. Disabling memory does not erase saved entries.";
+      form.appendChild(privacyNote);
+      const submit = document.createElement("button");
+      submit.type = "submit";
+      submit.className = "drawer-action";
+      submit.textContent = "SAVE PREFERENCES";
+      form.appendChild(submit);
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        submit.disabled = true;
+        try {
+          const saved = await apiRequest("/api/preferences", {
+            method: "PUT",
+            body: {
+              voice_input_locale: locale.value,
+              voice_enabled: voiceEnabled.checked,
+              memory_enabled: memoryEnabled.checked
+            }
+          });
+          const updated = saved?.preferences || {};
+          preferredRecognitionLocale = ["en-IN", "hi-IN", "hinglish"].includes(updated.voice_input_locale) ? updated.voice_input_locale : locale.value;
+          preferredVoiceEnabled = updated.voice_enabled !== false;
+          preferredMemoryEnabled = updated.memory_enabled !== false;
+          if (voiceActive && mode === "voice") {
+            stopRecognition();
+            scheduleRecognitionRestart();
+          }
+          showToast("Preferences saved for this account.");
+          await showPreferencesView();
+        } catch (error) {
+          drawerCard("Preferences not saved", error.message, error.code || "SAVE FAILED", "error");
+          if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+          submit.disabled = false;
+        }
+      });
+      ui.drawerContent.appendChild(form);
+    } catch (error) {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Preferences & privacy", "Account settings could not be loaded or saved.");
+      drawerCard("Preferences unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+      drawerButton("RETRY", () => { void showDrawerView("preferences"); }, true);
+    }
+  }
+
   async function showConversationHistory() {
     ui.drawerContent.replaceChildren();
     drawerHeading("Conversation history", "Saved threads are filtered by the signed-in account. Selecting one restores its recent messages as the context for your next request.");
@@ -1106,7 +1332,7 @@
     let researchData = null;
     let sources = [];
     let answer = "";
-    let shouldSpeak = source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
+    let shouldSpeak = preferredVoiceEnabled && source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
     try {
       if (wantsResearch(prompt) && !attachments.length) {
         setCoreState("research");
@@ -1710,6 +1936,14 @@
           .finally(() => { if (wasListening) scheduleRecognitionRestart(); });
       });
       drawerButton("REFRESH AVAILABLE VOICES", () => { void showDrawerView("voice-quality"); }, true);
+      return;
+    }
+    if (name === "memory") {
+      await showMemoryVault();
+      return;
+    }
+    if (name === "preferences") {
+      await showPreferencesView();
       return;
     }
     if (name === "history") {
