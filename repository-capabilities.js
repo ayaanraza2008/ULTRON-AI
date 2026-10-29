@@ -8,6 +8,7 @@ import { getOpenSeoReadiness } from "./integrations/openseo-mcp.js";
 import { getOpenHiggsfieldReadiness } from "./integrations/open-higgsfield.js";
 import { getOpenDesignReadiness } from "./integrations/open-design.js";
 import { getOpenGenerativeAIReadiness } from "./integrations/open-generative-ai.js";
+import { getAppFlowyReadiness } from "./integrations/appflowy.js";
 
 /**
  * Task-matched capability catalog for 43 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
@@ -66,11 +67,11 @@ const REPOSITORIES = [
   },
   {
     id: "appflowy", repo: "AppFlowy-IO/AppFlowy", domain: "workspace_docs",
-    match: /\b(appflowy|notion alternative|workspace page|knowledge base page|workspace document|team wiki|project knowledge base)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["workspace documents", "knowledge-base content", "task boards", "databases and structured notes"],
-    limits: ["Requires an authorized AppFlowy workspace/API or local connector; workspace data must remain user-scoped."],
-    envKeys: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN"], license: "AGPL-3.0 shown in upstream README; review network/distribution obligations", source: "https://github.com/AppFlowy-IO/AppFlowy"
+    match: /\b(appflowy|notion alternative|workspace page|knowledge base page|workspace document|team wiki|project knowledge base|appflowy workspace)\b/i,
+    integration: "owner_scoped_read_only_cloud_api", status: "adapter_present_unverified_live",
+    abilities: ["list owner-accessible AppFlowy Cloud workspaces", "read a bounded recursive workspace page/folder tree", "search workspace documents and return bounded previews"],
+    limits: ["This is a thin, read-only adapter to AppFlowy Cloud; it does not bundle the desktop/web application or decode and mutate collaborative document state. It requires an AppFlowy user access token and a secured, reachable AppFlowy Cloud deployment. Publishing, document edits, database writes, member changes and deletion are not exposed."],
+    envKeys: ["APPFLOWY_ENABLED", "APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["APPFLOWY_CLIENT_VERSION", "APPFLOWY_DEVICE_ID"], license: "AppFlowy source is AGPL-3.0; no upstream app source is copied into this adapter", source: "https://github.com/AppFlowy-IO/AppFlowy"
   },
   {
     id: "open-seo", repo: "every-app/open-seo", domain: "seo",
@@ -387,6 +388,7 @@ function configured(record, env) {
   if (record.id === "open-seo") return getOpenSeoReadiness(env).configured;
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
+  if (record.id === "appflowy") return getAppFlowyReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   if (record.id === "open-generative-ai") return getOpenGenerativeAIReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
   if (!keys.length) return null;
@@ -396,6 +398,7 @@ function configured(record, env) {
 function stateFor(record, env) {
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
+  if (record.id === "appflowy") return getAppFlowyReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-generative-ai") return getOpenGenerativeAIReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-seo") {
     const readiness = getOpenSeoReadiness(env);
