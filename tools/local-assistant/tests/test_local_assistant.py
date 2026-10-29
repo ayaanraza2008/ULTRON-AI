@@ -125,7 +125,7 @@ class LocalFirstCoreTests(unittest.TestCase):
             source = root / "main.py"
             original = "print('before')\n"
             revised = "print('after')\n"
-            source.write_bytes(original.replace("\n", "\\r\n").encode("utf-8"))
+            source.write_bytes(original.replace("\n", "\r\n").encode("utf-8"))
             drafts = app_data / "drafts"
             drafts.mkdir(parents=True)
             draft = drafts / "revision-main.py.draft"
@@ -141,8 +141,8 @@ class LocalFirstCoreTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     apply_workspace_draft(draft, root, confirm=False)
                 result = apply_workspace_draft(draft, root, confirm=True)
-            self.assertEqual(source.read_bytes(), revised.replace("\n", "\\r\n").encode("utf-8"))
-            self.assertEqual(Path(result["backup"]).read_bytes(), original.replace("\n", "\\r\n").encode("utf-8"))
+            self.assertEqual(source.read_bytes(), revised.replace("\n", "\r\n").encode("utf-8"))
+            self.assertEqual(Path(result["backup"]).read_bytes(), original.replace("\n", "\r\n").encode("utf-8"))
 
     def test_apply_draft_refuses_to_overwrite_a_changed_source(self):
         with tempfile.TemporaryDirectory() as temp:
