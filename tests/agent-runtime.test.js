@@ -2337,3 +2337,65 @@ test("agent tools expose OpenHiggsfield model catalog and disabled-by-default re
     assert.equal(appFlowyTool.state, "disabled_by_config");
   });
 });
+
+
+test("safe deterministic fallback selects explicit repository adapters when model tools are unavailable", async () => {
+  const cases = [
+    {
+      prompt: "Check OpenHiggsfield readiness",
+      env: {},
+      expected: "openhiggsfield",
+      expectAction: "readiness"
+    },
+    {
+      prompt: "Show Open Generative AI model catalog",
+      env: {},
+      expected: "open_generative_ai",
+      expectAction: "catalog"
+    },
+    {
+      prompt: "Check OpenDesign readiness",
+      env: {},
+      expected: "open_design",
+      expectAction: "readiness"
+    },
+    {
+      prompt: "Search AppFlowy for deployment notes",
+      env: {},
+      expected: "appflowy",
+      expectAction: "workspaces"
+    },
+    {
+      prompt: "Use OpenSEO to list my projects",
+      env: {},
+      expected: "openseo",
+      expectOperation: "list_projects"
+    }
+  ];
+
+  for (const item of cases) {
+    let providerCalls = 0;
+    const fetchImpl = async (url) => {
+      if (String(url).startsWith("https://openrouter.ai/api/v1/chat/completions")) {
+        providerCalls++;
+        throw new Error("model endpoint unavailable");
+      }
+      throw new Error("unexpected outbound call in disabled adapter test: " + url);
+    };
+    await withServer(item.env, fetchImpl, async base => {
+      const response = await fetch(base + "/api/agent/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: item.prompt })
+      });
+      assert.equal(response.status, 200, item.prompt);
+      const body = await response.json();
+      assert.ok(body.toolsUsed.some(tool => tool.name === item.expected), item.prompt);
+      const result = body.toolResults.find(tool => tool.name === item.expected)?.result;
+      assert.ok(result, item.prompt);
+      if (item.expectAction) assert.equal(result.state || result.execution, item.expectAction === "catalog" ? "static_model_catalog_only" : undefined, item.prompt);
+      if (item.expectOperation) assert.equal(result.operation, item.expectOperation, item.prompt);
+      assert.equal(providerCalls, 0, "test must not make model/provider calls when credentials are absent");
+    });
+  }
+});
