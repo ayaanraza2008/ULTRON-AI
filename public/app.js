@@ -73,6 +73,8 @@
   let fallbackRecorderStarting = false;
   let speechCapabilities = {};
   let speechCapabilitiesLoaded = false;
+  let speechLanguageMode = "auto";
+  let recognitionStartPending = false;
   let activeSpeechAudio = null;
   let activeSpeechObjectUrl = null;
   let finishActiveSpeechAudio = null;
@@ -1016,7 +1018,9 @@
         return false;
       }
       if (!voiceActive || mode !== "voice" || textInputOpen) return false;
-      ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
+      const detected = String(payload?.language || "").toLowerCase();
+      const languageLabel = detected.startsWith("hi") ? "HINDI" : detected.startsWith("en") ? "ENGLISH" : "";
+      ui.captionText.textContent = (languageLabel ? "HEARD " + languageLabel + " · " : "HEARD · ") + command.slice(0, 110);
       await sendPrompt(command, "voice");
       return true;
     } catch (error) {
@@ -1035,6 +1039,7 @@
       speechCapabilitiesLoaded = true;
     } catch {
       speechCapabilities = {};
+      speechCapabilitiesLoaded = true;
     }
     return speechCapabilities;
   }
@@ -1165,6 +1170,22 @@
 
   function startRecognition() {
     if (!voiceActive || mode !== "voice" || busy || textInputOpen) return;
+    if (speechLanguageMode === "auto" && !forceFallbackRecognition) {
+      if (!speechCapabilitiesLoaded) {
+        if (recognitionStartPending) return;
+        recognitionStartPending = true;
+        void ensureSpeechCapabilities().finally(() => {
+          recognitionStartPending = false;
+          if (voiceActive && mode === "voice" && !busy && !textInputOpen) startRecognition();
+        });
+        return;
+      }
+      if (speechCapabilities.premiumSttConfigured) {
+        forceFallbackRecognition = true;
+        void startFallbackRecognition();
+        return;
+      }
+    }
     const Recognition = speechRecognitionConstructor();
     if (forceFallbackRecognition || !Recognition) {
       void startFallbackRecognition();
@@ -1181,8 +1202,8 @@
     recognition = instance;
     instance.continuous = true;
     instance.interimResults = true;
-    instance.maxAlternatives = 1;
-    instance.lang = "en-IN";
+    instance.maxAlternatives = 3;
+    instance.lang = speechLanguageMode === "hi-IN" ? "hi-IN" : "en-IN";
     let hadAnyResult = false;
     instance.onstart = () => {
       if (recognition !== instance) return;
@@ -1677,7 +1698,7 @@
     }
     if (name === "voice-quality") {
       await ensureSpeechCapabilities();
-      drawerHeading("Voice quality & pronunciation", "ULTRON uses Fish Audio voice synthesis and server-side transcription when configured, with browser speech as a fallback.");
+      drawerHeading("Voice quality & pronunciation", "ULTRON uses a deep Indian male Fish Audio voice for natural Hindi-English speech. Auto recognition uses Fish Audio transcription when configured; browser language selection is available as a fallback.");
       drawerCard("Fish Audio synthesis",
         speechCapabilities.premiumTtsConfigured ? "The backend reports a speech output provider. A real response still depends on the key, voice model, and available quota." : "No server-side synthesis is configured; ULTRON will use browser-installed voices.",
         speechCapabilities.premiumTtsConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER FALLBACK",
@@ -1686,7 +1707,11 @@
         speechCapabilities.premiumSttConfigured ? "The backend reports a transcription provider for recorded-microphone fallback." : "Server transcription is unavailable; this browser must support its native speech-recognition service.",
         speechCapabilities.premiumSttConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER ONLY",
         speechCapabilities.premiumSttConfigured ? "ready" : "warning");
-      drawerCard("Voice reference", "7a18a1851d2649108c48ec9f2c80eb2c", "FISH AUDIO MODEL ID");
+      drawerCard("Voice reference", "Kamal · deep Indian male · Hindi-English", "FISH AUDIO VOICE");
+      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with Fish Audio transcription." : "Auto detection needs server-side Fish Audio transcription; browser fallback currently uses English (India).") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
+      drawerButton("AUTO · HINDI + ENGLISH", () => setSpeechLanguageMode("auto"), speechLanguageMode !== "auto");
+      drawerButton("HINDI · hi-IN", () => setSpeechLanguageMode("hi-IN"), speechLanguageMode !== "hi-IN");
+      drawerButton("ENGLISH · en-IN", () => setSpeechLanguageMode("en-IN"), speechLanguageMode !== "en-IN");
       drawerCard("Browser fallback voices", "Hindi: " + speechVoiceLabel("hi-IN") + " · English: " + speechVoiceLabel("en-IN"), "DEVICE DEPENDENT");
       drawerButton("PREVIEW HINDI + ENGLISH VOICE", () => {
         const wasListening = voiceActive && mode === "voice";
