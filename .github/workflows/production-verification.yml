@@ -3,6 +3,24 @@ on:
   push:
     branches:
       - main
+    # Mirror the Render Core build filter. A tools/docs/tests-only commit does
+    # not deploy the service and cannot be expected to match its deployed SHA.
+    paths:
+      - "**/*.js"
+      - "**/*.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "public/**"
+      - "supabase/migrations/**"
+      - "!tests/**"
+      - "!test/**"
+      - "!docs/**"
+      - "!.github/**"
+      - "!README.md"
+      - "!DEVELOPMENT_STATE.md"
+      - "!.env.example"
+      - "!.gitignore"
+      - "!public/world-intelligence-bridge.js"
   workflow_dispatch:
 
 # Only the newest main revision needs production verification. This prevents an
