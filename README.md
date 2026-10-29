@@ -230,6 +230,12 @@ Use a small model first on low-memory hardware. 4-bit bitsandbytes inference req
 
 The integration candidate includes same-origin chat history/resumption, a per-browser ULTRON/NAYA persona selector, model selection from the backend-reported catalog, voice/memory preferences, Memory Vault, private Notes, Reminders, Study Library, private document storage, AI Employee schedules, task lifecycle/approval controls, a secret-free readiness matrix, and defensive security guidance with passive HTTP-header evidence analysis. These panels call existing account-scoped backend APIs; any missing Supabase migration or unavailable provider is reported instead of being treated as success. Browser/device E2E and production deployment remain unverified.
 
+## PDF report export
+
+The authenticated backend exposes `POST /api/reports/pdf` with a JSON body containing `title`, `content`, and/or `sections: [{ heading, content }]`. It returns a paginated PDF attachment, bounds text to 40,000 characters and 40 sections, sets `Cache-Control: no-store`, and does not save the report or write to the database.
+
+The lightweight built-in PDF writer uses Helvetica/WinAnsi to avoid adding another runtime dependency. Latin/WinAnsi text is supported, but unsupported scripts such as Hindi/Devanagari are visibly replaced with question marks. Complex tables, charts and arbitrary embedded fonts are not supported yet; this is a basic report export, not a polished document-layout engine.
+
 ## Isolated coding sandbox (opt-in)
 
 ULTRON's agent exposes a `coding_sandbox_run` tool for the exact Python or JavaScript source in a direct request such as `Run this code:` followed by one fenced code block. It does not provide a general shell or modify repositories. The raw request must match the code exactly; model-generated substitutions are rejected.
