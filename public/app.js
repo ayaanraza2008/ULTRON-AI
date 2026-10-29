@@ -1119,6 +1119,34 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  async function exportReportPdf(title, content = "", sections = []) {
+    try {
+      const response = await fetch("/api/reports/pdf", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: String(title || "ULTRON Report").slice(0, 120), content, sections })
+      });
+      if (!response.ok) {
+        let message = "PDF export failed (HTTP " + response.status + ").";
+        try {
+          const payload = await response.json();
+          if (payload?.error?.message) message = payload.error.message;
+        } catch {}
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      if (!blob.size || blob.size > 5 * 1024 * 1024 || !/application\/pdf/i.test(blob.type)) {
+        throw new Error("The server returned an invalid or oversized PDF.");
+      }
+      downloadBlob(String(title || "ultron-report").slice(0, 100) + ".pdf", blob);
+      showToast("PDF report exported. Check the document's character-support note for unsupported scripts.");
+    } catch (error) {
+      showToast("Could not export PDF: " + (error?.message || "request failed"), 6500);
+    }
+  }
+
   async function showSecurityAssistantView() {
     ui.drawerContent.replaceChildren();
     drawerHeading("Security assistant", "Defensive learning, human-reviewed plans and analysis of evidence you provide. ULTRON does not scan targets, run shell commands or contact a target from these panels.");
@@ -2571,6 +2599,17 @@
     const tags = addDrawerField(form, "TAGS (COMMA SEPARATED)", "note-tags", {
       maxLength: 800, value: Array.isArray(note?.tags) ? note.tags.join(", ") : "", placeholder: "study, project, ideas"
     });
+    const exportPdf = document.createElement("button");
+    exportPdf.type = "button";
+    exportPdf.className = "drawer-action secondary";
+    exportPdf.textContent = "EXPORT CURRENT DRAFT AS PDF";
+    exportPdf.addEventListener("click", () => {
+      void exportReportPdf(title.value.trim() || "ULTRON Note", body.value, [
+        { heading: "Tags", content: tags.value.trim() || "No tags" },
+        { heading: "Note", content: body.value }
+      ]);
+    });
+    form.appendChild(exportPdf);
     const submit = document.createElement("button");
     submit.type = "submit";
     submit.className = "drawer-action";
@@ -2767,6 +2806,19 @@
       drawerButton("BACK TO STUDY LIBRARY", () => { void showDrawerView("study"); }, true);
       drawerButton("EXPORT MARKDOWN", () => { void exportStudyPack(pack); });
       const content = pack.content && typeof pack.content === "object" ? pack.content : {};
+      drawerButton("EXPORT PDF", () => {
+        const sections = [
+          { heading: "Summary", content: String(content.summary || "") },
+          { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\\n") }
+        ];
+        (Array.isArray(content.flashcards) ? content.flashcards : []).slice(0, 12).forEach((item, index) => {
+          sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\\nAnswer: " + String(item.answer || "") });
+        });
+        (Array.isArray(content.quiz) ? content.quiz : []).slice(0, 12).forEach((item, index) => {
+          sections.push({ heading: "Quiz " + (index + 1), content: "Question: " + String(item.question || "") + "\\nOptions: " + (Array.isArray(item.options) ? item.options.map(String).join("; ") : "") + "\\nAnswer: " + String(item.answer || item.correctAnswer || "Not available") });
+        });
+        void exportReportPdf(pack.title || "ULTRON Study Pack", "", sections.slice(0, 26));
+      });
       drawerCard("Summary", String(content.summary || "No summary stored.").slice(0, 8000), "STUDY NOTES");
       const objectives = Array.isArray(content.learningObjectives) ? content.learningObjectives : [];
       if (objectives.length) drawerCard("Learning objectives", objectives.slice(0, 8).map(item => "• " + String(item)).join("\n"), "OBJECTIVES");
