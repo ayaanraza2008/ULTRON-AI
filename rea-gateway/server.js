@@ -77,7 +77,7 @@ function parseMcpEnvelope(raw, contentType) {
   throw new Error("REA MCP probe received an invalid protocol response.");
 }
 
-function mcpExchange({ port, method = "POST", payload, sessionId, timeoutMs = 25000 }) {
+function mcpExchange({ port, method = "POST", payload, sessionId, protocolVersion, timeoutMs = 25000 }) {
   return new Promise((resolveExchange, rejectExchange) => {
     const headers = {
       accept: "application/json, text/event-stream",
@@ -85,6 +85,7 @@ function mcpExchange({ port, method = "POST", payload, sessionId, timeoutMs = 25
     };
     if (payload !== undefined) headers["content-type"] = "application/json";
     if (sessionId) headers["mcp-session-id"] = sessionId;
+    if (protocolVersion) headers["mcp-protocol-version"] = protocolVersion;
 
     const request = http.request({
       host: "127.0.0.1",
@@ -190,6 +191,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
   }
 
   let sessionId = null;
+  let protocolVersion = null;
   let activeTarget = false;
   let initialized = false;
   let nextId = 0;
@@ -202,7 +204,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       method,
       ...(Object.keys(params).length ? { params } : {})
     };
-    const reply = await mcpExchange({ port: upstreamPort, payload, sessionId });
+    const reply = await mcpExchange({ port: upstreamPort, payload, sessionId, protocolVersion });
     sessionId = reply.sessionId;
     if (notification) return reply.rpc;
     if (!reply.rpc) {
@@ -214,7 +216,11 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     if (reply.rpc.error) {
       throw Object.assign(new Error("REA MCP probe returned an RPC error."), { probeCode: "rpc_error" });
     }
-    return reply.rpc.result;
+    const result = reply.rpc.result;
+    if (method === "initialize" && typeof result?.protocolVersion === "string") {
+      protocolVersion = result.protocolVersion;
+    }
+    return result;
   };
 
   try {
@@ -276,7 +282,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
         try { await call("tools/call", { name: "close_binary", arguments: {} }); } catch {}
       }
       try {
-        await mcpExchange({ port: upstreamPort, method: "DELETE", sessionId, timeoutMs: 5000 });
+        await mcpExchange({ port: upstreamPort, method: "DELETE", sessionId, protocolVersion, timeoutMs: 5000 });
       } catch {}
     }
   }
