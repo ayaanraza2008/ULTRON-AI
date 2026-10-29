@@ -259,6 +259,14 @@ export function normalizeHinglishForRouting(value) {
 
 function extractIntent(text) {
   const s = normalizeHinglishForRouting(text).toLowerCase();
+  // Prefer explicit repository/service names over generic "generate image",
+  // "research", or "coding" fallbacks. This is important when the model provider
+  // is unavailable and ULTRON must select a deterministic, safe adapter.
+  if (/\b(openhiggsfield|open higgsfield|higgsfield)\b/.test(s)) return "openhiggsfield";
+  if (/\b(open[- ]generative[- ]ai|muapi)\b/.test(s)) return "open_generative_ai";
+  if (/\b(opendesign|open design)\b/.test(s)) return "open_design";
+  if (/\b(appflowy)\b/.test(s)) return "appflowy";
+  if (/\b(openseo|open seo)\b/.test(s)) return "openseo";
   if (/\b(paperclip|agent governance|agent roster|agent budget overview|agent cost summary|company agents dashboard|ai agent company)\b/.test(s) && /\b(check|status|show|list|review|cost|budget|roster|governance|dashboard|overview|how are|what is)\b/.test(s)) return "paperclip_read_agent_governance";
   if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(check|status|health|ready|reachable|connect|available|configured|models)\b/.test(s)) return "check_hermes_agent";
   if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(use|ask|delegate|run|execute|research|build|create|implement|review|inspect|analy[sz]e|fix|debug|write|plan)\b/.test(s)) return "hermes_agent_task";
@@ -301,6 +309,66 @@ function buildFallbackCalls(text) {
   };
   const intent = extractIntent(text);
   const browserGuidance = buildBrowserUseGuidance(text);
+
+  const readinessRequested = /\b(status|readiness|health|configured|connected|available|check|is it working)\b/i.test(text);
+  const catalogRequested = /\b(catalog|models?|list models|what models|capabilities)\b/i.test(text);
+  const generateRequested = /\b(generate|create|make|render|produce)\b/i.test(text) &&
+    /\b(image|picture|artwork|illustration|visual|video|clip|animation)\b/i.test(text);
+  if (intent === "openhiggsfield") {
+    if (readinessRequested) add("openhiggsfield", { action: "readiness" });
+    else if (catalogRequested) add("openhiggsfield", { action: "catalog" });
+    else if (generateRequested) {
+      const video = /\b(video|clip|animation|text.to.video|image.to.video)\b/i.test(text);
+      add("openhiggsfield", {
+        action: "generate",
+        model: video ? "seedance-2.5" : "soul-cinema",
+        prompt: bounded(text, 8000)
+      });
+    } else add("openhiggsfield", { action: "catalog" });
+  } else if (intent === "open_generative_ai") {
+    if (readinessRequested) add("open_generative_ai", { action: "readiness" });
+    else if (catalogRequested) add("open_generative_ai", { action: "catalog" });
+    else if (generateRequested) {
+      const video = /\b(video|clip|animation|text.to.video|image.to.video)\b/i.test(text);
+      add("open_generative_ai", {
+        action: "generate",
+        model: video ? "veo3.1-text-to-video" : "nano-banana-pro",
+        prompt: bounded(text, 8000)
+      });
+    } else add("open_generative_ai", { action: "catalog" });
+  } else if (intent === "open_design") {
+    if (readinessRequested) add("open_design", { action: "readiness" });
+    else if (/\b(projects?|list projects)\b/i.test(text)) add("open_design", { action: "projects" });
+    else if (/\b(build|create|design|implement|fix|code|develop|run|submit)\b/i.test(text)) {
+      add("open_design", { action: "submit", prompt: bounded(text, 6000) });
+    } else add("open_design", { action: "catalog" });
+  } else if (intent === "appflowy") {
+    if (readinessRequested) add("appflowy", { action: "readiness" });
+    else {
+      const workspaceId = text.match(/\b(?:workspace(?:Id| ID)|workspace)\s*[:=#]?\s*([0-9a-f]{8}-[0-9a-f-]{27,})\b/i)?.[1];
+      if (workspaceId && /\b(search|find|lookup|look up|query)\b/i.test(text)) {
+        add("appflowy", { action: "search", workspaceId, query: bounded(text, 300), limit: 8 });
+      } else if (/\b(folder|tree|contents|list pages|list workspaces|workspace list)\b/i.test(text)) {
+        add("appflowy", workspaceId ? { action: "folder", workspaceId, depth: 2 } : { action: "workspaces" });
+      } else if (/\b(search|find|lookup|look up|read|recall|knowledge base|document)\b/i.test(text)) {
+        add("appflowy", { action: "workspaces" });
+      } else add("appflowy", { action: "catalog" });
+    }
+  } else if (intent === "openseo") {
+    const projectId = text.match(/\bproject(?:Id| ID)?\s*[:=#]?\s*([A-Za-z0-9_-]{1,100})\b/i)?.[1];
+    const trackerId = text.match(/\btracker(?:Id| ID)?\s*[:=#]?\s*([A-Za-z0-9_-]{1,100})\b/i)?.[1];
+    if (readinessRequested) add("check_integrations");
+    else if (/\b(saved keywords?|existing keywords?)\b/i.test(text) && projectId) {
+      add("openseo", { operation: "list_saved_keywords", args: { projectId, search: bounded(text, 180), limit: 50 } });
+    } else if (/\b(estimate|cost|credits?)\b/i.test(text) && /\brank tracker\b/i.test(text) && projectId && trackerId) {
+      add("openseo", { operation: "estimate_rank_tracker_cost", args: { projectId, trackerId } });
+    } else if (projectId && /\b(keyword research|research keywords?|keyword ideas?|search volume)\b/i.test(text)) {
+      const seedText = bounded(text.replace(/^.*?\b(?:for|about|on)\b\s*/i, ""), 200) || bounded(text, 200);
+      add("openseo", { operation: "research_keywords", args: { projectId, seeds: [{ seed: seedText }] }, approvePaidLookup: false });
+    } else {
+      add("openseo", { operation: "list_projects", args: {} });
+    }
+  }
   const reaPathMatch = text.match(/\b(?:path|target path|artifact path)\s*[:=]\s*([A-Za-z0-9._/@+-]{1,500})/i);
   if (/\b(?:rea|reverse engineer(?:ing)?|reverse[- ]engineer)\b/i.test(text) && reaPathMatch) {
     const targetPath = reaPathMatch[1].trim();
@@ -384,7 +452,9 @@ function buildFallbackCalls(text) {
     const spoken = text.match(/(?:say|read|speak)(?: this)?(?: aloud)?[: ]+["“]?([\s\S]{1,12000})["”]?$/i);
     add("synthesize_speech", { text: bounded(spoken?.[1] || text, 12000), language: /\bhinglish\b/i.test(text) ? "Hinglish" : /\bhindi\b/i.test(text) ? "Hindi" : "auto" });
   }
-  if (/\b(generate|create|make|render|design)\b/.test(s) && /\b(image|picture|artwork|illustration|visual)\b/.test(s)) {
+  if (!["openhiggsfield", "open_generative_ai"].includes(intent) &&
+      /\b(generate|create|make|render|design)\b/.test(s) &&
+      /\b(image|picture|artwork|illustration|visual)\b/.test(s)) {
     add("run_comfyui_workflow", { reason: "User requested image generation; workflow and compute checks still apply." });
   }
   if (/\b(create|build|develop|write|make|implement|debug|review)\b/.test(s) && /\b(website|web app|application|script|api|function|program|automation|bot|code)\b/.test(s)) {
