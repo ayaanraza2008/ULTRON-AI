@@ -77,11 +77,25 @@ test("startup text smoke logs only bounded status metadata, never generated outp
       completionReceived: true,
       generatedText: "THIS MUST NEVER BE LOGGED",
       secret: "synthetic-secret",
-      attempts: [{ model: "openrouter/free", code: "PROVIDER_AUTH_REJECTED", httpStatus: 401 }]
+      attempts: [{
+        model: "openrouter/free",
+        code: "COMPLETION_TRUNCATED",
+        httpStatus: 200,
+        finishReason: "length",
+        contentShape: "missing",
+        contentLength: 0,
+        reasoningPresent: true,
+        toolCallCount: 0,
+        contentType: "application/json",
+        reasoning: "DO_NOT_LOG_PRIVATE_REASONING"
+      }]
     })
   });
   assert.equal(result.text.status, "passed");
   assert.equal(result.text.attemptCount, 1);
+  assert.equal(result.text.attempts[0].finishReason, "length");
+  assert.equal(result.text.attempts[0].reasoningPresent, true);
+  assert.equal(JSON.stringify(logs).includes("DO_NOT_LOG_PRIVATE_REASONING"), false);
   assert.equal(JSON.stringify(logs).includes("synthetic-secret"), false);
   assert.equal(JSON.stringify(logs).includes("THIS MUST NEVER BE LOGGED"), false);
   assert.equal(JSON.stringify(logs).includes("generatedText"), false);
