@@ -300,33 +300,47 @@ function safeAssetRemoteUrl(value) {
     return url;
   } catch { return null; }
 }
+function safeAssetSourcePage(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    const allowed = ["pexels.com", "www.pexels.com", "pixabay.com", "www.pixabay.com"];
+    if (url.protocol !== "https:" || !allowed.includes(host) || url.username || url.password || url.hash) return "";
+    return bounded(url.toString(), 1200);
+  } catch { return ""; }
+}
+function safeAssetThumbnail(value) {
+  const url = safeAssetRemoteUrl(value);
+  return url ? bounded(url.href, 1000) : "";
+}
+
 function mapPexelsVideo(video) {
   const files = Array.isArray(video.video_files) ? video.video_files.filter(f => typeof f.link === "string" && safeAssetRemoteUrl(f.link)) : [];
   const file = files.filter(f => (Number(f.width) || 0) <= 1920).sort((a, b) => (Number(b.width) || 0) - (Number(a.width) || 0))[0] || files[0];
   if (!file) return null;
   return { id: uuid(), provider: "pexels", kind: "video", title: "Pexels video " + String(video.id || ""), author: bounded(video.user?.name, 120),
-    sourcePage: bounded(video.url, 1000), thumbnailUrl: bounded(video.image, 1000), downloadUrl: bounded(file.link, 2000),
+    sourcePage: safeAssetSourcePage(video.url), thumbnailUrl: safeAssetThumbnail(video.image), downloadUrl: bounded(file.link, 2000),
     durationSeconds: Number(video.duration) || null, width: Number(file.width) || null, height: Number(file.height) || null };
 }
 function mapPexelsPhoto(photo) {
   const url = bounded(photo.src?.large2x || photo.src?.large || photo.src?.original, 2000);
   if (!safeAssetRemoteUrl(url)) return null;
   return { id: uuid(), provider: "pexels", kind: "image", title: "Pexels photo by " + bounded(photo.photographer, 120), author: bounded(photo.photographer, 120),
-    sourcePage: bounded(photo.url, 1000), thumbnailUrl: bounded(photo.src?.medium || photo.src?.small, 1000), downloadUrl: url,
+    sourcePage: safeAssetSourcePage(photo.url), thumbnailUrl: safeAssetThumbnail(photo.src?.medium || photo.src?.small), downloadUrl: url,
     width: Number(photo.width) || null, height: Number(photo.height) || null };
 }
 function mapPixabayVideo(video) {
   const file = video.videos?.large?.url ? video.videos.large : (video.videos?.medium || video.videos?.small);
   if (!file?.url || !safeAssetRemoteUrl(file.url)) return null;
   return { id: uuid(), provider: "pixabay", kind: "video", title: "Pixabay video " + String(video.id || ""), author: bounded(video.user, 120),
-    sourcePage: bounded(video.pageURL, 1000), thumbnailUrl: "", downloadUrl: bounded(file.url, 2000), durationSeconds: Number(video.duration) || null,
+    sourcePage: safeAssetSourcePage(video.pageURL), thumbnailUrl: "", downloadUrl: bounded(file.url, 2000), durationSeconds: Number(video.duration) || null,
     width: Number(file.width) || null, height: Number(file.height) || null };
 }
 function mapPixabayPhoto(photo) {
   const url = bounded(photo.largeImageURL || photo.webformatURL, 2000);
   if (!safeAssetRemoteUrl(url)) return null;
   return { id: uuid(), provider: "pixabay", kind: "image", title: "Pixabay photo by " + bounded(photo.user, 120), author: bounded(photo.user, 120),
-    sourcePage: bounded(photo.pageURL, 1000), thumbnailUrl: bounded(photo.previewURL || photo.webformatURL, 1000), downloadUrl: url,
+    sourcePage: safeAssetSourcePage(photo.pageURL), thumbnailUrl: safeAssetThumbnail(photo.previewURL || photo.webformatURL), downloadUrl: url,
     width: Number(photo.imageWidth) || null, height: Number(photo.imageHeight) || null };
 }
 
@@ -822,9 +836,16 @@ export function createVideoStudioRouter({
       if (!response.ok) { try { await response.body?.cancel?.(); } catch {} return errorResult(res, 502, "ASSET_DOWNLOAD_FAILED", "The stock provider did not return this media."); }
       const bytes = await readBytesLimited(response, MAX_IMPORT_BYTES);
       const contentType = String(response.headers?.get?.("content-type") || "").split(";")[0].toLowerCase();
-      if (item.kind === "image" ? !contentType.startsWith("image/") : !contentType.startsWith("video/")) return errorResult(res, 415, "ASSET_MEDIA_TYPE_MISMATCH", "The provider returned an unexpected file type.");
+      const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+      const allowedVideoTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
+      if (item.kind === "image" ? !allowedImageTypes.has(contentType) : !allowedVideoTypes.has(contentType)) {
+        return errorResult(res, 415, "ASSET_MEDIA_TYPE_MISMATCH", "The stock provider returned an unsupported image/video format. Only JPEG/PNG/WebP and MP4/WebM/QuickTime are accepted.");
+      }
       let extension = item.kind === "image" ? ".jpg" : ".mp4";
-      if (contentType === "image/png") extension = ".png"; else if (contentType === "image/webp") extension = ".webp"; else if (contentType === "video/webm") extension = ".webm";
+      if (contentType === "image/png") extension = ".png";
+      else if (contentType === "image/webp") extension = ".webp";
+      else if (contentType === "video/webm") extension = ".webm";
+      else if (contentType === "video/quicktime") extension = ".mov";
       const id = uuid(), filename = id + extension;
       await writeFile(path.join(folder, "assets", filename), bytes, { mode: 0o600 });
       const asset = { id, kind: item.kind, title: bounded(item.title, 240), provider: item.provider, sourcePage: bounded(item.sourcePage, 1200),
