@@ -49,7 +49,7 @@ test("file-backed project store persists data and rejects unsafe asset paths", a
   assert.equal((await store.list()).length, 1);
   assert.equal(safeProjectId(project.id), project.id);
   assert.equal(safeProjectId("../secret"), null);
-  assert.equal(safeAssetFilename("../" + project.id + ".mp4"), project.id + ".mp4");
+  assert.equal(safeAssetFilename("../" + project.id + ".mp4"), null);
   await assert.rejects(() => store.assetPath(project.id, "../../secret.txt"));
 });
 
