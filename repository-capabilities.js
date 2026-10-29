@@ -6,6 +6,7 @@ import { getChromeDevToolsReadiness } from "./integrations/chrome-devtools.js";
 import { getStrataReadiness } from "./integrations/strata.js";
 import { getOpenSeoReadiness } from "./integrations/openseo-mcp.js";
 import { getOpenHiggsfieldReadiness } from "./integrations/open-higgsfield.js";
+import { getOpenDesignReadiness } from "./integrations/open-design.js";
 
 /**
  * Task-matched capability catalog for 43 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
@@ -216,11 +217,11 @@ const REPOSITORIES = [
   },
   {
     id: "open-design", repo: "nexu-io/open-design", domain: "design_workspace",
-    match: /\b(open design|opendesign|design agent|design system|ui prototype|design tokens|brand style guide|collaborative design)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["design-system-aware prototyping", "collaborative design-agent workflows", "design review planning"],
-    limits: ["Needs an API or separately hosted service; a design workspace is not automatically callable just because the repository is listed."],
-    envKeys: ["OPENDESIGN_BASE_URL", "OPENDESIGN_API_TOKEN"], license: "Apache-2.0 per upstream README", source: "https://github.com/nexu-io/open-design"
+    match: /\b(open design|opendesign|design agent|design system|ui prototype|design tokens|brand style guide|collaborative design|headless design workspace)\b/i,
+    integration: "owner_scoped_headless_daemon", status: "adapter_present_unverified_live",
+    abilities: ["list existing OpenDesign projects", "submit explicitly approved headless BYOK design/coding runs to one configured project", "poll run status and validate deliverable metadata"],
+    limits: ["Requires a reachable secured OpenDesign daemon, bearer token, existing project ID, an OpenAI-compatible provider key/model, and the OpenCode executable inside the OpenDesign daemon environment. Run submissions can modify project files and consume model-provider credits; they require explicit per-request approval. No upstream app or daemon is bundled inside ULTRON."],
+    envKeys: ["OPEN_DESIGN_ENABLED", "OPEN_DESIGN_BASE_URL", "OPEN_DESIGN_API_TOKEN", "OPEN_DESIGN_PROJECT_ID", "OPEN_DESIGN_BYOK_BASE_URL", "OPEN_DESIGN_BYOK_API_KEY", "OPEN_DESIGN_BYOK_MODEL", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["OPEN_DESIGN_BYOK_PROTOCOL"], license: "Apache-2.0 per upstream README; this adapter does not copy upstream daemon source", source: "https://github.com/nexu-io/open-design"
   },
   {
     id: "public-apis", repo: "public-apis/public-apis", domain: "api_discovery",
@@ -384,6 +385,7 @@ function configured(record, env) {
   if (record.id === "strata") return getStrataReadiness(env).configured;
   if (record.id === "open-seo") return getOpenSeoReadiness(env).configured;
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
+  if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
   if (!keys.length) return null;
   return keys.every(key => typeof env[key] === "string" && env[key].trim().length > 0 && (!["GEO_SLEUTH_ENABLED"].includes(key) || env[key] === "true"));
@@ -391,11 +393,11 @@ function configured(record, env) {
 
 function stateFor(record, env) {
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
+  if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-seo") {
     const readiness = getOpenSeoReadiness(env);
     return readiness.configured ? "configured_unverified" : "missing_configuration";
   }
-  if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "obscura") {
     const readiness = getObscuraReadiness(env);
     return readiness.configured ? "configured_unverified" : readiness.state;
