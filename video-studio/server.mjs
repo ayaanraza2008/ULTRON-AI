@@ -52,16 +52,16 @@ function run(command, args, options = {}) {
 async function limitedJson(response, maxBytes = 2000000) {
   const reader = response.body && response.body.getReader ? response.body.getReader() : null;
   if (!reader) throw new Error("Provider returned an unbounded response.");
-  let size = 0, raw = "";
+  let size = 0, raw = "", decoder = new TextDecoder();
   try {
     while (true) {
       const part = await reader.read();
       if (part.done) break;
       size += part.value.byteLength;
       if (size > maxBytes) { await reader.cancel(); throw Object.assign(new Error("Provider response exceeded the limit."), { status: 502 }); }
-      raw += new TextDecoder().decode(part.value, { stream: true });
+      raw += decoder.decode(part.value, { stream: true });
     }
-    raw += "";
+    raw += decoder.decode();
   } finally { try { reader.releaseLock(); } catch {} }
   return raw ? JSON.parse(raw) : {};
 }
@@ -252,6 +252,38 @@ export function createVideoStudioServer({ env = process.env, logger = console, d
       res.status(202).json({ accepted: true }); launch(p.id, async () => { const info = await analyzeReference(p, store, env); await store.update(p.id, q => { q.referenceAnalysis = info; return event(q, "research", "Reference analysis refreshed."); }); });
     } catch (error) { sendError(res, error); }
   });
+  app.post("/api/projects/:id/research", async (req, res) => {
+    try {
+      const p = await store.get(req.params.id);
+      if (!p) return res.status(404).json({ error: { code: "VIDEO_PROJECT_NOT_FOUND", message: "Project not found." } });
+      const key = bounded(env.TAVILY_API_KEY, 2000);
+      if (!key) return res.status(503).json({ error: { code: "VIDEO_RESEARCH_NOT_CONFIGURED", message: "Add TAVILY_API_KEY to the local environment to use live web research. Other planning and editing features remain available." } });
+      const questions = Array.isArray(p.productionPlan && p.productionPlan.researchQuestions) ? p.productionPlan.researchQuestions.slice(0, 5).map(q => bounded(q, 300)) : [];
+      const query = ("Research reliable, current information and sources for this original video idea: " + p.brief + (questions.length ? " Research questions: " + questions.join("; ") : "")).slice(0, 1800);
+      const response = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + key, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ query, topic: "general", search_depth: "basic", max_results: 8, include_answer: true, include_raw_content: false }),
+        redirect: "error", signal: AbortSignal.timeout(30000)
+      });
+      if (!response.ok) {
+        try { await response.body.cancel(); } catch {}
+        return res.status(response.status === 429 ? 429 : 502).json({ error: { code: response.status === 429 ? "VIDEO_RESEARCH_RATE_LIMITED" : "VIDEO_RESEARCH_FAILED", message: "Live research did not complete. Check research-provider access and retry." } });
+      }
+      const data = await limitedJson(response, 1500000);
+      const sources = (Array.isArray(data.results) ? data.results : []).slice(0, 8).map(r => {
+        let u; try { u = new URL(r.url); } catch { return null; }
+        if (u.protocol !== "https:" || u.username || u.password || u.hostname === "localhost" || u.hostname.endsWith(".local")) return null;
+        return { title: bounded(r.title, 250), url: u.toString(), snippet: bounded(r.content, 1600), score: Number.isFinite(Number(r.score)) ? Number(r.score) : null, publishedDate: bounded(r.published_date, 80) || null };
+      }).filter(Boolean);
+      const updated = await store.update(p.id, q => {
+        q.researchResults = { provider: "Tavily Search API", answer: bounded(data.answer, 3000), query, sources, completedAt: new Date().toISOString(), note: "Search snippets are evidence leads, not verified facts. Open primary sources and check publication dates before using claims." };
+        q.toolsUsed = [...new Set([...q.toolsUsed, "Tavily Search API"])];
+        return event(q, "research", "Research gathered " + sources.length + " source(s). Verify the primary sources before scripting facts.");
+      });
+      return res.json({ project: updated, research: updated.researchResults });
+    } catch (error) { sendError(res, error); }
+  });
   app.post("/api/projects/:id/concepts/select", async (req, res) => {
     try {
       const p = await store.update(req.params.id, q => { if (!q.concepts.some(c => c.id === req.body.conceptId)) throw Object.assign(new Error("Select an existing concept."), { status: 400, code: "VIDEO_CONCEPT_INVALID" }); q.selectedConceptId = req.body.conceptId; q.approved = false; q.approvedAt = null; return event(q, "production_plan", "Concept selected. Regenerate plan to match it."); });
@@ -329,9 +361,8 @@ export function createVideoStudioServer({ env = process.env, logger = console, d
           const output = target.replace(/'/g, "''"), command = "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Speech; $text=[Console]::In.ReadToEnd(); $s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male,[System.Speech.Synthesis.VoiceAge]::Adult); $s.Rate=0; $s.Volume=100; $s.SetOutputToWaveFile('" + output + "'); $s.Speak($text); $s.Dispose()";
           await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { stdin: text, timeoutMs: 120000, maxBytes: 50000 });
         } else {
-          const script = await store.assetPath(p.id, crypto.randomUUID() + ".txt"); await fs.writeFile(script, text, { mode: 0o600 });
           let engine = env.ESPEAK_PATH || "espeak-ng"; try { await run(engine, ["--version"], { timeoutMs: 2500, maxBytes: 20000 }); } catch { engine = "espeak"; }
-          await run(engine, ["-v", "en-us+m3", "-s", "158", "-w", target, "-f", script], { timeoutMs: 120000, maxBytes: 50000 }); try { await fs.unlink(script); } catch {}
+          await run(engine, ["-v", "en-us+m3", "-s", "158", "-w", target], { stdin: text, timeoutMs: 120000, maxBytes: 50000 });
         }
         const stat = await fs.stat(target); if (!stat.size) throw Object.assign(new Error("Local speech engine created no audio; upload a voiceover file instead."), { status: 503, code: "VIDEO_TTS_EMPTY" });
         const asset = { id: crypto.randomUUID(), filename, name: "Generated system voiceover", kind: "voiceover", bytes: stat.size, mimeType: "audio/wav", provider: process.platform === "win32" ? "Windows SAPI" : "eSpeak NG", license: "Depends on installed system voice/package.", importedAt: new Date().toISOString() };
@@ -390,7 +421,7 @@ export function createVideoStudioServer({ env = process.env, logger = console, d
           const cap = (await store.assetPath(p.id, current.captionsFile)).replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
           args.push("-vf", "subtitles='" + cap + "':force_style='FontName=Arial,FontSize=22,Outline=2,MarginV=35'");
         }
-        args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", output);
+        args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-t", String(current.durationSeconds), "-movflags", "+faststart", output);
         try { await run(ffmpeg, args, { cwd: dir, timeoutMs: Math.max(180000, current.durationSeconds * 45000), maxBytes: 100000 }); }
         catch (error) {
           if (!current.captionsFile || !(req.body && req.body.burnCaptions === true)) throw error;
