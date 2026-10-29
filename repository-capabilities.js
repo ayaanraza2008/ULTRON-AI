@@ -390,6 +390,7 @@ function configured(record, env) {
 }
 
 function stateFor(record, env) {
+  if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-seo") {
     const readiness = getOpenSeoReadiness(env);
     return readiness.configured ? "configured_unverified" : "missing_configuration";
