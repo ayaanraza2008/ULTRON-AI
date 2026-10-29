@@ -115,7 +115,7 @@ test("agent creates a private note with owner ID from the authenticated session"
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.match(body.content, /saved the Quantum Revision note/i);
-    assert.deepEqual(schemaNames, ["notes_search", "notes_read", "notes_create", "notes_update"]);
+    assert.deepEqual(schemaNames, ["notes_read", "notes_search", "notes_create", "notes_update"]);
     assert.equal(body.toolsUsed.length, 1);
     assert.equal(body.toolsUsed[0].name, "notes_create");
     assert.equal(body.toolsUsed[0].ok, true);
