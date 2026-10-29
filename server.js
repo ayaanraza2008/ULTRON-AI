@@ -304,7 +304,7 @@ function hasConfiguredModelProvider(env) {
   });
 }
 
-function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
+function configuredChatProviders(env, openRouterBaseUrl = null, userId = null, allowSameBaseUrlModels = false) {
   const providers = [];
   const cactusProvider = resolveCactusProvider(env);
   if (cactusProvider) providers.push({ ...cactusProvider, supportsVision: false, isOpenRouter: false, isCactus: true });
@@ -355,7 +355,7 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
     const baseUrl = safeServiceBase(parsed.toString());
     if (!baseUrl) continue;
     const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
-    if (!apiKey || providers.some(provider => provider.name === name || provider.baseUrl === baseUrl)) continue;
+    if (!apiKey || providers.some(provider => provider.name === name || (!allowSameBaseUrlModels && provider.baseUrl === baseUrl))) continue;
     providers.push({
       name,
       baseUrl,
@@ -391,7 +391,9 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
 }
 
 function configuredModelPickerOptions(env, userId = null) {
-  return configuredChatProviders(env, null, userId)
+  // The picker is a list of model choices, not a list of unique HTTP hosts:
+  // multiple configured models may legitimately share one OpenAI-compatible endpoint.
+  return configuredChatProviders(env, null, userId, true)
     .filter(provider => !provider.isOpenRouter)
     .map(provider => ({
       id: "ultron/" + provider.name + "/" + provider.model,
