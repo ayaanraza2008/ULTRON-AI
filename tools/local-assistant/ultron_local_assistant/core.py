@@ -246,7 +246,7 @@ def local_chat(prompt: str, model: str = DEFAULT_LOCAL_MODEL, *, system: str = "
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("Prompt must be non-empty.")
     model = model.strip()
-    if not model or len(model) > 200 or any(char in model for char in "\\r\\n"):
+    if not model or len(model) > 200 or any(char in model for char in "\r\n"):
         raise ValueError("Invalid model identifier.")
     messages = []
     if system:
