@@ -71,3 +71,15 @@ test("ECC auto-selection covers bug-fix phrasing and keeps security fixes paired
   assert.ok(names.includes("tdd-workflow"));
   assert.ok(!names.includes("backend-patterns"), "Keep security review and TDD as the two most relevant skills");
 });
+
+test("Build Your Own X references are selected only for relevant architecture/code tasks", () => {
+  const relevant = buildTaskSkillsGuidance("Implement a RAG document search engine for ULTRON and expose it through an Express API endpoint with tests");
+  assert.ok(relevant.buildYourOwnX);
+  assert.ok(relevant.buildYourOwnX.matched.some(topic => topic.id === "ai-model"));
+  assert.ok(relevant.rules.some(rule => rule.includes("Build-your-own-X reference selected")));
+  assert.ok(relevant.rules.some(rule => rule.includes("regression tests")));
+
+  const ordinary = buildTaskSkillsGuidance("Write a birthday message");
+  assert.deepEqual(ordinary.buildYourOwnX.matched, []);
+  assert.deepEqual(ordinary.buildYourOwnX.rules, []);
+});

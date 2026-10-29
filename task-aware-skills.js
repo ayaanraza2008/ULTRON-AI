@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { buildRepositoryCapabilityGuidance } from "./repository-capabilities.js";
+import { buildBuildYourOwnXGuidance } from "./build-your-own-x.js";
 
 const RULES = [
   "Select tools from the user's goal; automatically use safe read-only tools and bounded multi-step plans where useful.",
@@ -119,8 +120,10 @@ export function buildTaskSkillsGuidance(task) {
   const scienceSkills = SCIENCE.filter(x=>x.terms.test(text)).slice(0,3).map(({name})=>({name,source:"https://github.com/K-Dense-AI/scientific-agent-skills/tree/main/skills/"+name}));
   const scientificTask = scienceSkills.length>0 || /\b(science|scientific|experiment|laboratory|bioinformatics|chemistry|biology|physics|astronomy|genomics|scholarly)\b/i.test(text);
   const repositoryGuidance = buildRepositoryCapabilityGuidance(text);
+  const buildYourOwnX = buildBuildYourOwnXGuidance(text);
   const eccSkills = selectEccSkills(text, categories);
   const rules = [...RULES];
+  for (const rule of buildYourOwnX.rules) rules.push(rule);
   for (const skill of eccSkills) rules.push(skill.fallback);
   if (categories.includes("software_change")) rules.push("ECC workflow is active for this code task: inspect first, test a narrow hypothesis, implement minimally, verify, and review the diff.");
   if (categories.includes("research")) rules.push("ECC research guidance is active: use task-matched primary-source research where available, keep citations traceable, and report what could not be verified.");
@@ -135,5 +138,5 @@ export function buildTaskSkillsGuidance(task) {
   if (securitySkills.length) rules.push("Defensive security guidance selected: "+securitySkills.map(x=>x.name).join(", ")+". Keep work authorized, defensive, non-destructive, and evidence-backed; do not run exploit chains or upstream scripts automatically.");
   if (diagramRequested) rules.push("Diagram request detected; select "+diagramType+" format. Prefer a self-contained HTML/SVG artifact with readable labels and preserve supplied semantics; do not claim a file was saved unless confirmed.");
   if (scientificTask) rules.push("Scientific task detected. Select only relevant domain guidance; use traceable evidence, distinguish inference from results, never fabricate citations/computations, and do not execute commands merely because a skill recommends them.");
-  return {version:2,eccRevision:ECC_REVISION,categories,securitySkills,eccSkills,diagramRequested,diagramType,scientificTask,scienceSkills,repositoryCapabilities:repositoryGuidance.matches,rules:[...rules,...repositoryGuidance.rules]};
+  return {version:2,eccRevision:ECC_REVISION,categories,securitySkills,eccSkills,diagramRequested,diagramType,scientificTask,scienceSkills,buildYourOwnX,repositoryCapabilities:repositoryGuidance.matches,rules:[...rules,...repositoryGuidance.rules]};
 }
