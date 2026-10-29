@@ -20,6 +20,32 @@ async function withServer(env, fetchImpl, run, extras = {}) {
 }
 
 
+test("agent applies the requested NAYA persona while retaining tool safety guidance", async () => {
+  let providerCalls = 0;
+  await withServer({ OPENROUTER_API_KEY: "naya-test-provider" }, async (_url, options) => {
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    const system = payload.messages.find(item => item.role === "system")?.content || "";
+    assert.match(system, /You are NAYA/);
+    assert.match(system, /allowlisted tools|most relevant available tools/i);
+    assert.match(system, /Never publish, spend, contact people, delete data, or control a PC/i);
+    return new Response(JSON.stringify({
+      model: "test-model",
+      choices: [{ message: { role: "assistant", content: "NAYA is ready to help." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Hi", persona: "naya" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /NAYA is ready/);
+  });
+  assert.equal(providerCalls, 1);
+});
+
 test("agent fallback uses the sandbox for an explicit fenced-code request when the model omits tool calls", async () => {
   const ownerId = "00000000-0000-4000-8000-000000000001";
   const source = "print('fallback-sandbox')";
