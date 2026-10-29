@@ -207,7 +207,8 @@ export async function runVisionProviderSmoke({
         body: JSON.stringify({
           model,
           temperature: 0,
-          max_tokens: 96,
+          reasoning: { effort: "low" },
+          max_tokens: 512,
           stream: false,
           messages: [{
             role: "system",
