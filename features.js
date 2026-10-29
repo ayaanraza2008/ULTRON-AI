@@ -820,6 +820,8 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         research: "search_endpoint_available",
         tasks: "authenticated task queue plus optional allowlisted research worker",
         documents: "authenticated_txt_md_csv_json_html_pdf_docx_extraction; transient_only",
+        notes: "authenticated_user_scoped_crud_requires_user_notes_migration",
+        studyPacks: "authenticated_user_scoped_library_requires_study_packs_migration",
         desktopAutomation: "local_companion_required",
         voice: "browser_native_available; premium_services_optional",
         integrations: "configuration_readiness_only"
