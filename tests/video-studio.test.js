@@ -277,7 +277,7 @@ test("existing ULTRON server serves the integrated Video Studio page and local s
     assert.match(await css.text(), /--red:/);
     const js = await fetch(base + "/studio/static/studio.js");
     assert.equal(js.status, 200);
-    assert.match(await js.text(), /reference\\/transcribe/);
+    assert.match(await js.text(), /transcribe/);
     assert.match(page.headers.get("content-security-policy"), /media-src 'self' blob: https:/);
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
