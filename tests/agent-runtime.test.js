@@ -20,6 +20,49 @@ async function withServer(env, fetchImpl, run, extras = {}) {
 }
 
 
+test("agent fallback uses the sandbox for an explicit fenced-code request when the model omits tool calls", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const source = "print('fallback-sandbox')";
+  const fence = String.fromCharCode(96).repeat(3);
+  const prompt = "Run this code:\n" + fence + "python\n" + source + "\n" + fence;
+  let sandboxCalls = [];
+  let providerCalls = 0;
+  await withServer({
+    OPENROUTER_API_KEY: "sandbox-fallback-test-provider",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    ULTRON_CODING_SANDBOX_ENABLED: "true",
+    ULTRON_CODING_SANDBOX_PYTHON_IMAGE: "python:3.12-alpine@sha256:" + "b".repeat(64)
+  }, async (_url, options) => {
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      assert.deepEqual(payload.tools.map(item => item.function.name), ["coding_sandbox_run"]);
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "I will run that now." } }] }), { status: 200 });
+    }
+    assert.ok(payload.messages.some(item => item.role === "tool" && String(item.content).includes("fallback-sandbox")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The isolated sandbox returned fallback-sandbox." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /isolated sandbox returned fallback-sandbox/);
+    assert.deepEqual(body.toolsUsed.map(item => item.name), ["coding_sandbox_run"]);
+  }, {
+    userId: ownerId,
+    runSandbox: async args => {
+      sandboxCalls.push(args);
+      return { runId: "fallback-run", state: "completed", success: true, language: args.language, stdout: "fallback-sandbox\n", stderr: "", execution: "restricted_local_container" };
+    }
+  });
+  assert.equal(sandboxCalls.length, 1);
+  assert.equal(sandboxCalls[0].source, source);
+  assert.equal(providerCalls, 2);
+});
+
 test("agent sandbox runs only the exact explicitly requested code for the configured owner", async () => {
   const ownerId = "00000000-0000-4000-8000-000000000001";
   const source = "print('ULTRON_OK')";
