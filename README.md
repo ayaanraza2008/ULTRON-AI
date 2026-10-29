@@ -12,6 +12,15 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
 - **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
 
+## Local Video Studio (experimental)
+
+A standalone local-only production board is available on the feature branch. It does not replace the existing API or alter hosted deployment.
+
+- Start it with npm run video-studio and open http://127.0.0.1:4174.
+- Setup, optional provider keys, examples, current limits and local API routes: [docs/VIDEO_STUDIO.md](docs/VIDEO_STUDIO.md).
+- The local service binds to loopback only, keeps project media under .runtime/video-studio/, and requires human approval before FFmpeg rendering. It is not a remotely authenticated service; do not expose its port.
+- Optional OpenRouter/Tavily/Pexels features depend on local configuration and provider availability. Actual hosted API charges are not automatically metered.
+
 ## Backend-only capability integration phase
 
 Backend additions on the feature branch:

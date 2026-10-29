@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ULTRON · Video Studio</title>
+  <link rel="stylesheet" href="/assets/studio.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/"><span class="brand-mark">U</span><span><b>ULTRON</b><small>CREATIVE STUDIO</small></span></a>
+      <div class="side-label">WORKSPACE</div>
+      <button class="side-action active" id="new-project-shortcut"><span>＋</span> New production</button>
+      <div class="side-label">PROJECTS <span id="project-count">0</span></div>
+      <nav id="project-list" class="project-list"><div class="empty-small">Your productions appear here.</div></nav>
+      <div class="sidebar-bottom"><span class="live-dot"></span><div><b>LOCAL WORKSPACE</b><small>Media stays on this device</small></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><div class="eyebrow">ULTRON SYSTEMS / MEDIA LAB</div><h1>Video Studio<span class="red-dot">.</span></h1></div>
+        <div class="top-actions"><span class="pill" id="model-status">Checking tools…</span><button class="icon-button" id="refresh-btn" aria-label="Refresh projects">↻</button></div>
+      </header>
+      <section class="welcome-row">
+        <div><div class="eyebrow">FROM IDEA TO FINAL CUT</div><h2>Make something worth watching.</h2><p>Describe it. Shape the story. Gather footage. Approve the cut. Render locally.</p></div>
+        <div class="stat"><span>PROJECTS</span><strong id="stat-projects">0</strong></div>
+        <div class="stat"><span>TRACKED SPEND</span><strong id="stat-spend">$0.00</strong></div>
+      </section>
+      <section id="create-panel" class="panel create-panel">
+        <div class="panel-heading"><div><span class="step-tag">01 / START</span><h3>New production</h3></div><span class="muted">Plain English or a reference link</span></div>
+        <form id="create-form">
+          <label for="brief">What are we making?</label>
+          <textarea id="brief" required minlength="8" maxlength="4000" rows="3" placeholder="A 45-second cinematic mystery short about a radio signal that appears at 3:17 AM. Moody, realistic footage, calm authoritative narration, rising tension, no jump scares…"></textarea>
+          <div class="form-grid">
+            <div><label for="title">Project name <span class="optional">OPTIONAL</span></label><input id="title" maxlength="100" placeholder="The Last Signal"></div>
+            <div><label for="reference-url">Reference URL <span class="optional">OPTIONAL</span></label><input id="reference-url" type="url" placeholder="https://youtube.com/watch?v=…"></div>
+            <div><label for="duration">Duration</label><select id="duration"><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="45" selected>45 seconds</option><option value="60">60 seconds</option><option value="90">90 seconds</option><option value="120">120 seconds</option><option value="180">180 seconds</option></select></div>
+            <div><label for="format">Output format</label><select id="format"><option value="landscape">16:9 · YouTube</option><option value="portrait">9:16 · Shorts / Reels / TikTok</option><option value="square">1:1 · Square</option></select></div>
+            <div><label for="source-mode">Visual approach</label><select id="source-mode"><option value="motion">Real motion footage</option><option value="images">Cinematic images + movement</option></select></div>
+          </div>
+          <div class="form-footer"><span class="muted">Planning can use your existing OpenRouter key; local fallback needs no key.</span><button class="primary-button" id="create-btn" type="submit">Create production <span>↗</span></button></div>
+        </form>
+      </section>
+      <section id="workspace" class="workspace hidden">
+        <div class="workspace-title"><div><span class="step-tag" id="project-status">PLANNING</span><h2 id="active-title">Production board</h2><p id="active-brief"></p></div><button class="ghost-button" id="back-new">＋ New project</button></div>
+        <div class="progress-panel">
+          <div class="progress-head"><span>PRODUCTION PIPELINE</span><strong id="progress-text">0%</strong></div>
+          <div class="progress-track"><div id="progress-bar"></div></div>
+          <div id="pipeline" class="pipeline"></div>
+        </div>
+        <div class="dashboard-grid">
+          <section class="panel span-2">
+            <div class="panel-heading"><div><span class="step-tag">02 / DIRECTION</span><h3>Choose a concept</h3></div><button id="regenerate-plan" class="ghost-button small">↻ Regenerate plan</button></div>
+            <div id="concepts" class="concept-grid"><div class="skeleton">Developing concepts…</div></div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading"><div><span class="step-tag">03 / PLAN</span><h3>Production notes</h3></div></div>
+            <div id="budget-box" class="budget-box"></div>
+            <div id="plan-notes" class="notes"></div>
+            <div class="action-stack">
+              <button class="secondary-button" id="make-voice">Generate local voiceover</button>
+              <button class="secondary-button" id="research-btn">Research the brief</button>
+              <button class="secondary-button" id="make-captions">Create SRT captions</button>
+              <label class="upload-button">Upload voiceover <input type="file" id="voice-file" accept="audio/*" hidden></label>
+              <label class="upload-button">Upload music bed <input type="file" id="music-file" accept="audio/*" hidden></label>
+            </div>
+          </section>
+        </div>
+        <section class="panel scenes-panel">
+          <div class="panel-heading"><div><span class="step-tag">04 / STORYBOARD</span><h3>Scenes & assets</h3><p class="muted">Every scene needs an asset before you can approve the cut.</p></div><label class="upload-button">Add reference clip/image <input type="file" id="reference-file" accept="video/*,image/*" hidden></label></div>
+          <div id="reference-analysis" class="reference-analysis hidden"></div>
+          <div id="scenes" class="scenes-list"><div class="skeleton">Preparing storyboard…</div></div>
+        </section>
+        <section class="panel audit-panel">
+          <div class="panel-heading"><div><span class="step-tag">05 / CONTROL ROOM</span><h3>Production activity</h3></div><span class="muted">Live project log</span></div>
+          <div class="lower-grid"><div><h4>Tools used</h4><div id="tools-used" class="chips"></div><h4>Assets created / imported</h4><div id="asset-list" class="asset-list"></div></div><div><h4>Stage history</h4><div id="event-list" class="event-list"></div></div></div>
+        </section>
+        <section class="approval-panel">
+          <div><span class="step-tag">06 / HUMAN CHECKPOINT</span><h3>Review before rendering</h3><p>Verify every source license, narration, captions, and music rights. Final render stays locked until you approve.</p><label class="approval-check"><input type="checkbox" id="rights-check"><span>I have reviewed this production and confirmed the source-media/music rights for my intended use.</span></label><div id="approval-message" class="muted"></div></div>
+          <div class="approval-buttons"><button class="secondary-button" id="approve-btn">Approve production</button><button class="primary-button" id="render-btn" disabled>Render final MP4 <span>↗</span></button></div>
+        </section>
+        <section id="render-result" class="panel render-result hidden"></section>
+      </section>
+      <footer>ULTRON VIDEO STUDIO <span>•</span> LOCAL-FIRST MEDIA PIPELINE <span>•</span> NO AUTO-PUBLISHING</footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/assets/studio.js" defer></script>
+</body>
+</html>
