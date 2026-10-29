@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { employeeRoutineCatalog } from "../employee-catalog.js";
 import {
   ROLE_CATALOG,
   UPSTREAM_PACKAGE,
@@ -26,7 +27,18 @@ test("catalog maps exactly eight roles and sixty routine slots", () => {
   assert.equal(UPSTREAM_PACKAGE, "ai-employees@1.9.0");
 });
 
-test("role IDs, upstream slugs, names and aliases resolve without ambiguity", () => {
+
+test("local role mapping matches every routine in ULTRON's existing 60-routine catalog", () => {
+  const ids = employeeRoutineCatalog.map((routine) => routine.id);
+  assert.equal(ids.length, 60);
+  assert.equal(new Set(ids).size, 60, "routine IDs must be unique");
+  for (const role of ROLE_CATALOG) {
+    const matches = employeeRoutineCatalog.filter((routine) => routine.roles.includes(role.id));
+    assert.equal(matches.length, role.routines, `${role.id} routine count must match employee-catalog.js`);
+    assert.ok(matches.every((routine) => routine.id.length > 0 && routine.name.length > 0));
+  }
+});
+\ntest("role IDs, upstream slugs, names and aliases resolve without ambiguity", () => {
   assert.equal(resolveRole("seo-aeo")?.upstream, "seo-employee");
   assert.equal(resolveRole("seo-employee")?.id, "seo-aeo");
   assert.equal(resolveRole("Customer Support")?.id, "customer-satisfaction");
