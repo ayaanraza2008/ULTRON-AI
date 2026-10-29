@@ -105,7 +105,7 @@
     if (!concepts.length) { ui.concepts.innerHTML = '<div class="skeleton">Planning concepts…</div>'; return; }
     ui.concepts.innerHTML = concepts.map(c => {
       const chosen = c.id === project.selectedConceptId;
-      return '<article class="concept-card ' + (chosen ? "chosen" : "") + '"><span class="tag">' + (chosen ? "Selected concept" : "Alternative") + '</span><h4>' + escapeHtml(c.title) + '</h4><p>' + escapeHtml(c.angle) + '</p><p class="hook">' + escapeHtml(c.hook) + '</p><p><b>Visuals</b><br>' + escapeHtml(c.visualStyle) + '</p><p><b>Pacing</b><br>' + escapeHtml(c.pacing) + '</p><p><b>Sound</b><br>' + escapeHtml(c.musicMood) + '</p><button class="' + (chosen ? "secondary-button" : "ghost-button") + '" data-concept="' + escapeHtml(c.id) + '">' + (chosen ? "Selected" : "Use this concept") + '</button></article>';
+      return '<article class="concept-card ' + (chosen ? "chosen" : "") + '"><span class="tag">' + (chosen ? "Selected concept" : "Alternative") + '</span><h4>' + escapeHtml(c.title) + '</h4><p>' + escapeHtml(c.angle) + '</p><p class="hook">' + escapeHtml(c.hook) + '</p><p><b>Visuals</b><br>' + escapeHtml(c.visualStyle) + '</p><p><b>Pacing</b><br>' + escapeHtml(c.pacing) + '</p><p><b>Sound</b><br>' + escapeHtml(c.musicMood) + '</p><p><b>Rough cost</b><br>' + escapeHtml(c.estimatedCostUsd || "Provider-dependent; not metered") + '</p><button class="' + (chosen ? "secondary-button" : "ghost-button") + '" data-concept="' + escapeHtml(c.id) + '">' + (chosen ? "Selected" : "Use this concept") + '</button></article>';
     }).join("");
   }
   function renderPlan(project, budget) {
