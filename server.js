@@ -265,6 +265,14 @@ function normalizeBaseUrl(value) {
 function hasConfiguredModelProvider(env) {
   const hermes = getHermesAgentReadiness(env);
   if (resolveCactusProvider(env) || resolveStrataProvider(env) || (hermes.configured && hermes.ownerGuardConfigured && hermes.directChatProviderEnabled)) return true;
+  // Optional first-class cloud fallbacks count as configured only with a valid HTTPS endpoint.
+  for (const entry of [
+    { key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1" },
+    { key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai" }
+  ]) {
+    if (!(typeof env[entry.key] === "string" && env[entry.key].trim())) continue;
+    if (safeServiceBase(env[entry.base] || entry.fallback)) return true;
+  }
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
@@ -316,6 +324,26 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
       supportsVision: true,
       isOpenRouter: true
     });
+  }
+
+  // Optional direct-key fallbacks; image requests stay on explicitly vision-capable providers.
+  const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  if (groqKey) {
+    const baseUrl = safeServiceBase(env.GROQ_BASE_URL || "https://api.groq.com/openai/v1");
+    const model = typeof env.GROQ_DEFAULT_MODEL === "string" && env.GROQ_DEFAULT_MODEL.trim()
+      ? env.GROQ_DEFAULT_MODEL.trim().slice(0, 160) : "openai/gpt-oss-20b";
+    if (baseUrl && !providers.some(provider => provider.name === "groq" || provider.baseUrl === baseUrl)) {
+      providers.push({ name: "groq", baseUrl, apiKey: groqKey, model, priority: 1, supportsVision: false, isOpenRouter: false });
+    }
+  }
+  const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  if (geminiKey) {
+    const baseUrl = safeServiceBase(env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai");
+    const model = typeof env.GEMINI_DEFAULT_MODEL === "string" && env.GEMINI_DEFAULT_MODEL.trim()
+      ? env.GEMINI_DEFAULT_MODEL.trim().slice(0, 160) : "gemini-3.8-flash";
+    if (baseUrl && !providers.some(provider => provider.name === "gemini" || provider.baseUrl === baseUrl)) {
+      providers.push({ name: "gemini", baseUrl, apiKey: geminiKey, model, priority: 2, supportsVision: false, isOpenRouter: false });
+    }
   }
 
   let configured = [];

@@ -1021,3 +1021,57 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(providerCalls, 0);
   });
 });
+
+test("chat fails over from OpenRouter through Groq to Gemini using server-side keys", async () => {
+  const calls = [];
+  const providerEnv = {
+    ...env,
+    GROQ_API_KEY: "groq-test-secret",
+    GROQ_DEFAULT_MODEL: "openai/gpt-oss-20b",
+    GEMINI_API_KEY: "gemini-test-secret",
+    GEMINI_DEFAULT_MODEL: "gemini-3.8-flash"
+  };
+  const app = createApp({
+    env: providerEnv,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, authorization: options.headers.Authorization, model: JSON.parse(options.body).model });
+      if (url === "https://openrouter.ai/api/v1/chat/completions") {
+        return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+      }
+      if (url === "https://api.groq.com/openai/v1/chat/completions") {
+        return new Response(JSON.stringify({ error: { message: "temporarily unavailable" } }), { status: 503 });
+      }
+      assert.equal(url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+      return new Response(JSON.stringify({
+        model: "gemini-3.8-flash",
+        choices: [{ message: { role: "assistant", content: "Gemini fallback completed." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Hello" }], stream: false })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Gemini fallback completed.");
+    assert.deepEqual(calls.map(call => call.url), [
+      "https://openrouter.ai/api/v1/chat/completions",
+      "https://api.groq.com/openai/v1/chat/completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    ]);
+    assert.deepEqual(calls.map(call => call.authorization), [
+      "Bearer test-key",
+      "Bearer groq-test-secret",
+      "Bearer gemini-test-secret"
+    ]);
+    assert.deepEqual(calls.map(call => call.model), [
+      "test-model",
+      "openai/gpt-oss-20b",
+      "gemini-3.8-flash"
+    ]);
+  });
+});

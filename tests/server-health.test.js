@@ -213,3 +213,25 @@ test("health does not report private HTTPS provider endpoints as configured", as
   });
   assert.equal(alternate.providerConfigured, false);
 });
+
+test("health recognizes direct-key Groq and Gemini fallbacks only for safe endpoints", async () => {
+  const groq = await health({
+    GROQ_API_KEY: "synthetic-groq-key",
+    GROQ_BASE_URL: "https://api.groq.com/openai/v1"
+  });
+  assert.equal(groq.providerConfigured, true);
+  assert.equal(JSON.stringify(groq).includes("synthetic-groq-key"), false);
+
+  const gemini = await health({
+    GEMINI_API_KEY: "synthetic-gemini-key",
+    GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai"
+  });
+  assert.equal(gemini.providerConfigured, true);
+  assert.equal(JSON.stringify(gemini).includes("synthetic-gemini-key"), false);
+
+  const rejected = await health({
+    GROQ_API_KEY: "synthetic-groq-key",
+    GROQ_BASE_URL: "http://localhost:8080/v1"
+  });
+  assert.equal(rejected.providerConfigured, false);
+});
