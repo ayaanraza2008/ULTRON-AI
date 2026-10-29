@@ -66,6 +66,9 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   assert.match(app, /api\/runtime\/readiness/);
   assert.match(app, /stopTaskProgressPolling/);
   assert.match(app, /AUTO REFRESH ON/);
+  assert.match(app, /REQUEST_ABORTED/);
+  assert.match(app, /task-cancel/);
+  assert.match(app, /An accepted server-side tool may still finish/);
   assert.match(app, /5000\)/);
   assert.match(app, /Capability readiness matrix/);
   assert.match(app, /preferredPersona/);
