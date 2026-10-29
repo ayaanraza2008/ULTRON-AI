@@ -43,11 +43,11 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
-  ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read (?:this|that|it|the text )?aloud|read aloud|voice studio|voicestudio)\b/i],
+  ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
   ["browser", /\b(?:browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
   ["geolocation", /\b(?:geolocat(?:e|ion)|where was this photo taken|photo location|identify (?:this )?location from (?:the )?(?:photo|image)|geo[- ]sleuth)\b/i],
   ["spaceplanner", /\b(?:floor plan|house plan|room layout|interior layout|spaceplanner|space planner)\b/i],
-  ["world_intelligence", /\b(?:god'?s eye|world intelligence|live globe|earthquake map|live flights|vessel tracking)\b/i],
+  ["world_intelligence", /\b(?:god[’']?s eye|world intelligence|live globe|earthquake map|live flights|vessel tracking)\b/i],
   ["youtube", /\b(?:youtube|video production plan|scene plan|thumbnail prompt|shorts script)\b/i],
   ["comfyui", /\b(?:comfyui|workflow json|image workflow|render an image|run the workflow)\b/i],
   ["paperclip", /\b(?:paperclip|agent governance|agent roster|agent budget|monthly agent cost)\b/i],
@@ -57,10 +57,10 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
   ["productivity", /\b(?:chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
   ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
-  ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
+  ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|we (?:decided|agreed|chose)|decision noted|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
   ["research", /\b(?:research|look up|search the web|search online|latest (?:news|information|release)|find sources|fact check|current information)\b/i],
   ["integrations", /\b(?:integration status|check integrations|what integrations|connected services|capability status|provider status|list capabilities|which tools are available|tools available for|connector readiness|repository readiness)\b/i],
-  ["planning", /\b(?:plan (?:my|the|a|an)|create a plan|multi[- ]step task|schedule (?:a|an|the) (?:task|employee|routine)|background task|enqueue task|run this in the background)\b/i],
+  ["planning", /\b(?:plan (?:my|the|a|an)|create a plan|multi[- ]step task|schedule (?:a|an|the) (?:task|employee|routine)|background task|enqueue task|queue (?:a |the |this )?(?:background )?(?:research |review |report |task|employee)|queue .*\b(?:background|research|review|report|task)\b|\b(?:background|queue|enqueue)\b.{0,80}\b(?:task|report|research|review|employee)\b|run this in the background)\b/i],
   ["browser", /\b(?:obscura|public web page snapshot|capture this public page)\b/i],
   ["media", /\b(?:talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
 ]);
