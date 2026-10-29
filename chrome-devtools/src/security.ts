@@ -168,6 +168,7 @@ export function validateCdpEndpoint(raw: unknown): string {
 export function safeDisplayUrl(raw: string): string {
   try {
     const url = new URL(raw);
+    if (["data:", "blob:", "javascript:", "file:"].includes(url.protocol)) return "[" + url.protocol.replace(":", "") + " resource omitted]";
     url.search = "";
     url.hash = "";
     if (url.username || url.password) {
