@@ -5,11 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ultron_local_assistant.core import (
-    DEFAULT_OLLAMA_URL, apply_workspace_draft, detect_hardware, get_system_health, load_relevant_skill_context, recommend_models, resolve_workspace_file,
+    DEFAULT_OLLAMA_URL, apply_workspace_draft, detect_hardware, get_system_health, _available_memory_bytes, load_relevant_skill_context, recommend_models, resolve_workspace_file,
     safe_shell_argv, search_documents, validate_local_ollama_url,
     run_approved_command,
 )
@@ -33,6 +33,14 @@ class LocalFirstCoreTests(unittest.TestCase):
         ]:
             with self.subTest(url=url), self.assertRaises(ValueError):
                 validate_local_ollama_url(url)
+
+    def test_available_memory_prefers_linux_memavailable_over_free_pages(self):
+        import os
+        if os.name == "nt":
+            self.skipTest("Linux /proc memory accounting is not used on Windows.")
+        with patch("builtins.open", mock_open(read_data="MemTotal: 8000 kB\\nMemAvailable: 5000 kB\\n")), \\
+             patch("ultron_local_assistant.core.os.sysconf", return_value=4096):
+            self.assertEqual(_available_memory_bytes(), 5000 * 1024)
 
     def test_system_health_reports_local_metrics_and_high_disk_usage(self):
         with tempfile.TemporaryDirectory() as temp:
