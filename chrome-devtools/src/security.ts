@@ -1,3 +1,6 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 export const CHROME_ACTIONS = [
   "status",
   "navigate",
@@ -50,6 +53,63 @@ function looksLikeInternalHostname(host: string): boolean {
     host.endsWith(".lan") ||
     host.endsWith(".home") ||
     host.endsWith(".localhost");
+}
+
+export function isPublicIpAddress(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) {
+    const parts = address.split(".").map(Number);
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+    const [a, b, c] = parts;
+    return !(a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 192 && b === 88 && c === 99) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0));
+  }
+  if (version === 6) {
+    const normalized = address.toLowerCase();
+    if (normalized.startsWith("::ffff:")) return false;
+    const parts = normalized.split(":");
+    const first = Number.parseInt(parts[0] || "0", 16);
+    const second = Number.parseInt(parts[1] || "0", 16);
+    // Only global-unicast space is considered. Exclude IETF special-use,
+    // documentation and deprecated 6to4 ranges within the global block.
+    if (first < 0x2000 || first > 0x3fff) return false;
+    if (first === 0x2001 && second <= 0x01ff) return false;
+    if (first === 0x2001 && second === 0x0db8) return false;
+    if (first === 0x2002) return false;
+    return true;
+  }
+  return false;
+}
+
+export async function assertPublicBrowserTarget(url: URL, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const host = hostnameOf(url);
+  if (isLoopbackHost(host)) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const addresses = await Promise.race([
+      lookup(host, { all: true, verbatim: true }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("DNS lookup timed out")), 3000);
+      })
+    ]);
+    if (!addresses.length || addresses.some((item) => !isPublicIpAddress(item.address))) {
+      throw new Error("Hostname resolved to a non-public address");
+    }
+  } catch {
+    throw new ChromeActionError(
+      "PRIVATE_TARGET_BLOCKED",
+      "The browser target could not be confirmed as resolving only to public IP addresses.",
+      403
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export function validateBrowserUrl(raw: unknown, env: NodeJS.ProcessEnv = process.env): URL {
