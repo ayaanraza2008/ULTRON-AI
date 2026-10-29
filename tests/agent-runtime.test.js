@@ -2254,9 +2254,10 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 61);
+    assert.equal(compoundTools.length, 62);
     assert.ok(compoundTools.includes("openhiggsfield"));
     assert.ok(compoundTools.includes("open_design"));
+    assert.ok(compoundTools.includes("open_generative_ai"));
   });
 });
 
@@ -2324,5 +2325,10 @@ test("agent tools expose OpenHiggsfield model catalog and disabled-by-default re
     assert.ok(designTool);
     assert.equal(designTool.available, false);
     assert.equal(designTool.state, "disabled_by_config");
+    const mediaTool = payload.tools.find(tool => tool.name === "open_generative_ai");
+    assert.ok(mediaTool);
+    assert.equal(mediaTool.available, false);
+    assert.equal(mediaTool.state, "disabled_by_config");
+    assert.equal(mediaTool.models, 38);
   });
 });
