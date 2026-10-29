@@ -2253,8 +2253,10 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.tier, "complex");
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
+    assert.ok(compoundTools.includes("public_api_lookup"));
+    assert.ok(compoundTools.includes("search_public_api_catalog"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 57);
+    assert.equal(compoundTools.length, 59);
   });
 });
 
