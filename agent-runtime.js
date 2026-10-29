@@ -104,6 +104,53 @@ function bounded(value, max = MAX_TEXT) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+export function buildWorldClockSnapshot(timeZones, { now = new Date() } = {}) {
+  const instant = now instanceof Date && Number.isFinite(now.getTime()) ? new Date(now.getTime()) : new Date();
+  const requested = Array.isArray(timeZones) ? timeZones.slice(0, 10) : [];
+  const unique = [];
+  const seen = new Set();
+  for (const item of requested) {
+    const zone = bounded(item, 80);
+    if (zone && !seen.has(zone)) { seen.add(zone); unique.push(zone); }
+  }
+  const locations = [];
+  const invalidTimeZones = [];
+  for (const timeZone of unique) {
+    try {
+      const parts = Object.fromEntries(
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", second: "2-digit",
+          hourCycle: "h23", timeZoneName: "short"
+        }).formatToParts(instant)
+          .filter(part => part.type !== "literal")
+          .map(part => [part.type, part.value])
+      );
+      const offsetParts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" }).formatToParts(instant);
+      const utcOffset = offsetParts.find(part => part.type === "timeZoneName")?.value || "unknown";
+      if (!parts.year || !parts.month || !parts.day || !parts.hour || !parts.minute || !parts.second) {
+        throw new Error("Time zone did not produce complete local date/time parts.");
+      }
+      locations.push({
+        timeZone,
+        localDate: parts.year + "-" + parts.month + "-" + parts.day,
+        localTime: parts.hour + ":" + parts.minute + ":" + parts.second,
+        timeZoneName: parts.timeZoneName || timeZone,
+        utcOffset,
+        timestamp: instant.toISOString()
+      });
+    } catch {
+      invalidTimeZones.push(timeZone);
+    }
+  }
+  return {
+    state: locations.length ? (invalidTimeZones.length ? "partial" : "ok") : "invalid_time_zones",
+    capturedAt: instant.toISOString(),
+    locations,
+    invalidTimeZones
+  };
+}
+
 export function voiceStudioSettings(env = process.env) {
   const raw = bounded(env.VOICESTUDIO_BASE_URL, 500);
   const token = bounded(env.VOICESTUDIO_API_KEY, 2000);
@@ -650,6 +697,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "check_hermes_agent", description: "Read-only: check the configured Hermes Agent API server model list and capability endpoint. Does not execute an agent task.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "hermes_agent_task", description: "Delegate a bounded task to the configured Hermes Agent runtime, which may use its own configured tools, skills, memory, subagents and terminal backend. Owner-scoped; consequential actions are blocked pending task-specific approval.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 8000 }, conversationId: { type: "string", maxLength: 160 } }, required: ["task"], additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "world_clock", description: "Offline world-clock lookup for one to ten IANA time-zone identifiers (for example Asia/Kolkata, Europe/London, or America/New_York). Uses the server clock and returns a shared capture timestamp; it does not geocode vague locations or fetch external data.", parameters: { type: "object", properties: { timeZones: { type: "array", minItems: 1, maxItems: 10, items: { type: "string", minLength: 1, maxLength: 80 } } }, required: ["timeZones"], additionalProperties: false } } },
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
@@ -819,6 +867,13 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (OWNER_SCOPED_SHARED_INTEGRATION_TOOLS.has(name)) {
       const denied = sharedIntegrationOwnerDenial(env, req.supabaseUser?.id);
       if (denied) return denied;
+    }
+    if (name === "world_clock") {
+      const timeZones = Array.isArray(args.timeZones) ? args.timeZones.slice(0, 10) : [];
+      if (!timeZones.length) throw Object.assign(new Error("Provide one or more IANA time-zone identifiers."), { code: "WORLD_CLOCK_TIME_ZONES_REQUIRED", status: 400 });
+      const snapshot = buildWorldClockSnapshot(timeZones);
+      if (!snapshot.locations.length) throw Object.assign(new Error("No valid IANA time-zone identifiers were supplied."), { code: "WORLD_CLOCK_TIME_ZONES_INVALID", status: 400 });
+      return snapshot;
     }
     if (name === "world_intelligence_command") {
       const command = bounded(args.command, 1000);
