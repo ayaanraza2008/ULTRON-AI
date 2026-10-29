@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateBrowserUrl, validateCdpEndpoint, validateChromeActionInput } from "../dist/security.js";
+import { validateBrowserUrl, validateCdpEndpoint, validateChromeActionInput, isPublicIpAddress } from "../dist/security.js";
 
 test("navigation accepts HTTPS public domains and local development URLs", () => {
   assert.equal(validateBrowserUrl("https://example.com/app").hostname, "example.com");
@@ -22,6 +22,14 @@ test("navigation rejects unsafe schemes, embedded credentials, direct IPs and in
     assert.throws(() => validateBrowserUrl(url), undefined, url);
   }
 });
+
+test("resolved-address policy allows public addresses and rejects special/private ranges", () => {
+  assert.equal(isPublicIpAddress("8.8.8.8"), true);
+  assert.equal(isPublicIpAddress("1.1.1.1"), true);
+  for (const address of ["127.0.0.1", "10.0.0.1", "172.16.1.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "224.0.0.1", "2001:db8::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1"]) {
+    assert.equal(isPublicIpAddress(address), false, address);
+  }
+ });
 
 test("CDP endpoint is restricted to loopback HTTP", () => {
   assert.equal(validateCdpEndpoint("http://127.0.0.1:9222"), "http://127.0.0.1:9222");
