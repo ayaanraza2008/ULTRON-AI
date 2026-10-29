@@ -1023,7 +1023,7 @@
       }
       if (!voiceActive || mode !== "voice" || textInputOpen) return false;
       const detected = String(payload?.language || "").toLowerCase();
-      const languageLabel = detected.startsWith("hi") ? "HINDI" : detected.startsWith("en") ? "ENGLISH" : "";
+      const languageLabel = /^(hi|hindi)/.test(detected) ? "HINDI" : /^(en|english)/.test(detected) ? "ENGLISH" : "";
       ui.captionText.textContent = (languageLabel ? "HEARD " + languageLabel + " · " : "HEARD · ") + command.slice(0, 110);
       await sendPrompt(command, "voice");
       return true;
@@ -1234,7 +1234,16 @@
       let interimText = "";
       for (let index = 0; index < event.results.length; index += 1) {
         const result = event.results[index];
-        const transcript = result && result[0] ? String(result[0].transcript || "") : "";
+        const alternatives = [];
+        for (let altIndex = 0; altIndex < (result?.length || 0); altIndex += 1) {
+          const alternative = result[altIndex];
+          if (alternative && typeof alternative.transcript === "string" && alternative.transcript.trim()) {
+            alternatives.push(alternative.transcript.trim());
+          }
+        }
+        const transcript = speechLanguageMode === "hi-IN"
+          ? alternatives.find(value => /[\u0900-\u097F]/.test(value)) || alternatives[0] || ""
+          : alternatives.find(value => /[A-Za-z]/.test(value)) || alternatives[0] || "";
         if (result && result.isFinal) finalText += transcript + " ";
         else interimText += transcript;
       }
