@@ -69,8 +69,8 @@ const REPOSITORIES = [
     id: "appflowy", repo: "AppFlowy-IO/AppFlowy", domain: "workspace_docs",
     match: /\b(appflowy|notion alternative|workspace page|knowledge base page|workspace document|team wiki|project knowledge base|appflowy workspace)\b/i,
     integration: "owner_scoped_read_only_cloud_api", status: "adapter_present_unverified_live",
-    abilities: ["list owner-accessible AppFlowy Cloud workspaces", "read a bounded recursive workspace page/folder tree", "search workspace documents and return bounded previews"],
-    limits: ["This is a thin, read-only adapter to AppFlowy Cloud; it does not bundle the desktop/web application or decode and mutate collaborative document state. It requires an AppFlowy user access token and a secured, reachable AppFlowy Cloud deployment. Publishing, document edits, database writes, member changes and deletion are not exposed."],
+    abilities: ["list owner-accessible AppFlowy Cloud workspaces", "read a bounded recursive workspace page/folder tree", "read bounded collab JSON for a selected document/page/database", "search workspace documents and return bounded previews"],
+    limits: ["This is a thin, read-only adapter to AppFlowy Cloud; it does not bundle the desktop/web application or mutate collaborative document state. It can return bounded collab JSON, not a fully rendered rich-text export. It requires an AppFlowy user access token and a secured, reachable AppFlowy Cloud deployment. Publishing, document edits, database writes, member changes and deletion are not exposed."],
     envKeys: ["APPFLOWY_ENABLED", "APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["APPFLOWY_CLIENT_VERSION", "APPFLOWY_DEVICE_ID"], license: "AppFlowy source is AGPL-3.0; no upstream app source is copied into this adapter", source: "https://github.com/AppFlowy-IO/AppFlowy"
   },
   {
