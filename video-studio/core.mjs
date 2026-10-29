@@ -67,7 +67,8 @@ export function newProject(input, now = new Date().toISOString()) {
 }
 
 export function safeAssetFilename(value) {
-  const name = typeof value === "string" ? path.basename(value) : "";
+  if (typeof value !== "string" || value !== path.basename(value)) return null;
+  const name = value;
   if (!/^[0-9a-f-]{36}\.(mp4|mov|m4v|webm|mkv|ogv|avi|jpg|jpeg|png|webp|wav|mp3|m4a|aac|ogg|flac|srt)$/i.test(name)) return null;
   return FILE_EXTENSIONS.has(path.extname(name).toLowerCase()) ? name : null;
 }
