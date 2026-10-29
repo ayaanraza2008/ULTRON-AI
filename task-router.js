@@ -87,7 +87,8 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   else if (hasHistory && VAGUE_PATTERN.test(text)) tier = "medium";
   else if (complex || categories.length > 1 || /\b(?:project|application|repository|repo|platform|system)\b/i.test(text) && ACTION_PATTERN.test(text)) tier = "complex";
   else if (categories.length === 1) tier = "medium";
-  else if (!ACTION_PATTERN.test(text) || SIMPLE_PATTERN.test(text)) tier = "simple";
+  else if (SIMPLE_PATTERN.test(text)) tier = "simple";
+  else if (!ACTION_PATTERN.test(text)) tier = "medium";
   else tier = "complex";
 
   // Simple/underspecified requests should not receive any tool schemas. For one
