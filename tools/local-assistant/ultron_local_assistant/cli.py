@@ -294,11 +294,23 @@ def skills_review(args):
         return 1
 
 def skills_install(args):
-    if not confirm("INSTALL", f"Install Markdown skill instructions only from {args.repository}?"):
+    try:
+        reviewed = review_skill_repository(args.repository)
+    except Exception as exc:
+        print(f"Pre-install skill review failed: {exc}", file=sys.stderr)
+        return 1
+    out_json(reviewed)
+    if not reviewed.get("skills"):
+        print("No SKILL.md files were found; nothing can be installed.", file=sys.stderr)
+        return 1
+    print("\nReview the source paths, SHA-256 hashes, and warnings above before proceeding.")
+    if not confirm("INSTALL", f"Install only these Markdown instructions from {args.repository}?"):
         print("Cancelled.")
         return 0
+    expected = {item["path"]: item["sha256"] for item in reviewed["skills"]}
     try:
-        out_json(install_skill_repository(args.repository, confirm=True))
+        report = install_skill_repository(args.repository, confirm=True, expected_hashes=expected)
+        out_json(report)
         return 0
     except Exception as exc:
         print(f"Skill installation failed: {exc}", file=sys.stderr)
