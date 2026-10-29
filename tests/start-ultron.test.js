@@ -48,3 +48,58 @@ test("launcher relays an unexpected child termination signal to the parent", () 
   harness.child.emit("exit", null, "SIGTERM");
   assert.deepEqual(harness.forwardedSignals, [{ pid: 12345, signal: "SIGTERM" }]);
 });
+
+test("startup provider smokes are skipped unless explicitly enabled", async () => {
+  const logs = [];
+  let textCalls = 0;
+  let visionCalls = 0;
+  const result = await (await import("../scripts/start-ultron.mjs")).runStartupProviderSmokes({
+    env: { OPENROUTER_API_KEY: "synthetic-secret" },
+    logger: { info: (...args) => logs.push(args) },
+    textSmoke: async () => { textCalls += 1; return { status: "passed" }; },
+    visionSmoke: async () => { visionCalls += 1; return { status: "passed" }; }
+  });
+  assert.deepEqual(result, {});
+  assert.equal(textCalls, 0);
+  assert.equal(visionCalls, 0);
+  assert.equal(logs.length, 0);
+});
+
+test("startup text smoke logs only bounded status metadata, never generated output or credentials", async () => {
+  const logs = [];
+  const result = await (await import("../scripts/start-ultron.mjs")).runStartupProviderSmokes({
+    env: { ULTRON_RUN_STARTUP_MODEL_SMOKE: "YES", OPENROUTER_API_KEY: "synthetic-secret" },
+    logger: { info: (...args) => logs.push(args) },
+    textSmoke: async () => ({
+      status: "passed",
+      provider: "openrouter",
+      model: "openrouter/free",
+      completionReceived: true,
+      generatedText: "THIS MUST NEVER BE LOGGED",
+      secret: "synthetic-secret",
+      attempts: [{ model: "openrouter/free", code: "PROVIDER_AUTH_REJECTED", httpStatus: 401 }]
+    })
+  });
+  assert.equal(result.text.status, "passed");
+  assert.equal(result.text.attemptCount, 1);
+  assert.equal(JSON.stringify(logs).includes("synthetic-secret"), false);
+  assert.equal(JSON.stringify(logs).includes("THIS MUST NEVER BE LOGGED"), false);
+  assert.equal(JSON.stringify(logs).includes("generatedText"), false);
+});
+
+test("startup vision smoke explicitly confirms the synthetic challenge without revealing output", async () => {
+  const logs = [];
+  let captured;
+  const result = await (await import("../scripts/start-ultron.mjs")).runStartupProviderSmokes({
+    env: { ULTRON_RUN_STARTUP_VISION_SMOKE: "YES", OPENROUTER_API_KEY: "synthetic-secret" },
+    logger: { info: (...args) => logs.push(args) },
+    visionSmoke: async options => {
+      captured = options;
+      return { status: "passed", provider: "openrouter", model: "openrouter/free", challengeVerified: true, attempts: [] };
+    }
+  });
+  assert.equal(captured.env.ULTRON_CONFIRM_VISION_SMOKE, "YES");
+  assert.equal(result.vision.challengeVerified, true);
+  assert.equal(JSON.stringify(logs).includes("synthetic-secret"), false);
+});
+
