@@ -10,3 +10,6 @@ Thumbs.db
 npm-debug.log*
 .local/
 models/
+
+# Local Video Studio workspace and generated media
+.runtime/video-studio/
