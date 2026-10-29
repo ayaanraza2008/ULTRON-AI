@@ -171,13 +171,29 @@ function readJson(file) {
   } catch { return null; }
 }
 
-function readSmallText(file) {
+function readSmallText(file, boundaryRoot = path.dirname(file)) {
   try {
-    // lstat intentionally refuses symbolic links: a brief must be a regular file
-    // in the employee workspace, not a link to unrelated/private external content.
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.size > MAX_BRIEF_BYTES) return "";
-    return fs.readFileSync(file, "utf8").trim();
+    const boundary = path.resolve(boundaryRoot);
+    const target = path.resolve(file);
+    if (target === boundary || !isInside(boundary, target)) return "";
+    const safeRoot = resolveThroughExistingSymlinks(boundary);
+    const safeTarget = path.resolve(safeRoot, path.relative(boundary, target));
+    const parts = path.relative(safeRoot, safeTarget).split(path.sep).filter(Boolean);
+    if (!parts.length) return "";
+    let current = safeRoot;
+    for (let i = 0; i < parts.length; i += 1) {
+      current = path.join(current, parts[i]);
+      // Inspect every path segment rather than only the final file: a normal
+      // file reached through a linked parent directory can still escape the kit.
+      const stat = fs.lstatSync(current);
+      if (stat.isSymbolicLink()) return "";
+      if (i < parts.length - 1 && !stat.isDirectory()) return "";
+      if (i === parts.length - 1) {
+        if (!stat.isFile() || stat.size > MAX_BRIEF_BYTES) return "";
+        return fs.readFileSync(current, "utf8").trim();
+      }
+    }
+    return "";
   } catch { return ""; }
 }
 
@@ -225,7 +241,7 @@ export function buildMorningBrief({ root, date = new Date(), employees = findIns
     let chosen = "";
     let body = "";
     for (const candidate of candidates) {
-      const text = readSmallText(candidate);
+      const text = readSmallText(candidate, item.folder);
       if (text) { chosen = candidate; body = text; break; }
     }
     if (body) {
@@ -313,11 +329,66 @@ function parseRoot(args, fallback = DEFAULT_ROOT) {
   return resolveWorkspaceRoot(args[index + 1]);
 }
 
-function writeAtomic(file, text) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = `${file}.tmp-${process.pid}-${Date.now()}`;
+function ensureSafeDirectoryTree(boundaryRoot, targetDirectory) {
+  const requestedRoot = path.resolve(boundaryRoot);
+  const requestedTarget = path.resolve(targetDirectory);
+  if (requestedTarget !== requestedRoot && !isInside(requestedRoot, requestedTarget)) {
+    throw new Error("Write path escaped its workspace boundary.");
+  }
+
+  const safeRoot = resolveThroughExistingSymlinks(requestedRoot);
+  const safeTarget = path.resolve(safeRoot, path.relative(requestedRoot, requestedTarget));
+  fs.mkdirSync(safeRoot, { recursive: true });
+  const rootStat = fs.lstatSync(safeRoot);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new Error("Workspace root must be a real directory, not a symbolic link or file.");
+  }
+
+  let current = safeRoot;
+  const segments = path.relative(safeRoot, safeTarget).split(path.sep).filter(Boolean);
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    try {
+      const stat = fs.lstatSync(current);
+      if (stat.isSymbolicLink()) throw new Error("Refusing to write through a symbolic link inside the workspace.");
+      if (!stat.isDirectory()) throw new Error("A workspace path component is not a directory.");
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      fs.mkdirSync(current);
+    }
+  }
+  return safeTarget;
+}
+
+function writeAtomic(file, text, boundaryRoot) {
+  if (!boundaryRoot) throw new Error("Workspace boundary is required for local writes.");
+  const requestedRoot = path.resolve(boundaryRoot);
+  const requestedTarget = path.resolve(file);
+  if (requestedTarget === requestedRoot || !isInside(requestedRoot, requestedTarget)) {
+    throw new Error("Write path escaped its workspace boundary.");
+  }
+
+  const safeRoot = resolveThroughExistingSymlinks(requestedRoot);
+  const safeTarget = path.resolve(safeRoot, path.relative(requestedRoot, requestedTarget));
+  const safeParent = ensureSafeDirectoryTree(safeRoot, path.dirname(safeTarget));
+  const target = path.join(safeParent, path.basename(safeTarget));
+  try {
+    const existing = fs.lstatSync(target);
+    if (existing.isSymbolicLink() || !existing.isFile()) {
+      throw new Error("Refusing to replace a symbolic link or non-file workspace target.");
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+
+  const temp = `${target}.tmp-${process.pid}-${Date.now()}`;
   fs.writeFileSync(temp, text, { encoding: "utf8", flag: "wx" });
-  fs.renameSync(temp, file);
+  try {
+    fs.renameSync(temp, target);
+  } catch (error) {
+    try { fs.unlinkSync(temp); } catch {}
+    throw error;
+  }
 }
 
 function runInstaller(role, target) {
@@ -385,8 +456,8 @@ async function hire(role, root) {
     workspace: root,
     scheduling: "not-registered-by-ultron-wrapper"
   };
-  writeAtomic(path.join(target, ".ultron-employee.json"), JSON.stringify(manifest, null, 2) + "\n");
-  writeAtomic(path.join(target, "ULTRON-INTEGRATION.md"), integrationNote(role));
+  writeAtomic(path.join(target, ".ultron-employee.json"), JSON.stringify(manifest, null, 2) + "\n", target);
+  writeAtomic(path.join(target, "ULTRON-INTEGRATION.md"), integrationNote(role), target);
   console.log("");
   console.log(`Installed ${role.name} (files only). Local schedules are not registered yet.`);
   console.log(`Next: open "${target}" in your harness and follow INSTALL-PROMPT.md.`);
@@ -441,7 +512,7 @@ async function main(argv = process.argv.slice(2)) {
   if (command === "brief") {
     const brief = buildMorningBrief({ root });
     const output = path.join(root, "briefs", `morning-brief-${localDay()}.md`);
-    writeAtomic(output, brief);
+    writeAtomic(output, brief, root);
     console.log(brief);
     console.log(`\nSaved local brief: ${output}`);
     return;
@@ -456,9 +527,9 @@ async function main(argv = process.argv.slice(2)) {
     if (!isInside(employeeRoot, folder)) throw new Error("Routine path escaped the employee workspace.");
     if (fs.existsSync(folder)) throw new Error(`Routine already exists; nothing was overwritten: ${folder}`);
     fs.mkdirSync(folder, { recursive: true });
-    writeAtomic(path.join(folder, "SKILL.md"), makeRoutineTemplate({ id, role, goal: `Define one measurable outcome owned by ${role.name}.` }));
+    writeAtomic(path.join(folder, "SKILL.md"), makeRoutineTemplate({ id, role, goal: `Define one measurable outcome owned by ${role.name}.` }), employeeRoot);
     const note = `# Register ${id}\n\nThis template is not scheduled yet. Before enabling it:\n\n1. Define the exact output path, allowed inputs and success criteria in routines/${id}/SKILL.md.\n2. Add a valid row to SCHEDULE.md with days, local fire time, window, period key, time budget and browser lane. Follow that file's schema; do not guess a time zone.\n3. Confirm CAPABILITIES.md maps every required capability to this harness and its signed-in browser profile.\n4. Run the kit's self-tests and the routine once manually in a safe/review-only mode. Confirm idempotency and inspect the run log.\n5. Register the job in the selected harness/OS scheduler only after the first manual check. Verify the job exists; keep external actions held.\n6. Add a dated correction if evidence exposes a defect. Never widen authority silently.\n`;
-    writeAtomic(path.join(folder, "REGISTER-ROUTINE.md"), note);
+    writeAtomic(path.join(folder, "REGISTER-ROUTINE.md"), note, employeeRoot);
     console.log(`Created local routine template: ${path.join(folder, "SKILL.md")}`);
     console.log("Not scheduled. Complete REGISTER-ROUTINE.md, validate the SCHEDULE.md row, then register it in your harness.");
     return;
