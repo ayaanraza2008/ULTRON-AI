@@ -15,6 +15,7 @@ services:
         - "package.json"
         - "package-lock.json"
         - "public/**"
+        - "video-studio/**"
         - "supabase/migrations/**"
       ignoredPaths:
         - "tests/**"
