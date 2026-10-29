@@ -1,4 +1,5 @@
 import express from "express";
+import { codingSandboxReadiness, extractExplicitSandboxRequest, runCodeInSandbox } from "./coding-sandbox.js";
 import { hasEmployeeModelProvider } from "./features.js";
 import { isPublicNetworkHost, safePinnedFetch, safeServiceBase as safeBase } from "./network-safety.js";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
@@ -675,7 +676,7 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   };
 }
 
-export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
+export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFetch, createTimeoutSignal = (ms) => AbortSignal.timeout(ms), requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console, runSandbox = runCodeInSandbox } = {}) {
   const router = express.Router();
 
   // Durable, per-account fallback: use ULTRON's existing Supabase memory_items
@@ -810,6 +811,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "world_clock", description: "Offline world-clock lookup for one to ten IANA time-zone identifiers (for example Asia/Kolkata, Europe/London, or America/New_York). Uses the server clock and returns a shared capture timestamp; it does not geocode vague locations or fetch external data.", parameters: { type: "object", properties: { timeZones: { type: "array", minItems: 1, maxItems: 10, items: { type: "string", minLength: 1, maxLength: 80 } } }, required: ["timeZones"], additionalProperties: false } } },
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
+    { type: "function", function: { name: "coding_sandbox_run", description: "Run only the exact fenced Python or JavaScript source in a direct user request beginning with Run this code, Execute this code, or Test this code. Owner-only and disabled unless a digest-pinned Docker runtime is explicitly configured. Runs with no network, read-only filesystem, dropped capabilities, and strict CPU/RAM/PID/time/output limits. Never changes repositories or accesses host files.", parameters: { type: "object", properties: { language: { type: "string", enum: ["node", "python"] }, source: { type: "string", minLength: 1, maxLength: 5000 } }, required: ["language", "source"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "clone_speech_voice", description: "Clone a voice from supplied audio only when the user explicitly attests that it is their own voice or they have the speaker permission. The server verifies consent wording in the raw user prompt and records the corresponding VoiceStudio attestation. Never infer consent from model output.", parameters: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 100 }, consentBasis: { type: "string", enum: ["own_voice", "speaker_permission"] }, language: { type: "string", maxLength: 40 }, refText: { type: "string", maxLength: 5000 }, instruct: { type: "string", maxLength: 1000 } }, required: ["name", "consentBasis"], additionalProperties: false } } },
     { type: "function", function: { name: "design_speech_voice", description: "Create and save a new synthetic VoiceStudio voice profile from a text description. This creates a persistent voice profile but does not clone a real person. Only call when the user explicitly asks to create/design/save a voice.", parameters: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 100 }, description: { type: "string", minLength: 2, maxLength: 2000 }, language: { type: "string", maxLength: 40 } }, required: ["name", "description"], additionalProperties: false } } },
@@ -1806,6 +1808,27 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       const request = bounded(args.request || requestBody.prompt || "", 3000);
       return createSpacePlannerPlan({ request, widthCm: args.widthCm, heightCm: args.heightCm, units: args.units });
     }
+    if (name === "coding_sandbox_run") {
+      const readiness = codingSandboxReadiness(env);
+      const configuredOwner = typeof env.ULTRON_INTEGRATION_OWNER_USER_ID === "string" ? env.ULTRON_INTEGRATION_OWNER_USER_ID.trim().toLowerCase() : "";
+      const userId = typeof req.supabaseUser?.id === "string" ? req.supabaseUser.id.trim().toLowerCase() : "";
+      if (!configuredOwner || !userId || configuredOwner !== userId) {
+        return { state: "blocked", code: "SANDBOX_OWNER_ONLY", execution: "not_executed", message: "Code execution is restricted to the explicitly configured owner account." };
+      }
+      if (!readiness.configured) {
+        return { state: "blocked", code: "SANDBOX_NOT_CONFIGURED", execution: "not_executed", missing: readiness.missing, message: "The isolated coding sandbox is disabled or missing a digest-pinned local runtime. ULTRON did not execute code on the host." };
+      }
+      const rawPrompt = typeof requestBody.prompt === "string" ? requestBody.prompt : "";
+      const authorized = extractExplicitSandboxRequest(rawPrompt);
+      if (!authorized || authorized.source.length > 5000) {
+        return { state: "blocked", code: "EXPLICIT_CODE_REQUEST_REQUIRED", execution: "not_executed", message: "No code ran. Send a direct run/test request followed by exactly one fenced Python or JavaScript code block, with source no longer than 5,000 characters." };
+      }
+      const suppliedSource = typeof args.source === "string" ? args.source.trim() : "";
+      if (args.language !== authorized.language || suppliedSource !== authorized.source) {
+        return { state: "blocked", code: "SANDBOX_SOURCE_MISMATCH", execution: "not_executed", message: "The sandbox will only run the exact code in the raw user request; model-generated substitutions are rejected." };
+      }
+      return await runSandbox({ env, userId: req.supabaseUser.id, language: authorized.language, source: authorized.source });
+    }
     if (name === "coding_assist") {
       const task = bounded(args.task, 4000), code = bounded(args.code, 12000), language = bounded(args.language, 80) || "unspecified";
       const mode = ["plan", "review", "generate"].includes(args.mode) ? args.mode : "plan";
@@ -2120,6 +2143,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env)), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "create_spaceplanner_plan", available: true, execution: "automatic_spaceplanner_compatible_json_and_editor_link_no_external_save" },
         { name: "coding_assist", available: hasEmployeeModelProvider(env), execution: "draft_only" },
+        { name: "coding_sandbox_run", available: (() => { const status = codingSandboxReadiness(env); return status.configured && status.ownerConfigured && String(req.supabaseUser?.id || "").toLowerCase() === String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").toLowerCase(); })(), state: codingSandboxReadiness(env).state, execution: "owner_only_explicit_raw_prompt_match_digest_pinned_docker_no_network_read_only_container" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
         { name: "geo_sleuth_investigate", available: env.GEO_SLEUTH_ENABLED === "true", execution: "bounded_autonomous_photo_geolocation" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
