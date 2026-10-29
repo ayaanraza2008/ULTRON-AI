@@ -340,7 +340,20 @@ def _is_sensitive_path(path: Path) -> bool:
 
 def resolve_workspace_file(root: str | Path, relative_path: str, *, allow_missing: bool = False) -> Path:
     base = Path(root).expanduser().resolve()
-    target = (base / relative_path).resolve(strict=not allow_missing)
+    candidate = base / relative_path
+    # Reject symlink components before resolving, so symlinks within the workspace are not silently followed.
+    probe = base
+    try:
+        lexical_parts = candidate.relative_to(base).parts
+    except ValueError:
+        raise ValueError("The requested path is outside the selected workspace.")
+    for part in lexical_parts:
+        if part in ("", "."):
+            continue
+        probe = probe / part
+        if probe.is_symlink():
+            raise ValueError("Symlink paths are blocked by default in the local assistant workspace.")
+    target = candidate.resolve(strict=not allow_missing)
     try:
         target.relative_to(base)
     except ValueError as exc:
@@ -348,7 +361,7 @@ def resolve_workspace_file(root: str | Path, relative_path: str, *, allow_missin
     relative = target.relative_to(base)
     if _is_sensitive_path(relative):
         raise ValueError("Access to likely secret/credential files is blocked by default.")
-    if not allow_missing and (not target.is_file() or target.is_symlink()):
+    if not allow_missing and not target.is_file():
         raise ValueError("The requested path must be a regular file inside the workspace.")
     return target
 
