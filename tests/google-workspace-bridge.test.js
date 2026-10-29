@@ -24,7 +24,7 @@ test("Apps Script bridge contains no write/delete Gmail, Calendar, Drive, or She
     ".setValues(",
     ".appendRow("
   ]) assert.equal(source.includes(forbidden), false, "forbidden mutation: " + forbidden);
-  assert.match(source, /Read-only actions are deliberately/);
+  assert.match(source, /Enabled actions are deliberately read-only/);
 });
 
 test("Apps Script bridge caps request size, message count, date range, and spreadsheet cells", () => {
