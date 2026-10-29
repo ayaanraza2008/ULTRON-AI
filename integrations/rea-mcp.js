@@ -4,10 +4,21 @@ import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 const MAX_RESPONSE_BYTES = 1_500_000;
 const MAX_RESULT_BYTES = 800_000;
 const MAX_PATH_LENGTH = 500;
+const NATIVE_CODE_OPERATIONS = new Set(["file_headers", "section_headers", "symbols", "relocations", "dwarf", "disassemble", "disassemble_all"]);
 const TOOL_SPECS = Object.freeze({
   rea_analyze_application: {
     upstreamTool: "analyze_javascript_application", pathRequired: true, requiresActiveTarget: true,
     args: path => ({ input_path: path, format: "auto", integrity_policy: "fail", detail: "complete" })
+  },
+  rea_investigate_application_feature: {
+    // Analyze and trace in one MCP session so the evidence remains valid for the follow-up.
+    upstreamTool: "trace_application_feature", sourceTool: "analyze_javascript_application",
+    pathRequired: true, requiresActiveTarget: true,
+    args: path => ({ input_path: path, format: "auto", integrity_policy: "fail", detail: "complete" })
+  },
+  rea_inspect_native_code: {
+    upstreamTool: "inspect_with_objdump", pathRequired: true,
+    args: (path, input) => ({ path, operation: input.operation, ...(input.symbol ? { symbol: input.symbol } : {}) })
   },
   rea_inspect_artifact: {
     upstreamTool: "inspect_artifact", pathRequired: true, requiresActiveTarget: true,
@@ -221,7 +232,7 @@ async function withEndpointLock(key, work) {
     if (endpointQueues.get(key) === tail) endpointQueues.delete(key);
   }
 }
-async function invokeRea(config, fetchImpl, toolName, upstreamArgs, targetPath = null, requiresActiveTarget = false) {
+async function invokeRea(config, fetchImpl, toolName, upstreamArgs, targetPath = null, requiresActiveTarget = false, postProcess = null) {
   let sessionId = null, requestId = 0;
   const call = async (method, params = {}, notification = false) => {
     const payload = { jsonrpc: "2.0", ...(notification ? {} : { id: ++requestId }), method, ...(Object.keys(params).length ? { params } : {}) };
@@ -246,6 +257,7 @@ async function invokeRea(config, fetchImpl, toolName, upstreamArgs, targetPath =
   let output, operationError;
   try {
     output = extractToolOutput(await call("tools/call", { name: toolName, arguments: upstreamArgs }));
+    if (postProcess) output = await postProcess({ output, call });
   } catch (error) {
     operationError = error;
   }
@@ -263,7 +275,7 @@ async function invokeRea(config, fetchImpl, toolName, upstreamArgs, targetPath =
 }
 
 /** Call one allowlisted REA inspection/guidance tool; arbitrary MCP tools are unavailable. */
-export async function runReaTool({ env = process.env, fetchImpl = safePinnedFetch, userId, toolName, path: relativePath, query, format, recordOrdinals, sensitiveValues } = {}) {
+export async function runReaTool({ env = process.env, fetchImpl = safePinnedFetch, userId, toolName, path: relativePath, query, format, recordOrdinals, sensitiveValues, operation, symbol, seed } = {}) {
   const config = endpointConfig(env, userId);
   if (config.error) return config.error;
   const spec = TOOL_SPECS[toolName];
@@ -275,6 +287,20 @@ export async function runReaTool({ env = process.env, fetchImpl = safePinnedFetc
   } else if (toolName === "rea_search_guidance" && bounded(query, 500).length < 2) {
     return blocked("REA_QUERY_REQUIRED", "Provide at least two characters describing the workflow guidance to find.");
   }
+  if (toolName === "rea_investigate_application_feature" && bounded(seed, 500).length < 2) {
+    return blocked("REA_FEATURE_SEED_REQUIRED", "Describe the feature or behavior to trace using at least two characters.");
+  }
+  if (toolName === "rea_inspect_native_code") {
+    if (!NATIVE_CODE_OPERATIONS.has(operation)) {
+      return blocked("REA_NATIVE_OPERATION_INVALID", "Choose a supported read-only native-code operation: file_headers, section_headers, symbols, relocations, dwarf, disassemble, or disassemble_all.");
+    }
+    if (symbol !== undefined && (typeof symbol !== "string" || !symbol.trim() || symbol.length > 300 || /[\u0000-\u001f\u007f]/.test(symbol))) {
+      return blocked("REA_NATIVE_SYMBOL_INVALID", "symbol must be a non-empty name of at most 300 characters without control characters.");
+    }
+    if (symbol !== undefined && operation !== "disassemble") {
+      return blocked("REA_NATIVE_SYMBOL_OPERATION_MISMATCH", "A symbol selector is supported only for the disassemble operation.");
+    }
+  }
   if (toolName === "rea_inspect_web_network_capture") {
     if (!["har", "mitmproxy", "saz", "qlog"].includes(format)) return blocked("REA_CAPTURE_FORMAT_INVALID", "Choose a supported offline capture format: har, mitmproxy, saz, or qlog.");
     if (recordOrdinals !== undefined && (!Array.isArray(recordOrdinals) || recordOrdinals.length < 1 || recordOrdinals.length > 100 || recordOrdinals.some(n => !Number.isSafeInteger(n) || n < 0))) {
@@ -284,9 +310,36 @@ export async function runReaTool({ env = process.env, fetchImpl = safePinnedFetc
       return blocked("REA_SENSITIVE_VALUES_INVALID", "sensitiveValues may contain at most 20 non-empty strings, each up to 500 characters.");
     }
   }
-  const upstreamArgs = spec.args(targetPath, { query, format, recordOrdinals, sensitiveValues: Array.isArray(sensitiveValues) ? sensitiveValues : [] });
+  const upstreamArgs = spec.args(targetPath, {
+    query, format, recordOrdinals, operation, symbol: typeof symbol === "string" ? symbol.trim() : undefined,
+    seed: bounded(seed, 500), sensitiveValues: Array.isArray(sensitiveValues) ? sensitiveValues : []
+  });
   try {
-    const output = await withEndpointLock(config.url, () => invokeRea({ url: config.url, token: config.token }, fetchImpl, spec.upstreamTool, upstreamArgs, targetPath, Boolean(spec.requiresActiveTarget)));
+    const compoundFeatureTrace = toolName === "rea_investigate_application_feature";
+    const sourceTool = compoundFeatureTrace ? spec.sourceTool : spec.upstreamTool;
+    const postProcess = compoundFeatureTrace ? async ({ output: applicationEvidence, call }) => {
+      if (!applicationEvidence || typeof applicationEvidence !== "object" || Array.isArray(applicationEvidence) ||
+          typeof applicationEvidence.evidence_id !== "string" || !applicationEvidence.normalized_result) {
+        throw Object.assign(new Error("REA analysis did not return complete application Evidence."), {
+          code: "REA_APPLICATION_EVIDENCE_MISSING", status: 502
+        });
+      }
+      const evidenceJson = JSON.stringify(applicationEvidence);
+      if (Buffer.byteLength(evidenceJson, "utf8") > MAX_RESULT_BYTES) {
+        throw Object.assign(new Error("Application Evidence exceeds the bounded trace input size."), {
+          code: "REA_RESULT_TOO_LARGE", status: 502
+        });
+      }
+      const featureTrace = extractToolOutput(await call("tools/call", {
+        name: "trace_application_feature",
+        arguments: { application: applicationEvidence, seed: { kind: "string", value: bounded(seed, 500) }, direction: "both" }
+      }));
+      return { applicationEvidenceId: applicationEvidence.evidence_id, featureTrace };
+    } : null;
+    const output = await withEndpointLock(config.url, () => invokeRea(
+      { url: config.url, token: config.token }, fetchImpl, sourceTool, upstreamArgs, targetPath,
+      Boolean(spec.requiresActiveTarget), postProcess
+    ));
     let serialized = "";
     try { serialized = JSON.stringify(output); } catch {}
     if (Buffer.byteLength(serialized, "utf8") > MAX_RESULT_BYTES) {
