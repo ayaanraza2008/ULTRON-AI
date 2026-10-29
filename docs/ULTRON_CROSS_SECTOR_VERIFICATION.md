@@ -43,3 +43,11 @@ Last inspected: 2026-10-29 UTC. This matrix separates source/CI evidence from li
 - `Ultron core / ultron-ai-core` — `https://ultron-ai-core.onrender.com`; latest observed deploy for `6b7f09d97508fc2be2085695d862a921e1ae8487` is `live`.
 - `My Workspace / ultron-ai` — `https://ultron-ai-zvd7.onrender.com`; the 10 latest deploy attempts returned on 2026-10-29 were blocked before the application build by Render's `pipeline_minutes_exhausted` event, including an attempt for that same main SHA.
 - The green production-revision workflow validates only the first service. No Render setting, environment variable, deploy, restart, deletion, or service repointing was performed during this audit.
+
+## Local Video Studio Origin hardening — source-verified
+
+- Fixed `video-studio/server.mjs` so Origin requests must use the same loopback **HTTP origin**, including the same host and port as the request Host header. A loopback hostname by itself is no longer treated as sufficient same-origin validation.
+- Added regression assertions in `tests/video-studio.test.js`: exact same origin is accepted; a different loopback port, HTTPS origin, and remote origin are rejected; the existing hostile Host-header check remains.
+- GitHub Actions passed for the PR source revision `cee5671d5ecf3df3bc71843010ef8b3b54d3c3a0`: [run 40945100841](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40945100841). Results: `npm run check` passed; `npm test` reported 793 tests, 792 passed, 0 failed, 1 skipped; World Intelligence build/bridge injection and Windows installer parsing passed; high-severity runtime dependency audit step passed.
+- This is source/CI evidence only. The cross-sector PR remains unmerged and undeployed. Real provider inference, two-account Auth/RLS E2E, live worker completion, Supabase leaked-password protection, physical Windows pairing, and real Docker sandbox execution remain separate verification blockers.
+
