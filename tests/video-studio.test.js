@@ -24,6 +24,7 @@ async function withStudio({ env: overrides = {}, commandRunner, fetchImpl, authe
       if (command === "ffprobe") return { stdout: JSON.stringify({ format: { duration: "10.0" }, streams: [
         { codec_type: "video", width: 720, height: 1280, avg_frame_rate: "30/1" }, { codec_type: "audio" }
       ] }), stderr: "" };
+      if (command === "ffmpeg" && args.some(arg => String(arg).includes("metadata=mode=print"))) return { stdout: "", stderr: "lavfi.signalstats.YAVG=45\nlavfi.signalstats.YLOW=10\nlavfi.signalstats.YHIGH=100\nlavfi.signalstats.SATAVG=18\nlavfi.signalstats.YAVG=50\nlavfi.signalstats.YLOW=10\nlavfi.signalstats.YHIGH=120\nlavfi.signalstats.SATAVG=22\n" };
       if (command === "ffmpeg" && args.some(arg => String(arg).includes("showinfo"))) return { stdout: "", stderr: "pts_time:2.1\npts_time:5.0\n" };
       return { stdout: "", stderr: "" };
     }),
@@ -98,9 +99,12 @@ test("reference clips use bounded upload and expose real ffprobe/scene-cut analy
     });
     assert.equal(analysis.status, 200);
     const result = await analysis.json();
-    assert.equal(result.analysis.analysisDepth, "local-media-metadata+scene-cuts");
+    assert.equal(result.analysis.analysisDepth, "local-media-metadata+scene-cuts+sampled-visual-stats");
     assert.equal(result.analysis.durationSeconds, 10);
     assert.deepEqual(result.analysis.sceneCutsSeconds, [2.1, 5]);
+    assert.equal(result.analysis.visualCharacter.state, "measured");
+    assert.equal(result.analysis.visualCharacter.brightnessLabel, "dark / low-key");
+    assert.equal(result.analysis.visualCharacter.saturationLabel, "muted colour");
     assert.equal(result.analysis.transcript, "A sample transcript for style analysis.");
   });
 });
