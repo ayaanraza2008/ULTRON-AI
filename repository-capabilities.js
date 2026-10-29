@@ -5,6 +5,7 @@ import { getHermesAgentReadiness } from "./integrations/hermes-agent.js";
 import { getChromeDevToolsReadiness } from "./integrations/chrome-devtools.js";
 import { getStrataReadiness } from "./integrations/strata.js";
 import { getOpenSeoReadiness } from "./integrations/openseo-mcp.js";
+import { getOpenHiggsfieldReadiness } from "./integrations/open-higgsfield.js";
 
 /**
  * Task-matched capability catalog for 43 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
@@ -80,10 +81,10 @@ const REPOSITORIES = [
   {
     id: "open-higgsfield", repo: "wide-trace/open-higgsfield", domain: "media_generation",
     match: /\b(openhiggsfield|open higgsfield|generate (an )?(image|video)|ai video generation|image generation|start frame|end frame|video reference asset|cinematic video generation)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["multi-model image generation", "multi-model video generation", "reference/start/end frame inputs", "generation history and asset reuse"],
-    limits: ["Needs a reachable compatible generation service and provider keys; provider usage can incur costs and model content policies apply."],
-    envKeys: ["OPEN_HIGGSFIELD_BASE_URL", "OPEN_HIGGSFIELD_API_KEY"], license: "Review repository LICENSE and each model provider's terms", source: "https://github.com/wide-trace/open-higgsfield"
+    integration: "owner_scoped_media_api_adapter", status: "adapter_present_unverified_live",
+    abilities: ["allowlisted 38-model image/video catalog", "text-to-image/video and supported image/video reference inputs", "validated aspect ratio, resolution, duration, sound and model-specific settings", "queued job IDs and bounded status polling"],
+    limits: ["A server-side id:secret platform key, HTTPS API base and owner UUID are required. Provider calls can consume credits and require explicit per-request approval. Upstream account, pricing, model entitlements, output quality and live generation remain unverified; ULTRON never accepts the API key from the browser or request body."],
+    envKeys: ["ULTRON_OPEN_HIGGSFIELD_ENABLED", "HF_API_BASE_URL", "OPEN_HIGGSFIELD_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "Review OpenHiggsfield source LICENSE and each model/provider's terms before bundling; this adapter does not copy upstream app code", source: "https://github.com/wide-trace/open-higgsfield"
   },
   {
     id: "voicestudio", repo: "debpalash/VoiceStudio", domain: "speech",
@@ -382,6 +383,7 @@ const ROUTING_RULES = [
 function configured(record, env) {
   if (record.id === "strata") return getStrataReadiness(env).configured;
   if (record.id === "open-seo") return getOpenSeoReadiness(env).configured;
+  if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
   if (!keys.length) return null;
   return keys.every(key => typeof env[key] === "string" && env[key].trim().length > 0 && (!["GEO_SLEUTH_ENABLED"].includes(key) || env[key] === "true"));
@@ -392,6 +394,7 @@ function stateFor(record, env) {
     const readiness = getOpenSeoReadiness(env);
     return readiness.configured ? "configured_unverified" : "missing_configuration";
   }
+  if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "obscura") {
     const readiness = getObscuraReadiness(env);
     return readiness.configured ? "configured_unverified" : readiness.state;
