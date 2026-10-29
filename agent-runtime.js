@@ -17,6 +17,8 @@ import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentPro
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 import { findOpenVikingContext, getOpenVikingReadiness, readOpenVikingContext } from "./integrations/openviking.js";
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrations/desktop-companion.js";
+import { getPublicApiCatalog, inferPublicApiRequest, lookupPublicApi } from "./integrations/public-apis.js";
+import { getPublicApiDirectoryStats, inferPublicApiCatalogQuery, searchPublicApiDirectory } from "./integrations/public-api-directory.js";
 import { cognitiveLayerLabel, extractCorrectionLesson, rankCognitiveMemories } from "./cognitive-memory.js";
 import { classifyTaskRoute } from "./task-router.js";
 import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./integrations/google-workspace.js";
@@ -275,6 +277,8 @@ function extractIntent(text) {
   if (/\b(run|queue|submit)\b/.test(s) && /\b(comfyui|workflow)\b/.test(s)) return "run_comfyui_workflow";
   if (/\b(comfyui|image generation server|generation queue|gpu queue)\b/.test(s) && /\b(status|health|available|check|queue)\b/.test(s)) return "check_comfyui";
   if (/\b(integration|integrations|connected services|provider status|what tools|capabilities)\b/.test(s) && /\b(check|status|available|configured|show|list|what)\b/.test(s)) return "integration_status";
+  if (inferPublicApiRequest(text)) return "public_api_lookup";
+  if (inferPublicApiCatalogQuery(text)) return "search_public_api_catalog";
   if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) return "research_web";
   if (/\b(background|queue|schedule|run automatically|recurring)\b/.test(s) && /\b(employee|routine|report|research|task|web-dev|review|draft|plan)\b/.test(s)) return "enqueue_employee_task";
   if (/\b(ai employee|employee routine|make a plan|create a plan|draft a|review this|write a report)\b/.test(s)) return "plan_employee";
@@ -296,6 +300,10 @@ function buildFallbackCalls(text) {
     }
   };
   const intent = extractIntent(text);
+  const publicApiRequest = inferPublicApiRequest(text);
+  if (publicApiRequest) add("public_api_lookup", publicApiRequest);
+  const publicApiCatalogQuery = !publicApiRequest ? inferPublicApiCatalogQuery(text) : null;
+  if (publicApiCatalogQuery) add("search_public_api_catalog", publicApiCatalogQuery);
   const browserGuidance = buildBrowserUseGuidance(text);
   const reaPathMatch = text.match(/\b(?:path|target path|artifact path)\s*[:=]\s*([A-Za-z0-9._/@+-]{1,500})/i);
   if (/\b(?:rea|reverse engineer(?:ing)?|reverse[- ]engineer)\b/i.test(text) && reaPathMatch) {
@@ -475,6 +483,8 @@ const SAFE_PREPARATION_TOOLS = new Set([
   // tasks (including durable queueing, media jobs, publishing, or messaging)
   // outside this exception.
   "research_web",
+  "public_api_lookup",
+  "search_public_api_catalog",
   "create_youtube_production_plan",
   "create_spaceplanner_plan",
   "plan_employee",
@@ -619,6 +629,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "google_sheets_read", description: "Read a bounded Google Sheets A1 range (maximum 40 rows by 20 columns). Read-only; cannot write or append rows.", parameters: { type: "object", properties: { spreadsheetId: { type: "string", minLength: 10, maxLength: 120 }, sheetName: { type: "string", maxLength: 100 }, range: { type: "string", maxLength: 80 } }, required: ["spreadsheetId"], additionalProperties: false } } },
     { type: "function", function: { name: "create_youtube_production_plan", description: "Automatically draft a YouTube production package when a user requests a YouTube video/Short, channel content, cinematic story or nature Short. Produces title options, script, scene plan, visual/narration directions, SEO metadata and fact/media-rights checks. Does not generate media, use paid APIs, upload, schedule or publish; human approval remains required.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1500 }, format: { type: "string", enum: ["long_video", "short", "cinematic_mystery", "nature_short"] }, targetSeconds: { type: "integer", minimum: 15, maximum: 1200 }, language: { type: "string", maxLength: 60 }, audience: { type: "string", maxLength: 300 }, style: { type: "string", maxLength: 400 }, sceneCount: { type: "integer", minimum: 2, maximum: 30 } }, required: ["topic", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
+    { type: "function", function: { name: "public_api_lookup", description: "Read-only lookup from ULTRON’s fixed keyless public API catalog. Use for weather and air quality by city, public holiday calendars, scholarly paper search, museum artworks, currency reference rates, country facts, Wikipedia, books and ebooks, public GitHub repository metadata, sunrise/sunset, trivia, earthquakes, dictionary definitions, or public news. Supports only fixed services; never accepts arbitrary URLs or writes data.", parameters: { type: "object", properties: { service: { type: "string", enum: ["weather", "currency", "country", "wikipedia", "books", "github_repo", "sunrise_sunset", "ebooks", "trivia", "earthquakes", "dictionary", "news", "air_quality", "holidays", "research_papers", "museum_art"] }, query: { type: "string", maxLength: 220 }, countryCode: { type: "string", pattern: "^[A-Za-z]{2}$" }, year: { type: "integer", minimum: 1900, maximum: 2100 }, baseCurrency: { type: "string", pattern: "^[A-Za-z]{3}$" }, quoteCurrency: { type: "string", pattern: "^[A-Za-z]{3}$" }, amount: { type: "number", exclusiveMinimum: 0, maximum: 1000000000000 }, date: { type: "string", maxLength: 10 }, language: { type: "string", maxLength: 12 }, difficulty: { type: "string", enum: ["easy", "medium", "hard"] }, categoryId: { type: "integer", minimum: 9, maximum: 32 }, questionType: { type: "string", enum: ["multiple", "boolean"] }, period: { type: "string", enum: ["hour", "day", "week"] }, significant: { type: "boolean" }, minMagnitude: { type: "number", minimum: 0, maximum: 10 } }, required: ["service"], additionalProperties: false } } },
+    { type: "function", function: { name: "search_public_api_catalog", description: "Search ULTRON’s bundled public-apis directory (thousands of service listings) to discover providers, docs URLs, categories, and declared auth/HTTPS metadata. This is offline catalog search only: it does not call any returned endpoint or supply API keys. Prefer public_api_lookup for the fixed, tested keyless read-only data adapters.", parameters: { type: "object", properties: { query: { type: "string", maxLength: 220 }, category: { type: "string", maxLength: 120 }, authFilter: { type: "string", enum: ["any", "no_auth", "requires_auth", "unknown"] }, limit: { type: "integer", minimum: 1, maximum: 12 } }, additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search is off unless explicitly opted into.", parameters: { type: "object", properties: { includeReverseSearch: { type: "boolean", description: "Opt in to sending image-derived information to external reverse-image providers. Defaults to false." } }, additionalProperties: false } } },
@@ -679,6 +691,21 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       const baseUrl = safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
       if (baseUrl) providers.push({ name: "openrouter", baseUrl, apiKey: primaryKey, model: bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", priority: 0, supportsTools: true });
     }
+    // First-class optional OpenAI-compatible fallbacks. Credentials stay server-side.
+    // OpenRouter remains priority 0; these providers are skipped when their keys are absent.
+    const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+    if (groqKey) {
+      const baseUrl = safeBase(env.GROQ_BASE_URL || "https://api.groq.com/openai/v1");
+      const model = bounded(env.GROQ_DEFAULT_MODEL, 160) || "openai/gpt-oss-20b";
+      if (baseUrl) providers.push({ name: "groq", baseUrl, apiKey: groqKey, model, priority: 1, supportsTools: true });
+    }
+    const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+    if (geminiKey) {
+      const baseUrl = safeBase(env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai");
+      const model = bounded(env.GEMINI_DEFAULT_MODEL, 160) || "gemini-3.8-flash";
+      if (baseUrl) providers.push({ name: "gemini", baseUrl, apiKey: geminiKey, model, priority: 2, supportsTools: true });
+    }
+
     let configured = [];
     try {
       const parsed = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]");
@@ -933,7 +960,29 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       const includeReverseSearch = args.includeReverseSearch === true && /reverse[- ]image search|search similar images online|use reverse search/.test(promptText);
       return runGeoSleuthInvestigation({ imageBase64, includeReverseSearch, env });
     }
-    if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
+    if (name === "check_integrations") {
+      const integrations = buildIntegrationCatalog(env).map(item => ({
+        id: item.id,
+        name: item.name,
+        state: item.state,
+        configured: Boolean(item.configured),
+        mode: item.mode,
+        requiredEnv: Array.isArray(item.requiredEnv) ? item.requiredEnv.slice(0, 12) : [],
+        ...(Array.isArray(item.optionalEnv) && item.optionalEnv.length ? { optionalEnv: item.optionalEnv.slice(0, 8) } : {}),
+        ...(item.note ? { note: bounded(item.note, 220) } : {})
+      }));
+      return {
+        summary: {
+          total: integrations.length,
+          configured: integrations.filter(item => item.configured).length,
+          blocked: integrations.filter(item => ["blocked", "disabled", "desktop_companion_required"].includes(item.state)).length
+        },
+        integrations,
+        note: "Compact configuration-readiness snapshot only; detailed metadata is available from GET /api/integrations. Configured does not imply live-verified."
+      };
+    }
+    if (name === "public_api_lookup") return lookupPublicApi(args, { fetchImpl });
+    if (name === "search_public_api_catalog") return searchPublicApiDirectory(args);
     if (name === "check_openviking") return getOpenVikingReadiness({ env, userId: req.supabaseUser?.id });
     if (name === "openviking_find_context") return findOpenVikingContext({ env, userId: req.supabaseUser?.id, query: args.query, limit: args.limit, targetUri: args.targetUri, fetchImpl });
     if (name === "openviking_read_context") return readOpenVikingContext({ env, userId: req.supabaseUser?.id, uri: args.uri, fetchImpl });
@@ -1372,6 +1421,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "caldiy_check_availability", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.CALDIY_BASE_URL && env.CALDIY_API_TOKEN), execution: "owner_scoped_read_only_availability_check_never_books" },
         { name: "create_youtube_production_plan", available: true, execution: "draft_script_scenes_seo_metadata_and_rights_checklist_no_media_generation_or_publish" },
         { name: "research_web", available: true, configured: Boolean(env.TAVILY_API_KEY), fallback: "public search HTML" },
+        { name: "public_api_lookup", available: true, requiresApiKey: false, services: getPublicApiCatalog().map(item => item.id), execution: "fixed_allowlist_public_read_only_queries_no_arbitrary_urls" },
+        { name: "search_public_api_catalog", available: true, requiresApiKey: false, ...getPublicApiDirectoryStats(), execution: "local_catalog_metadata_search_no_network_calls" },
         { name: "plan_employee", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env)), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "create_spaceplanner_plan", available: true, execution: "automatic_spaceplanner_compatible_json_and_editor_link_no_external_save" },

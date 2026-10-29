@@ -10,6 +10,7 @@ import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
+import { createVideoStudioRouter } from "./video-studio.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveStrataProvider } from "./integrations/strata.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
@@ -398,12 +399,28 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     const worldIntelligence = req.path === "/world-intelligence" || req.path.startsWith("/world-intelligence/");
     if (worldIntelligence) res.removeHeader("X-Frame-Options");
     else res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
+    res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
     res.setHeader("Content-Security-Policy", worldIntelligence
       ? "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' blob: https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https: wss: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
-      : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+      : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://upload.wikimedia.org https://cdn.pixabay.com https://pixabay.com https://www.pixabay.com https://images.pexels.com https://videos.pexels.com; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob: https://upload.wikimedia.org https://cdn.pixabay.com https://pixabay.com https://www.pixabay.com https://images.pexels.com https://videos.pexels.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     next();
   });
+
+  // Serve the first-party Living Core UI from the same origin as the authenticated API.
+  // Static serving falls through so existing /api routes and health checks are unchanged.
+  const publicDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+  app.use(express.static(publicDirectory, {
+    index: "index.html",
+    dotfiles: "deny",
+    fallthrough: true,
+    redirect: false,
+    maxAge: env.NODE_ENV === "production" ? 300_000 : 0,
+    setHeaders(res, filePath) {
+      if (path.basename(filePath) === "index.html") res.setHeader("Cache-Control", "no-store");
+      else if (env.NODE_ENV === "production") res.setHeader("Cache-Control", "public, max-age=300");
+      else res.setHeader("Cache-Control", "no-store");
+    }
+  }));
 
   const apiRateLimiter = createApiRateLimiter({
     windowMs: Math.max(10_000, Number(env.RATE_LIMIT_WINDOW_MS) || 60_000),
@@ -1918,6 +1935,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createVideoStudioRouter({ env, fetchImpl, requireSupabaseUser, logger }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
@@ -1935,6 +1953,15 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
   });
+  // Video Studio is a first-party workspace mounted on the same ULTRON server.
+  const videoStudioDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "video-studio");
+  app.get(["/studio", "/studio/"], (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    return res.sendFile(path.join(videoStudioDir, "index.html"));
+  });
+  app.use("/studio/static", express.static(videoStudioDir, {
+    index: false, dotfiles: "deny", etag: true, maxAge: 0
+  }));
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();
     if (err?.type === "entity.too.large") return res.status(413).json({ error: { code: "BODY_TOO_LARGE", message: "Request body is too large." } });

@@ -15,6 +15,7 @@ services:
         - "package.json"
         - "package-lock.json"
         - "public/**"
+        - "video-studio/**"
         - "supabase/migrations/**"
       ignoredPaths:
         - "tests/**"
@@ -39,6 +40,18 @@ services:
         value: "60"
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: GROQ_DEFAULT_MODEL
+        value: openai/gpt-oss-20b
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: GEMINI_DEFAULT_MODEL
+        value: gemini-3.8-flash
       - key: OPENVIKING_BASE_URL
         sync: false
       - key: OPENVIKING_API_TOKEN
@@ -100,6 +113,10 @@ services:
       - key: LOCAL_MODEL_TIMEOUT_SECONDS
         value: "90"
       - key: TAVILY_API_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: PIXABAY_API_KEY
         sync: false
       - key: FISH_API_KEY
         sync: false

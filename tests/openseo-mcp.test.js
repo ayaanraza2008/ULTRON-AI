@@ -39,10 +39,17 @@ function mcpFetchStub({ projectResult = { projects: [] }, tools = ["list_project
 }
 
 test("OpenSEO is optional and readiness never exposes the API key", () => {
-  const readiness = getOpenSeoReadiness({});
-  assert.equal(readiness.configured, false);
-  assert.equal(readiness.state, "optional");
-  assert.equal(JSON.stringify(readiness).includes("oseo_"), false);
+  const absent = getOpenSeoReadiness({});
+  assert.equal(absent.configured, false);
+  assert.equal(absent.state, "optional");
+  const sentinel = "oseo_private_test_secret_123456789";
+  const configured = getOpenSeoReadiness({
+    OPENSEO_API_KEY: sentinel,
+    OPENSEO_MCP_URL: "https://app.openseo.so/mcp",
+    ULTRON_INTEGRATION_OWNER_USER_ID: owner
+  });
+  assert.equal(configured.configured, true);
+  assert.equal(JSON.stringify(configured).includes(sentinel), false);
 });
 
 test("OpenSEO blocks non-owner and missing key before outbound calls", async () => {

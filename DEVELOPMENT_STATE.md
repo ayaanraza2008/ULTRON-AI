@@ -144,3 +144,10 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Supabase project `opdjfhwepmcprbqojpat` remains `ACTIVE_HEALTHY`. Migration `private_document_storage` is applied at version `20261027185203`; read-only checks confirm private bucket, 5 MiB limit, RLS, and authenticated grants. Real authenticated file E2E is still unverified.
 - Latest code changes improve source-level safety and test coverage; they do not resolve the external blockers for Render build quota, live provider inference, dedicated Auth/RLS E2E accounts, the leaked-password-protection dashboard setting, or physical Windows companion verification.
 - Autonomy regression coverage includes SMS/texts, replies/messages to personal recipients, forwarded notes, and an explicit draft-only exception; a mixed request that also asks to publish remains confirmation-gated.
+
+## 2026-10-29 rebased integration candidate
+
+- This candidate is based on current `main` commit `de706ddafe0dd37dea1e3f12d8859a6aabb3e587`, preserving the existing Strata work while adding the same-origin Living Core UI, local-first Video Studio, optional Groq/Gemini fallbacks, fixed public-API adapters, local assistant and AI Employees runtime.
+- The UI/static and Studio routes are mounted in `server.js`; external media preview hosts are narrowly scoped in CSP while API `connect-src` remains self-only. Studio uses loopback-only mode in its local launcher and authenticated per-user project storage in hosted mode.
+- Combined CI and runtime smoke tests are still required. Live provider calls, OAuth, browser/microphone checks, cross-account isolation, PC-local Ollama actions, and an authorized sample render are not yet verified. The deployment manifest changes are source-only; no Render settings or production deployment were changed.
+- Supabase leaked-password protection still requires the project owner to enable the dashboard setting. Deployment remains intentionally last after candidate tests and UI review.
