@@ -22,6 +22,11 @@ const CATEGORY_TOOLS = Object.freeze({
     "openproject_list_work_packages", "caldiy_list_event_types",
     "caldiy_check_availability"
   ],
+  google_workspace: [
+    "google_workspace_status", "google_gmail_list_unread", "google_gmail_search",
+    "google_calendar_get_events", "google_drive_list_files", "google_drive_read_doc",
+    "google_sheets_read"
+  ],
   planning: ["plan_employee", "enqueue_employee_task", "create_youtube_production_plan"],
   youtube: ["create_youtube_production_plan", "research_web"],
   geolocation: ["geo_sleuth_investigate", "research_web"],
@@ -49,6 +54,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["hermes", /\b(?:hermes agent|run hermes|hermes task)\b/i],
   ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
   ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
+  ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
   ["productivity", /\b(?:chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
   ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
   ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
