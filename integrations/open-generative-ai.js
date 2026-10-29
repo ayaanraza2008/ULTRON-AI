@@ -190,7 +190,7 @@ async function readLimitedText(response) {
   if(!reader)throw fail("MUAPI_RESPONSE_UNSAFE","MuAPI response could not be size-limited safely.",502);
   const decoder=new TextDecoder();let size=0,text="";
   try{
-    while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>MAX_RESPONSE_BYTES){try{await reader.cancel();}catch{}throw fail("MUAPI_RESPONSE_TOO_LARGE","MuAPI response exceeded ULTRON's size limit.",502);}text+=decoder.decode(value,{stream:true);}
+    while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>MAX_RESPONSE_BYTES){try{await reader.cancel();}catch{}throw fail("MUAPI_RESPONSE_TOO_LARGE","MuAPI response exceeded ULTRON's size limit.",502);}text+=decoder.decode(value,{stream:true});}
     return text+decoder.decode();
   }finally{try{reader.releaseLock();}catch{}}
 }
