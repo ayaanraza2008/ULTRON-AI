@@ -35,7 +35,13 @@ test("capability router matches distinct task domains automatically", () => {
 test("new screenshot repositories have explicit safe/unverified states", () => {
   const status = getRepositoryCapabilityStatus({});
   const byId = Object.fromEntries(status.integrations.map(item => [item.id, item]));
-  assert.equal(byId["heretic"].state, "review_required_upstream_unverified");
+  assert.equal(byId["heretic"].state, "review_required_license_and_resource_gate");
+  assert.equal(byId["open-generative-ai"].state, "adapter_not_implemented");
+  assert.equal(byId["agency-agents"].state, "guidance_only");
+  assert.equal(byId["jcode"].state, "local_cli_runtime_required");
+  assert.equal(byId["open-generative-ai"].repo, "Anil-matcha/Open-Generative-AI");
+  assert.equal(byId["agency-agents"].repo, "msitarzewski/agency-agents");
+  assert.equal(byId["jcode"].repo, "1jehuang/jcode");
   assert.equal(byId["atticus-mac"].state, "desktop_companion_required");
   assert.equal(byId["ecc"].state, "task_aware_skill_selector");
   assert.equal(byId["strata"].state, "optional");
@@ -51,7 +57,7 @@ test("new screenshot repositories have explicit safe/unverified states", () => {
   const configuredStrata = getRepositoryCapabilityStatus({ STRATA_BASE_URL: "http://127.0.0.1:8080/v1", STRATA_MODEL: "local-model" }).integrations.find(item => item.id === "strata");
   assert.equal(configuredStrata.state, "configured_unverified");
   assert.equal(configuredStrata.configured, true);
-  for (const id of ["free-cloud-code", "not-ai", "jcode", "open-generative-ai", "dramadaw", "opendudley", "agency-agents"]) {
+  for (const id of ["free-cloud-code", "not-ai", "dramadaw", "opendudley"]) {
     assert.equal(byId[id].state, "review_required_upstream_unverified", id);
   }
   assert.equal(byId["chrome-devtools"].state, "blocked");
