@@ -6,11 +6,6 @@ import JSZip from "jszip";
 import { deflateRawSync } from "node:zlib";
 import { createFeatureRouter } from "../features.js";
 
-function assertEncodedPdfText(pdf, text) {
-  const encoded = Buffer.from(text, "ascii").toString("hex").toUpperCase();
-  assert.ok(pdf.toString("ascii").includes(encoded), "PDF should contain encoded text: " + text);
-}
-
 async function withServer(env, run, extras = {}) {
   const app = express();
   app.use(express.json());
@@ -1694,7 +1689,7 @@ test("authenticated report PDF endpoint returns a readable transient attachment"
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.match(bytes.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d$/);
-    const parsed = await pdfParse(bytes);
+    const parsed = await pdfParse(bytes, { version: "v2.0.550" });
     assert.match(parsed.text, /ULTRON Verification Report/);
     assert.match(parsed.text, /source test suite passed/);
     assert.match(parsed.text, /two-account database checks remain/);
