@@ -386,6 +386,7 @@ function configured(record, env) {
   if (record.id === "open-seo") return getOpenSeoReadiness(env).configured;
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
+  if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
   if (!keys.length) return null;
   return keys.every(key => typeof env[key] === "string" && env[key].trim().length > 0 && (!["GEO_SLEUTH_ENABLED"].includes(key) || env[key] === "true"));
@@ -393,6 +394,7 @@ function configured(record, env) {
 
 function stateFor(record, env) {
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
+  if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-seo") {
     const readiness = getOpenSeoReadiness(env);
