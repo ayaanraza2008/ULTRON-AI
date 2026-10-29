@@ -123,7 +123,7 @@ export async function runCodeInSandbox({ env = process.env, userId, language, so
     id = String(created.stdout || "").trim();
     if (!/^[a-f0-9]{12,64}$/i.test(id)) return { runId, state: "failed", code: "SANDBOX_CREATE_FAILED", execution: "not_executed" };
     try {
-      const out = await call(["start", "--attach", "--sig-proxy=true", id], budget + 1000);
+      const out = await call(["start", "--attach", id], budget + 1000);
       const stdout = boundedOutput(out.stdout), stderr = boundedOutput(out.stderr);
       return { runId, state: "completed", success: true, exitCode: 0, language, stdout: stdout.text, stderr: stderr.text, outputTruncated: stdout.truncated || stderr.truncated, timeoutMs: budget, execution: "restricted_local_container", limits: { network: "none", memoryMb: 256, cpuCores: 0.5, pids: 48 } };
     } catch (error) {
