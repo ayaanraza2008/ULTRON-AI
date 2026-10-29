@@ -1022,14 +1022,22 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
   });
 });
 
-test("chat fails over from OpenRouter through Groq to Gemini using server-side keys", async () => {
+test("chat tries registry providers before direct-key billing-dependent fallbacks", async () => {
   const calls = [];
   const providerEnv = {
     ...env,
     GROQ_API_KEY: "groq-test-secret",
     GROQ_DEFAULT_MODEL: "openai/gpt-oss-20b",
     GEMINI_API_KEY: "gemini-test-secret",
-    GEMINI_DEFAULT_MODEL: "gemini-3.8-flash"
+    GEMINI_DEFAULT_MODEL: "gemini-3.8-flash",
+    REGISTRY_API_KEY: "registry-test-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "registry-alternative",
+      baseUrl: "https://registry-provider.com/v1",
+      apiKeyEnv: "REGISTRY_API_KEY",
+      model: "registry-model",
+      priority: 20
+    }])
   };
   const app = createApp({
     env: providerEnv,
@@ -1037,6 +1045,9 @@ test("chat fails over from OpenRouter through Groq to Gemini using server-side k
       calls.push({ url, authorization: options.headers.Authorization, model: JSON.parse(options.body).model });
       if (url === "https://openrouter.ai/api/v1/chat/completions") {
         return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+      }
+      if (url === "https://registry-provider.com/v1/chat/completions") {
+        return new Response(JSON.stringify({ error: { message: "registry fallback unavailable" } }), { status: 503 });
       }
       if (url === "https://api.groq.com/openai/v1/chat/completions") {
         return new Response(JSON.stringify({ error: { message: "temporarily unavailable" } }), { status: 503 });
@@ -1059,19 +1070,25 @@ test("chat fails over from OpenRouter through Groq to Gemini using server-side k
     assert.equal(response.status, 200);
     assert.equal((await response.json()).content, "Gemini fallback completed.");
     const providerUrls = calls.map(call => call.url);
-    assert.ok(providerUrls.length >= 3, "primary and fallback providers should be attempted");
-    assert.ok(providerUrls.slice(0, -2).every(url => url === "https://openrouter.ai/api/v1/chat/completions"),
+    assert.ok(providerUrls.length >= 4, "primary and fallback providers should be attempted");
+    const registryUrl = "https://registry-provider.com/v1/chat/completions";
+    const registryIndex = providerUrls.indexOf(registryUrl);
+    assert.ok(registryIndex > 0, "OpenRouter model candidates should be attempted first");
+    assert.ok(providerUrls.slice(0, registryIndex).every(url => url === "https://openrouter.ai/api/v1/chat/completions"),
       "the primary may retry configured OpenRouter models before switching providers");
-    assert.deepEqual(providerUrls.slice(-2), [
+    assert.deepEqual(providerUrls.slice(registryIndex), [
+      registryUrl,
       "https://api.groq.com/openai/v1/chat/completions",
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
     ]);
-    assert.ok(calls.slice(0, -2).every(call => call.authorization === "Bearer test-key"));
-    assert.deepEqual(calls.slice(-2).map(call => call.authorization), [
+    assert.ok(calls.slice(0, registryIndex).every(call => call.authorization === "Bearer test-key"));
+    assert.deepEqual(calls.slice(registryIndex).map(call => call.authorization), [
+      "Bearer registry-test-secret",
       "Bearer groq-test-secret",
       "Bearer gemini-test-secret"
     ]);
-    assert.deepEqual(calls.slice(-2).map(call => call.model), [
+    assert.deepEqual(calls.slice(registryIndex).map(call => call.model), [
+      "registry-model",
       "openai/gpt-oss-20b",
       "gemini-3.8-flash"
     ]);
