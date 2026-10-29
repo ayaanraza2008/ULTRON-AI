@@ -264,6 +264,10 @@ test("ComfyUI cancellation rejects unsafe prompt ids", async () => {
 
 test("integration catalog reports readiness without exposing credentials or claiming connectivity", async () => {
   await withServer({
+    REA_MCP_ENABLED: "true",
+    REA_MCP_URL: "https://rea.example.com/mcp",
+    REA_MCP_TOKEN: "rea-test-secret",
+    REA_ANALYSIS_ROOT: "/srv/rea/targets",
     ULTRON_EMPLOYEES_ENABLED: "true",
     COMFYUI_BASE_URL: "https://comfy.example.com",
     COMFYUI_API_KEY: "secret-comfy-test",
@@ -279,9 +283,14 @@ test("integration catalog reports readiness without exposing credentials or clai
     const comfy = body.integrations.find(item => item.id === "comfyui");
     const voice = body.integrations.find(item => item.id === "omnivoice");
     const employees = body.integrations.find(item => item.id === "ai-employees");
+    const rea = body.integrations.find(item => item.id === "rea-reverse-engineering");
+    assert.equal(rea.state, "configured_unverified");
+    assert.equal(rea.configured, true);
     assert.equal(comfy.state, "configured_unverified");
     assert.equal(voice.configured, true);
     assert.equal(employees.state, "enabled_guarded_templates");
+    assert.equal(JSON.stringify(body).includes("rea-test-secret"), false);
+    assert.equal(JSON.stringify(body).includes("/srv/rea/targets"), false);
     assert.equal(JSON.stringify(body).includes("secret-comfy-test"), false);
     assert.equal(JSON.stringify(body).includes("secret-voice-test"), false);
   });

@@ -283,6 +283,70 @@ test("Cactus low-confidence answers fall back to the next configured provider", 
   });
 });
 
+test("agent forwards REA network-capture tool arguments through its owner-scoped MCP adapter", async () => {
+  let modelCalls = 0;
+  let captureCalls = 0;
+  const mcpMethods = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    REA_MCP_ENABLED: "true",
+    REA_MCP_URL: "http://127.0.0.1:8080/mcp",
+    REA_ANALYSIS_ROOT: "/srv/rea/targets"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      modelCalls++;
+      if (modelCalls === 1) return new Response(JSON.stringify({ choices: [{ message: {
+        role: "assistant", content: null,
+        tool_calls: [{ id: "rea-capture-call", type: "function", function: {
+          name: "rea_inspect_web_network_capture",
+          arguments: JSON.stringify({ path: "captures/session.har", format: "har", recordOrdinals: [0], sensitiveValues: ["session-secret"] })
+        } }]
+      } }] }), { status: 200 });
+      const body = JSON.parse(options.body);
+      assert.ok(body.messages.some(m => m.role === "tool" && String(m.content).includes("Offline capture inspected")));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The authorized capture was inspected offline." } }] }), { status: 200 });
+    }
+    assert.equal(url, "http://127.0.0.1:8080/mcp");
+    const payload = JSON.parse(options.body);
+    mcpMethods.push(payload.method);
+    if (payload.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: {
+        protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "rea", version: "test" }
+      } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-rea-agent" } });
+    }
+    if (payload.method === "notifications/initialized") {
+      return new Response(null, { status: 202, headers: { "Mcp-Session-Id": "session-rea-agent" } });
+    }
+    assert.equal(payload.method, "tools/call");
+    assert.equal(payload.params.name, "inspect_web_network_capture");
+    assert.deepEqual(payload.params.arguments, {
+      capture_path: "/srv/rea/targets/captures/session.har",
+      format: "har",
+      detail: "complete",
+      sensitive_values: ["session-secret"],
+      record_ordinals: [0]
+    });
+    captureCalls++;
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: {
+      structuredContent: { summary: "Offline capture inspected" }
+    } }), { status: 200, headers: { "Content-Type": "application/json", "Mcp-Session-Id": "session-rea-agent" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Inspect this offline network capture." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.content, "The authorized capture was inspected offline.");
+    assert.ok(body.toolsUsed.some(item => item.name === "rea_inspect_web_network_capture" && item.ok));
+    assert.equal(captureCalls, 1);
+    assert.deepEqual(mcpMethods, ["initialize", "notifications/initialized", "tools/call"]);
+    assert.equal(JSON.stringify(body).includes("session-secret"), false);
+  });
+});
+
 test("agent automatically routes explicit Obscura requests to a public-page snapshot", async () => {
   const modelCalls = [];
   const mcpCalls = [];
