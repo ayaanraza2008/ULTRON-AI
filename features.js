@@ -1537,6 +1537,146 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     }
   });
 
+
+  const REMINDER_STATUSES = new Set(["scheduled", "completed", "cancelled"]);
+  const reminderIdIsValid = value => typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  const parseExplicitReminderTimestamp = value => {
+    if (typeof value !== "string"
+      || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(value)) return null;
+    const milliseconds = Date.parse(value);
+    return Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : null;
+  };
+
+  router.get("/reminders", requireSupabaseUser, async (req, res) => {
+    const status = typeof req.query.status === "string" ? req.query.status : "scheduled";
+    if (status !== "all" && !REMINDER_STATUSES.has(status)) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_STATUS", message: "Reminder status must be scheduled, completed, cancelled or all." } });
+    }
+    const rawLimit = Number.parseInt(String(req.query.limit || "30"), 10);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 50)) : 30;
+    const statusFilter = status === "all" ? "" : "&status=eq." + encodeURIComponent(status);
+    try {
+      const rows = await supabaseRest(req, "user_reminders", "GET",
+        "?select=id,title,body,due_at,status,created_at,updated_at&user_id=eq."
+        + encodeURIComponent(req.supabaseUser.id) + statusFilter
+        + "&order=due_at.asc&limit=" + limit);
+      return res.json({ reminders: Array.isArray(rows) ? rows : [] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "REMINDERS_READ_FAILED", message: "Reminders are temporarily unavailable." } });
+    }
+  });
+
+  router.post("/reminders", requireSupabaseUser, async (req, res) => {
+    const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+    if (Object.keys(body).some(key => !["title", "body", "dueAt"].includes(key))) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_FIELDS", message: "Only title, body and dueAt can be set." } });
+    }
+    if (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 200) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_TITLE", message: "Reminder title must be 1-200 characters." } });
+    }
+    if (body.body !== undefined && (typeof body.body !== "string" || body.body.trim().length > 2000)) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_BODY", message: "Reminder details must be at most 2,000 characters." } });
+    }
+    const dueAt = parseExplicitReminderTimestamp(body.dueAt);
+    if (!dueAt || Date.parse(dueAt) <= Date.now()) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_DUE_AT", message: "Provide a future ISO 8601 dueAt value ending in Z or an explicit UTC offset." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "user_reminders", "POST", "", {
+        user_id: req.supabaseUser.id,
+        title: body.title.trim(),
+        body: typeof body.body === "string" ? body.body.trim() : "",
+        due_at: dueAt,
+        status: "scheduled"
+      });
+      if (!Array.isArray(rows) || !rows[0]?.id) {
+        return res.status(502).json({ error: { code: "REMINDER_SAVE_UNCONFIRMED", message: "The database did not confirm that the reminder was saved." } });
+      }
+      return res.status(201).json({ reminder: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "REMINDER_SAVE_FAILED", message: "The reminder could not be saved." } });
+    }
+  });
+
+  router.get("/reminders/:id", requireSupabaseUser, async (req, res) => {
+    if (!reminderIdIsValid(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_ID", message: "Reminder ID is invalid." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "user_reminders", "GET",
+        "?select=id,title,body,due_at,status,created_at,updated_at&id=eq."
+        + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "REMINDER_NOT_FOUND", message: "Reminder was not found." } });
+      return res.json({ reminder: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "REMINDER_READ_FAILED", message: "The reminder is temporarily unavailable." } });
+    }
+  });
+
+  router.patch("/reminders/:id", requireSupabaseUser, async (req, res) => {
+    if (!reminderIdIsValid(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_ID", message: "Reminder ID is invalid." } });
+    }
+    const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+    const allowed = new Set(["title", "body", "dueAt", "status"]);
+    if (!Object.keys(body).length || Object.keys(body).some(key => !allowed.has(key))) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_UPDATE", message: "Provide a supported reminder field to update." } });
+    }
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(body, "title")) {
+      if (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 200) {
+        return res.status(400).json({ error: { code: "INVALID_REMINDER_TITLE", message: "Reminder title must be 1-200 characters." } });
+      }
+      patch.title = body.title.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "body")) {
+      if (typeof body.body !== "string" || body.body.trim().length > 2000) {
+        return res.status(400).json({ error: { code: "INVALID_REMINDER_BODY", message: "Reminder details must be at most 2,000 characters." } });
+      }
+      patch.body = body.body.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "dueAt")) {
+      const dueAt = parseExplicitReminderTimestamp(body.dueAt);
+      if (!dueAt || Date.parse(dueAt) <= Date.now()) {
+        return res.status(400).json({ error: { code: "INVALID_REMINDER_DUE_AT", message: "A rescheduled reminder must have a future ISO 8601 dueAt value with an explicit timezone." } });
+      }
+      patch.due_at = dueAt;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "status")) {
+      if (!REMINDER_STATUSES.has(body.status)) {
+        return res.status(400).json({ error: { code: "INVALID_REMINDER_STATUS", message: "Reminder status must be scheduled, completed or cancelled." } });
+      }
+      if (body.status === "scheduled" && !patch.due_at) {
+        return res.status(400).json({ error: { code: "REMINDER_RESCHEDULE_REQUIRED", message: "Set a future dueAt value when rescheduling a reminder." } });
+      }
+      patch.status = body.status;
+    }
+    try {
+      const rows = await supabaseRest(req, "user_reminders", "PATCH",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id),
+        patch);
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "REMINDER_NOT_FOUND", message: "Reminder was not found." } });
+      return res.json({ reminder: rows[0] });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "REMINDER_UPDATE_FAILED", message: "The reminder could not be updated." } });
+    }
+  });
+
+  router.delete("/reminders/:id", requireSupabaseUser, async (req, res) => {
+    if (!reminderIdIsValid(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_REMINDER_ID", message: "Reminder ID is invalid." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "user_reminders", "DELETE",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id));
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "REMINDER_NOT_FOUND", message: "Reminder was not found." } });
+      return res.json({ deleted: true, id: rows[0].id });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "REMINDER_DELETE_FAILED", message: "The reminder could not be deleted." } });
+    }
+  });
+
   router.get("/tasks", requireSupabaseUser, async (req, res) => {
     try {
       const rows = await supabaseRest(req, "agent_tasks", "GET", "?select=id,title,input,status,result,error_code,started_at,finished_at,created_at,updated_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&order=created_at.desc&limit=50");
