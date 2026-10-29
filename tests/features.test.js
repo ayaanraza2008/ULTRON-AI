@@ -494,8 +494,7 @@ test("premium speech endpoints fail clearly when no provider is configured", asy
 test("Fish Audio synthesis uses the configured voice model ID and server-only key", async () => {
   const calls = [];
   const env = {
-    FISH_API_KEY: "synthetic-fish-secret",
-    FISH_AUDIO_VOICE_MODEL_ID: "7a18a1851d2649108c48ec9f2c80eb2c"
+    FISH_API_KEY: "synthetic-fish-secret"
   };
   await withServer(env, async base => {
     const response = await fetch(base + "/api/speech/synthesize", {
@@ -515,11 +514,11 @@ test("Fish Audio synthesis uses the configured voice model ID and server-only ke
     assert.equal(options.headers.Authorization, "Bearer synthetic-fish-secret");
     assert.equal(options.headers.model, "s2.1-pro-free");
     const body = JSON.parse(options.body);
-    assert.equal(body.text, "[confident][calm, deep male voice, resonant baritone, authoritative, smooth and controlled delivery, crisp diction] Hello ULTRON");
-    assert.equal(body.reference_id, "7a18a1851d2649108c48ec9f2c80eb2c");
+    assert.equal(body.text, "[natural conversational delivery, deep warm Indian male voice, resonant baritone, calm and authoritative, precise Hindi and English pronunciation, measured pace, natural pauses, subtle emphasis] Hello ULTRON");
+    assert.equal(body.reference_id, "db9ad6eb7fb84294b2046cf05ef64718");
     assert.equal(body.format, "mp3");
     assert.equal(body.latency, "balanced");
-    assert.deepEqual(body.prosody, { speed: 1.12, volume: 0, normalize_loudness: true });
+    assert.deepEqual(body.prosody, { speed: 1.05, volume: 0, normalize_loudness: true });
     assert.equal(JSON.stringify(body).includes("synthetic-fish-secret"), false);
     return new Response(Buffer.from("fake-fish-mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
   }});
