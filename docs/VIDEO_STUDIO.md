@@ -54,7 +54,8 @@ Project data defaults to .local/video-studio/; override it with ULTRON_VIDEO_STU
 | OPENROUTER_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, ULTRON_MODEL_PROVIDERS_JSON | Optional model providers for production concepts and scripts |
 | TAVILY_API_KEY | Enables web research |
 | PEXELS_API_KEY, PIXABAY_API_KEY | Enable stock-video and still-image search |
-| VOICESTUDIO_BASE_URL, VOICESTUDIO_API_KEY | VoiceStudio TTS and transcription endpoint. On the same PC, local mode can call http://localhost:3900. |\n| STT_API_BASE_URL, STT_API_KEY, STT_MODEL | OpenAI-compatible STT base URL (usually ending in /v1), key, and model when VoiceStudio isn't used |
+| VOICESTUDIO_BASE_URL, VOICESTUDIO_API_KEY | VoiceStudio TTS and transcription endpoint. On the same PC, local mode can call http://localhost:3900. |
+| STT_API_BASE_URL, STT_API_KEY, STT_MODEL | OpenAI-compatible STT base URL (usually ending in /v1), key, and model when VoiceStudio isn't used |
 | TTS_API_BASE_URL, TTS_API_KEY, TTS_MODEL, TTS_DEFAULT_VOICE | Compatible OpenAI-style speech endpoint when VoiceStudio is not used |
 | ULTRON_STUDIO_AI_COST_PER_1K_TOKENS_USD | Optional configured unit rate used to estimate AI cost |
 | ULTRON_STUDIO_TTS_COST_PER_1K_CHARS_USD | Optional configured unit rate used to estimate TTS cost |
