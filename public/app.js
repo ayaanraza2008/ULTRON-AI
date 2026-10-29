@@ -2851,7 +2851,7 @@
       drawerButton("EXPORT PDF", () => {
         const sections = [
           { heading: "Summary", content: String(content.summary || "") },
-          { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\\n") }
+          { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\n") }
         ];
         (Array.isArray(content.flashcards) ? content.flashcards : []).slice(0, 12).forEach((item, index) => {
           sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\\nAnswer: " + String(item.answer || "") });
@@ -2864,7 +2864,7 @@
       drawerButton("EXPORT POWERPOINT", () => {
         const sections = [
           { heading: "Summary", content: String(content.summary || "") },
-          { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\\n") }
+          { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\n") }
         ];
         (Array.isArray(content.flashcards) ? content.flashcards : []).slice(0, 10).forEach((item, index) => {
           sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\\nAnswer: " + String(item.answer || "") });
