@@ -152,19 +152,21 @@ def _available_memory_bytes() -> int | None:
                 return int(status.ullAvailPhys)
         except Exception:
             return None
-    try:
-        page_size = os.sysconf("SC_PAGE_SIZE")
-        available_pages = os.sysconf("SC_AVPHYS_PAGES")
-        if page_size and available_pages:
-            return int(page_size * available_pages)
-    except (AttributeError, OSError, ValueError):
-        pass
+    # Prefer MemAvailable on Linux: SC_AVPHYS_PAGES can report only free pages
+    # and would incorrectly count reclaimable file cache as occupied memory.
     try:
         with open("/proc/meminfo", "r", encoding="ascii") as handle:
             for line in handle:
                 if line.startswith("MemAvailable:"):
                     return int(line.split()[1]) * 1024
     except (OSError, ValueError, IndexError):
+        pass
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        available_pages = os.sysconf("SC_AVPHYS_PAGES")
+        if page_size and available_pages:
+            return int(page_size * available_pages)
+    except (AttributeError, OSError, ValueError):
         pass
     return None
 
