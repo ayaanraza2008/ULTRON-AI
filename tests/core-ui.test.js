@@ -270,7 +270,8 @@ test("voice quality panel reports Fish Audio readiness and can preview Hindi and
   assert.ok(app.includes('drawerButton("AUTO · HINDI + ENGLISH"'));
   assert.ok(app.includes('drawerButton("HINDI · hi-IN"'));
   assert.ok(app.includes('drawerButton("ENGLISH · en-IN"'));
-  assert.ok(app.includes("For Hindi-English replies, write Hindi words in Devanagari and English words in Latin script"));
+  assert.ok(app.includes("Kamal · deep Indian male · Hindi-English"));
+  assert.ok(app.includes("Auto recognition uses Fish Audio transcription when configured"));
   assert.ok(app.includes("मैं हिंदी और English दोनों में जवाब दूँगा"));
 });
 
