@@ -1,0 +1,108 @@
+// Friday-inspired deterministic routing for ULTRON's existing allowlisted agent tools.
+// Tool schemas are narrowed only for a single, high-confidence intent. Compound or
+// ambiguous requests keep the full allowlist so a narrow classifier cannot strand work.
+const CATEGORY_TOOLS = Object.freeze({
+  voice: [
+    "clone_speech_voice", "design_speech_voice", "describe_speech_voice",
+    "list_speech_voices", "synthesize_speech", "transcribe_audio",
+    "create_talking_avatar"
+  ],
+  research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
+  browser: ["browser_use", "research_web", "obscura_inspect_public_page", "obscura_capture_public_page"],
+  coding: ["coding_assist", "check_repository_capabilities", "check_openviking", "openviking_find_context", "openviking_read_context"],
+  memory: ["check_openviking", "openviking_find_context", "openviking_read_context"],
+  integrations: [
+    "check_integrations", "check_cactus", "check_desktop_companion",
+    "check_openviking", "check_hermes_agent", "check_comfyui",
+    "check_repository_capabilities", "paperclip_read_agent_governance"
+  ],
+  desktop: ["check_desktop_companion"],
+  productivity: [
+    "chatwoot_list_conversations", "openproject_list_projects",
+    "openproject_list_work_packages", "caldiy_list_event_types",
+    "caldiy_check_availability"
+  ],
+  planning: ["plan_employee", "enqueue_employee_task", "create_youtube_production_plan"],
+  youtube: ["create_youtube_production_plan", "research_web"],
+  geolocation: ["geo_sleuth_investigate", "research_web"],
+  spaceplanner: ["create_spaceplanner_plan"],
+  world_intelligence: ["world_intelligence_command"],
+  paperclip: ["paperclip_read_agent_governance"],
+  hermes: ["check_hermes_agent", "hermes_agent_task"],
+  cactus: ["check_cactus"],
+  comfyui: ["check_comfyui", "run_comfyui_workflow"],
+  media: [
+    "create_youtube_production_plan", "check_comfyui", "run_comfyui_workflow",
+    "create_talking_avatar", "design_speech_voice", "synthesize_speech"
+  ]
+});
+
+const CATEGORY_PATTERNS = Object.freeze([
+  ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|voice studio|voicestudio)\b/i],
+  ["browser", /\b(?:browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
+  ["geolocation", /\b(?:geolocat(?:e|ion)|where was this photo taken|photo location|identify (?:this )?location from (?:the )?(?:photo|image)|geo[- ]sleuth)\b/i],
+  ["spaceplanner", /\b(?:floor plan|house plan|room layout|interior layout|spaceplanner|space planner)\b/i],
+  ["world_intelligence", /\b(?:god'?s eye|world intelligence|live globe|earthquake map|live flights|vessel tracking)\b/i],
+  ["youtube", /\b(?:youtube|video production plan|scene plan|thumbnail prompt|shorts script)\b/i],
+  ["comfyui", /\b(?:comfyui|workflow json|image workflow|render an image|run the workflow)\b/i],
+  ["paperclip", /\b(?:paperclip|agent governance|agent roster|agent budget|monthly agent cost)\b/i],
+  ["hermes", /\b(?:hermes agent|run hermes|hermes task)\b/i],
+  ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
+  ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
+  ["productivity", /\b(?:chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
+  ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
+  ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
+  ["research", /\b(?:research|look up|search the web|search online|latest (?:news|information|release)|find sources|fact check|current information)\b/i],
+  ["integrations", /\b(?:integration status|check integrations|what integrations|connected services|capability status|provider status|list capabilities)\b/i],
+  ["planning", /\b(?:plan (?:my|the|a|an)|create a plan|multi[- ]step task|schedule (?:a|an|the) (?:task|employee|routine)|background task|enqueue task|run this in the background)\b/i],
+  ["browser", /\b(?:obscura|public web page snapshot|capture this public page)\b/i],
+  ["media", /\b(?:talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
+]);
+
+const COMPLEX_PATTERN = /\b(?:then|after that|step by step|multi[- ]step|end to end|from scratch|complete project|across multiple|and also|and then|first .* then|workflow|autonomously)\b/i;
+const ACTION_PATTERN = /\b(?:build|create|write|fix|debug|implement|run|execute|schedule|send|publish|book|delete|change|update|research|search|open|inspect|transcribe|generate|plan|connect|integrate|check|analyze|analyse|summarize|compare|calculate|find)\b/i;
+const SIMPLE_PATTERN = /^(?:hi|hello|hey|good morning|good afternoon|good evening|thanks|thank you|who are you|what can you do|what is [\s\S]+|what's [\s\S]+|define [\s\S]+|explain [\s\S]+|tell me about [\s\S]+|how does [\s\S]+ work|why is [\s\S]+)\??[.! ]*$/i;
+const VAGUE_PATTERN = /^(?:help|help me|do it|continue|go ahead|make it better|fix it|start|proceed|do the needful|handle it)[.! ]*$/i;
+
+export function getToolCategories() {
+  return Object.keys(CATEGORY_TOOLS);
+}
+
+export function classifyTaskRoute(value, { hasHistory = false } = {}) {
+  const text = typeof value === "string" ? value.trim().slice(0, 6000) : "";
+  const categories = [];
+  for (const [category, pattern] of CATEGORY_PATTERNS) {
+    if (pattern.test(text) && !categories.includes(category)) categories.push(category);
+  }
+
+  const complex = COMPLEX_PATTERN.test(text);
+  let tier = "medium";
+  if (!text || (!hasHistory && VAGUE_PATTERN.test(text))) tier = "clarify";
+  else if (complex || categories.length > 1 || /\b(?:project|application|repository|repo|platform|system)\b/i.test(text) && ACTION_PATTERN.test(text)) tier = "complex";
+  else if (categories.length === 1) tier = "medium";
+  else if (!ACTION_PATTERN.test(text) || SIMPLE_PATTERN.test(text)) tier = "simple";
+  else tier = "complex";
+
+  // Do not narrow a compound request: tools from an unrecognized subtask could
+  // otherwise be hidden. No matches means use ULTRON's complete existing allowlist.
+  let toolNames = null;
+  if (categories.length === 1 && !complex) {
+    const selected = CATEGORY_TOOLS[categories[0]] || [];
+    toolNames = [...new Set(selected)];
+  }
+
+  return {
+    tier,
+    categories,
+    filtered: Array.isArray(toolNames),
+    toolNames,
+    clarificationSuggested: tier === "clarify",
+    reason: tier === "simple"
+      ? "Conversational or explanatory request; no tool schema is needed initially."
+      : tier === "clarify"
+        ? "The request is too vague to infer a safe task without context."
+        : toolNames
+          ? "One high-confidence intent; send only the matching allowlisted tool schemas."
+          : "Compound or uncertain task; retain the full allowlist to avoid hiding needed tools."
+  };
+}
