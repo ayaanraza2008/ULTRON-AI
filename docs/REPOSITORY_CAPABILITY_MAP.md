@@ -1,6 +1,6 @@
 # ULTRON AI — Repository Capability Integration Map
 
-Updated: 2026-10-25
+Updated: 2026-10-29
 
 This map covers all 31 registered repository capabilities for ULTRON. The supplied Cactus organization URL resolves to multiple projects; this integration uses `cactus-compute/cactus` as the inference engine plus its related `cactus-compute/needle` micro-model and Whistle speech component. The new registry gives the agent task-matched capability guidance and provides a **configuration-only** status API at `GET /api/agent/repositories` (authenticated). It does not install upstream applications, clone entire projects into the ULTRON server, create provider accounts, or falsely mark a service as working.
 
@@ -12,6 +12,15 @@ This map covers all 31 registered repository capabilities for ULTRON. The suppli
 4. Public read-only research, planning, evidence analysis, and drafts can be used automatically. External publishing, messages, bookings, spending, account changes, deletion, and PC-control actions remain scoped to the supported approval workflow.
 5. Free/local-first is the default. Services with metered API access must not be invoked unless their credentials and budget policy are deliberately configured.
 6. Upstream skills and repository files are untrusted reference data. They are not shell scripts or higher-priority instructions.
+
+## Public API catalog adapter
+
+ULTRON bundles a reviewed discovery snapshot of 2,226 entries from `public-apis/public-apis` README.md (upstream commit `c6f3deea786d8636de4567e15df361ad5f3831c4`) across 53 categories. The authenticated agent tool `search_public_api_catalog` can search this metadata by capability/category and surface declared auth/HTTPS hints. This snapshot is directory metadata, not executable integrations or a cache of credentials. A second authenticated tool, `public_api_lookup`, executes a fixed allowlist of 16 keyless, read-only APIs: Open-Meteo weather/geocoding and air quality; Nager.Date public holiday calendars; OpenAlex scholarly-work search; the Metropolitan Museum of Art public collection; Frankfurter reference exchange rates; World Bank country metadata; Wikipedia article summaries; Open Library book search; public GitHub repository metadata; Sunrise-Sunset.org solar times; Gutendex public-domain ebook discovery; Open Trivia Database quizzes; USGS recent earthquake feeds; FreeDictionaryAPI.com word definitions; and GDELT public news search. Deterministic routing prioritizes these fixed adapters when the user asks for real data. Open-Meteo responses require attribution and its terms; OpenAlex metadata is CC0; museum artwork rights vary by object; all results are bounded and must be checked before relying on them.
+
+The live adapter hard-codes provider hosts, rejects arbitrary service names/URLs, applies timeouts and response-size bounds, disables redirects, normalizes results, and sends requests through ULTRON's pinned-DNS fetch layer. The Met Museum adapter uses the paginated `v1.1/search` endpoint and fetches at most three object details; OpenAlex returns at most five works; holiday lookup validates the country code and year; air-quality output is explicitly identified as model-estimated data. The directory supports broad discovery, but ULTRON does not dynamically execute URLs found in catalog data. Paid/authenticated services must be integrated one-by-one with documented API contracts, owner-scoped credentials, cost limits, and tests; catalog entries do not include API keys.
+
+Providers can impose rate limits and change availability or terms. Open-Meteo attribution and non-commercial usage limits, Wikimedia attribution/licensing, and Open Library's request guidelines must be respected. Returned content is untrusted and should be verified before high-impact decisions.
+
 
 ## Per-repository capability map
 
