@@ -1146,6 +1146,8 @@
     if (options.multiline) {
       input = document.createElement("textarea");
       input.rows = options.rows || 4;
+    } else if (options.select) {
+      input = document.createElement("select");
     } else {
       input = document.createElement("input");
       input.type = options.type || "text";
@@ -1464,7 +1466,7 @@
     const topic = addDrawerField(form, "TOPIC / SYLLABUS", "study-topic", {
       required: true, maxLength: 1200, placeholder: "e.g. BTech CSE Quantum Physics — Unit 1"
     });
-    const format = addDrawerField(form, "FORMAT", "study-format", { required: true, value: "mixed" });
+    const format = addDrawerField(form, "FORMAT", "study-format", { required: true, value: "mixed", select: true });
     format.replaceChildren();
     for (const [value, labelText] of [["mixed","Mixed pack"],["flashcards","Flashcards"],["quiz","Multiple-choice quiz"],["revision_sheet","Revision sheet"]]) {
       const option = document.createElement("option");
@@ -1473,7 +1475,7 @@
       format.appendChild(option);
     }
     format.value = "mixed";
-    const level = addDrawerField(form, "LEVEL", "study-level", { required: true, value: "exam" });
+    const level = addDrawerField(form, "LEVEL", "study-level", { required: true, value: "exam", select: true });
     level.replaceChildren();
     for (const [value, labelText] of [["beginner","Beginner"],["intermediate","Intermediate"],["advanced","Advanced"],["exam","Exam preparation"]]) {
       const option = document.createElement("option");
