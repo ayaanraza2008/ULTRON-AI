@@ -193,6 +193,35 @@ def _local_json_request(url: str, payload: dict[str, Any] | None = None, timeout
     return parsed
 
 
+def pull_local_model(model: str, url: str | None = None, timeout: int = 1800) -> dict[str, Any]:
+    """Download a model only when the caller has already confirmed the exact tag."""
+    model = (model or "").strip()
+    if not model or len(model) > 200 or any(char in model for char in "\\r\\n") or model.startswith("-"):
+        raise ValueError("Enter a valid Ollama model tag.")
+    base = validate_local_ollama_url(url)
+    payload = json.dumps({"name": model, "stream": False}).encode("utf-8")
+    request = urllib.request.Request(
+        base + "/api/pull", data=payload,
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            raw = response.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise RuntimeError("Model pull response exceeded the response size limit.")
+            result = json.loads(raw.decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise RuntimeError("Local Ollama could not complete the model download.") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Local Ollama returned invalid model-download status.") from exc
+    if not isinstance(result, dict):
+        raise RuntimeError("Local Ollama returned an unexpected model-download response.")
+    if result.get("error"):
+        raise RuntimeError(str(result["error"])[:500])
+    return result
+
+
 def list_local_models(url: str | None = None) -> list[dict[str, Any]]:
     base = validate_local_ollama_url(url)
     payload = _local_json_request(base)
