@@ -112,9 +112,11 @@
     ui.budget.innerHTML = '<div class="budget-main">$0 local tools</div><small>' + escapeHtml(plan.budgetEstimate || budget.note || "Actual hosted API charges are not measured by the studio.") + '</small><small>Tracked spend: $' + Number(project.trackedSpendUsd || 0).toFixed(2) + ' · Provider charges are not automatically metered.</small>';
     const questions = Array.isArray(plan.researchQuestions) ? plan.researchQuestions : [];
     const notes = Array.isArray(plan.productionNotes) ? plan.productionNotes : [];
+    const research = project.researchResults || null;
     ui.planNotes.innerHTML = '<b>Draft script</b><p>' + escapeHtml(plan.script || "Planning…") + '</p>' +
       (questions.length ? '<b>Research to verify</b><ul>' + questions.map(x => "<li>" + escapeHtml(x) + "</li>").join("") + '</ul>' : "") +
-      (notes.length ? '<b>Production notes</b><ul>' + notes.map(x => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>" : "");
+      (notes.length ? '<b>Production notes</b><ul>' + notes.map(x => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>" : "") +
+      (research ? '<div class="research-summary"><b>Research summary</b><p>' + escapeHtml(research.answer || research.note || "Sources found.") + '</p><small>' + escapeHtml(research.note || "") + '</small><ul>' + (research.sources || []).map(s => '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.title || s.url) + '</a><br><small>' + escapeHtml(s.snippet || "") + '</small></li>').join("") + '</ul></div>' : '<p class="muted">Live source research is optional. Use “Research the brief” after adding TAVILY_API_KEY.</p>');
   }
   function renderScenes(project) {
     const scenes = project.scenes || [];
@@ -158,7 +160,6 @@
     ui.approveBtn.textContent = project.approved ? "Approved ✓" : "Approve production";
     ui.renderBtn.disabled = !project.approved || !ui.rightsCheck.checked || project.status === "rendering";
     ui.approvalMessage.textContent = missing.length ? missing.length + " scene(s) still need media assets." : project.approved ? "Approved at " + new Date(project.approvedAt).toLocaleString() + ". Check rights confirmation to enable rendering." : "All scenes have assets. Confirm rights and approve to unlock render.";
-    ui.rightsCheck.checked = false;
     if (project.approved) ui.approvalMessage.textContent = "Production approved. Check the rights confirmation again to enable rendering.";
   }
   async function saveScenes() {
@@ -239,6 +240,7 @@
   $("#regenerate-plan").addEventListener("click", () => postAction("plan", { conceptId: activeProject && activeProject.selectedConceptId }, "Plan regeneration queued."));
   $("#make-voice").addEventListener("click", () => postAction("voiceover", {}, "Local voiceover queued."));
   $("#make-captions").addEventListener("click", () => postAction("captions", {}, "SRT caption generation requested."));
+  $("#research-btn").addEventListener("click", () => postAction("research", {}, "Live web research requested."));
   $("#reference-file").addEventListener("change", e => { if (e.target.files[0]) uploadFile(e.target.files[0], "reference").catch(error => showToast(error.message)); e.target.value = ""; });
   $("#voice-file").addEventListener("change", e => { if (e.target.files[0]) uploadFile(e.target.files[0], "voiceover").catch(error => showToast(error.message)); e.target.value = ""; });
   $("#music-file").addEventListener("change", e => { if (e.target.files[0]) uploadFile(e.target.files[0], "music").catch(error => showToast(error.message)); e.target.value = ""; });
