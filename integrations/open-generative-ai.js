@@ -100,10 +100,12 @@ function validatePublicUrl(value) {
 function validateSettings(value,model) {
   if(value===undefined||value===null)return {};
   if(!value||typeof value!=="object"||Array.isArray(value))throw fail("MUAPI_SETTINGS_INVALID","settings must be a JSON object.");
-  const allowed=new Set(model.settings);
+  // Public API accepts camelCase aspectRatio; model definitions use the provider's
+  // snake_case aspect_ratio. Normalize the model schema once, then validate the
+  // public setting names consistently before translating them for MuAPI.
+  const allowed=new Set(model.settings.map(key=>key==="aspect_ratio"?"aspectRatio":key));
   for(const key of Object.keys(value)){
-    const providerKey=key==="aspectRatio"?"aspect_ratio":key;
-    if(!ALLOWED_SETTING_KEYS.has(key)||!allowed.has(providerKey)) throw fail("MUAPI_SETTING_UNSUPPORTED","Setting "+key+" is not supported by the selected model.");
+    if(!ALLOWED_SETTING_KEYS.has(key)||!allowed.has(key)) throw fail("MUAPI_SETTING_UNSUPPORTED","Setting "+key+" is not supported by the selected model.");
   }
   const out={};
   if(value.aspectRatio!==undefined) {
