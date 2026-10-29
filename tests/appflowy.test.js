@@ -143,3 +143,45 @@ test("AppFlowy masks upstream HTTP auth errors and never propagates response bod
   assert.equal(error.code, "APPFLOWY_AUTH_FAILED");
   assert.doesNotMatch(error.message, /appflowy-user-token/);
 });
+
+
+test("AppFlowy reads a bounded collab document through the numeric type allowlist", async () => {
+  let request;
+  const result = await runAppFlowyAction({
+    env: readyEnv,
+    userId: owner,
+    action: "read_document",
+    workspaceId: "00000000-0000-4000-8000-000000000010",
+    viewId: "00000000-0000-4000-8000-000000000011",
+    documentType: "document",
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return jsonResponse({ data: {
+        collab: { document: { root: { children: [{ text: "Meeting notes and action items" }] } }, metadata: { layout: "document" } },
+        privateToken: "must-not-be-returned"
+      } });
+    }
+  });
+  assert.equal(request.url, "https://appflowy.example.com/api/workspace/v1/00000000-0000-4000-8000-000000000010/collab/00000000-0000-4000-8000-000000000011/json?collab_type=0");
+  assert.equal(request.options.method, "GET");
+  assert.equal(result.state, "completed");
+  assert.equal(result.documentType, "document");
+  assert.equal(result.collab.document.root.children[0].text, "Meeting notes and action items");
+  assert.equal(JSON.stringify(result).includes("must-not-be-returned"), false);
+  assert.match(result.notice, /Read-only AppFlowy collab JSON/i);
+});
+
+test("AppFlowy document read rejects unsupported collab types before network access", async () => {
+  let calls = 0;
+  await assert.rejects(
+    runAppFlowyAction({
+      env: readyEnv, userId: owner, action: "read_document",
+      workspaceId: "00000000-0000-4000-8000-000000000010",
+      viewId: "00000000-0000-4000-8000-000000000011",
+      documentType: "user_awareness",
+      fetchImpl: async () => { calls++; return jsonResponse({ data: {} }); }
+    }),
+    error => error.code === "APPFLOWY_DOCUMENT_TYPE_INVALID"
+  );
+  assert.equal(calls, 0);
+});
