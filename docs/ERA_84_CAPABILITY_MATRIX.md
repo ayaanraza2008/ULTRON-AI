@@ -66,7 +66,7 @@ Repository code, a capability catalog entry, or a mocked test does not by itself
 | 45 | Screen region extractor | NOT IMPLEMENTED | Browser screenshots/inspection are narrower than local screen-region OCR. | Add user-selected capture, OCR/extraction preview and command-review safeguards. |
 | 46 | Gesture control | NOT IMPLEMENTED | No verified webcam gesture detector found. | Requires consent, supported local detector, calibration and immediate stop control. |
 | 47 | Application updates | NOT IMPLEMENTED | No verifiable client updater/integrity workflow found. | Depends on packaging/distribution design, signed update origins and explicit consent. |
-| 48 | World clock | IMPLEMENTED | This branch adds an offline IANA time-zone tool with bounded input and a shared timestamp. | CI must pass before VERIFIED; it takes explicit time-zone IDs and does not geocode vague place names. |
+| 48 | World clock | VERIFIED | Offline IANA time-zone tool; deterministic unit tests and agent-dispatch integration tests pass in GitHub Actions run [40899260072](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40899260072). | Uses explicit IANA time-zone IDs; does not geocode vague place names or require an external provider. |
 | 49 | Deep research | PARTIAL | Research tool, public-search fallback and structured report quality checks exist. | Needs end-to-end source coverage, contradictory-source handling and quality validation. |
 | 50 | PDF report generation | NOT IMPLEMENTED | PDF text parsing is present; no verified PDF generator found. | Add output generation, Unicode/font/page-layout validation and file tests. |
 | 51 | PDF analysis | PARTIAL | pdf-parse dependency and document extraction routes/tests exist. | Scanned PDF OCR and complex-table extraction are not established; privacy and size limits need validation. |
@@ -78,7 +78,7 @@ Repository code, a capability catalog entry, or a mocked test does not by itself
 | 57 | Photo analysis | PARTIAL | Multimodal image routing and Geo-Sleuth investigation adapter exist. | Real vision-provider operation and evidence quality need configured providers; location precision must not be invented. |
 | 58 | Study and exam mode | PARTIAL | General agent chat supports educational explanations and research. | Dedicated mode with adjustable difficulty, persisted flashcards/quizzes/revision sheets and source-grounding is not verified. |
 | 59 | Web search and browsing | PARTIAL | research_web, public search, Browser Use and Chrome DevTools adapters exist. | Current-source quality, live access and browser bridge functionality are provider/service dependent. |
-| 60 | Wikipedia lookup | NOT IMPLEMENTED | No distinct Wikipedia API adapter was confirmed in the tool registry. | Add API-backed lookup and source links or report this capability unavailable. |
+| 60 | Wikipedia lookup | VERIFIED | Allowlisted public REST summary adapter and mocked agent integration tests pass in GitHub Actions run [40899260072](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40899260072). | Read-only article summaries only; external text is marked untrusted, requests are bounded, and no editing/private content is supported. |
 | 61 | Email | PARTIAL | Google Workspace adapter exposes read-only Gmail list/search tools. | Draft/send workflow, OAuth consent, delivery and attachment permissions are not verified; sending must remain approval-gated. |
 | 62 | WhatsApp | NOT IMPLEMENTED | No authorised WhatsApp adapter found. | Requires permitted account/API connection, scoped access and approval before sending. |
 | 63 | Telegram | NOT IMPLEMENTED | No Telegram adapter or secured remote-command endpoint found. | Add authorised bot/account integration, allowlists, authentication and audit controls if required. |
@@ -117,5 +117,5 @@ Repository code, a capability catalog entry, or a mocked test does not by itself
 ## Change record
 
 - This matrix separates source existence from feature completeness and live verification.
-- This branch adds a narrow vertical slice for capability 48 (World Clock) without a new dependency, API key or network call. Its status stays IMPLEMENTED until its GitHub CI passes.
+- World Clock (48) and Wikipedia lookup (60) have unit and agent-dispatch integration coverage. GitHub Actions run [40899260072](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40899260072) passed npm run check, npm test (653 passed, 0 failed, 1 skipped), and the World Intelligence build.
 - Open Video Studio and voice PRs are documented as work in progress, not merged capabilities.
