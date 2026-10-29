@@ -180,12 +180,13 @@ function parseRpc(raw, contentType) {
   }
   throw Object.assign(new Error("REA MCP returned unreadable protocol data."), { code: "REA_RESPONSE_INVALID", status: 502 });
 }
-async function mcpPost(fetchImpl, config, sessionId, payload) {
+async function mcpPost(fetchImpl, config, sessionId, payload, protocolVersion = null) {
   const headers = {
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
     ...(config.token ? { Authorization: "Bearer " + config.token } : {}),
-    ...(sessionId ? { "Mcp-Session-Id": sessionId } : {})
+    ...(sessionId ? { "Mcp-Session-Id": sessionId } : {}),
+    ...(protocolVersion ? { "Mcp-Protocol-Version": protocolVersion } : {})
   };
   let response;
   try {
@@ -233,11 +234,14 @@ async function withEndpointLock(key, work) {
   }
 }
 async function invokeRea(config, fetchImpl, toolName, upstreamArgs, targetPath = null, requiresActiveTarget = false, postProcess = null) {
-  let sessionId = null, requestId = 0;
+  let sessionId = null, requestId = 0, protocolVersion = null;
   const call = async (method, params = {}, notification = false) => {
     const payload = { jsonrpc: "2.0", ...(notification ? {} : { id: ++requestId }), method, ...(Object.keys(params).length ? { params } : {}) };
-    const reply = await mcpPost(fetchImpl, config, sessionId, payload);
+    const reply = await mcpPost(fetchImpl, config, sessionId, payload, protocolVersion);
     sessionId = reply.sessionId;
+    if (method === "initialize" && typeof reply.result?.protocolVersion === "string") {
+      protocolVersion = reply.result.protocolVersion;
+    }
     return reply.result;
   };
   const initialized = await call("initialize", {
