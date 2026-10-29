@@ -1168,6 +1168,19 @@
     }, 450);
   }
 
+  function setSpeechLanguageMode(nextMode) {
+    if (!["auto", "hi-IN", "en-IN"].includes(nextMode)) return;
+    speechLanguageMode = nextMode;
+    forceFallbackRecognition = false;
+    if (restartTimer) window.clearTimeout(restartTimer);
+    restartTimer = null;
+    stopRecognition();
+    stopFallbackRecognition({ transcribe: false });
+    if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+    showToast(nextMode === "auto" ? "Voice recognition set to AUTO: Hindi + English." : nextMode === "hi-IN" ? "Voice recognition set to Hindi." : "Voice recognition set to English (India).");
+    void showDrawerView("voice-quality");
+  }
+
   function startRecognition() {
     if (!voiceActive || mode !== "voice" || busy || textInputOpen) return;
     if (speechLanguageMode === "auto" && !forceFallbackRecognition) {
@@ -1492,9 +1505,12 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        if (!force && streamSpeechBuffer.length >= 22) {
-          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 19);
-          if (cutoff >= 12) {
+        const minimumBuffer = streamSpeechUsesFish ? 72 : 22;
+        const preferredCutoff = streamSpeechUsesFish ? 64 : 19;
+        const minimumCutoff = streamSpeechUsesFish ? 48 : 12;
+        if (!force && streamSpeechBuffer.length >= minimumBuffer) {
+          const cutoff = streamSpeechBuffer.lastIndexOf(" ", preferredCutoff);
+          if (cutoff >= minimumCutoff) {
             enqueueStreamSpeech(streamSpeechBuffer.slice(0, cutoff).trim());
             streamSpeechBuffer = streamSpeechBuffer.slice(cutoff + 1);
             continue;
@@ -1537,7 +1553,7 @@
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const voicePrompt = streamVoiceReply
-        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 12–24 words when possible). Lead with the answer; no greeting, filler, or preamble. Use a calm, confident, direct tone and mirror the user's language.\n\nUser request: " + outgoingPrompt
+        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 12–24 words when possible). Lead with the answer; no greeting, filler, or preamble. Use a calm, confident, natural Indian male-assistant tone. Mirror the user's language. For Hindi-English replies, write Hindi words in Devanagari and English words in Latin script; do not phonetic-transliterate English or Hinglish into Roman Hindi. Preserve proper nouns and technical spelling.\n\nUser request: " + outgoingPrompt
         : outgoingPrompt;
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
