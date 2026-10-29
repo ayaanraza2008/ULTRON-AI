@@ -301,16 +301,16 @@ test("gateway recovery keeps trying through a longer cold start and returns when
 test("voice listening starts without waiting for backend readiness and submits short pauses quickly", () => {
   assert.ok(app.includes("void ensureSpeechCapabilities();"));
   assert.ok(app.includes("if (Recognition && !forceFallbackRecognition)"));
-  assert.ok(app.includes("now - session.lastVoiceAt >= 450"));
-  assert.ok(app.includes("}, 100);"));
+  assert.ok(app.includes("now - session.lastVoiceAt >= 300"));
+  assert.ok(app.includes("}, 75);"));
   assert.ok(app.includes("nativeSilenceTimer = window.setTimeout"));
-  assert.ok(app.includes("}, 500);"));
+  assert.ok(app.includes("}, 300);"));
   assert.ok(app.includes("pendingInterimCommand && voiceActive"));
   assert.ok(app.includes("async function streamChatRequest(body, onDelta)"));
   assert.ok(app.includes("body: JSON.stringify({ ...body, stream: true })"));
   assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferFishAudio)"));
-  assert.ok(app.includes("streamSpeechBuffer.length >= 36"));
-  assert.ok(app.includes('const cutoff = streamSpeechBuffer.lastIndexOf(" ", 32)'));
+  assert.ok(app.includes("streamSpeechBuffer.length >= 22"));
+  assert.ok(app.includes('const cutoff = streamSpeechBuffer.lastIndexOf(" ", 19)'));
   assert.ok(app.includes("const fishAudioBlobPromise = streamSpeechUsesFish"));
   assert.ok(app.includes("about 12–24 words when possible"));
   assert.ok(app.includes("You are replying aloud. Answer immediately in 1–2 short sentences"));
