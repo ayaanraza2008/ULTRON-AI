@@ -386,3 +386,11 @@ body.composer-open .core-coordinate { opacity: .2; }
 .system-control-nav .nav-chevron { color: #e975a0; }
 .drawer-action:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
 .drawer-action:disabled:hover { border-color: rgba(75,183,255,.34); box-shadow: none; }
+
+.drawer-field textarea { min-height: 84px; width: 100%; max-width: 100%; padding: 9px 10px; resize: vertical; border: 1px solid rgba(91,140,192,.26); border-radius: 8px; background: rgba(0,3,13,.58); color: #e8f5ff; font: inherit; font-size: 10px; line-height: 1.55; }
+.drawer-inline-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 9px; }
+.drawer-inline-actions .drawer-action { min-width: 0; min-height: 31px; margin: 0; padding: 5px 4px; font-size: 8px; }
+.drawer-quiz-options { display: grid; gap: 5px; margin-top: 9px; }
+.drawer-quiz-options .device-scope { align-items: flex-start; }
+.drawer-quiz-options .device-scope > span { color: #8da0bd; font-size: 9px; line-height: 1.45; }
+.drawer-quiz-options input { accent-color: #68d9ff; }
