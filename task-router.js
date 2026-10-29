@@ -9,7 +9,7 @@ const CATEGORY_TOOLS = Object.freeze({
   ],
   weather: ["weather_lookup"],
   study: ["create_study_pack"],
-  notes: ["notes_search", "notes_create", "notes_update"],
+  notes: ["notes_search", "notes_read", "notes_create", "notes_update"],
   github: ["github_public_repo"],
   wikipedia: ["wikipedia_lookup"],
   time: ["world_clock"],
@@ -57,7 +57,7 @@ const CATEGORY_TOOLS = Object.freeze({
 
 const CATEGORY_PATTERNS = Object.freeze([
   ["github", /\b(?:github|git hub|github\.com|readme (?:from|on) github|latest commits for|open issues for|public github repository)\b/i],
-  ["notes", /\b(?:notes? library|saved notes?|search (?:my )?notes?|find (?:my )?notes?|create (?:a )?note|write (?:a )?note|save (?:a |this |the )?note|update (?:my |the )?note)\b/i],
+  ["notes", /\b(?:notes? library|saved notes?|search (?:my )?notes?|find (?:my )?notes?|read (?:my |the )?note|create (?:a )?note|write (?:a )?note|save (?:a |this |the )?note|update (?:my |the )?note)\b/i],
   ["study", /\b(?:study mode|study pack|study guide|exam mode|revision sheet|revision notes|flashcards?|make (?:me )?(?:a )?quiz|create (?:a )?quiz|generate (?:a )?quiz|practice questions|practice test|mock test|self.?test|quiz me|test me on)\b/i],
   ["weather", /\b(?:weather\s+(?:in|for|forecast)|current weather|forecast\s+(?:in|for)|temperature\s+(?:outside|in)|rain chance\s+in|local weather)\b/i],
   ["wikipedia", /\b(?:wikipedia|wiki article|wikipedia page)\b/i],
