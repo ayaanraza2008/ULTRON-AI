@@ -1276,6 +1276,77 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     }
   });
 
+
+  router.get("/study-packs/:id/export", requireSupabaseUser, async (req, res) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: { code: "INVALID_STUDY_PACK_ID", message: "Study-pack ID is invalid." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "study_packs", "GET",
+        "?select=id,title,topic,format,level,language,source_mode,content&id=eq."
+        + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { code: "STUDY_PACK_NOT_FOUND", message: "Saved study pack was not found." } });
+      const pack = rows[0];
+      const content = pack.content && typeof pack.content === "object" && !Array.isArray(pack.content) ? pack.content : {};
+      const clean = (value, max = 3000) => boundedString(value, max);
+      const lines = [
+        "# " + clean(pack.title, 200),
+        "",
+        "**Topic:** " + clean(pack.topic, 1200),
+        "**Level:** " + clean(pack.level, 40),
+        "**Format:** " + clean(pack.format, 40),
+        "**Language:** " + clean(pack.language, 60),
+        "**Source mode:** " + clean(pack.source_mode, 60),
+        "",
+        "## Learning objectives",
+        ...(Array.isArray(content.learningObjectives) ? content.learningObjectives.slice(0, 8).map(item => "- " + clean(item, 400)) : []),
+        "",
+        "## Summary",
+        clean(content.summary, 8000),
+        ""
+      ];
+      const flashcards = Array.isArray(content.flashcards) ? content.flashcards.slice(0, 12) : [];
+      if (flashcards.length) {
+        lines.push("## Flashcards", "");
+        for (const card of flashcards) {
+          const question = clean(card?.question, 600);
+          const answer = clean(card?.answer, 1400);
+          if (question && answer) lines.push("**Q:** " + question, "", "**A:** " + answer, "");
+        }
+      }
+      const quiz = Array.isArray(content.quiz) ? content.quiz.slice(0, 12) : [];
+      if (quiz.length) {
+        lines.push("## Quiz and answers", "");
+        for (const item of quiz) {
+          const question = clean(item?.question, 700);
+          const options = Array.isArray(item?.options) ? item.options.slice(0, 4).map(option => clean(option, 400)) : [];
+          if (!question || options.length !== 4 || !options.every(Boolean)
+            || !Number.isInteger(item?.answerIndex) || item.answerIndex < 0 || item.answerIndex > 3) continue;
+          lines.push(
+            "### " + question,
+            ...options.map((option, index) => "- " + (index === item.answerIndex ? "**Correct:** " : "") + option),
+            "",
+            clean(item.explanation, 1200),
+            ""
+          );
+        }
+      }
+      const checklist = Array.isArray(content.revisionChecklist) ? content.revisionChecklist.slice(0, 12) : [];
+      if (checklist.length) lines.push("## Revision checklist", "", ...checklist.map(item => "- [ ] " + clean(item, 500)), "");
+      const notes = clean(content.sourceNotes, 1200);
+      if (notes) lines.push("## Source notes", "", notes, "");
+      lines.push("---", clean(content.notice, 500) || "AI-generated study aid; verify against the course syllabus.", "");
+      const markdown = lines.join("\n").slice(0, 60_000);
+      const stem = clean(pack.title, 200).replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "-").slice(0, 80) || "study-pack";
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="' + stem + '.md"');
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).send(markdown);
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: "STUDY_PACK_EXPORT_FAILED", message: "The study pack could not be exported." } });
+    }
+  });
+
   router.delete("/study-packs/:id", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) {
       return res.status(400).json({ error: { code: "INVALID_STUDY_PACK_ID", message: "Study-pack ID is invalid." } });
