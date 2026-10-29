@@ -78,7 +78,7 @@ For a local ULTRON backend on the same computer, set the URL to `http://127.0.0.
 ## Safety boundaries
 
 - Only HTTP(S) navigation is accepted. Localhost is allowed for development; remote destinations must use HTTPS. Direct IP literals, metadata hostnames, internal suffixes, and single-label hostnames are blocked.
-- The service checks each browser request against the same hostname policy. This is defense in depth, not a substitute for an operating-system firewall or a pinned egress proxy against DNS rebinding.
+- Routed browser requests use a bounded DNS lookup and are rejected if any resolved address is non-public. This is defense in depth, not DNS pinning: use an operating-system firewall or pinned egress proxy for hostile DNS/rebinding environments.
 - Clicking high-impact controls or external form submissions requires both the per-call `confirmExternalAction: true` flag and the explicit server-side `CHROME_ALLOW_EXTERNAL_ACTIONS=true` setting. Local loopback development apps may be tested normally.
 - Password, token, one-time-code, and payment fields cannot be filled. The service never returns field values.
 - The service does not execute JavaScript supplied by the model, read local files, launch shell commands, upload files, bypass sign-in controls, solve CAPTCHAs, or perform stealth automation.
