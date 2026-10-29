@@ -92,6 +92,10 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   assert.match(app, /api\/notes/);
   assert.match(app, /api\/reminders/);
   assert.match(app, /api\/reports\/pdf/);
+  assert.match(app, /api\/reports\/pptx/);
+  assert.match(app, /exportPresentationPptx/);
+  assert.match(app, /EXPORT CURRENT DRAFT AS POWERPOINT/);
+  assert.match(app, /EXPORT POWERPOINT/);
   assert.match(app, /TRANSIENT · NO PERSISTENCE/);
   assert.match(app, /api\/study-packs/);
   assert.match(app, /api\/agent\/run/);
