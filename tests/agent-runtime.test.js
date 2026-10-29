@@ -2146,11 +2146,19 @@ test("short confirmation inherits the task for automatic ECC skill selection", a
 
 
 test("task router narrows one clear domain and retains the full allowlist for compound tasks", async () => {
-  const providerRequests = [];
+  const providerRequests = { voice: [], compound: [] };
   await withServer({ OPENROUTER_API_KEY: "task-router-test-key" }, async (url, options) => {
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
     const request = JSON.parse(options.body);
-    providerRequests.push(request);
+    const requestMessages = Array.isArray(request.messages) ? request.messages : [];
+    const isVoiceRequest = requestMessages.some(message =>
+      message.role === "user" && typeof message.content === "string" && message.content.includes("List VoiceStudio voices")
+    );
+    const isCompoundRequest = requestMessages.some(message =>
+      message.role === "user" && typeof message.content === "string" && message.content.includes("Research this topic and then create a YouTube production plan")
+    );
+    if (isVoiceRequest) providerRequests.voice.push(request);
+    if (isCompoundRequest) providerRequests.compound.push(request);
     return new Response(JSON.stringify({
       choices: [{ message: { role: "assistant", content: "The task route is ready." } }]
     }), { status: 200 });
@@ -2162,7 +2170,7 @@ test("task router narrows one clear domain and retains the full allowlist for co
     });
     assert.equal(voiceResponse.status, 200);
     const voiceBody = await voiceResponse.json();
-    const voiceTools = providerRequests[0].tools.map(tool => tool.function.name);
+    const voiceTools = providerRequests.voice[0].tools.map(tool => tool.function.name);
     assert.equal(voiceBody.routing.tier, "medium");
     assert.equal(voiceBody.routing.toolSchemasFiltered, true);
     assert.ok(voiceTools.includes("list_speech_voices"));
@@ -2177,7 +2185,7 @@ test("task router narrows one clear domain and retains the full allowlist for co
     });
     assert.equal(compoundResponse.status, 200);
     const compoundBody = await compoundResponse.json();
-    const compoundTools = providerRequests[1].tools.map(tool => tool.function.name);
+    const compoundTools = providerRequests.compound[0].tools.map(tool => tool.function.name);
     assert.equal(compoundBody.routing.tier, "complex");
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
