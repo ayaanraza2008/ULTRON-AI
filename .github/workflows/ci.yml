@@ -39,6 +39,25 @@ jobs:
           npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: npm test
+  local-assistant-windows-script:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse guided PowerShell installer without executing it
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "tools/local-assistant/setup.ps1",
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
