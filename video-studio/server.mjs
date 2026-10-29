@@ -265,9 +265,10 @@ export function createVideoStudioServer({ env = process.env, logger = console, d
         let plan = null, contactSheet = null; try { contactSheet = await referenceImageDataUrl(now, store); } catch {} try { plan = await generatePlan(now, env, contactSheet); } catch (e) { logger.warn && logger.warn("Plan refresh failed", { code: e.code || "PLAN_FAILED" }); }
         const concepts = plan ? plan.concepts : makeFallbackConcepts(now), selected = concepts.find(c => c.id === bounded(req.body && req.body.conceptId, 80)) || concepts[0];
         const scenes = plan && selected.id === concepts[0].id ? plan.scenes : makeFallbackScenes(now, selected);
+        const selectedPlan = plan ? { ...plan.productionPlan, script: scenes.map(s => s.narration).join(" "), productionNotes: selected.id === concepts[0].id ? plan.productionPlan.productionNotes : [...(plan.productionPlan.productionNotes || []), "This alternative uses a deterministic scene-beat draft; replace and review it before rendering."] } : { script: scenes.map(s => s.narration).join(" "), researchQuestions: [], productionNotes: ["Local fallback draft."], budgetEstimate: "Provider-dependent costs are not measured." };
         await store.update(p.id, q => {
           q.concepts = concepts; q.selectedConceptId = selected.id; q.scenes = scenes;
-          q.productionPlan = plan ? plan.productionPlan : { script: scenes.map(s => s.narration).join(" "), researchQuestions: [], productionNotes: ["Local fallback draft."], budgetEstimate: "Provider-dependent costs are not measured." };
+          q.productionPlan = selectedPlan;
           q.status = "needs_assets"; q.approved = false; q.approvedAt = null; q.progress = 28;
           return event(q, "production_plan", plan ? "Scene plan regenerated." : "Local starter plan regenerated.");
         });
