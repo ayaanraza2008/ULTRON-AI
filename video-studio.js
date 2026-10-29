@@ -231,8 +231,8 @@ function normalizePlan(raw, project) {
 }
 function describeVisualCharacter(output) {
   const text = String(output || "");
-  const values = name => [...text.matchAll(new RegExp("lavfi\\\\.signalstats\\\\." + name + "=([0-9]+(?:\\\\.[0-9]+)?)", "g"))]
-    .map(match => Number(match[1])).filter(value => Number.isFinite(value));
+  const values = name => [...text.matchAll(/lavfi\.signalstats\.([A-Z]+)=([0-9]+(?:\.[0-9]+)?)/g)]
+    .filter(match => match[1] === name).map(match => Number(match[2])).filter(value => Number.isFinite(value));
   const mean = items => items.length ? items.reduce((sum, value) => sum + value, 0) / items.length : null;
   const y = values("YAVG"), low = values("YLOW"), high = values("YHIGH"), saturation = values("SATAVG");
   if (!y.length) return { state: "unavailable", sampledFrames: 0, notes: ["FFmpeg did not emit sampled-frame signal statistics."] };
