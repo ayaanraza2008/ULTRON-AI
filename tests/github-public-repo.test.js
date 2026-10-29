@@ -203,6 +203,84 @@ test("GitHub tool excludes pull requests from its open-issues result", async () 
   assert.equal(githubCalls, 1);
 });
 
+
+test("GitHub tool lists recent commits with bounded fields", async () => {
+  let githubCalls = 0;
+  let providerCalls = 0;
+  await withAgentServer(async (url, options) => {
+    if (url === API + "/commits?per_page=3") {
+      githubCalls += 1;
+      assert.equal(options.redirect, "error");
+      return new Response(JSON.stringify([
+        { sha: "0123456789012345678901234567890123456789", commit: { message: "Add README\n\nInitial project setup", author: { name: "octocat", date: "2026-10-28T12:00:00Z" } }, html_url: "https://github.com/octocat/Hello-World/commit/0123456789012345678901234567890123456789" },
+        { sha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd", commit: { message: "Fix typo", author: { name: "octocat", date: "2026-10-27T12:00:00Z" } }, html_url: "https://github.com/octocat/Hello-World/commit/abcdefabcdefabcdefabcdefabcdefabcdefabcd" }
+      ]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    const hasCommits = payload.messages.some(message => message.role === "tool" && message.content.includes('"Add README'));
+    if (hasCommits) return reply({ role: "assistant", content: "The repository has recent README and typo-fix commits." });
+    return reply({
+      content: null,
+      tool_calls: [{
+        id: "github-commits-call",
+        type: "function",
+        function: { name: "github_public_repo", arguments: JSON.stringify({ owner: "octocat", repo: "Hello-World", action: "latest_commits", limit: 3 }) }
+      }]
+    });
+  }, async (_req, table) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    throw new Error("Commit history must not require other database content.");
+  }, async base => {
+    const response = await sendPrompt(base, "Show the latest commits for GitHub octocat/Hello-World");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "completed");
+    assert.equal(body.toolResults[0].result.commits.length, 2);
+    assert.match(body.toolResults[0].result.commits[0].message, /Add README/);
+    assert.equal(body.toolResults[0].result.sourceContentTrust, "untrusted_external_content");
+  });
+  assert.equal(providerCalls, 2);
+  assert.equal(githubCalls, 1);
+});
+
+test("GitHub public API rate limiting is returned as a blocker without retrying or asking for a token", async () => {
+  let githubCalls = 0;
+  let providerCalls = 0;
+  await withAgentServer(async (url, options) => {
+    if (url === API) {
+      githubCalls += 1;
+      assert.equal(options.headers.Authorization, undefined);
+      return new Response(JSON.stringify({ message: "API rate limit exceeded" }), { status: 403, headers: { "content-type": "application/json" } });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    const hasRateStatus = payload.messages.some(message => message.role === "tool" && message.content.includes('"rate_limited_or_forbidden"'));
+    if (hasRateStatus) return reply({ role: "assistant", content: "GitHub's unauthenticated public API denied the request or reached its rate limit." });
+    return reply({
+      content: null,
+      tool_calls: [{
+        id: "github-rate-limit-call",
+        type: "function",
+        function: { name: "github_public_repo", arguments: JSON.stringify({ owner: "octocat", repo: "Hello-World", action: "metadata" }) }
+      }]
+    });
+  }, async (_req, table) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    throw new Error("Public metadata lookup must not require private data.");
+  }, async base => {
+    const response = await sendPrompt(base, "Look up the GitHub repository octocat/Hello-World metadata");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.state, "rate_limited_or_forbidden");
+    assert.match(body.content, /unauthenticated public API denied/i);
+  });
+  assert.equal(providerCalls, 2);
+  assert.equal(githubCalls, 1);
+});
+
 test("GitHub file reads reject traversal paths before calling the public API", async () => {
   let githubCalls = 0;
   let providerCalls = 0;
