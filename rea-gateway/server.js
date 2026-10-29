@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 const DEFAULT_CHILD_PORT = 49321;
-const REQUEST_HEADERS = ["accept", "content-type", "mcp-session-id", "last-event-id"];
+const REQUEST_HEADERS = ["accept", "content-type", "mcp-session-id", "mcp-protocol-version", "last-event-id"];
 const RESPONSE_HEADERS = ["content-type", "content-length", "mcp-session-id", "cache-control", "retry-after"];
 
 function validToken(token) {
