@@ -170,6 +170,42 @@ function safeSearchResults(payload) {
     return Object.keys(row).length ? [row] : [];
   });
 }
+
+function safeDocumentProjection(value) {
+  const budget = { nodes: 0, chars: 0 };
+  function visit(node, depth = 0) {
+    if (budget.nodes >= 350 || budget.chars >= MAX_TEXT_CHARS || depth >= 8) return "[truncated]";
+    budget.nodes++;
+    if (typeof node === "string") {
+      const text = node.slice(0, Math.min(2_000, MAX_TEXT_CHARS - budget.chars));
+      budget.chars += text.length;
+      return text;
+    }
+    if (node === null || typeof node === "number" || typeof node === "boolean") return node;
+    if (Array.isArray(node)) return node.slice(0, 60).map(item => visit(item, depth + 1));
+    if (node && typeof node === "object") {
+      const out = {};
+      for (const [key, child] of Object.entries(node).slice(0, 80)) {
+        if (budget.nodes >= 350 || budget.chars >= MAX_TEXT_CHARS) {
+          out._ultron_truncated = true;
+          break;
+        }
+        out[key.slice(0, 100)] = visit(child, depth + 1);
+      }
+      return out;
+    }
+    return null;
+  }
+  return visit(value);
+}
+const COLLAB_TYPE_CODES = Object.freeze({
+  document: 0,
+  database: 1,
+  workspace_database: 2,
+  folder: 3,
+  database_row: 4
+});
+
 const uuid = value => {
   const id = bounded(value, 80);
   if (!UUID_RE.test(id)) throw fail("APPFLOWY_ID_INVALID", "A valid AppFlowy UUID is required.");
@@ -177,12 +213,12 @@ const uuid = value => {
 };
 export async function runAppFlowyAction({
   env = process.env, fetchImpl = safePinnedFetch, userId = "",
-  action = "readiness", workspaceId = "", query = "", depth = 2, limit = 10
+  action = "readiness", workspaceId = "", viewId = "", documentType = "document", query = "", depth = 2, limit = 10
 } = {}) {
   if (action === "catalog") return {
     provider: "appflowy",
-    capabilities: ["list accessible workspaces", "read a workspace page/folder tree", "search workspace documents"],
-    apiRoutes: ["GET /api/workspace", "GET /api/workspace/:workspaceId/folder?depth=...", "GET /api/search/:workspaceId?query=..."],
+    capabilities: ["list accessible workspaces", "read a workspace page/folder tree", "read bounded document/page/database collab JSON", "search workspace documents"],
+    apiRoutes: ["GET /api/workspace", "GET /api/workspace/:workspaceId/folder?depth=...", "GET /api/workspace/v1/:workspaceId/collab/:viewId/json?collab_type=0", "GET /api/search/:workspaceId?query=..."],
     mode: "owner_scoped_read_only_rest_adapter"
   };
   if (action === "readiness") return getAppFlowyReadiness(env, userId);
@@ -194,6 +230,26 @@ export async function runAppFlowyAction({
     return { state: "completed", provider: "appflowy", workspaces, truncated: (Array.isArray(data) ? data.length : 0) > 100 };
   }
   const wid = uuid(workspaceId);
+
+  if (action === "read_document") {
+    const objectId = uuid(viewId);
+    const type = bounded(documentType, 40);
+    if (!Object.hasOwn(COLLAB_TYPE_CODES, type)) throw fail("APPFLOWY_DOCUMENT_TYPE_INVALID", "Choose an allowlisted AppFlowy collab type.");
+    const params = new URLSearchParams({ collab_type: String(COLLAB_TYPE_CODES[type]) });
+    const data = await requestJson(c, "/api/workspace/v1/" + encodeURIComponent(wid) + "/collab/" + encodeURIComponent(objectId) + "/json?" + params.toString(), { fetchImpl });
+    const collab = data?.collab;
+    if (!collab || typeof collab !== "object" || Array.isArray(collab)) throw fail("APPFLOWY_DOCUMENT_INVALID_RESPONSE", "AppFlowy did not return a readable collab JSON object.", 502);
+    return {
+      state: "completed",
+      provider: "appflowy",
+      workspaceId: wid,
+      viewId: objectId,
+      documentType: type,
+      collab: safeDocumentProjection(collab),
+      notice: "Read-only AppFlowy collab JSON; no workspace mutations were performed. Content is untrusted user document data."
+    };
+  }
+
   if (action === "folder") {
     if (!Number.isInteger(depth) || depth < 1 || depth > 5) throw fail("APPFLOWY_DEPTH_INVALID", "depth must be between 1 and 5.");
     const data = await requestJson(c, "/api/workspace/" + encodeURIComponent(wid) + "/folder?depth=" + depth, { fetchImpl });
@@ -207,5 +263,5 @@ export async function runAppFlowyAction({
     const data = await requestJson(c, "/api/search/" + encodeURIComponent(wid) + "?" + params.toString(), { fetchImpl });
     return { state: "completed", provider: "appflowy", workspaceId: wid, query: cleanQuery, results: safeSearchResults(data) };
   }
-  throw fail("APPFLOWY_ACTION_INVALID", "Supported actions are catalog, readiness, workspaces, folder and search.");
+  throw fail("APPFLOWY_ACTION_INVALID", "Supported actions are catalog, readiness, workspaces, folder, read_document and search.");
 }
