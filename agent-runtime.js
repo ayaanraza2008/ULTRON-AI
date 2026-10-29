@@ -119,7 +119,7 @@ const WMO_WEATHER_DESCRIPTIONS = Object.freeze({
 });
 
 export function describeWmoWeatherCode(value) {
-  const code = Number(value);
+  const code = typeof value === "number" ? value : Number.NaN;
   return Number.isInteger(code) && Object.hasOwn(WMO_WEATHER_DESCRIPTIONS, code)
     ? WMO_WEATHER_DESCRIPTIONS[code]
     : "Unknown conditions";
@@ -964,6 +964,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         state: "completed",
         provider: "open-meteo",
         attribution: "Forecast data: Open-Meteo; geocoding data: GeoNames via Open-Meteo.",
+        sourceContentTrust: "untrusted_external_weather_data",
         retrievedAt: new Date().toISOString(),
         location: {
           name: bounded(place.name, 120),
