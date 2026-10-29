@@ -4,6 +4,7 @@ import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 import { getOpenHiggsfieldReadiness, listOpenHiggsfieldModels, runOpenHiggsfieldAction } from "./open-higgsfield.js";
 import { getOpenDesignReadiness, runOpenDesignAction } from "./open-design.js";
 import { getOpenGenerativeAIReadiness, listOpenGenerativeAIModels, runOpenGenerativeAIAction } from "./open-generative-ai.js";
+import { getAppFlowyReadiness, runAppFlowyAction } from "./appflowy.js";
 
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024;
 
@@ -401,6 +402,40 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = safePin
       });
       return res.json(result);
     } catch (error) { safeError(res, error, "Open Generative AI job status"); }
+  });
+
+
+  // Read-only AppFlowy Cloud connector. Owner-only because the provider token
+  // belongs to one AppFlowy account; never expose the bearer token to the client.
+  router.get("/integrations/appflowy/status", requireSupabaseUser, (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(getAppFlowyReadiness(env, req.supabaseUser?.id));
+  });
+
+  router.get("/integrations/appflowy/workspaces", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      return res.json(await runAppFlowyAction({ env, fetchImpl, userId: req.supabaseUser?.id, action: "workspaces" }));
+    } catch (error) { safeError(res, error, "AppFlowy workspace listing"); }
+  });
+
+  router.get("/integrations/appflowy/workspaces/:workspaceId/folder", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      const depth = Number(req.query.depth ?? 2);
+      return res.json(await runAppFlowyAction({
+        env, fetchImpl, userId: req.supabaseUser?.id, action: "folder",
+        workspaceId: req.params.workspaceId, depth
+      }));
+    } catch (error) { safeError(res, error, "AppFlowy folder listing"); }
+  });
+
+  router.get("/integrations/appflowy/workspaces/:workspaceId/search", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      const limit = Number(req.query.limit ?? 10);
+      return res.json(await runAppFlowyAction({
+        env, fetchImpl, userId: req.supabaseUser?.id, action: "search",
+        workspaceId: req.params.workspaceId, query: bounded(req.query.q, 300), limit
+      }));
+    } catch (error) { safeError(res, error, "AppFlowy document search"); }
   });
 
   return router;
