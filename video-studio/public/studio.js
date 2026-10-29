@@ -71,8 +71,9 @@
     try {
       const data = await api("/api/projects/" + activeId);
       if (activeId !== data.project.id) return;
+      const unchanged = Boolean(activeProject && activeProject.updatedAt === data.project.updatedAt);
       activeProject = data.project;
-      renderProject(data.project, data.budget || {});
+      if (!unchanged) renderProject(data.project, data.budget || {});
       await refreshProjects();
     } catch (error) {
       if (error.message.toLowerCase().includes("not found")) {
@@ -135,7 +136,7 @@
         '<div class="scene-body"><div class="scene-fields"><div><label>VISUAL DIRECTION</label><textarea data-scene="' + escapeHtml(s.id) + '" data-field="visual">' + escapeHtml(s.visual) + '</textarea></div><div><label>NARRATION / SCRIPT</label><textarea data-scene="' + escapeHtml(s.id) + '" data-field="narration">' + escapeHtml(s.narration) + '</textarea></div></div>' +
         '<div class="scene-actions"><input class="search-query" data-query="' + escapeHtml(s.id) + '" value="' + escapeHtml(s.searchQuery || s.visual || "") + '" aria-label="Stock search query"><button class="secondary-button" data-search="' + escapeHtml(s.id) + '">Find ' + (project.sourceMode === "images" ? "images" : "footage") + '</button><label class="upload-button">Upload asset <input type="file" data-upload-scene="' + escapeHtml(s.id) + '" accept="video/*,image/*" hidden></label>' +
         (asset ? '<span class="muted">' + escapeHtml(asset.name) + ' · ' + Math.ceil(Number(asset.bytes || 0) / 1024) + ' KB</span>' : "") + '</div>' +
-        (candidates.length ? '<div class="asset-candidates">' + candidates.map(c => '<div class="candidate"><img loading="lazy" src="' + escapeHtml(c.previewUrl || "") + '" alt=""><div class="candidate-info"><b>' + escapeHtml(c.title) + '</b><small>' + escapeHtml(c.creator || c.provider) + ' · ' + escapeHtml(c.license || "License not identified") + '</small><a href="' + escapeHtml(c.pageUrl || "#") + '" target="_blank" rel="noopener noreferrer">Source / license ↗</a><br><button class="secondary-button" data-import="' + escapeHtml(c.id) + '" data-import-scene="' + escapeHtml(s.id) + '">Use this asset</button></div></div>').join("") + '</div>' : "") +
+        (candidates.length ? (candidates.some(c => c.provider === "pexels") ? '<p class="muted">Stock search via <a href="https://www.pexels.com" target="_blank" rel="noopener noreferrer">Pexels</a>. Review the creator/source page for licensing and attribution.</p>' : "") + '<div class="asset-candidates">' + candidates.map(c => '<div class="candidate"><img loading="lazy" src="' + escapeHtml(c.previewUrl || "") + '" alt=""><div class="candidate-info"><b>' + escapeHtml(c.title) + '</b><small>' + escapeHtml(c.creator || c.provider) + ' · ' + escapeHtml(c.license || "License not identified") + '</small><a href="' + escapeHtml(c.pageUrl || "#") + '" target="_blank" rel="noopener noreferrer">Source / license ↗</a><br><button class="secondary-button" data-import="' + escapeHtml(c.id) + '" data-import-scene="' + escapeHtml(s.id) + '">Use this asset</button></div></div>').join("") + '</div>' : "") +
         '</div></article>';
     }).join("");
   }
