@@ -9,6 +9,7 @@ import { getStrataReadiness } from "./strata.js";
 import { getOpenSeoReadiness } from "./openseo-mcp.js";
 import { getOpenDesignReadiness } from "./open-design.js";
 import { getOpenHiggsfieldReadiness } from "./open-higgsfield.js";
+import { getOpenGenerativeAIReadiness } from "./open-generative-ai.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -40,6 +41,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const openSeoReadiness = getOpenSeoReadiness(env);
   const openDesignReadiness = getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const openHiggsfieldReadiness = getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
+  const openGenerativeAIReadiness = getOpenGenerativeAIReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
 
   return [
     {
@@ -260,6 +262,17 @@ export function buildIntegrationCatalog(env = process.env) {
       requiredEnv: ["OPEN_DESIGN_ENABLED=true", "OPEN_DESIGN_BASE_URL", "OPEN_DESIGN_API_TOKEN", "OPEN_DESIGN_PROJECT_ID", "OPEN_DESIGN_BYOK_BASE_URL", "OPEN_DESIGN_BYOK_API_KEY", "OPEN_DESIGN_BYOK_MODEL", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       apiRoutes: ["GET /api/integrations/open-design/status", "GET /api/integrations/open-design/projects", "POST /api/integrations/open-design/runs", "GET /api/integrations/open-design/runs/:runId", "agent tool: open_design"],
       note: openDesignReadiness.note
+    },
+    {
+      id: "open-generative-ai",
+      name: "Open Generative AI / MuAPI Studio",
+      capability: "Allowlisted image generation/editing and video text/image/reference/edit/extend workflows with asynchronous status polling",
+      state: openGenerativeAIReadiness.state,
+      configured: Boolean(openGenerativeAIReadiness.configured),
+      mode: "owner_scoped_metered_media_api",
+      requiredEnv: ["ULTRON_OPEN_GENERATIVE_AI_ENABLED=true", "MUAPI_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["GET /api/integrations/open-generative-ai/status", "GET /api/integrations/open-generative-ai/models", "POST /api/integrations/open-generative-ai/generate", "GET /api/integrations/open-generative-ai/jobs/:requestId", "agent tool: open_generative_ai"],
+      note: openGenerativeAIReadiness.note
     },
     {
       id: "hermes-agent",
