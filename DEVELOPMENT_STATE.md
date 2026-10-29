@@ -152,3 +152,10 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Added `.env.example`, Render Blueprint secret placeholders, and provider setup/fallback documentation. The real credentials are not stored in the repository.
 - **Verification status:** source/test changes are on feature branch `feat/gemini-groq-provider-support`. Mocked regression test is added; CI results and real provider completions still need verification. No Render environment values were changed, no deployment was triggered by this work, and live inference is not claimed.
 - **Credential dependency:** a valid `GROQ_API_KEY` and/or `GEMINI_API_KEY` must be created in the respective provider console and entered privately in the backend environment. Provider-specific rates, free-tier rules, model availability, and quotas apply.
+
+## 2026-10-29 Video Studio integration candidate
+
+- Added the same-origin `/studio` workspace and authenticated `/api/studio/*` routes on the separate `integration/ultron-completion-20261029` branch, alongside the existing Chrome bridge and provider fallback code.
+- Studio uses per-user hashed project directories in hosted mode; local-only mode binds to loopback via `npm run studio:local`. The CSP remains self-only for API connections and permits only the explicit public-media hosts needed for preview assets.
+- FFmpeg/FFprobe, reference clip metadata/scene cues, optional stock search, generated planning, SRT sidecars and approval-gated rendering are implemented in source. This is not a generative-video model; it assembles assets the user has rights to use. No real local render, media license check, provider auth, or production deployment is claimed yet.
+- Render Blueprint changes are source-only and do not change live Render environment settings or trigger deployment.
