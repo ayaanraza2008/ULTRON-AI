@@ -170,8 +170,8 @@ The optional [ULTRON Model Lab](tools/model-lab/README.md) Python CLI benchmarks
 
 ```bash
 python -m pip install -r tools/model-lab/requirements.txt
-npm run model-lab -- doctor
-npm run test:model-lab
+python tools/model-lab/ultron_model_lab.py doctor
+python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
