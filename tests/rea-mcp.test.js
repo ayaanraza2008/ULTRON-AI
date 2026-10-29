@@ -222,7 +222,7 @@ test("REA native-code inspection rejects arbitrary operations and invalid symbol
   for (const input of [
     { operation: "execute_shell_command" },
     { operation: "symbols", symbol: "main" },
-    { operation: "disassemble", symbol: "bad\\u0000symbol" }
+    { operation: "disassemble", symbol: "bad\u0000symbol" }
   ]) {
     let called = false;
     const result = await runReaTool({
