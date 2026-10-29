@@ -239,11 +239,6 @@ function safeStatusPayload(payload,requestId) {
   };
 }
 export const OPEN_GENERATIVE_AI_PAID_CONFIRMATION=PAID_CONFIRMATION;
-export function getOpenGenerativeAIReadiness(env=process.env,userId=""){
-  const c=configFor(env,userId);
-  return {configured:c.configured,ownerAuthorized:c.ownerAuthorized,state:!c.enabled?"disabled_by_config":!c.apiKey||!c.ownerId?"missing_configuration":!c.ownerAuthorized?"owner_only":"configured_unverified",requiredEnv:["ULTRON_OPEN_GENERATIVE_AI_ENABLED=true","MUAPI_API_KEY","ULTRON_INTEGRATION_OWNER_USER_ID"],modelCount:MODELS.length,endpoint:BASE_URL,note:!c.enabled?"MuAPI media integration is disabled by default.":!c.configured?"Provide a server-side MUAPI_API_KEY and the ULTRON integration owner UUID.":!c.ownerAuthorized?"MuAPI credentials are restricted to the configured owner.":"MuAPI credentials are present, but account entitlement, current billing, model access, generation and output quality are not live-verified. Every generation requires explicit approval; actual provider cost is not estimated/capped."};
-}
-export function listOpenGenerativeAIModels(){return MODELS.map(({id,label,media})=>({id,label,media}));}
 export async function runOpenGenerativeAIAction({env=process.env,fetchImpl=safePinnedFetch,userId="",action="readiness",model:modelId,prompt="",media={},settings={},requestId="",approvePaidGeneration=false,confirmationText="",userPrompt=""}={}) {
  if(action==="catalog")return {provider:"open-generative-ai-muapi",modelCount:MODELS.length,models:listOpenGenerativeAIModels(),capabilities:["text-to-image","image-to-image using supplied public image URLs","text-to-video","image-to-video","reference-image-to-video","video-edit and extension for allowlisted models","bounded generation status polling"],execution:"static_model_catalog_only"};
  const config=configFor(env,userId);
