@@ -443,6 +443,10 @@ function buildFallbackCalls(text) {
     }
   };
   const intent = extractIntent(text);
+  // If a free model returns plain text instead of a tool call, keep direct
+  // user-authorized fenced code on the same exact-source sandbox path.
+  const explicitSandbox = extractExplicitSandboxRequest(text);
+  if (explicitSandbox) add("coding_sandbox_run", explicitSandbox);
   const browserGuidance = buildBrowserUseGuidance(text);
   const reaPathMatch = text.match(/\b(?:path|target path|artifact path)\s*[:=]\s*([A-Za-z0-9._/@+-]{1,500})/i);
   if (/\b(?:rea|reverse engineer(?:ing)?|reverse[- ]engineer)\b/i.test(text) && reaPathMatch) {
