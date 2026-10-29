@@ -43,7 +43,7 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
-  ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|voice studio|voicestudio)\b/i],
+  ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read (?:this|that|it|the text )?aloud|read aloud|voice studio|voicestudio)\b/i],
   ["browser", /\b(?:browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
   ["geolocation", /\b(?:geolocat(?:e|ion)|where was this photo taken|photo location|identify (?:this )?location from (?:the )?(?:photo|image)|geo[- ]sleuth)\b/i],
   ["spaceplanner", /\b(?:floor plan|house plan|room layout|interior layout|spaceplanner|space planner)\b/i],
@@ -65,7 +65,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["media", /\b(?:talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
 ]);
 
-const COMPLEX_PATTERN = /\b(?:then|after that|step by step|multi[- ]step|end to end|from scratch|complete project|across multiple|and also|and then|first .* then|workflow|autonomously)\b/i;
+const COMPLEX_PATTERN = /\b(?:then|after that|step by step|multi[- ]step|end to end|from scratch|complete project|across multiple|and also|and then|first .* then|workflow|autonomously|background|queue (?:a |the |an )?(?:task|report|research))\b/i;
 const ACTION_PATTERN = /\b(?:build|create|write|fix|debug|implement|run|execute|schedule|send|publish|book|delete|change|update|research|search|open|inspect|transcribe|generate|plan|connect|integrate|check|analyze|analyse|summarize|compare|calculate|find|coordinate|migrate|migration|report|audit|verify|test)\b/i;
 const SIMPLE_PATTERN = /^(?:hi|hello|hey|good morning|good afternoon|good evening|thanks|thank you|who are you|what can you do|what is [\s\S]+|what's [\s\S]+|define [\s\S]+|explain [\s\S]+|tell me about [\s\S]+|how does [\s\S]+ work|why is [\s\S]+)\??[.! ]*$/i;
 const VAGUE_PATTERN = /^(?:help|help me|do it|continue|go ahead|make it better|fix it|start|proceed|do the needful|handle it)[.! ]*$/i;
