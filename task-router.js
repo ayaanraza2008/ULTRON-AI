@@ -11,6 +11,7 @@ const CATEGORY_TOOLS = Object.freeze({
   study: ["create_study_pack"],
   notes: ["notes_search", "notes_read", "notes_create", "notes_update"],
   github: ["github_public_repo"],
+  reminders: ["list_reminders", "create_reminder", "update_reminder"],
   wikipedia: ["wikipedia_lookup"],
   time: ["world_clock"],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
@@ -56,6 +57,7 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
+  ["reminders", /\b(?:remind me|reminder(?:s)?|snooze (?:a |the )?reminder|mark (?:a |the )?reminder|reschedule (?:a |the )?reminder)\b/i],
   ["github", /\b(?:github|git hub|github\.com|readme (?:from|on) github|latest commits for|open issues for|public github repository)\b/i],
   ["notes", /\b(?:notes? library|saved notes?|search (?:my )?notes?|find (?:my )?notes?|read (?:my |the )?note|create (?:a )?note|write (?:a )?note|save (?:a |this |the )?note|update (?:my |the )?note)\b/i],
   ["study", /\b(?:study mode|study pack|study guide|exam mode|revision sheet|revision notes|flashcards?|make (?:me )?(?:a )?quiz|create (?:a )?quiz|generate (?:a )?quiz|practice questions|practice test|mock test|self.?test|quiz me|test me on)\b/i],
