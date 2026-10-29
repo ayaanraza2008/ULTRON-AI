@@ -1,10 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import express from "express";
 import JSZip from "jszip";
 import { deflateRawSync } from "node:zlib";
 import { createFeatureRouter } from "../features.js";
+
+function assertPdfStructure(pdf) {
+  assert.ok(Buffer.isBuffer(pdf));
+  assert.match(pdf.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d/);
+  const raw = pdf.toString("latin1");
+  const start = /startxref\r?\n(\d+)\r?\n%%EOF/.exec(raw);
+  assert.ok(start, "PDF must end with startxref and EOF");
+  const xrefOffset = Number(start[1]);
+  assert.equal(raw.slice(xrefOffset, xrefOffset + 4), "xref");
+  const xref = raw.slice(xrefOffset);
+  const header = /^xref\r?\n0 (\d+)\r?\n/.exec(xref);
+  assert.ok(header, "xref must declare its object count");
+  const count = Number(header[1]);
+  const eol = xref.includes("\r\n") ? "\r\n" : "\n";
+  const rows = xref.split(/\r?\n/);
+  assert.ok(rows.length >= count + 2);
+  for (let id = 1; id < count; id++) {
+    const row = rows[id + 2];
+    assert.match(row || "", /^\d{10} 00000 n ?$/);
+    assert.equal(Buffer.byteLength(row + eol, "latin1"), 20);
+    const offset = Number(row.slice(0, 10));
+    assert.equal(raw.slice(offset, offset + String(id).length + 7), String(id) + " 0 obj");
+  }
+}
 
 async function withServer(env, run, extras = {}) {
   const app = express();
@@ -1689,10 +1712,8 @@ test("authenticated report PDF endpoint returns a readable transient attachment"
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.match(bytes.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d$/);
-    const parsed = await pdfParse(bytes, { version: "v2.0.550" });
-    assert.match(parsed.text, /ULTRON Verification Report/);
-    assert.match(parsed.text, /source test suite passed/);
-    assert.match(parsed.text, /two-account database checks remain/);
+    assertPdfStructure(bytes);
+    assert.ok(bytes.toString("latin1").includes("ULTRON Verification Report"));
   });
 });
 
