@@ -47,6 +47,7 @@ test("all required UI assets are served as same-origin static files", async (t) 
 test("Living Core exposes notes, reminders and study-library routes in the navigation", async (t) => {
   const base = await startApp(t);
   const html = await (await fetch(base + "/")).text();
+  assert.match(html, /data-drawer-view="security"/);
   assert.match(html, /data-drawer-view="employees"/);
   assert.match(html, /data-drawer-view="documents"/);
   assert.match(html, /data-drawer-view="memory"/);
@@ -67,6 +68,8 @@ test("Living Core exposes notes, reminders and study-library routes in the navig
   assert.match(app, /preferredPersona/);
   assert.match(app, /preference-assistant-persona/);
   assert.match(app, /ultron-preferred-persona/);
+  assert.match(app, /kaligpt\/security\/assist/);
+  assert.match(app, /kaligpt\/tools\/headers\/analyze/);
   assert.match(app, /api\/preferences/);
   assert.match(app, /api\/conversations/);
   assert.match(app, /api\/notes/);
