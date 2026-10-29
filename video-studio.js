@@ -229,6 +229,34 @@ function normalizePlan(raw, project) {
     generatedBy: "model"
   };
 }
+function describeVisualCharacter(output) {
+  const text = String(output || "");
+  const values = name => [...text.matchAll(new RegExp("lavfi\\\\.signalstats\\\\." + name + "=([0-9]+(?:\\\\.[0-9]+)?)", "g"))]
+    .map(match => Number(match[1])).filter(value => Number.isFinite(value));
+  const mean = items => items.length ? items.reduce((sum, value) => sum + value, 0) / items.length : null;
+  const y = values("YAVG"), low = values("YLOW"), high = values("YHIGH"), saturation = values("SATAVG");
+  if (!y.length) return { state: "unavailable", sampledFrames: 0, notes: ["FFmpeg did not emit sampled-frame signal statistics."] };
+  const averageLuma = mean(y);
+  const averageContrast = low.length && high.length ? mean(high.slice(0, Math.min(low.length, high.length)).map((value, index) => value - low[index])) : null;
+  const averageSaturation = mean(saturation);
+  const brightnessLabel = averageLuma < 70 ? "dark / low-key" : averageLuma > 170 ? "bright / high-key" : "balanced brightness";
+  const contrastLabel = averageContrast == null ? "not measured" : averageContrast < 70 ? "soft contrast" : averageContrast > 130 ? "high contrast" : "moderate contrast";
+  const saturationLabel = averageSaturation == null ? "not measured" : averageSaturation < 25 ? "muted colour" : averageSaturation > 70 ? "highly saturated colour" : "balanced colour";
+  const round = value => value == null ? null : Math.round(value * 10) / 10;
+  return {
+    state: "measured",
+    method: "FFmpeg signal statistics from up to six downscaled sample frames",
+    sampledFrames: y.length,
+    averageLuma: round(averageLuma),
+    averageContrast: round(averageContrast),
+    averageSaturation: round(averageSaturation),
+    brightnessLabel,
+    contrastLabel,
+    saturationLabel,
+    note: "These are objective visual-character cues, not semantic image recognition. Combine them with transcript/context and review the clip manually."
+  };
+}
+
 function formatSrtTime(seconds) {
   const ms = Math.max(0, Math.round(Number(seconds || 0) * 1000));
   return String(Math.floor(ms / 3600000)).padStart(2, "0") + ":" +
@@ -596,6 +624,18 @@ export function createVideoStudioRouter({
           } catch { analysis.notes.push("FFmpeg scene-cut detection was unavailable; duration/dimensions may still be usable."); }
           const duration = Number(analysis.durationSeconds) || 0, cuts = analysis.sceneCutsSeconds?.length || 0;
           analysis.pacing = { cutsDetected: cuts, cutsPerMinute: duration > 0 ? Math.round(cuts / duration * 600) / 10 : null };
+          try {
+            const sampleStats = await commandRunner("ffmpeg", [
+              "-hide_banner", "-i", videoPath,
+              "-vf", "fps=1/4,scale=160:90:force_original_aspect_ratio=decrease,signalstats,metadata=mode=print",
+              "-frames:v", "6", "-an", "-f", "null", "-"
+            ], { timeout: 60000, maxBuffer: 2 * 1024 * 1024, windowsHide: true });
+            analysis.visualCharacter = describeVisualCharacter(String(sampleStats.stderr || "") + "\n" + String(sampleStats.stdout || ""));
+            if (analysis.visualCharacter.state === "measured") analysis.analysisDepth = "local-media-metadata+scene-cuts+sampled-visual-stats";
+          } catch {
+            analysis.visualCharacter = { state: "unavailable", sampledFrames: 0, notes: ["FFmpeg visual-character statistics are unavailable."] };
+            analysis.notes.push("Visual brightness/contrast sampling was unavailable; duration and scene-change analysis may still be usable.");
+          }
         }
       } else if (reference.url) {
         const validated = platformForUrl(reference.url);
