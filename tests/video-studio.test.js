@@ -400,3 +400,59 @@ test("stock search sanitizes provider source URLs and rejects imported HTML disg
     assert.equal((await imported.json()).error.code, "ASSET_MEDIA_TYPE_MISMATCH");
   });
 });
+
+
+test("Wikimedia Commons supplies free archive candidates without stock-provider keys", async () => {
+  const calls = [];
+  await withStudio({
+    fetchImpl: async (url, options = {}) => {
+      const target = String(url);
+      calls.push(target);
+      if (target.startsWith("https://commons.wikimedia.org/w/api.php")) {
+        return new Response(JSON.stringify({ query: { pages: {
+          421: {
+            pageid: 421, title: "File:Sample railway footage.webm",
+            imageinfo: [{
+              url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/sample.webm",
+              thumburl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/sample.webm/320px-sample.webm",
+              mime: "video/webm",
+              extmetadata: {
+                Artist: { value: "Archive contributor" },
+                LicenseShortName: { value: "CC BY-SA 4.0" },
+                LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/4.0/" }
+              }
+            }]
+          }
+        } } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (target === "https://upload.wikimedia.org/wikipedia/commons/a/ab/sample.webm") {
+        return new Response(Buffer.from("mock-webm-bytes"), { status: 200, headers: { "Content-Type": "video/webm" } });
+      }
+      throw new Error("Unexpected outbound URL in test: " + target);
+    }
+  }, async ({ base }) => {
+    const project = await createProject(base);
+    const search = await request(base, "/api/studio/projects/" + project.id + "/assets/search", {
+      method: "POST", body: JSON.stringify({ query: "railway station", kind: "video" })
+    });
+    assert.equal(search.status, 200);
+    const result = await search.json();
+    assert.equal(result.providers.wikimediaCommons, true);
+    assert.equal(result.results.length, 1);
+    assert.equal(result.results[0].provider, "wikimedia_commons");
+    assert.equal(result.results[0].author, "Archive contributor");
+    assert.equal(result.results[0].license, "CC BY-SA 4.0");
+    assert.equal(result.results[0].sourcePage, "https://commons.wikimedia.org/wiki/Sample_railway_footage.webm");
+    assert.equal("downloadUrl" in result.results[0], false);
+    const imported = await request(base, "/api/studio/projects/" + project.id + "/assets/" + result.results[0].id + "/import", {
+      method: "POST", body: "{}"
+    });
+    assert.equal(imported.status, 201);
+    const body = await imported.json();
+    assert.equal(body.asset.provider, "wikimedia_commons");
+    assert.equal(body.asset.mimeType, "video/webm");
+    assert.equal(body.asset.license, "CC BY-SA 4.0");
+    assert.ok(calls.includes("https://upload.wikimedia.org/wikipedia/commons/a/ab/sample.webm"));
+    assert.equal(JSON.stringify(result).includes("PEXELS_API_KEY"), false);
+  });
+});
