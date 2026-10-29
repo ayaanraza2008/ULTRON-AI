@@ -132,6 +132,36 @@ function failureCode(error, status) {
   return error?.code && /^[A-Z0-9_]{1,60}$/.test(error.code) ? error.code : "REQUEST_FAILED";
 }
 
+function completionDiagnostics(data, response) {
+  const choice = data?.choices?.[0];
+  const message = choice?.message;
+  const content = message?.content;
+  const finishReasonRaw = choice?.finish_reason;
+  const finishReason = typeof finishReasonRaw === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(finishReasonRaw)
+    ? finishReasonRaw
+    : undefined;
+  const contentShape = typeof content === "string" ? "string"
+    : Array.isArray(content) ? "array"
+    : content == null ? "missing" : "other";
+  const contentLength = typeof content === "string" ? Math.min(content.length, 100_000)
+    : Array.isArray(content) ? Math.min(content.reduce((total, item) => total + (typeof item?.text === "string" ? item.text.length : 0), 0), 100_000)
+    : 0;
+  const reasoningPresent = [message?.reasoning, message?.analysis, message?.reasoning_details]
+    .some(value => typeof value === "string" ? value.trim().length > 0 : Array.isArray(value) ? value.length > 0 : Boolean(value && typeof value === "object"));
+  const toolCallCount = Array.isArray(message?.tool_calls) ? Math.min(message.tool_calls.length, 100) : 0;
+  const rawContentType = response?.headers?.get?.("content-type");
+  const mime = typeof rawContentType === "string" ? rawContentType.split(";")[0].trim().toLowerCase() : "";
+  const contentType = /^[a-z0-9][a-z0-9.+-]{0,60}\/[a-z0-9][a-z0-9.+-]{0,60}$/.test(mime) ? mime : undefined;
+  return {
+    ...(finishReason ? { finishReason } : {}),
+    contentShape,
+    contentLength,
+    reasoningPresent,
+    toolCallCount,
+    ...(contentType ? { contentType } : {})
+  };
+}
+
 /**
  * Executes one minimal provider completion only when explicitly invoked by an
  * operator. It never returns credentials, generated text, or raw upstream errors.
@@ -158,7 +188,7 @@ export async function runModelProviderSmoke({ env = process.env, fetchImpl = saf
             { role: "system", content: "You are running a connectivity test. Reply with the single token ULTRON_SMOKE_OK." },
             { role: "user", content: "Reply with ULTRON_SMOKE_OK." }
           ],
-          max_tokens: 16,
+          max_tokens: 128,
           temperature: 0,
           stream: false
         }),
@@ -171,17 +201,24 @@ export async function runModelProviderSmoke({ env = process.env, fetchImpl = saf
         continue;
       }
       const data = await readJsonLimited(response);
+      const diagnostics = completionDiagnostics(data, response);
       const content = data?.choices?.[0]?.message?.content;
       const completion = typeof content === "string" ? content.trim()
         : Array.isArray(content) ? content.map(item => typeof item?.text === "string" ? item.text : "").join("").trim() : "";
       if (!completion) {
-        attempts.push({ provider: provider.name, model: provider.model, code: "EMPTY_COMPLETION", httpStatus: response.status });
+        attempts.push({
+          provider: provider.name,
+          model: provider.model,
+          code: diagnostics.finishReason === "length" ? "COMPLETION_TRUNCATED" : "EMPTY_COMPLETION",
+          httpStatus: response.status,
+          ...diagnostics
+        });
         continue;
       }
       // HTTP 200 plus arbitrary text is not enough to prove the expected model
       // completion contract. Verify the challenge token without exposing output.
       if (!completion.toUpperCase().includes("ULTRON_SMOKE_OK")) {
-        attempts.push({ provider: provider.name, model: provider.model, code: "UNEXPECTED_COMPLETION", httpStatus: response.status });
+        attempts.push({ provider: provider.name, model: provider.model, code: "UNEXPECTED_COMPLETION", httpStatus: response.status, ...diagnostics });
         continue;
       }
       return {
