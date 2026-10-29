@@ -1,6 +1,6 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is an API-first assistant runtime. This repository exposes the existing backend APIs and integrations, plus a first-party local-first Video Studio workspace at `/studio`. The root URL is not a general-purpose chat frontend.
 
 ## Current status
 
@@ -10,7 +10,7 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **UI status:** `/studio` provides the Video Studio production board. It is a focused production workspace, not a replacement for the full general-purpose ULTRON chat interface.
 
 ## Backend-only capability integration phase
 
@@ -28,6 +28,36 @@ Backend additions on the feature branch:
 - `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
 
 These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. The private original-file storage implementation requires its additive Supabase migration to be applied and live upload/download/delete E2E verification. A hardened coding sandbox, Windows PC-control action runner, live external-account integrations, and real provider/database end-to-end tests remain incomplete. Premium speech endpoints need a compatible provider configuration. The user-facing frontend and full Windows PC-control UI remain deferred. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.
+
+## Video Studio — local-first video production
+
+The integrated Video Studio workspace is served by the same ULTRON API at `http://127.0.0.1:10000/studio`. It creates a persistent project board, generates three creative directions and a timed script/scene plan, analyzes local reference clips with FFmpeg/FFprobe, can search optional Pexels/Pixabay stock catalogs, creates SRT caption sidecars, can request a configured voiceover service, and renders an MP4 with local FFmpeg after explicit plan and final-render approvals.
+
+### Local quick start
+
+1. Install Node.js 20+ and install the project dependencies with `npm install`.
+2. Copy `.env.example` to `.env`. Fill in provider keys privately only when needed. The local launcher reads `.env`; the file is ignored by Git.
+3. Install FFmpeg (which includes `ffmpeg` and `ffprobe`) and ensure both commands are on `PATH`. Install `yt-dlp` only if you want optional metadata extraction for reference URLs.
+4. Run `npm run studio:local` and open `http://127.0.0.1:10000/studio`.
+
+Projects and assets default to `.local/video-studio/`. The local runner binds to `127.0.0.1`, and local unauthenticated mode rejects non-loopback Host requests. Do not expose it through a tunnel, reverse proxy, or public network. Set `ULTRON_VIDEO_STUDIO_DIR` to change the data directory.
+
+### Optional providers
+
+- AI planning uses the configured OpenRouter/Groq/Gemini or other OpenAI-compatible providers. With no usable provider key, the app uses a local template planner and does not claim it called a model.
+- `TAVILY_API_KEY` enables live research. If it is absent, the app records that research was not run.
+- `PEXELS_API_KEY` and `PIXABAY_API_KEY` enable stock-media search. Each result retains a source link and creator/source metadata; check the current terms/licence before publishing.
+- Voiceover uses a separately installed local VoiceStudio endpoint or a configured compatible endpoint using the existing `TTS_API_BASE_URL`, `TTS_API_KEY`, `TTS_MODEL`, and `TTS_DEFAULT_VOICE` settings. Local reference transcription is available when VoiceStudio or an OpenAI-compatible STT endpoint (`STT_API_BASE_URL`, `STT_API_KEY`, `STT_MODEL`) is configured; otherwise paste the transcript manually.
+
+### Current boundaries
+
+- A link alone does not reveal full scene cuts or reliably provide a transcript. Upload an authorized local clip to inspect duration, dimensions and scene-change timestamps. If an STT/VoiceStudio endpoint is configured, the board can extract up to 210 seconds of audio locally and request a transcript; otherwise paste one manually. `yt-dlp` metadata access is opt-in in local mode only when the user confirms rights; the app does not automatically download the source video.
+- Local reference clip and direct local asset uploads are capped at 8 MB per file in this UI; stock media imports are capped at 40 MB. Short samples are recommended.
+- The renderer uses licensed/imported footage and still images. Stills receive a slow zoom/pan effect; imported motion footage is cut to fit the requested duration. Captions are an editable/downloadable `.srt` sidecar and are not burned into the MP4. No video/image generation service is silently installed or called.
+- Cost values are estimates based on optional user-configured unit rates. Provider quota, commercial usage terms, music/media licences and third-party generation costs remain separate and may be unknown.
+- The final renderer is disabled until the plan is approved, visual media exists, and final-render approval is explicitly recorded.
+
+See [docs/VIDEO_STUDIO.md](docs/VIDEO_STUDIO.md) for setup details, workflows, supported sources, and verification limits.
 
 ## Configuration
 
