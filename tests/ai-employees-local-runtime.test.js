@@ -50,6 +50,9 @@ test("local role mapping matches every routine in ULTRON's existing 60-routine c
 test("workspace path rejects cloud-synced directories and home/root", () => {
   const temp = tempDir();
   assert.equal(isCloudSyncedPath(path.join(temp, "OneDrive", "employees")), true);
+  assert.equal(isCloudSyncedPath(path.join(temp, "OneDrive - Personal", "employees")), true);
+  assert.equal(isCloudSyncedPath(path.join(temp, "iCloud Drive", "employees")), true);
+  assert.equal(isCloudSyncedPath(path.join(temp, "Google Drive (personal)", "employees")), true);
   assert.equal(isCloudSyncedPath(path.join(temp, "local-employees")), false);
   assert.throws(() => resolveWorkspaceRoot(os.homedir()), /dedicated employee workspace/i);
   assert.throws(() => resolveWorkspaceRoot(path.join(temp, "Dropbox", "employees")), /cloud/i);
