@@ -106,3 +106,25 @@ test("learns scope and language preferences only after a clear correction signal
   const language = extractCorrectionLesson("Wrong answer; I said explain in English.");
   assert.match(language.content, /explicitly requested language/i);
 });
+
+test("a recently reinforced inferred memory uses reinforcement time even without updated_at changes", () => {
+  const row = {
+    id: "reinforced-old-row",
+    kind: "project_fact",
+    title: "Reinforced deployment lesson",
+    content: "Keep production deployment separate until tests are complete.",
+    source: "conversation_summary",
+    created_at: new Date(NOW - 240 * 86_400_000).toISOString(),
+    updated_at: new Date(NOW - 240 * 86_400_000).toISOString(),
+    metadata: {
+      cognitiveLayer: "procedural",
+      confidence: 0.9,
+      reinforcementCount: 3,
+      lastReinforcedAt: new Date(NOW - 1 * 86_400_000).toISOString()
+    }
+  };
+
+  const ranked = rankCognitiveMemories([row], "production deployment tests", { now: NOW, limit: 8 });
+  assert.equal(ranked.length, 1, "reinforcement should prevent a false stale-memory exclusion");
+  assert.ok(ranked[0].cognitiveDecay > 0.95, "decay should be measured from last reinforcement");
+});
