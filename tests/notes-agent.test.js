@@ -259,3 +259,54 @@ test("agent updates a user's own note using an owner-filtered conditional update
   assert.equal(providerCalls, 2);
   assert.equal(updateCalls, 1);
 });
+
+test("agent reads a full private note only through an owner-filtered query", async () => {
+  let providerCalls = 0;
+  let reads = 0;
+  const bodyText = "Full saved note content with all the details the short search preview omits.";
+  await withAgentServer({ OPENROUTER_API_KEY: "notes-read-test-provider-key" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    const hasReadResult = payload.messages.some(message => message.role === "tool"
+      && typeof message.content === "string" && message.content.includes('"body":"' + bodyText + '"'));
+    if (hasReadResult) {
+      return providerReply({ role: "assistant", content: "I read your full saved Quantum Revision note." });
+    }
+    return providerReply({
+      content: null,
+      tool_calls: [{
+        id: "notes-read-call",
+        type: "function",
+        function: { name: "notes_read", arguments: JSON.stringify({ id: NOTE_ID }) }
+      }]
+    });
+  }, async (req, table, method, query) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
+    reads += 1;
+    assert.equal(table, "user_notes");
+    assert.equal(method, "GET");
+    assert.ok(query.includes("id=eq." + NOTE_ID));
+    assert.ok(query.includes("user_id=eq." + USER_ID));
+    assert.equal(req.supabaseUser.id, USER_ID);
+    return [{
+      id: NOTE_ID,
+      title: "Quantum Revision",
+      body: bodyText,
+      tags: ["physics"],
+      created_at: "2026-10-28T00:00:00.000Z",
+      updated_at: "2026-10-29T00:00:00.000Z"
+    }];
+  }, async base => {
+    const response = await sendAgentPrompt(base, "Read my note " + NOTE_ID);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /read your full saved Quantum Revision note/i);
+    assert.ok(body.routing.categories.includes("notes"));
+    assert.deepEqual(body.toolResults[0].result.note.body, bodyText);
+    assert.equal(body.toolResults[0].result.sourceContentTrust, "user_saved_content");
+  });
+
+  assert.equal(providerCalls, 2);
+  assert.equal(reads, 1);
+});
