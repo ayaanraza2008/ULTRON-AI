@@ -24,12 +24,14 @@ const generatedPack = {
   sourceNotes: "General knowledge draft; check this against the course syllabus."
 };
 
-async function withAgentServer(env, fetchImpl, run) {
+async function withAgentServer(env, fetchImpl, run, extras = {}) {
   const app = express();
   app.use(express.json({ limit: "12mb" }));
   app.use("/api", createAgentRouter({
     env: { ...env, ULTRON_INTEGRATION_OWNER_USER_ID: USER_ID },
     fetchImpl,
+    supabaseRest: extras.supabaseRest,
+    privilegedSupabaseRest: extras.supabaseRest,
     requireSupabaseUser: (req, _res, next) => {
       req.supabaseUser = { id: USER_ID };
       next();
