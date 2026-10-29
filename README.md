@@ -1,16 +1,16 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is a personal-assistant backend and same-origin Living Core web interface. The consolidated source candidate adds a responsive interface served from `/`, keeps authenticated APIs under `/api/*`, and includes fixed public-data tools plus a local AI Employees kit runtime. This branch is a source candidate—not a claim that the current production release already contains these changes.
 
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-zvd7.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
+- **Core service target:** https://ultron-ai-core.onrender.com. The production verification workflow checks its health/configuration/revision; the consolidated source candidate is not considered live until that deployed revision and its UI asset checks pass.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **Frontend status:** this source candidate includes the Living Core interface under `public/` and same-origin static serving. Camera/microphone access remains browser-permission controlled and user-triggered; live production serving is not claimed until verified.
 
 ## Backend-only capability integration phase
 
@@ -209,3 +209,25 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## Living-core frontend
+
+The same-origin living-core interface is served by the existing Express backend from `public/`. Open the root path (`/`) when running ULTRON; the interface keeps `/api/*` on the same origin, uses the existing auth/session routes, and requests camera or microphone access only after a user gesture. UI source and serving tests live in `public/` and `tests/frontend-serving.test.js`. See [the UI serving notes](docs/CORE_UI_SAME_ORIGIN.md). The frontend build and mocked route tests do not prove that production chat, physical camera access, or user-account flows are working end-to-end.
+
+## Fixed public-data adapters
+
+ULTRON includes an offline searchable public-API directory and a fixed set of keyless, read-only data adapters. The agent may search the bundled directory with `search_public_api_catalog` or call `public_api_lookup` for supported services such as weather, air quality, public holidays, scholarly papers, museum objects, currency reference rates, country data, Wikipedia, books, public GitHub metadata, sunrise/sunset, public-domain ebooks, trivia, earthquakes, dictionary definitions, and public news. Returned directory URLs are metadata only; they are never executed dynamically. See [the repository capability map](docs/REPOSITORY_CAPABILITY_MAP.md) for provenance, terms notes and limits.
+
+## Local AI Employees
+
+The optional [local AI Employees runtime](docs/AI_EMPLOYEES_LOCAL_RUNTIME.md) installs eight role kits into a dedicated local workspace. Use the repository CLI to inspect the available roles, install all missing kits, and generate a local fleet brief:
+
+```bash
+npm run employees -- list
+npm run employees -- hire-all
+npm run employees -- status
+npm run employees -- brief
+```
+
+`hire-all` installs kit files sequentially, skips recognized installations, and refuses to overwrite unrecognized folders. This installer does not by itself register jobs in your coding-agent harness or enable browser-control permissions. Actual scheduled execution depends on the chosen local harness, its supported scheduler/skills interface, configured business context and any approved browser bridge. Do not treat installed kit files as proof that the role routines have run.
+
