@@ -5,7 +5,7 @@ import { createAgentRouter } from "../agent-runtime.js";
 
 const USER_ID = "00000000-0000-4000-8000-000000000001";
 
-async function withAgent({ memoryEnabled = true, memoryRows = [] } = {}, run) {
+async function withAgent({ memoryEnabled = true, memoryRows = [], assertMemoryContext = true } = {}, run) {
   const writes = [];
   const queries = [];
   const supabaseRest = async (_req, table, method, query, body) => {
@@ -30,8 +30,8 @@ async function withAgent({ memoryEnabled = true, memoryRows = [] } = {}, run) {
     fetchImpl: async (url, options) => {
       assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
       const request = JSON.parse(options.body);
-      if (request.messages) {
-        assert.ok(request.messages.some(message =>
+      if (assertMemoryContext) {
+        assert.ok(request.messages?.some(message =>
           message.role === "system" && String(message.content).includes("keep the response concise and focused")
         ), "ranked cognitive memory should be injected into the model context");
       }
@@ -88,7 +88,7 @@ test("agent injects ranked per-user cognitive memories and learns a generic corr
 });
 
 test("agent does not recall or write correction lessons when account memory is disabled", async () => {
-  await withAgent({ memoryEnabled: false }, async (base, state) => {
+  await withAgent({ memoryEnabled: false, assertMemoryContext: false }, async (base, state) => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
