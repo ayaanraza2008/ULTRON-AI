@@ -1421,7 +1421,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     try {
       let first;
       try {
-        first = await requestModel(messages, { useTools: !["simple", "clarify"].includes(taskRoute.tier), userId: req.supabaseUser?.id, allowedToolNames: taskRoute.toolNames });
+        first = await requestModel(messages, { useTools: true, userId: req.supabaseUser?.id, allowedToolNames: taskRoute.toolNames });
       } catch (toolModeError) {
         // Some free-model routes reject tool schemas. Retry plain chat first; if that
         // also fails, deterministic safe intents can still execute non-model tools.
