@@ -2,13 +2,14 @@
 from __future__ import annotations
 import argparse
 import difflib
+import hashlib
 import json
 import os
 import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
-from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, search_documents, secure_write, speak_text
+from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -204,11 +205,36 @@ def code_revise(args):
         print("Refusing to save a fenced model response.", file=sys.stderr)
         return 1
     draft = app_data_dir() / "drafts" / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{path.name}.draft"
-    secure_write(draft, revised + "\n")
+    draft_content = revised + "\n"
+    root = Path(args.root).expanduser().resolve()
+    secure_write(draft, draft_content)
+    metadata = {
+        "workspace_root": str(root),
+        "source_relative": path.relative_to(root).as_posix(),
+        "source_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+        "draft_sha256": hashlib.sha256(draft_content.encode("utf-8")).hexdigest(),
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+    secure_write(Path(str(draft) + ".json"), json.dumps(metadata, indent=2))
     print("Saved draft outside the project: " + str(draft))
-    print("Original file was not modified.")
+    print("Original file was not modified. To apply after reviewing, run:")
+    print("ultron-local code apply " + shlex.quote(str(draft)) + " --root " + shlex.quote(str(root)))
     print("\n".join(list(difflib.unified_diff(original.splitlines(), revised.splitlines(),
         fromfile="original/" + args.file, tofile="draft/" + args.file, lineterm=""))[:500]))
+    return 0
+
+def code_apply(args):
+    print("This will replace the original source only if it has not changed since the draft was created.")
+    print("A private backup will be saved before the change.")
+    if not confirm("APPLY", "Review the draft and its diff before applying."):
+        print("Draft not applied.")
+        return 0
+    try:
+        result = apply_workspace_draft(args.draft, args.root, confirm=True)
+    except Exception as exc:
+        print(f"Draft application blocked or failed: {exc}", file=sys.stderr)
+        return 1
+    out_json(result)
     return 0
 
 def code_run(args):
@@ -335,6 +361,7 @@ def build_parser():
     p = cs.add_parser("show"); p.add_argument("file"); p.add_argument("--root", default="."); p.set_defaults(handler=code_show)
     p = cs.add_parser("ask"); p.add_argument("request"); p.add_argument("--file", action="append"); p.add_argument("--root", default="."); p.add_argument("--model"); p.set_defaults(handler=code_ask)
     p = cs.add_parser("revise"); p.add_argument("file"); p.add_argument("--request", required=True); p.add_argument("--root", default="."); p.add_argument("--model"); p.set_defaults(handler=code_revise)
+    p = cs.add_parser("apply"); p.add_argument("draft"); p.add_argument("--root", default="."); p.set_defaults(handler=code_apply)
     p = cs.add_parser("run"); p.add_argument("file"); p.add_argument("--root", default="."); p.set_defaults(handler=code_run)
     p = subs.add_parser("shell"); p.add_argument("--root", default="."); p.add_argument("--command", required=True); p.set_defaults(handler=shell)
     m = subs.add_parser("model"); ms = m.add_subparsers(dest="model_command", required=True)
