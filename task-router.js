@@ -8,6 +8,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "create_talking_avatar"
   ],
   weather: ["weather_lookup"],
+  study: ["create_study_pack"],
   wikipedia: ["wikipedia_lookup"],
   time: ["world_clock"],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
@@ -53,6 +54,7 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
+  ["study", /\b(?:study mode|study pack|study guide|exam mode|revision sheet|revision notes|flashcards?|make (?:me )?(?:a )?quiz|create (?:a )?quiz|generate (?:a )?quiz|practice questions|practice test|mock test|self.?test|quiz me|test me on)\b/i],
   ["weather", /\b(?:weather\s+(?:in|for|forecast)|current weather|forecast\s+(?:in|for)|temperature\s+(?:outside|in)|rain chance\s+in|local weather)\b/i],
   ["wikipedia", /\b(?:wikipedia|wiki article|wikipedia page)\b/i],
   ["time", /\b(?:world clock|time zones?|timezones?|utc offset|time difference|what\s+time\b|current time in\b|local time in\b|time in\s+[a-z][a-z .'-]{1,60})\b/i],
