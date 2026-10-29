@@ -29,6 +29,17 @@ function timestamp(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function memoryUpdatedAt(item) {
+  const metadata = objectOrEmpty(item?.metadata);
+  // A reinforcement is a real memory event even if a database update trigger
+  // does not refresh the row's updated_at timestamp.
+  return Math.max(
+    timestamp(item?.updated_at),
+    timestamp(metadata.lastReinforcedAt),
+    timestamp(item?.created_at)
+  );
+}
+
 function tokens(value) {
   return new Set(
     String(value || "").toLowerCase()
@@ -89,7 +100,7 @@ export function rankCognitiveMemories(items, query, { now = Date.now(), limit = 
 
     const metadata = objectOrEmpty(item.metadata);
     const layer = cognitiveLayerForMemory(item);
-    const updatedAt = timestamp(item.updated_at) || timestamp(item.created_at);
+    const updatedAt = memoryUpdatedAt(item);
     const ageDays = updatedAt ? Math.max(0, (now - updatedAt) / 86_400_000) : 0;
     const explicit = item.source === "user_approved" || metadata.explicit === true;
     const decay = explicit ? 1 : Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
@@ -120,7 +131,7 @@ export function rankCognitiveMemories(items, query, { now = Date.now(), limit = 
 
   return ranked
     .sort((a, b) => b.cognitiveScore - a.cognitiveScore ||
-      timestamp(b.updated_at) - timestamp(a.updated_at))
+      memoryUpdatedAt(b) - memoryUpdatedAt(a))
     .slice(0, Math.max(0, Math.min(32, Math.trunc(limit) || 0)));
 }
 
