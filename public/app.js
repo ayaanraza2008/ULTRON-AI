@@ -1121,7 +1121,7 @@
             session.heardSpeech = true;
             session.lastVoiceAt = now;
           }
-          if (session.heardSpeech && now - session.lastVoiceAt >= 650) {
+          if (session.heardSpeech && now - session.lastVoiceAt >= 450) {
             stopFallbackRecognition({ transcribe: true });
           } else if (now - session.startedAt >= 18000) {
             stopFallbackRecognition({ transcribe: session.heardSpeech });
@@ -1223,7 +1223,7 @@
           stopRecognition();
           ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
           void sendPrompt(command, "voice");
-        }, 750);
+        }, 500);
       }
     };
     instance.onerror = (event) => {
@@ -1436,9 +1436,25 @@
       const clean = String(segment || "").trim();
       if (!clean || !streamVoiceReply) return;
       streamSpeechCount += 1;
+      // Start synthesis while the previous chunk is playing, then preserve
+      // playback order. This removes an extra network round-trip between chunks.
+      const fishAudioBlobPromise = streamSpeechUsesFish
+        ? requestFishAudioSpeech(clean).catch(() => null)
+        : Promise.resolve(null);
       streamSpeechQueue = streamSpeechQueue.then(async () => {
         if (streamSpeechEpoch === null || streamSpeechEpoch !== speechEpoch) return;
-        const spoke = await speakStreamingSegment(clean, streamSpeechEpoch, streamSpeechUsesFish);
+        let spoke = false;
+        if (streamSpeechUsesFish) {
+          const blob = await fishAudioBlobPromise;
+          if (blob && streamSpeechEpoch === speechEpoch) {
+            spoke = await playFishAudioBlob(blob, streamSpeechEpoch);
+          }
+          if (!spoke && streamSpeechEpoch === speechEpoch) {
+            spoke = await speakResponseBrowser(clean, streamSpeechEpoch);
+          }
+        } else {
+          spoke = await speakResponseBrowser(clean, streamSpeechEpoch);
+        }
         if (!spoke && streamSpeechEpoch === speechEpoch && !streamSpeechFallbackNotified) {
           streamSpeechFallbackNotified = true;
           showToast("Voice playback is unavailable. Check your browser audio output and Fish Audio settings.", 4500);
@@ -1455,9 +1471,9 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        if (!force && streamSpeechBuffer.length >= 180) {
-          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 155);
-          if (cutoff >= 85) {
+        if (!force && streamSpeechBuffer.length >= 52) {
+          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 46);
+          if (cutoff >= 28) {
             enqueueStreamSpeech(streamSpeechBuffer.slice(0, cutoff).trim());
             streamSpeechBuffer = streamSpeechBuffer.slice(cutoff + 1);
             continue;
@@ -1500,7 +1516,7 @@
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const voicePrompt = streamVoiceReply
-        ? "You are replying aloud. Lead with the direct answer, keep it concise (usually 1–3 short sentences), and avoid a long preamble. Mirror the user's language and style.\n\nUser request: " + outgoingPrompt
+        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 20–35 words). Start with the answer; no greeting, filler, or preamble. Mirror the user's language and style.\n\nUser request: " + outgoingPrompt
         : outgoingPrompt;
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
