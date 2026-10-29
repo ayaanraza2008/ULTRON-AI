@@ -275,10 +275,10 @@ const REPOSITORIES = [
   {
     id: "heretic", repo: "p-e-w/heretic", domain: "local_model_experimentation",
     match: /\b(heretic|abliteration|model refusal behavior|modify local model weights|model alignment experiment)\b/i,
-    integration: "local_model_tool_review_required", status: "review_required_upstream_unverified",
+    integration: "local_model_tool_review_required", status: "review_required_license_and_resource_gate",
     abilities: ["Optional local research on model behavior and controlled model-weight experiments", "Compare model variants with a task-specific evaluation set before and after any offline experiment"],
-    limits: ["No upstream code has been imported or executed by ULTRON. This workflow is not enabled as an automatic runtime feature; it requires source/license review, an explicit model and offline evaluation plan, and manual approval before modifying weights. ULTRON never downloads model weights automatically."],
-    envKeys: [], license: "Review upstream LICENSE and model licenses before reuse", source: "https://github.com/p-e-w/heretic"
+    limits: ["Source and root GNU AGPL-3.0 license are verified, but model weights/datasets may carry separate terms. No upstream code has been imported or executed by ULTRON; manual license/resource review and explicit approval remain required before modifying weights. ULTRON never downloads model weights automatically."],
+    envKeys: [], license: "GNU AGPL-3.0 for upstream source; model weights/datasets have separate terms", source: "https://github.com/p-e-w/heretic"
   },
   {
     id: "atticus-mac", repo: "SaarthurR/atticus-mac", domain: "desktop_voice_agent",
@@ -321,20 +321,20 @@ const REPOSITORIES = [
     envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/udayjhamadav/Not-AI"
   },
   {
-    id: "jcode", repo: "Jjchuang/jcode", domain: "coding_agent",
+    id: "jcode", repo: "1jehuang/jcode", domain: "coding_agent",
     match: /\b(jcode|jcode coding agent|jcode repo|coding agent workflow)\b/i,
-    integration: "upstream_review_required", status: "review_required_upstream_unverified",
-    abilities: ["Candidate coding-agent workflows to compare with ULTRON's existing agent runtime and browser-debugging tools"],
-    limits: ["The screenshot identifies this repository, but its README/API contract could not be verified from the connected source during this pass. No code is claimed as integrated. Confirm exact URL, supported runtime, licensing, security boundaries and tests before importing."],
-    envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/Jjchuang/jcode"
+    integration: "local_cli_runtime", status: "local_cli_runtime_required",
+    abilities: ["High-performance local coding-agent CLI with multiple concurrent sessions and reduced per-session memory overhead"],
+    limits: ["This is a local CLI runtime, not a ULTRON HTTP API. No installer was run and no process is launched by the cloud backend. A separately installed local runtime, provider configuration, explicit sandbox/permission policy, resource limits and cancelable execution bridge would be required."],
+    envKeys: [], license: "MIT for upstream repository source", source: "https://github.com/1jehuang/jcode"
   },
   {
-    id: "open-generative-ai", repo: "Anti-matcha/Open-Generative-AI", domain: "generative_media",
+    id: "open-generative-ai", repo: "Anil-matcha/Open-Generative-AI", domain: "generative_media",
     match: /\b(open-generative-ai|open generative ai|image and video generation platform|generative media studio)\b/i,
-    integration: "upstream_review_required", status: "review_required_upstream_unverified",
-    abilities: ["Candidate image/video generation workflows to evaluate alongside the existing ComfyUI and media-planning capabilities"],
-    limits: ["The screenshot suggests a generative-media project, but the repository contents, API, model requirements and license were not verifiable through the connected source in this pass. No provider access or rendering is claimed; review the exact upstream before integrating."],
-    envKeys: [], license: "Unknown until upstream source and model licenses are verified", source: "https://github.com/Anti-matcha/Open-Generative-AI"
+    integration: "separate_media_studio", status: "adapter_not_implemented",
+    abilities: ["Upstream media-studio workflows for AI image/video generation and related media-provider actions"],
+    limits: ["The public upstream README describes a MuAPI-powered media studio and 600+ provider models; provider plans/credits and model terms are separate, so do not assume usage is free or models are included. ULTRON has no Open Generative AI rendering adapter and has not made provider calls."],
+    envKeys: [], license: "MIT for upstream app source; provider APIs, model weights and media assets have separate terms", source: "https://github.com/Anil-matcha/Open-Generative-AI"
   },
   {
     id: "dramadaw", repo: "dramadaw/dramadaw", domain: "video_creation",
@@ -353,12 +353,12 @@ const REPOSITORIES = [
     envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/TechyCSR/OpenDudley"
   },
   {
-    id: "agency-agents", repo: "mditazwadi/agency-agents", domain: "agent_roles",
+    id: "agency-agents", repo: "msitarzewski/agency-agents", domain: "agent_roles",
     match: /\b(agency agents|agency-agents|agent persona|role-based agents|multi-agent team|agent team templates)\b/i,
-    integration: "upstream_review_required", status: "review_required_upstream_unverified",
-    abilities: ["Candidate role/persona templates to compare with ULTRON's existing AI Employee roles, task routing, and Hermes delegation"],
-    limits: ["The screenshot identifies this repository, but the exact source and LICENSE could not be verified from the connected repository tool. No upstream personas or prompts have been imported. Review prompt provenance, tool permissions, source license and security assumptions before use."],
-    envKeys: [], license: "Unknown until upstream source and LICENSE are verified", source: "https://github.com/mditazwadi/agency-agents"
+    integration: "reference_library", status: "guidance_only",
+    abilities: ["Role-based specialist agent profiles, personalities, workflows, deliverable templates and success metrics"],
+    limits: ["The public repository is a prompt/agent reference library. No agent pack was imported or installed; review each selected template and preserve ULTRON's own tool allowlists, authentication scope and approval gates."],
+    envKeys: [], license: "MIT for upstream repository source; review individual assets and third-party content as needed", source: "https://github.com/msitarzewski/agency-agents"
   },
   {
     id: "chrome-devtools", repo: "ayaanraza2008/ULTRON-AI/chrome-devtools", domain: "browser_debugging",
@@ -407,11 +407,11 @@ function stateFor(record, env) {
     return readiness.configured ? "configured_unverified" : readiness.state;
   }
   if (record.id === "strata") return getStrataReadiness(env).state;
-  if (record.status === "review_required_upstream_unverified") return record.status;
+  if (record.status.startsWith("review_required_")) return record.status;
   if (record.status === "task_aware_skill_selector" || record.status === "guidance_only" || record.status === "catalog_only" || record.status === "planning_only") return record.status;
   if (!record.envKeys.length && record.integration === "existing_adapter") return record.status;
   if (!record.envKeys.length && record.status === "bounded_security_routes_present") return record.status;
-  if (record.status === "desktop_companion_required" || record.status === "local_mcp_required") {
+  if (record.status === "desktop_companion_required" || record.status === "local_mcp_required" || record.status === "local_cli_runtime_required") {
     return configured(record, env) ? "configured_unverified" : record.status;
   }
   if (configured(record, env)) return record.status === "adapter_not_implemented" ? "credentials_present_adapter_missing" : "configured_unverified";
