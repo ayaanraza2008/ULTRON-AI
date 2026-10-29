@@ -15,7 +15,14 @@ test("the default screen is a black, minimal living-core interface", () => {
   assert.match(css, /\.core-orbit/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(app, /drawArrays\(gl\.POINTS, 0, PARTICLE_COUNT\)/);
-  assert.match(app, /const PARTICLE_COUNT = 20000/);
+  assert.ok(app.includes('const PREFERS_REDUCED_MOTION = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;'));
+  assert.ok(app.includes("if (PREFERS_REDUCED_MOTION) return 1200;"));
+  assert.ok(app.includes("const lowMemory = Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) <= 4;"));
+  assert.ok(app.includes("const lowCores = Number(navigator.hardwareConcurrency) > 0 && Number(navigator.hardwareConcurrency) <= 4;"));
+  assert.ok(app.includes('const compactViewport = window.matchMedia?.("(max-width: 720px)")?.matches === true;'));
+  assert.ok(app.includes("return 20000;"));
+  assert.ok(app.includes("if (!PREFERS_REDUCED_MOTION) window.requestAnimationFrame(frame);"));
+  assert.ok(app.includes("if (PREFERS_REDUCED_MOTION) frame(0);"));
   assert.match(app, /#version 300 es/);
   assert.match(app, /gl_VertexID/);
 });
