@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import JSZip from "jszip";
 import { deflateRawSync } from "node:zlib";
 import { createFeatureRouter } from "../features.js";
 
@@ -1710,5 +1711,54 @@ test("report PDF endpoint rejects empty and oversized reports without generating
     });
     assert.equal(oversized.status, 400);
     assert.equal((await oversized.json()).error.code, "REPORT_TOO_LARGE");
+  });
+});
+
+
+test("authenticated presentation endpoint returns an editable OOXML PowerPoint attachment", async () => {
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/reports/pptx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "ULTRON Editable Presentation",
+        sections: [
+          { heading: "Verified", content: "The backend creates an editable PowerPoint file." },
+          { heading: "Pending", content: "Live provider and device tests remain." }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /application\\/vnd\\.openxmlformats-officedocument\\.presentationml\\.presentation/);
+    assert.match(response.headers.get("content-disposition") || "", /ultron-presentation\\.pptx/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.subarray(0, 2).toString("ascii"), "PK");
+    const zip = await JSZip.loadAsync(bytes);
+    assert.ok(zip.file("[Content_Types].xml"));
+    assert.ok(zip.file("ppt/presentation.xml"));
+    const names = Object.keys(zip.files).filter(name => /^ppt\\/slides\\/slide\\d+\\.xml$/.test(name));
+    assert.equal(names.length, 3);
+    const cover = await zip.file("ppt/slides/slide1.xml").async("string");
+    const firstContent = await zip.file("ppt/slides/slide2.xml").async("string");
+    assert.match(cover, /ULTRON Editable Presentation/);
+    assert.match(firstContent, /Verified/);
+    assert.match(firstContent, /editable PowerPoint/);
+  });
+});
+
+test("presentation endpoint rejects empty and oversized requests", async () => {
+  await withServer({}, async base => {
+    const empty = await fetch(base + "/api/reports/pptx", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Empty" })
+    });
+    assert.equal(empty.status, 400);
+    assert.equal((await empty.json()).error.code, "PPTX_CONTENT_REQUIRED");
+    const oversized = await fetch(base + "/api/reports/pptx", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: "x".repeat(30001) })
+    });
+    assert.equal(oversized.status, 400);
+    assert.equal((await oversized.json()).error.code, "PPTX_TOO_LARGE");
   });
 });
