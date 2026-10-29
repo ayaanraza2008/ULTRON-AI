@@ -8,8 +8,8 @@ const MAX_REQUEST_ID = 180;
 const PAID_CONFIRMATION = "I explicitly approve this MuAPI image/video generation and authorize use of my configured MuAPI credits.";
 
 const MODELS = [
-  { id: "nano-banana", label: "Nano Banana", media: "image-edit", path: "nano-banana", inputField: "image_url", settings: ["aspect_ratio"], ratios: ["1:1","3:4","4:3","9:16","16:9","3:2","2:3","5:4","4:5","21:9"] },
-  { id: "nano-banana-pro", label: "Nano Banana Pro", media: "image-edit", path: "nano-banana-pro", inputField: "image_url", settings: ["aspect_ratio","resolution"], ratios: ["1:1","3:4","4:3","9:16","16:9","3:2","2:3","5:4","4:5","21:9"], resolutions: ["1k","2k","4k"] },
+  { id: "nano-banana", label: "Nano Banana", media: "image", path: "nano-banana", settings: ["aspect_ratio"], ratios: ["1:1","3:4","4:3","9:16","16:9","3:2","2:3","5:4","4:5","21:9"] },
+  { id: "nano-banana-pro", label: "Nano Banana Pro", media: "image", path: "nano-banana-pro", settings: ["aspect_ratio","resolution"], ratios: ["1:1","3:4","4:3","9:16","16:9","3:2","2:3","5:4","4:5","21:9"], resolutions: ["1k","2k","4k"] },
   { id: "flux-schnell", label: "Flux Schnell", media: "image", path: "flux-schnell-image", settings: ["width","height","num_images"] },
   { id: "flux-dev", label: "Flux Dev", media: "image", path: "flux-dev", settings: ["width","height","num_images"] },
   { id: "minimax-image-01", label: "MiniMax Image 01", media: "image", path: "minimax-image-01", settings: ["aspect_ratio","num_images"], ratios: ["1:1","2:3","3:2","3:4","4:3","9:16","16:9"] },
