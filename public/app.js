@@ -1449,7 +1449,7 @@
     const queueCompletedSpeech = (force = false) => {
       if (!streamVoiceReply) return;
       while (streamSpeechBuffer.trim()) {
-        const match = /^([\s\S]*?[.!?।]+(?:["'”’\)\]]*)(?:\s+|$)/.exec(streamSpeechBuffer);
+        const match = /^([\s\S]*?[.!?।]+["'”’)]*)(?:\s+|$)/.exec(streamSpeechBuffer);
         if (match && match[1].trim().length >= 3) {
           enqueueStreamSpeech(match[1].trim());
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
