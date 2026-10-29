@@ -219,6 +219,11 @@
       ["Scene cuts", Array.isArray(a.sceneCutsSeconds) ? a.sceneCutsSeconds.length : "Not measured"],
       ["Cuts / minute", a.pacing?.cutsPerMinute ?? "Unknown"], ["Transcript", a.transcript ? "Provided" : "Missing"]
     ];
+    if (a.visualCharacter?.state === "measured") {
+      metrics.push(["Visual brightness", a.visualCharacter.brightnessLabel || "Not measured"]);
+      metrics.push(["Visual contrast", a.visualCharacter.contrastLabel || "Not measured"]);
+      metrics.push(["Colour character", a.visualCharacter.saturationLabel || "Not measured"]);
+    }
     metrics.forEach(([label, value]) => {
       const card = node("div", "metric-card");
       card.append(node("small", "", label), node("strong", "", value));
