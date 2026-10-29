@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { classifyTaskRoute, getToolCategories } from "../task-router.js";
 
 test("routes an ordinary greeting or explanation without sending tool schemas", () => {
-  assert.equal(classifyTaskRoute("Hello").tier, "simple");
-  assert.equal(classifyTaskRoute("Explain energy bands in simple English").tier, "simple");
-  assert.equal(classifyTaskRoute("Explain this briefly").tier, "simple");
-  assert.deepEqual(classifyTaskRoute("Hello").toolNames, null);
+  for (const prompt of ["Hello", "Explain energy bands in simple English", "Explain this briefly"]) {
+    const route = classifyTaskRoute(prompt);
+    assert.equal(route.tier, "simple");
+    assert.equal(route.filtered, true);
+    assert.deepEqual(route.toolNames, []);
+  }
 });
 
 test("narrows high-confidence single-domain tasks to allowlisted relevant tools", () => {
