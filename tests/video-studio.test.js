@@ -342,3 +342,22 @@ test("approved local render runs crossfade FFmpeg pipeline and exposes final MP4
   });
 });
 
+test("selecting a concept replans the script and clears prior approvals", async () => {
+  await withStudio({}, async ({ base }) => {
+    const project = await createProject(base);
+    const plannedResponse = await request(base, "/api/studio/projects/" + project.id + "/plan", { method: "POST", body: "{}" });
+    assert.equal(plannedResponse.status, 200);
+    const planned = (await plannedResponse.json()).project;
+    const chosen = planned.concepts[1];
+    const response = await request(base, "/api/studio/projects/" + project.id + "/concept", {
+      method: "POST", body: JSON.stringify({ conceptId: chosen.id })
+    });
+    assert.equal(response.status, 200);
+    const result = (await response.json()).project;
+    assert.equal(result.selectedConceptId, chosen.id);
+    assert.equal(result.concepts.length, 3);
+    assert.ok(result.script.includes(chosen.title));
+    assert.equal(result.approvals.plan, false);
+    assert.equal(result.approvals.render, false);
+  });
+});
