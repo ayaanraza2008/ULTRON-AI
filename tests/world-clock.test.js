@@ -119,8 +119,8 @@ test("agent invokes the offline world-clock tool and returns its real tool resul
     assert.equal(body.toolsUsed.length, 1);
     assert.equal(body.toolsUsed[0].name, "world_clock");
     assert.equal(body.toolsUsed[0].ok, true);
-    assert.deepEqual(body.toolsUsed[0].result.locations.map(item => item.timeZone), ["Asia/Tokyo", "Europe/London"]);
-    assert.ok(body.toolsUsed[0].result.locations.every(item => item.timestamp === body.toolsUsed[0].result.capturedAt));
+    assert.deepEqual(body.toolResults[0].result.locations.map(item => item.timeZone), ["Asia/Tokyo", "Europe/London"]);
+    assert.ok(body.toolResults[0].result.locations.every(item => item.timestamp === body.toolResults[0].result.capturedAt));
   });
 
   assert.equal(providerCalls, 2);
