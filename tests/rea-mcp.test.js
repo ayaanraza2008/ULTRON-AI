@@ -89,6 +89,7 @@ test("REA calls the allowlisted analysis tool with a rooted relative path", asyn
   assert.deepEqual(calls.filter(call => call.payload.method === "tools/call").map(call => call.payload.params.name), ["open_binary", "analyze_javascript_application", "close_binary"]);
   assert.equal(toolCall.options.headers.Authorization, "Bearer synthetic-rea-token");
   assert.equal(toolCall.options.headers["Mcp-Session-Id"], "rea-session-test");
+  assert.equal(toolCall.options.headers["Mcp-Protocol-Version"], "2025-03-26");
   assert.equal(JSON.stringify(result).includes("synthetic-rea-token"), false);
 });
 test("REA routes static ELF, WASM and firmware tools to their specific upstream operations", async () => {

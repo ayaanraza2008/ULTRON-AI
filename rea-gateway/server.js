@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 const DEFAULT_CHILD_PORT = 49321;
-const REQUEST_HEADERS = ["accept", "content-type", "mcp-session-id", "last-event-id"];
+const REQUEST_HEADERS = ["accept", "content-type", "mcp-session-id", "mcp-protocol-version", "last-event-id"];
 const RESPONSE_HEADERS = ["content-type", "content-length", "mcp-session-id", "cache-control", "retry-after"];
 
 function validToken(token) {
@@ -77,7 +77,7 @@ function parseMcpEnvelope(raw, contentType) {
   throw new Error("REA MCP probe received an invalid protocol response.");
 }
 
-function mcpExchange({ port, method = "POST", payload, sessionId, timeoutMs = 25000 }) {
+function mcpExchange({ port, method = "POST", payload, sessionId, protocolVersion, timeoutMs = 25000 }) {
   return new Promise((resolveExchange, rejectExchange) => {
     const headers = {
       accept: "application/json, text/event-stream",
@@ -85,6 +85,7 @@ function mcpExchange({ port, method = "POST", payload, sessionId, timeoutMs = 25
     };
     if (payload !== undefined) headers["content-type"] = "application/json";
     if (sessionId) headers["mcp-session-id"] = sessionId;
+    if (protocolVersion) headers["mcp-protocol-version"] = protocolVersion;
 
     const request = http.request({
       host: "127.0.0.1",
@@ -190,6 +191,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
   }
 
   let sessionId = null;
+  let protocolVersion = null;
   let activeTarget = false;
   let initialized = false;
   let nextId = 0;
@@ -202,7 +204,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       method,
       ...(Object.keys(params).length ? { params } : {})
     };
-    const reply = await mcpExchange({ port: upstreamPort, payload, sessionId });
+    const reply = await mcpExchange({ port: upstreamPort, payload, sessionId, protocolVersion });
     sessionId = reply.sessionId;
     if (notification) return reply.rpc;
     if (!reply.rpc) {
@@ -214,7 +216,11 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     if (reply.rpc.error) {
       throw Object.assign(new Error("REA MCP probe returned an RPC error."), { probeCode: "rpc_error" });
     }
-    return reply.rpc.result;
+    const result = reply.rpc.result;
+    if (method === "initialize" && typeof result?.protocolVersion === "string") {
+      protocolVersion = result.protocolVersion;
+    }
+    return result;
   };
 
   try {
@@ -276,7 +282,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
         try { await call("tools/call", { name: "close_binary", arguments: {} }); } catch {}
       }
       try {
-        await mcpExchange({ port: upstreamPort, method: "DELETE", sessionId, timeoutMs: 5000 });
+        await mcpExchange({ port: upstreamPort, method: "DELETE", sessionId, protocolVersion, timeoutMs: 5000 });
       } catch {}
     }
   }
@@ -392,6 +398,44 @@ function positivePort(value, fallback) {
   return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
 }
 
+
+function safeDiagnosticCode(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null;
+}
+
+function observeReaChildStderr(child) {
+  let pending = "";
+  child.stderr?.on("data", chunk => {
+    pending += chunk.toString("utf8");
+    // Logs are line-delimited. Keep only a small tail in case a provider emits
+    // one unusually large record; never forward the raw content to Render logs.
+    if (pending.length > 8192) pending = pending.slice(-8192);
+    while (true) {
+      const newline = pending.indexOf("\n");
+      if (newline < 0) break;
+      const line = pending.slice(0, newline).trim();
+      pending = pending.slice(newline + 1);
+      if (!line) continue;
+      let event;
+      try { event = JSON.parse(line); } catch {}
+      if (event?.msg === "MCP transport listening") {
+        console.log("REA child reports its MCP listener started.");
+        continue;
+      }
+      const level = event?.level;
+      const isError = level === "error" || (typeof level === "number" && level >= 50);
+      if (isError || (!event && /\b(?:error|failed|exception|unable to|cannot)\b/i.test(line))) {
+        const code = safeDiagnosticCode(event?.code ?? event?.err?.code ?? event?.error?.code);
+        console.error("REA child emitted a startup error diagnostic" + (code ? "; code=" + code : "") + "; details withheld.");
+      }
+    }
+  });
+  child.on("error", error => {
+    const code = safeDiagnosticCode(error?.code);
+    console.error("REA child could not start" + (code ? "; code=" + code : "") + ".");
+  });
+}
+
 export async function startGateway(env = process.env) {
   const token = env.REA_MCP_TOKEN;
   if (!validToken(token)) {
@@ -414,13 +458,16 @@ export async function startGateway(env = process.env) {
     windowsHide: true
   });
 
-  // Drain diagnostics so a full stderr pipe cannot stall REA. Do not log target
-  // content, provider output, credentials, or raw exceptions.
-  child.stderr?.on("data", () => {});
-  child.on("error", () => {});
-  child.on("exit", () => {
+  // Retain only safe startup signals and diagnostic codes; never write raw
+  // target-derived content or upstream error messages into Render logs.
+  observeReaChildStderr(child);
+  child.on("exit", (code, signal) => {
     mcpReady = false;
-    console.error("REA child process stopped; gateway readiness is degraded.");
+    const exitCode = Number.isInteger(code) && code >= 0 ? String(code) : null;
+    const safeSignal = safeDiagnosticCode(signal);
+    console.error("REA child process stopped; gateway readiness is degraded." +
+      (exitCode ? " exit_code=" + exitCode : "") +
+      (safeSignal ? " signal=" + safeSignal : ""));
   });
 
   const server = createGatewayServer({ token, upstreamPort: childPort, isReady: () => mcpReady });
