@@ -5,6 +5,7 @@ import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
 import { safeServiceBase } from "../network-safety.js";
 import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
+import { getStrataReadiness } from "./strata.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -32,6 +33,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasChromeDevTools = hasIntegrationOwner && safeBaseUrl(env.ULTRON_CHROME_DEVTOOLS_URL) && typeof env.ULTRON_CHROME_DEVTOOLS_TOKEN === "string" && env.ULTRON_CHROME_DEVTOOLS_TOKEN.trim().length >= 32;
   const reaReadiness = getReaReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
+  const strataReadiness = getStrataReadiness(env);
 
   return [
     {
@@ -206,6 +208,18 @@ export function buildIntegrationCatalog(env = process.env) {
       note: cactusReadiness.configured
         ? "Configured but not yet live-tested. The engine and Needle/Whistle must be installed and started separately; ULTRON never downloads model weights."
         : "Requires an already-running Cactus OpenAI-compatible server, an installed model ID, and an authenticated HTTPS gateway for remote endpoints. On the same machine, loopback HTTP is allowed."
+    },
+    {
+      id: "strata",
+      name: "Strata Local Inference",
+      capability: "Optional OpenAI-/Anthropic-compatible local model server",
+      state: strataReadiness.state,
+      configured: Boolean(strataReadiness.configured),
+      mode: "optional_model_provider",
+      requiredEnv: ["STRATA_BASE_URL", "STRATA_MODEL"],
+      optionalEnv: ["STRATA_API_KEY", "STRATA_SUPPORTS_TOOLS", "STRATA_SUPPORTS_VISION"],
+      apiRoutes: ["model provider fallback: /chat/completions"],
+      note: strataReadiness.note
     },
     {
       id: "hermes-agent",
