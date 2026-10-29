@@ -3,8 +3,8 @@ on:
   push:
     branches:
       - main
-    # Only verify revisions for commits that should alter the ULTRON backend service.
-    # Documentation, CI-only, and unit-test-only commits do not need a Render revision.
+    # Verify backend revisions and changes to this verification workflow itself.
+    # Docs, CI-only, and unit-test-only commits do not need a Render revision.
     paths:
       - "**/*.js"
       - "**/*.mjs"
@@ -16,6 +16,7 @@ on:
       - "!tests/**"
       - "!test/**"
       - "!public/world-intelligence-bridge.js"
+      - ".github/workflows/production-verification.yml"
   workflow_dispatch:
 
 permissions:
@@ -29,14 +30,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          url="https://ultron-ai-zvd7.onrender.com/api/health"
-          for i in $(seq 1 6); do
-            if curl --fail --silent --show-error "$url" -o /tmp/ultron-health.json; then
-              cat /tmp/ultron-health.json
-              node -e 'const fs=require("node:fs"); const d=JSON.parse(fs.readFileSync("/tmp/ultron-health.json","utf8")); const required=["providerConfigured","accessConfigured","supabaseConfigured"]; const missing=required.filter(k=>d[k]!==true); if(d.status!=="ok"||missing.length){console.error("Health/configuration check failed:",{status:d.status,missing});process.exit(1)} const commit=d.build?.commit; if(!commit){console.error("Production revision is unknown: health endpoint does not expose a deployed commit. Release is NOT production-verified.");process.exit(1)} if(commit!==process.env.GITHUB_SHA){console.error("Production deployment is stale:",{deployedCommit:commit,expectedCommit:process.env.GITHUB_SHA});process.exit(1)} console.log("Production health, required configuration, and revision match verified.");'
+          url="https://ultron-ai-core.onrender.com/api/health"
+          for i in $(seq 1 10); do
+            if ! curl --fail --silent --show-error "$url" -o /tmp/ultron-health.json; then
+              echo "Health endpoint not ready (attempt $i/10); retrying."
+            elif node -e 'const fs=require("node:fs"); let d; try { d=JSON.parse(fs.readFileSync("/tmp/ultron-health.json","utf8")); } catch { console.error("Health endpoint returned invalid JSON."); process.exit(1); } const required=["providerConfigured","accessConfigured","supabaseConfigured"]; const missing=required.filter(k=>d[k]!==true); if(d.status!=="ok"||missing.length){console.error("Health/configuration check failed:",{status:d.status,missing});process.exit(1)} const commit=d.build?.commit; if(!commit){console.error("Production revision is unknown: health endpoint does not expose a deployed commit.");process.exit(1)} if(commit!==process.env.GITHUB_SHA){console.error("Production deployment is stale; retrying:",{deployedCommit:commit,expectedCommit:process.env.GITHUB_SHA});process.exit(1)} console.log("Production health, required configuration, and revision match verified.");'; then
               exit 0
+            else
+              echo "Production verification did not pass (attempt $i/10); retrying."
             fi
             sleep 8
           done
-          echo "Production health endpoint did not become ready; release is NOT production-verified."
+          echo "Production health/configuration/revision check failed after 10 attempts; release is NOT production-verified."
           exit 1
