@@ -1436,15 +1436,31 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       if (!calls.length) calls = buildFallbackCalls(userText);
       if (!calls.length) {
         const content = typeof assistantMessage?.content === "string" ? assistantMessage.content : "I couldn't produce a response. Please try again.";
+        if (correctionLesson && !userMemoryEnabled) correctionLearningState = "memory_disabled";
         if (userMemoryEnabled) {
           try { await captureSupabaseMemory(userText, req); }
           catch (memoryError) { logger.warn?.("Optional Supabase memory capture failed", { code: memoryError.code || "SUPABASE_MEMORY_CAPTURE_FAILED" }); }
+          if (correctionLesson) {
+            try {
+              const learned = await captureCorrectionMemory(correctionLesson, req);
+              correctionLearningState = learned.state;
+            } catch (memoryError) {
+              correctionLearningState = "failed";
+              logger.warn?.("Optional correction-memory learning failed", { code: memoryError.code || "CORRECTION_MEMORY_LEARNING_FAILED" });
+            }
+          }
         }
         if (userMemoryEnabled && agentMemory.configured && agentMemory.automaticCapture) {
           try { await captureAgentMemory(userText, { env, fetchImpl, userId: req.supabaseUser?.id }); }
           catch (memoryError) { logger.warn?.("Optional AgentMemory capture failed", { code: memoryError.code || "AGENTMEMORY_CAPTURE_FAILED" }); }
         }
-        return res.json({ content, toolsUsed: [], autonomy: autonomyPlan, model: first?.model || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free" });
+        return res.json({
+          content,
+          toolsUsed: [],
+          autonomy: autonomyPlan,
+          cognition: { memoryItemsUsed: cognitiveMemoryCount, correctionLearning: correctionLearningState },
+          model: first?.model || env.OPENROUTER_DEFAULT_MODEL || "openrouter/free"
+        });
       }
       const toolMessages = [];
       const used = [];
