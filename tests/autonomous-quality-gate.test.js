@@ -72,3 +72,74 @@ test("quality gate rejects hex-encoded IPv4-mapped private and loopback IPv6 URL
   assert.equal(result.checks.find(check => check.id === "sources_available").passed, false);
   assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false);
 });
+
+test("quality gate requires an exact URL token instead of a URL substring", () => {
+  const sourceUrl = "https://example.com/source";
+  const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
+  const invalidCitations = [
+    "https://example.com/source.evil",
+    "https://attacker.example/?next=https://example.com/source",
+    "ftp://https://example.com/source"
+  ];
+
+  for (const citation of invalidCitations) {
+    const result = verifyAutonomousOutput({
+      research: { sources: [{ url: sourceUrl }] },
+      report: { answer: reportPrefix + "Citation: " + citation }
+    });
+    assert.equal(result.checks.find(check => check.id === "sources_available").passed, true, citation);
+    assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false, citation);
+    assert.equal(result.state, "needs_review", citation);
+  }
+
+  const exact = verifyAutonomousOutput({
+    research: { sources: [{ url: sourceUrl }] },
+    report: { answer: reportPrefix + "Citation: (" + sourceUrl + ")." }
+  });
+  assert.equal(exact.checks.find(check => check.id === "citations_traceable").passed, true);
+  assert.equal(exact.state, "passed");
+});
+
+test("quality gate does not count URLs inside Markdown code as citations", () => {
+  const sourceUrl = "https://example.com/source";
+  const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
+  for (const codeOnlyCitation of [
+    "```text\n" + sourceUrl + "\n```",
+    "`" + sourceUrl + "`",
+    "```text\nexample output: " + sourceUrl
+  ]) {
+    const result = verifyAutonomousOutput({
+      research: { sources: [{ url: sourceUrl }] },
+      report: { answer: reportPrefix + codeOnlyCitation }
+    });
+    assert.equal(result.checks.find(check => check.id === "sources_available").passed, true);
+    assert.equal(result.checks.find(check => check.id === "citations_traceable").passed, false, codeOnlyCitation);
+    assert.equal(result.state, "needs_review", codeOnlyCitation);
+  }
+});
+
+
+
+test("quality gate preserves URL boundary positions after long Markdown code blocks", () => {
+  const sourceUrl = "https://example.com/source";
+  const reportPrefix = "A sufficiently substantive report with a conclusion, evidence and next steps. ";
+  const fencedCode = "```text\n" + " ".repeat(300) + "\n```\n";
+
+  const nestedUrlAfterCode = verifyAutonomousOutput({
+    research: { sources: [{ url: sourceUrl }] },
+    report: { answer: reportPrefix + fencedCode + "Citation: ftp://https://example.com/source" }
+  });
+  assert.equal(
+    nestedUrlAfterCode.checks.find(check => check.id === "citations_traceable").passed,
+    false,
+    "a nested HTTPS URL after a code block must not count as a citation"
+  );
+  assert.equal(nestedUrlAfterCode.state, "needs_review");
+
+  const exactUrlAfterCode = verifyAutonomousOutput({
+    research: { sources: [{ url: sourceUrl }] },
+    report: { answer: reportPrefix + fencedCode + "Citation: (" + sourceUrl + ")." }
+  });
+  assert.equal(exactUrlAfterCode.checks.find(check => check.id === "citations_traceable").passed, true);
+  assert.equal(exactUrlAfterCode.state, "passed");
+});
