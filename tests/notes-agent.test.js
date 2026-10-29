@@ -56,7 +56,7 @@ test("task router narrows note requests to private Notes tools", () => {
     assert.equal(route.tier, "medium");
     assert.ok(route.categories.includes("notes"));
     assert.equal(route.filtered, true);
-    assert.deepEqual(route.toolNames, ["notes_search", "notes_create", "notes_update"]);
+    assert.deepEqual(route.toolNames, ["notes_search", "notes_read", "notes_create", "notes_update"]);
   }
 });
 
