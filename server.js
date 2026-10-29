@@ -271,7 +271,10 @@ function hasConfiguredModelProvider(env) {
     { key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai" }
   ]) {
     if (!(typeof env[entry.key] === "string" && env[entry.key].trim())) continue;
-    if (safeServiceBase(env[entry.base] || entry.fallback)) return true;
+    let parsed;
+    try { parsed = new URL(env[entry.base] || entry.fallback); } catch { continue; }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) continue;
+    if (safeServiceBase(parsed.toString())) return true;
   }
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
@@ -326,26 +329,6 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
     });
   }
 
-  // Optional direct-key fallbacks; image requests stay on explicitly vision-capable providers.
-  const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
-  if (groqKey) {
-    const baseUrl = safeServiceBase(env.GROQ_BASE_URL || "https://api.groq.com/openai/v1");
-    const model = typeof env.GROQ_DEFAULT_MODEL === "string" && env.GROQ_DEFAULT_MODEL.trim()
-      ? env.GROQ_DEFAULT_MODEL.trim().slice(0, 160) : "openai/gpt-oss-20b";
-    if (baseUrl && !providers.some(provider => provider.name === "groq" || provider.baseUrl === baseUrl)) {
-      providers.push({ name: "groq", baseUrl, apiKey: groqKey, model, priority: 1, supportsVision: false, isOpenRouter: false });
-    }
-  }
-  const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
-  if (geminiKey) {
-    const baseUrl = safeServiceBase(env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai");
-    const model = typeof env.GEMINI_DEFAULT_MODEL === "string" && env.GEMINI_DEFAULT_MODEL.trim()
-      ? env.GEMINI_DEFAULT_MODEL.trim().slice(0, 160) : "gemini-3.8-flash";
-    if (baseUrl && !providers.some(provider => provider.name === "gemini" || provider.baseUrl === baseUrl)) {
-      providers.push({ name: "gemini", baseUrl, apiKey: geminiKey, model, priority: 2, supportsVision: false, isOpenRouter: false });
-    }
-  }
-
   let configured = [];
   try {
     const parsed = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]");
@@ -381,6 +364,25 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
       priority: Number.isFinite(item.priority) ? item.priority : 100,
       supportsVision: item.supportsVision === true,
       isOpenRouter: false
+    });
+  }
+  // Optional direct-key fallbacks. Explicit registry entries take precedence.
+  // These are text-only until image compatibility has been verified.
+  for (const entry of [
+    { name: "groq", key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1", modelEnv: "GROQ_DEFAULT_MODEL", model: "openai/gpt-oss-20b", priority: 1 },
+    { name: "gemini", key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai", modelEnv: "GEMINI_DEFAULT_MODEL", model: "gemini-3.8-flash", priority: 2 }
+  ]) {
+    const apiKey = typeof env[entry.key] === "string" ? env[entry.key].trim() : "";
+    if (!apiKey || providers.some(provider => provider.name === entry.name)) continue;
+    let parsed;
+    try { parsed = new URL(env[entry.base] || entry.fallback); } catch { continue; }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) continue;
+    const baseUrl = safeServiceBase(parsed.toString());
+    if (!baseUrl || providers.some(provider => provider.baseUrl === baseUrl)) continue;
+    const configuredModel = typeof env[entry.modelEnv] === "string" ? env[entry.modelEnv].trim().slice(0, 160) : "";
+    providers.push({
+      name: entry.name, baseUrl, apiKey, model: configuredModel || entry.model,
+      priority: entry.priority, supportsVision: false, isOpenRouter: false
     });
   }
   return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);

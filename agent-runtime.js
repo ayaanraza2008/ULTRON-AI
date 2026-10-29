@@ -833,20 +833,6 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       const baseUrl = safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
       if (baseUrl) providers.push({ name: "openrouter", baseUrl, apiKey: primaryKey, model: bounded(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", priority: 0, supportsTools: true });
     }
-    // Optional first-class OpenAI-compatible fallbacks. Credentials stay server-side.
-    const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
-    if (groqKey) {
-      const baseUrl = safeBase(env.GROQ_BASE_URL || "https://api.groq.com/openai/v1");
-      const model = bounded(env.GROQ_DEFAULT_MODEL, 160) || "openai/gpt-oss-20b";
-      if (baseUrl) providers.push({ name: "groq", baseUrl, apiKey: groqKey, model, priority: 1, supportsTools: true });
-    }
-    const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
-    if (geminiKey) {
-      const baseUrl = safeBase(env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai");
-      const model = bounded(env.GEMINI_DEFAULT_MODEL, 160) || "gemini-3.8-flash";
-      if (baseUrl) providers.push({ name: "gemini", baseUrl, apiKey: geminiKey, model, priority: 2, supportsTools: true });
-    }
-
     let configured = [];
     try {
       const parsed = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]");
@@ -869,6 +855,24 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       if (!baseUrl) continue;
       seen.add(name);
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100, supportsTools: item.supportsTools !== false });
+    }
+
+    // Direct-key fallbacks are appended after registry entries so an explicit
+    // registry entry with the same name or endpoint retains its configured model.
+    for (const entry of [
+      { name: "groq", key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1", modelEnv: "GROQ_DEFAULT_MODEL", model: "openai/gpt-oss-20b", priority: 1 },
+      { name: "gemini", key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai", modelEnv: "GEMINI_DEFAULT_MODEL", model: "gemini-3.8-flash", priority: 2 }
+    ]) {
+      const apiKey = typeof env[entry.key] === "string" ? env[entry.key].trim() : "";
+      if (!apiKey || seen.has(entry.name)) continue;
+      let parsed;
+      try { parsed = new URL(env[entry.base] || entry.fallback); } catch { continue; }
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) continue;
+      const baseUrl = safeBase(parsed.toString());
+      if (!baseUrl || providers.some(provider => provider.baseUrl === baseUrl)) continue;
+      const configuredModel = bounded(env[entry.modelEnv], 160) || entry.model;
+      seen.add(entry.name);
+      providers.push({ name: entry.name, baseUrl, apiKey, model: configuredModel, priority: entry.priority, supportsTools: true });
     }
 
     // When a shared OpenRouter key and a model list already exist, derive a

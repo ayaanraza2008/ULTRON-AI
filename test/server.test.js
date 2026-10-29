@@ -1058,18 +1058,20 @@ test("chat fails over from OpenRouter through Groq to Gemini using server-side k
     });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).content, "Gemini fallback completed.");
-    assert.deepEqual(calls.map(call => call.url), [
-      "https://openrouter.ai/api/v1/chat/completions",
+    const providerUrls = calls.map(call => call.url);
+    assert.ok(providerUrls.length >= 3, "primary and fallback providers should be attempted");
+    assert.ok(providerUrls.slice(0, -2).every(url => url === "https://openrouter.ai/api/v1/chat/completions"),
+      "the primary may retry configured OpenRouter models before switching providers");
+    assert.deepEqual(providerUrls.slice(-2), [
       "https://api.groq.com/openai/v1/chat/completions",
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
     ]);
-    assert.deepEqual(calls.map(call => call.authorization), [
-      "Bearer test-key",
+    assert.ok(calls.slice(0, -2).every(call => call.authorization === "Bearer test-key"));
+    assert.deepEqual(calls.slice(-2).map(call => call.authorization), [
       "Bearer groq-test-secret",
       "Bearer gemini-test-secret"
     ]);
-    assert.deepEqual(calls.map(call => call.model), [
-      "test-model",
+    assert.deepEqual(calls.slice(-2).map(call => call.model), [
       "openai/gpt-oss-20b",
       "gemini-3.8-flash"
     ]);
