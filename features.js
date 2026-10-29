@@ -2,6 +2,7 @@ import { inflateRawSync } from "node:zlib";
 import { isIP } from "node:net";
 import express from "express";
 import { generateReportPdf } from "./reports/pdf-report.js";
+import { generatePresentationPptx } from "./reports/presentation-pptx.js";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
@@ -471,6 +472,28 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     return res.status(200).end(result.pdf);
   });
 
+
+  router.post("/reports/pptx", requireSupabaseUser, async (req, res) => {
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return res.status(400).json({ error: { code: "INVALID_PRESENTATION", message: "Presentation data must be a JSON object." } });
+    }
+    let result;
+    try {
+      result = await generatePresentationPptx({ title: body.title, content: body.content, sections: body.sections });
+    } catch (error) {
+      logger.error?.("PowerPoint generation failed", { name: error?.name || "Error" });
+      return res.status(500).json({ error: { code: "PPTX_GENERATION_FAILED", message: "Could not generate the PowerPoint presentation." } });
+    }
+    if (!result.ok) return res.status(400).json({ error: { code: result.code, message: result.message } });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    res.setHeader("Content-Disposition", "attachment; filename=\"ultron-presentation.pptx\"");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Length", String(result.pptx.byteLength));
+    return res.status(200).end(result.pptx);
+  });
+
   async function recordAuditEvent(req, event) {
     try {
       await privilegedSupabaseRest(req, "audit_events", "POST", "", event, "return=minimal");
@@ -843,6 +866,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         notes: "authenticated_user_scoped_crud_requires_user_notes_migration",
         studyPacks: "authenticated_user_scoped_library_requires_study_packs_migration",
         pdfReports: "authenticated_transient_report_pdf_export",
+        presentations: "authenticated_transient_editable_pptx_export",
         desktopAutomation: "local_companion_required",
         voice: "browser_native_available; premium_services_optional",
         integrations: "configuration_readiness_only"
