@@ -45,8 +45,14 @@ const CATEGORY_TOOLS = Object.freeze({
   comfyui: ["check_comfyui", "run_comfyui_workflow"],
   media: [
     "create_youtube_production_plan", "check_comfyui", "run_comfyui_workflow",
-    "create_talking_avatar", "design_speech_voice", "synthesize_speech"
-  ]
+    "create_talking_avatar", "design_speech_voice", "synthesize_speech",
+    "openhiggsfield", "open_generative_ai"
+  ],
+  open_higgsfield: ["openhiggsfield", "check_integrations", "check_repository_capabilities"],
+  open_generative_ai: ["open_generative_ai", "check_integrations", "check_repository_capabilities"],
+  open_design: ["open_design", "coding_assist", "check_integrations", "check_repository_capabilities"],
+  appflowy: ["appflowy", "check_integrations", "check_repository_capabilities"],
+  open_seo: ["openseo", "research_web", "check_integrations", "check_repository_capabilities"]
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
@@ -58,6 +64,11 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["world_intelligence", /\b(?:god[’']?s eye|world intelligence|live globe|earthquake map|live flights|vessel tracking)\b/i],
   ["youtube", /\b(?:youtube|video production plan|scene plan|thumbnail prompt|shorts script)\b/i],
   ["comfyui", /\b(?:comfyui|workflow json|image workflow|render an image|run the workflow)\b/i],
+  ["open_higgsfield", /\b(?:openhiggsfield|open higgsfield|higgsfield (?:image|video|model|generation)|higgsfield\s+studio)\b/i],
+  ["open_generative_ai", /\b(?:open[- ]generative[- ]ai|open gen(?:erative)? ai studio|muapi (?:image|video) generation|muapi model)\b/i],
+  ["open_design", /\b(?:opendesign|open design (?:agent|workspace|project)|headless design agent|design workspace run)\b/i],
+  ["appflowy", /\b(?:appflowy|appflowy workspace|search appflowy|appflowy documents?)\b/i],
+  ["open_seo", /\b(?:openseo|open seo|seo keyword research|rank tracker cost|domain keyword suggestions|serp lookup)\b/i],
   ["paperclip", /\b(?:paperclip|agent governance|agent roster|agent budget|monthly agent cost)\b/i],
   ["hermes", /\b(?:hermes agent|run hermes|hermes task)\b/i],
   ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
@@ -87,6 +98,14 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   const categories = [];
   for (const [category, pattern] of CATEGORY_PATTERNS) {
     if (pattern.test(text) && !categories.includes(category)) categories.push(category);
+  }
+
+  // Provider-specific intents take precedence over generic media/research matches.
+  // This keeps the correct adapter visible for single-domain work.
+  const providerSpecific = new Set(["open_higgsfield", "open_generative_ai", "open_design", "appflowy", "open_seo"]);
+  if (categories.some(category => providerSpecific.has(category))) {
+    const matched = categories.filter(category => providerSpecific.has(category));
+    categories.splice(0, categories.length, ...matched);
   }
 
   const complex = COMPLEX_PATTERN.test(text);
