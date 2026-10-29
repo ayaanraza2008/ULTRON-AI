@@ -2949,16 +2949,22 @@
       return;
     }
     busy = true;
+    const requestController = new AbortController();
+    activeRequestController = requestController;
     ui.sendButton.disabled = true;
     setCoreState("thinking");
     openTaskPanel({ kind: "STUDY PACK", title: "Generating " + String(topicTitle || "study material").slice(0, 140), side: "right", stage: "CALLING STUDY TOOL" });
+    if (ui.taskCancel) { ui.taskCancel.hidden = false; ui.taskCancel.disabled = false; }
     updateTaskPanel("Sending a structured request to the authenticated tool-using agent.", "GENERATING STUDY PACK");
     let packToDisplay = null;
     try {
       const payload = await apiRequest("/api/agent/run", {
         method: "POST",
-        body: { prompt, messages: history.slice(-12) }
+        body: { prompt, messages: history.slice(-12), persona: preferredPersona },
+        signal: requestController.signal
       });
+      if (activeRequestController === requestController) activeRequestController = null;
+      if (ui.taskCancel) ui.taskCancel.hidden = true;
       const answer = String(payload?.content || "").trim();
       const results = Array.isArray(payload?.toolResults) ? payload.toolResults : [];
       const tool = results.find(item => item?.name === "create_study_pack");
@@ -2990,17 +2996,23 @@
         showGeneratedStudyPack(pack);
       }
     } catch (error) {
-      markTaskError(error.message);
-      setCoreState("error");
+      const aborted = error?.code === "REQUEST_ABORTED" || error?.name === "AbortError";
+      markTaskError(aborted
+        ? "Stopped waiting for study generation. The server may still have generated or saved the pack; check Study Library before retrying."
+        : error.message);
+      setCoreState(aborted ? "idle" : "error");
       setDrawerOpen(true);
       ui.drawerContent.replaceChildren();
-      drawerHeading("Study pack generation failed", "This request did not return a verified structured study-pack tool result.");
-      drawerCard("Study pack unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      drawerHeading(aborted ? "Study generation stopped waiting" : "Study pack generation failed",
+        aborted ? "The browser stopped waiting; this does not prove that server-side tool execution stopped. Check Saved study packs before retrying." : "This request did not return a verified structured study-pack tool result.");
+      drawerCard(aborted ? "Result not yet confirmed" : "Study pack unavailable", error.message, aborted ? "CHECK SAVED LIBRARY" : (error.code || "REQUEST FAILED"), aborted ? "warning" : "error");
       if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
       drawerButton("BACK TO STUDY LIBRARY", () => { void showDrawerView("study"); }, true);
-      showToast(error.message || "Study pack generation failed.", 6500);
+      showToast(aborted ? "Stopped waiting. Check Study Library before retrying to avoid duplicate saves." : (error.message || "Study pack generation failed."), 7500);
       schedulePanelHide(6000);
     } finally {
+      if (activeRequestController === requestController) activeRequestController = null;
+      if (ui.taskCancel) { ui.taskCancel.hidden = true; ui.taskCancel.disabled = false; ui.taskCancel.textContent = "STOP WAITING"; }
       busy = false;
       ui.sendButton.disabled = false;
       if (coreState !== "error") setCoreState("idle");
