@@ -1,0 +1,7 @@
+{
+  "name": "rea-demo-search-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tiny benign fixture for the authenticated REA integration smoke test."
+}
