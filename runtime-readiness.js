@@ -1,4 +1,5 @@
 import { safeServiceBase } from "./network-safety.js";
+import { getStrataReadiness } from "./integrations/strata.js";
 
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -25,6 +26,7 @@ export function buildRuntimeReadiness({
   const chromeDevtoolsConfigured = secureServiceUrl(env.ULTRON_CHROME_DEVTOOLS_URL) && truthy(env.ULTRON_CHROME_DEVTOOLS_TOKEN) && env.ULTRON_CHROME_DEVTOOLS_TOKEN.trim().length >= 32 && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN) && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
+  const strataReadiness = getStrataReadiness(env);
   const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
   const premiumTtsConfigured = secureServiceUrl(env.TTS_API_BASE_URL) && truthy(env.TTS_API_KEY);
@@ -84,6 +86,8 @@ export function buildRuntimeReadiness({
       ["OLLAMA_BASE_URL"], localModelConfigured
         ? "Endpoint is configured; model availability and network reachability are not tested."
         : "Optional. A cloud-hosted service cannot reach a PC-local localhost endpoint."),
+    component("strata", "Strata OpenAI-compatible provider", strataReadiness.state,
+      ["STRATA_BASE_URL", "STRATA_MODEL"], strataReadiness.note),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
     component("safe_code_execution", "Isolated code execution", "not_available",
