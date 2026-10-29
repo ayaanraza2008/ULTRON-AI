@@ -50,7 +50,7 @@ function tcpReady(port, timeoutMs = 350) {
   });
 }
 
-const MCP_PROBE_MAX_BYTES = 2 * 1024 * 1024;
+const MCP_PROBE_MAX_BYTES = 8 * 1024 * 1024;
 
 function parseMcpEnvelope(raw, contentType) {
   const candidates = [];
@@ -119,7 +119,9 @@ function mcpExchange({ port, method = "POST", payload, sessionId, protocolVersio
         if (bytes > MCP_PROBE_MAX_BYTES) {
           rejected = true;
           response.destroy();
-          rejectExchange(new Error("REA MCP probe response exceeded the size limit."));
+          rejectExchange(Object.assign(new Error("REA MCP probe response exceeded the size limit."), {
+            probeCode: "response_too_large"
+          }));
           return;
         }
         chunks.push(chunk);
@@ -136,7 +138,11 @@ function mcpExchange({ port, method = "POST", payload, sessionId, protocolVersio
         }
       });
       response.once("error", () => {
-        if (!rejected) rejectExchange(new Error("REA MCP probe response failed."));
+        if (!rejected) {
+          rejectExchange(Object.assign(new Error("REA MCP probe response failed."), {
+            probeCode: "response_failed"
+          }));
+        }
       });
     });
 
@@ -273,7 +279,8 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       "http_status_400", "http_status_401", "http_status_404", "http_status_405",
       "http_status_406", "http_status_415", "http_status_429", "http_status_500",
       "http_status_503", "connection_failed", "timeout", "invalid_rpc_response",
-      "missing_rpc_envelope", "rpc_id_mismatch", "rpc_error"
+      "missing_rpc_envelope", "rpc_id_mismatch", "rpc_error", "response_failed",
+      "response_too_large"
     ]);
     return { ok: false, stage, reason: knownReasons.has(error?.probeCode) ? error.probeCode : "tool_check_failed" };
   } finally {
