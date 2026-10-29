@@ -66,6 +66,7 @@
   let busy = false;
   let recognition = null;
   let restartTimer = null;
+  let nativeSilenceTimer = null;
   let forceFallbackRecognition = false;
   let nativeRecognitionEmptyRuns = 0;
   let fallbackRecorderSession = null;
@@ -168,6 +169,77 @@
       throw error;
     }
     return payload;
+  }
+
+  async function streamChatRequest(body, onDelta) {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream, application/json" },
+      body: JSON.stringify({ ...body, stream: true })
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const readError = async () => {
+      const payload = contentType.includes("application/json")
+        ? await response.json().catch(() => ({}))
+        : { error: { message: await response.text().catch(() => "") } };
+      const details = payload && typeof payload === "object" ? payload.error : null;
+      const error = new Error(details && typeof details.message === "string" ? details.message
+        : response.status === 401 ? "Sign in to ULTRON before sending commands."
+        : response.status === 503 ? "This backend capability is not configured yet."
+        : "The ULTRON backend returned an error (" + response.status + ").");
+      error.status = response.status;
+      error.code = details && typeof details.code === "string" ? details.code : "REQUEST_FAILED";
+      return error;
+    };
+    if (!response.ok) throw await readError();
+    if (contentType.includes("application/json")) {
+      const payload = await response.json();
+      if (typeof payload?.content === "string") onDelta?.(payload.content);
+      return payload;
+    }
+    if (!response.body?.getReader) throw new Error("Streaming replies are not supported by this connection.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let content = "";
+    let streamError = null;
+    const processLine = line => {
+      if (!line.startsWith("data:")) return;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") return;
+      let event;
+      try { event = JSON.parse(data); } catch { return; }
+      if (event?.error && typeof event.error.message === "string") {
+        streamError = new Error(event.error.message);
+        streamError.code = typeof event.error.code === "string" ? event.error.code : "STREAM_PROVIDER_ERROR";
+        return;
+      }
+      const delta = typeof event?.delta === "string" ? event.delta : event?.choices?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta) {
+        content += delta;
+        onDelta?.(delta);
+      }
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        for (const line of lines) processLine(line);
+        if (streamError) throw streamError;
+      }
+      buffer += decoder.decode();
+      if (buffer) processLine(buffer);
+      if (streamError) throw streamError;
+    } finally {
+      try { reader.releaseLock(); } catch { /* stream may already be closed */ }
+    }
+    if (!content.trim()) throw new Error("The model returned an empty response.");
+    return { content };
   }
 
   function compileShader(context, type, source) {
@@ -825,6 +897,22 @@
     });
   }
 
+  async function speakStreamingSegment(text, epoch, preferFishAudio) {
+    const segment = String(text || "").trim();
+    if (!segment || epoch !== speechEpoch) return false;
+    if (preferFishAudio) {
+      try {
+        const blob = await requestFishAudioSpeech(segment);
+        if (epoch !== speechEpoch) return false;
+        const played = await playFishAudioBlob(blob, epoch);
+        if (played || epoch !== speechEpoch) return played;
+      } catch {
+        if (epoch !== speechEpoch) return false;
+      }
+    }
+    return speakResponseBrowser(segment, epoch);
+  }
+
   async function startMicVisualizer() {
     if (micStream && analyser) return true;
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") return false;
@@ -1029,11 +1117,11 @@
           }
           const rms = Math.sqrt(total / audioSamples.length);
           const now = Date.now();
-          if (rms > 0.018) {
+          if (rms > 0.012) {
             session.heardSpeech = true;
             session.lastVoiceAt = now;
           }
-          if (session.heardSpeech && now - session.lastVoiceAt >= 1100) {
+          if (session.heardSpeech && now - session.lastVoiceAt >= 650) {
             stopFallbackRecognition({ transcribe: true });
           } else if (now - session.startedAt >= 18000) {
             stopFallbackRecognition({ transcribe: session.heardSpeech });
@@ -1041,7 +1129,7 @@
             stopFallbackRecognition({ transcribe: false });
           }
         }
-      }, 160);
+      }, 100);
     } catch {
       ui.captionText.textContent = "VOICE RECORDING FAILED";
       showToast("Could not start microphone recording. Check microphone permission and try again.");
@@ -1054,6 +1142,8 @@
   function stopRecognition() {
     if (restartTimer) window.clearTimeout(restartTimer);
     restartTimer = null;
+    if (nativeSilenceTimer) window.clearTimeout(nativeSilenceTimer);
+    nativeSilenceTimer = null;
     stopFallbackRecognition({ transcribe: false });
     const current = recognition;
     recognition = null;
@@ -1099,11 +1189,12 @@
       setCoreState("listening");
       ui.voiceSubtitle.textContent = "Listening · tap to pause";
     };
+    let pendingInterimCommand = "";
     instance.onresult = (event) => {
       if (!voiceActive || mode !== "voice" || busy) return;
       let finalText = "";
       let interimText = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      for (let index = 0; index < event.results.length; index += 1) {
         const result = event.results[index];
         const transcript = result && result[0] ? String(result[0].transcript || "") : "";
         if (result && result.isFinal) finalText += transcript + " ";
@@ -1113,11 +1204,26 @@
         hadAnyResult = true;
         nativeRecognitionEmptyRuns = 0;
       }
-      if (interimText.trim()) ui.captionText.textContent = "HEARING · " + interimText.trim().slice(0, 110);
       if (finalText.trim()) {
+        pendingInterimCommand = "";
         const command = finalText.trim();
         stopRecognition();
         void sendPrompt(command, "voice");
+        return;
+      }
+      if (interimText.trim()) {
+        pendingInterimCommand = interimText.trim();
+        ui.captionText.textContent = "HEARING · " + pendingInterimCommand.slice(0, 110);
+        if (nativeSilenceTimer) window.clearTimeout(nativeSilenceTimer);
+        nativeSilenceTimer = window.setTimeout(() => {
+          nativeSilenceTimer = null;
+          if (recognition !== instance || !voiceActive || mode !== "voice" || busy || !pendingInterimCommand) return;
+          const command = pendingInterimCommand;
+          pendingInterimCommand = "";
+          stopRecognition();
+          ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
+          void sendPrompt(command, "voice");
+        }, 750);
       }
     };
     instance.onerror = (event) => {
@@ -1167,19 +1273,29 @@
     nativeRecognitionEmptyRuns = 0;
     renderMode();
     setCoreState("listening");
-    await ensureSpeechCapabilities();
-    if (!voiceActive || mode !== "voice") return;
-    const micReady = await startMicVisualizer();
+    // Never make native microphone startup wait for a sleeping backend's
+    // capability endpoint. Load provider status in parallel with listening.
+    void ensureSpeechCapabilities();
     if (!voiceActive || mode !== "voice") return;
     const Recognition = speechRecognitionConstructor();
-    if (!Recognition || !micReady) {
-      forceFallbackRecognition = true;
-      if (!Recognition) {
-        ui.captionText.textContent = "SERVER SPEECH RECOGNITION";
-        ui.voiceSubtitle.textContent = "Using server transcription";
-      }
+    if (Recognition && !forceFallbackRecognition) {
+      // Browser speech recognition can start immediately; the visualizer's
+      // separate getUserMedia permission request must not block it.
+      void startMicVisualizer();
       startRecognition();
     } else {
+      const micReady = await startMicVisualizer();
+      if (!voiceActive || mode !== "voice") return;
+      if (!micReady) {
+        voiceActive = false;
+        renderMode();
+        setCoreState("error");
+        showToast("Microphone access is unavailable. Allow microphone access for this secure site and try again.");
+        return;
+      }
+      forceFallbackRecognition = true;
+      ui.captionText.textContent = "SERVER SPEECH RECOGNITION";
+      ui.voiceSubtitle.textContent = "Using server transcription";
       startRecognition();
     }
     if (voiceActive) {
@@ -1283,20 +1399,79 @@
       showToast("Sign in to ULTRON before sending commands.");
       return;
     }
+    const explicitResearchIntent = /\b(search|research|look up|latest|current|today|news|weather|forecast|mausam|citations?|sources?|references?)\b/i.test(prompt);
+    const shouldResearch = wantsResearch(prompt) && !attachments.length && (source !== "voice" || explicitResearchIntent);
     busy = true;
     ui.sendButton.disabled = true;
     const task = attachments.length
       ? { kind: source === "camera-auto" ? "LIVE EYES" : "VISION ANALYSIS", title: source === "camera-auto" ? "Observing the current camera view" : "Analyzing what the camera sees", side: "right", stage: source === "camera-auto" ? "OBSERVING FRAME" : "ANALYZING IMAGE" }
       : guessTask(prompt);
     openTaskPanel(task);
-    setCoreState(source === "camera-auto" ? "thinking" : wantsResearch(prompt) ? "research" : "thinking");
+    setCoreState(source === "camera-auto" ? "thinking" : shouldResearch ? "research" : "thinking");
     updateTaskPanel("Routing: " + prompt.slice(0, 190), task.stage);
     let researchData = null;
     let sources = [];
     let answer = "";
-    let shouldSpeak = source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
+    const shouldSpeak = source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
+    const streamVoiceReply = source === "voice" && shouldSpeak && attachments.length === 0;
+    let streamSpeechEpoch = null;
+    let streamSpeechUsesFish = false;
+    let streamSpeechFallbackNotified = false;
+    let streamSpeechCount = 0;
+    let streamSpeechBuffer = "";
+    let streamSpeechQueue = Promise.resolve();
+
+    const enqueueStreamSpeech = segment => {
+      const clean = String(segment || "").trim();
+      if (!clean || !streamVoiceReply) return;
+      streamSpeechCount += 1;
+      streamSpeechQueue = streamSpeechQueue.then(async () => {
+        if (streamSpeechEpoch === null || streamSpeechEpoch !== speechEpoch) return;
+        const spoke = await speakStreamingSegment(clean, streamSpeechEpoch, streamSpeechUsesFish);
+        if (!spoke && streamSpeechEpoch === speechEpoch && !streamSpeechFallbackNotified) {
+          streamSpeechFallbackNotified = true;
+          showToast("Voice playback is unavailable. Check your browser audio output and Fish Audio settings.", 4500);
+        }
+      });
+    };
+
+    const queueCompletedSpeech = (force = false) => {
+      if (!streamVoiceReply) return;
+      while (streamSpeechBuffer.trim()) {
+        const match = /^([\s\S]*?[.!?।]+(?:["'”’\)\]]*)(?:\s+|$)/.exec(streamSpeechBuffer);
+        if (match && match[1].trim().length >= 10) {
+          enqueueStreamSpeech(match[1].trim());
+          streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
+          continue;
+        }
+        if (!force && streamSpeechBuffer.length >= 180) {
+          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 155);
+          if (cutoff >= 85) {
+            enqueueStreamSpeech(streamSpeechBuffer.slice(0, cutoff).trim());
+            streamSpeechBuffer = streamSpeechBuffer.slice(cutoff + 1);
+            continue;
+          }
+        }
+        if (force) {
+          enqueueStreamSpeech(streamSpeechBuffer.trim());
+          streamSpeechBuffer = "";
+        }
+        break;
+      }
+    };
+
+    const onStreamDelta = delta => {
+      if (typeof delta !== "string" || !delta) return;
+      answer += delta;
+      if (streamVoiceReply) {
+        streamSpeechBuffer += delta;
+        queueCompletedSpeech(false);
+        updateTaskPanel(answer.slice(-1000), "GENERATING RESPONSE", sources);
+      }
+    };
+
     try {
-      if (wantsResearch(prompt) && !attachments.length) {
+      if (shouldResearch) {
         setCoreState("research");
         updateTaskPanel("Searching for current public references…", "SEARCHING REFERENCES");
         try {
@@ -1311,21 +1486,38 @@
       }
       setCoreState("thinking");
       updateTaskPanel("Request received. ULTRON is generating the response.", "GENERATING RESPONSE", sources);
-      const context = history.slice(-18);
+      const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
-      const messages = context.concat([{ role: "user", content: outgoingPrompt }]).slice(-40);
-      const payload = await apiRequest("/api/chat", {
-        method: "POST",
-        body: { messages, stream: false, persona: "ultron", ...(attachments.length ? { attachments } : {}) }
-      });
-      answer = payload && typeof payload.content === "string" ? payload.content.trim() : "";
+      const voicePrompt = streamVoiceReply
+        ? "You are replying aloud. Lead with the direct answer, keep it concise (usually 1–3 short sentences), and avoid a long preamble. Mirror the user's language and style.\n\nUser request: " + outgoingPrompt
+        : outgoingPrompt;
+      const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
+      if (streamVoiceReply) {
+        streamSpeechEpoch = ++speechEpoch;
+        streamSpeechUsesFish = Boolean(speechCapabilities.premiumTtsConfigured);
+        stopFishAudioPlayback();
+        try { window.speechSynthesis?.cancel?.(); } catch { /* no previous speech to stop */ }
+      }
+      const requestBody = { messages, persona: "ultron", ...(attachments.length ? { attachments } : {}) };
+      const payload = streamVoiceReply
+        ? await streamChatRequest(requestBody, onStreamDelta)
+        : await apiRequest("/api/chat", { method: "POST", body: { ...requestBody, stream: false } });
+      answer = payload && typeof payload.content === "string" ? payload.content.trim() : answer.trim();
       if (!answer) throw new Error("The model returned an empty response.");
       history.push({ role: "user", content: prompt }, { role: "assistant", content: answer });
       if (history.length > 30) history = history.slice(-30);
       markTaskComplete(answer, sources, shouldSpeak);
       setCoreState(shouldSpeak ? "speaking" : "idle");
       if (shouldSpeak) {
-        const spoke = await speakResponse(answer, true);
+        let spoke = false;
+        if (streamVoiceReply) {
+          queueCompletedSpeech(true);
+          await streamSpeechQueue;
+          spoke = streamSpeechCount > 0;
+          if (!spoke) spoke = await speakResponse(answer, true);
+        } else {
+          spoke = await speakResponse(answer, true);
+        }
         if (panelIsComplete) schedulePanelHide(spoke ? 850 : 4000);
       }
       if (!shouldSpeak) schedulePanelHide(6500);
