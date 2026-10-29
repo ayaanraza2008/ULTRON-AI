@@ -1331,6 +1331,127 @@ test("study pack library list/detail/delete use explicit authenticated-owner fil
   assert.equal(calls[2].method, "DELETE");
 });
 
+
+const USER_NOTE_TEST_ID = "20000000-0000-4000-8000-000000000001";
+const USER_NOTE_OWNER_ID = "00000000-0000-4000-8000-000000000001";
+const validNoteInput = () => ({
+  title: "Quantum Physics Revision",
+  body: "Energy bands describe allowed electron energies in solids.",
+  tags: ["physics", "revision"]
+});
+
+test("notes library saves only authenticated-owner data", async () => {
+  const calls = [];
+  const note = { ...validNoteInput(), id: USER_NOTE_TEST_ID, user_id: USER_NOTE_OWNER_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" };
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validNoteInput(), user_id: "99999999-9999-4999-8999-999999999999" })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.note.id, USER_NOTE_TEST_ID);
+    assert.equal(body.note.user_id, USER_NOTE_OWNER_ID);
+    assert.deepEqual(body.note.tags, ["physics", "revision"]);
+  }, {
+    supabaseRest: async (_req, table, method, query, body) => {
+      calls.push({ table, method, query, body });
+      assert.equal(table, "user_notes");
+      assert.equal(method, "POST");
+      assert.equal(query, "");
+      return [{ ...body, id: USER_NOTE_TEST_ID, created_at: note.created_at, updated_at: note.updated_at }];
+    }
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.user_id, USER_NOTE_OWNER_ID);
+});
+
+test("notes library rejects oversized, empty and malformed note input before database writes", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    for (const body of [
+      { title: " ", body: "valid body" },
+      { title: "valid title", body: " " },
+      { title: "valid title", body: "valid body", tags: "not-an-array" },
+      { title: "valid title", body: "valid body", tags: Array.from({ length: 21 }, (_, i) => "tag" + i) },
+      { title: "valid title", body: "valid body", tags: ["x".repeat(41)] },
+      { title: "valid title", body: "x".repeat(30001) }
+    ]) {
+      const response = await fetch(base + "/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, "INVALID_NOTE");
+    }
+  }, { supabaseRest: async () => { calls++; return []; } });
+  assert.equal(calls, 0);
+});
+
+test("notes library list/detail/update/delete are filtered to the authenticated owner", async () => {
+  const calls = [];
+  const note = { ...validNoteInput(), id: USER_NOTE_TEST_ID, user_id: USER_NOTE_OWNER_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" };
+  await withServer({}, async base => {
+    const list = await fetch(base + "/api/notes?limit=999");
+    assert.equal(list.status, 200);
+    assert.equal((await list.json()).notes[0].id, USER_NOTE_TEST_ID);
+
+    const detail = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID);
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).note.body, note.body);
+
+    const update = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Updated title", tags: ["updated"] })
+    });
+    assert.equal(update.status, 200);
+    assert.equal((await update.json()).note.title, "Updated title");
+
+    const deletion = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID, { method: "DELETE" });
+    assert.equal(deletion.status, 200);
+    assert.deepEqual(await deletion.json(), { deleted: true, id: USER_NOTE_TEST_ID });
+  }, {
+    supabaseRest: async (_req, table, method, query, body) => {
+      calls.push({ table, method, query, body });
+      assert.equal(table, "user_notes");
+      assert.ok(query.includes("user_id=eq." + USER_NOTE_OWNER_ID), "all operations must be owner-filtered");
+      if (method === "DELETE") return [note];
+      if (method === "PATCH") return [{ ...note, ...body }];
+      return [note];
+    }
+  });
+  assert.equal(calls.length, 4);
+  assert.ok(calls[0].query.endsWith("&limit=50"));
+  assert.ok(calls[1].query.includes("id=eq." + USER_NOTE_TEST_ID));
+  assert.equal(calls[2].method, "PATCH");
+  assert.deepEqual(calls[2].body, { title: "Updated title", tags: ["updated"] });
+  assert.equal(calls[3].method, "DELETE");
+});
+
+test("notes library rejects invalid IDs and returns not-found without leaking cross-user records", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    const invalid = await fetch(base + "/api/notes/not-a-uuid");
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).error.code, "INVALID_NOTE_ID");
+
+    const missing = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID);
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).error.code, "NOTE_NOT_FOUND");
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls++;
+      assert.equal(table, "user_notes");
+      assert.ok(query.includes("user_id=eq." + USER_NOTE_OWNER_ID));
+      return [];
+    }
+  });
+  assert.equal(calls, 1);
+});
+
 test("configured Ollama model listing rejects upstream redirects", async () => {
   await withServer({ OLLAMA_BASE_URL: "https://ollama.example.com" }, async base => {
     const response = await fetch(base + "/api/local/models");
