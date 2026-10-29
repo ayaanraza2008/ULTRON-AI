@@ -11,7 +11,7 @@ async function withServer(env, fetchImpl, run, extras = {}) {
     configuredEnv.ULTRON_INTEGRATION_OWNER_USER_ID = "00000000-0000-4000-8000-000000000001";
   }
   const requireSupabaseUser = (req, _res, next) => { req.supabaseUser = { id: extras.userId || "00000000-0000-4000-8000-000000000001" }; next(); };
-  app.use("/api", createAgentRouter({ env: configuredEnv, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, privilegedSupabaseRest: extras.privilegedSupabaseRest || extras.supabaseRest, logger: { warn() {} } }));
+  app.use("/api", createAgentRouter({ env: configuredEnv, fetchImpl, requireSupabaseUser, supabaseRest: extras.supabaseRest, privilegedSupabaseRest: extras.privilegedSupabaseRest || extras.supabaseRest, logger: { warn() {} }, runSandbox: extras.runSandbox }));
   const server = await new Promise(resolve => {
     const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
   });
@@ -19,6 +19,90 @@ async function withServer(env, fetchImpl, run, extras = {}) {
   finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
 
+
+test("agent sandbox runs only the exact explicitly requested code for the configured owner", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const source = "print('ULTRON_OK')";
+  const fence = String.fromCharCode(96).repeat(3);
+  const prompt = "Run this code:\n" + fence + "python\n" + source + "\n" + fence;
+  let sandboxCalls = [];
+  let providerCalls = 0;
+  await withServer({
+    OPENROUTER_API_KEY: "sandbox-test-provider",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    ULTRON_CODING_SANDBOX_ENABLED: "true",
+    ULTRON_CODING_SANDBOX_PYTHON_IMAGE: "python:3.12-alpine@sha256:" + "b".repeat(64)
+  }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      assert.deepEqual(payload.tools.map(item => item.function.name), ["coding_sandbox_run"]);
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "sandbox-tool-call", type: "function",
+        function: { name: "coding_sandbox_run", arguments: JSON.stringify({ language: "python", source }) }
+      }] } }] }), { status: 200 });
+    }
+    assert.ok(payload.messages.some(item => item.role === "tool" && String(item.content).includes("ULTRON_OK")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Sandbox test completed with ULTRON_OK." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /Sandbox test completed/);
+    assert.deepEqual(body.toolsUsed.map(item => item.name), ["coding_sandbox_run"]);
+  }, {
+    userId: ownerId,
+    runSandbox: async args => {
+      sandboxCalls.push(args);
+      return { runId: "test-run", state: "completed", success: true, language: args.language, stdout: "ULTRON_OK\n", stderr: "", execution: "restricted_local_container" };
+    }
+  });
+  assert.equal(sandboxCalls.length, 1);
+  assert.equal(sandboxCalls[0].userId, ownerId);
+  assert.equal(sandboxCalls[0].language, "python");
+  assert.equal(sandboxCalls[0].source, source);
+  assert.equal(providerCalls, 2);
+});
+
+test("agent sandbox refuses model-substituted code", async () => {
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const source = "print('safe')";
+  const fence = String.fromCharCode(96).repeat(3);
+  const prompt = "Run this code:\n" + fence + "python\n" + source + "\n" + fence;
+  let sandboxCalls = 0;
+  let providerCalls = 0;
+  await withServer({
+    OPENROUTER_API_KEY: "sandbox-test-provider",
+    ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+    ULTRON_CODING_SANDBOX_ENABLED: "true",
+    ULTRON_CODING_SANDBOX_PYTHON_IMAGE: "python:3.12-alpine@sha256:" + "b".repeat(64)
+  }, async (_url, options) => {
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "substituted-sandbox-call", type: "function",
+        function: { name: "coding_sandbox_run", arguments: JSON.stringify({ language: "python", source: "print('substituted')" }) }
+      }] } }] }), { status: 200 });
+    }
+    assert.ok(payload.messages.some(item => item.role === "tool" && String(item.content).includes("SANDBOX_SOURCE_MISMATCH")));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "No substituted code was executed." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /No substituted code was executed/);
+  }, { userId: ownerId, runSandbox: async () => { sandboxCalls += 1; return { state: "completed" }; } });
+  assert.equal(sandboxCalls, 0);
+});
 
 test("agent cancels oversized model responses and falls back to the next configured provider", async () => {
   let firstCancelled = false;
