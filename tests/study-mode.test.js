@@ -195,3 +195,113 @@ test("agent creates a structured study pack through its configured provider", as
   assert.equal(toolCalls, 1);
   assert.equal(generationCalls, 1);
 });
+
+
+const STUDY_PACK_ID = "30000000-0000-4000-8000-000000000001";
+
+test("study pack persists only when the user explicitly requests saving it", async () => {
+  let providerCalls = 0;
+  const dbCalls = [];
+  const savedAt = "2026-10-29T00:00:00.000Z";
+
+  await withAgentServer({ OPENROUTER_API_KEY: "study-save-test-provider-key" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    const promptText = payload.messages.map(message => typeof message.content === "string" ? message.content : "").join("\n");
+    if (promptText.includes("structured study-pack generator")) {
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: JSON.stringify(generatedPack) } }]
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    const hasSavedResult = payload.messages.some(message => message.role === "tool" && message.content.includes('"saveStatus":"saved"'));
+    if (hasSavedResult) return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "I generated and saved your study pack to your private study library." } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: null, tool_calls: [{
+        id: "study-pack-save-call",
+        type: "function",
+        function: { name: "create_study_pack", arguments: JSON.stringify({
+          topic: "photosynthesis", level: "beginner", format: "mixed", language: "English", questionCount: 3, save: true
+        }) }
+      }] } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Create a study pack about photosynthesis and save this study pack to my study library." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /saved your study pack/i);
+    assert.equal(body.toolsUsed[0].name, "create_study_pack");
+    assert.equal(body.toolResults[0].result.saveStatus, "saved");
+    assert.equal(body.toolResults[0].result.studyPackId, STUDY_PACK_ID);
+  }, {
+    supabaseRest: async (_req, table, method, query, body) => {
+      if (table === "user_preferences") return [{ memory_enabled: false }];
+      dbCalls.push({ table, method, query, body });
+      assert.equal(table, "study_packs");
+      assert.equal(method, "POST");
+      assert.equal(query, "");
+      assert.equal(body.user_id, USER_ID);
+      assert.equal(body.source_mode, "general_knowledge_draft");
+      assert.equal(body.topic, "photosynthesis");
+      return [{ ...body, id: STUDY_PACK_ID, created_at: savedAt, updated_at: savedAt }];
+    }
+  });
+
+  assert.equal(providerCalls, 3);
+  assert.equal(dbCalls.length, 1);
+});
+
+test("study pack does not persist when the provider asks to save but the user did not", async () => {
+  let providerCalls = 0;
+  let studyPackWrites = 0;
+
+  await withAgentServer({ OPENROUTER_API_KEY: "study-no-auto-save-test-key" }, async (url, options) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    const promptText = payload.messages.map(message => typeof message.content === "string" ? message.content : "").join("\n");
+    if (promptText.includes("structured study-pack generator")) {
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: JSON.stringify(generatedPack) } }]
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    const hasStudyResult = payload.messages.some(message => message.role === "tool" && message.content.includes('"saveStatus":"not_requested"'));
+    if (hasStudyResult) return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "I created the study pack without saving it." } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: null, tool_calls: [{
+        id: "study-pack-no-save-call",
+        type: "function",
+        function: { name: "create_study_pack", arguments: JSON.stringify({
+          topic: "photosynthesis", level: "beginner", format: "mixed", language: "English", questionCount: 3, save: true
+        }) }
+      }] } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Make flashcards and a quiz about photosynthesis for a beginner." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /created the study pack without saving it/i);
+    assert.equal(body.toolResults[0].result.saveStatus, "not_requested");
+  }, {
+    supabaseRest: async (_req, table, method) => {
+      if (table === "user_preferences") return [{ memory_enabled: false }];
+      if (table === "study_packs" && method === "POST") studyPackWrites += 1;
+      throw new Error("A study pack must not be saved without explicit user intent.");
+    }
+  });
+
+  assert.equal(providerCalls, 3);
+  assert.equal(studyPackWrites, 0);
+});
