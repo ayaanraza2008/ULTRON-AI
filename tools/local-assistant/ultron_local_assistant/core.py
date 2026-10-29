@@ -131,6 +131,44 @@ def _physical_memory_bytes() -> int | None:
     return None
 
 
+
+def _available_memory_bytes() -> int | None:
+    """Return OS-reported available physical memory without collecting process data."""
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            status = MEMORYSTATUSEX()
+            status.dwLength = ctypes.sizeof(status)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return int(status.ullAvailPhys)
+        except Exception:
+            return None
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        available_pages = os.sysconf("SC_AVPHYS_PAGES")
+        if page_size and available_pages:
+            return int(page_size * available_pages)
+    except (AttributeError, OSError, ValueError):
+        pass
+    try:
+        with open("/proc/meminfo", "r", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 def _fixed_probe(command: list[str]) -> str | None:
     """Run only a fixed hardware-query command; never a user-supplied command."""
     if not shutil.which(command[0]):
@@ -161,6 +199,65 @@ def detect_hardware() -> dict[str, Any]:
         "ram_gib": round(ram / (1024 ** 3), 1) if ram else None,
         "gpu": gpu,
         "python": platform.python_version(),
+    }
+
+
+
+def get_system_health(path: str | Path | None = None) -> dict[str, Any]:
+    """Read basic local CPU, memory, and disk health; never makes network requests."""
+    warnings: list[str] = []
+    total_ram = _physical_memory_bytes()
+    available_ram = _available_memory_bytes()
+    memory_used_percent = None
+    if total_ram and available_ram is not None and total_ram > 0:
+        memory_used_percent = round(max(0, min(100, (total_ram - available_ram) / total_ram * 100)), 1)
+        if memory_used_percent >= 90:
+            warnings.append("high_memory_usage")
+
+    root: Path | None
+    try:
+        root = Path(path).expanduser().resolve(strict=True) if path is not None else Path.home().resolve(strict=True)
+        if not root.is_dir():
+            root = None
+    except (OSError, RuntimeError, TypeError, ValueError):
+        root = None
+
+    disk: dict[str, Any] = {"available": False, "path": str(root) if root else None}
+    if root is not None:
+        try:
+            usage = shutil.disk_usage(root)
+            used_percent = round((usage.used / usage.total) * 100, 1) if usage.total else None
+            disk = {
+                "available": True,
+                "path": str(root),
+                "total_bytes": int(usage.total),
+                "free_bytes": int(usage.free),
+                "used_percent": used_percent,
+            }
+            if used_percent is not None and used_percent >= 90:
+                warnings.append("low_disk_space")
+        except OSError:
+            warnings.append("disk_probe_failed")
+    else:
+        warnings.append("disk_path_unavailable")
+
+    memory = {
+        "total_bytes": total_ram,
+        "available_bytes": available_ram,
+        "used_percent": memory_used_percent,
+    }
+    if total_ram is None or available_ram is None:
+        warnings.append("memory_probe_incomplete")
+
+    status = "warning" if any(w in warnings for w in ("high_memory_usage", "low_disk_space", "disk_probe_failed", "disk_path_unavailable")) else ("partial" if warnings else "ok")
+    return {
+        "status": status,
+        "platform": platform.platform(),
+        "cpu": {"logical_cpus": os.cpu_count() or 1, "processor": platform.processor() or platform.uname().processor or "unknown"},
+        "memory": memory,
+        "disk": disk,
+        "warnings": warnings,
+        "privacy": "Computed locally; no network requests, file contents, or process inventory are collected.",
     }
 
 
