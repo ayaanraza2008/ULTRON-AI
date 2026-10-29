@@ -304,7 +304,7 @@ test("agent reads a full private note only through an owner-filtered query", asy
     assert.match(body.content, /read your full saved Quantum Revision note/i);
     assert.ok(body.routing.categories.includes("notes"));
     assert.deepEqual(body.toolResults[0].result.note.body, bodyText);
-    assert.equal(body.toolResults[0].result.sourceContentTrust, "user_saved_content");
+    assert.equal(body.toolResults[0].result.sourceContentTrust, "untrusted_user_saved_content");
   });
 
   assert.equal(providerCalls, 2);
