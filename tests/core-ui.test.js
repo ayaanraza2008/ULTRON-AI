@@ -301,13 +301,18 @@ test("gateway recovery keeps trying through a longer cold start and returns when
 test("voice listening starts without waiting for backend readiness and submits short pauses quickly", () => {
   assert.ok(app.includes("void ensureSpeechCapabilities();"));
   assert.ok(app.includes("if (Recognition && !forceFallbackRecognition)"));
-  assert.ok(app.includes("now - session.lastVoiceAt >= 650"));
+  assert.ok(app.includes("now - session.lastVoiceAt >= 450"));
   assert.ok(app.includes("}, 100);"));
   assert.ok(app.includes("nativeSilenceTimer = window.setTimeout"));
+  assert.ok(app.includes("}, 500);"));
   assert.ok(app.includes("pendingInterimCommand && voiceActive"));
   assert.ok(app.includes("async function streamChatRequest(body, onDelta)"));
   assert.ok(app.includes("body: JSON.stringify({ ...body, stream: true })"));
   assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferFishAudio)"));
+  assert.ok(app.includes("streamSpeechBuffer.length >= 52"));
+  assert.ok(app.includes('const cutoff = streamSpeechBuffer.lastIndexOf(" ", 46)'));
+  assert.ok(app.includes("const fishAudioBlobPromise = streamSpeechUsesFish"));
+  assert.ok(app.includes("about 20–35 words"));
   assert.ok(app.includes("You are replying aloud. Lead with the direct answer"));
 });
 
