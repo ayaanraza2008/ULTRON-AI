@@ -1070,7 +1070,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         const rows = await supabaseRest(req, "user_notes", "GET",
           "?select=id,title,body,tags,updated_at&user_id=eq." + encodeURIComponent(userId) + "&or=" + filter
           + "&order=updated_at.desc&limit=" + limit);
-        return { state: "completed", query, count: Array.isArray(rows) ? rows.length : 0, notes: (Array.isArray(rows) ? rows : []).slice(0, limit).map(responseNote) };
+        return { state: "completed", query, count: Array.isArray(rows) ? rows.length : 0, notes: (Array.isArray(rows) ? rows : []).slice(0, limit).map(responseNote), sourceContentTrust: "untrusted_user_saved_content" };
       }
       if (name === "notes_create") {
         if (typeof args.title !== "string" || !args.title.trim() || args.title.trim().length > 200
@@ -1084,7 +1084,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         if (!Array.isArray(rows) || !rows[0]?.id) {
           throw Object.assign(new Error("The database did not confirm that the note was saved."), { code: "NOTE_SAVE_UNCONFIRMED", status: 502 });
         }
-        return { state: "created", note: responseNote(rows[0]), notice: "Private note saved for the signed-in user." };
+        return { state: "created", note: responseNote(rows[0]), notice: "Private note saved for the signed-in user.", sourceContentTrust: "untrusted_user_saved_content" };
       }
       if (name === "notes_read") {
         if (!validNoteId(args.id)) {
@@ -1107,7 +1107,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
             createdAt: bounded(row.created_at, 40),
             updatedAt: bounded(row.updated_at, 40)
           },
-          sourceContentTrust: "user_saved_content"
+          sourceContentTrust: "untrusted_user_saved_content"
         };
       }
       if (!validNoteId(args.id)) {
@@ -1129,7 +1129,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       if (!Array.isArray(rows) || !rows[0]?.id) {
         return { state: "not_found", message: "No note with that ID is visible to the signed-in user." };
       }
-      return { state: "updated", note: responseNote(rows[0]), notice: "Only the signed-in user's note was updated." };
+      return { state: "updated", note: responseNote(rows[0]), notice: "Only the signed-in user's note was updated.", sourceContentTrust: "untrusted_user_saved_content" };
     }
     if (name === "weather_lookup") {
       const location = bounded(args.location, 160).replace(/\s+/g, " ");
