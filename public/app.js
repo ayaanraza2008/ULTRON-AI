@@ -2701,6 +2701,181 @@
     }
   }
 
+  function studyPackMarkdown(pack) {
+    const lines = [
+      "# " + String(pack.topic || "ULTRON study pack"),
+      "",
+      "- Level: " + String(pack.level || "unspecified"),
+      "- Format: " + String(pack.format || "mixed"),
+      "- Language: " + String(pack.language || "English"),
+      "- Source mode: " + String(pack.sourceMode || "general-knowledge draft"),
+      "",
+      "## Summary",
+      String(pack.summary || "No summary returned."),
+      ""
+    ];
+    if (Array.isArray(pack.learningObjectives) && pack.learningObjectives.length) {
+      lines.push("## Learning objectives", ...pack.learningObjectives.map(item => "- " + String(item)), "");
+    }
+    if (Array.isArray(pack.flashcards) && pack.flashcards.length) {
+      lines.push("## Flashcards");
+      for (const [index, item] of pack.flashcards.entries()) {
+        lines.push("### " + (index + 1) + ". " + String(item.question || ""), "", String(item.answer || ""), "");
+      }
+    }
+    if (Array.isArray(pack.quiz) && pack.quiz.length) {
+      lines.push("## Practice quiz");
+      for (const [index, item] of pack.quiz.entries()) {
+        lines.push("### " + (index + 1) + ". " + String(item.question || ""));
+        for (const [optionIndex, option] of (Array.isArray(item.options) ? item.options : []).entries()) {
+          lines.push(String.fromCharCode(65 + optionIndex) + ". " + String(option));
+        }
+        lines.push("", "Answer: " + String(item.answerIndex ?? "not returned"), String(item.explanation || ""), "");
+      }
+    }
+    if (Array.isArray(pack.revisionChecklist) && pack.revisionChecklist.length) {
+      lines.push("## Revision checklist", ...pack.revisionChecklist.map(item => "- [ ] " + String(item)), "");
+    }
+    lines.push("## Source note", String(pack.sourceNotes || pack.notice || "Verify this draft against your official syllabus."), "");
+    return lines.join("\n").slice(0, 60000);
+  }
+
+  function showGeneratedStudyPack(pack) {
+    ui.drawerContent.replaceChildren();
+    drawerHeading(String(pack.topic || "Generated study pack").slice(0, 200), [pack.level, pack.format, pack.language].filter(Boolean).join(" · "));
+    drawerCard(
+      "Generated draft — not saved",
+      String(pack.saveMessage || "The tool returned a study pack, but the database did not confirm persistence. This copy exists only in the current browser view until you export it."),
+      String(pack.saveStatus || "SAVE UNCONFIRMED").replaceAll("_", " ").toUpperCase(),
+      "warning"
+    );
+    drawerButton("BACK TO STUDY LIBRARY", () => { void showDrawerView("study"); }, true);
+    drawerButton("DOWNLOAD MARKDOWN", () => {
+      downloadTextFile((String(pack.topic || "study-pack").slice(0, 80) || "study-pack") + ".md", studyPackMarkdown(pack));
+      showToast("Generated study draft exported. It was not saved to the database.");
+    });
+    drawerCard("Summary", String(pack.summary || "No summary returned.").slice(0, 8000), "STUDY NOTES");
+    if (pack.sourceNotes || pack.notice) drawerCard("Source / verification note", String(pack.sourceNotes || pack.notice).slice(0, 3000), "VERIFY AGAINST SYLLABUS", "warning");
+    const objectives = Array.isArray(pack.learningObjectives) ? pack.learningObjectives : [];
+    if (objectives.length) drawerCard("Learning objectives", objectives.slice(0, 12).map(item => "• " + String(item)).join("\n"), "OBJECTIVES");
+    for (let i = 0; i < Math.min((pack.flashcards || []).length, 15); i += 1) {
+      const item = pack.flashcards[i];
+      const card = drawerCard("Flashcard " + (i + 1), String(item.question || "").slice(0, 900), "GENERATED DRAFT", "warning");
+      const reveal = document.createElement("button");
+      reveal.type = "button";
+      reveal.className = "drawer-action secondary";
+      reveal.textContent = "REVEAL ANSWER";
+      reveal.addEventListener("click", () => {
+        const answer = document.createElement("p");
+        answer.textContent = String(item.answer || "").slice(0, 2000);
+        card.appendChild(answer);
+        reveal.disabled = true;
+        reveal.textContent = "ANSWER REVEALED";
+      });
+      card.appendChild(reveal);
+    }
+    for (let i = 0; i < Math.min((pack.quiz || []).length, 12); i += 1) {
+      const item = pack.quiz[i];
+      const card = drawerCard("Practice question " + (i + 1), String(item.question || "").slice(0, 1000), "MULTIPLE CHOICE", "warning");
+      const group = document.createElement("div");
+      group.className = "drawer-quiz-options";
+      const radios = [];
+      (Array.isArray(item.options) ? item.options : []).slice(0, 4).forEach((option, optionIndex) => {
+        const label = document.createElement("label");
+        label.className = "device-scope";
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "study-draft-quiz-" + i;
+        radio.value = String(optionIndex);
+        const text = document.createElement("span");
+        text.textContent = String(option).slice(0, 400);
+        label.append(radio, text);
+        group.appendChild(label);
+        radios.push(radio);
+      });
+      const check = document.createElement("button");
+      check.type = "button";
+      check.className = "drawer-action secondary";
+      check.textContent = "CHECK ANSWER";
+      const result = document.createElement("p");
+      result.className = "drawer-view-description";
+      result.hidden = true;
+      check.addEventListener("click", () => {
+        const selected = radios.findIndex(radio => radio.checked);
+        if (selected < 0) { showToast("Choose an answer first."); return; }
+        result.textContent = (selected === item.answerIndex ? "Correct. " : "Not quite. ") + String(item.explanation || "").slice(0, 1200);
+        result.hidden = false;
+      });
+      card.append(group, check, result);
+    }
+    const checklist = Array.isArray(pack.revisionChecklist) ? pack.revisionChecklist : [];
+    if (checklist.length) drawerCard("Revision checklist", checklist.slice(0, 20).map(item => "• " + String(item)).join("\n"), "DRAFT");
+  }
+
+  async function runStudyPackAgent(prompt, topicTitle) {
+    if (busy) {
+      showToast("ULTRON is finishing another task. Try again after it completes.");
+      return;
+    }
+    busy = true;
+    ui.sendButton.disabled = true;
+    setCoreState("thinking");
+    openTaskPanel({ kind: "STUDY PACK", title: "Generating " + String(topicTitle || "study material").slice(0, 140), side: "right", stage: "CALLING STUDY TOOL" });
+    updateTaskPanel("Sending a structured request to the authenticated tool-using agent.", "GENERATING STUDY PACK");
+    let packToDisplay = null;
+    try {
+      const payload = await apiRequest("/api/agent/run", {
+        method: "POST",
+        body: { prompt, messages: history.slice(-12) }
+      });
+      const answer = String(payload?.content || "").trim();
+      const results = Array.isArray(payload?.toolResults) ? payload.toolResults : [];
+      const tool = results.find(item => item?.name === "create_study_pack");
+      const pack = tool?.result && typeof tool.result === "object" && !Array.isArray(tool.result) ? tool.result : null;
+      if (!tool || tool.ok !== true || !pack || typeof pack.summary !== "string") {
+        throw new Error("The agent did not confirm a successful create_study_pack tool result. No study pack is being marked as saved.");
+      }
+      packToDisplay = pack;
+      const storedAnswer = answer || "ULTRON generated a study pack for " + String(pack.topic || topicTitle || "your topic") + ".";
+      await persistConversationExchange(prompt, storedAnswer);
+      history.push({ role: "user", content: prompt }, { role: "assistant", content: storedAnswer });
+      if (history.length > 30) history = history.slice(-30);
+      const saved = pack.saveStatus === "saved" && typeof pack.studyPackId === "string" && pack.studyPackId.length > 0;
+      if (saved) {
+        markTaskComplete(storedAnswer, [], false);
+        setCoreState("idle");
+        showToast("Study pack was generated and the backend confirmed the private database save.", 6500);
+        setDrawerOpen(true);
+        await showStudyPackDetail(pack.studyPackId);
+      } else {
+        const state = String(pack.saveStatus || "unconfirmed").replaceAll("_", " ");
+        const title = pack.saveStatus === "failed" ? "Study pack generated, but database save failed."
+          : pack.saveStatus === "unavailable" ? "Study pack generated, but authenticated storage or its migration is unavailable."
+          : "Study pack generated, but persistence was not confirmed.";
+        markTaskComplete(title + " Export the draft if you want to keep a local copy.", [], false);
+        setCoreState("idle");
+        showToast("A study draft was generated; database save status: " + state + ".", 7000);
+        setDrawerOpen(true);
+        showGeneratedStudyPack(pack);
+      }
+    } catch (error) {
+      markTaskError(error.message);
+      setCoreState("error");
+      setDrawerOpen(true);
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Study pack generation failed", "This request did not return a verified structured study-pack tool result.");
+      drawerCard("Study pack unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+      drawerButton("BACK TO STUDY LIBRARY", () => { void showDrawerView("study"); }, true);
+      showToast(error.message || "Study pack generation failed.", 6500);
+      schedulePanelHide(6000);
+    } finally {
+      busy = false;
+      ui.sendButton.disabled = false;
+      if (coreState !== "error") setCoreState("idle");
+    }
+  }
+
   async function showStudyLibrary() {
     ui.drawerContent.replaceChildren();
     drawerHeading("Study library", "Generate study material through the ULTRON agent, explicitly save it, then review flashcards and quizzes here.");
@@ -2747,10 +2922,7 @@
         "Do not invent citations or claim that the source or syllabus was independently verified."
       ].join("\n\n");
       setDrawerOpen(false);
-      switchToTextMode();
-      await sendPrompt(prompt, "text");
-      setDrawerOpen(true);
-      await showStudyLibrary();
+      await runStudyPackAgent(prompt, topic.value.trim());
     });
     ui.drawerContent.appendChild(form);
     const separator = document.createElement("div");
