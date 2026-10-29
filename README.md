@@ -225,3 +225,9 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## Local Video Studio
+
+ULTRON includes an optional local-first video production studio for planning original videos, analyzing a reference URL or local clip, finding licensed media candidates, and rendering a reviewed edit with local FFmpeg tools. Start it separately with `npm run video-studio`; by default it binds only to `127.0.0.1:4174` and rejects non-loopback Host/Origin headers. It stores workspace media under `.runtime/video-studio/` unless `ULTRON_VIDEO_STUDIO_DATA_DIR` is set.
+
+Install FFmpeg/FFprobe and yt-dlp locally, and configure server-side `OPENROUTER_API_KEY` for AI planning. `TAVILY_API_KEY` enables current research and `PEXELS_API_KEY` enables optional stock-video search. The studio does not publish, upload or schedule content. Review media licenses, narration and music rights before rendering or sharing. See [docs/VIDEO_STUDIO.md](docs/VIDEO_STUDIO.md).
