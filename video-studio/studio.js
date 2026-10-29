@@ -7,7 +7,7 @@
     engineSummary: $("#engineSummary"), createForm: $("#newProjectForm"), createMessage: $("#createMessage"), referenceFile: $("#referenceFile"),
     projectWorkspace: $("#projectWorkspace"), activeTitle: $("#activeTitle"), activeMeta: $("#activeMeta"), activeStage: $("#activeStage"),
     stageTrack: $("#stageTrack"), referenceSummary: $("#referenceSummary"), referenceTranscript: $("#referenceTranscript"),
-    referenceAnalysis: $("#referenceAnalysis"), analyzeReference: $("#analyzeReference"), planButton: $("#generatePlan"),
+    referenceAnalysis: $("#referenceAnalysis"), analyzeReference: $("#analyzeReference"), transcribeReference: $("#transcribeReference"), planButton: $("#generatePlan"),
     conceptList: $("#conceptList"), productionPlan: $("#productionPlan"), planMessage: $("#planMessage"),
     scriptEditor: $("#scriptEditor"), saveScript: $("#saveScript"), sceneList: $("#sceneList"),
     researchButton: $("#runResearch"), researchNote: $("#researchNote"), researchSources: $("#researchSources"),
@@ -421,6 +421,23 @@
     } catch (error) { setMessage(ui.createMessage, error.message, "error"); }
     finally { setBusy(false); }
   });
+  ui.transcribeReference.addEventListener("click", async () => {
+    if (!state.project) return;
+    ui.transcribeReference.disabled = true;
+    setMessage(ui.planMessage, "Extracting audio locally and requesting transcription…");
+    try {
+      const result = await api("/studio/projects/" + encodeURIComponent(state.project.id) + "/reference/transcribe", {
+        method: "POST", body: JSON.stringify({ language: state.project.language === "Auto-detect" ? "" : state.project.language })
+      });
+      state.project = result.project;
+      ui.referenceTranscript.value = result.transcript || "";
+      renderProject();
+      setMessage(ui.planMessage, "Reference transcript created by " + result.provider + ". Review names and wording before using it in a new script.", "success");
+      await refreshAll();
+    } catch (error) { setMessage(ui.planMessage, error.message, "error"); }
+    finally { ui.transcribeReference.disabled = false; }
+  });
+
   ui.analyzeReference.addEventListener("click", async () => {
     if (!state.project) return;
     ui.analyzeReference.disabled = true;
