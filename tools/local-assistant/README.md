@@ -16,18 +16,36 @@ A separate Python terminal companion that adds local-first chat, specialist agen
 
 Python 3.10 or newer is required. Install Ollama separately using its official installer and start it locally. The base ULTRON assistant has no Python dependencies beyond the standard library.
 
-From the ULTRON repository root (PowerShell examples work on Windows):
+From the ULTRON repository root, run the guided installer:
 
 ~~~powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e tools/local-assistant
-ultron-local doctor
-ultron-local agents
+.\tools\local-assistant\setup.ps1
 ~~~
 
-If PowerShell blocks virtual-environment activation, use the environment's Python directly: `\.venv\Scripts\python.exe -m pip install -e tools/local-assistant` then `\.venv\Scripts\ultron-local.exe doctor`.
+The guided script creates an isolated virtual environment, installs the CLI, and runs the hardware doctor. It does not download a model or ask for Google access by default. Opt-in flags:
+
+~~~powershell
+# Add optional local PDF/DOCX readers:
+.\tools\local-assistant\setup.ps1 -WithDocuments
+
+# Add read-only Gmail/Calendar client libraries (OAuth consent is still required later):
+.\tools\local-assistant\setup.ps1 -WithGoogle
+
+# Offer to install Ollama using winget; typed confirmation is required:
+.\tools\local-assistant\setup.ps1 -InstallOllama
+
+# Explicitly request a model download; a second typed PULL confirmation is required:
+.\tools\local-assistant\setup.ps1 -PullModel
+~~~
+
+If you prefer a manual install:
+
+~~~powershell
+py -m venv tools/local-assistant/.venv
+tools\local-assistant\.venv\Scripts\python.exe -m pip install -e tools/local-assistant
+tools\local-assistant\.venv\Scripts\ultron-local.exe doctor
+tools\local-assistant\.venv\Scripts\ultron-local.exe agents
+~~~
 
 ## Local model recommendation
 
