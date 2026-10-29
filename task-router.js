@@ -92,6 +92,12 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   for (const [category, pattern] of CATEGORY_PATTERNS) {
     if (pattern.test(text) && !categories.includes(category)) categories.push(category);
   }
+  // A specific Wikipedia lookup should not be widened by the generic "look up"
+  // research matcher; the narrow route keeps it on the dedicated read-only tool.
+  if (categories.includes("wikipedia")) {
+    const genericResearchIndex = categories.indexOf("research");
+    if (genericResearchIndex >= 0) categories.splice(genericResearchIndex, 1);
+  }
 
   const complex = COMPLEX_PATTERN.test(text);
   let tier = "medium";
