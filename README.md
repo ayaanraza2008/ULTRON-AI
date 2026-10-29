@@ -217,3 +217,12 @@ Fish Audio and its reference/model ID have been removed. By default, `GET /api/c
 This is a **free system-voice preset**, not a bundled premium neural voice model. Voice names, naturalness, and availability depend on the browser and operating system, and the preset does not download models or send speech text to a third-party TTS provider. The backend repository does not contain the separate ULTRON frontend, so that frontend must call the helper to apply this profile in its voice UI.
 
 The authenticated `POST /api/speech/synthesize` and `POST /api/speech/transcribe` routes remain optional server-side adapters for OpenAI-compatible providers. They are not needed for browser-native speech. Configure `TTS_API_BASE_URL`/`TTS_API_KEY` or `STT_API_BASE_URL`/`STT_API_KEY` only when server-generated audio or server-side transcription is required.
+
+
+## Local-first Python personal assistant
+
+A private terminal companion now lives in [tools/local-assistant](tools/local-assistant/README.md). It adds specialist morning-digest, local-document research, and code-assistant agents; hardware/model recommendations; local system speech; and a reviewed Markdown-only skill library. It runs separately from the hosted API so local files and prompts are processed by local Ollama, not ULTRON's cloud API.
+
+Install it with Python 3.10+ and Ollama, then run 'ultron-local doctor'. Hardware recommendations are advisory and model downloads require explicit typed confirmation. Gmail and Calendar are opt-in integrations that use read-only OAuth scopes and call Google's APIs to retrieve data; digest generation and speech remain local. Scripts run only after confirmation but are not OS-sandboxed, so review them first. Only reviewed SKILL.md Markdown is copied from public GitHub repositories; repository code is never executed.
+
+See the [local assistant guide](tools/local-assistant/README.md) for setup, privacy boundaries, supported commands, Google OAuth, and tests.
