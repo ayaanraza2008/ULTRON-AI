@@ -101,6 +101,7 @@ test("agent creates a private note with owner ID from the authenticated session"
       }]
     });
   }, async (_req, table, method, query, body) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
     writeCalls += 1;
     assert.equal(table, "user_notes");
     assert.equal(method, "POST");
@@ -155,6 +156,7 @@ test("agent note search stays user-scoped and only accepts literal safe search t
       }]
     });
   }, async (req, table, method, query) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
     readCalls += 1;
     assert.equal(table, "user_notes");
     assert.equal(method, "GET");
@@ -195,9 +197,10 @@ test("agent refuses an unsafe note search term before accessing Supabase", async
         function: { name: "notes_search", arguments: JSON.stringify({ query: "x*)&user_id=neq.000" }) }
       }]
     });
-  }, async () => {
+  }, async (_req, table) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
     supabaseCalls += 1;
-    throw new Error("Unsafe note search must not reach Supabase.");
+    throw new Error("Unsafe note search must not reach the notes table.");
   }, async base => {
     const response = await sendAgentPrompt(base, "Search my notes for quantum physics");
     assert.equal(response.status, 200);
@@ -236,6 +239,7 @@ test("agent updates a user's own note using an owner-filtered conditional update
       }]
     });
   }, async (_req, table, method, query, patch) => {
+    if (table === "user_preferences") return [{ memory_enabled: false }];
     updateCalls += 1;
     assert.equal(table, "user_notes");
     assert.equal(method, "PATCH");
