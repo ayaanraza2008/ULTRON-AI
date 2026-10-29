@@ -1147,11 +1147,21 @@
         );
         addCardActionRow(card, [
           { label: "DOWNLOAD", onClick: () => { void downloadPrivateDocument(item); } },
-          { label: "ANALYZE", secondary: true, onClick: () => {
-            setDrawerOpen(false);
-            switchToTextMode();
-            ui.messageInput.value = "Analyze the saved document named \"" + String(item.filename || "document").slice(0, 180) + "\". The private document library does not expose its content directly in chat yet; please ask me to open/download it or select the original file from this device for analysis.";
-            ui.messageInput.focus();
+          { label: "ANALYZE", secondary: true, onClick: async () => {
+            try {
+              const response = await fetch("/api/documents/" + encodeURIComponent(item.id) + "/download", {
+                method: "GET", credentials: "same-origin", cache: "no-store"
+              });
+              if (!response.ok) {
+                let message = "Could not retrieve the private document (HTTP " + response.status + ").";
+                try { const payload = await response.json(); if (payload?.error?.message) message = payload.error.message; } catch {}
+                throw new Error(message);
+              }
+              const blob = await response.blob();
+              if (!blob.size || blob.size > 5 * 1024 * 1024) throw new Error("The saved file is empty or exceeds 5 MB.");
+              const file = new File([blob], String(item.filename || "ultron-document"), { type: String(item.mime_type || blob.type || "application/octet-stream") });
+              await analyzeLocalFile(file);
+            } catch (error) { showToast("Could not analyze the saved document: " + error.message, 6500); }
           }},
           { label: "DELETE", secondary: true, onClick: async () => {
             if (!window.confirm("Delete this private document permanently?")) return;
