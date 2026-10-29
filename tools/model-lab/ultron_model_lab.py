@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import platform
 import re
@@ -21,6 +22,7 @@ from typing import Any
 
 FORMAT_VERSION = 1
 DEFAULT_MAX_NEW_TOKENS = 128
+MAX_PROFILE_BYTES = 1_000_000
 DECODING_CANDIDATES = (
     {"temperature": 0.0, "top_p": 1.0},
     {"temperature": 0.2, "top_p": 0.9},
@@ -149,17 +151,55 @@ def choose_candidate(results: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def load_json(path: str | Path) -> dict[str, Any]:
+    source = Path(path).expanduser()
     try:
-        with Path(path).expanduser().open("r", encoding="utf-8") as handle:
-            value = json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
+        with source.open("rb") as handle:
+            raw = handle.read(MAX_PROFILE_BYTES + 1)
+    except OSError as exc:
         raise ValueError(f"Could not read JSON profile at {path}: {exc}") from exc
+    if len(raw) > MAX_PROFILE_BYTES:
+        raise ValueError(f"Profile exceeds the {MAX_PROFILE_BYTES}-byte size limit.")
+
+    def reject_constant(constant: str) -> None:
+        raise ValueError(f"Non-finite JSON number {constant!r} is not allowed.")
+
+    try:
+        value = json.loads(raw.decode("utf-8"), parse_constant=reject_constant)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"Could not read valid JSON profile at {path}: {exc}") from exc
+
     if not isinstance(value, dict):
         raise ValueError("Profile must be a JSON object.")
-    if value.get("format_version") != FORMAT_VERSION:
+    if type(value.get("format_version")) is not int or value["format_version"] != FORMAT_VERSION:
         raise ValueError(f"Unsupported profile format_version; expected {FORMAT_VERSION}.")
-    return value
 
+    model_id = value.get("base_model")
+    if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 512:
+        raise ValueError("Profile base_model must be a non-empty model identifier of at most 512 characters.")
+
+    calibration = value.get("calibration")
+    if not isinstance(calibration, dict):
+        raise ValueError("Profile calibration must be a JSON object.")
+    if type(calibration.get("eligible")) is not bool:
+        raise ValueError("Profile calibration.eligible must be true or false.")
+
+    parameters = calibration.get("selected_parameters")
+    if not isinstance(parameters, dict):
+        raise ValueError("Profile calibration.selected_parameters must be a JSON object.")
+    raw_temperature = parameters.get("temperature")
+    raw_top_p = parameters.get("top_p")
+    if type(raw_temperature) not in (int, float) or type(raw_top_p) not in (int, float):
+        raise ValueError("Selected parameters must include numeric temperature and top_p values.")
+    try:
+        temperature = float(raw_temperature)
+        top_p = float(raw_top_p)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Selected decoding parameters must be finite numbers.") from exc
+    if not math.isfinite(temperature) or not 0.0 <= temperature <= 2.0:
+        raise ValueError("Selected temperature must be finite and between 0 and 2.")
+    if not math.isfinite(top_p) or not 0.0 < top_p <= 1.0:
+        raise ValueError("Selected top_p must be finite and greater than 0 and at most 1.")
+    return value
 
 def write_json(path: str | Path, data: dict[str, Any]) -> Path:
     target = Path(path).expanduser()
