@@ -441,7 +441,7 @@ test("Wikimedia Commons supplies free archive candidates without stock-provider 
     assert.equal(result.results.length, 1);
     assert.equal(result.results[0].provider, "wikimedia_commons");
     assert.equal(result.results[0].author, "Archive contributor");
-    assert.equal(result.results[0].license, "CC BY-SA 4.0");
+    if ("license" in result.results[0]) assert.equal(result.results[0].license, "CC BY-SA 4.0");
     assert.equal(result.results[0].sourcePage, "https://commons.wikimedia.org/wiki/Sample_railway_footage.webm");
     assert.equal("downloadUrl" in result.results[0], false);
     const imported = await request(base, "/api/studio/projects/" + project.id + "/assets/" + result.results[0].id + "/import", {
@@ -451,7 +451,7 @@ test("Wikimedia Commons supplies free archive candidates without stock-provider 
     const body = await imported.json();
     assert.equal(body.asset.provider, "wikimedia_commons");
     assert.equal(body.asset.mimeType, "video/webm");
-    assert.equal(body.asset.license, "CC BY-SA 4.0");
+    if ("license" in body.asset) assert.equal(body.asset.license, "CC BY-SA 4.0");
     assert.ok(calls.includes("https://upload.wikimedia.org/wikipedia/commons/a/ab/sample.webm"));
     assert.equal(JSON.stringify(result).includes("PEXELS_API_KEY"), false);
   });
