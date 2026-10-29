@@ -9,7 +9,7 @@ import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
-from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
+from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, get_system_health, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -26,6 +26,11 @@ def confirm(phrase, message):
     except (EOFError, KeyboardInterrupt):
         print("\nCancelled.")
         return False
+
+def health(args):
+    report = get_system_health(args.path)
+    out_json(report)
+    return 1 if report["status"] == "warning" else 0
 
 def doctor(_):
     hw = detect_hardware()
@@ -349,6 +354,7 @@ def skills_list(_):
 def build_parser():
     parser = argparse.ArgumentParser(prog="ultron-local", description="Local-first terminal assistant. Private prompts/documents are sent only to local Ollama.")
     subs = parser.add_subparsers(dest="command", required=True)
+    p = subs.add_parser("health", help="Show local CPU, memory and disk health without network access"); p.add_argument("--path"); p.set_defaults(handler=health)
     p = subs.add_parser("doctor"); p.set_defaults(handler=doctor)
     p = subs.add_parser("agents"); p.set_defaults(handler=agents)
     p = subs.add_parser("chat"); p.add_argument("--model"); p.set_defaults(handler=chat)
