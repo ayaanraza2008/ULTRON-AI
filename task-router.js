@@ -8,7 +8,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "create_talking_avatar"
   ],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
-  browser: ["browser_use", "research_web", "obscura_inspect_public_page", "obscura_capture_public_page"],
+  browser: ["browser_use", "chrome_devtools", "research_web", "obscura_inspect_public_page", "obscura_capture_public_page"],
   reverse_engineering: [
     "rea_analyze_application", "rea_investigate_application_feature", "rea_inspect_native_code",
     "rea_inspect_artifact", "rea_inspect_binary_layout", "rea_inspect_wasm_artifact",
@@ -51,7 +51,7 @@ const CATEGORY_TOOLS = Object.freeze({
 
 const CATEGORY_PATTERNS = Object.freeze([
   ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read (?:this|it|that) aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
-  ["browser", /\b(?:browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
+  ["browser", /\b(?:chrome devtools|devtools|performance trace|browser performance|console logs|network requests|inspect chrome|browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
   ["reverse_engineering", /\b(?:reverse engineer(?:ing)?|trace how .{1,120} work(?:s)?|trace application feature|inspect (?:this |an? )?(?:binary|executable|firmware|apk|electron app|desktop application|wasm)|analy[sz]e (?:the )?(?:binary|executable|firmware|apk|electron app|native code)|decompile|disassembl(?:e|y)|\brea\b)\b/i],
   ["geolocation", /\b(?:geolocat(?:e|ion)|where was this photo taken|photo location|identify (?:this )?location from (?:the )?(?:photo|image)|geo[- ]sleuth)\b/i],
   ["spaceplanner", /\b(?:floor plan|house plan|room layout|interior layout|spaceplanner|space planner)\b/i],
