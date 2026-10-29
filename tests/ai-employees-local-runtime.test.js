@@ -38,7 +38,8 @@ test("local role mapping matches every routine in ULTRON's existing 60-routine c
     assert.ok(matches.every((routine) => routine.id.length > 0 && routine.name.length > 0));
   }
 });
-\ntest("role IDs, upstream slugs, names and aliases resolve without ambiguity", () => {
+
+test("role IDs, upstream slugs, names and aliases resolve without ambiguity", () => {
   assert.equal(resolveRole("seo-aeo")?.upstream, "seo-employee");
   assert.equal(resolveRole("seo-employee")?.id, "seo-aeo");
   assert.equal(resolveRole("Customer Support")?.id, "customer-satisfaction");
