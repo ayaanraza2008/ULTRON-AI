@@ -8,7 +8,7 @@ import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
-from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, search_documents, secure_write, speak_text
+from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, search_documents, secure_write, speak_text
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -227,7 +227,7 @@ def code_run(args):
     runtime = sys.executable if target.suffix.lower() == ".py" else "node"
     command = shlex.quote(runtime) + " " + shlex.quote(str(target))
     try:
-        result = run_approved_command(command, args.root, confirm=True)
+        result = run_script(args.file, args.root, confirm=True)
     except Exception as exc:
         print(f"Execution failed: {exc}", file=sys.stderr)
         return 1
