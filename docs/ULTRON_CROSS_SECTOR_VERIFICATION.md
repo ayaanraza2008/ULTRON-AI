@@ -29,7 +29,7 @@ Last inspected: 2026-10-29 UTC. This matrix separates source/CI evidence from li
 | Browser/external integrations | NOT LIVE-VERIFIED | Require owner-scoped credentials and safe live read-only requests. |
 | Windows companion | NOT COMPLETE | Status protocol/adapter is not proof of a paired runtime. Authenticated permission-scoped companion and physical-device tests are needed. |
 | Coding sandbox | NOT AVAILABLE | Arbitrary code execution stays disabled until a suitable isolated sandbox and resource/network/filesystem limits are implemented and tested. |
-| Deployment identity | MIXED | Read-only Render inventory: `ultron-ai-core` in `Ultron core` is live at main SHA `6b7f09d97508fc2be2085695d862a921e1ae8487` and matches the production-check workflow. `ultron-ai` in `My Workspace` has 10 latest deploy records reported as `build_failed`. `render.yaml` declares the older `ultron-ai` service. Canonical target must be resolved before changing or triggering deployments. |
+| Deployment identity | MIXED | Read-only Render inventory: `ultron-ai-core` in `Ultron core` is live at main SHA `6b7f09d97508fc2be2085695d862a921e1ae8487` and matches the production-check workflow. `ultron-ai` in `My Workspace` has 10 recent deploy attempts blocked before build by Render's `pipeline_minutes_exhausted` event. `render.yaml` declares the older `ultron-ai` service. Canonical target must be resolved before changing or triggering deployments. |
 | Performance/accessibility | NEEDS DEVICE/BROWSER CHECKS | CI succeeds but map/globe chunks are large. Measure load time and verify keyboard, reduced-motion, screen-reader, mobile and desktop behavior. |
 
 ## Release boundaries

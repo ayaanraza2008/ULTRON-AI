@@ -163,6 +163,6 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 
 Read-only Render inventory found two different ULTRON backend services connected to this repository in separate workspaces:
 - `ultron-ai-core` in workspace `Ultron core`, URL `https://ultron-ai-core.onrender.com`: latest observed deploy for commit `6b7f09d97508fc2be2085695d862a921e1ae8487` is `live`; the production-revision workflow checked this same hostname and commit.
-- `ultron-ai` in workspace `My Workspace`, URL `https://ultron-ai-zvd7.onrender.com`: the 10 most recent deploy records returned by Render during this audit were all `build_failed`, including attempts for the same main commit.
+- `ultron-ai` in workspace `My Workspace`, URL `https://ultron-ai-zvd7.onrender.com`: the 10 most recent deploy attempts returned by Render during this audit were blocked before the application build by `pipeline_minutes_exhausted`, including the attempt for the same main commit.
 
 The CI workflow's passing production-revision result therefore confirms the `ultron-ai-core` service only, not both services. The Blueprint still names `ultron-ai`. Do not silently repoint, delete, reconfigure, or trigger either service as part of backend source work; designate the canonical service during a separately authorized deployment phase.
