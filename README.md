@@ -236,6 +236,12 @@ The authenticated backend exposes `POST /api/reports/pdf` with a JSON body conta
 
 The lightweight built-in PDF writer uses Helvetica/WinAnsi to avoid adding another runtime dependency. Latin/WinAnsi text is supported, but unsupported scripts such as Hindi/Devanagari are visibly replaced with question marks. Complex tables, charts and arbitrary embedded fonts are not supported yet; this is a basic report export, not a polished document-layout engine.
 
+## PowerPoint presentation export
+
+The authenticated backend exposes `POST /api/reports/pptx` for editable `.pptx` files using PptxGenJS 4.0.1 (MIT). The endpoint accepts `title`, `content`, and/or `sections: [{ heading, content }]`, creates a 16:9 deck with a title slide and editable text slides, bounds total input to 30,000 characters, and returns a transient attachment with `Cache-Control: no-store`. It does not persist report text to the database.
+
+Notes and saved study-pack views have export controls for PDF and PowerPoint. This is a text-and-shape deck generator, not a full AI presentation designer: it does not generate charts from datasets, images, video, speaker notes or branded templates yet. Real PowerPoint/LibreOffice rendering is still a release verification step.
+
 ## Isolated coding sandbox (opt-in)
 
 ULTRON's agent exposes a `coding_sandbox_run` tool for the exact Python or JavaScript source in a direct request such as `Run this code:` followed by one fenced code block. It does not provide a general shell or modify repositories. The raw request must match the code exactly; model-generated substitutions are rejected.
