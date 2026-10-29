@@ -365,3 +365,38 @@ test("selecting a concept replans the script and clears prior approvals", async 
     assert.equal(result.approvals.render, false);
   });
 });
+
+test("stock search sanitizes provider source URLs and rejects imported HTML disguised as video", async () => {
+  const calls = [];
+  await withStudio({
+    env: { PEXELS_API_KEY: "synthetic-pexels-secret" },
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), authorization: options.headers?.Authorization });
+      if (String(url).includes("api.pexels.com")) return new Response(JSON.stringify({
+        videos: [{
+          id: 44, url: "https://evil.example/steal", image: "https://evil.example/tracker.jpg", duration: 8,
+          user: { name: "Untrusted author text" },
+          video_files: [{ link: "https://videos.pexels.com/video-files/44/clip.mp4", width: 640, height: 360 }]
+        }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response("<html>not a video</html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+  }, async ({ base }) => {
+    const project = await createProject(base);
+    const search = await request(base, "/api/studio/projects/" + project.id + "/assets/search", {
+      method: "POST", body: JSON.stringify({ query: "railway", kind: "video" })
+    });
+    assert.equal(search.status, 200);
+    const data = await search.json();
+    assert.equal(data.results.length, 1);
+    assert.equal(data.results[0].sourcePage, "");
+    assert.equal(data.results[0].thumbnailUrl, "");
+    assert.equal(calls[0].authorization, "synthetic-pexels-secret");
+    assert.equal(JSON.stringify(data).includes("synthetic-pexels-secret"), false);
+    const imported = await request(base, "/api/studio/projects/" + project.id + "/assets/" + data.results[0].id + "/import", {
+      method: "POST", body: "{}"
+    });
+    assert.equal(imported.status, 415);
+    assert.equal((await imported.json()).error.code, "ASSET_MEDIA_TYPE_MISMATCH");
+  });
+});
