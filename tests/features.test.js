@@ -1402,6 +1402,15 @@ test("notes library list/detail/update/delete are filtered to the authenticated 
     assert.equal(detail.status, 200);
     assert.equal((await detail.json()).note.body, note.body);
 
+    const exported = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID + "/export");
+    assert.equal(exported.status, 200);
+    assert.match(exported.headers.get("content-type"), /text\/markdown/);
+    assert.match(exported.headers.get("content-disposition"), /attachment; filename="Quantum-Physics-Revision\.md"/);
+    const markdown = await exported.text();
+    assert.match(markdown, /^# Quantum Physics Revision/);
+    assert.match(markdown, /Energy bands describe allowed electron energies/);
+    assert.match(markdown, /Tags: physics, revision/);
+
     const update = await fetch(base + "/api/notes/" + USER_NOTE_TEST_ID, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1423,12 +1432,39 @@ test("notes library list/detail/update/delete are filtered to the authenticated 
       return [note];
     }
   });
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.ok(calls[0].query.endsWith("&limit=50"));
   assert.ok(calls[1].query.includes("id=eq." + USER_NOTE_TEST_ID));
-  assert.equal(calls[2].method, "PATCH");
-  assert.deepEqual(calls[2].body, { title: "Updated title", tags: ["updated"] });
-  assert.equal(calls[3].method, "DELETE");
+  assert.ok(calls[2].query.includes("id=eq." + USER_NOTE_TEST_ID));
+  assert.equal(calls[3].method, "PATCH");
+  assert.deepEqual(calls[3].body, { title: "Updated title", tags: ["updated"] });
+  assert.equal(calls[4].method, "DELETE");
+});
+
+
+test("notes search accepts only literal safe terms", async () => {
+  const calls = [];
+  await withServer({}, async base => {
+    const valid = await fetch(base + "/api/notes?search=quantum%20physics");
+    assert.equal(valid.status, 200);
+    assert.deepEqual((await valid.json()).notes, []);
+
+    for (const search of ["", "a,b", "x*)&user_id=neq.000", "title.ilike.*"]) {
+      const response = await fetch(base + "/api/notes?search=" + encodeURIComponent(search));
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, "INVALID_NOTE_SEARCH");
+    }
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls.push({ table, method, query });
+      assert.equal(table, "user_notes");
+      assert.ok(query.includes("user_id=eq." + USER_NOTE_OWNER_ID));
+      return [];
+    }
+  });
+  assert.equal(calls.length, 1, "unsafe search strings must be rejected before database access");
+  assert.ok(decodeURIComponent(calls[0].query).includes("title.ilike.*quantum physics*"));
+  assert.ok(decodeURIComponent(calls[0].query).includes("body.ilike.*quantum physics*"));
 });
 
 test("notes library rejects invalid IDs and returns not-found without leaking cross-user records", async () => {
