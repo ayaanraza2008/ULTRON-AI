@@ -431,7 +431,7 @@ function buildFallbackCalls(text) {
   }
   // a free model omits function calls or the provider is temporarily unavailable.
   // Only add tools when the user's wording clearly expresses that capability.
-  if (/\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) {
+  if (intent !== "openseo" && /\b(research|search the web|search online|look up|latest news|find sources|sources about)\b/.test(s)) {
     add("research_web", { query: bounded(text, 500) });
   }
   if (/\b(check|show|list|what are)\b/.test(s) && /\b(integrations|connected services|available tools|capabilities|provider status)\b/.test(s)) {
