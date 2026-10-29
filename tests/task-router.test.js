@@ -26,6 +26,17 @@ test("narrows high-confidence single-domain tasks to allowlisted relevant tools"
   assert.ok(youtube.toolNames.includes("create_youtube_production_plan"));
 });
 
+test("routes Google Workspace requests to its bounded read-only tool set", () => {
+  const route = classifyTaskRoute("Search Gmail for unread emails from school");
+  assert.equal(route.tier, "medium");
+  assert.deepEqual(route.categories, ["google_workspace"]);
+  assert.equal(route.filtered, true);
+  assert.ok(route.toolNames.includes("google_gmail_search"));
+  assert.ok(route.toolNames.includes("google_gmail_list_unread"));
+  assert.ok(!route.toolNames.includes("google_sheets_read") === false);
+  assert.ok(!route.toolNames.includes("browser_use"));
+});
+
 test("retains the full tool list for compound or uncertain actions", () => {
   const route = classifyTaskRoute("Research the topic and then create a YouTube production plan");
   assert.equal(route.tier, "complex");
