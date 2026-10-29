@@ -169,7 +169,7 @@ function driveListFiles_(p) {
   if (type && !Object.prototype.hasOwnProperty.call(typeMap, type)) throw new Error("Invalid Drive file type.");
   let criteria = "trashed = false";
   if (type) criteria += " and mimeType = '" + typeMap[type] + "'";
-  if (query) criteria += " and name contains '" + escapeDriveLiteral_(query) + "'";
+  if (query) criteria += " and title contains '" + escapeDriveLiteral_(query) + "'";
   const limit = clampInt_(p.limit, 20, 1, MAX_ITEMS);
   const files = DriveApp.searchFiles(criteria);
   const result = [];
