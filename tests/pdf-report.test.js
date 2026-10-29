@@ -22,7 +22,7 @@ function assertPdfStructure(pdf) {
     assert.match(row || "", /^\d{10} 00000 n ?$/, "xref entry must be a fixed-width in-use entry");
     assert.equal(Buffer.byteLength(row + eol, "latin1"), 20, "xref rows must be exactly 20 bytes");
     const offset = Number(row.slice(0, 10));
-    assert.equal(raw.slice(offset, offset + String(id).length + 7), String(id) + " 0 obj", "xref offset must point to its object");
+    assert.equal(raw.slice(offset, offset + String(id).length + 6), String(id) + " 0 obj", "xref offset must point to its object");
   }
 }
 
