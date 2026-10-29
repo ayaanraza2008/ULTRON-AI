@@ -29,3 +29,9 @@ Run `npm run check` and `npm test` from the repository root. Run `npm test` insi
 A first full-CI run caught a missing separator between newly appended repository records; the source was corrected on `main`. A subsequent CI run passed syntax checks and identified one remaining test with a hard-coded old repository count; that assertion is now updated to 43. Re-run the full ULTRON checks against this latest base before marking the audit verified.
 
 No Render deployment or production environment changes are part of this audit.
+
+## Adapter integration status — 2026-10-29 candidate
+
+The candidate adds guarded adapters for AppFlowy Cloud (read-only workspace/page/document-collab JSON/search), OpenDesign (explicitly approved headless runs), Open Generative AI/MuAPI (allowlisted image/video models with approval gates), and OpenHiggsfield (38 allowlisted models with credit-consumption approval gates). OpenSEO MCP is exposed in the integration catalog and capability readiness. These are source-integrated adapters, not proof of live upstream authorization, provider quotas, paid credits, output quality, or completed end-to-end tasks. Default configuration remains disabled/optional.
+
+See `integrations/appflowy.js`, `integrations/open-design.js`, `integrations/open-generative-ai.js`, `integrations/open-higgsfield.js`, and their focused tests.

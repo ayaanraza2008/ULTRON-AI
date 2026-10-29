@@ -88,3 +88,15 @@ State meanings:
 6. Add the YouTube production pipeline as durable stages with fact/media-rights checks and a human publish gate. Media generation and channel publication are not considered complete until each stage is live-tested.
 
 This ordering intentionally avoids copying whole, independently deployable applications into the Node backend. It keeps ULTRON modular, free-first, resource-bounded and testable on the target 8 GB RAM / integrated-graphics PC while allowing heavyweight services to run elsewhere.
+
+## Current integration candidate additions (2026-10-29)
+
+| Capability | Source integration | Guard/known boundary |
+| --- | --- | --- |
+| AppFlowy Cloud | `integrations/appflowy.js` | Owner-scoped read-only workspace/folder/collab JSON/search; token and live AppFlowy Cloud required. |
+| OpenDesign | `integrations/open-design.js` | Owner-scoped headless REST daemon; task submission requires explicit approval and configured BYOK. |
+| Open Generative AI / MuAPI | `integrations/open-generative-ai.js` | Fixed model/operation allowlist; paid media generation requires explicit approval. |
+| OpenHiggsfield | `integrations/open-higgsfield.js` | 38-model allowlist; provider credit consumption requires explicit approval. |
+| OpenSEO | `integrations/openseo-mcp.js` | Owner-scoped MCP connector; credit-consuming operations require explicit approval. |
+
+All live states remain configured-unverified or disabled/optional until upstream auth, quotas, deployment and end-to-end output are independently tested. These adapters do not bundle third-party applications.
