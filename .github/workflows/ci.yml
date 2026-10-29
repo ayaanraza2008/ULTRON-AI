@@ -24,6 +24,10 @@ jobs:
         run: |
           python -m py_compile browser-use-bridge/main.py browser-use-bridge/navigation_policy.py browser-use-bridge/test_navigation_policy.py
           python browser-use-bridge/test_navigation_policy.py
+      - name: Verify ULTRON Model Lab Python CLI
+        run: |
+          python -m py_compile tools/model-lab/ultron_model_lab.py
+          python -m unittest discover -s tools/model-lab -p 'test_*.py'
       - run: npm install --ignore-scripts
       - name: Report high-severity runtime dependency advisories
         run: |
