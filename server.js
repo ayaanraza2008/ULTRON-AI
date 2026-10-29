@@ -366,11 +366,13 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
       isOpenRouter: false
     });
   }
-  // Optional direct-key fallbacks. Explicit registry entries take precedence.
-  // These are text-only until image compatibility has been verified.
+  // Optional direct-key fallbacks are deliberately last-resort: Groq GPT-OSS
+  // is billed per token, while Gemini free-tier eligibility/quotas are account-dependent.
+  // Explicit provider registry priorities are honored; default direct keys stay behind them.
+  // These providers are text-only until image compatibility has been verified.
   for (const entry of [
-    { name: "groq", key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1", modelEnv: "GROQ_DEFAULT_MODEL", model: "openai/gpt-oss-20b", priority: 1 },
-    { name: "gemini", key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai", modelEnv: "GEMINI_DEFAULT_MODEL", model: "gemini-3.8-flash", priority: 2 }
+    { name: "groq", key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1", modelEnv: "GROQ_DEFAULT_MODEL", model: "openai/gpt-oss-20b", priority: 1000 },
+    { name: "gemini", key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai", modelEnv: "GEMINI_DEFAULT_MODEL", model: "gemini-3.8-flash", priority: 1001 }
   ]) {
     const apiKey = typeof env[entry.key] === "string" ? env[entry.key].trim() : "";
     if (!apiKey || providers.some(provider => provider.name === entry.name)) continue;
