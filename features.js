@@ -892,11 +892,12 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
             model: fish.ttsModel
           },
           body: JSON.stringify({
-            text,
+            text: "[confident][calm, deep male voice, resonant baritone, authoritative, smooth and controlled delivery, crisp diction] " + text,
             reference_id: fish.voiceModelId,
             format: "mp3",
             latency: "balanced",
-            normalize: true
+            normalize: true,
+            prosody: { speed: 1.12, volume: 0, normalize_loudness: true }
           })
         });
         if (!response.ok) {
