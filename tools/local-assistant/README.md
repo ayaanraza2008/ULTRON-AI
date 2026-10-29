@@ -133,3 +133,8 @@ python -m unittest discover -s tools/local-assistant/tests -p 'test_*.py'
 ~~~
 
 This package is a local companion integrated into the ULTRON repository; it does not magically install Ollama or configure the user's PC from GitHub CI. Real Google OAuth, local-model inference, installed system voices, and script behavior must be verified on the target device.
+
+### Local system health
+
+`ultron-local health` reports logical CPU count, OS-reported available/total RAM, and disk capacity/free space for the home directory. Use `ultron-local health --path "D:\\Work"` to inspect the filesystem containing a chosen existing directory. It does not enumerate running processes, read files, contact a network service, or modify the machine. Memory data uses Linux `MemAvailable` where available to avoid treating reclaimable cache as fully occupied RAM. A disk at 90% use or RAM use at 90% or more returns a warning status; unsupported probes are listed instead of being guessed.
+
