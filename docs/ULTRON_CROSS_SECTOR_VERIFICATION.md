@@ -41,5 +41,5 @@ Last inspected: 2026-10-29 UTC. This matrix separates source/CI evidence from li
 ## Observed Render deployment split
 
 - `Ultron core / ultron-ai-core` — `https://ultron-ai-core.onrender.com`; latest observed deploy for `6b7f09d97508fc2be2085695d862a921e1ae8487` is `live`.
-- `My Workspace / ultron-ai` — `https://ultron-ai-zvd7.onrender.com`; the latest 10 deploy records returned on 2026-10-29 show `build_failed`, including a deployment attempt for that same main SHA.
+- `My Workspace / ultron-ai` — `https://ultron-ai-zvd7.onrender.com`; the 10 latest deploy attempts returned on 2026-10-29 were blocked before the application build by Render's `pipeline_minutes_exhausted` event, including an attempt for that same main SHA.
 - The green production-revision workflow validates only the first service. No Render setting, environment variable, deploy, restart, deletion, or service repointing was performed during this audit.

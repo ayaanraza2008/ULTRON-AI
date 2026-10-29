@@ -4,7 +4,7 @@ import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const directory = fileURLToPath(new URL("../supabase/migrations/", import.meta.url));
-const expected = [
+const expectedRemoteLedger = [
   "20261021183847_initial_schema.sql",
   "20261021183915_secure_function_search_path.sql",
   "20261021184829_touch_conversation_on_message.sql",
@@ -22,9 +22,12 @@ const expected = [
   "20261027185203_private_document_storage.sql"
 ];
 
-test("active Supabase migration filenames are unique and match the audited remote ledger", () => {
+test("active Supabase migrations preserve the remote ledger baseline and prevent version collisions", () => {
   const actual = readdirSync(directory).filter(name => name.endsWith(".sql")).sort();
-  assert.deepEqual(actual, expected);
+  assert.ok(expectedRemoteLedger.every(name => actual.includes(name)), "every version already recorded in the remote ledger must keep its exact matching filename");
+  const additional = actual.filter(name => !expectedRemoteLedger.includes(name));
+  const latestRemoteVersion = expectedRemoteLedger.map(name => name.slice(0, 14)).sort().at(-1);
+  assert.ok(additional.every(name => name.slice(0, 14) > latestRemoteVersion), "new migration files must use versions later than the inspected remote ledger baseline");
   const versions = actual.map(name => name.slice(0, 14));
   assert.ok(versions.every(version => /^[0-9]{14}$/.test(version)), "each active migration must start with a 14-digit version");
   assert.equal(new Set(versions).size, versions.length, "migration version identifiers must be unique");

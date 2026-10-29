@@ -20,4 +20,6 @@ Read-only inspection of project `opdjfhwepmcprbqojpat` on 2026-10-29 showed thes
 
 The active migration filenames previously had duplicate/mismatched version IDs. The old `202610220001_task_worker.sql` scaffold was not present in the remote ledger and shared its prefix with a different migration; it is moved outside `supabase/migrations/` and explicitly marked archived. The current active chain defines the attempts column, retry/recovery behavior and hardened worker RPC.
 
-This branch renames source files and adds a regression test only; it does not execute SQL, mutate the database or apply a migration. Compare the live migration list before every future schema push.
+The 15 entries above are the remote-ledger baseline observed on 2026-10-29, not a permanent ban on future migrations. New, approved migration files may be added if their 14-digit versions are unique and later than the latest baseline version; they remain pending until a separately approved database release applies them. The regression test preserves the baseline and rejects duplicate or out-of-order additions.
+
+This branch changes source filenames/archive placement and tests only. It does not execute SQL, mutate the database or apply a migration. Compare the live migration list before every future schema push.
