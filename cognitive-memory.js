@@ -138,7 +138,7 @@ export function extractCorrectionLesson(value) {
     content = "When the user asks for a very short answer or quick revision, keep the response concise and focused.";
   } else if (/\b(?:english|hindi|hinglish|language|in english|in hindi)\b/i.test(text)) {
     content = "Follow the user's explicitly requested language for the current response; do not switch languages.";
-  } else if (/\b(?:project|repository|repo|unrelated|production|deploy|permission|scope|other branch)\b/i.test(text)) {
+  } else if (/\b(?:project|repository|repositories|repo|unrelated|production|deploy|permission|scope|other branch)\b/i.test(text)) {
     content = "Respect the user's explicit project and change-scope boundaries; do not modify unrelated repositories or production settings.";
   } else if (/\b(?:name|called|rename|not [a-z][a-z0-9_-]{1,30}|instead)\b/i.test(text)) {
     content = "Treat the user's latest explicit correction to a name or project identity as authoritative.";
