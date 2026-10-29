@@ -51,6 +51,8 @@ ultron-local research "Explain the difference between conductors and semiconduct
 ultron-local code show src\main.py --root .
 ultron-local code ask "Find the bug and suggest tests" --file src\main.py --root .
 ultron-local code revise src\main.py --request "Add input validation" --root .
+# Inspect the printed diff, then apply the generated private draft if appropriate:
+ultron-local code apply "PATH_TO_THE_PRINTED_DRAFT.draft" --root .
 ultron-local code run scripts\check.py --root .
 
 # Bounded shell commands; still requires confirmation.
@@ -61,6 +63,8 @@ ultron-local skills review owner/repository
 ultron-local skills install owner/repository
 ultron-local skills list
 ~~~
+
+The `code apply` command asks for the exact `APPLY` confirmation, verifies that both the draft and original source still match their recorded SHA-256 hashes, creates a private backup first, and refuses to overwrite source changes made since the draft was prepared.
 
 For `code run`, scripts may use the user's ordinary file/network/process permissions; the confirmation prompt is not a security sandbox. Do not run unknown code. The shell tool is deliberately allowlisted and is not a general shell.
 
