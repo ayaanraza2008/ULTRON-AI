@@ -258,10 +258,12 @@ test("voice output prefers installed male voices and uses language-specific spee
   assert.ok(app.includes('function speechVoiceLabel(language)'));
 });
 
-test("voice quality panel explains browser voice requirements and can preview Hindi and English", () => {
+test("voice quality panel reports Fish Audio readiness and can preview Hindi and English", () => {
   assert.ok(app.includes('if (name === "voice-quality")'));
   assert.ok(app.includes('drawerButton("PREVIEW HINDI + ENGLISH VOICE"'));
-  assert.ok(app.includes("Natural/Neural male voice"));
+  assert.ok(app.includes("speechCapabilities.premiumTtsConfigured"));
+  assert.ok(app.includes("speechCapabilities.premiumSttConfigured"));
+  assert.ok(app.includes("7a18a1851d2649108c48ec9f2c80eb2c"));
   assert.ok(app.includes("मैं हिंदी और English दोनों में जवाब दूँगा"));
 });
 
