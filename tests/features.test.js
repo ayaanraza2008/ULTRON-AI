@@ -1218,6 +1218,119 @@ test("STT JSON response is bounded and cancelled when declared oversized", async
   }), { status: 200, headers: { "content-length": "1000001", "content-type": "application/json" } }) });
 });
 
+
+const STUDY_PACK_TEST_ID = "10000000-0000-4000-8000-000000000001";
+const STUDY_PACK_USER_ID = "00000000-0000-4000-8000-000000000001";
+const validStudyPack = () => ({
+  state: "completed",
+  topic: "Photosynthesis",
+  format: "mixed",
+  level: "beginner",
+  language: "English",
+  sourceMode: "general_knowledge_draft",
+  generatedAt: "2026-10-29T00:00:00.000Z",
+  model: "test-model",
+  learningObjectives: ["Explain photosynthesis"],
+  summary: "Photosynthesis converts light energy to stored chemical energy.",
+  flashcards: [{ question: "What pigment absorbs light?", answer: "Chlorophyll." }],
+  quiz: [{
+    question: "What gas is taken in?",
+    options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"],
+    answerIndex: 1,
+    explanation: "Carbon dioxide supplies carbon for sugars."
+  }],
+  revisionChecklist: ["Remember the inputs and products"],
+  sourceNotes: "General-knowledge draft.",
+  notice: "AI-generated study aid."
+});
+
+test("study pack library saves only validated user-owned content", async () => {
+  const calls = [];
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Photosynthesis Revision", user_id: "99999999-9999-4999-8999-999999999999", pack: validStudyPack() })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.studyPack.id, STUDY_PACK_TEST_ID);
+    assert.equal(body.studyPack.user_id, STUDY_PACK_USER_ID);
+    assert.equal(body.studyPack.title, "Photosynthesis Revision");
+    assert.equal(body.studyPack.content.quiz[0].answerIndex, 1);
+  }, {
+    supabaseRest: async (_req, table, method, query, body) => {
+      calls.push({ table, method, query, body });
+      assert.equal(table, "study_packs");
+      assert.equal(method, "POST");
+      assert.equal(query, "");
+      return [{ ...body, id: STUDY_PACK_TEST_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" }];
+    }
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.user_id, STUDY_PACK_USER_ID, "owner ID must come from the authenticated session, not JSON");
+  assert.equal(calls[0].body.source_mode, "general_knowledge_draft");
+});
+
+test("study pack library rejects malformed quiz content before database writes", async () => {
+  let calls = 0;
+  const pack = validStudyPack();
+  pack.quiz[0].answerIndex = 9;
+  await withServer({}, async base => {
+    const response = await fetch(base + "/api/study-packs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pack })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_STUDY_PACK");
+    assert.equal(calls, 0);
+  }, { supabaseRest: async () => { calls++; return []; } });
+});
+
+test("study pack library list/detail/delete use explicit authenticated-owner filters", async () => {
+  const calls = [];
+  const packRow = {
+    id: STUDY_PACK_TEST_ID,
+    user_id: STUDY_PACK_USER_ID,
+    title: "Photosynthesis",
+    topic: "Photosynthesis",
+    format: "mixed",
+    level: "beginner",
+    language: "English",
+    source_mode: "general_knowledge_draft",
+    content: { summary: validStudyPack().summary },
+    created_at: "2026-10-29T00:00:00.000Z",
+    updated_at: "2026-10-29T00:00:00.000Z"
+  };
+  await withServer({}, async base => {
+    const listResponse = await fetch(base + "/api/study-packs?limit=1000");
+    assert.equal(listResponse.status, 200);
+    assert.equal((await listResponse.json()).studyPacks[0].id, STUDY_PACK_TEST_ID);
+
+    const detailResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID);
+    assert.equal(detailResponse.status, 200);
+    assert.equal((await detailResponse.json()).studyPack.content.summary, validStudyPack().summary);
+
+    const deleteResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, { method: "DELETE" });
+    assert.equal(deleteResponse.status, 200);
+    assert.deepEqual(await deleteResponse.json(), { deleted: true, id: STUDY_PACK_TEST_ID });
+  }, {
+    supabaseRest: async (_req, table, method, query) => {
+      calls.push({ table, method, query });
+      assert.equal(table, "study_packs");
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID), "every operation must filter by the authenticated user");
+      if (method === "DELETE") return [packRow];
+      if (query.includes("id=eq.")) return [packRow];
+      return [packRow];
+    }
+  });
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].query.endsWith("&limit=50"), "list limit must be clamped to 50");
+  assert.ok(calls[1].query.includes("id=eq." + STUDY_PACK_TEST_ID));
+  assert.equal(calls[2].method, "DELETE");
+});
+
 test("configured Ollama model listing rejects upstream redirects", async () => {
   await withServer({ OLLAMA_BASE_URL: "https://ollama.example.com" }, async base => {
     const response = await fetch(base + "/api/local/models");
