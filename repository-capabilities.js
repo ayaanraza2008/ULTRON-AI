@@ -7,6 +7,7 @@ import { getStrataReadiness } from "./integrations/strata.js";
 import { getOpenSeoReadiness } from "./integrations/openseo-mcp.js";
 import { getOpenHiggsfieldReadiness } from "./integrations/open-higgsfield.js";
 import { getOpenDesignReadiness } from "./integrations/open-design.js";
+import { getOpenGenerativeAIReadiness } from "./integrations/open-generative-ai.js";
 
 /**
  * Task-matched capability catalog for 43 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
@@ -332,11 +333,11 @@ const REPOSITORIES = [
   },
   {
     id: "open-generative-ai", repo: "Anil-matcha/Open-Generative-AI", domain: "generative_media",
-    match: /\b(open-generative-ai|open generative ai|image and video generation platform|generative media studio)\b/i,
-    integration: "separate_media_studio", status: "adapter_not_implemented",
-    abilities: ["Upstream media-studio workflows for AI image/video generation and related media-provider actions"],
-    limits: ["The public upstream README describes a MuAPI-powered media studio and 600+ provider models; provider plans/credits and model terms are separate, so do not assume usage is free or models are included. ULTRON has no Open Generative AI rendering adapter and has not made provider calls."],
-    envKeys: [], license: "MIT for upstream app source; provider APIs, model weights and media assets have separate terms", source: "https://github.com/Anil-matcha/Open-Generative-AI"
+    match: /\b(open-generative-ai|open generative ai|muapi image generation|muapi video generation|text to image|image to image|text to video|image to video|video edit|video extend)\b/i,
+    integration: "owner_scoped_muapi_media_adapter", status: "adapter_present_unverified_live",
+    abilities: ["allowlisted text-to-image and image-edit workflows", "allowlisted text-to-video, image-to-video and reference-video workflows", "selected source-video edit/extend workflows", "bounded request-ID polling and output URL normalization"],
+    limits: ["This is a thin owner-scoped adapter for the upstream MuAPI endpoints, not the full desktop studio, workflows, audio/lip-sync or marketing UI. MUAPI_API_KEY and an enabled flag are required. Requests may consume credits; generation is disabled by default and requires explicit per-request approval. Current account entitlement, live model access and exact charges remain unverified."],
+    envKeys: ["ULTRON_OPEN_GENERATIVE_AI_ENABLED", "MUAPI_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "MIT for upstream app source; MuAPI API, model and media-provider terms are separate", source: "https://github.com/Anil-matcha/Open-Generative-AI"
   },
   {
     id: "dramadaw", repo: "dramadaw/dramadaw", domain: "video_creation",
@@ -386,6 +387,7 @@ function configured(record, env) {
   if (record.id === "open-seo") return getOpenSeoReadiness(env).configured;
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
+  if (record.id === "open-generative-ai") return getOpenGenerativeAIReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).configured;
   const keys = Array.isArray(record.envKeys) ? record.envKeys : [];
   if (!keys.length) return null;
   return keys.every(key => typeof env[key] === "string" && env[key].trim().length > 0 && (!["GEO_SLEUTH_ENABLED"].includes(key) || env[key] === "true"));
@@ -394,6 +396,7 @@ function configured(record, env) {
 function stateFor(record, env) {
   if (record.id === "open-higgsfield") return getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-design") return getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
+  if (record.id === "open-generative-ai") return getOpenGenerativeAIReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID).state;
   if (record.id === "open-seo") {
     const readiness = getOpenSeoReadiness(env);
     return readiness.configured ? "configured_unverified" : "missing_configuration";
