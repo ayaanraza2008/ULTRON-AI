@@ -2325,10 +2325,10 @@ test("agent tools expose OpenHiggsfield model catalog and disabled-by-default re
     assert.ok(designTool);
     assert.equal(designTool.available, false);
     assert.equal(designTool.state, "disabled_by_config");
-    const mediaTool = payload.tools.find(tool => tool.name === "open_generative_ai");
-    assert.ok(mediaTool);
-    assert.equal(mediaTool.available, false);
-    assert.equal(mediaTool.state, "disabled_by_config");
-    assert.equal(mediaTool.models, 38);
+    const openGenTool = payload.tools.find(tool => tool.name === "open_generative_ai");
+    assert.ok(openGenTool);
+    assert.equal(openGenTool.available, false);
+    assert.equal(openGenTool.state, "disabled_by_config");
+    assert.equal(openGenTool.models, 38);
   });
 });
