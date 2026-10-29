@@ -297,6 +297,10 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
   const providers = [];
   const cactusProvider = resolveCactusProvider(env);
   if (cactusProvider) providers.push({ ...cactusProvider, supportsVision: false, isOpenRouter: false, isCactus: true });
+  const strataProvider = resolveStrataProvider(env);
+  if (strataProvider && !providers.some(provider => provider.name === strataProvider.name || provider.baseUrl === strataProvider.baseUrl)) {
+    providers.push({ ...strataProvider, isOpenRouter: false, isStrata: true });
+  }
   const hermesProvider = resolveHermesAgentProvider(env, userId);
   if (hermesProvider) providers.push({ ...hermesProvider, isOpenRouter: false, isHermesAgent: true });
   const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
