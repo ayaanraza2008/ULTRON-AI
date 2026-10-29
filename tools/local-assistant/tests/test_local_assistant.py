@@ -123,8 +123,8 @@ class LocalFirstCoreTests(unittest.TestCase):
             root.mkdir()
             app_data = Path(temp) / "app-data"
             source = root / "main.py"
-            original = "print('before')\\n"
-            revised = "print('after')\\n"
+            original = "print('before')\n"
+            revised = "print('after')\n"
             source.write_text(original, encoding="utf-8")
             drafts = app_data / "drafts"
             drafts.mkdir(parents=True)
@@ -150,8 +150,8 @@ class LocalFirstCoreTests(unittest.TestCase):
             root.mkdir()
             app_data = Path(temp) / "app-data"
             source = root / "main.py"
-            original = "print('before')\\n"
-            revised = "print('draft')\\n"
+            original = "print('before')\n"
+            revised = "print('draft')\n"
             source.write_text(original, encoding="utf-8")
             drafts = app_data / "drafts"
             drafts.mkdir(parents=True)
@@ -163,11 +163,11 @@ class LocalFirstCoreTests(unittest.TestCase):
                 "source_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
                 "draft_sha256": hashlib.sha256(revised.encode("utf-8")).hexdigest(),
             }), encoding="utf-8")
-            source.write_text("print('newer manual work')\\n", encoding="utf-8")
+            source.write_text("print('newer manual work')\n", encoding="utf-8")
             with patch("ultron_local_assistant.core.app_data_dir", return_value=app_data):
                 with self.assertRaisesRegex(RuntimeError, "changed since the draft"):
                     apply_workspace_draft(draft, root, confirm=True)
-            self.assertEqual(source.read_text(encoding="utf-8"), "print('newer manual work')\\n")
+            self.assertEqual(source.read_text(encoding="utf-8"), "print('newer manual work')\n")
 
     def test_shell_execution_requires_explicit_confirmation(self):
         with tempfile.TemporaryDirectory() as temp:
