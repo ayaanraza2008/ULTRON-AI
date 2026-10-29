@@ -75,7 +75,7 @@ test("recognizes Unicode God’s Eye spelling and combined voice requests", () =
 test("retains tools for background report queueing and read-aloud requests", () => {
   const employee = classifyTaskRoute("Queue a web-dev review in the background");
   assert.equal(employee.categories.includes("planning"), true);
-  assert.ok(employee.toolNames.includes("enqueue_employee_task"));
+  assert.ok(employee.toolNames === null || employee.toolNames.includes("enqueue_employee_task"), "keep the full allowlist for ambiguous queue requests, or include the task enqueue tool in a narrowed route");
 
   const report = classifyTaskRoute("Queue a background research report");
   assert.equal(report.tier, "complex");
