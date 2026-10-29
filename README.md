@@ -184,6 +184,8 @@ ULTRON now includes a local-first wrapper for the upstream MIT AI Employees kits
 npm run employees -- list
 npm run employees -- doctor
 npm run employees -- hire chief-of-staff
+# Or install all eight local role kits in one pass:
+npm run employees -- hire-all
 npm run employees -- status
 npm run employees -- brief
 npm run test:employees
