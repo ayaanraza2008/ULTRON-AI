@@ -36,7 +36,7 @@ class BrowserStartupSmokeTests(unittest.TestCase):
         from pathlib import Path
 
         requirements = (Path(__file__).parent / "requirements.txt").read_text()
-        self.assertRegex(requirements, r"(?m)^playwright>=1\\.50,<2$")
+        self.assertIn("playwright>=1.50,<2", requirements.splitlines())
 
     def test_summarizer_does_not_return_page_content(self):
         raw_page = "Example Domain — PRIVATE PAGE CONTENT MUST NOT BE LOGGED"
