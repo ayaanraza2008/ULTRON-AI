@@ -11,6 +11,7 @@ import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
 import { resolveCactusProvider } from "./integrations/cactus.js";
+import { resolveStrataProvider } from "./integrations/strata.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
 
@@ -263,7 +264,7 @@ function normalizeBaseUrl(value) {
 
 function hasConfiguredModelProvider(env) {
   const hermes = getHermesAgentReadiness(env);
-  if (resolveCactusProvider(env) || (hermes.configured && hermes.ownerGuardConfigured && hermes.directChatProviderEnabled)) return true;
+  if (resolveCactusProvider(env) || resolveStrataProvider(env) || (hermes.configured && hermes.ownerGuardConfigured && hermes.directChatProviderEnabled)) return true;
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
