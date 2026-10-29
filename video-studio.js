@@ -74,10 +74,10 @@ function projectCostEstimate(env, script = "") {
   const aiUsd = aiKnown ? Math.round(3.5 * aiRate * 10000) / 10000 : null;
   const ttsUsd = ttsKnown ? Math.round(script.length / 1000 * ttsRate * 10000) / 10000 : null;
   return {
-    currency: "USD", localRenderingUsd: 0, aiEstimateUsd: aiUsd, voiceoverEstimateUsd: ttsUsd,
+    currency: "USD", localRenderingUsd: 0, aiAssumedTokens: 3500, aiEstimateUsd: aiUsd, voiceoverEstimateUsd: ttsUsd,
     knownSubtotalUsd: aiKnown && ttsKnown ? Math.round((aiUsd + ttsUsd) * 10000) / 10000 : null,
     pricingComplete: aiKnown && ttsKnown,
-    note: "Uses optional unit rates you configure. Provider billing, licence restrictions, music rights and external generation costs are not discoverable from API keys."
+    note: "AI estimate assumes about 3,500 prompt+completion tokens and TTS estimate assumes billed characters equal script length. Uses optional unit rates you configure; these are rough estimates, not provider quotes. Provider billing, licences, music rights and external generation costs may be unknown."
   };
 }
 function safeProviderBase(value) { return typeof value === "string" ? safeServiceBase(value) : null; }
@@ -509,7 +509,8 @@ export function createVideoStudioRouter({
         source: "local_file", fileName, title: bounded(req.body.filename, 240), platform: "local", rightsConfirmed: true,
         state: "uploaded", transcript: "", analysis: null, bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex")
       };
-      project.stage = "idea"; addActivity(project, "Reference clip uploaded", project.reference.title + " (" + bytes.length + " bytes).");
+      project.stage = "idea"; project.approvals.plan = false; project.approvals.render = false;
+      addActivity(project, "Reference clip uploaded", project.reference.title + " (" + bytes.length + " bytes).");
       await saveProject(folder, project);
       return res.status(201).json({ project: sanitizedProject(project) });
     } catch (error) { return respondError(res, error, "Could not save the reference clip."); }
@@ -582,6 +583,7 @@ export function createVideoStudioRouter({
       if (project.reference.transcript) analysis.transcript = project.reference.transcript;
       project.reference.analysis = analysis;
       project.reference.state = analysis.state === "completed" ? "analyzed" : "partial_analysis";
+      project.approvals.plan = false; project.approvals.render = false;
       if (project.stage === "idea") project.stage = "reference_analyzed";
       addActivity(project, "Reference analyzed", analysis.analysisDepth || "metadata-only");
       await saveProject(folder, project);
@@ -606,7 +608,7 @@ export function createVideoStudioRouter({
       const kind = baseKind === "audio" && ["music", "voiceover", "audio"].includes(requestedKind) ? requestedKind : baseKind;
       const asset = { id, kind, title: bounded(req.body.filename, 240), provider: "local-upload", sourcePage: "", author: "", filename,
         mimeType: parsed.mimeType, bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), importedAt: new Date().toISOString(), selected: true };
-      project.assets.push(asset); addActivity(project, "Asset uploaded", asset.title);
+      project.assets.push(asset); project.approvals.render = false; addActivity(project, "Asset uploaded", asset.title);
       project.costEstimate = projectCostEstimate(env, project.script);
       if (project.stage !== "rendered") project.stage = project.approvals.plan ? "assets_ready" : project.stage;
       await saveProject(folder, project);
@@ -677,7 +679,7 @@ export function createVideoStudioRouter({
       const asset = { id, kind: item.kind, title: bounded(item.title, 240), provider: item.provider, sourcePage: bounded(item.sourcePage, 1200),
         author: bounded(item.author, 160), filename, mimeType: MIME_BY_EXT[extension], bytes: bytes.length,
         sha256: crypto.createHash("sha256").update(bytes).digest("hex"), importedAt: new Date().toISOString(), selected: true };
-      project.assets.push(asset); addActivity(project, "Stock media imported", asset.provider + ": " + asset.title);
+      project.assets.push(asset); project.approvals.render = false; addActivity(project, "Stock media imported", asset.provider + ": " + asset.title);
       project.costEstimate = projectCostEstimate(env, project.script);
       if (project.stage !== "rendered" && project.approvals.plan) project.stage = "assets_ready";
       await saveProject(folder, project);
@@ -739,7 +741,7 @@ export function createVideoStudioRouter({
       await writeFile(path.join(folder, "assets", filename), bytes, { mode: 0o600 });
       const asset = { id, kind: "voiceover", title: "Voiceover", provider: useVoiceStudio ? "voicestudio" : "configured-tts",
         filename, mimeType: mime, bytes: bytes.length, importedAt: new Date().toISOString(), selected: true };
-      project.assets.push(asset); project.voiceoverFile = filename;
+      project.assets.push(asset); project.voiceoverFile = filename; project.approvals.render = false;
       addActivity(project, "Voiceover created", "Audio received from " + asset.provider + ".");
       await saveProject(folder, project);
       return res.json({ asset, project: sanitizedProject(project) });
