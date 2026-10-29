@@ -26,4 +26,6 @@ This audit tracks the 41 repository names shown in the supplied screenshots, the
 
 Run `npm run check` and `npm test` from the repository root. Run `npm test` inside `chrome-devtools/` for the TypeScript build and bridge security tests. Passing CI proves source checks and mocked contracts only; it does not prove real API credentials, external services, Chrome CDP attachment, a physical desktop, model latency/quality, payment/quota behavior, or Supabase cross-account isolation. Only promote an adapter to a live-verified state after a controlled end-to-end smoke test against a dedicated test account and service.
 
+A first full-CI run caught a missing separator between newly appended repository records; the source was corrected on `main`. Re-run the full ULTRON checks against the corrected base before marking this audit verified.
+
 No Render deployment or production environment changes are part of this audit.
