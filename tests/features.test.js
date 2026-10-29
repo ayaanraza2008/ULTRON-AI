@@ -25,7 +25,7 @@ function assertPdfStructure(pdf) {
     assert.match(row || "", /^\d{10} 00000 n ?$/);
     assert.equal(Buffer.byteLength(row + eol, "latin1"), 20);
     const offset = Number(row.slice(0, 10));
-    assert.equal(raw.slice(offset, offset + String(id).length + 7), String(id) + " 0 obj");
+    assert.equal(raw.slice(offset, offset + String(id).length + 6), String(id) + " 0 obj");
   }
 }
 
