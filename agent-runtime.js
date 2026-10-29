@@ -1753,7 +1753,24 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       } catch (error) {
         logger.warn?.("Agent synthesis failed", { code: error.code || "AGENT_SYNTHESIS_FAILED" });
       }
-      if (!content) content = used.map(item => "**" + item.name + "**\n" + JSON.stringify(item.result, null, 2)).join("\n\n");
+      if (!content) {
+        // The integration-catalog result can be much larger than a following
+        // research result. Bound each tool independently so one early result
+        // cannot consume the whole response and hide later executed tools.
+        const perResultLimit = Math.max(800, Math.min(5000, Math.floor(14000 / Math.max(used.length, 1))));
+        content = used.map(item => {
+          let detail;
+          try {
+            detail = JSON.stringify(sanitizeToolResultForClient(item.result), null, 2);
+          } catch {
+            detail = "{\"error\":\"Tool result could not be summarized safely.\"}";
+          }
+          const clipped = detail.length > perResultLimit
+            ? detail.slice(0, perResultLimit) + "\n[This tool result was truncated to preserve the remaining results.]"
+            : detail;
+          return "**" + item.name + "** (" + (item.ok ? "completed" : "failed") + ")\n" + clipped;
+        }).join("\n\n");
+      }
       if (correctionLesson && !userMemoryEnabled) correctionLearningState = "memory_disabled";
       if (userMemoryEnabled) {
         try { await captureSupabaseMemory(userText, req); }
