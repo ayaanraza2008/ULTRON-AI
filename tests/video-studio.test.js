@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createVideoStudioRouter } from "../video-studio.js";
+import { createApp } from "../server.js";
 
 async function withStudio({ env: overrides = {}, commandRunner, fetchImpl, authenticated = false } = {}, run) {
   const root = await mkdtemp(path.join(os.tmpdir(), "ultron-video-studio-"));
@@ -255,5 +256,32 @@ test("local reference audio can be transcribed using a configured OpenAI-compati
     assert.equal(upstreamCalls.length, 1);
     assert.equal(JSON.stringify(data).includes("synthetic-stt-secret"), false);
   });
+});
+
+test("existing ULTRON server serves the integrated Video Studio page and local static assets", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "ultron-studio-app-"));
+  const app = createApp({
+    env: { NODE_ENV: "test", ULTRON_VIDEO_STUDIO_LOCAL_MODE: "true", ULTRON_VIDEO_STUDIO_DIR: root },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  const server = await new Promise(resolve => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+  const base = "http://127.0.0.1:" + server.address().port;
+  try {
+    const page = await fetch(base + "/studio");
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /ULTRON Video Studio/);
+    const css = await fetch(base + "/studio/static/studio.css");
+    assert.equal(css.status, 200);
+    assert.match(await css.text(), /--red:/);
+    const js = await fetch(base + "/studio/static/studio.js");
+    assert.equal(js.status, 200);
+    assert.match(await js.text(), /Create production board/);
+    assert.match(page.headers.get("content-security-policy"), /media-src 'self' blob: https:/);
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
