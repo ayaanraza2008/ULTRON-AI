@@ -90,10 +90,13 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   else if (!ACTION_PATTERN.test(text) || SIMPLE_PATTERN.test(text)) tier = "simple";
   else tier = "complex";
 
-  // Do not narrow a compound request: tools from an unrecognized subtask could
-  // otherwise be hidden. No matches means use ULTRON's complete existing allowlist.
+  // Simple/underspecified requests should not receive any tool schemas. For one
+  // high-confidence domain, send only that domain's allowlist. Compound or
+  // uncertain tasks retain the full allowlist so valid subtasks are not hidden.
   let toolNames = null;
-  if (categories.length === 1 && !complex) {
+  if (tier === "simple" || tier === "clarify") {
+    toolNames = [];
+  } else if (categories.length === 1 && !complex) {
     const selected = CATEGORY_TOOLS[categories[0]] || [];
     toolNames = [...new Set(selected)];
   }
@@ -108,7 +111,7 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
       ? "Conversational or explanatory request; no tool schema is needed initially."
       : tier === "clarify"
         ? "The request is too vague to infer a safe task without context."
-        : toolNames
+        : Array.isArray(toolNames)
           ? "One high-confidence intent; send only the matching allowlisted tool schemas."
           : "Compound or uncertain task; retain the full allowlist to avoid hiding needed tools."
   };
