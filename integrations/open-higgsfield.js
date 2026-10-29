@@ -27,23 +27,23 @@ const MODELS = [
   { id: "recraft-4.1", label: "Recraft 4.1", surface: "image", kind: "generic-image", path: "recraft/v4.1/text-to-image", roles: { reference: 8 } },
   { id: "qwen-image-3", label: "Qwen Image 3", surface: "image", kind: "generic-image", path: "alibaba/qwen-image-3/text-to-image", roles: { reference: 8 } },
   { id: "z-image-turbo", label: "Z-Image Turbo", surface: "image", kind: "generic-image", path: "z-image/turbo", roles: { reference: 8 } },
-  { id: "wan-3", label: "Wan 3.0", surface: "video", kind: "generic-video", path: "alibaba/wan-3.0/text-to-video", roles: { start: 1 } },
-  { id: "wan-3-prime", label: "Wan 3.0 Prime", surface: "video", kind: "generic-video", path: "alibaba/wan-3.0-prime/text-to-video", roles: { start: 1 } },
-  { id: "wan-2.7", label: "Wan 2.7", surface: "video", kind: "generic-video", path: "wan/v2.7/text-to-video", roles: { start: 1 } },
-  { id: "wan-2.6", label: "Wan 2.6", surface: "video", kind: "generic-video", path: "wan/v2.6/text-to-video", roles: { start: 1 } },
-  { id: "flux-3", label: "Flux 3", surface: "video", kind: "generic-video", path: "blackforestlabs/flux-3/text-to-video", roles: { start: 1 } },
-  { id: "minimax-h3", label: "MiniMax H3", surface: "video", kind: "generic-video", path: "minimax/h3/text-to-video", roles: { start: 1 } },
-  { id: "minimax-hailuo-2.3", label: "MiniMax Hailuo 2.3", surface: "video", kind: "generic-video", path: "minimax/hailuo-2.3/standard/text-to-video", roles: { start: 1 } },
-  { id: "happy-horse-1", label: "Happy Horse 1.0", surface: "video", kind: "generic-video", path: "alibaba/happy-horse/text-to-video", roles: { start: 1 } },
-  { id: "happy-horse-1.1", label: "Happy Horse 1.1", surface: "video", kind: "generic-video", path: "alibaba/happy-horse/v1.1/text-to-video", roles: { start: 1 } },
+  { id: "wan-3", label: "Wan 3.0", surface: "video", kind: "generic-video", path: "alibaba/wan-3.0/text-to-video", imagePath: "alibaba/wan-3.0/image-to-video", roles: { start: 1 } },
+  { id: "wan-3-prime", label: "Wan 3.0 Prime", surface: "video", kind: "generic-video", path: "alibaba/wan-3.0-prime/text-to-video", imagePath: "alibaba/wan-3.0-prime/image-to-video", roles: { start: 1 } },
+  { id: "wan-2.7", label: "Wan 2.7", surface: "video", kind: "generic-video", path: "wan/v2.7/text-to-video", imagePath: "wan/v2.7/image-to-video", roles: { start: 1 } },
+  { id: "wan-2.6", label: "Wan 2.6", surface: "video", kind: "generic-video", path: "wan/v2.6/text-to-video", imagePath: "wan/v2.6/image-to-video", roles: { start: 1 } },
+  { id: "flux-3", label: "Flux 3", surface: "video", kind: "generic-video", path: "blackforestlabs/flux-3/text-to-video", imagePath: "blackforestlabs/flux-3/image-to-video", roles: { start: 1 } },
+  { id: "minimax-h3", label: "MiniMax H3", surface: "video", kind: "generic-video", path: "minimax/h3/text-to-video", imagePath: "minimax/h3/image-to-video", roles: { start: 1 } },
+  { id: "minimax-hailuo-2.3", label: "MiniMax Hailuo 2.3", surface: "video", kind: "generic-video", path: "minimax/hailuo-2.3/standard/text-to-video", imagePath: "minimax/hailuo-2.3/standard/image-to-video", roles: { start: 1 } },
+  { id: "happy-horse-1", label: "Happy Horse 1.0", surface: "video", kind: "generic-video", path: "alibaba/happy-horse/text-to-video", imagePath: "alibaba/happy-horse/image-to-video", roles: { start: 1 } },
+  { id: "happy-horse-1.1", label: "Happy Horse 1.1", surface: "video", kind: "generic-video", path: "alibaba/happy-horse/v1.1/text-to-video", imagePath: "alibaba/happy-horse/v1.1/image-to-video", roles: { start: 1 } },
   { id: "kling-2.6", label: "Kling 2.6", surface: "video", kind: "generic-video", path: "kling-video/v2.6/pro/text-to-video", imagePath: "kling-video/v2.6/pro/image-to-video", roles: { start: 1 } },
   { id: "kling-2.5", label: "Kling 2.5", surface: "video", kind: "image-video", path: "kling-video/v2.5-turbo/standard/image-to-video", roles: { start: 1 } },
   { id: "kling-o3", label: "Kling O3", surface: "video", kind: "first-last", path: "kling-video/o3/first-last-frame", roles: { start: 1, end: 1 } },
   { id: "kling-o1", label: "Kling O1 (Omni)", surface: "video", kind: "first-last", path: "kling-video/omni/first-last-frame", roles: { start: 1, end: 1 } },
-  { id: "ltx-2.5-fast", label: "LTX 2.5 Fast", surface: "video", kind: "generic-video", path: "lightricks/ltx-2.5/text-to-video/fast", roles: { start: 1 } },
-  { id: "ltx-2.5-pro", label: "LTX 2.5 Pro", surface: "video", kind: "generic-video", path: "lightricks/ltx-2.5/text-to-video/pro", roles: { start: 1 } },
+  { id: "ltx-2.5-fast", label: "LTX 2.5 Fast", surface: "video", kind: "generic-video", path: "lightricks/ltx-2.5/text-to-video/fast", imagePath: "lightricks/ltx-2.5/image-to-video/fast", roles: { start: 1 } },
+  { id: "ltx-2.5-pro", label: "LTX 2.5 Pro", surface: "video", kind: "generic-video", path: "lightricks/ltx-2.5/text-to-video/pro", imagePath: "lightricks/ltx-2.5/image-to-video/pro", roles: { start: 1 } },
   { id: "grok-imagine-video-1.5", label: "Grok Imagine Video 1.5", surface: "video", kind: "reference-video", path: "xai/grok-imagine-video/v1.5/reference-to-video", roles: { reference: 8, video: 3 } },
-  { id: "pixverse-6", label: "PixVerse 6", surface: "video", kind: "generic-video", path: "pixverse/v6/text-to-video", roles: { start: 1 } },
+  { id: "pixverse-6", label: "PixVerse 6", surface: "video", kind: "generic-video", path: "pixverse/v6/text-to-video", imagePath: "pixverse/v6/image-to-video", roles: { start: 1 } },
   { id: "dop", label: "DoP", surface: "video", kind: "image-video", path: "higgsfield-ai/dop/lite", roles: { start: 1 } }
 ];
 
@@ -349,7 +349,7 @@ export async function runOpenHiggsfieldAction({
     if (!model) throw fail("OPEN_HIGGSFIELD_MODEL_INVALID", "Choose one of ULTRON's allowlisted OpenHiggsfield models.");
     const cleanPrompt = bounded(prompt, MAX_PROMPT_CHARS);
     if (cleanPrompt.length < 2) throw fail("OPEN_HIGGSFIELD_PROMPT_REQUIRED", "A generation prompt is required.");
-    if (approvePaidGeneration !== true || bounded(confirmationText, 300) !== PAID_CONFIRMATION || !/\\b(approve|authorize|confirm)\\b[\\s\\S]{0,100}\\b(credits?|paid|billable|generation)\\b/i.test(userPrompt)) {
+    if (approvePaidGeneration !== true || bounded(confirmationText, 300) !== PAID_CONFIRMATION || !/\b(approve|authorize|confirm)\b[\s\S]{0,100}\b(credits?|paid|billable|generation)\b/i.test(userPrompt)) {
       return {
         state: "approval_required",
         provider: "open-higgsfield",
