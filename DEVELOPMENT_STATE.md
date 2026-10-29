@@ -1,6 +1,6 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-27 UTC (source changes verified; production deployment blocked by Render quota)
+Last verified: 2026-10-29 UTC (source CI and production-revision verification passed; live model/auth/task/device E2E remains incomplete)
 
 ## Operating constraints
 - Preserve the existing repository, backend data, and frontend. The cinematic command center has been built and merged, but is not live-verified until Render serves and reports the expected commit.
@@ -144,3 +144,25 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Supabase project `opdjfhwepmcprbqojpat` remains `ACTIVE_HEALTHY`. Migration `private_document_storage` is applied at version `20261027185203`; read-only checks confirm private bucket, 5 MiB limit, RLS, and authenticated grants. Real authenticated file E2E is still unverified.
 - Latest code changes improve source-level safety and test coverage; they do not resolve the external blockers for Render build quota, live provider inference, dedicated Auth/RLS E2E accounts, the leaked-password-protection dashboard setting, or physical Windows companion verification.
 - Autonomy regression coverage includes SMS/texts, replies/messages to personal recipients, forwarded notes, and an explicit draft-only exception; a mixed request that also asks to publish remains confirmation-gated.
+
+
+## Cross-sector verification checkpoint — 2026-10-29
+
+- Latest main commit: `6b7f09d97508fc2be2085695d862a921e1ae8487`; PR #392 merged.
+- Post-merge CI [40909210938](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40909210938) passed both jobs; 653 tests, 652 passed, 0 failed, 1 skipped.
+- Production-revision verification [40909211008](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40909211008) passed its configured health/configuration/revision check. This does not prove model inference, account isolation, task execution, voice or physical desktop control.
+- Read-only Supabase audit confirmed `opdjfhwepmcprbqojpat` is `ACTIVE_HEALTHY`; all eight public tables have RLS; policies are owner-scoped; `anon` has no direct public-table/sequence grants in the inspected grants view; and worker SECURITY DEFINER RPCs use empty search_path and execute grants only to `service_role`.
+- Supabase Security Advisor still reports leaked-password protection disabled. No plan upgrade or billing change was made. See https://supabase.com/docs/guides/auth/password-security.
+- The live migration ledger lists 15 versions; repository filenames had duplicate/mismatched IDs. This branch aligns active migration filenames to the inspected ledger and archives an obsolete scaffold outside `supabase/migrations/`; no SQL was executed against the database.
+- Deprecated Fish Audio placeholders remained in `render.yaml`; this branch removes those stale Blueprint keys without modifying hosted environment variables.
+- Remaining live blockers: actual text/vision provider completions, dedicated two-user Auth/RLS E2E, worker completion with credentials/test user, signup/recovery/Google/phone delivery, voice/browser integrations, and physical Windows companion pairing. Arbitrary code execution remains unavailable until a suitable sandbox is built and tested.
+- World Intelligence CI passes, but build output reported large chunks; performance and device/browser checks remain separate.
+
+
+## Render inventory clarification — 2026-10-29
+
+Read-only Render inventory found two different ULTRON backend services connected to this repository in separate workspaces:
+- `ultron-ai-core` in workspace `Ultron core`, URL `https://ultron-ai-core.onrender.com`: latest observed deploy for commit `6b7f09d97508fc2be2085695d862a921e1ae8487` is `live`; the production-revision workflow checked this same hostname and commit.
+- `ultron-ai` in workspace `My Workspace`, URL `https://ultron-ai-zvd7.onrender.com`: the 10 most recent deploy attempts returned by Render during this audit were blocked before the application build by `pipeline_minutes_exhausted`, including the attempt for the same main commit.
+
+The CI workflow's passing production-revision result therefore confirms the `ultron-ai-core` service only, not both services. The Blueprint still names `ultron-ai`. Do not silently repoint, delete, reconfigure, or trigger either service as part of backend source work; designate the canonical service during a separately authorized deployment phase.
