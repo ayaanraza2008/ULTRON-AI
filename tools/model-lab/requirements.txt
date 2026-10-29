@@ -1,0 +1,9 @@
+# Install PyTorch for your platform from https://pytorch.org/get-started/locally/
+# These dependencies enable Hugging Face text-generation workflows.
+torch>=2.4
+transformers>=4.45
+accelerate>=0.34
+huggingface_hub>=0.25
+
+# Optional: bitsandbytes enables 4-bit inference only on compatible CUDA/ROCm setups.
+# Install separately after verifying platform support; it is intentionally not mandatory.

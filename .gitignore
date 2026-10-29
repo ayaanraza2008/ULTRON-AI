@@ -8,3 +8,5 @@ dist/
 Thumbs.db
 *.log
 npm-debug.log*
+.local/
+models/

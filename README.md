@@ -162,3 +162,16 @@ For account-enumeration resistance, invalid input is rejected, but upstream erro
 ## Opt-in live Supabase isolation test
 
 `npm run test:supabase:e2e` runs the two-account conversation, message, memory, and row-level-security test. It is skipped unless dedicated, confirmed test accounts and all required variables are supplied, including `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`. It is hard-scoped to the configured ULTRON Supabase project and creates/deletes temporary test rows. Read `docs/SUPABASE_E2E_ISOLATION.md` first. Do not use personal/admin accounts or commit secrets. A skipped test is not evidence that live data isolation works.
+
+
+## Local Hugging Face model tooling
+
+The optional [ULTRON Model Lab](tools/model-lab/README.md) Python CLI benchmarks decoding presets on benign-task and safety-boundary checks, produces a local calibration profile, and offers terminal chat, unchanged local model snapshots, and Hugging Face profile publishing. It does not modify model weights. Inference dependencies are optional and are not needed by the Node.js API service.
+
+```bash
+python -m pip install -r tools/model-lab/requirements.txt
+python tools/model-lab/ultron_model_lab.py doctor
+python -m unittest discover -s tools/model-lab -p 'test_*.py'
+```
+
+Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
