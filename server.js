@@ -1582,7 +1582,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
       catch { primaryProviderConfigInvalid = true; }
     }
-    const configuredProviders = configuredChatProviders(env, baseUrl, req.supabaseUser?.id);
+    const configuredProviders = configuredChatProviders(env, baseUrl, req.supabaseUser?.id, Boolean(requestedProviderOption));
     const chatProviders = requestedProviderOption
       ? [
           ...configuredProviders.filter(provider => provider.name === requestedProviderOption.name && provider.model === requestedProviderOption.model),
