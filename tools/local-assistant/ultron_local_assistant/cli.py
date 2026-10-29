@@ -72,7 +72,7 @@ def chat(args):
         if not text:
             continue
         try:
-            print("\nULTRON> " + local_chat(text, model=chosen))
+            print("\nULTRON> " + local_chat(text, model=chosen, use_skills=True))
         except Exception as exc:
             print(f"Local model error: {exc}")
 
@@ -176,7 +176,7 @@ def code_ask(args):
         prompt += "\n\nWORKSPACE FILES:\n" + "\n\n".join(snippets)
     try:
         print(local_chat(prompt, model=model_name(args.model),
-                         system="You are ULTRON's local coding assistant. Use only supplied context and the local model."))
+                         system="You are ULTRON's local coding assistant. Use only supplied context and the local model.", use_skills=True))
         return 0
     except Exception as exc:
         print(f"Local code assistant failed: {exc}", file=sys.stderr)
@@ -195,7 +195,7 @@ def code_revise(args):
               + "REQUEST:\n" + args.request + "\n\nPATH:\n" + args.file + "\n\nSOURCE:\n" + original)
     try:
         revised = local_chat(prompt, model=model_name(args.model),
-                             system="You are a careful local code editor. Output only the full new file contents.")
+                             system="You are a careful local code editor. Output only the full new file contents.", use_skills=True)
     except Exception as exc:
         print(f"Local revision failed: {exc}", file=sys.stderr)
         return 1
