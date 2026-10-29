@@ -114,10 +114,13 @@ export function createNonOverlappingRunner(run, onError = () => {}) {
   };
 }
 
-export async function renewTaskLease({ taskId, rest, logger = console, onInactive }) {
-  if (!taskId || typeof rest !== "function") return false;
+export async function renewTaskLease({ taskId, attempts, rest, logger = console, onInactive }) {
+  const claimAttempts = Number(attempts);
+  // A lease belongs to one specific claim generation. Without that generation
+  // fence, an old worker could refresh a newer worker's lease after reclamation.
+  if (!taskId || !Number.isInteger(claimAttempts) || claimAttempts < 1 || claimAttempts > 3 || typeof rest !== "function") return false;
   try {
-    const rows = await rest("agent_tasks?id=eq." + encodeURIComponent(taskId) + "&status=eq.RUNNING", {
+    const rows = await rest("agent_tasks?id=eq." + encodeURIComponent(taskId) + "&status=eq.RUNNING&attempts=eq." + claimAttempts, {
       method: "PATCH",
       body: JSON.stringify({ started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     });
@@ -479,10 +482,21 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
     const claimed = await rest("rpc/ultron_claim_next_task", { method: "POST", body: "{}" });
     const task = Array.isArray(claimed) ? claimed[0] : claimed;
     if (!task?.id) return false;
+    const claimAttempts = Number(task.attempts);
+    if (!Number.isInteger(claimAttempts) || claimAttempts < 1 || claimAttempts > 3) {
+      status.tasksBlocked += 1;
+      status.lastErrorAt = new Date().toISOString();
+      status.lastErrorCode = "TASK_CLAIM_INVALID";
+      logger.error?.("Worker refused a task claim without a valid attempt generation:", bounded(task.id, 120));
+      // Do not execute or mutate a claim that cannot be safely fenced. Database
+      // lease recovery can handle the abandoned claim without stale writes.
+      return true;
+    }
     const taskController = new AbortController();
     const heartbeatRunner = createNonOverlappingRunner(async () => {
       const renewed = await renewTaskLease({
         taskId: task.id,
+        attempts: claimAttempts,
         rest,
         logger,
         onInactive: () => taskController.abort(new Error("Task is no longer RUNNING."))
@@ -504,7 +518,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
       const result = await execute(task, taskController.signal);
       let completedRows;
       try {
-        completedRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
+        completedRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING&attempts=eq." + claimAttempts, {
           method: "PATCH",
           body: JSON.stringify({ status: "COMPLETED", result, finished_at: new Date().toISOString() })
         });
@@ -545,10 +559,10 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
       status.lastErrorAt = new Date().toISOString();
       status.lastErrorCode = code;
       const retryable = ["RESEARCH_PROVIDER_RETRYABLE", "EMPLOYEE_PROVIDER_RETRYABLE", "TASK_EXECUTION_FAILED", "AbortError", "TimeoutError"].includes(code);
-      const shouldRetry = retryable && Number(task.attempts || 1) < 3;
+      const shouldRetry = retryable && claimAttempts < 3;
       let failureRows;
       try {
-        failureRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING", {
+        failureRows = await rest("agent_tasks?id=eq." + encodeURIComponent(task.id) + "&status=eq.RUNNING&attempts=eq." + claimAttempts, {
           method: "PATCH",
           body: JSON.stringify({
             status: code === "TASK_TYPE_NOT_ALLOWED" || code === "APPROVAL_REQUIRED" ? "BLOCKED" : shouldRetry ? "QUEUED" : "FAILED",
