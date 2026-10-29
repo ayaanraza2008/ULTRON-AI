@@ -95,6 +95,9 @@ test("sandbox starts only an isolated container and cleans up after successful e
   assert.equal(result.state, "completed");
   assert.equal(result.success, true);
   assert.match(result.stdout, /ULTRON_OK/);
+  const startArgs = calls.find(item => item.args[0] === "start").args;
+  assert.deepEqual(startArgs, ["start", "--attach", "abcdef0123456789abcdef0123456789"], "Docker start must use supported CLI flags only");
+  assert.ok(!startArgs.includes("--sig-proxy=true"), "sig-proxy is a docker run option, not a docker start option");
   const createArgs = calls.find(item => item.args[0] === "create").args.join(" ");
   assert.match(createArgs, /--network=none/);
   assert.match(createArgs, /--read-only/);
