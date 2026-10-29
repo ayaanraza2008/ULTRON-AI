@@ -33,7 +33,7 @@ test("routes Google Workspace requests to its bounded read-only tool set", () =>
   assert.equal(route.filtered, true);
   assert.ok(route.toolNames.includes("google_gmail_search"));
   assert.ok(route.toolNames.includes("google_gmail_list_unread"));
-  assert.ok(!route.toolNames.includes("google_sheets_read") === false);
+  assert.ok(route.toolNames.includes("google_sheets_read"));
   assert.ok(!route.toolNames.includes("browser_use"));
 });
 
