@@ -6,7 +6,8 @@ import {
   validateBrowserUrl,
   validateCdpEndpoint,
   validateChromeActionInput,
-  isLoopbackHost
+  isLoopbackHost,
+  assertPublicBrowserTarget
 } from "./security.js";
 
 type ConsoleEntry = { time: string; type: string; text: string; url?: string };
@@ -62,7 +63,8 @@ export class ChromeController {
           return;
         }
         try {
-          validateBrowserUrl(raw, this.env);
+          const target = validateBrowserUrl(raw, this.env);
+          await assertPublicBrowserTarget(target, this.env);
           await route.continue();
         } catch {
           await route.abort("blockedbyclient");
@@ -235,6 +237,7 @@ export class ChromeController {
     }
     if (input.action === "navigate") {
       const target = validateBrowserUrl(input.url, this.env);
+      await assertPublicBrowserTarget(target, this.env);
       await page.goto(target.toString(), { waitUntil: "domcontentloaded", timeout: 20000 });
       const finalUrl = validateBrowserUrl(page.url(), this.env);
       return { state: "completed", action: input.action, title: (await page.title()).slice(0, 300), url: safeDisplayUrl(finalUrl.toString()) };
