@@ -1026,6 +1026,152 @@
     }
   }
 
+  function fileToBase64(file) {
+    return file.arrayBuffer().then(buffer => {
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+      }
+      return btoa(binary);
+    });
+  }
+
+  async function downloadPrivateDocument(documentInfo) {
+    try {
+      const response = await fetch("/api/documents/" + encodeURIComponent(documentInfo.id) + "/download", {
+        method: "GET", credentials: "same-origin", cache: "no-store"
+      });
+      if (!response.ok) {
+        let message = "Download failed (HTTP " + response.status + ").";
+        try {
+          const payload = await response.json();
+          if (payload?.error?.message) message = payload.error.message;
+        } catch {}
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      if (blob.size > 5 * 1024 * 1024) throw new Error("The downloaded file exceeded the supported size limit.");
+      downloadBlob(documentInfo.filename || "ultron-document", blob);
+      showToast("Private document downloaded.");
+    } catch (error) {
+      showToast("Could not download the document: " + error.message, 6500);
+    }
+  }
+
+  function downloadBlob(filename, blob) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = String(filename || "ultron-export").replace(/[\\/:*?"<>|]/g, "-").slice(0, 160);
+    anchor.hidden = true;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function showDocumentsView() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("Private document library", "Files are stored only after an explicit upload action in account-scoped private storage. The backend verifies file size, type, ownership and content integrity.");
+    const form = document.createElement("form");
+    const fileField = document.createElement("div");
+    fileField.className = "drawer-field";
+    const label = document.createElement("label");
+    label.textContent = "SELECT FILE (TXT, MD, CSV, JSON, HTML, PDF OR DOCX; UP TO 5 MB)";
+    label.htmlFor = "saved-document-file";
+    const input = document.createElement("input");
+    input.type = "file";
+    input.id = "saved-document-file";
+    input.name = "saved-document-file";
+    input.accept = ".txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx";
+    input.required = true;
+    fileField.append(label, input);
+    form.appendChild(fileField);
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "drawer-action";
+    submit.textContent = "UPLOAD TO PRIVATE LIBRARY";
+    form.appendChild(submit);
+    const formatList = new Set(["txt", "md", "markdown", "csv", "json", "html", "htm", "pdf", "docx"]);
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const file = input.files && input.files[0];
+      if (!file) { showToast("Choose a file before uploading."); return; }
+      const extension = (String(file.name).split(".").pop() || "").toLowerCase();
+      if (!formatList.has(extension)) { showToast("This file type is not supported."); return; }
+      if (file.size <= 0 || file.size > 5 * 1024 * 1024) { showToast("Choose a non-empty file up to 5 MB."); return; }
+      submit.disabled = true;
+      input.disabled = true;
+      try {
+        const fileBase64 = await fileToBase64(file);
+        await apiRequest("/api/documents/upload", {
+          method: "POST",
+          body: { filename: String(file.name).slice(0, 240), fileBase64 }
+        });
+        showToast("File saved in private storage.");
+        await showDrawerView("documents");
+      } catch (error) {
+        drawerCard("Upload not confirmed", error.message, error.code || "UPLOAD FAILED", "error");
+        if (error.code === "DOCUMENT_STORAGE_NOT_READY" || error.code === "DOCUMENT_STORAGE_NOT_CONFIGURED") {
+          drawerCard("Private storage setup required", "The document storage migration or authenticated Storage policy is missing. Review and apply the documented migration, then run owner-isolation and upload/download integrity tests before using this feature.", "SETUP REQUIRED", "warning");
+        }
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        submit.disabled = false;
+        input.disabled = false;
+      }
+    });
+    ui.drawerContent.appendChild(form);
+    const separator = document.createElement("div");
+    separator.className = "drawer-rule";
+    ui.drawerContent.appendChild(separator);
+    drawerHeading("Saved files", "Loading private documents for this account…");
+    try {
+      const payload = await apiRequest("/api/documents");
+      const docs = Array.isArray(payload?.documents) ? payload.documents : [];
+      if (!docs.length) {
+        drawerCard("No saved documents", "Choose a file above and press Upload to keep an account-scoped original. Merely analyzing a local file does not store it.", "EMPTY", "warning");
+        return;
+      }
+      for (const item of docs.slice(0, 50)) {
+        const size = Number(item.size_bytes);
+        const sizeLabel = Number.isFinite(size) ? (size / (1024 * 1024)).toFixed(2) + " MB" : "Size unavailable";
+        const created = item.created_at ? new Date(item.created_at) : null;
+        const createdLabel = created && Number.isFinite(created.getTime()) ? "Saved " + created.toLocaleString() : "Saved document";
+        const card = drawerCard(
+          String(item.filename || "Document").slice(0, 240),
+          [sizeLabel, String(item.mime_type || "Unknown file type"), createdLabel].join(" · "),
+          "PRIVATE STORAGE",
+          "ready"
+        );
+        addCardActionRow(card, [
+          { label: "DOWNLOAD", onClick: () => { void downloadPrivateDocument(item); } },
+          { label: "ANALYZE", secondary: true, onClick: () => {
+            setDrawerOpen(false);
+            switchToTextMode();
+            ui.messageInput.value = "Analyze the saved document named \"" + String(item.filename || "document").slice(0, 180) + "\". The private document library does not expose its content directly in chat yet; please ask me to open/download it or select the original file from this device for analysis.";
+            ui.messageInput.focus();
+          }},
+          { label: "DELETE", secondary: true, onClick: async () => {
+            if (!window.confirm("Delete this private document permanently?")) return;
+            try {
+              await apiRequest("/api/documents/" + encodeURIComponent(item.id), { method: "DELETE" });
+              showToast("Private document deleted.");
+              await showDrawerView("documents");
+            } catch (error) { showToast("Could not delete document: " + error.message, 6500); }
+          }}
+        ]);
+      }
+    } catch (error) {
+      drawerCard("Document library unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (error.code === "DOCUMENT_STORAGE_NOT_READY") {
+        drawerCard("Migration required", "The private document-storage migration is not installed in the connected database. Review the migration and RLS policies; the UI will not apply database changes.", "SETUP REQUIRED", "warning");
+      }
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+    }
+  }
+
   async function showMemoryEditor(item = null) {
     ui.drawerContent.replaceChildren();
     drawerHeading(item ? "Edit saved memory" : "Save a memory",
@@ -1936,6 +2082,10 @@
           .finally(() => { if (wasListening) scheduleRecognitionRestart(); });
       });
       drawerButton("REFRESH AVAILABLE VOICES", () => { void showDrawerView("voice-quality"); }, true);
+      return;
+    }
+    if (name === "documents") {
+      await showDocumentsView();
       return;
     }
     if (name === "memory") {
