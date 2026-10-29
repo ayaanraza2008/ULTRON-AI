@@ -11,6 +11,7 @@ import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWork
 import { inspectPublicPageWithObscura, capturePublicPageWithObscura, getObscuraReadiness } from "./integrations/obscura-mcp.js";
 import { runReaTool } from "./integrations/rea-mcp.js";
 import { checkCactusService, resolveCactusProvider, getCactusReadiness } from "./integrations/cactus.js";
+import { resolveStrataProvider } from "./integrations/strata.js";
 import { getPaperclipAgentDashboard } from "./integrations/paperclip-services.js";
 import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentProvider, runHermesAgentTask } from "./integrations/hermes-agent.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
@@ -665,9 +666,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
   function configuredModelProviders(userId = null) {
     const providers = [];
     const cactusProvider = resolveCactusProvider(env);
+    const strataProvider = resolveStrataProvider(env);
     const hermesProvider = resolveHermesAgentProvider(env, userId);
     if (hermesProvider) providers.push(hermesProvider);
     if (cactusProvider) providers.push(cactusProvider);
+    if (strataProvider) providers.push(strataProvider);
     const primaryKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
     if (primaryKey) {
       const baseUrl = safeBase(env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
