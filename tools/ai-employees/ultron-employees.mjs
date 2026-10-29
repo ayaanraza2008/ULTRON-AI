@@ -335,6 +335,13 @@ function ensureSafeDirectoryTree(boundaryRoot, targetDirectory) {
   if (requestedTarget !== requestedRoot && !isInside(requestedRoot, requestedTarget)) {
     throw new Error("Write path escaped its workspace boundary.");
   }
+  try {
+    if (fs.lstatSync(requestedRoot).isSymbolicLink()) {
+      throw new Error("Workspace boundary must not itself be a symbolic link.");
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
 
   const safeRoot = resolveThroughExistingSymlinks(requestedRoot);
   const safeTarget = path.resolve(safeRoot, path.relative(requestedRoot, requestedTarget));
@@ -358,6 +365,18 @@ function ensureSafeDirectoryTree(boundaryRoot, targetDirectory) {
     }
   }
   return safeTarget;
+}
+
+export function createRoutineWorkspace(employeeRoot, routineId) {
+  const root = path.resolve(employeeRoot);
+  const folder = path.resolve(root, "routines", routineId);
+  if (!isInside(root, folder) || folder === root) {
+    throw new Error("Routine path escaped the employee workspace.");
+  }
+  if (fs.existsSync(folder)) {
+    throw new Error(`Routine already exists; nothing was overwritten: ${folder}`);
+  }
+  return ensureSafeDirectoryTree(root, folder);
 }
 
 function writeAtomic(file, text, boundaryRoot) {
@@ -523,10 +542,7 @@ async function main(argv = process.argv.slice(2)) {
     const id = validateRoutineId(argv[2] ?? "", role);
     const employeeRoot = path.join(root, role.id);
     if (!fs.existsSync(path.join(employeeRoot, "ROLE.md"))) throw new Error(`Install ${role.name} first: npm run employees -- hire ${role.id}`);
-    const folder = path.join(employeeRoot, "routines", id);
-    if (!isInside(employeeRoot, folder)) throw new Error("Routine path escaped the employee workspace.");
-    if (fs.existsSync(folder)) throw new Error(`Routine already exists; nothing was overwritten: ${folder}`);
-    fs.mkdirSync(folder, { recursive: true });
+    const folder = createRoutineWorkspace(employeeRoot, id);
     writeAtomic(path.join(folder, "SKILL.md"), makeRoutineTemplate({ id, role, goal: `Define one measurable outcome owned by ${role.name}.` }), employeeRoot);
     const note = `# Register ${id}\n\nThis template is not scheduled yet. Before enabling it:\n\n1. Define the exact output path, allowed inputs and success criteria in routines/${id}/SKILL.md.\n2. Add a valid row to SCHEDULE.md with days, local fire time, window, period key, time budget and browser lane. Follow that file's schema; do not guess a time zone.\n3. Confirm CAPABILITIES.md maps every required capability to this harness and its signed-in browser profile.\n4. Run the kit's self-tests and the routine once manually in a safe/review-only mode. Confirm idempotency and inspect the run log.\n5. Register the job in the selected harness/OS scheduler only after the first manual check. Verify the job exists; keep external actions held.\n6. Add a dated correction if evidence exposes a defect. Never widen authority silently.\n`;
     writeAtomic(path.join(folder, "REGISTER-ROUTINE.md"), note, employeeRoot);
