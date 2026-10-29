@@ -1409,6 +1409,87 @@ test("study pack Markdown export returns not-found for records outside the owner
   assert.equal(calls, 1);
 });
 
+
+test("study pack update supports title edits and validated content replacement", async () => {
+  const calls = [];
+  const initial = {
+    id: STUDY_PACK_TEST_ID,
+    user_id: STUDY_PACK_USER_ID,
+    title: "Old title",
+    topic: "Photosynthesis",
+    format: "mixed",
+    level: "beginner",
+    language: "English",
+    source_mode: "general_knowledge_draft",
+    content: { summary: "Old summary" }
+  };
+  await withServer({}, async base => {
+    const titleResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New title" })
+    });
+    assert.equal(titleResponse.status, 200);
+    assert.equal((await titleResponse.json()).studyPack.title, "New title");
+
+    const changedPack = {
+      ...validStudyPack(),
+      topic: "Photosynthesis updated",
+      summary: "Updated course summary."
+    };
+    const contentResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Final title", pack: changedPack, user_id: "99999999-9999-4999-8999-999999999999" })
+    });
+    assert.equal(contentResponse.status, 400, "unknown caller fields must be rejected");
+    const validContentResponse = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Final title", pack: changedPack })
+    });
+    assert.equal(validContentResponse.status, 200);
+    const result = await validContentResponse.json();
+    assert.equal(result.studyPack.title, "Final title");
+    assert.equal(result.studyPack.summary, "Updated course summary.");
+  }, {
+    supabaseRest: async (_req, table, method, query, patch) => {
+      calls.push({ table, method, query, patch });
+      assert.equal(table, "study_packs");
+      assert.equal(method, "PATCH");
+      assert.ok(query.includes("id=eq." + STUDY_PACK_TEST_ID));
+      assert.ok(query.includes("user_id=eq." + STUDY_PACK_USER_ID));
+      return [{ ...initial, ...patch, id: STUDY_PACK_TEST_ID, user_id: STUDY_PACK_USER_ID }];
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].patch, { title: "New title" });
+  assert.equal(calls[1].patch.title, "Final title");
+  assert.equal(calls[1].patch.content.summary, "Updated course summary.");
+});
+
+test("study pack update rejects invalid IDs and malformed packs before database writes", async () => {
+  let calls = 0;
+  await withServer({}, async base => {
+    const invalidId = await fetch(base + "/api/study-packs/not-a-uuid", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New title" })
+    });
+    assert.equal(invalidId.status, 400);
+
+    const invalidPack = { ...validStudyPack(), quiz: [{ question: "Bad answer", options: ["A", "B", "C", "D"], answerIndex: 99, explanation: "invalid index" }] };
+    const response = await fetch(base + "/api/study-packs/" + STUDY_PACK_TEST_ID, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pack: invalidPack })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_STUDY_PACK");
+  }, { supabaseRest: async () => { calls++; return []; } });
+  assert.equal(calls, 0);
+});
+
 test("notes library saves only authenticated-owner data", async () => {
   const calls = [];
   const note = { ...validNoteInput(), id: USER_NOTE_TEST_ID, user_id: USER_NOTE_OWNER_ID, created_at: "2026-10-29T00:00:00.000Z", updated_at: "2026-10-29T00:00:00.000Z" };
