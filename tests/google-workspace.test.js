@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { buildIntegrationCatalog } from "../integrations/catalog.js";
 import {
   getGoogleWorkspaceReadiness,
   isGoogleWorkspaceConfigured,
@@ -27,6 +28,17 @@ test("Google Workspace is owner-scoped and exposes no credential values in readi
   const denied = getGoogleWorkspaceReadiness({ env: ENV, userId: "00000000-0000-4000-8000-000000000002" });
   assert.equal(denied.configured, false);
   assert.equal(denied.error.code, "INTEGRATION_OWNER_ONLY");
+});
+
+test("integration catalog reports Google Workspace as configured-but-unverified without exposing secrets", () => {
+  const configured = buildIntegrationCatalog(ENV).find(item => item.id === "google-workspace");
+  assert.equal(configured.configured, true);
+  assert.equal(configured.state, "configured_unverified");
+  assert.equal(JSON.stringify(configured).includes(TOKEN), false);
+  const blocked = buildIntegrationCatalog({ ...ENV, GOOGLE_WORKSPACE_BRIDGE_TOKEN: "weak" })
+    .find(item => item.id === "google-workspace");
+  assert.equal(blocked.configured, false);
+  assert.equal(blocked.state, "blocked");
 });
 
 test("Google Workspace rejects missing, weak, malformed, or non-Google bridge configuration", async () => {
