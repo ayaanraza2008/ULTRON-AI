@@ -112,7 +112,7 @@ test("agent reads public GitHub metadata through a fixed unauthenticated endpoin
     assert.equal(body.toolResults[0].result.state, "completed");
     assert.equal(body.toolResults[0].result.repository.fullName, "octocat/Hello-World");
     assert.equal(body.toolResults[0].result.repository.license, "MIT");
-    assert.equal(body.toolResults[0].result.sourceContentTrust, undefined);
+    assert.equal(body.toolResults[0].result.sourceContentTrust, "untrusted_external_content");
     assert.equal(body.toolResults[0].result.repository.url, "https://github.com/octocat/Hello-World");
   });
   assert.equal(providerCalls, 2);
@@ -125,7 +125,7 @@ test("agent reads bounded text files and README content as untrusted repository 
   const source = "# Hello World\n\nThis repository demonstrates a small project.\n";
   const path = "README.md";
   await withAgentServer(async (url, options) => {
-    if (url === API + "/contents/README.md") {
+    if (url === API + "/contents/README.md?ref=main") {
       githubCalls += 1;
       assert.equal(options.redirect, "error");
       assert.equal(options.headers.Authorization, undefined);
