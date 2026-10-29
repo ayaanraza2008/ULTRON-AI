@@ -1295,12 +1295,18 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const patch = {};
     const has = key => Object.prototype.hasOwnProperty.call(body || {}, key);
     if (!partial || has("title")) {
-      const title = boundedString(body?.title, 200);
+      if (typeof body?.title !== "string" || body.title.trim().length > 200) {
+        return { error: "A note title is required and must be at most 200 characters." };
+      }
+      const title = boundedString(body.title, 200);
       if (!title) return { error: "A note title is required." };
       patch.title = title;
     }
     if (!partial || has("body")) {
-      const content = boundedString(body?.body, 30_000);
+      if (typeof body?.body !== "string" || body.body.trim().length > 30_000) {
+        return { error: "Note content is required and must be at most 30,000 characters." };
+      }
+      const content = boundedString(body.body, 30_000);
       if (!content) return { error: "Note content is required and must be at most 30,000 characters." };
       patch.body = content;
     }
