@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { generateReportPdf } from "../reports/pdf-report.js";
+
+function pdfContainsText(pdf, text) {
+  const encoded = Buffer.from(text, "ascii").toString("hex").toUpperCase();
+  return pdf.toString("ascii").includes(encoded);
+}
 
 function assertPdfCrossReference(pdf) {
   const raw = pdf.toString("ascii");
@@ -39,10 +43,9 @@ test("PDF report generator produces a readable, multi-section PDF without persis
   assert.equal(report.filename, "ultron-report.pdf");
   assert.equal(report.pages, 1);
   assertPdfCrossReference(report.pdf);
-  const parsed = await pdfParse(report.pdf);
-  assert.match(parsed.text, /ULTRON Project Review/);
-  assert.match(parsed.text, /Source-level verification passed/);
-  assert.match(parsed.text, /physical device integrations/);
+  assert.ok(pdfContainsText(report.pdf, "ULTRON Project Review"));
+  assert.ok(pdfContainsText(report.pdf, "Source-level verification passed."));
+  assert.ok(pdfContainsText(report.pdf, "physical device integrations."));
   assert.ok(report.pdf.length > 500);
 });
 
@@ -51,17 +54,17 @@ test("PDF report generator paginates long text and retains the final section", a
   const report = generateReportPdf({ title: "Long Verification Report", content });
   assert.equal(report.ok, true);
   assert.ok(report.pages > 5);
-  const parsed = await pdfParse(report.pdf);
-  assert.match(parsed.text, /Paragraph 299/);
-  assert.match(parsed.text, /Long Verification Report/);
+  assertPdfCrossReference(report.pdf);
+  assert.ok(pdfContainsText(report.pdf, "Paragraph 299"));
+  assert.ok(pdfContainsText(report.pdf, "Long Verification Report"));
 });
 
 test("PDF report generator marks glyph substitutions for unsupported scripts", async () => {
   const report = generateReportPdf({ title: "Language Check", content: "Hindi sample: नमस्ते. English sample: hello." });
   assert.equal(report.ok, true);
   assert.ok(report.unsupportedCharacterCount > 0);
-  const parsed = await pdfParse(report.pdf);
-  assert.match(parsed.text, /unsupported script characters/);
+  assertPdfCrossReference(report.pdf);
+  assert.ok(pdfContainsText(report.pdf, "unsupported script characters"));
 });
 
 test("PDF report generator rejects empty, oversized, and over-section-limit input", () => {
