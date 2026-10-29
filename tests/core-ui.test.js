@@ -318,12 +318,13 @@ test("voice listening starts without waiting for backend readiness and submits s
   assert.ok(app.includes('body: {\n          audioBase64,\n          mimeType,\n          ...(speechLanguageMode === "hi-IN" ? { language: "hi" } : speechLanguageMode === "en-IN" ? { language: "en" } : {})'));
   assert.ok(app.includes("body: JSON.stringify({ ...body, stream: true })"));
   assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferFishAudio)"));
-  assert.ok(app.includes("const minimumBuffer = streamSpeechUsesFish ? 72 : 22"));
-  assert.ok(app.includes('const preferredCutoff = streamSpeechUsesFish ? 64 : 19'));
-  assert.ok(app.includes('const minimumCutoff = streamSpeechUsesFish ? 48 : 12'));
+  assert.ok(app.includes("Never cut Fish Audio or browser speech at an arbitrary word count"));
+  assert.ok(app.includes("if (force) {\n          enqueueStreamSpeech(streamSpeechBuffer.trim());"));
+  assert.doesNotMatch(app, /streamSpeechBuffer\.length >= (?:72|22)/);
   assert.ok(app.includes("const fishAudioBlobPromise = streamSpeechUsesFish"));
-  assert.ok(app.includes("about 12–24 words when possible"));
-  assert.ok(app.includes("You are replying aloud. Answer immediately in 1–2 short sentences"));
+  assert.ok(app.includes("ALWAYS reply in clear, natural English, regardless of the input language"));
+  assert.ok(app.includes("one short, complete English sentence"));
+  assert.ok(app.includes("No greeting, filler, markdown, bullets, stage directions, or pronunciation spellings"));
 });
 
 test("spoken prompts skip unnecessary pre-search and use a smaller conversational context", () => {
