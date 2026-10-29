@@ -1738,7 +1738,12 @@ test("authenticated presentation endpoint returns an editable OOXML PowerPoint a
     const zip = await JSZip.loadAsync(bytes);
     assert.ok(zip.file("[Content_Types].xml"));
     assert.ok(zip.file("ppt/presentation.xml"));
-    const names = Object.keys(zip.files).filter(name => /^ppt\\/slides\\/slide\\d+\\.xml$/.test(name));
+    const names = Object.keys(zip.files).filter(name => {
+      const prefix = "ppt/slides/slide", suffix = ".xml";
+      if (!name.startsWith(prefix) || !name.endsWith(suffix)) return false;
+      const index = name.slice(prefix.length, -suffix.length);
+      return index.length > 0 && [...index].every(char => char >= "0" && char <= "9");
+    });
     assert.equal(names.length, 3);
     const cover = await zip.file("ppt/slides/slide1.xml").async("string");
     const firstContent = await zip.file("ppt/slides/slide2.xml").async("string");
