@@ -185,3 +185,29 @@ test("AppFlowy document read rejects unsupported collab types before network acc
   );
   assert.equal(calls, 0);
 });
+
+
+test("AppFlowy collab JSON projection bounds large payloads and nested values", async () => {
+  const oversizedText = "x".repeat(5000);
+  const payload = {
+    collab: {
+      document: {
+        root: {
+          text: oversizedText,
+          children: Array.from({ length: 150 }, (_, index) => ({ id: "node-" + index, text: "note-" + index }))
+        }
+      }
+    }
+  };
+  const result = await runAppFlowyAction({
+    env: readyEnv, userId: owner, action: "read_document",
+    workspaceId: "00000000-0000-4000-8000-000000000010",
+    viewId: "00000000-0000-4000-8000-000000000011",
+    documentType: "document",
+    fetchImpl: async () => jsonResponse({ data: payload })
+  });
+  assert.equal(result.state, "completed");
+  assert.ok(result.collab.document.root.children.length <= 60);
+  assert.equal(result.collab.document.root.text.length, 2000);
+  assert.ok(JSON.stringify(result.collab).length < 20_000);
+});
