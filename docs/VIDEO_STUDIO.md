@@ -40,7 +40,7 @@ Project data defaults to .local/video-studio/; override it with ULTRON_VIDEO_STU
 2. **Analyze.** A local uploaded clip can be inspected with FFprobe and FFmpeg for duration, dimensions, frame rate, audio presence and scene-change timestamps. When FFmpeg emits signal statistics, the board also summarizes sampled-frame brightness, contrast and saturation as objective visual cues, not semantic vision or subject recognition. If VoiceStudio or an OpenAI-compatible STT endpoint is configured, choose **Transcribe local clip** to extract up to 210 seconds of audio locally and request a transcript. Otherwise paste a transcript manually. A URL is only limited metadata unless a supported local extractor is available.
 3. **Plan.** ULTRON tries its configured server-side model providers and falls back to a local template if no usable provider is configured. Review three directions, script, timed scenes, transitions, continuity, and tasks.
 4. **Research.** Configure TAVILY_API_KEY to enable live research. Otherwise the board records that research was not run. Always verify important claims against primary sources.
-5. **Gather assets.** Upload local media or search optional stock libraries with PEXELS_API_KEY and/or PIXABAY_API_KEY. Asset records keep the provider, title, source page and contributor when available. Read the actual licence and any attribution requirements before publishing.
+5. **Gather assets.** Upload local media or search the Wikimedia Commons archive without a key. Optional PEXELS_API_KEY and/or PIXABAY_API_KEY add stock-provider results. Asset records keep provider, title, source page, creator and known licence metadata. Open the source/license pages and check attribution plus commercial/derivative-use restrictions before publishing.
 6. **Audio/captions.** Voiceover uses the existing VoiceStudio or compatible TTS configuration. Captions are drafted as an SRT sidecar from scene narration. Timing/spelling remain editorial review tasks.
 7. **Approve.** Approve the plan, import visual assets, review the budget/credits, and explicitly approve the final render. Changing the script resets plan and render approvals.
 8. **Render.** FFmpeg creates an MP4 locally. Still images get a slow zoom/pan motion treatment; motion assets are resized/cropped into segments, then gentle crossfades are applied between scenes with a hard-cut fallback if the filter is unavailable. Available voiceover/music tracks are mixed. Render progress and activity are recorded on the board.
@@ -53,7 +53,7 @@ Project data defaults to .local/video-studio/; override it with ULTRON_VIDEO_STU
 | ULTRON_VIDEO_STUDIO_LOCAL_MODE | Loopback-only no-login mode. The local launcher defaults it to true; keep false on hosted deployments. |
 | OPENROUTER_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, ULTRON_MODEL_PROVIDERS_JSON | Optional model providers for production concepts and scripts |
 | TAVILY_API_KEY | Enables web research |
-| PEXELS_API_KEY, PIXABAY_API_KEY | Enable stock-video and still-image search |
+| PEXELS_API_KEY, PIXABAY_API_KEY | Add optional Pexels/Pixabay stock search; Wikimedia Commons is the free archive fallback |
 | VOICESTUDIO_BASE_URL, VOICESTUDIO_API_KEY | VoiceStudio TTS and transcription endpoint. On the same PC, local mode can call http://localhost:3900. |
 | STT_API_BASE_URL, STT_API_KEY, STT_MODEL | OpenAI-compatible STT base URL (usually ending in /v1), key, and model when VoiceStudio isn't used |
 | TTS_API_BASE_URL, TTS_API_KEY, TTS_MODEL, TTS_DEFAULT_VOICE | Compatible OpenAI-style speech endpoint when VoiceStudio is not used |
@@ -66,6 +66,8 @@ Leave unknown pricing blank. The displayed total stays marked as partial unless 
 
 - FFmpeg downloads and installation: https://ffmpeg.org/download.html
 - yt-dlp project and installation instructions: https://github.com/yt-dlp/yt-dlp
+- Wikimedia Commons Search and Imageinfo API: https://www.mediawiki.org/wiki/API:Search and https://www.mediawiki.org/wiki/API:Imageinfo
+- Wikimedia Commons reuse/license guidance: https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia
 - Pexels API docs: https://www.pexels.com/api/documentation/
 - Pixabay API docs: https://pixabay.com/api/docs/
 - Google Gemini API key: https://aistudio.google.com/apikey
