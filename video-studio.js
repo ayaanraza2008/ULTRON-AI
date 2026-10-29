@@ -312,6 +312,14 @@ function safeAssetSourcePage(value) {
     return bounded(url.toString(), 1200);
   } catch { return ""; }
 }
+function safeAssetLicenseUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (url.protocol !== "https:" || !["creativecommons.org", "www.gnu.org"].includes(host) || url.username || url.password || url.hash) return "";
+    return bounded(url.toString(), 1200);
+  } catch { return ""; }
+}
 function safeAssetThumbnail(value) {
   const url = safeAssetRemoteUrl(value);
   return url ? bounded(url.href, 1000) : "";
@@ -336,7 +344,7 @@ function mapWikimediaFile(page, kind) {
   return {
     id: uuid(), provider: "wikimedia_commons", kind, title, author: creator, sourcePage,
     thumbnailUrl: safeAssetThumbnail(info.thumburl || info.url), downloadUrl: download.href,
-    license: clean("LicenseShortName") || "License not identified", licenseUrl: clean("LicenseUrl"), licenseVerified: Boolean(clean("LicenseShortName") && clean("LicenseUrl"))
+    license: clean("LicenseShortName") || "License not identified", licenseUrl: safeAssetLicenseUrl(clean("LicenseUrl")), licenseVerified: Boolean(clean("LicenseShortName") && safeAssetLicenseUrl(clean("LicenseUrl")))
   };
 }
 
