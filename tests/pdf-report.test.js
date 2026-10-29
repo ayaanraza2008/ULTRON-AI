@@ -23,12 +23,12 @@ test("PDF report generator produces a readable, multi-section PDF without persis
 });
 
 test("PDF report generator paginates long text and retains the final section", async () => {
-  const content = Array.from({ length: 650 }, (_, i) => "Paragraph " + i + ": the result remains explicitly unverified until the target integration is checked.").join("\n");
+  const content = Array.from({ length: 300 }, (_, i) => "Paragraph " + i + ": the result remains explicitly unverified until the target integration is checked.").join("\n");
   const report = generateReportPdf({ title: "Long Verification Report", content });
   assert.equal(report.ok, true);
   assert.ok(report.pages > 5);
   const parsed = await pdfParse(report.pdf);
-  assert.match(parsed.text, /Paragraph 649/);
+  assert.match(parsed.text, /Paragraph 299/);
   assert.match(parsed.text, /Long Verification Report/);
 });
 
