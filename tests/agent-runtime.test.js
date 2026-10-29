@@ -2193,3 +2193,50 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundTools.length, 42);
   });
 });
+
+
+test("simple task routing sends no tool schemas and blocks provider-invented tool calls", async () => {
+  let providerCalls = 0;
+  let bridgeCalls = 0;
+  const bridgeUrl = "https://script.google.com/macros/s/AKfycbx0123456789abcdefghijklmnopqrstuv/exec";
+  await withServer({
+    OPENROUTER_API_KEY: "no-tool-routing-test-key",
+    GOOGLE_WORKSPACE_BRIDGE_URL: bridgeUrl,
+    GOOGLE_WORKSPACE_BRIDGE_TOKEN: "workspace-test-token-that-is-at-least-32-characters",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async (url, options) => {
+    if (url !== "https://openrouter.ai/api/v1/chat/completions") {
+      bridgeCalls += 1;
+      throw new Error("A simple explanatory task must never call Google Workspace.");
+    }
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    assert.equal(Object.hasOwn(payload, "tools"), false, "simple tasks must omit tool schemas");
+    return new Response(JSON.stringify({
+      choices: [{ message: {
+        role: "assistant",
+        content: "Energy bands are allowed ranges of electron energies in a solid.",
+        // A provider may hallucinate a call even when no tools were advertised.
+        tool_calls: [{
+          id: "hallucinated-google-call",
+          type: "function",
+          function: { name: "google_gmail_list_unread", arguments: JSON.stringify({ limit: 5 }) }
+        }]
+      } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Explain energy bands in simple English" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.match(body.content, /allowed ranges of electron energies/i);
+    assert.deepEqual(body.toolsUsed, []);
+    assert.equal(body.routing.tier, "simple");
+    assert.equal(body.routing.toolSchemasFiltered, true);
+  });
+  assert.equal(providerCalls, 1);
+  assert.equal(bridgeCalls, 0);
+});
