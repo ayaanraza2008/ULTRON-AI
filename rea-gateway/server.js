@@ -99,7 +99,9 @@ function mcpExchange({ port, method = "POST", payload, sessionId, timeoutMs = 25
       const expectsRpc = method === "POST" && payload?.id !== undefined;
       if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
         response.resume();
-        rejectExchange(new Error("REA MCP probe request was refused."));
+        const error = new Error("REA MCP probe request was refused.");
+        error.probeCode = "http_status_" + response.statusCode;
+        rejectExchange(error);
         return;
       }
       if (!expectsRpc) {
@@ -127,7 +129,9 @@ function mcpExchange({ port, method = "POST", payload, sessionId, timeoutMs = 25
           const rpc = parseMcpEnvelope(Buffer.concat(chunks).toString("utf8"), response.headers["content-type"]);
           resolveExchange({ status: response.statusCode, sessionId: responseSessionId, rpc });
         } catch {
-          rejectExchange(new Error("REA MCP probe response could not be parsed."));
+          const error = new Error("REA MCP probe response could not be parsed.");
+          error.probeCode = "invalid_rpc_response";
+          rejectExchange(error);
         }
       });
       response.once("error", () => {
@@ -135,8 +139,16 @@ function mcpExchange({ port, method = "POST", payload, sessionId, timeoutMs = 25
       });
     });
 
-    request.setTimeout(timeoutMs, () => request.destroy(new Error("REA MCP probe timed out.")));
-    request.once("error", () => rejectExchange(new Error("REA MCP probe request failed.")));
+    request.setTimeout(timeoutMs, () => {
+      const error = new Error("REA MCP probe timed out.");
+      error.probeCode = "timeout";
+      request.destroy(error);
+    });
+    request.once("error", error => {
+      rejectExchange(Object.assign(new Error("REA MCP probe request failed."), {
+        probeCode: error?.message === "REA MCP probe timed out." ? "timeout" : "connection_failed"
+      }));
+    });
     if (payload !== undefined) request.write(JSON.stringify(payload));
     request.end();
   });
@@ -205,10 +217,10 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       capabilities: {},
       clientInfo: { name: "ultron-rea-live-smoke", version: "1.0.0" }
     });
+    initialized = Boolean(sessionId);
     if (!initialization || typeof initialization !== "object" || !sessionId) {
-      return { ok: false, stage: "initialize" };
+      return { ok: false, stage: "initialize", reason: "missing_initialize_result" };
     }
-    initialized = true;
 
     stage = "initialize_notification";
     await call("notifications/initialized", {}, true);
@@ -217,7 +229,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     const catalog = await call("tools/list");
     const toolNames = Array.isArray(catalog?.tools) ? catalog.tools.map(tool => tool?.name) : [];
     for (const required of ["open_binary", "analyze_javascript_application", "trace_application_feature", "close_binary"]) {
-      if (!toolNames.includes(required)) return { ok: false, stage: "tools_list" };
+      if (!toolNames.includes(required)) return { ok: false, stage: "tools_list", reason: "required_tool_missing" };
     }
 
     stage = "open_demo_target";
@@ -233,7 +245,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       arguments: { input_path: targetPath, format: "auto", integrity_policy: "fail", detail: "complete" }
     }));
     if (typeof evidence.evidence_id !== "string" || !evidence.normalized_result) {
-      return { ok: false, stage: "analyze_demo_target" };
+      return { ok: false, stage: "analyze_demo_target", reason: "evidence_missing" };
     }
 
     stage = "trace_demo_feature";
@@ -241,11 +253,16 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       name: "trace_application_feature",
       arguments: { application: evidence, seed: { kind: "string", value: "search results" }, direction: "both" }
     }));
-    if (!trace || typeof trace !== "object") return { ok: false, stage: "trace_demo_feature" };
+    if (!trace || typeof trace !== "object") return { ok: false, stage: "trace_demo_feature", reason: "trace_empty" };
 
     return { ok: true, stage: "complete" };
-  } catch {
-    return { ok: false, stage };
+  } catch (error) {
+    const knownReasons = new Set([
+      "http_status_400", "http_status_401", "http_status_404", "http_status_405",
+      "http_status_406", "http_status_415", "http_status_429", "http_status_500",
+      "http_status_503", "connection_failed", "timeout", "invalid_rpc_response"
+    ]);
+    return { ok: false, stage, reason: knownReasons.has(error?.probeCode) ? error.probeCode : "tool_check_failed" };
   } finally {
     if (sessionId && initialized) {
       if (activeTarget) {
@@ -406,23 +423,30 @@ export async function startGateway(env = process.env) {
   });
   console.log("REA authenticated gateway listening on configured port.");
 
-  let selfTestResult = { ok: false, stage: "not_started" };
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    if (child.exitCode !== null) break;
-    selfTestResult = await runReaMcpSelfTest({ upstreamPort: childPort, analysisRoot: env.REA_ANALYSIS_ROOT });
-    if (selfTestResult.ok) {
-      mcpReady = true;
-      break;
-    }
-    await new Promise(resolveDelay => setTimeout(resolveDelay, 1500));
-  }
-  if (mcpReady) {
-    console.log("REA MCP live smoke test passed: catalog, static demo analysis, and feature trace verified.");
-  } else {
-    console.error("REA MCP live smoke test did not pass; gateway remains unavailable. Stage: " + selfTestResult.stage);
-  }
-
   let shuttingDown = false;
+  const monitorReadiness = async () => {
+    let attempts = 0;
+    while (!shuttingDown && child.exitCode === null && !mcpReady) {
+      let result;
+      if (!(await tcpReady(childPort, 1000))) {
+        result = { ok: false, stage: "upstream_not_listening", reason: "tcp_not_ready" };
+      } else {
+        result = await runReaMcpSelfTest({ upstreamPort: childPort, analysisRoot: env.REA_ANALYSIS_ROOT });
+      }
+      if (result.ok) {
+        mcpReady = true;
+        console.log("REA MCP live smoke test passed: catalog, static demo analysis, and feature trace verified.");
+        return;
+      }
+      attempts += 1;
+      if (attempts === 1 || attempts % 10 === 0) {
+        console.error("REA MCP readiness probe pending; stage=" + result.stage + ", reason=" + result.reason + ".");
+      }
+      await new Promise(resolveDelay => setTimeout(resolveDelay, 1500));
+    }
+  };
+  void monitorReadiness();
+
   const shutdown = () => {
     if (shuttingDown) return;
     shuttingDown = true;
