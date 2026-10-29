@@ -28,6 +28,9 @@ npm run employees -- doctor
 # Install exactly one role (download occurs only on this explicit command)
 npm run employees -- hire chief-of-staff
 
+# Install all missing role kits sequentially in one pass
+npm run employees -- hire-all
+
 # Use a different local workspace, such as D:\\AgentOps
 npm run employees -- hire sales --root "D:\\AgentOps"
 
@@ -58,7 +61,7 @@ Available ULTRON role IDs:
 
 ## Finish hiring a role
 
-The `hire` command copies one complete upstream kit and runs the upstream installer's self-tests. It then adds `.ultron-employee.json` and `ULTRON-INTEGRATION.md`; it does not overwrite the upstream's own files.
+The `hire` command copies one complete upstream kit and runs the upstream installer's self-tests. `hire-all` sequentially installs every missing kit, skips recognized installations, reports folders it cannot safely adopt, and continues after an individual role fails. Both commands add `.ultron-employee.json` and `ULTRON-INTEGRATION.md`; they do not overwrite the upstream's own files or pre-existing unrecognized role folders.
 
 The installation is **not yet scheduled** after the copy. That deliberate separation avoids silently registering 7–8 jobs before you have reviewed a role or confirmed the machine/account access. To enable it:
 
