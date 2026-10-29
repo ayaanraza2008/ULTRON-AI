@@ -10,6 +10,7 @@ import { getOpenSeoReadiness } from "./openseo-mcp.js";
 import { getOpenDesignReadiness } from "./open-design.js";
 import { getOpenHiggsfieldReadiness } from "./open-higgsfield.js";
 import { getOpenGenerativeAIReadiness } from "./open-generative-ai.js";
+import { getAppFlowyReadiness } from "./appflowy.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -42,6 +43,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const openDesignReadiness = getOpenDesignReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const openHiggsfieldReadiness = getOpenHiggsfieldReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const openGenerativeAIReadiness = getOpenGenerativeAIReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
+  const appFlowyReadiness = getAppFlowyReadiness(env, env.ULTRON_INTEGRATION_OWNER_USER_ID);
 
   return [
     {
@@ -273,6 +275,18 @@ export function buildIntegrationCatalog(env = process.env) {
       requiredEnv: ["ULTRON_OPEN_GENERATIVE_AI_ENABLED=true", "MUAPI_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       apiRoutes: ["GET /api/integrations/open-generative-ai/status", "GET /api/integrations/open-generative-ai/models", "POST /api/integrations/open-generative-ai/generate", "GET /api/integrations/open-generative-ai/jobs/:requestId", "agent tool: open_generative_ai"],
       note: openGenerativeAIReadiness.note
+    },
+    {
+      id: "appflowy",
+      name: "AppFlowy Workspace Knowledge",
+      capability: "Owner-scoped workspace listing, recursive page/folder tree reads and document search",
+      state: appFlowyReadiness.state,
+      configured: Boolean(appFlowyReadiness.configured),
+      mode: "owner_scoped_read_only_cloud_api",
+      requiredEnv: ["APPFLOWY_ENABLED=true", "APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["APPFLOWY_CLIENT_VERSION", "APPFLOWY_DEVICE_ID"],
+      apiRoutes: ["GET /api/integrations/appflowy/status", "GET /api/integrations/appflowy/workspaces", "GET /api/integrations/appflowy/workspaces/:workspaceId/folder", "GET /api/integrations/appflowy/workspaces/:workspaceId/search", "agent tool: appflowy"],
+      note: appFlowyReadiness.note
     },
     {
       id: "hermes-agent",
