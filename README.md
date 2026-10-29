@@ -226,6 +226,14 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
 
+## Isolated coding sandbox (opt-in)
+
+ULTRON's agent exposes a `coding_sandbox_run` tool for the exact Python or JavaScript source in a direct request such as `Run this code:` followed by one fenced code block. It does not provide a general shell or modify repositories. The raw request must match the code exactly; model-generated substitutions are rejected.
+
+The tool is **disabled by default**. It is owner-only and requires `ULTRON_CODING_SANDBOX_ENABLED=true`, the exact `ULTRON_INTEGRATION_OWNER_USER_ID`, and at least one locally cached, trusted Docker image pinned by SHA-256 digest. ULTRON will not pull images. The container runs without network access, with a read-only filesystem, dropped capabilities, no-new-privileges, a non-root UID, 256 MiB RAM, 0.5 CPU, a 48-process limit and a short timeout. Mocked tests cover exact-source authorization and cleanup; actual Docker execution still needs a deliberate local smoke test.
+
+The sandbox runs on the machine hosting the ULTRON process, not on your Windows PC when the API is cloud-hosted. Do not enable it on Render or any public host until isolated Docker capacity, image provenance, quotas, permissions and monitoring have been reviewed. See [docs/CODING_SANDBOX.md](docs/CODING_SANDBOX.md).
+
 ## Local Video Studio
 
 ULTRON includes an optional local-first video production studio for planning original videos, analyzing a reference URL or local clip, finding licensed media candidates, and rendering a reviewed edit with local FFmpeg tools. Start it separately with `npm run video-studio`; by default it binds only to `127.0.0.1:4174` and rejects non-loopback Host/Origin headers. It stores workspace media under `.runtime/video-studio/` unless `ULTRON_VIDEO_STUDIO_DATA_DIR` is set.
