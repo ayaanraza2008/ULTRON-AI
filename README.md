@@ -219,9 +219,3 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
-
-## Fish Audio speech integration
-
-ULTRON's authenticated speech endpoints support Fish Audio's native REST API for **both voice synthesis and speech recognition**. Configure `FISH_API_KEY` on the backend and keep it secret. The requested voice/reference model ID is set to `7a18a1851d2649108c48ec9f2c80eb2c`; TTS defaults to the `s2.1-pro-free` engine, while STT defaults to `transcribe-1`. A Fish Audio key takes priority over the optional legacy OpenAI-compatible speech settings.
-
-See [docs/FISH_AUDIO_INTEGRATION.md](docs/FISH_AUDIO_INTEGRATION.md) for Render/local environment settings, the two endpoints, browser recording fallback, security limits, and live verification guidance. The backend includes mocked API-contract tests; live requests still require a valid server-side key and account quota.
