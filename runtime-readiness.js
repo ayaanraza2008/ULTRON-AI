@@ -22,6 +22,7 @@ export function buildRuntimeReadiness({
   now = new Date()
 } = {}) {
   const browserConfigured = secureServiceUrl(env.ULTRON_BROWSER_USE_URL) && truthy(env.ULTRON_BROWSER_USE_TOKEN);
+  const chromeDevtoolsConfigured = secureServiceUrl(env.ULTRON_CHROME_DEVTOOLS_URL) && truthy(env.ULTRON_CHROME_DEVTOOLS_TOKEN) && env.ULTRON_CHROME_DEVTOOLS_TOKEN.trim().length >= 32 && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN) && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
   const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
@@ -71,6 +72,10 @@ export function buildRuntimeReadiness({
       ["ULTRON_BROWSER_USE_URL", "ULTRON_BROWSER_USE_TOKEN"], browserConfigured
         ? "Bridge settings are present; browser readiness and real browser actions are not tested here."
         : "A separately hosted, authenticated Browser Use bridge is required."),
+    component("chrome_devtools", "Chrome DevTools browser debugging", chromeDevtoolsConfigured ? "configured_unverified" : "optional",
+      ["ULTRON_CHROME_DEVTOOLS_URL", "ULTRON_CHROME_DEVTOOLS_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], chromeDevtoolsConfigured
+        ? "Bridge URL, token and owner guard are configured; live Chrome connectivity and performance results remain unverified. A hosted backend cannot directly reach a developer PC localhost."
+        : "Requires the TypeScript Chrome CDP bridge, a random token of at least 32 characters, and the exact owner UUID. Remote access must use an authenticated HTTPS gateway."),
     component("windows_companion", "Windows PC companion", desktopConfigured ? "configured_unverified" : "blocked",
       ["ULTRON_DESKTOP_AGENT_URL", "ULTRON_DESKTOP_AGENT_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], desktopConfigured
         ? "Bridge settings and the owner guard are present; live pairing is unverified. The current adapter only probes status and does not execute PC commands."

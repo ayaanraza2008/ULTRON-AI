@@ -19,6 +19,7 @@ import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrati
 import { cognitiveLayerLabel, extractCorrectionLesson, rankCognitiveMemories } from "./cognitive-memory.js";
 import { classifyTaskRoute } from "./task-router.js";
 import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./integrations/google-workspace.js";
+import { getChromeDevToolsReadiness, runChromeDevToolsAction } from "./integrations/chrome-devtools.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
@@ -117,6 +118,7 @@ export function voiceStudioSettings(env = process.env) {
 
 const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
   "browser_use",
+  "chrome_devtools",
   "check_comfyui",
   "run_comfyui_workflow",
   "create_talking_avatar",
@@ -656,6 +658,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "create_talking_avatar", description: "Create a talking-head/lip-sync job through configured HeyGem. Requires user-provided image and audio media; never invent media.", parameters: { type: "object", properties: { prompt: { type: "string", maxLength: 1000 } }, additionalProperties: false } } },
     { type: "function", function: { name: "transcribe_audio", description: "Transcribe supplied audio using VoiceStudio when configured, otherwise the Handy desktop bridge. Audio must be supplied with this agent request.", parameters: { type: "object", properties: { language: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
     { type: "function", function: { name: "browser_use", description: "Use the optional Browser Use bridge for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, and website tests. Include explicit public HTTPS URL(s) in task; only those exact hosts can be reached. Read-only only; consequential actions are blocked.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 2500 }, maxSteps: { type: "integer", minimum: 1, maximum: 12 } }, required: ["task"], additionalProperties: false } } },
+    { type: "function", function: { name: "chrome_devtools", description: "Use the authenticated local Chrome DevTools bridge to navigate, click/fill non-secret fields, capture screenshots, inspect DOM/console/network logs, and run a performance trace. Supports only allowlisted actions; no arbitrary JavaScript. Shared bridge credentials are restricted to the configured owner account.", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "navigate", "click", "fill", "screenshot", "page_snapshot", "console_logs", "network_requests", "performance_trace"] }, url: { type: "string", maxLength: 2048 }, selector: { type: "string", maxLength: 600 }, text: { type: "string", maxLength: 5000 }, limit: { type: "integer", minimum: 1, maximum: 100 }, durationMs: { type: "integer", minimum: 1000, maximum: 10000 }, confirmExternalAction: { type: "boolean" } }, required: ["action"], additionalProperties: false } } },
     { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
 
@@ -843,6 +846,18 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         return result("track_entity", { layerId, query: bounded(track[2], 120) });
       }
       throw Object.assign(new Error("Unsupported God’s Eye action. Try: show satellites, turn on earthquakes, zoom in, fly to London, set thermal style, or stop tracking."), { code: "WORLD_TOOL_NOT_SUPPORTED", status: 400 });
+    }
+    if (name === "chrome_devtools") {
+      const input = {
+        action: bounded(args.action, 40),
+        ...(typeof args.url === "string" ? { url: args.url } : {}),
+        ...(typeof args.selector === "string" ? { selector: args.selector } : {}),
+        ...(typeof args.text === "string" ? { text: args.text } : {}),
+        ...(Number.isInteger(args.limit) ? { limit: args.limit } : {}),
+        ...(Number.isInteger(args.durationMs) ? { durationMs: args.durationMs } : {}),
+        ...(typeof args.confirmExternalAction === "boolean" ? { confirmExternalAction: args.confirmExternalAction } : {})
+      };
+      return runChromeDevToolsAction({ env, fetchImpl, userId: req.supabaseUser?.id, input });
     }
     if (name === "browser_use") {
       const task = bounded(args.task, 2500);
@@ -1321,6 +1336,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "agentmemory", available: agentMemoryReadiness(env).configured, execution: "automatic_task_relevant_recall_and_bounded_durable_capture" },
         { name: "openviking_context", available: getOpenVikingReadiness({ env, userId: req.supabaseUser?.id }).configured && getOpenVikingReadiness({ env, userId: req.supabaseUser?.id }).ownerAuthorized === true, execution: "owner_scoped_read_only_context_search_and_read_no_writes" },
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
+        { name: "chrome_devtools", available: (() => { const readiness = getChromeDevToolsReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getChromeDevToolsReadiness(env, req.supabaseUser?.id).state, execution: "owner_scoped_live_chrome_cdp_console_network_screenshot_performance_trace" },
         { name: "check_desktop_companion", available: Boolean(desktopCompanionReadiness.configured && desktopCompanionReadiness.ownerAuthorized), state: desktopCompanionReadiness.state, execution: "owner_scoped_read_only_device_status_no_command_execution" },
         { name: "task_aware_skills", available: true, execution: "automatic_task_aware_guidance_for_software_research_security_diagrams_science_and_28_repository_domains" },
         { name: "repository_capability_router", available: true, execution: "task_matched_registry_for_28_requested_repositories; read configuration-only status at /api/agent/repositories" },

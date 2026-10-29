@@ -29,6 +29,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasGoogleWorkspace = isGoogleWorkspaceConfigured(env);
   const paperclipReadiness = getPaperclipReadiness(env);
   const obscuraReadiness = getObscuraReadiness(env);
+  const hasChromeDevTools = hasIntegrationOwner && safeBaseUrl(env.ULTRON_CHROME_DEVTOOLS_URL) && typeof env.ULTRON_CHROME_DEVTOOLS_TOKEN === "string" && env.ULTRON_CHROME_DEVTOOLS_TOKEN.trim().length >= 32;
   const reaReadiness = getReaReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
 
@@ -178,6 +179,19 @@ export function buildIntegrationCatalog(env = process.env) {
       note: obscuraReadiness.configured
         ? "The MCP endpoint and owner guard are configured; live navigation has not been verified. Remote endpoints must be behind a gateway that validates the configured bearer token."
         : "Requires a local Obscura MCP service or a remote HTTPS service behind an authenticated gateway. Public-page read-only use only; no stealth, proxy rotation, authentication/CAPTCHA bypass, or form submission."
+    },
+    {
+      id: "chrome-devtools",
+      name: "Chrome DevTools Browser Debugging",
+      capability: "Owner-scoped live Chrome navigation, screenshots, console/network diagnostics, and performance traces",
+      state: hasChromeDevTools ? "configured_unverified" : "blocked",
+      configured: Boolean(hasChromeDevTools),
+      mode: "owner_scoped_local_cdp_bridge",
+      requiredEnv: ["ULTRON_CHROME_DEVTOOLS_URL", "ULTRON_CHROME_DEVTOOLS_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tool: chrome_devtools", "local MCP tools: chrome_status, chrome_navigate, chrome_click, chrome_fill, chrome_page_snapshot, chrome_screenshot, chrome_console_logs, chrome_network_requests, chrome_performance_trace"],
+      note: hasChromeDevTools
+        ? "Bridge URL, token and owner guard are configured; local Chrome/CDP connectivity remains unverified. A hosted backend cannot reach the developer PC's localhost."
+        : "Optional TypeScript Chrome CDP companion; requires a token of at least 32 characters and the exact owner UUID. Remote use requires a private authenticated HTTPS gateway; never expose port 9222."
     },
     {
       id: "cactus-compute",

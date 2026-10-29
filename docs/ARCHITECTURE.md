@@ -21,5 +21,11 @@
 - Wake-word companions do not grant PC-control privileges. Desktop actions remain unavailable until a local bridge is authenticated, paired, scoped to allowlisted actions, and covered by visible permission prompts and an emergency stop.
 - Consequential actions require explicit confirmation, audit events, least privilege, and an emergency stop.
 
+## Live Chrome DevTools integration
+- The optional TypeScript service in `chrome-devtools/` exposes a local HTTP action bridge and an MCP stdio server using Chromium's DevTools Protocol.
+- Supported actions are tab status, navigation, unique-selector click/fill, visible page snapshot, screenshot, bounded console/network metadata, and short performance traces. It does not expose arbitrary JavaScript, shell commands, cookies, request bodies or secret field values.
+- ULTRON's agent tool is owner-guarded by `ULTRON_INTEGRATION_OWNER_USER_ID` and uses `ULTRON_CHROME_DEVTOOLS_URL` plus a server-only `ULTRON_CHROME_DEVTOOLS_TOKEN`. Live connectivity is unverified until a local bridge and Chrome instance are running.
+- A cloud-hosted backend cannot use its own `localhost` to reach the developer PC. Remote use requires an explicitly configured authenticated HTTPS gateway and should not expose the Chrome CDP port itself.
+
 ## Deployment
 The Render service `ultron-ai` is hosted at https://ultron-ai-zvd7.onrender.com. Render Blueprint contains only the backend API service in this phase.
