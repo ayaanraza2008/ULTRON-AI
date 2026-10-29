@@ -43,7 +43,7 @@ function wrap(value, width = 92) {
 function assemble(pages) {
   const eol = "\r\n";
   const objects = [];
-  const add = text => objects.push(text);
+  const add = text => objects.push(Buffer.from(text, "ascii"));
   add("<< /Type /Catalog /Pages 2 0 R >>");
   const pageIds = pages.map((_, i) => 5 + i * 2);
   add("<< /Type /Pages /Kids [" + pageIds.map(id => id + " 0 R").join(" ") + "] /Count " + pages.length + " >>");
@@ -52,19 +52,46 @@ function assemble(pages) {
   pages.forEach((content, i) => {
     const pageId = 5 + i * 2, streamId = pageId + 1;
     add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + PAGE_WIDTH + " " + PAGE_HEIGHT + "] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents " + streamId + " 0 R >>");
-    add("<< /Length " + Buffer.byteLength(content, "ascii") + " >>" + eol + "stream" + eol + content + eol + "endstream");
+    const stream = Buffer.from(content, "ascii");
+    objects.push(Buffer.concat([
+      Buffer.from("<< /Length " + stream.length + " >>" + eol + "stream" + eol, "ascii"),
+      stream,
+      Buffer.from(eol + "endstream", "ascii")
+    ]));
   });
-  let output = "%PDF-1.4" + eol + "%\xE2\xE3\xCF\xD3" + eol;
+
+  // Compute offsets from the exact byte buffers written to the file. PDF xref
+  // offsets are bytes, not JavaScript string indices; keep one serialization path
+  // for every object, xref entry and startxref position.
+  const header = Buffer.concat([
+    Buffer.from("%PDF-1.4" + eol + "%", "ascii"),
+    Buffer.from([0xE2, 0xE3, 0xCF, 0xD3]),
+    Buffer.from(eol, "ascii")
+  ]);
+  const chunks = [header];
   const offsets = [0];
+  let offset = header.length;
   objects.forEach((object, i) => {
-    offsets.push(Buffer.byteLength(output, "latin1"));
-    output += (i + 1) + " 0 obj" + eol + object + eol + "endobj" + eol;
+    offsets.push(offset);
+    const pre = Buffer.from((i + 1) + " 0 obj" + eol, "ascii");
+    const post = Buffer.from(eol + "endobj" + eol, "ascii");
+    chunks.push(pre, object, post);
+    offset += pre.length + object.length + post.length;
   });
-  const xrefOffset = Buffer.byteLength(output, "latin1");
-  output += "xref" + eol + "0 " + (objects.length + 1) + eol + "0000000000 65535 f " + eol;
-  for (let i = 1; i < offsets.length; i++) output += String(offsets[i]).padStart(10, "0") + " 00000 n" + eol;
-  output += "trailer" + eol + "<< /Size " + (objects.length + 1) + " /Root 1 0 R >>" + eol + "startxref" + eol + xrefOffset + eol + "%%EOF" + eol;
-  return Buffer.from(output, "latin1");
+  const xrefOffset = offset;
+  const xref = [
+    "xref" + eol + "0 " + (objects.length + 1) + eol,
+    "0000000000 65535 f " + eol
+  ];
+  for (let i = 1; i < offsets.length; i++) {
+    xref.push(String(offsets[i]).padStart(10, "0") + " 00000 n " + eol);
+  }
+  xref.push(
+    "trailer" + eol + "<< /Size " + (objects.length + 1) + " /Root 1 0 R >>" + eol +
+    "startxref" + eol + xrefOffset + eol + "%%EOF" + eol
+  );
+  chunks.push(Buffer.from(xref.join(""), "ascii"));
+  return Buffer.concat(chunks);
 }
 
 export function generateReportPdf(input = {}) {
