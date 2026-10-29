@@ -1,4 +1,5 @@
 import { getObscuraReadiness } from "./obscura-mcp.js";
+import { getReaReadiness } from "./rea-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
@@ -28,6 +29,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const hasGoogleWorkspace = isGoogleWorkspaceConfigured(env);
   const paperclipReadiness = getPaperclipReadiness(env);
   const obscuraReadiness = getObscuraReadiness(env);
+  const reaReadiness = getReaReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
 
   return [
@@ -150,6 +152,18 @@ export function buildIntegrationCatalog(env = process.env) {
       note: hasCalDiy
         ? "Owner-scoped API credentials are present; event types/availability need live verification. Booking/cancellation is not exposed as automatic action."
         : "Requires a secure compatible API endpoint/token and an owner UUID guard; connector remains disabled otherwise."
+    },
+    {
+      id: "rea-reverse-engineering",
+      name: "REA Reverse Engineering",
+      capability: "Owner-scoped static analysis of authorized application and software artifacts through REA MCP",
+      state: reaReadiness.state,
+      configured: Boolean(reaReadiness.configured),
+      mode: "owner_scoped_mcp",
+      requiredEnv: ["REA_MCP_ENABLED=true", "REA_MCP_URL", "REA_ANALYSIS_ROOT", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["REA_MCP_TOKEN"],
+      apiRoutes: ["agent tools: rea_analyze_application, rea_inspect_artifact, rea_inspect_desktop_application, rea_inspect_model_artifact, rea_inspect_managed_artifact, rea_inspect_apk_signature, rea_inspect_android_package, rea_search_guidance, rea_list_guided_workflows"],
+      note: reaReadiness.note
     },
     {
       id: "obscura",
