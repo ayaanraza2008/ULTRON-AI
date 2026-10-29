@@ -198,7 +198,6 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
 
   let sessionId = null;
   let protocolVersion = null;
-  let activeTarget = false;
   let initialized = false;
   let nextId = 0;
   let stage = "initialize";
@@ -246,16 +245,9 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     stage = "tools_list";
     const catalog = await call("tools/list");
     const toolNames = Array.isArray(catalog?.tools) ? catalog.tools.map(tool => tool?.name) : [];
-    for (const required of ["open_binary", "analyze_javascript_application", "trace_application_feature", "close_binary"]) {
+    for (const required of ["analyze_javascript_application", "trace_application_feature"]) {
       if (!toolNames.includes(required)) return { ok: false, stage: "tools_list", reason: "required_tool_missing" };
     }
-
-    stage = "open_demo_target";
-    getStructuredToolOutput(await call("tools/call", {
-      name: "open_binary",
-      arguments: { path: targetPath }
-    }));
-    activeTarget = true;
 
     stage = "analyze_demo_target";
     const evidence = getStructuredToolOutput(await call("tools/call", {
@@ -285,9 +277,6 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     return { ok: false, stage, reason: knownReasons.has(error?.probeCode) ? error.probeCode : "tool_check_failed" };
   } finally {
     if (sessionId && initialized) {
-      if (activeTarget) {
-        try { await call("tools/call", { name: "close_binary", arguments: {} }); } catch {}
-      }
       try {
         await mcpExchange({ port: upstreamPort, method: "DELETE", sessionId, protocolVersion, timeoutMs: 5000 });
       } catch {}
