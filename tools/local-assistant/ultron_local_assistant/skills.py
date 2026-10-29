@@ -124,7 +124,7 @@ def review_skill_repository(repository: str) -> dict[str, Any]:
         }
 
 
-def install_skill_repository(repository: str, *, confirm: bool = False) -> dict[str, Any]:
+def install_skill_repository(repository: str, *, confirm: bool = False, expected_hashes: dict[str, str] | None = None) -> dict[str, Any]:
     if not confirm:
         raise PermissionError("Skill installation requires an explicit typed confirmation.")
     owner, name = normalize_github_repo(repository)
@@ -135,9 +135,17 @@ def install_skill_repository(repository: str, *, confirm: bool = False) -> dict[
         found, warnings = _find_skill_files(clone_dir)
         if not found:
             raise RuntimeError("No SKILL.md files were found; nothing was installed.")
+        selected = found[:100]
+        if expected_hashes is not None:
+            actual = {
+                path.relative_to(clone_dir).as_posix(): hashlib.sha256(content.encode()).hexdigest()
+                for path, content in selected
+            }
+            if actual != expected_hashes:
+                raise RuntimeError("The repository's SKILL.md content changed after review; nothing was installed. Review it again.")
         install_root = app_data_dir() / "skills" / f"{owner}--{name}"
         installed = []
-        for source, content in found[:100]:
+        for source, content in selected:
             relative = source.relative_to(clone_dir)
             destination = install_root / relative.parent / "SKILL.md"
             # Never replace a previously installed skill implicitly.
