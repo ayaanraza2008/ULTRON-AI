@@ -4,6 +4,7 @@ import express from "express";
 import { createIntegrationRouter } from "../integrations/router.js";
 import { OPEN_HIGGSFIELD_PAID_CONFIRMATION } from "../integrations/open-higgsfield.js";
 import { OPEN_DESIGN_PAID_CONFIRMATION } from "../integrations/open-design.js";
+import { OPEN_GENERATIVE_AI_PAID_CONFIRMATION } from "../integrations/open-generative-ai.js";
 
 async function withServer(env, fetchImpl, run, { userId = "00000000-0000-4000-8000-000000000001" } = {}) {
   const app = express();
@@ -623,5 +624,107 @@ test("OpenDesign run status routes only return validated status and deliverable 
     assert.equal(result.verified, true);
     assert.equal(result.deliverableEntryFile, "index.html");
     assert.equal(JSON.stringify(result).includes("must-not-return"), false);
+  });
+});
+
+
+test("Open Generative AI readiness and model catalog require no external API call", async () => {
+  await withServer({}, async () => {
+    throw new Error("MuAPI readiness and static catalog must not contact the provider.");
+  }, async base => {
+    const statusResponse = await fetch(base + "/api/integrations/open-generative-ai/status");
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.configured, false);
+    assert.equal(status.state, "disabled_by_config");
+
+    const modelsResponse = await fetch(base + "/api/integrations/open-generative-ai/models");
+    assert.equal(modelsResponse.status, 200);
+    const models = await modelsResponse.json();
+    assert.equal(models.modelCount, 38);
+    assert.equal(models.models.length, 38);
+  });
+});
+
+test("Open Generative AI generation route blocks unapproved paid requests before network", async () => {
+  let calls = 0;
+  await withServer({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: "muapi-route-secret-123456",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async () => {
+    calls++;
+    throw new Error("Unapproved generation must not reach MuAPI.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-generative-ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "nano-banana-pro",
+        prompt: "A cinematic red planet",
+        userPrompt: "Make an image."
+      })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).state, "approval_required");
+    assert.equal(calls, 0);
+  });
+});
+
+test("Open Generative AI generation route submits confirmed jobs with server-side API key only", async () => {
+  let request;
+  const apiKey = "muapi-route-secret-123456";
+  await withServer({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: apiKey,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ request_id: "req_media_123", status: "queued" }), {
+      status: 202, headers: { "content-type": "application/json" }
+    });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-generative-ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "nano-banana-pro",
+        prompt: "A cinematic red planet at sunrise",
+        settings: { aspectRatio: "16:9", resolution: "2k" },
+        confirmPaidGeneration: true,
+        confirmationText: OPEN_GENERATIVE_AI_PAID_CONFIRMATION,
+        userPrompt: "I explicitly approve this paid image generation using my MuAPI provider credits."
+      })
+    });
+    assert.equal(response.status, 202);
+    const result = await response.json();
+    assert.equal(result.state, "queued");
+    assert.equal(result.requestId, "req_media_123");
+    assert.equal(request.url, "https://api.muapi.ai/api/v1/nano-banana-pro");
+    assert.equal(request.options.headers["x-api-key"], apiKey);
+    assert.equal(JSON.stringify(result).includes(apiKey), false);
+  });
+});
+
+test("Open Generative AI status route polls only a validated job ID and sanitizes output URLs", async () => {
+  let requestUrl;
+  await withServer({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: "muapi-route-secret-123456",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async url => {
+    requestUrl = url;
+    return new Response(JSON.stringify({
+      status: "completed",
+      outputs: ["https://cdn.muapi.ai/video.mp4", "http://127.0.0.1/private.mp4"]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-generative-ai/jobs/req_media_123");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(requestUrl, "https://api.muapi.ai/api/v1/predictions/req_media_123/result");
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.outputs, ["https://cdn.muapi.ai/video.mp4"]);
+    assert.equal(JSON.stringify(result).includes("127.0.0.1"), false);
   });
 });
