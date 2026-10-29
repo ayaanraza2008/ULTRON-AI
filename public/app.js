@@ -1248,6 +1248,17 @@
     };
     instance.onend = () => {
       if (recognition === instance) recognition = null;
+      if (pendingInterimCommand && voiceActive && mode === "voice" && !busy && !textInputOpen) {
+        if (nativeSilenceTimer) window.clearTimeout(nativeSilenceTimer);
+        nativeSilenceTimer = null;
+        const command = pendingInterimCommand;
+        pendingInterimCommand = "";
+        ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
+        void sendPrompt(command, "voice");
+        return;
+      }
+      if (nativeSilenceTimer) window.clearTimeout(nativeSilenceTimer);
+      nativeSilenceTimer = null;
       if (!hadAnyResult) nativeRecognitionEmptyRuns += 1;
       else nativeRecognitionEmptyRuns = 0;
       if (nativeRecognitionEmptyRuns >= 2) {
