@@ -12,6 +12,7 @@ import {
   isCloudSyncedPath,
   makeRoutineTemplate,
   normalizeKey,
+  planHireAll,
   resolveRole,
   resolveWorkspaceRoot,
   validateRoutineId
@@ -104,6 +105,37 @@ test("morning brief ignores linked files outside an employee workspace", () => {
     const brief = buildMorningBrief({ root });
     assert.equal(brief.includes("PRIVATE_OUTSIDE_SENTINEL"), false);
     assert.match(brief, /No standard latest brief was found/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("hire-all plan installs missing kits but never overwrites unrecognized folders", () => {
+  const root = tempDir();
+  const installed = path.join(root, "gtm-engineer");
+  const unknown = path.join(root, "sales");
+  fs.mkdirSync(installed, { recursive: true });
+  fs.writeFileSync(path.join(installed, ".ultron-employee.json"), JSON.stringify({ roleId: "gtm-engineer" }));
+  fs.mkdirSync(unknown, { recursive: true });
+  try {
+    const plan = planHireAll(root);
+    assert.equal(plan.length, 8);
+    assert.equal(plan.filter((item) => item.state === "already-installed").length, 1);
+    assert.equal(plan.find((item) => item.role.id === "gtm-engineer")?.state, "already-installed");
+    assert.equal(plan.find((item) => item.role.id === "sales")?.state, "blocked-existing-folder");
+    assert.equal(plan.filter((item) => item.state === "install").length, 6);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("employee discovery rejects a manifest whose role does not match its folder", () => {
+  const root = tempDir();
+  const wrongFolder = path.join(root, "sales");
+  fs.mkdirSync(wrongFolder, { recursive: true });
+  fs.writeFileSync(path.join(wrongFolder, ".ultron-employee.json"), JSON.stringify({ roleId: "web-dev" }));
+  try {
+    assert.equal(findInstalledEmployees(root).length, 0);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
