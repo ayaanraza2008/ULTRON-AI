@@ -1451,7 +1451,7 @@ test("study pack update supports title edits and validated content replacement",
     assert.equal(validContentResponse.status, 200);
     const result = await validContentResponse.json();
     assert.equal(result.studyPack.title, "Final title");
-    assert.equal(result.studyPack.summary, "Updated course summary.");
+    assert.equal(result.studyPack.content.summary, "Updated course summary.");
   }, {
     supabaseRest: async (_req, table, method, query, patch) => {
       calls.push({ table, method, query, patch });
