@@ -1908,3 +1908,49 @@ test("background AI Employee automatically falls back through configured free Op
   assert.ok(modelCalls.every(call => call.authorization === "Bearer openrouter-worker-fallback-test-key"));
   assert.equal(worker.getStatus().tasksCompleted, 1);
 });
+
+test("worker sends Supabase sb_secret_ credentials only as API keys, not bearer JWTs", async () => {
+  let worker;
+  const requests = [];
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "sb_secret_unit_test"
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => worker.stop(),
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, headers: options.headers || {} });
+      return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+  });
+  await worker.done;
+
+  assert.ok(requests.length > 0);
+  assert.ok(requests.every(request => request.headers.apikey === "sb_secret_unit_test"));
+  assert.ok(requests.every(request => !Object.hasOwn(request.headers, "Authorization")));
+});
+
+test("worker retains Bearer authorization for legacy Supabase service_role JWTs", async () => {
+  let worker;
+  const requests = [];
+  const legacyKey = "eyJ.synthetic.legacy-service-role";
+  worker = startWorker({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: legacyKey
+    },
+    logger: { info() {}, warn() {}, error() {} },
+    sleepImpl: async () => worker.stop(),
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, headers: options.headers || {} });
+      return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+  });
+  await worker.done;
+
+  assert.ok(requests.length > 0);
+  assert.ok(requests.every(request => request.headers.apikey === legacyKey));
+  assert.ok(requests.every(request => request.headers.Authorization === "Bearer " + legacyKey));
+});
+

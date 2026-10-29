@@ -669,7 +669,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         method,
         headers: {
           apikey: serviceKey,
-          Authorization: "Bearer " + serviceKey,
+          // New sb_secret_ keys are not JWTs; keep Authorization for legacy service_role JWTs only.
+          ...(serviceKey.startsWith("sb_secret_") ? {} : { Authorization: "Bearer " + serviceKey }),
           Accept: "application/json",
           ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: prefer })
         },
