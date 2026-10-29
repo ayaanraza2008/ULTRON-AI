@@ -2038,8 +2038,12 @@
         ? payload.defaultModel
         : (models.includes("openrouter/free") ? "openrouter/free" : models[0] || "");
       const requested = chatMode === "direct" && selectedModel && models.includes(selectedModel) ? selectedModel : "__agent__";
+      chatMode = requested === "__agent__" ? "agent" : "direct";
       selectedModel = requested === "__agent__" ? "" : requested;
-      try { window.localStorage.setItem("ultron-selected-model", requested); } catch {}
+      try {
+        window.localStorage.setItem("ultron-selected-model", requested);
+        window.localStorage.setItem("ultron-chat-mode", chatMode);
+      } catch {}
       ui.drawerContent.replaceChildren();
       drawerHeading("AI model routing", "Autonomous mode uses /api/agent/run for safe task routing and tool use. Picking a concrete model uses direct chat; images, camera and file-analysis paths remain direct and permission-scoped.");
       drawerCard(
