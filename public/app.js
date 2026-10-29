@@ -1147,6 +1147,37 @@
     }
   }
 
+  async function exportPresentationPptx(title, content = "", sections = []) {
+    try {
+      const response = await fetch("/api/reports/pptx", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: String(title || "ULTRON Presentation").slice(0, 160), content, sections })
+      });
+      if (!response.ok) {
+        let message = "PowerPoint export failed (HTTP " + response.status + ").";
+        try {
+          const payload = await response.json();
+          if (payload?.error?.message) message = payload.error.message;
+        } catch {}
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      if (!blob.size || blob.size > 8 * 1024 * 1024 ||
+          !/application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation/i.test(blob.type)) {
+        throw new Error("The server returned an invalid or oversized PowerPoint file.");
+      }
+      const signature = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+      if (signature[0] !== 0x50 || signature[1] !== 0x4b) throw new Error("The PowerPoint package signature is invalid.");
+      downloadBlob(String(title || "ultron-presentation").slice(0, 100) + ".pptx", blob);
+      showToast("Editable PowerPoint presentation exported.");
+    } catch (error) {
+      showToast("Could not export PowerPoint: " + (error?.message || "request failed"), 6500);
+    }
+  }
+
   async function showSecurityAssistantView() {
     ui.drawerContent.replaceChildren();
     drawerHeading("Security assistant", "Defensive learning, human-reviewed plans and analysis of evidence you provide. ULTRON does not scan targets, run shell commands or contact a target from these panels.");
@@ -2610,6 +2641,17 @@
       ]);
     });
     form.appendChild(exportPdf);
+    const exportPptx = document.createElement("button");
+    exportPptx.type = "button";
+    exportPptx.className = "drawer-action secondary";
+    exportPptx.textContent = "EXPORT CURRENT DRAFT AS POWERPOINT";
+    exportPptx.addEventListener("click", () => {
+      void exportPresentationPptx(title.value.trim() || "ULTRON Note", "", [
+        { heading: "Tags", content: tags.value.trim() || "No tags" },
+        { heading: "Note", content: body.value }
+      ]);
+    });
+    form.appendChild(exportPptx);
     const submit = document.createElement("button");
     submit.type = "submit";
     submit.className = "drawer-action";
@@ -2818,6 +2860,19 @@
           sections.push({ heading: "Quiz " + (index + 1), content: "Question: " + String(item.question || "") + "\\nOptions: " + (Array.isArray(item.options) ? item.options.map(String).join("; ") : "") + "\\nAnswer: " + String(item.answer || item.correctAnswer || "Not available") });
         });
         void exportReportPdf(pack.title || "ULTRON Study Pack", "", sections.slice(0, 26));
+      });
+      drawerButton("EXPORT POWERPOINT", () => {
+        const sections = [
+          { heading: "Summary", content: String(content.summary || "") },
+          { heading: "Learning objectives", content: (Array.isArray(content.learningObjectives) ? content.learningObjectives : []).map(item => "- " + String(item)).join("\\n") }
+        ];
+        (Array.isArray(content.flashcards) ? content.flashcards : []).slice(0, 10).forEach((item, index) => {
+          sections.push({ heading: "Flashcard " + (index + 1), content: "Question: " + String(item.question || "") + "\\nAnswer: " + String(item.answer || "") });
+        });
+        (Array.isArray(content.quiz) ? content.quiz : []).slice(0, 10).forEach((item, index) => {
+          sections.push({ heading: "Quiz " + (index + 1), content: "Question: " + String(item.question || "") + "\\nOptions: " + (Array.isArray(item.options) ? item.options.map(String).join("; ") : "") + "\\nAnswer: " + String(item.answer || item.correctAnswer || "Not available") });
+        });
+        void exportPresentationPptx(pack.title || "ULTRON Study Pack", "", sections.slice(0, 24));
       });
       drawerCard("Summary", String(content.summary || "No summary stored.").slice(0, 8000), "STUDY NOTES");
       const objectives = Array.isArray(content.learningObjectives) ? content.learningObjectives : [];
