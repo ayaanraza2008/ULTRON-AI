@@ -101,6 +101,14 @@ services:
         value: "90"
       - key: TAVILY_API_KEY
         sync: false
+      - key: FISH_API_KEY
+        sync: false
+      - key: FISH_AUDIO_VOICE_MODEL_ID
+        value: "7a18a1851d2649108c48ec9f2c80eb2c"
+      - key: FISH_AUDIO_TTS_MODEL
+        value: "s2.1-pro-free"
+      - key: FISH_AUDIO_STT_MODEL
+        value: "transcribe-1"
       - key: TTS_API_BASE_URL
         sync: false
       - key: TTS_API_KEY
