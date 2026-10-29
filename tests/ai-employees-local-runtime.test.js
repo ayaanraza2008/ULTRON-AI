@@ -8,6 +8,7 @@ import {
   ROLE_CATALOG,
   UPSTREAM_PACKAGE,
   buildMorningBrief,
+  createRoutineWorkspace,
   findInstalledEmployees,
   isCloudSyncedPath,
   makeRoutineTemplate,
@@ -136,6 +137,41 @@ test("employee discovery rejects a manifest whose role does not match its folder
   fs.writeFileSync(path.join(wrongFolder, ".ultron-employee.json"), JSON.stringify({ roleId: "web-dev" }));
   try {
     assert.equal(findInstalledEmployees(root).length, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("morning brief refuses content reached through a linked parent directory", () => {
+  if (process.platform === "win32") return;
+  const root = tempDir();
+  const folder = path.join(root, "gtm-engineer");
+  const outside = path.join(root, "outside-briefs");
+  fs.mkdirSync(folder, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.writeFileSync(path.join(folder, ".ultron-employee.json"), JSON.stringify({ roleId: "gtm-engineer" }));
+  fs.writeFileSync(path.join(outside, "brief-latest.md"), "PRIVATE_PARENT_LINK_SENTINEL");
+  fs.symlinkSync(outside, path.join(folder, "briefs"), "dir");
+  try {
+    const brief = buildMorningBrief({ root });
+    assert.equal(brief.includes("PRIVATE_PARENT_LINK_SENTINEL"), false);
+    assert.match(brief, /No standard latest brief was found/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("new routine creation refuses a linked routines directory", () => {
+  if (process.platform === "win32") return;
+  const root = tempDir();
+  const employeeRoot = path.join(root, "sales");
+  const outside = path.join(root, "external-routines");
+  fs.mkdirSync(employeeRoot, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.symlinkSync(outside, path.join(employeeRoot, "routines"), "dir");
+  try {
+    assert.throws(() => createRoutineWorkspace(employeeRoot, "sales-safe-review"), /symbolic link/i);
+    assert.equal(fs.existsSync(path.join(outside, "sales-safe-review")), false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
