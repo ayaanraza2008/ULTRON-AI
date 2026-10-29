@@ -1,6 +1,7 @@
 """Redacted, opt-in one-time smoke checks for the hosted browser bridge."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Mapping
 
 SMOKE_ENV = "ULTRON_RUN_BROWSER_SMOKE"
@@ -38,3 +39,9 @@ def summarize_browser_smoke(result: Any) -> dict[str, Any]:
         "model": safe_model,
         "resultLength": min(len(content.strip()), 12000),
     }
+
+
+def configure_browser_logging() -> None:
+    """Redact request/page details by suppressing verbose third-party browser logs."""
+    logging.getLogger("browser_use").setLevel(logging.WARNING)
+    logging.getLogger("bubus").setLevel(logging.WARNING)
