@@ -73,6 +73,9 @@
   let fallbackRecorderStarting = false;
   let speechCapabilities = {};
   let speechCapabilitiesLoaded = false;
+  let speechCapabilitiesPromise = null;
+  let speechLanguageMode = "auto";
+  let recognitionStartPending = false;
   let activeSpeechAudio = null;
   let activeSpeechObjectUrl = null;
   let finishActiveSpeechAudio = null;
@@ -1007,7 +1010,11 @@
       const mimeType = String(blob.type || "audio/webm").split(";")[0];
       const payload = await apiRequest("/api/speech/transcribe", {
         method: "POST",
-        body: { audioBase64, mimeType }
+        body: {
+          audioBase64,
+          mimeType,
+          ...(speechLanguageMode === "hi-IN" ? { language: "hi" } : speechLanguageMode === "en-IN" ? { language: "en" } : {})
+        }
       });
       const command = String(payload?.text || "").trim();
       if (!command) {
@@ -1016,7 +1023,9 @@
         return false;
       }
       if (!voiceActive || mode !== "voice" || textInputOpen) return false;
-      ui.captionText.textContent = "HEARD · " + command.slice(0, 110);
+      const detected = String(payload?.language || "").toLowerCase();
+      const languageLabel = /^(hi|hindi)/.test(detected) ? "HINDI" : /^(en|english)/.test(detected) ? "ENGLISH" : "";
+      ui.captionText.textContent = (languageLabel ? "HEARD " + languageLabel + " · " : "HEARD · ") + command.slice(0, 110);
       await sendPrompt(command, "voice");
       return true;
     } catch (error) {
@@ -1028,15 +1037,21 @@
 
   async function ensureSpeechCapabilities() {
     if (speechCapabilitiesLoaded) return speechCapabilities;
-    try {
-      const payload = await apiRequest("/api/capabilities");
-      speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
-        ? payload.providers.speech : {};
-      speechCapabilitiesLoaded = true;
-    } catch {
-      speechCapabilities = {};
-    }
-    return speechCapabilities;
+    if (speechCapabilitiesPromise) return speechCapabilitiesPromise;
+    speechCapabilitiesPromise = (async () => {
+      try {
+        const payload = await apiRequest("/api/capabilities");
+        speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
+          ? payload.providers.speech : {};
+      } catch {
+        speechCapabilities = {};
+      } finally {
+        speechCapabilitiesLoaded = true;
+        speechCapabilitiesPromise = null;
+      }
+      return speechCapabilities;
+    })();
+    return speechCapabilitiesPromise;
   }
 
   async function startFallbackRecognition() {
@@ -1163,8 +1178,37 @@
     }, 450);
   }
 
+  function setSpeechLanguageMode(nextMode) {
+    if (!["auto", "hi-IN", "en-IN"].includes(nextMode)) return;
+    speechLanguageMode = nextMode;
+    forceFallbackRecognition = false;
+    if (restartTimer) window.clearTimeout(restartTimer);
+    restartTimer = null;
+    stopRecognition();
+    stopFallbackRecognition({ transcribe: false });
+    if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
+    showToast(nextMode === "auto" ? "Voice recognition set to AUTO: Hindi + English." : nextMode === "hi-IN" ? "Voice recognition set to Hindi." : "Voice recognition set to English (India).");
+    void showDrawerView("voice-quality");
+  }
+
   function startRecognition() {
     if (!voiceActive || mode !== "voice" || busy || textInputOpen) return;
+    if (speechLanguageMode === "auto" && !forceFallbackRecognition) {
+      if (!speechCapabilitiesLoaded) {
+        if (recognitionStartPending) return;
+        recognitionStartPending = true;
+        void ensureSpeechCapabilities().finally(() => {
+          recognitionStartPending = false;
+          if (voiceActive && mode === "voice" && !busy && !textInputOpen) startRecognition();
+        });
+        return;
+      }
+      if (speechCapabilities.premiumSttConfigured) {
+        forceFallbackRecognition = true;
+        void startFallbackRecognition();
+        return;
+      }
+    }
     const Recognition = speechRecognitionConstructor();
     if (forceFallbackRecognition || !Recognition) {
       void startFallbackRecognition();
@@ -1181,8 +1225,8 @@
     recognition = instance;
     instance.continuous = true;
     instance.interimResults = true;
-    instance.maxAlternatives = 1;
-    instance.lang = "en-IN";
+    instance.maxAlternatives = 3;
+    instance.lang = speechLanguageMode === "hi-IN" ? "hi-IN" : "en-IN";
     let hadAnyResult = false;
     instance.onstart = () => {
       if (recognition !== instance) return;
@@ -1196,7 +1240,16 @@
       let interimText = "";
       for (let index = 0; index < event.results.length; index += 1) {
         const result = event.results[index];
-        const transcript = result && result[0] ? String(result[0].transcript || "") : "";
+        const alternatives = [];
+        for (let altIndex = 0; altIndex < (result?.length || 0); altIndex += 1) {
+          const alternative = result[altIndex];
+          if (alternative && typeof alternative.transcript === "string" && alternative.transcript.trim()) {
+            alternatives.push(alternative.transcript.trim());
+          }
+        }
+        const transcript = speechLanguageMode === "hi-IN"
+          ? alternatives.find(value => /[\u0900-\u097F]/.test(value)) || alternatives[0] || ""
+          : alternatives.find(value => /[A-Za-z]/.test(value)) || alternatives[0] || "";
         if (result && result.isFinal) finalText += transcript + " ";
         else interimText += transcript;
       }
@@ -1471,9 +1524,12 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        if (!force && streamSpeechBuffer.length >= 22) {
-          const cutoff = streamSpeechBuffer.lastIndexOf(" ", 19);
-          if (cutoff >= 12) {
+        const minimumBuffer = streamSpeechUsesFish ? 72 : 22;
+        const preferredCutoff = streamSpeechUsesFish ? 64 : 19;
+        const minimumCutoff = streamSpeechUsesFish ? 48 : 12;
+        if (!force && streamSpeechBuffer.length >= minimumBuffer) {
+          const cutoff = streamSpeechBuffer.lastIndexOf(" ", preferredCutoff);
+          if (cutoff >= minimumCutoff) {
             enqueueStreamSpeech(streamSpeechBuffer.slice(0, cutoff).trim());
             streamSpeechBuffer = streamSpeechBuffer.slice(cutoff + 1);
             continue;
@@ -1516,7 +1572,7 @@
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const voicePrompt = streamVoiceReply
-        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 12–24 words when possible). Lead with the answer; no greeting, filler, or preamble. Use a calm, confident, direct tone and mirror the user's language.\n\nUser request: " + outgoingPrompt
+        ? "You are replying aloud. Answer immediately in 1–2 short sentences (about 12–24 words when possible). Lead with the answer; no greeting, filler, or preamble. Use a calm, confident, natural Indian male-assistant tone. Mirror the user's language. For Hindi-English replies, write Hindi words in Devanagari and English words in Latin script; do not phonetic-transliterate English or Hinglish into Roman Hindi. Preserve proper nouns and technical spelling.\n\nUser request: " + outgoingPrompt
         : outgoingPrompt;
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
@@ -1677,7 +1733,7 @@
     }
     if (name === "voice-quality") {
       await ensureSpeechCapabilities();
-      drawerHeading("Voice quality & pronunciation", "ULTRON uses Fish Audio voice synthesis and server-side transcription when configured, with browser speech as a fallback.");
+      drawerHeading("Voice quality & pronunciation", "ULTRON uses a deep Indian male Fish Audio voice for natural Hindi-English speech. Auto recognition uses Fish Audio transcription when configured; browser language selection is available as a fallback.");
       drawerCard("Fish Audio synthesis",
         speechCapabilities.premiumTtsConfigured ? "The backend reports a speech output provider. A real response still depends on the key, voice model, and available quota." : "No server-side synthesis is configured; ULTRON will use browser-installed voices.",
         speechCapabilities.premiumTtsConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER FALLBACK",
@@ -1686,7 +1742,11 @@
         speechCapabilities.premiumSttConfigured ? "The backend reports a transcription provider for recorded-microphone fallback." : "Server transcription is unavailable; this browser must support its native speech-recognition service.",
         speechCapabilities.premiumSttConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER ONLY",
         speechCapabilities.premiumSttConfigured ? "ready" : "warning");
-      drawerCard("Voice reference", "7a18a1851d2649108c48ec9f2c80eb2c", "FISH AUDIO MODEL ID");
+      drawerCard("Voice reference", "Kamal · deep Indian male · Hindi-English", "FISH AUDIO VOICE");
+      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with Fish Audio transcription." : "Auto detection needs server-side Fish Audio transcription; browser fallback currently uses English (India).") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
+      drawerButton("AUTO · HINDI + ENGLISH", () => setSpeechLanguageMode("auto"), speechLanguageMode !== "auto");
+      drawerButton("HINDI · hi-IN", () => setSpeechLanguageMode("hi-IN"), speechLanguageMode !== "hi-IN");
+      drawerButton("ENGLISH · en-IN", () => setSpeechLanguageMode("en-IN"), speechLanguageMode !== "en-IN");
       drawerCard("Browser fallback voices", "Hindi: " + speechVoiceLabel("hi-IN") + " · English: " + speechVoiceLabel("en-IN"), "DEVICE DEPENDENT");
       drawerButton("PREVIEW HINDI + ENGLISH VOICE", () => {
         const wasListening = voiceActive && mode === "voice";
@@ -2449,6 +2509,8 @@
   renderMode();
   setCoreState("idle");
   startParticleCore();
+  // Warm speech capability detection before the user first enters Voice Mode.
+  void ensureSpeechCapabilities();
   void checkSession();
   void checkBackend();
   window.setInterval(() => { void checkBackend(); }, 60000);

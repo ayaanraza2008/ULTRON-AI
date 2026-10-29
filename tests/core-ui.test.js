@@ -256,6 +256,8 @@ test("voice output prefers installed male voices and uses language-specific spee
   assert.ok(app.includes('utterance.pitch = 0.80'));
   assert.ok(app.includes('utterance.rate = 1.08'));
   assert.ok(app.includes('function speechVoiceLabel(language)'));
+  assert.ok(app.includes('let speechLanguageMode = "auto"'));
+  assert.ok(app.includes('instance.lang = speechLanguageMode === "hi-IN" ? "hi-IN" : "en-IN"'));
 });
 
 test("voice quality panel reports Fish Audio readiness and can preview Hindi and English", () => {
@@ -263,7 +265,12 @@ test("voice quality panel reports Fish Audio readiness and can preview Hindi and
   assert.ok(app.includes('drawerButton("PREVIEW HINDI + ENGLISH VOICE"'));
   assert.ok(app.includes("speechCapabilities.premiumTtsConfigured"));
   assert.ok(app.includes("speechCapabilities.premiumSttConfigured"));
-  assert.ok(app.includes("7a18a1851d2649108c48ec9f2c80eb2c"));
+  assert.doesNotMatch(app, /db9ad6eb7fb84294b2046cf05ef64718/); // voice IDs are kept server-side
+  assert.ok(app.includes("Kamal · deep Indian male · Hindi-English"));
+  assert.ok(app.includes('drawerButton("AUTO · HINDI + ENGLISH"'));
+  assert.ok(app.includes('drawerButton("HINDI · hi-IN"'));
+  assert.ok(app.includes('drawerButton("ENGLISH · en-IN"'));
+  assert.ok(app.includes("For Hindi-English replies, write Hindi words in Devanagari and English words in Latin script"));
   assert.ok(app.includes("मैं हिंदी और English दोनों में जवाब दूँगा"));
 });
 
@@ -307,10 +314,13 @@ test("voice listening starts without waiting for backend readiness and submits s
   assert.ok(app.includes("}, 300);"));
   assert.ok(app.includes("pendingInterimCommand && voiceActive"));
   assert.ok(app.includes("async function streamChatRequest(body, onDelta)"));
+  assert.ok(app.includes("speechCapabilities.premiumSttConfigured"));
+  assert.ok(app.includes('body: {\n          audioBase64,\n          mimeType,\n          ...(speechLanguageMode === "hi-IN" ? { language: "hi" } : speechLanguageMode === "en-IN" ? { language: "en" } : {})'));
   assert.ok(app.includes("body: JSON.stringify({ ...body, stream: true })"));
   assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferFishAudio)"));
-  assert.ok(app.includes("streamSpeechBuffer.length >= 22"));
-  assert.ok(app.includes('const cutoff = streamSpeechBuffer.lastIndexOf(" ", 19)'));
+  assert.ok(app.includes("const minimumBuffer = streamSpeechUsesFish ? 72 : 22"));
+  assert.ok(app.includes('const preferredCutoff = streamSpeechUsesFish ? 64 : 19'));
+  assert.ok(app.includes('const minimumCutoff = streamSpeechUsesFish ? 48 : 12'));
   assert.ok(app.includes("const fishAudioBlobPromise = streamSpeechUsesFish"));
   assert.ok(app.includes("about 12–24 words when possible"));
   assert.ok(app.includes("You are replying aloud. Answer immediately in 1–2 short sentences"));
