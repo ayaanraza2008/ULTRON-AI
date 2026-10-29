@@ -285,3 +285,60 @@ test("existing ULTRON server serves the integrated Video Studio page and local s
   }
 });
 
+test("approved local render runs crossfade FFmpeg pipeline and exposes final MP4 download", async () => {
+  const ffmpegCalls = [];
+  await withStudio({
+    commandRunner: async (command, args) => {
+      if (args.includes("-version")) return { stdout: command + " version mocked\n", stderr: "" };
+      if (command === "ffmpeg") {
+        ffmpegCalls.push(args.slice());
+        await writeFile(args.at(-1), Buffer.from("mocked-mp4-bytes"));
+        return { stdout: "", stderr: "" };
+      }
+      return { stdout: "", stderr: "" };
+    }
+  }, async ({ base }) => {
+    const project = await createProject(base, { durationSeconds: 15 });
+    const plan = await request(base, "/api/studio/projects/" + project.id + "/plan", { method: "POST", body: "{}" });
+    assert.equal(plan.status, 200);
+    const firstAsset = await request(base, "/api/studio/projects/" + project.id + "/assets/upload", {
+      method: "POST", body: JSON.stringify({ filename: "first.png", fileBase64: Buffer.from("first-image").toString("base64") })
+    });
+    const secondAsset = await request(base, "/api/studio/projects/" + project.id + "/assets/upload", {
+      method: "POST", body: JSON.stringify({ filename: "second.png", fileBase64: Buffer.from("second-image").toString("base64") })
+    });
+    assert.equal(firstAsset.status, 201);
+    assert.equal(secondAsset.status, 201);
+    const latestProject = (await secondAsset.json()).project;
+    const planApproval = await request(base, "/api/studio/projects/" + project.id + "/approve", {
+      method: "POST", body: JSON.stringify({ stage: "plan" })
+    });
+    assert.equal(planApproval.status, 200);
+    const renderApproval = await request(base, "/api/studio/projects/" + project.id + "/approve", {
+      method: "POST", body: JSON.stringify({ stage: "render" })
+    });
+    assert.equal(renderApproval.status, 200);
+    const selectedIds = latestProject.assets.map(asset => asset.id);
+    const render = await request(base, "/api/studio/projects/" + project.id + "/render", {
+      method: "POST", body: JSON.stringify({ assetIds: selectedIds })
+    });
+    assert.equal(render.status, 202);
+
+    let finalProject;
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const status = await request(base, "/api/studio/projects/" + project.id);
+      finalProject = (await status.json()).project;
+      if (finalProject.stage === "rendered" || finalProject.renderError) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.equal(finalProject.stage, "rendered");
+    assert.equal(finalProject.renderProgress.percent, 100);
+    assert.ok(ffmpegCalls.some(args => args.includes("-filter_complex") && args.join(" ").includes("xfade=transition=fade")));
+    assert.equal(finalProject.actualCostEntries.at(-1).tool, "ffmpeg");
+    const download = await request(base, "/api/studio/projects/" + project.id + "/render");
+    assert.equal(download.status, 200);
+    assert.ok((await download.arrayBuffer()).byteLength > 0);
+    await new Promise(resolve => setTimeout(resolve, 60));
+  });
+});
+
