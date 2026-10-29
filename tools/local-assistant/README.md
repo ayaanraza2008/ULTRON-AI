@@ -85,6 +85,16 @@ The digest reads up to 10 unread messages from the last day using message header
 
 Google OAuth requires a Google Cloud project, API enablement, internet access, and explicit user consent. Those credentials and account-specific configuration cannot be created on your behalf from this repository commit.
 
+## PDF and DOCX documents
+
+The standard-library install supports text/source/Markdown/CSV/JSON/HTML/YAML files. To index local PDF and DOCX files, install the optional document readers:
+
+~~~powershell
+python -m pip install -e "tools/local-assistant[documents]"
+~~~
+
+The reader bounds document size, PDF page count, DOCX archive size, and extracted text. Scanned PDFs without a text layer need local OCR, which this package does not install or run by default.
+
 ## Skill library behavior
 
 `skills review` shallow-clones the named public GitHub repository into a temporary directory, locates `SKILL.md` files, applies size/file-count limits, and reports simple risk indicators. `skills install` clones again, prompts for typed approval, copies only Markdown instruction files into a per-user app-data folder, and writes a SHA-256 metadata record. It does not run scripts and should not be considered a complete security review; inspect the skill text before using it as agent instructions.
