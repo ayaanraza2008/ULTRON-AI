@@ -244,3 +244,11 @@ See [the local runtime guide](docs/AI_EMPLOYEES_LOCAL_RUNTIME.md) for role IDs, 
 ULTRON's authenticated speech endpoints support Fish Audio's native REST API for **both voice synthesis and speech recognition**. Configure `FISH_API_KEY` on the backend and keep it secret. The requested voice/reference model ID is set to `7a18a1851d2649108c48ec9f2c80eb2c`; TTS defaults to the `s2.1-pro-free` engine, while STT defaults to `transcribe-1`. A Fish Audio key takes priority over the optional legacy OpenAI-compatible speech settings.
 
 See [docs/FISH_AUDIO_INTEGRATION.md](docs/FISH_AUDIO_INTEGRATION.md) for Render/local environment settings, the two endpoints, browser recording fallback, security limits, and live verification guidance. The backend includes mocked API-contract tests; live requests still require a valid server-side key and account quota.
+
+## Local-first Python personal assistant
+
+A private terminal companion now lives in [tools/local-assistant](tools/local-assistant/README.md). It adds specialist morning-digest, local-document research, and code-assistant agents; hardware/model recommendations; local system speech; and a reviewed Markdown-only skill library. It runs separately from the hosted API so local files and prompts are processed by local Ollama, not ULTRON's cloud API.
+
+Install it with Python 3.10+ and Ollama, then run 'ultron-local doctor'. Hardware recommendations are advisory and model downloads require explicit typed confirmation. Gmail and Calendar are opt-in integrations that use read-only OAuth scopes and call Google's APIs to retrieve data; digest generation and speech remain local. Scripts run only after confirmation but are not OS-sandboxed, so review them first. Only reviewed SKILL.md Markdown is copied from public GitHub repositories; repository code is never executed.
+
+See the [local assistant guide](tools/local-assistant/README.md) for setup, privacy boundaries, supported commands, Google OAuth, and tests.
