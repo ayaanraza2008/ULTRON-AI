@@ -3,6 +3,8 @@ import { getReaReadiness } from "./rea-mcp.js";
 import { getCactusReadiness } from "./cactus.js";
 import { getPaperclipReadiness } from "./paperclip-services.js";
 import { getHermesAgentReadiness } from "./hermes-agent.js";
+import { getPublicApiCatalog } from "./public-apis.js";
+import { getPublicApiDirectoryStats } from "./public-api-directory.js";
 import { safeServiceBase } from "../network-safety.js";
 import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
 import { getStrataReadiness } from "./strata.js";
@@ -34,8 +36,22 @@ export function buildIntegrationCatalog(env = process.env) {
   const reaReadiness = getReaReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
   const strataReadiness = getStrataReadiness(env);
+  const publicApiDirectoryStats = getPublicApiDirectoryStats();
 
   return [
+    {
+      id: "public-apis",
+      name: "Public API Directory + Tested Adapters",
+      capability: "Search the bundled public-apis directory; execute only fixed keyless data adapters for weather, air quality, public holidays, scholarly papers, museum artwork, currencies, country metadata, Wikipedia, books, public GitHub metadata, sunrise/sunset, public-domain ebooks, trivia, recent earthquakes, dictionary definitions, and public news search",
+      state: "available",
+      configured: true,
+      mode: "catalog_discovery_plus_fixed_allowlist",
+      requiredEnv: [],
+      apiRoutes: ["agent tool: search_public_api_catalog", "agent tool: public_api_lookup"],
+      directory: { entries: publicApiDirectoryStats.entries, categories: publicApiDirectoryStats.categories },
+      services: getPublicApiCatalog().map(item => ({ id: item.id, provider: item.provider, requiresApiKey: item.requiresApiKey })),
+      note: "The directory contains provider listings and authentication labels, not usable API keys. Listings remain unverified and are never called dynamically."
+    },
     {
       id: "heygem",
       name: "HeyGem Avatar",

@@ -1,6 +1,6 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is a same-origin assistant web app and backend runtime. The Core service serves the Living Core interface at `/` and authenticated APIs under `/api/*`; the local-first Video Studio is available at `/studio`.
 
 ## Current status
 
@@ -10,7 +10,7 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **Frontend status:** the source-controlled Living Core interface is served from the same origin as the API on the integration candidate; browser-level login, voice, accessibility and responsive-device verification remain pending.
 
 ## Backend-only capability integration phase
 
@@ -225,3 +225,64 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## Local AI Employees runtime
+
+ULTRON now includes a local-first wrapper for the upstream MIT AI Employees kits. Its eight roles/60 routines map to the existing ULTRON role catalog. Install one role at a time into your own local folder; the upstream kit files, routine instructions, schedule definitions, browser-capability mappings and correction files stay on your machine. The wrapper never adds API keys to files and does not register schedules until you open the kit in your chosen agent and follow its install prompt.
+
+```bash
+npm run employees -- list
+npm run employees -- doctor
+npm run employees -- hire chief-of-staff
+# Or install all eight local role kits in one pass:
+npm run employees -- hire-all
+npm run employees -- status
+npm run employees -- brief
+npm run test:employees
+```
+
+Choose a folder outside OneDrive, Dropbox, Google Drive and iCloud. The default is `~/ULTRON-AI-Employees`. After hiring, open the printed role directory in your signed-in agent and follow `INSTALL-PROMPT.md`; then verify the scheduled task and its run logs. `brief` combines local role briefs without uploading them. To add a routine, use `npm run employees -- new-routine <role-id> <role-prefix>-<routine-name>`, then complete the generated registration checklist and verify the schedule manually.
+
+See [the local runtime guide](docs/AI_EMPLOYEES_LOCAL_RUNTIME.md) for role IDs, harness setup, safety gates, testing and the distinction between local browser-driven routines and ULTRON's existing hosted plan-only worker. Source: [markfulton/ai-employees](https://github.com/markfulton/ai-employees), pinned at `ai-employees@1.9.0`; the upstream MIT license is retained in each installed kit.
+
+## Local-first Python personal assistant
+
+A private terminal companion now lives in [tools/local-assistant](tools/local-assistant/README.md). It adds specialist morning-digest, local-document research, and code-assistant agents; hardware/model recommendations; local system speech; and a reviewed Markdown-only skill library. It runs separately from the hosted API so local files and prompts are processed by local Ollama, not ULTRON's cloud API.
+
+Install it with Python 3.10+ and Ollama, then run 'ultron-local doctor'. Hardware recommendations are advisory and model downloads require explicit typed confirmation. Gmail and Calendar are opt-in integrations that use read-only OAuth scopes and call Google's APIs to retrieve data; digest generation and speech remain local. Scripts run only after confirmation but are not OS-sandboxed, so review them first. Only reviewed SKILL.md Markdown is copied from public GitHub repositories; repository code is never executed.
+
+See the [local assistant guide](tools/local-assistant/README.md) for setup, privacy boundaries, supported commands, Google OAuth, and tests.
+
+## Video Studio — local-first video production
+
+The integrated Video Studio workspace is served by the same ULTRON API at `http://127.0.0.1:10000/studio`. It creates a persistent project board, generates three creative directions and a timed script/scene plan, analyzes local reference clips with FFmpeg/FFprobe, can search optional Pexels/Pixabay stock catalogs, creates SRT caption sidecars, can request a configured voiceover service, and renders an MP4 with local FFmpeg after explicit plan and final-render approvals.
+
+### Local quick start
+
+1. Install Node.js 20+ and install the project dependencies with `npm install`.
+2. Copy `.env.example` to `.env`. Fill in provider keys privately only when needed. The local launcher reads `.env`; the file is ignored by Git.
+3. Install FFmpeg (which includes `ffmpeg` and `ffprobe`) and ensure both commands are on `PATH`. Install `yt-dlp` only if you want optional metadata extraction for reference URLs.
+4. Run `npm run studio:local` and open `http://127.0.0.1:10000/studio`.
+
+Projects and assets default to `.local/video-studio/`. The local runner binds to `127.0.0.1`, and local unauthenticated mode rejects non-loopback Host requests. Do not expose it through a tunnel, reverse proxy, or public network. Set `ULTRON_VIDEO_STUDIO_DIR` to change the data directory.
+
+### Optional providers
+
+- AI planning uses the configured OpenRouter/Groq/Gemini or other OpenAI-compatible providers. With no usable provider key, the app uses a local template planner and does not claim it called a model.
+- `TAVILY_API_KEY` enables live research. If it is absent, the app records that research was not run.
+- `PEXELS_API_KEY` and `PIXABAY_API_KEY` enable stock-media search. Each result retains a source link and creator/source metadata; check the current terms/licence before publishing.
+- Voiceover uses a separately installed local VoiceStudio endpoint or a configured compatible endpoint using the existing `TTS_API_BASE_URL`, `TTS_API_KEY`, `TTS_MODEL`, and `TTS_DEFAULT_VOICE` settings. Local reference transcription is available when VoiceStudio or an OpenAI-compatible STT endpoint (`STT_API_BASE_URL`, `STT_API_KEY`, `STT_MODEL`) is configured; otherwise paste the transcript manually.
+
+### Current boundaries
+
+- A link alone does not reveal full scene cuts or reliably provide a transcript. Upload an authorized local clip to inspect duration, dimensions and scene-change timestamps. If an STT/VoiceStudio endpoint is configured, the board can extract up to 210 seconds of audio locally and request a transcript; otherwise paste one manually. `yt-dlp` metadata access is opt-in in local mode only when the user confirms rights; the app does not automatically download the source video.
+- Local reference clip and direct local asset uploads are capped at 8 MB per file in this UI; stock media imports are capped at 40 MB. Short samples are recommended.
+- The renderer uses licensed/imported footage and still images. Stills receive a slow zoom/pan effect; imported motion footage is cut to fit the requested duration. Captions are an editable/downloadable `.srt` sidecar and are not burned into the MP4. No video/image generation service is silently installed or called.
+- Cost values are estimates based on optional user-configured unit rates. Provider quota, commercial usage terms, music/media licences and third-party generation costs remain separate and may be unknown.
+- The final renderer is disabled until the plan is approved, visual media exists, and final-render approval is explicitly recorded.
+
+See [docs/VIDEO_STUDIO.md](docs/VIDEO_STUDIO.md) for setup details, workflows, supported sources, and verification limits.
+
+## ULTRON Living Core interface
+
+The repository includes the first-party command interface under `public/`, served by the same Core origin as its authenticated API routes. Open `/` for the Living Core UI; its JavaScript and CSS load from `/app.js` and `/styles.css`. Authentication uses same-origin requests and secure server-managed cookies. Static serving denies dotfiles, does not expose directory listings, and falls through to the existing `/api/*` routes. See [Core UI notes](docs/CORE_UI.md).
