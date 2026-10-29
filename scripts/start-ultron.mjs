@@ -43,7 +43,7 @@ export function launchUltron({ spawnImpl = spawn, processObject = process, env =
 
 
 function safeSmokeSummary(result) {
-  const safeCode = value => typeof value === "string" && /^[A-Z0-9_]{1,60}$/.test(value) ? value : undefined;
+  const safeCode = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,60}$/.test(value) ? value : undefined;
   const safeModel = value => typeof value === "string" && /^[a-zA-Z0-9._:/-]{1,180}$/.test(value) ? value : undefined;
   const attempts = Array.isArray(result?.attempts) ? result.attempts.slice(0, 7).map(attempt => ({
     ...(safeModel(attempt?.model) ? { model: safeModel(attempt.model) } : {}),
