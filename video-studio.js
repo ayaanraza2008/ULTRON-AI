@@ -864,8 +864,33 @@ export function createVideoStudioRouter({
     const concatFile = path.join(renderDir, "concat-" + uuid() + ".txt"), silentOutput = path.join(renderDir, "silent-" + uuid() + ".mp4");
     try {
       await writeFile(concatFile, segments.map(file => "file '" + quoteConcatPath(file) + "'").join("\n") + "\n", { mode: 0o600 });
-      await commandRunner("ffmpeg", ["-y", "-hide_banner", "-f", "concat", "-safe", "0", "-i", concatFile, "-c", "copy", "-movflags", "+faststart", silentOutput],
-        { timeout: 180000, maxBuffer: 2 * 1024 * 1024, windowsHide: true });
+      if (segments.length > 1) {
+        const fadeDuration = Math.min(0.35, Math.max(0.15, perScene * 0.2));
+        const segmentDuration = Math.max(1, Math.round(perScene * 100) / 100);
+        const inputs = segments.flatMap(file => ["-i", file]);
+        const graph = segments.map((_, index) => "[" + index + ":v]settb=AVTB,setpts=PTS-STARTPTS[v" + index + "]").join(";");
+        let current = "v0";
+        let filterGraph = graph;
+        for (let index = 1; index < segments.length; index++) {
+          const output = index === segments.length - 1 ? "vout" : "x" + index;
+          const offset = (index * (segmentDuration - fadeDuration)).toFixed(3);
+          filterGraph += ";[" + current + "][v" + index + "]xfade=transition=fade:duration=" + fadeDuration.toFixed(3) + ":offset=" + offset + "[" + output + "]";
+          current = output;
+        }
+        try {
+          await commandRunner("ffmpeg", ["-y", "-hide_banner", ...inputs, "-filter_complex", filterGraph, "-map", "[vout]", "-an",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26", "-pix_fmt", "yuv420p", "-movflags", "+faststart", silentOutput],
+            { timeout: 240000, maxBuffer: 2 * 1024 * 1024, windowsHide: true });
+          addActivity(project, "Scene transitions applied", segments.length - 1 + " gentle crossfades.");
+        } catch {
+          addActivity(project, "Transition fallback", "Crossfade filter unavailable; falling back to clean hard cuts.");
+          await commandRunner("ffmpeg", ["-y", "-hide_banner", "-f", "concat", "-safe", "0", "-i", concatFile, "-c", "copy", "-movflags", "+faststart", silentOutput],
+            { timeout: 180000, maxBuffer: 2 * 1024 * 1024, windowsHide: true });
+        }
+      } else {
+        await commandRunner("ffmpeg", ["-y", "-hide_banner", "-f", "concat", "-safe", "0", "-i", concatFile, "-c", "copy", "-movflags", "+faststart", silentOutput],
+          { timeout: 180000, maxBuffer: 2 * 1024 * 1024, windowsHide: true });
+      }
       const voice = project.assets.find(a => a.kind === "voiceover" && a.filename), music = project.assets.find(a => a.kind === "music" && a.filename);
       const finalFile = path.join(renderDir, "ultron-final.mp4"), audioArgs = [];
       if (voice) audioArgs.push("-i", path.join(assetsDir, path.basename(voice.filename)));
