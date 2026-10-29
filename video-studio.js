@@ -296,7 +296,9 @@ async function commandAvailable(commandRunner, name) {
 function safeAssetRemoteUrl(value) {
   try {
     const url = new URL(value), host = url.hostname.toLowerCase();
-    if (url.protocol !== "https:" || !["cdn.pixabay.com", "images.pexels.com", "videos.pexels.com"].includes(host) || url.username || url.password || url.hash) return null;
+    const trustedHost = ["cdn.pixabay.com", "images.pexels.com", "videos.pexels.com"].includes(host);
+    const pixabayOriginalImage = (host === "pixabay.com" || host === "www.pixabay.com") && url.pathname.startsWith("/get/");
+    if (url.protocol !== "https:" || (!trustedHost && !pixabayOriginalImage) || url.username || url.password || url.hash) return null;
     return url;
   } catch { return null; }
 }
