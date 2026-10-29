@@ -1,6 +1,7 @@
 import express from "express";
 import { buildIntegrationCatalog } from "./catalog.js";
 import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
+import { getOpenHiggsfieldReadiness, listOpenHiggsfieldModels, runOpenHiggsfieldAction } from "./open-higgsfield.js";
 
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024;
 
@@ -280,6 +281,44 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = safePin
       } catch (error) { safeError(res, error, adapter.label); }
     });
   }
+
+
+  // OpenHiggsfield is an optional separate generation API. The model catalog is
+  // static and free; queueing media is owner-scoped and requires explicit paid-use
+  // approval. The provider API key is never accepted from a request body.
+  router.get("/integrations/open-higgsfield/status", requireSupabaseUser, (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(getOpenHiggsfieldReadiness(env, req.supabaseUser?.id));
+  });
+
+  router.get("/integrations/open-higgsfield/models", requireSupabaseUser, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ provider: "open-higgsfield", modelCount: listOpenHiggsfieldModels().length, models: listOpenHiggsfieldModels() });
+  });
+
+  router.post("/integrations/open-higgsfield/generate", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      const result = await runOpenHiggsfieldAction({
+        env, fetchImpl, userId: req.supabaseUser?.id, action: "generate",
+        model: req.body?.model, prompt: req.body?.prompt, media: req.body?.media, settings: req.body?.settings,
+        approvePaidGeneration: req.body?.confirmPaidGeneration === true,
+        confirmationText: req.body?.confirmationText,
+        userPrompt: bounded(req.body?.userPrompt, 1200)
+      });
+      if (result.state === "approval_required") return res.status(409).json(result);
+      return res.status(202).json(result);
+    } catch (error) { safeError(res, error, "OpenHiggsfield generation"); }
+  });
+
+  router.get("/integrations/open-higgsfield/jobs/:requestId", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      const result = await runOpenHiggsfieldAction({
+        env, fetchImpl, userId: req.supabaseUser?.id, action: "status",
+        requestId: req.params.requestId
+      });
+      return res.json(result);
+    } catch (error) { safeError(res, error, "OpenHiggsfield job status"); }
+  });
 
   return router;
 }
