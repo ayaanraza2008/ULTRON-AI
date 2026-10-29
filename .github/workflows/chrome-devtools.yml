@@ -1,0 +1,27 @@
+name: Chrome DevTools Bridge
+
+on:
+  push:
+    paths:
+      - "chrome-devtools/**"
+  pull_request:
+    paths:
+      - "chrome-devtools/**"
+
+jobs:
+  typescript-build-and-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install bridge dependencies
+        working-directory: chrome-devtools
+        run: npm install --no-audit --no-fund
+      - name: Build TypeScript and run security tests
+        working-directory: chrome-devtools
+        run: npm test
