@@ -14,12 +14,23 @@ const bounded = (v, n = 500) => typeof v === "string" ? v.trim().slice(0, n) : "
 const loopback = host => LOCAL_HOSTS.has(String(host || "").toLowerCase());
 
 function localGuard(req, res, next) {
-  let host = "";
-  try { host = new URL("http://" + String(req.headers.host || "")).hostname; } catch {}
-  if (!loopback(host)) return res.status(403).json({ error: { code: "LOCAL_HOST_ONLY", message: "The local studio only accepts loopback Host headers." } });
+  const requestHost = String(req.headers.host || "").trim().toLowerCase();
+  let parsedHost;
+  try { parsedHost = new URL("http://" + requestHost); } catch {}
+  if (!parsedHost || !loopback(parsedHost.hostname)) {
+    return res.status(403).json({ error: { code: "LOCAL_HOST_ONLY", message: "The local studio only accepts loopback Host headers." } });
+  }
   if (req.headers.origin) {
-    try { if (!loopback(new URL(req.headers.origin).hostname)) return res.status(403).json({ error: { code: "LOCAL_ORIGIN_ONLY", message: "Cross-origin requests are blocked." } }); }
-    catch { return res.status(403).json({ error: { code: "LOCAL_ORIGIN_ONLY", message: "Invalid request origin." } }); }
+    try {
+      const origin = new URL(req.headers.origin);
+      // Require the exact same local HTTP origin. Checking only that Origin's
+      // hostname is loopback would also admit a different port or HTTPS origin.
+      if (origin.protocol !== "http:" || !loopback(origin.hostname) || origin.host.toLowerCase() !== requestHost) {
+        return res.status(403).json({ error: { code: "LOCAL_ORIGIN_ONLY", message: "Cross-origin requests are blocked." } });
+      }
+    } catch {
+      return res.status(403).json({ error: { code: "LOCAL_ORIGIN_ONLY", message: "Invalid request origin." } });
+    }
   }
   next();
 }
