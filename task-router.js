@@ -43,7 +43,7 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
-  ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
+  ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read (?:this|it|that) aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
   ["browser", /\b(?:browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
   ["geolocation", /\b(?:geolocat(?:e|ion)|where was this photo taken|photo location|identify (?:this )?location from (?:the )?(?:photo|image)|geo[- ]sleuth)\b/i],
   ["spaceplanner", /\b(?:floor plan|house plan|room layout|interior layout|spaceplanner|space planner)\b/i],
