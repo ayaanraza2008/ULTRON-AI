@@ -1090,6 +1090,177 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  async function showEmployeeAutomationView() {
+    ui.drawerContent.replaceChildren();
+    drawerHeading("AI Employees & automations", "Choose a supported role and routine to save a recurring draft/report workflow. A schedule is not proof that the worker is running.");
+    drawerCard("Employee catalog", "Loading supported roles and routine templates…", "CHECKING", "warning");
+    let catalog;
+    try {
+      catalog = await apiRequest("/api/employees/roles");
+    } catch (error) {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("AI Employees & automations", "The role catalog is unavailable.");
+      drawerCard("Employee catalog unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+      return;
+    }
+    const roles = Array.isArray(catalog?.roles) ? catalog.roles : [];
+    const templates = Array.isArray(catalog?.routineTemplates) ? catalog.routineTemplates : [];
+    ui.drawerContent.replaceChildren();
+    drawerHeading("AI Employees & automations", "Schedules are account-scoped and can be paused or deleted. Scheduled routines only prepare AI-generated drafts and reports; they do not send, publish, spend, run arbitrary commands or control devices.");
+    drawerCard("Scheduler readiness",
+      catalog.scheduler === "enabled"
+        ? "Backend configuration indicates that the worker may be enabled. This does not prove a task will execute; verify the worker service and a real task result."
+        : "The background worker is not configured. Schedules can be stored, but they will not run until the owner configures the worker, server-side credentials, provider and database migration.",
+      catalog.scheduler === "enabled" ? "CONFIGURED · NOT LIVE-VERIFIED" : "NOT CONFIGURED",
+      "warning");
+    const form = document.createElement("form");
+    const role = addDrawerField(form, "AI EMPLOYEE ROLE", "employee-role", { required: true, select: true });
+    for (const entry of roles) {
+      const option = document.createElement("option");
+      option.value = String(entry.id || "");
+      option.textContent = String(entry.name || entry.id || "Role");
+      role.appendChild(option);
+    }
+    const routine = addDrawerField(form, "ROUTINE TEMPLATE", "employee-routine", { required: true, select: true });
+    const goal = addDrawerField(form, "DESIRED OUTCOME", "employee-goal", {
+      required: true, maxLength: 2000, multiline: true, rows: 4,
+      placeholder: "What should this routine prepare or review?"
+    });
+    const context = addDrawerField(form, "OPTIONAL CONTEXT (NO SECRETS)", "employee-context", {
+      maxLength: 4000, multiline: true, rows: 3, placeholder: "Project background or constraints the employee should consider."
+    });
+    const interval = addDrawerField(form, "RUN CADENCE", "employee-interval", { required: true, select: true, value: "1440" });
+    for (const [value, labelText] of [["60", "Every hour"], ["360", "Every 6 hours"], ["1440", "Daily"], ["10080", "Weekly"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      interval.appendChild(option);
+    }
+    interval.value = "1440";
+    function refreshRoutineOptions() {
+      const eligible = templates.filter(item => Array.isArray(item.roles) && item.roles.includes(role.value));
+      routine.replaceChildren();
+      for (const entry of eligible) {
+        const option = document.createElement("option");
+        option.value = String(entry.id || "");
+        option.textContent = String(entry.name || entry.title || entry.id || "Routine") + (entry.description ? " — " + String(entry.description).slice(0, 110) : "");
+        routine.appendChild(option);
+      }
+      routine.disabled = eligible.length === 0;
+      if (!eligible.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No routine templates for this role";
+        routine.appendChild(option);
+      }
+    }
+    role.addEventListener("change", refreshRoutineOptions);
+    if (roles.length) role.value = String(roles[0].id || "");
+    refreshRoutineOptions();
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "drawer-action";
+    save.textContent = "SAVE RECURRING DRAFT/REPORT";
+    form.appendChild(save);
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!role.value || !routine.value) { showToast("Choose a role and supported routine."); return; }
+      const intervalMinutes = Number(interval.value);
+      if (!Number.isInteger(intervalMinutes) || intervalMinutes < 60 || intervalMinutes > 10080) {
+        showToast("Choose a cadence from one hour to seven days.");
+        return;
+      }
+      save.disabled = true;
+      try {
+        const response = await apiRequest("/api/employees/schedules", {
+          method: "POST",
+          body: {
+            role: role.value,
+            routineId: routine.value,
+            goal: goal.value.trim(),
+            context: context.value.trim(),
+            intervalMinutes
+          }
+        });
+        showToast(response?.notice || "Schedule saved; worker execution is not yet verified.", 6500);
+        await showDrawerView("employees");
+      } catch (error) {
+        drawerCard("Schedule not saved", error.message, error.code || "SAVE FAILED", "error");
+        if (/employee_schedules|migration/i.test(error.message)) {
+          drawerCard("Database setup required", "The employee scheduler migration is missing or unavailable. Review it and verify RLS before relying on saved schedules.", "MIGRATION REQUIRED", "warning");
+        }
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        save.disabled = false;
+      }
+    });
+    ui.drawerContent.appendChild(form);
+    const separator = document.createElement("div");
+    separator.className = "drawer-rule";
+    ui.drawerContent.appendChild(separator);
+    drawerHeading("Saved schedules", "Loading schedules owned by this account…");
+    try {
+      const payload = await apiRequest("/api/employees/schedules");
+      const schedules = Array.isArray(payload?.schedules) ? payload.schedules : [];
+      if (!schedules.length) {
+        drawerCard("No saved schedules", "Create one above. It will run only when the scheduler and worker are correctly configured.", "EMPTY", "warning");
+        return;
+      }
+      for (const schedule of schedules.slice(0, 50)) {
+        const roleInfo = roles.find(item => item.id === schedule.role_id);
+        const routineInfo = templates.find(item => item.id === schedule.routine_id);
+        const next = schedule.next_run_at ? new Date(schedule.next_run_at) : null;
+        const last = schedule.last_run_at ? new Date(schedule.last_run_at) : null;
+        const description = [
+          roleInfo?.name || schedule.role_id,
+          routineInfo?.name || schedule.routine_id,
+          "Cadence: every " + Number(schedule.interval_minutes || 0) + " minutes",
+          schedule.goal,
+          schedule.context ? "Context: " + String(schedule.context).slice(0, 300) : "",
+          next && Number.isFinite(next.getTime()) ? "Next: " + next.toLocaleString() : "",
+          last && Number.isFinite(last.getTime()) ? "Last run: " + last.toLocaleString() : ""
+        ].filter(Boolean).join("\n");
+        const card = drawerCard(
+          String(schedule.goal || "Employee schedule").slice(0, 200),
+          description.slice(0, 900),
+          schedule.enabled ? "ENABLED" : "PAUSED",
+          schedule.enabled ? "ready" : "warning"
+        );
+        addCardActionRow(card, [
+          { label: "QUEUE REPORT", onClick: async () => {
+            if (!window.confirm("Queue one AI-generated draft/report for this schedule? It will not send, publish, spend or control devices.")) return;
+            try {
+              const result = await apiRequest("/api/employees/schedules/" + encodeURIComponent(schedule.id) + "/run", { method: "POST", body: {} });
+              showToast("Report task queued: " + String(result?.task?.id || "ID not returned") + ". Completion is not yet verified.", 7500);
+              await showDrawerView("tasks");
+            } catch (error) { showToast("Could not queue this schedule: " + error.message, 7500); }
+          }},
+          { label: schedule.enabled ? "PAUSE" : "RESUME", secondary: true, onClick: async () => {
+            try {
+              await apiRequest("/api/employees/schedules/" + encodeURIComponent(schedule.id), { method: "PATCH", body: { enabled: !schedule.enabled } });
+              showToast(schedule.enabled ? "Schedule paused." : "Schedule enabled.");
+              await showDrawerView("employees");
+            } catch (error) { showToast("Could not update schedule: " + error.message, 6500); }
+          }},
+          { label: "DELETE", secondary: true, onClick: async () => {
+            if (!window.confirm("Delete this recurring schedule? Existing task records are not deleted.")) return;
+            try {
+              await apiRequest("/api/employees/schedules/" + encodeURIComponent(schedule.id), { method: "DELETE" });
+              showToast("Schedule deleted.");
+              await showDrawerView("employees");
+            } catch (error) { showToast("Could not delete schedule: " + error.message, 6500); }
+          }}
+        ]);
+      }
+    } catch (error) {
+      drawerCard("Saved schedules unavailable", error.message, error.code || "REQUEST FAILED", "error");
+      if (/employee_schedules|migration/i.test(error.message)) {
+        drawerCard("Database setup required", "The employee_schedules table is missing or unavailable. Review its migration and account-scoped RLS before enabling recurring work.", "MIGRATION REQUIRED", "warning");
+      }
+      if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+    }
+  }
+
   async function showDocumentsView() {
     ui.drawerContent.replaceChildren();
     drawerHeading("Private document library", "Files are stored only after an explicit upload action in account-scoped private storage. The backend verifies file size, type, ownership and content integrity.");
@@ -2166,6 +2337,10 @@
           .finally(() => { if (wasListening) scheduleRecognitionRestart(); });
       });
       drawerButton("REFRESH AVAILABLE VOICES", () => { void showDrawerView("voice-quality"); }, true);
+      return;
+    }
+    if (name === "employees") {
+      await showEmployeeAutomationView();
       return;
     }
     if (name === "documents") {
