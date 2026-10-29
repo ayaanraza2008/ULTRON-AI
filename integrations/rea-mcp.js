@@ -5,20 +5,26 @@ const MAX_RESPONSE_BYTES = 1_500_000;
 const MAX_RESULT_BYTES = 800_000;
 const MAX_PATH_LENGTH = 500;
 const TOOL_SPECS = Object.freeze({
-  rea_analyze_application: { upstreamTool: "analyze_javascript_application", pathRequired: true, args: path => ({ path, detail: "complete" }) },
-  rea_inspect_artifact: { upstreamTool: "inspect_artifact", pathRequired: true, args: path => ({ path, detail: "complete" }) },
+  rea_analyze_application: {
+    upstreamTool: "analyze_javascript_application", pathRequired: true, requiresActiveTarget: true,
+    args: path => ({ input_path: path, format: "auto", integrity_policy: "fail", detail: "complete" })
+  },
+  rea_inspect_artifact: {
+    upstreamTool: "inspect_artifact", pathRequired: true, requiresActiveTarget: true,
+    args: () => ({ detail: "complete" })
+  },
   rea_inspect_binary_layout: { upstreamTool: "inspect_binary_layout", pathRequired: true, args: path => ({ path, detail: "complete" }) },
-  rea_inspect_wasm_artifact: { upstreamTool: "inspect_wasm_artifact", pathRequired: true, args: path => ({ path, glue_paths: [], candidate_paths: [], detail: "complete" }) },
+  rea_inspect_wasm_artifact: { upstreamTool: "inspect_wasm_artifact", pathRequired: true, requiresActiveTarget: true, args: path => ({ path, glue_paths: [], candidate_paths: [], detail: "complete" }) },
   rea_inspect_firmware_regions: { upstreamTool: "inspect_firmware_regions", pathRequired: true, args: path => ({ path }) },
   rea_inspect_web_network_capture: {
     upstreamTool: "inspect_web_network_capture", pathRequired: true,
     args: (path, input) => ({ capture_path: path, format: input.format, detail: "complete",
       sensitive_values: input.sensitiveValues, ...(input.recordOrdinals ? { record_ordinals: input.recordOrdinals } : {}) })
   },
-  rea_inspect_desktop_application: { upstreamTool: "inspect_desktop_application", pathRequired: true, args: path => ({ path, detail: "complete" }) },
-  rea_inspect_model_artifact: { upstreamTool: "inspect_model_artifact", pathRequired: true, args: path => ({ path, hash: "header", detail: "complete" }) },
+  rea_inspect_desktop_application: { upstreamTool: "inspect_desktop_application", pathRequired: true, requiresActiveTarget: true, args: path => ({ path, detail: "complete" }) },
+  rea_inspect_model_artifact: { upstreamTool: "inspect_model_artifact", pathRequired: true, requiresActiveTarget: true, args: path => ({ path, hash: "header", detail: "complete" }) },
   rea_inspect_managed_artifact: { upstreamTool: "inspect_managed_artifact", pathRequired: true, args: path => ({ path, detail: "complete" }) },
-  rea_inspect_apk_signature: { upstreamTool: "inspect_apk_signature", pathRequired: true, args: path => ({ path }) },
+  rea_inspect_apk_signature: { upstreamTool: "inspect_apk_signature", pathRequired: true, requiresActiveTarget: true, args: path => ({ path }) },
   rea_inspect_android_package: { upstreamTool: "inspect_android_package", pathRequired: true, args: path => ({ path, detail: "complete" }) },
   rea_search_guidance: { upstreamTool: "search_guidance", pathRequired: false, args: (_path, input) => ({ query: bounded(input.query, 500) }) },
   rea_list_guided_workflows: { upstreamTool: "guided_workflows", pathRequired: false, args: () => ({ action: "list" }) }
@@ -215,7 +221,7 @@ async function withEndpointLock(key, work) {
     if (endpointQueues.get(key) === tail) endpointQueues.delete(key);
   }
 }
-async function invokeRea(config, fetchImpl, toolName, upstreamArgs) {
+async function invokeRea(config, fetchImpl, toolName, upstreamArgs, targetPath = null, requiresActiveTarget = false) {
   let sessionId = null, requestId = 0;
   const call = async (method, params = {}, notification = false) => {
     const payload = { jsonrpc: "2.0", ...(notification ? {} : { id: ++requestId }), method, ...(Object.keys(params).length ? { params } : {}) };
@@ -229,6 +235,12 @@ async function invokeRea(config, fetchImpl, toolName, upstreamArgs) {
   });
   if (!initialized || typeof initialized !== "object") throw Object.assign(new Error("REA MCP initialization returned no result."), { code: "REA_INITIALIZE_FAILED", status: 502 });
   await call("notifications/initialized", {}, true);
+  // REA checks requiresActiveTarget for several analyzers. Open the already
+  // authorized local artifact first, in this same MCP session, without executing it.
+  if (requiresActiveTarget) {
+    if (!targetPath) throw Object.assign(new Error("An active REA target path is required."), { code: "REA_ACTIVE_TARGET_PATH_REQUIRED", status: 400 });
+    extractToolOutput(await call("tools/call", { name: "open_binary", arguments: { path: targetPath } }));
+  }
   return extractToolOutput(await call("tools/call", { name: toolName, arguments: upstreamArgs }));
 }
 
@@ -256,7 +268,7 @@ export async function runReaTool({ env = process.env, fetchImpl = safePinnedFetc
   }
   const upstreamArgs = spec.args(targetPath, { query, format, recordOrdinals, sensitiveValues: Array.isArray(sensitiveValues) ? sensitiveValues : [] });
   try {
-    const output = await withEndpointLock(config.url, () => invokeRea({ url: config.url, token: config.token }, fetchImpl, spec.upstreamTool, upstreamArgs));
+    const output = await withEndpointLock(config.url, () => invokeRea({ url: config.url, token: config.token }, fetchImpl, spec.upstreamTool, upstreamArgs, targetPath, Boolean(spec.requiresActiveTarget)));
     let serialized = "";
     try { serialized = JSON.stringify(output); } catch {}
     if (Buffer.byteLength(serialized, "utf8") > MAX_RESULT_BYTES) {
