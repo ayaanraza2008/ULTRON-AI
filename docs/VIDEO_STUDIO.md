@@ -43,7 +43,7 @@ Project data defaults to .local/video-studio/; override it with ULTRON_VIDEO_STU
 5. **Gather assets.** Upload local media or search optional stock libraries with PEXELS_API_KEY and/or PIXABAY_API_KEY. Asset records keep the provider, title, source page and contributor when available. Read the actual licence and any attribution requirements before publishing.
 6. **Audio/captions.** Voiceover uses the existing VoiceStudio or compatible TTS configuration. Captions are drafted as an SRT sidecar from scene narration. Timing/spelling remain editorial review tasks.
 7. **Approve.** Approve the plan, import visual assets, review the budget/credits, and explicitly approve the final render. Changing the script resets plan and render approvals.
-8. **Render.** FFmpeg creates an MP4 locally. Still images get a slow zoom/pan motion treatment; motion assets are resized/cropped and edited into sequential segments. Available voiceover/music tracks are mixed. Render progress and activity are recorded on the board.
+8. **Render.** FFmpeg creates an MP4 locally. Still images get a slow zoom/pan motion treatment; motion assets are resized/cropped into segments, then gentle crossfades are applied between scenes with a hard-cut fallback if the filter is unavailable. Available voiceover/music tracks are mixed. Render progress and activity are recorded on the board.
 
 ## Environment variables
 
@@ -85,3 +85,8 @@ Only configure third-party services you accept for the content you send them. A 
 - The board's status and test results must not be read as proof that real providers, account access, media licences, the audio device, or an actual render have succeeded. Run an end-to-end render with sample media before relying on it for production.
 
 For current implementation coverage and outstanding verification, see DEVELOPMENT_STATE.md.
+
+
+## Licensing note
+
+The existing ULTRON repository currently has no top-level LICENSE file. This integration does not silently apply a license to the entire existing codebase. Public repository visibility is not itself an open-source license; the repository owner should choose and add a project license before advertising the integrated project for reuse or redistribution.
