@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createIntegrationRouter } from "../integrations/router.js";
 import { OPEN_HIGGSFIELD_PAID_CONFIRMATION } from "../integrations/open-higgsfield.js";
+import { OPEN_DESIGN_PAID_CONFIRMATION } from "../integrations/open-design.js";
 
 async function withServer(env, fetchImpl, run, { userId = "00000000-0000-4000-8000-000000000001" } = {}) {
   const app = express();
@@ -507,5 +508,120 @@ test("OpenHiggsfield generation route queues only after explicit confirmation an
     assert.equal(request.options.headers.Authorization, "Key " + apiKey);
     assert.equal(request.options.redirect, "error");
     assert.equal(JSON.stringify(body).includes(apiKey), false);
+  });
+});
+
+
+const openDesignEnv = {
+  OPEN_DESIGN_ENABLED: "true",
+  OPEN_DESIGN_BASE_URL: "https://design.example.com",
+  OPEN_DESIGN_API_TOKEN: "od-test-daemon-token",
+  OPEN_DESIGN_PROJECT_ID: "personal_project_123",
+  OPEN_DESIGN_BYOK_PROTOCOL: "openai",
+  OPEN_DESIGN_BYOK_BASE_URL: "https://openrouter.ai/api/v1",
+  OPEN_DESIGN_BYOK_API_KEY: "provider-key-synthetic",
+  OPEN_DESIGN_BYOK_MODEL: "openrouter/free",
+  ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+};
+
+test("OpenDesign integration status remains disabled by default without network access", async () => {
+  await withServer({}, async () => {
+    throw new Error("OpenDesign status must not contact an upstream service.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/status");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.state, "disabled_by_config");
+    assert.equal(result.configured, false);
+  });
+});
+
+test("OpenDesign route lists projects only for the configured owner and keeps token server-side", async () => {
+  let request;
+  await withServer(openDesignEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ projects: [{ id: "personal_project_123", name: "Personal Design" }] }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/projects");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(result.projects, [{ id: "personal_project_123", name: "Personal Design" }]);
+    assert.equal(request.url, "https://design.example.com/api/projects");
+    assert.equal(request.options.headers.Authorization, "Bearer " + openDesignEnv.OPEN_DESIGN_API_TOKEN);
+    assert.equal(JSON.stringify(result).includes(openDesignEnv.OPEN_DESIGN_API_TOKEN), false);
+  });
+});
+
+test("OpenDesign run route rejects unapproved requests before forwarding model-provider credentials", async () => {
+  let calls = 0;
+  await withServer(openDesignEnv, async () => {
+    calls++;
+    throw new Error("Unapproved task must not reach OpenDesign.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Create a landing page", userPrompt: "Create a landing page" })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).state, "approval_required");
+    assert.equal(calls, 0);
+  });
+});
+
+test("OpenDesign run route submits a confirmed task with server-side BYOK configuration", async () => {
+  let request;
+  await withServer(openDesignEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ runId: "run_123", conversationId: "conversation_1", assistantMessageId: "message_1" }), {
+      status: 202, headers: { "content-type": "application/json" }
+    });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Create a responsive product landing page in index.html.",
+        confirmPaidRun: true,
+        confirmationText: OPEN_DESIGN_PAID_CONFIRMATION,
+        userPrompt: "I approve this task using my configured provider credits in OpenDesign."
+      })
+    });
+    assert.equal(response.status, 202);
+    const result = await response.json();
+    assert.equal(result.state, "queued");
+    assert.equal(result.runId, "run_123");
+    assert.equal(request.url, "https://design.example.com/api/runs");
+    assert.equal(request.options.headers.Authorization, "Bearer " + openDesignEnv.OPEN_DESIGN_API_TOKEN);
+    const body = JSON.parse(request.options.body);
+    assert.equal(body.projectId, openDesignEnv.OPEN_DESIGN_PROJECT_ID);
+    assert.equal(body.agentId, "byok-opencode");
+    assert.equal(body.byokProvider.apiKey, openDesignEnv.OPEN_DESIGN_BYOK_API_KEY);
+    assert.equal(JSON.stringify(result).includes(openDesignEnv.OPEN_DESIGN_API_TOKEN), false);
+    assert.equal(JSON.stringify(result).includes(openDesignEnv.OPEN_DESIGN_BYOK_API_KEY), false);
+  });
+});
+
+test("OpenDesign run status routes only return validated status and deliverable metadata", async () => {
+  let requestUrl;
+  await withServer(openDesignEnv, async url => {
+    requestUrl = url;
+    return new Response(JSON.stringify({
+      status: "succeeded",
+      deliverableValid: true,
+      deliverableEntryFile: "index.html",
+      apiKey: "must-not-return"
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/runs/run_123");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(requestUrl, "https://design.example.com/api/runs/run_123");
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.verified, true);
+    assert.equal(result.deliverableEntryFile, "index.html");
+    assert.equal(JSON.stringify(result).includes("must-not-return"), false);
   });
 });
