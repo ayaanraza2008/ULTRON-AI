@@ -188,8 +188,11 @@ export function findInstalledEmployees(root) {
     if (!entry.isDirectory()) continue;
     const folder = path.join(root, entry.name);
     const manifest = readJson(path.join(folder, ".ultron-employee.json"));
-    if (manifest && resolveRole(manifest.roleId)) {
-      found.push({ role: resolveRole(manifest.roleId), folder, manifest });
+    const role = manifest ? resolveRole(manifest.roleId) : null;
+    // The manifest must agree with the containing directory to prevent stale or
+    // copied metadata from making one directory masquerade as another role.
+    if (role && entry.name === role.id) {
+      found.push({ role, folder, manifest });
     }
   }
   return found.sort((a, b) => a.role.id.localeCompare(b.role.id));
