@@ -15,6 +15,7 @@ services:
         - "package.json"
         - "package-lock.json"
         - "public/**"
+        - "video-studio/**"
         - "supabase/migrations/**"
       ignoredPaths:
         - "tests/**"
@@ -112,6 +113,10 @@ services:
       - key: LOCAL_MODEL_TIMEOUT_SECONDS
         value: "90"
       - key: TAVILY_API_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: PIXABAY_API_KEY
         sync: false
       - key: FISH_API_KEY
         sync: false
