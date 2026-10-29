@@ -48,6 +48,17 @@ test("new screenshot repositories have explicit safe/unverified states", () => {
   assert.equal(byId["open-seo"].state, "missing_configuration");
   assert.equal(byId["open-higgsfield"].state, "disabled_by_config");
   assert.equal(byId["open-design"].state, "disabled_by_config");
+  assert.equal(byId["appflowy"].state, "disabled_by_config");
+  const appFlowyToken = "appflowy-user-access-token-synthetic-123456";
+  const appFlowy = getRepositoryCapabilityStatus({
+    APPFLOWY_ENABLED: "true",
+    APPFLOWY_BASE_URL: "https://appflowy.example.com",
+    APPFLOWY_API_TOKEN: appFlowyToken,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }).integrations.find(item => item.id === "appflowy");
+  assert.equal(appFlowy.state, "configured_unverified");
+  assert.equal(appFlowy.configured, true);
+  assert.equal(JSON.stringify(appFlowy).includes(appFlowyToken), false);
   assert.equal(byId["open-generative-ai"].state, "disabled_by_config");
   const muapiKey = "muapi-test-secret-123456";
   const configuredMuApi = getRepositoryCapabilityStatus({
