@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import express from "express";
 import JSZip from "jszip";
 import { deflateRawSync } from "node:zlib";
@@ -1693,9 +1694,10 @@ test("authenticated report PDF endpoint returns a readable transient attachment"
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.match(bytes.subarray(0, 8).toString("ascii"), /^%PDF-1\.\d$/);
-    assertEncodedPdfText(bytes, "ULTRON Verification Report");
-    assertEncodedPdfText(bytes, "The source test suite passed.");
-    assertEncodedPdfText(bytes, "Live provider and two-account database checks remain.");
+    const parsed = await pdfParse(bytes);
+    assert.match(parsed.text, /ULTRON Verification Report/);
+    assert.match(parsed.text, /source test suite passed/);
+    assert.match(parsed.text, /two-account database checks remain/);
   });
 });
 
