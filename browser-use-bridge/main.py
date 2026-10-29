@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, Header, HTTPException
 from navigation_policy import build_host_resolver_rules, resolve_public_https_targets
 from pydantic import BaseModel, Field
+from startup_smoke import SMOKE_TASK, browser_smoke_enabled, summarize_browser_smoke
 
 app = FastAPI(title="ULTRON Browser Use Bridge", docs_url=None, redoc_url=None)
 SIDE_EFFECTS = re.compile(r"\b(send|submit|purchase|buy|checkout|pay|transfer|delete|publish|post|comment|message|email|invite|change password|change billing|place order|book|reserve|cancel subscription|upload|share publicly|accept terms|sign contract)\b", re.I)
@@ -124,3 +125,32 @@ async def run_task(payload: BrowserTask, x_ultron_browser_token: str | None = He
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Browser task failed: " + type(exc).__name__)
+
+@app.on_event("startup")
+async def _schedule_opt_in_browser_smoke() -> None:
+    # The smoke is off by default. A one-time Render env opt-in performs a
+    # read-only navigation to example.com through ULTRON's authenticated model
+    # gateway. It logs status metadata only, never page content or credentials.
+    if not browser_smoke_enabled(os.environ):
+        return
+
+    async def run_smoke() -> None:
+        logger = __import__("logging").getLogger("ultron.browser.smoke")
+        token = os.getenv("ULTRON_BROWSER_USE_TOKEN", "")
+        if not token:
+            logger.warning("ULTRON browser smoke %s", {"status": "blocked", "reason": "TOKEN_MISSING"})
+            return
+        try:
+            payload = BrowserTask(task=SMOKE_TASK, maxSteps=4, confirmExternalAction=False)
+            result = await asyncio.wait_for(run_task(payload, x_ultron_browser_token=token), timeout=105)
+            summary = summarize_browser_smoke(result)
+        except HTTPException as exc:
+            summary = {"status": "failed", "reason": "BRIDGE_HTTP_" + str(exc.status_code)}
+        except asyncio.TimeoutError:
+            summary = {"status": "failed", "reason": "SMOKE_TIMEOUT"}
+        except Exception as exc:
+            summary = {"status": "failed", "reason": "SMOKE_" + type(exc).__name__[:60]}
+        logger.info("ULTRON browser startup smoke %s", summary)
+
+    asyncio.create_task(run_smoke())
+
