@@ -78,6 +78,8 @@
   let toastTimer = null;
   let panelTimer = null;
   let panelIsComplete = false;
+  let taskProgressTimer = null;
+  let activeTaskProgressId = null;
   let history = [];
   let currentConversationId = null;
   let conversationPersistenceUnavailable = false;
@@ -1380,7 +1382,15 @@
     catch { return String(value).slice(0, 5000); }
   }
 
+  function stopTaskProgressPolling() {
+    if (taskProgressTimer) window.clearTimeout(taskProgressTimer);
+    taskProgressTimer = null;
+    activeTaskProgressId = null;
+  }
+
   async function showTaskProgress(taskId) {
+    stopTaskProgressPolling();
+    activeTaskProgressId = String(taskId || "");
     ui.drawerContent.replaceChildren();
     drawerHeading("Task progress", "Loading lifecycle status and the account-scoped checkpoint timeline…");
     try {
@@ -1439,6 +1449,14 @@
         }, true);
       }
       drawerButton("REFRESH PROGRESS", () => { void showTaskProgress(taskId); }, true);
+      // Poll only a task the user is actively inspecting. Navigation clears the timer.
+      if (["QUEUED", "RUNNING", "IN_PROGRESS"].includes(status) && activeTaskProgressId === String(taskId)) {
+        drawerCard("Progress refresh", "This task status refreshes automatically every 5 seconds while this panel stays open.", "AUTO REFRESH ON", "warning");
+        taskProgressTimer = window.setTimeout(() => {
+          taskProgressTimer = null;
+          if (activeTaskProgressId === String(taskId) && drawerView === "tasks") void showTaskProgress(taskId);
+        }, 5000);
+      }
     } catch (error) {
       ui.drawerContent.replaceChildren();
       drawerHeading("Task progress unavailable", "The task record or progress endpoint could not be read.");
@@ -3062,6 +3080,7 @@
   }
 
   async function showDrawerView(name) {
+    stopTaskProgressPolling();
     setDrawerOpen(true);
     drawerView = name;
     ui.drawer.querySelectorAll("[data-drawer-view]").forEach((button) => {
