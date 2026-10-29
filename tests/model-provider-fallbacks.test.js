@@ -421,3 +421,61 @@ test("direct Groq and Gemini keys activate ordered fallbacks without registry JS
     assert.equal(JSON.stringify(calls.map(call => call.body)).includes("untrusted-client-key"), false);
   });
 });
+
+test("agent routing tries explicitly configured free OpenRouter tool models before direct-key fallbacks", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "primary-test-secret",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "nemotron-lightning-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "nvidia/nemotron-3.5-lightning:free",
+        priority: 10,
+        supportsTools: true
+      },
+      {
+        name: "north-mini-code-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "cohere/north-mini-code:free",
+        priority: 20,
+        supportsTools: true
+      }
+    ]),
+    GROQ_API_KEY: "groq-test-secret",
+    GEMINI_API_KEY: "gemini-test-secret"
+  };
+  await withServer(env, async (url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push({ url, authorization: options.headers.Authorization, model: body.model });
+    if (body.model === "openrouter/free") {
+      return new Response(JSON.stringify({ error: { message: "primary model unavailable" } }), { status: 429 });
+    }
+    if (body.model === "nvidia/nemotron-3.5-lightning:free") {
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: "Free registry fallback completed." } }]
+      }), { status: 200 });
+    }
+    throw new Error("A direct-key provider was attempted before the configured free model.");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Free registry fallback completed/);
+  });
+  assert.deepEqual(calls.map(call => call.model), [
+    "openrouter/free",
+    "nvidia/nemotron-3.5-lightning:free"
+  ]);
+  assert.deepEqual(calls.map(call => call.authorization), [
+    "Bearer primary-test-secret",
+    "Bearer primary-test-secret"
+  ]);
+});
