@@ -22,6 +22,8 @@ npm run build
 npm test
 ```
 
+The included security checks cover URL schemes and host/IP policy, private-address rejection, inline URL redaction, CDP endpoint restrictions, and bounded tool inputs.
+
 The project uses `playwright-core`; it does not silently download a browser. Use an installed Chromium/Chrome binary and launch it with a dedicated automation profile. For example on Windows, close that dedicated profile first, then start Chrome with flags equivalent to:
 
 ```powershell
