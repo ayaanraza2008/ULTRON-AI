@@ -17,7 +17,7 @@ async function close(server) {
   await new Promise(resolve => server.close(() => resolve()));
 }
 
-async function withGateway(run, { maxRequestBytes = 1024 } = {}) {
+async function withGateway(run, { maxRequestBytes = 1024, isReady } = {}) {
   const seen = [];
   const upstream = http.createServer((req, res) => {
     const chunks = [];
@@ -40,7 +40,7 @@ async function withGateway(run, { maxRequestBytes = 1024 } = {}) {
     });
   });
   const upstreamPort = await listen(upstream);
-  const gateway = createGatewayServer({ token, upstreamPort, maxRequestBytes });
+  const gateway = createGatewayServer({ token, upstreamPort, maxRequestBytes, isReady });
   const gatewayPort = await listen(gateway);
   try {
     await run({ base: "http://127.0.0.1:" + gatewayPort, seen });
@@ -49,6 +49,22 @@ async function withGateway(run, { maxRequestBytes = 1024 } = {}) {
     await close(upstream);
   }
 }
+
+test("gateway remains unavailable until its live REA protocol check succeeds", async () => {
+  await withGateway(async ({ base, seen }) => {
+    const health = await fetch(base + "/healthz");
+    assert.equal(health.status, 503);
+    assert.deepEqual(await health.json(), { status: "starting" });
+
+    const mcp = await fetch(base + "/mcp", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+    });
+    assert.equal(mcp.status, 503);
+    assert.equal(seen.length, 0);
+  }, { isReady: () => false });
+});
 
 test("REA gateway exposes readiness without disclosing secrets or target data", async () => {
   await withGateway(async ({ base }) => {
