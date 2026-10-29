@@ -298,7 +298,8 @@ function safeAssetRemoteUrl(value) {
     const url = new URL(value), host = url.hostname.toLowerCase();
     const trustedHost = ["cdn.pixabay.com", "images.pexels.com", "videos.pexels.com"].includes(host);
     const pixabayOriginalImage = (host === "pixabay.com" || host === "www.pixabay.com") && url.pathname.startsWith("/get/");
-    if (url.protocol !== "https:" || (!trustedHost && !pixabayOriginalImage) || url.username || url.password || url.hash) return null;
+    const wikimediaFile = host === "upload.wikimedia.org" && url.pathname.startsWith("/wikipedia/commons/");
+    if (url.protocol !== "https:" || (!trustedHost && !pixabayOriginalImage && !wikimediaFile) || url.username || url.password || url.hash) return null;
     return url;
   } catch { return null; }
 }
@@ -306,7 +307,7 @@ function safeAssetSourcePage(value) {
   try {
     const url = new URL(String(value || ""));
     const host = url.hostname.toLowerCase().replace(/\.$/, "");
-    const allowed = ["pexels.com", "www.pexels.com", "pixabay.com", "www.pixabay.com"];
+    const allowed = ["pexels.com", "www.pexels.com", "pixabay.com", "www.pixabay.com", "commons.wikimedia.org"];
     if (url.protocol !== "https:" || !allowed.includes(host) || url.username || url.password || url.hash) return "";
     return bounded(url.toString(), 1200);
   } catch { return ""; }
@@ -314,6 +315,29 @@ function safeAssetSourcePage(value) {
 function safeAssetThumbnail(value) {
   const url = safeAssetRemoteUrl(value);
   return url ? bounded(url.href, 1000) : "";
+}
+
+function mapWikimediaFile(page, kind) {
+  const info = page?.imageinfo?.[0];
+  if (!info?.url) return null;
+  const download = safeAssetRemoteUrl(info.url);
+  if (!download) return null;
+  const mime = String(info.mime || "").toLowerCase(), pathname = download.pathname.toLowerCase();
+  const isVideo = mime.startsWith("video/") || /\.(webm|mp4|mov)$/i.test(pathname);
+  const isImage = mime.startsWith("image/") || /\.(jpe?g|png|webp)$/i.test(pathname);
+  const accepted = kind === "video" ? ["video/mp4", "video/webm", "video/quicktime"] : ["image/jpeg", "image/png", "image/webp"];
+  if (kind === "video" ? !isVideo : !isImage) return null;
+  if (mime && !accepted.includes(mime)) return null;
+  const meta = info.extmetadata || {};
+  const clean = key => bounded(String(meta[key]?.value || "").replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"), 300);
+  const creator = clean("Artist") || clean("Credit") || "Contributor not identified";
+  const title = bounded(String(page.title || "").replace(/^File:/, ""), 200);
+  const sourcePage = safeAssetSourcePage("https://commons.wikimedia.org/wiki/" + encodeURIComponent(title.replace(/ /g, "_")));
+  return {
+    id: uuid(), provider: "wikimedia_commons", kind, title, author: creator, sourcePage,
+    thumbnailUrl: safeAssetThumbnail(info.thumburl || info.url), downloadUrl: download.href,
+    license: clean("LicenseShortName") || "License not identified", licenseUrl: clean("LicenseUrl"), licenseVerified: Boolean(clean("LicenseShortName") && clean("LicenseUrl"))
+  };
 }
 
 function mapPexelsVideo(video) {
@@ -788,7 +812,6 @@ export function createVideoStudioRouter({
       const { project, folder } = await ensureProject(req, req.params.id);
       const query = bounded(req.body?.query, 120), kind = ["video", "image"].includes(req.body?.kind) ? req.body.kind : "video";
       if (query.length < 2) return errorResult(res, 400, "ASSET_QUERY_REQUIRED", "Enter a search term of at least 2 characters.");
-      if (!env.PEXELS_API_KEY && !env.PIXABAY_API_KEY) return errorResult(res, 503, "STOCK_PROVIDER_NOT_CONFIGURED", "Set PEXELS_API_KEY or PIXABAY_API_KEY privately to search free stock catalogs.");
       const results = [];
       if (env.PEXELS_API_KEY) {
         try {
@@ -817,13 +840,31 @@ export function createVideoStudioRouter({
           }
         } catch {}
       }
+      let archiveSearched = false;
+      if (results.length < 6) {
+        archiveSearched = true;
+        try {
+          const endpoint = new URL("https://commons.wikimedia.org/w/api.php");
+          endpoint.searchParams.set("action", "query");
+          endpoint.searchParams.set("generator", "search");
+          endpoint.searchParams.set("gsrsearch", (kind === "video" ? "filetype:video " : "filetype:bitmap ") + query.slice(0, 100));
+          endpoint.searchParams.set("gsrnamespace", "6"); endpoint.searchParams.set("gsrlimit", "8");
+          endpoint.searchParams.set("prop", "imageinfo"); endpoint.searchParams.set("iiprop", "url|extmetadata|mime");
+          endpoint.searchParams.set("iiurlwidth", "640"); endpoint.searchParams.set("format", "json");
+          const response = await fetchImpl(endpoint.href, { headers: { "User-Agent": "ULTRON-Video-Studio/1.0 (local creative workspace)", Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(14000) });
+          if (response.ok) {
+            const data = await responseJson(response, 900000);
+            results.push(...Object.values(data?.query?.pages || {}).map(page => mapWikimediaFile(page, kind)).filter(Boolean));
+          }
+        } catch { /* Archive search is a best-effort fallback; retain available stock results. */ }
+      }
       project.assetSearchResults = results.filter(item => safeAssetRemoteUrl(item.downloadUrl)).slice(0, 12);
       project.lastAssetQuery = { query, kind, at: new Date().toISOString() };
       addActivity(project, "Stock media searched", query + " (" + kind + ")");
       await saveProject(folder, project);
       return res.json({ results: project.assetSearchResults.map(({ downloadUrl, ...item }) => ({ ...item, downloadable: Boolean(downloadUrl) })),
-        providers: { pexels: Boolean(env.PEXELS_API_KEY), pixabay: Boolean(env.PIXABAY_API_KEY) },
-        attribution: "Keep the source page and creator credit with imported media. Check the current licence and terms before publication." });
+        providers: { pexels: Boolean(env.PEXELS_API_KEY), pixabay: Boolean(env.PIXABAY_API_KEY), wikimediaCommons: archiveSearched },
+        attribution: "Free/archive results may have differing license conditions. Keep the source page and creator credit, confirm commercial/derivative-use rights, and read the current license before publication." });
     } catch (error) { return respondError(res, error, "Stock media search failed."); }
   });
 
@@ -851,7 +892,7 @@ export function createVideoStudioRouter({
       const id = uuid(), filename = id + extension;
       await writeFile(path.join(folder, "assets", filename), bytes, { mode: 0o600 });
       const asset = { id, kind: item.kind, title: bounded(item.title, 240), provider: item.provider, sourcePage: bounded(item.sourcePage, 1200),
-        author: bounded(item.author, 160), filename, mimeType: MIME_BY_EXT[extension], bytes: bytes.length,
+        author: bounded(item.author, 160), license: bounded(item.license, 200), licenseUrl: bounded(item.licenseUrl, 1200), filename, mimeType: MIME_BY_EXT[extension], bytes: bytes.length,
         sha256: crypto.createHash("sha256").update(bytes).digest("hex"), importedAt: new Date().toISOString(), selected: true };
       project.assets.push(asset); project.approvals.render = false; addActivity(project, "Stock media imported", asset.provider + ": " + asset.title);
       project.costEstimate = projectCostEstimate(env, project.script);
