@@ -33,7 +33,14 @@ function collectPdf(doc) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     doc.on("data", chunk => chunks.push(chunk));
-    doc.once("end", () => resolve(Buffer.concat(chunks)));
+    doc.once("end", () => {
+      const combined = Buffer.concat(chunks);
+      // Keep the PDF on an exact-size backing ArrayBuffer. Some older PDF.js
+      // callers mishandle pooled Node Buffers by reading beyond byteOffset.
+      const output = Buffer.allocUnsafeSlow(combined.length);
+      combined.copy(output);
+      resolve(output);
+    });
     doc.once("error", reject);
   });
 }
