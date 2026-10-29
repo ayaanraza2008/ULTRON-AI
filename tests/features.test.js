@@ -1730,7 +1730,7 @@ test("authenticated presentation endpoint returns an editable OOXML PowerPoint a
     });
     assert.equal(response.status, 200);
     assert.ok((response.headers.get("content-type") || "").includes("application/vnd.openxmlformats-officedocument.presentationml.presentation"));
-    assert.match(response.headers.get("content-disposition") || "", /ultron-presentation\\.pptx/);
+    assert.ok((response.headers.get("content-disposition") || "").includes("ultron-presentation.pptx"));
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     const bytes = Buffer.from(await response.arrayBuffer());
