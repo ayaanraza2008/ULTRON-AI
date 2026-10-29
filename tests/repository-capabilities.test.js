@@ -37,7 +37,7 @@ test("new screenshot repositories have explicit safe/unverified states", () => {
   const byId = Object.fromEntries(status.integrations.map(item => [item.id, item]));
   assert.equal(byId["heretic"].state, "review_required_upstream_unverified");
   assert.equal(byId["atticus-mac"].state, "desktop_companion_required");
-  assert.equal(byId["ecc"].state, "guidance_only");
+  assert.equal(byId["ecc"].state, "task_aware_skill_selector");
   assert.equal(byId["strata"].state, "optional");
   const configuredStrata = getRepositoryCapabilityStatus({ STRATA_BASE_URL: "http://127.0.0.1:8080/v1", STRATA_MODEL: "local-model" }).integrations.find(item => item.id === "strata");
   assert.equal(configuredStrata.state, "configured_unverified");
