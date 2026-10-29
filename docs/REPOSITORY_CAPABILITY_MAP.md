@@ -81,7 +81,7 @@ State meanings:
 ## Next integration order
 
 1. Verify and harden existing adapters: model provider, VoiceStudio, ComfyUI, Geo-Sleuth, Handy bridge, Browser Use, AgentMemory, HeyGem and OmniVoice.
-2. Live-test the owner-scoped Chatwoot, Cal.diy and OpenProject read-only adapters on dedicated test data; then implement further read-only adapters for AppFlowy only after API schemas/auth scopes are confirmed.
+2. Live-test the owner-scoped Chatwoot, Cal.diy, OpenProject and AppFlowy Cloud read-only adapters on dedicated test data, including AppFlowy folder/document/database-collab reads; verify real endpoint/auth compatibility before marking any adapter live-verified.
 3. Add OpenSEO and public-API discovery with explicit cost/terms checks; Paperclip read-only governance is now implemented but still needs live endpoint verification. OpenViking has a read-only owner-scoped service adapter; live connectivity still requires configuration and verification. OpenDesign remains a separate service adapter.
 4. Build one authenticated desktop bridge for local capture/dictation and the approved Windows action allowlist before adding Cap/OpenWhispr/REA local workflows.
 5. Configure and live-test Obscura and Cactus/Needle on a local companion or authenticated private endpoint; benchmark on target hardware before enabling model downloads. Keep Cactus cloud handoff disabled unless separately approved.
