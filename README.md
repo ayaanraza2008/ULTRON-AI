@@ -200,3 +200,22 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## Local AI Employees runtime
+
+ULTRON now includes a local-first wrapper for the upstream MIT AI Employees kits. Its eight roles/60 routines map to the existing ULTRON role catalog. Install one role at a time into your own local folder; the upstream kit files, routine instructions, schedule definitions, browser-capability mappings and correction files stay on your machine. The wrapper never adds API keys to files and does not register schedules until you open the kit in your chosen agent and follow its install prompt.
+
+```bash
+npm run employees -- list
+npm run employees -- doctor
+npm run employees -- hire chief-of-staff
+# Or install all eight local role kits in one pass:
+npm run employees -- hire-all
+npm run employees -- status
+npm run employees -- brief
+npm run test:employees
+```
+
+Choose a folder outside OneDrive, Dropbox, Google Drive and iCloud. The default is `~/ULTRON-AI-Employees`. After hiring, open the printed role directory in your signed-in agent and follow `INSTALL-PROMPT.md`; then verify the scheduled task and its run logs. `brief` combines local role briefs without uploading them. To add a routine, use `npm run employees -- new-routine <role-id> <role-prefix>-<routine-name>`, then complete the generated registration checklist and verify the schedule manually.
+
+See [the local runtime guide](docs/AI_EMPLOYEES_LOCAL_RUNTIME.md) for role IDs, harness setup, safety gates, testing and the distinction between local browser-driven routines and ULTRON's existing hosted plan-only worker. Source: [markfulton/ai-employees](https://github.com/markfulton/ai-employees), pinned at `ai-employees@1.9.0`; the upstream MIT license is retained in each installed kit.
