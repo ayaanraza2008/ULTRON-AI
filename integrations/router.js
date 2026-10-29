@@ -438,5 +438,16 @@ export function createIntegrationRouter({ env = process.env, fetchImpl = safePin
     } catch (error) { safeError(res, error, "AppFlowy document search"); }
   });
 
+
+  router.get("/integrations/appflowy/workspaces/:workspaceId/documents/:viewId", requireSupabaseUser, requireIntegrationOwner, async (req, res) => {
+    try {
+      return res.json(await runAppFlowyAction({
+        env, fetchImpl, userId: req.supabaseUser?.id, action: "read_document",
+        workspaceId: req.params.workspaceId, viewId: req.params.viewId,
+        documentType: bounded(req.query.type, 40) || "document"
+      }));
+    } catch (error) { safeError(res, error, "AppFlowy document read"); }
+  });
+
   return router;
 }
