@@ -72,7 +72,7 @@ export function buildRuntimeReadiness({
       ["ULTRON_BROWSER_USE_URL", "ULTRON_BROWSER_USE_TOKEN"], browserConfigured
         ? "Bridge settings are present; browser readiness and real browser actions are not tested here."
         : "A separately hosted, authenticated Browser Use bridge is required."),
-    component("chrome_devtools", "Chrome DevTools browser debugging", chromeDevtoolsConfigured ? "configured_unverified" : "blocked",
+    component("chrome_devtools", "Chrome DevTools browser debugging", chromeDevtoolsConfigured ? "configured_unverified" : "optional",
       ["ULTRON_CHROME_DEVTOOLS_URL", "ULTRON_CHROME_DEVTOOLS_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], chromeDevtoolsConfigured
         ? "Bridge URL, token and owner guard are configured; live Chrome connectivity and performance results remain unverified. A hosted backend cannot directly reach a developer PC localhost."
         : "Requires the TypeScript Chrome CDP bridge, a random token of at least 32 characters, and the exact owner UUID. Remote access must use an authenticated HTTPS gateway."),
