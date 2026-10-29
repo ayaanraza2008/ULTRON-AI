@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ultron-local-assistant"
+version = "0.1.0"
+description = "Local-first terminal assistant tools for ULTRON AI"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+google = [
+  "google-api-python-client>=2.150.0",
+  "google-auth-httplib2>=0.2.0",
+  "google-auth-oauthlib>=1.2.1",
+]
+
+[project.scripts]
+ultron-local = "ultron_local_assistant.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ultron_local_assistant*"]
