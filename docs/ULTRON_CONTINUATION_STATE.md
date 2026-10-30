@@ -2,8 +2,8 @@
 
 **Checkpoint date:** 2026-10-30  
 **Working candidate branch:** `integration/ultron-cross-sector-current-main-20261029`  
-**Latest source/workflow head before documentation refresh:** `27077e2c84d9f34beb26ed42705e190cc8c68a26`  
-**Latest acceptance-matrix commit:** `9d4e689f7103a9168a1814870d378d8d4794596c`  
+**Latest source/workflow head before documentation refresh:** `57ee9bd27387b94d09bb978e0fe900430f613d1a`  
+**Latest acceptance-matrix commit:** `5a0117c5b2792156e9c3d55278adb12b1841a0e2`  
 **Pull request:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **Default branch:** `main`
 
@@ -64,6 +64,26 @@ Three errors from initial PR #400 CI [run 41093747376](https://github.com/ayaanr
 
 The active PR #400 source `public/speech-voices.js` already contains correct male/female name regexes with actual word boundaries. The only remaining PR #404 delta was two direct regressions in `tests/speech-voices.test.js`; they were forward-ported in commit `27077e2c84d9f34beb26ed42705e190cc8c68a26`. One test verifies Microsoft David outranks Microsoft Zira when locale and other factors are equal; the second verifies Zira is penalized versus a neutral voice. The prior PR #404 run [41083912987](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41083912987) passed the standalone branch tests, but the forward-ported tests still require current PR #400 CI. Actual voice output, pronunciation, speech latency and microphone/browser quality remain unverified.
 
+
+## Paired credential-file path hardening
+
+The review found `_credential_file()` rejected ordinary symlinks but did not reuse the new reparse-point guard. It now calls `_is_symlink_or_junction()` for the credentials directory and `device-credentials.json`, preventing a junction/reparse target from redirecting heartbeat bearer-token persistence or reads. Two tests cover an actual symlinked credentials file (skipping only when the platform cannot create symlinks) and simulated Windows reparse metadata. Commits: implementation `0488b583bcf771533e42a212f43759e8572037e2`, tests `ac1100bd2a3aae0102db758bf75dc635190ffb6d`, newline fixture correction `2dd65ed37a29d355f63c1765fe856236647d1a2c`. The test has not yet executed in a completed workflow.
+
+## Browser speech voice scoring test forward-port
+
+Two focused tests from stale PR #404 have been added to current `tests/speech-voices.test.js` in commit `27077e2c84d9f34beb26ed42705e190cc8c68a26`: when locale and other score inputs tie, a named male voice outranks a named female voice; the female name also loses to a neutral voice. Current source already contains the corrected word-boundary regex. Prior standalone PR #404 test run `41083912987` passed, but the forward-ported tests are pending current candidate CI.
+
+## Full workflow inventory after Node 24 upgrade
+
+The repository has five workflow files: `ci.yml`, `windows-companion.yml`, `android-companion.yml`, `chrome-devtools.yml`, and `production-verification.yml`. The four build/test paths were modernized:
+- Core CI: checkout v7, setup-node v7, setup-python v7.
+- Windows companion: checkout v7, setup-dotnet v6, upload-artifact v7.
+- Android companion: checkout v7, setup-java v6, upload-artifact v7; android-actions/setup-android v4 and gradle/actions/setup-gradle v4 already use Node 24.
+- Chrome DevTools: checkout v7 and setup-node v7 on Node 24; path filters now include the workflow file so workflow-only edits are tested.
+- Production verification is a shell-only read-only health/revision check triggered on main; it contains no third-party action and was not modified. No workflow deploys or alters Render settings in this session.
+
+All four build/test workflows have queued runs on exact source/workflow head `57ee9bd27387b94d09bb978e0fe900430f613d1a`: [ULTRON CI 41102684180](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41102684180), [Android Companion 41102684159](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41102684159), [Chrome DevTools Bridge 41102684173](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41102684173), and [Windows Companion 41102684194](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41102684194). The connector returned all jobs as queued. No result has been claimed for these changes.
+
 ## PR #400 desktop pairing relay security review
 
 Source review found: API-level rate limiting; high-entropy single-use pairing codes; hashed device tokens; atomic expiry/consumption and device registration; narrowly named service-role RPC calls; owner-scoped device inventory/revocation; narrow migration grants/RLS; and no remote command/control endpoint. This is not live migration or pairing verification. The separate relay currently provides pairing/status/heartbeat only.
@@ -102,7 +122,7 @@ Current comparison against declared bases at the time of review:
 ## Immediate next action when resuming
 
 1. Re-read this file and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`; inspect PR #400 actual head (latest source/workflow head was `0fd8c84c3198674a4ec04357b2b593c6b3821b6a`; matrix refresh commit was `11fe766899129ff6ce2ac6b811a1b2d550688685`).
-2. Fetch Actions runs for the actual latest PR #400 head (the last observed head before this checkpoint update was `9d4e689f7103a9168a1814870d378d8d4794596c`). The new action upgrades, identity/reparse tests, World Intelligence patch-forward and speech scoring tests are not complete until all current ULTRON CI and Windows Companion jobs pass. A run lookup for this exact head returned no workflow runs; never infer a pass from older runs.
+2. Fetch Actions runs for the actual latest PR #400 head (the last observed source/workflow head before this checkpoint update was `57ee9bd27387b94d09bb978e0fe900430f613d1a`; matrix update commit `5a0117c5b2792156e9c3d55278adb12b1841a0e2` is newer). Verify current ULTRON CI, Windows Companion, Android Companion and Chrome DevTools workflows. At the last check, all four runs on 57ee were queued: 41102684180, 41102684194, 41102684159, 41102684173. The action upgrades, identity/credential/reparse tests, World Intelligence patch-forward and speech scoring tests remain unverified until these workflows execute successfully on the actual latest head.
 3. Inspect the Node test output and Python logs: confirm malformed UUID, symlink and junction/reparse tests were actually executed on Ubuntu/Windows; verify both audits show zero vulnerabilities, pinned World Intelligence build and bridge pass, and Windows artifact upload succeeds.
 4. Check the Windows workflow logs for the prior Node20 deprecation warning; confirm it has disappeared after moving to Node24-compatible action majors.
 5. If any CI failure occurs, inspect exact failing test/log, fix only the cause, rerun and re-record the actual head.
