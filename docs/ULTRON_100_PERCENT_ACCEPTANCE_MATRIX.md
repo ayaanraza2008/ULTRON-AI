@@ -2,7 +2,8 @@
 
 **Snapshot under review:** 2026-10-30  
 **Base candidate:** `integration/ultron-cross-sector-current-main-20261029`  
-**Base commit:** `75089c38baf61d47d99daba3f23b2e76b3973826`  
+**Initial CI evidence commit:** `75089c38baf61d47d99daba3f23b2e76b3973826`  
+**Matrix review branch base:** `75711594340fef6c01ed6890b3024faf0a38ac88`  
 **Base PR:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **This document's rule:** source presence, a green mock test, configuration, or a successful build is not proof of live behavior.
 
@@ -22,14 +23,14 @@ A row is **not** 100% complete until every applicable automated, integration, se
 
 ## Current CI evidence
 
-The latest observed PR-head workflow is [GitHub Actions run 41075191599](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41075191599), for exact head `75089c38baf61d47d99daba3f23b2e76b3973826`. Its three jobs all completed successfully:
+Latest observed candidate CI is [GitHub Actions run 41076988615](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41076988615), for exact integration head `75711594340fef6c01ed6890b3024faf0a38ac88`. All three jobs completed successfully:
 
-- Node/Python test job: `npm run check` passed and syntax-checked 165 JavaScript source files; `npm test` reported **812 tests, 811 passed, 0 failed, 1 skipped**.
-- Local assistant: **19 Python unit tests passed**; Python compilation passed.
-- Dependency audits: both install audit and `npm audit --omit=dev --audit-level=high` reported **0 vulnerabilities**.
-- Windows installer PowerShell parsing passed; World Intelligence build and ULTRON bridge verification passed.
+- Node test/build job: `npm run check` passed and syntax-checked **165 JavaScript source files**; `npm test` reported **812 tests, 811 passed, 0 failed, 1 skipped**.
+- Python local assistant: **29 tests passed**; dedicated Windows companion protocol suite: **10 tests passed**; Python compilation passed for the assistant and companion files.
+- Dependency audits: install audit and `npm audit --omit=dev --audit-level=high` each reported **0 vulnerabilities**.
+- Windows installer PowerShell parsing and the pinned World Intelligence build/ULTRON bridge verification passed.
 
-The one skipped Node test is the explicitly opt-in live two-account Supabase isolation test. CI did not prove real provider inference, authenticated live database flows, actual worker completion, Docker execution, microphone/speaker quality, Windows pairing, or real external-service actions. The Node runner also emitted a `punycode` deprecation warning and a GitHub Actions Node 20 action-runtime deprecation warning; neither caused this run to fail and both should be reviewed separately.
+The one skipped Node test is the explicitly opt-in live two-account Supabase isolation test. CI does not prove real model inference, authenticated live database flows, worker completion, Docker execution on the target host, microphone/speaker quality, physical Windows pairing, or real external-service actions.
 
 ## Windows local companion CI follow-up
 
@@ -77,6 +78,47 @@ The one skipped Node test is the explicitly opt-in live two-account Supabase iso
 | REL-01 | CI/build/dependency readiness | PR-head CI run 41075191599 passed all three jobs; audits reported 0 vulnerabilities. | Address action runtime deprecation warning and Node `punycode` deprecation after checking current compatible action/runtime versions. | Existing CI and dependency audits. | Fresh CI on any change. | Review final PR diff and release notes. | TESTED |
 | REL-02 | Production/deployment readiness | Read-only inventory recorded `ultron-ai-core` at main SHA `6b7f09d…`; separate `ultron-ai` service had attempts blocked by Render `pipeline_minutes_exhausted`. PR #400 is not deployed. | Resolve canonical service/release target and build quota in a separately authorized release task; deploy only after explicit approval. | Build/health checks in CI. | Post-deploy revision and safe smoke workflow. | Owner-approved release and rollback check. | BLOCKED |
 | SPEC-01 | Fictional sentience / unlimited resources | These are not measurable software capabilities. | Implement practical equivalents only: tool autonomy under permissions, measurable task quality, finite compute budgets and user control. | Not applicable to source tests. | Not applicable. | Do not advertise consciousness or unlimited capability. | NOT APPLICABLE |
+
+## Dependency and evidence register
+
+This register supplies the primary prerequisites and evidence class for every acceptance-matrix ID. “Source/CI” must not be read as “live verified.”
+
+| ID | Primary dependencies / prerequisites | Evidence quality and current reference |
+|---|---|---|
+| AI-01 | Node backend and model registry, configured model IDs, selected-model UI dispatch. | Run 41076988615; model-picker and selected-provider regression tests. Source/CI only; live prompt completion still open. |
+| AI-02 | Registry/provider adapters, OpenRouter model availability, optional Groq/Gemini keys and account quotas. | Run 41076988615; provider-order/fallback mock tests. Live usage and cost behavior unverified. |
+| AI-03 | At least one valid server-side provider key and compatible live text model; explicit smoke authorization. | Mock smoke tests in CI; live smoke not run. |
+| AI-04 | Vision-capable model/provider key, test image and explicit live smoke environment. | Vision routing/mock tests in CI; real semantic image challenge not run. |
+| AG-01 | Agent runtime, task router, approved tool registry and authenticated owner context. | Agent/task-router and approval regression tests in CI; representative live authorized workflow unverified. |
+| AG-02 | Supabase task schema/RLS, active worker, service-role secret and disposable test-user UUID. | Worker/task unit tests; live queue-to-terminal-state smoke blocked. |
+| AG-03 | Autonomy policy, tool guards, authenticated owner and explicit action approvals. | Policy and agent approval-guard tests in CI; consequential-tool manual review remains. |
+| MEM-01 | Cognitive memory APIs, Supabase auth/RLS, user preference and two disposable accounts. | Memory unit/API tests in CI; real persistence and cross-user retrieval/deletion unverified. |
+| MEM-02 | Conversation/message schemas, authenticated session, storage and disposable accounts. | Server persistence tests in CI; live create/resume and cross-account denial unverified. |
+| RES-01 | Search provider or public fallback reachability, DNS-pinned network transport and source validation. | Research/weather/Wikipedia/GitHub/clock regression tests in CI; source quality and live provider requests not comprehensively verified. |
+| CODE-01 | Repository tools, authenticated GitHub access when private, disposable checkout and approved patch workflow. | Repository capability and agent tests in CI; isolated real repository workflow still needs manual confirmation. |
+| CODE-02 | Docker Engine on target host and reviewed cached digest-pinned image; opt-in owner-only setting. | Mocked command/isolation tests in CI; real Docker runtime and host containment blocked. |
+| VIS-01 | Upload/input validation, parsers, supported vision model, optional explicitly installed OCR engine. | Document extraction and vision routing tests in CI; real provider challenge and hostile scanned-document corpus remain. |
+| VO-01 | Supported browser, microphone/speaker, browser speech APIs, permissions and a target device. | Source tests cover adjacent voice/wake-word logic; recognition quality, interruption and latency require device tests. |
+| VO-02 | VoiceStudio endpoint, available STT/TTS models, optional server key and audio device. | Mocked VoiceStudio integration tests in CI; live audio quality and latency not verified. |
+| DESK-01 | Windows 10/11 device, local Python package, generated token, allowed local browser Origin if needed, authenticated pairing/gateway for cloud access. | 10 local companion protocol tests and desktop-adapter tests passed in run 41076988615; physical install and cloud-to-device pairing remain unverified. |
+| UI-01 | Current backend APIs, authenticated browser session, supported desktop/mobile browsers and accessibility tools. | Frontend-serving/API regression tests and CI build; real browser/device accessibility acceptance outstanding. |
+| INT-01 | Tool catalog/router, service license review, owner UUID and least-privilege credentials per service. | Adapter/catalog mock tests in CI; each enabled upstream still requires its own live health/workflow evidence. |
+| INT-02 | Per-service OAuth/API credentials, endpoint/model availability, quotas and explicit approval for paid or mutating actions. | Optional adapter tests in CI; no claim of live parity for AppFlowy/OpenDesign/OpenSEO/media providers. |
+| DOC-01 | PDFKit/JSZip generation, authenticated report endpoint and viewer/browser download. | Structure/content/pagination regression tests in CI; real viewer round-trip and real browser download not completed. |
+| DOC-02 | Supabase private Storage bucket, document migration, Auth session, storage policies and two test accounts. | Migration/storage integrity tests in CI; two-user upload/download/delete E2E remains blocked. |
+| MEDIA-01 | Local Video Studio, FFmpeg/FFprobe, test media, optional provider credentials and rights-cleared assets. | Video Studio HTTP/route tests in CI; physical rendering and output inspection still needed. |
+| SEC-01 | Auth/session configuration, DNS-safe transport, CORS/CSRF/SSRF controls, audit policy and supported dependency tree. | Security regression tests and 0-vulnerability npm audits in run 41076988615; deployed-config threat testing remains. |
+| SEC-02 | Live Supabase project, RLS policies, SQL read-only audit and worker function ACLs. | Read-only audit recorded 8/8 inspected public tables with RLS, 26 owner policies and restricted worker function ACLs; this narrow baseline is not two-user end-to-end proof. |
+| SEC-03 | Supabase project-owner access and eligible Auth configuration. | Security Advisor warning documents leaked-password protection disabled; owner must enable and re-check. |
+| DB-01 | Supabase migration files, exact live migration ledger, test project/backups and approved migration operator. | Migration-ledger/SQL regression tests; candidate study/notes/reminders migrations remain source-only. |
+| DB-02 | Supabase Auth settings, email provider/redirect URLs, two disposable accounts and confirmation/recovery access. | Auth/API unit tests; live signup/recovery/session/cross-account E2E blocked. |
+| PERF-01 | Target Ryzen 7 5700U/8 GB RAM/AMD iGPU PC; optional small Ollama model and bounded workloads. | 19 earlier local-assistant Python tests plus current 29-test suite; target-device latency/RAM/CPU measurements not run. |
+| PERF-02 | Target desktop/mobile browsers, network profile, accessibility inspection and performance tooling. | Build and frontend tests in CI; measured browser performance and assistive-technology checks outstanding. |
+| SELF-01 | Quality-gate rules, versioned benchmark set, sample candidate configurations and rollback process. | Quality-gate/regression tests in CI; measured real-model improvement and rollback drill not demonstrated. |
+| SYS-01 | Local companion CLI and physical target OS/hardware for final comparison. | Local health unit tests; physical Windows metric comparison remains. |
+| REL-01 | GitHub Actions, pinned Node/Python runtimes, reproducible dependency lock and supported action versions. | Run 41076988615 all jobs green and audits clean; review Node/action deprecation warnings separately. |
+| REL-02 | Canonical Render service, included build minutes/quota, explicit production authorization and rollback plan. | Read-only inventory only; deployment blocked by previously observed pipeline-minute exhaustion and deployment authorization boundary. |
+| SPEC-01 | No external dependency; capability defined as measurable software behavior rather than sentience. | Technically not applicable: consciousness, unlimited intelligence and unlimited compute are not engineering acceptance criteria. |
 
 ## External blockers and owner actions
 
