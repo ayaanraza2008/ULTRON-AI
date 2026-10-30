@@ -310,6 +310,34 @@ export function createDesktopCompanionRelayRouter({
     }
   });
 
+  // Revalidate the claimed request after the user types ALLOW and immediately
+  // before invoking the local Windows shortcut. Revocation or expiry blocks it.
+  router.post("/desktop-companion/actions/:id/authorize", async (req, res) => {
+    const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
+    const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
+    const actionId = cleanString(req.params.id, 64);
+    const deviceId = cleanString(req.body?.deviceId, 64);
+    if (!match || !UUID_RE.test(actionId) || !UUID_RE.test(deviceId) ||
+        Object.keys(req.body || {}).sort().join(",") !== "deviceId") {
+      return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_AUTHORIZATION", message: "Provide a valid action ID and paired device identity." } });
+    }
+    try {
+      const authorized = await privilegedSupabaseRpc("authorize_desktop_companion_action", {
+        p_token_hash: sha256(match[1]),
+        p_device_id: deviceId,
+        p_action_id: actionId
+      });
+      if (authorized !== true) {
+        return res.status(409).json({ error: { code: "DESKTOP_ACTION_NO_LONGER_AUTHORIZED", message: "The action expired, was revoked, or is no longer pending for this device." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ authorized: true, actionId });
+    } catch (error) {
+      logger.warn?.("Desktop companion action authorization failed", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_AUTHORIZATION_FAILED", "Could not authorize the local desktop action.");
+    }
+  });
+
   router.post("/desktop-companion/actions/:id/complete", async (req, res) => {
     const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
     const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
