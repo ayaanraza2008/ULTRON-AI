@@ -48,7 +48,7 @@ const CATEGORY_TOOLS = Object.freeze({
   spaceplanner: ["create_spaceplanner_plan"],
   world_intelligence: ["world_intelligence_command"],
   paperclip: ["paperclip_read_agent_governance"],
-  hermes: ["check_hermes_agent", "hermes_agent_task", "hermes_agent_start_run", "hermes_agent_run_status", "hermes_agent_stop_run"],
+  hermes: ["check_hermes_agent", "hermes_agent_task", "hermes_agent_start_run", "hermes_agent_run_status", "hermes_agent_stop_run", "hermes_agent_list_skills", "hermes_agent_list_toolsets"],
   cactus: ["check_cactus"],
   comfyui: ["check_comfyui", "run_comfyui_workflow"],
   media: [
