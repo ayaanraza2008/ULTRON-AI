@@ -527,8 +527,8 @@ export function buildChromeDevToolsActionInput(args = {}) {
  */
 export function parseVoiceCloneConsent(value) {
   const text = typeof value === "string" ? value.slice(0, 6000) : "";
-  const own = text.match(/^\s*i confirm this is my own voice and i approve cloning the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
-  const speaker = text.match(/^\s*i confirm i have the speaker's permission and i approve cloning the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
+  const own = text.match(/^\s*i confirm this is my own voice and i approve you to clone the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
+  const speaker = text.match(/^\s*i confirm i have the speaker's permission and i approve you to clone the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
   const match = own || speaker;
   if (!match || /\b(?:do not|don't|never|not|withdraw|revoke|cancel|hold off|wait)\b/i.test(text.slice(match[0].length))) return null;
   return own ? "own_voice" : "speaker_permission";
