@@ -7,6 +7,38 @@ const html = await readFile(new URL("../public/index.html", import.meta.url), "u
 const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
 const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 const proxySource = await readFile(new URL("../core-ui-proxy.mjs", import.meta.url), "utf8");
+const pwaManifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
+const serviceWorker = await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8");
+
+
+test("the interface has an installable standalone PWA manifest for phones and desktops", () => {
+  assert.equal(pwaManifest.name, "ULTRON AI — Living Core");
+  assert.equal(pwaManifest.short_name, "ULTRON");
+  assert.equal(pwaManifest.start_url, "/");
+  assert.equal(pwaManifest.scope, "/");
+  assert.equal(pwaManifest.display, "standalone");
+  assert.equal(pwaManifest.theme_color, "#020205");
+  assert.deepEqual(
+    pwaManifest.icons.map(icon => icon.sizes).sort(),
+    ["192x192", "512x512"]
+  );
+  assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(html, /rel="apple-touch-icon" href="\/icons\/icon-180\.png"/);
+  assert.match(html, /apple-mobile-web-app-capable/);
+  assert.ok(app.includes('navigator.serviceWorker.register("/service-worker.js", { scope: "/" })'));
+});
+
+test("the service worker caches only the static shell and never caches private API traffic", () => {
+  assert.ok(serviceWorker.includes('request.method !== "GET"'));
+  assert.ok(serviceWorker.includes('url.origin !== self.location.origin'));
+  assert.ok(serviceWorker.includes('url.pathname === "/api" || url.pathname.startsWith("/api/")'));
+  assert.ok(serviceWorker.includes('url.pathname === "/world-intelligence" || url.pathname.startsWith("/world-intelligence/")'));
+  assert.ok(serviceWorker.includes("const SHELL_PATHS = new Set("));
+  assert.ok(serviceWorker.includes("if (!SHELL_PATHS.has(url.pathname)) return;"));
+  assert.ok(serviceWorker.includes("const CACHE_NAME ="));
+  assert.match(proxySource, /worker-src 'self'/);
+  assert.match(proxySource, /filename === "service-worker\.js" \|\| filename === "manifest\.webmanifest" \? "no-cache"/);
+});
 
 test("the default screen is a black, minimal living-core interface", () => {
   assert.match(html, /id="core-canvas"/);
