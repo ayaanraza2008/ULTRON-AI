@@ -331,7 +331,7 @@ class CompanionServerTests(unittest.TestCase):
         self.assertEqual(requests[0][3]["Authorization"], "Bearer " + ("T" * 43))
         self.assertEqual(requests[0][3]["Connection"], "close")
 
-    def test_cloud_request_does_not_follow_redirects_or_forward_device_token(self):
+    def test_cloud_request_does_not_follow_redirects_to_unvalidated_hosts(self):
         requests = []
         class Response:
             status = 302
