@@ -95,7 +95,7 @@ class Harness2Tests(unittest.TestCase):
     def test_codex_executor_uses_readonly_ephemeral_cli(self):
         stdout = json.dumps({"type":"item.completed","item":{"type":"agent_message","text":"hello"}})
         completed = subprocess.CompletedProcess([], 0, stdout, "")
-        with patch.object(harness2.subprocess, "run", return_value=completed) as mocked:
+        with patch.object(harness2, "run_bounded", return_value=completed) as mocked:
             self.assertEqual(harness2.Executor("codex", None, 30).ask("prompt"), "hello")
         command = mocked.call_args.args[0]
         for flag in ("exec", "--json", "--sandbox", "read-only", "--ask-for-approval",
@@ -103,7 +103,8 @@ class Harness2Tests(unittest.TestCase):
                      "--skip-git-repo-check"):
             self.assertIn(flag, command)
         self.assertEqual(command[-1], "-")
-        self.assertEqual(mocked.call_args.kwargs["input"], "prompt")
+        self.assertEqual(mocked.call_args.kwargs["input_text"], "prompt")
+        self.assertEqual(mocked.call_args.kwargs["timeout"], 30)
         self.assertNotEqual(Path(mocked.call_args.kwargs["cwd"]).resolve(), self.root.resolve())
 
     def test_opencode_executor_uses_temporary_deny_by_default_agent(self):
@@ -118,7 +119,7 @@ class Harness2Tests(unittest.TestCase):
             agent = Path(kwargs["env"]["OPENCODE_CONFIG_DIR"]) / "agents" / "harness2-readonly.md"
             captured["agent"] = agent.read_text()
             return completed
-        with patch.object(harness2.subprocess, "run", side_effect=fake_run):
+        with patch.object(harness2, "run_bounded", side_effect=fake_run):
             self.assertEqual(harness2.Executor("opencode", None, 30).ask("prompt"), "hello")
         command = captured["command"]
         for flag in ("--pure", "run", "--agent", "harness2-readonly", "--format", "json", "--dir"):
