@@ -73,7 +73,7 @@ test("VoiceStudio cloning requires supplied audio, creates the profile, and reco
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "I confirm this is my own voice and I approve cloning the attached audio into a VoiceStudio profile.", audioBase64, mimeType: "audio/wav" })
+      body: JSON.stringify({ prompt: "I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile.", audioBase64, mimeType: "audio/wav" })
     });
     assert.equal(response.status, 200);
     const body = await response.json();
