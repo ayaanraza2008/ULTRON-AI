@@ -164,3 +164,23 @@ Current comparison against declared bases at the time of review:
 2. Confirm the Android build succeeds on Gradle action v6.4.1 and the Node 20 deprecation warning is absent. If a new warning/failure appears, inspect its exact source and make the smallest safe correction.
 3. Inspect core CI's full result, including Node test counts, Python tests, source syntax scan, dependency audits, Docker sandbox smoke and World Intelligence build/bridge. Keep the Supabase isolation test marked skipped/blocked until authorized disposable accounts exist.
 4. Update this checkpoint and the acceptance matrix with the observed exact-head results, then move to the next independently verifiable blocker. Do not merge, deploy, apply migrations, change production settings, consume paid quota, or modify PHANTOM/NOX.
+
+
+## 2026-10-30 verification update — Gradle action upgrade passed
+
+- Exact code/workflow head `e746927ac41f8572998a97f178156b4896c29f74` completed all four workflows successfully:
+  - ULTRON CI [run 41104536323](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536323): all four jobs green (Node/Python tests, Windows-script parser, Docker sandbox smoke, World Intelligence build/bridge). Node suite: **848 tests, 847 passed, 0 failed, 1 skipped**. The local-assistant Python suite reported **79 tests, all passed**. Repository syntax scan reported **175 JavaScript source files**. Both ULTRON dependency audits reported **0 vulnerabilities**.
+  - Windows Companion [run 41104536689](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536689): successful build/publish and artifact upload.
+  - Android Companion [run 41104536252](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536252): successful `gradle --no-daemon assembleDebug` using `gradle/actions/setup-gradle@v6.4.1`; Android debug APK uploaded (artifact ID `13000567125`, 760,063 bytes). The old Gradle action's Node 20 deprecation warning is absent from the inspected log.
+  - Chrome DevTools Bridge [run 41104536548](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536548): successful.
+- The Android workflow still prints three upstream warnings: `The SDK Manager CLI tool (sdkmanager) is deprecated. Use Android CLI instead.` The workflow already uses the latest inspected `android-actions/setup-android@v4.0.4`; its official README still documents sdkmanager for package installation. Do not replace it with an unverified command. Next investigate Google's supported Android CLI replacement and update only if the toolchain provides a documented, compatible path. This warning did not fail the build.
+- The single Node skip remains live two-account Supabase Auth/data isolation. It is still **not passed**; dedicated disposable accounts and explicit write authorization are required.
+- Documentation commits `4f17899a14e21172bbe692e08e1526ec0bbcbea3` and `9a3dc1c61ac7c03fdcf072ea0a2c139753ade8c9` followed the e746 code head. They changed only the continuation/acceptance documents. Their resulting exact-head workflows were started: core `41104755216`, Android `41104755369`, Windows `41104755220`, Chrome `41104755167`. Recheck these latest docs-head runs before claiming current branch-wide green status.
+- PR #400 remains open and unmerged. No Render deployment/settings, production secrets, Supabase migration application, paid provider call, or PHANTOM/NOX project change occurred.
+
+### Next unfinished task
+
+1. Verify the latest documentation-head workflow runs above.
+2. Investigate the SDK Manager deprecation warning against Google's current official Android CLI documentation; do not make speculative toolchain changes.
+3. Continue the highest-priority remaining live acceptance blocker that can be addressed without owner credentials: inspect auth/account-isolation test harness and diagnostics for correctness, but keep live two-account isolation blocked until disposable identities and write authorization are supplied.
+4. Preserve the production/deployment and PHANTOM/NOX boundaries.
