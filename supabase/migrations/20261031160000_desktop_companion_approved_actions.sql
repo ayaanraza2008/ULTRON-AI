@@ -181,6 +181,103 @@ $function$;
 
 -- A result is accepted only from the same still-active paired device and only
 -- for a command previously delivered to it. Result codes are deliberately enum-like.
+-- After the Windows user approves a displayed action, re-check that the
+-- command is still delivered, unexpired, and bound to the same active device.
+create or replace function public.authorize_desktop_companion_command(
+  p_token_hash text,
+  p_device_id uuid,
+  p_command_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_authorized boolean;
+begin
+  if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}
+  p_token_hash text,
+  p_device_id uuid,
+  p_command_id uuid,
+  p_status text,
+  p_result_code text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_updated_id uuid;
+begin
+  if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$'
+     or p_device_id is null
+     or p_command_id is null
+     or p_status not in ('completed', 'rejected', 'failed')
+     or p_result_code not in (
+       'USER_APPROVED', 'USER_REJECTED', 'ACTION_COMPLETED',
+       'ACTION_FAILED', 'APPROVAL_EXPIRED'
+     ) then
+    return false;
+  end if;
+
+  update public.desktop_companion_commands c
+     set status = p_status,
+         completed_at = pg_catalog.now(),
+         result_code = p_result_code
+    from public.desktop_companion_devices d
+   where c.id = p_command_id
+     and c.device_record_id = d.id
+     and d.token_hash = p_token_hash
+     and d.device_id = p_device_id
+     and d.revoked_at is null
+     and c.status = 'delivered'
+     and c.expires_at > pg_catalog.now()
+  returning c.id into v_updated_id;
+
+  return v_updated_id is not null;
+end;
+$function$;
+
+revoke all on function public.create_desktop_companion_command(uuid, text, text)
+  from public, anon;
+revoke all on function public.claim_desktop_companion_command(text, uuid)
+  from public, anon, authenticated;
+revoke all on function public.authorize_desktop_companion_command(text, uuid, uuid)
+  from public, anon, authenticated;
+revoke all on function public.complete_desktop_companion_command(text, uuid, uuid, text, text)
+  from public, anon, authenticated;
+grant execute on function public.create_desktop_companion_command(uuid, text, text)
+  to authenticated;
+grant execute on function public.claim_desktop_companion_command(text, uuid)
+  to service_role;
+grant execute on function public.authorize_desktop_companion_command(text, uuid, uuid)
+  to service_role;
+grant execute on function public.complete_desktop_companion_command(text, uuid, uuid, text, text)
+  to service_role;
+
+     or p_device_id is null or p_command_id is null then
+    return false;
+  end if;
+
+  select exists (
+    select 1
+      from public.desktop_companion_devices d
+      join public.desktop_companion_commands c
+        on c.device_record_id = d.id
+     where d.token_hash = p_token_hash
+       and d.device_id = p_device_id
+       and d.revoked_at is null
+       and c.id = p_command_id
+       and c.status = 'delivered'
+       and c.expires_at > pg_catalog.now()
+  ) into v_authorized;
+
+  return coalesce(v_authorized, false);
+end;
+$function$;
+
 create or replace function public.complete_desktop_companion_command(
   p_token_hash text,
   p_device_id uuid,
