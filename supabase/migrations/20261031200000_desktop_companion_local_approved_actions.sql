@@ -146,6 +146,107 @@ begin
 end;
 $function$;
 
+create or replace function public.authorize_desktop_companion_action(
+  p_token_hash text,
+  p_device_id uuid,
+  p_action_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_authorized boolean;
+begin
+  if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}
+  p_token_hash text,
+  p_device_id uuid,
+  p_action_id uuid,
+  p_status text,
+  p_result_code text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_action_id uuid;
+begin
+  if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$'
+     or p_device_id is null or p_action_id is null
+     or p_status is null or p_result_code is null
+     or p_status not in ('completed', 'denied', 'failed', 'expired')
+     or not (
+       (p_status = 'completed' and p_result_code = 'ACTION_COMPLETED')
+       or (p_status = 'denied' and p_result_code in ('USER_DENIED', 'LOCAL_APPROVAL_REQUIRED'))
+       or (p_status = 'failed' and p_result_code = 'ACTION_FAILED')
+       or (p_status = 'expired' and p_result_code = 'ACTION_EXPIRED')
+     ) then
+    return false;
+  end if;
+
+  update public.desktop_companion_actions a
+     set status = p_status,
+         result_code = p_result_code,
+         completed_at = pg_catalog.now()
+   where a.id = p_action_id
+     and a.status = 'claimed'
+     and a.device_id = p_device_id
+     and a.device_record_id in (
+       select d.id
+         from public.desktop_companion_devices d
+        where d.token_hash = p_token_hash
+          and d.device_id = p_device_id
+          and d.revoked_at is null
+     )
+     and (
+       (p_status = 'expired' and a.expires_at <= pg_catalog.now())
+       or
+       (p_status <> 'expired' and a.expires_at > pg_catalog.now())
+     )
+  returning a.id into v_action_id;
+
+  return v_action_id is not null;
+end;
+$function$;
+
+revoke all on function public.claim_desktop_companion_action(text, uuid)
+  from public, anon, authenticated;
+revoke all on function public.authorize_desktop_companion_action(text, uuid, uuid)
+  from public, anon, authenticated;
+revoke all on function public.complete_desktop_companion_action(text, uuid, uuid, text, text)
+  from public, anon, authenticated;
+grant execute on function public.claim_desktop_companion_action(text, uuid)
+  to service_role;
+grant execute on function public.authorize_desktop_companion_action(text, uuid, uuid)
+  to service_role;
+grant execute on function public.complete_desktop_companion_action(text, uuid, uuid, text, text)
+  to service_role;
+
+     or p_device_id is null or p_action_id is null then
+    return false;
+  end if;
+
+  select exists (
+    select 1
+      from public.desktop_companion_devices d
+      join public.desktop_companion_actions a
+        on a.device_record_id = d.id
+     where d.token_hash = p_token_hash
+       and d.device_id = p_device_id
+       and d.revoked_at is null
+       and a.id = p_action_id
+       and a.device_id = p_device_id
+       and a.status = 'claimed'
+       and a.expires_at > pg_catalog.now()
+  ) into v_authorized;
+
+  return coalesce(v_authorized, false);
+end;
+$function$;
+
 create or replace function public.complete_desktop_companion_action(
   p_token_hash text,
   p_device_id uuid,
