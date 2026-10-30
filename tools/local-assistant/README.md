@@ -198,7 +198,7 @@ On Windows 10/11, run this direct launcher after setup:
 .\tools\local-assistant\start-voice.ps1
 ~~~
 
-Say **“Ultron”** before every request, for example “Ultron, explain this error” or “Ultron, open Notepad”. Voice capture uses an already-installed Windows System.Speech recognition language and the default microphone. It recognises one bounded utterance at a time; it does not stream audio to ULTRON's cloud API. Ordinary questions are sent only to the local Ollama loopback endpoint and answered with the selected local model (the default is qwen2.5:1.5b). The existing Windows system speech engine reads responses aloud. No speech model is downloaded automatically.
+Say **“Ultron”** before every request, for example “Ultron, explain this error” or “Ultron, open Notepad”. Voice capture uses an already-installed Windows System.Speech recognition language and the default microphone. It recognises one bounded utterance at a time; it does not stream audio to ULTRON's cloud API. Ordinary questions are sent only to the local Ollama loopback endpoint and answered with the selected local model (the default is qwen2.5:1.5b). The voice chat prompt accepts Hindi, English and Hinglish context and requests concise English replies. Actual Hindi/Hinglish recognition still depends on the installed Windows speech recognizer; choose `-Locale hi-IN` when that recognizer is installed. This is not a guaranteed automatic bilingual speech recognizer. The existing Windows system speech engine reads responses aloud. No speech model is downloaded automatically.
 
 Optional settings:
 
