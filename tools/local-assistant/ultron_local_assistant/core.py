@@ -12,9 +12,11 @@ import platform
 import re
 import shlex
 import shutil
+import signal
 import stat
 import subprocess
 import sys
+import threading
 import tempfile
 import urllib.error
 import urllib.parse
@@ -728,6 +730,71 @@ def apply_workspace_draft(draft_path: str | Path, root: str | Path, *, confirm: 
     return {"applied_to": str(target), "backup": str(backup), "draft": str(draft)}
 
 
+MAX_COMMAND_OUTPUT_BYTES = 1_000_000
+
+
+def _run_bounded_process(argv: list[str], cwd: Path, *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+    """Run without a shell while bounding captured output and terminating timed-out process trees."""
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    process = subprocess.Popen(
+        argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        shell=False, start_new_session=(os.name != "nt"), creationflags=creationflags,
+    )
+    buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
+    truncated = {"stdout": False, "stderr": False}
+
+    def drain(name: str, stream) -> None:
+        while True:
+            chunk = stream.read(65536)
+            if not chunk:
+                return
+            remaining = MAX_COMMAND_OUTPUT_BYTES - len(buffers[name])
+            if remaining > 0:
+                buffers[name].extend(chunk[:remaining])
+            if len(chunk) > remaining:
+                truncated[name] = True
+
+    readers = [
+        threading.Thread(target=drain, args=("stdout", process.stdout), daemon=True),
+        threading.Thread(target=drain, args=("stderr", process.stderr), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    try:
+        return_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        if os.name == "nt":
+            taskkill = shutil.which("taskkill.exe") or shutil.which("taskkill")
+            if taskkill:
+                try:
+                    subprocess.run([taskkill, "/PID", str(process.pid), "/T", "/F"],
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=5, check=False)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            if process.poll() is None:
+                process.kill()
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        process.wait()
+        for reader in readers:
+            reader.join(timeout=2)
+        raise RuntimeError(f"Process exceeded the {timeout}-second time limit and was terminated.") from exc
+    for reader in readers:
+        reader.join(timeout=2)
+    for name in ("stdout", "stderr"):
+        if truncated[name]:
+            buffers[name].extend(b"\\n[output truncated at 1 MB]")
+    return subprocess.CompletedProcess(
+        argv, return_code,
+        buffers["stdout"].decode("utf-8", errors="replace"),
+        buffers["stderr"].decode("utf-8", errors="replace"),
+    )
+
+
 def run_script(path: str | Path, root: str | Path, *, confirm: bool = False) -> subprocess.CompletedProcess[str]:
     """Run one selected local source file without invoking a shell."""
     if not confirm:
@@ -744,10 +811,7 @@ def run_script(path: str | Path, root: str | Path, *, confirm: bool = False) -> 
         argv = [node, str(target)]
     else:
         raise ValueError("Only Python or JavaScript workspace files may be run.")
-    try:
-        return subprocess.run(argv, cwd=base, capture_output=True, text=True, timeout=60, check=False)
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("Script exceeded the 60-second time limit.") from exc
+    return _run_bounded_process(argv, base, timeout=60)
 
 
 def run_approved_command(command: str, root: str | Path, *, confirm: bool = False) -> subprocess.CompletedProcess[str]:
@@ -755,10 +819,7 @@ def run_approved_command(command: str, root: str | Path, *, confirm: bool = Fals
     if not confirm:
         raise PermissionError("Execution requires explicit confirmation from the interactive user.")
     base = Path(root).expanduser().resolve()
-    try:
-        return subprocess.run(argv, cwd=base, capture_output=True, text=True, timeout=60, check=False)
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("Command exceeded the 60-second time limit.") from exc
+    return _run_bounded_process(argv, base, timeout=60)
 
 
 def speak_text(text: str) -> tuple[bool, str]:
