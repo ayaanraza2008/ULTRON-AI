@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
+import { createDesktopCompanionRelayRouter } from "./integrations/desktop-companion-relay.js";
 import { createVoiceStudioRouter } from "./integrations/voicestudio.js";
 import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
@@ -741,6 +742,53 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       logger.warn?.("Privileged task database request failed", { table, status: response.status });
       const status = response.status === 401 || response.status === 403 ? 503 : response.status === 404 ? 404 : 502;
       throw Object.assign(new Error(status === 503 ? "Server-side database operation was denied or not configured." : "Could not complete the task database operation."), { status, code: "PRIVILEGED_DATABASE_REQUEST_FAILED" });
+    }
+    return payload;
+  }
+
+  // Dedicated, function-only service-role RPC path. Never accept a function name
+  // from HTTP input and never broaden the existing privileged table helper.
+  async function supabasePrivilegedRpc(functionName, body) {
+    const allowed = new Set([
+      "complete_desktop_companion_pairing",
+      "record_desktop_companion_heartbeat"
+    ]);
+    if (!allowed.has(functionName) || !body || typeof body !== "object" || Array.isArray(body)) {
+      throw Object.assign(new Error("Privileged RPC operation is not allowed."), { status: 400, code: "PRIVILEGED_RPC_NOT_ALLOWED" });
+    }
+    const config = supabaseConfig();
+    const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+    if (!config || !serviceKey) {
+      throw Object.assign(new Error("Server-side companion operations are not configured."), { status: 503, code: "SERVICE_ROLE_NOT_CONFIGURED" });
+    }
+    let response;
+    try {
+      response = await fetchImpl(config.url + "/rest/v1/rpc/" + functionName, {
+        method: "POST",
+        headers: {
+          apikey: serviceKey,
+          ...(serviceKey.startsWith("sb_secret_") ? {} : { Authorization: "Bearer " + serviceKey }),
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify(body),
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000)
+      });
+    } catch {
+      throw Object.assign(new Error("Server-side companion RPC request failed."), { status: 502, code: "PRIVILEGED_RPC_UNAVAILABLE" });
+    }
+    let payload;
+    try { payload = await readResponseJsonLimited(response, 512_000); }
+    catch {
+      throw Object.assign(new Error("Server-side companion RPC response was invalid or too large."), { status: 502, code: "PRIVILEGED_RPC_RESPONSE_INVALID" });
+    }
+    if (!response.ok) {
+      logger.warn?.("Privileged desktop companion RPC failed", { functionName, status: response.status });
+      throw Object.assign(new Error("Could not complete the desktop companion operation."), {
+        status: response.status === 401 || response.status === 403 ? 503 : 502,
+        code: "PRIVILEGED_RPC_FAILED"
+      });
     }
     return payload;
   }
@@ -1977,6 +2025,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
+  app.use("/api", createDesktopCompanionRelayRouter({
+    requireSupabaseUser, supabaseRest, privilegedSupabaseRpc, logger
+  }));
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
