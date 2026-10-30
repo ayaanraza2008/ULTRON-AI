@@ -8,6 +8,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "create_talking_avatar"
   ],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
+  open_seo: ["openseo"],
   browser: ["browser_use", "chrome_devtools", "research_web", "obscura_inspect_public_page", "obscura_capture_public_page"],
   reverse_engineering: [
     "rea_analyze_application", "rea_investigate_application_feature", "rea_inspect_native_code",
