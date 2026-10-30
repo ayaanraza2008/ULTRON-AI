@@ -10,3 +10,6 @@ Thumbs.db
 npm-debug.log*
 .local/
 models/
+.harness2/
+__pycache__/
+*.py[cod]

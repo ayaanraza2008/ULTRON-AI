@@ -225,3 +225,14 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## Local Harness2 agent benchmark tool
+
+Harness2 is a Python 3.12+ local utility for running and recursively refining agent harnesses against transparent benchmark datasets. It supports a zero-credential deterministic demo, sequential/parallel candidate refinement, local OpenCode/Codex CLI executors, resumable checkpoints, judging, and reports. See [docs/HARNESS2.md](docs/HARNESS2.md).
+
+```bash
+python3 tools/harness2/harness2.py setup --workspace .
+python3 tools/harness2/harness2.py run --workspace . --benchmark smoke --executor demo --mode sequential
+```
+
+The demo validates workflow mechanics only, not model quality. OpenCode/Codex modes require their respective local CLI and authentication.
