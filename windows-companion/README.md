@@ -28,7 +28,7 @@ Windows must have an installed compatible English speech-recognition engine and 
 The launcher keeps its existing default hosted destination. To open a different ULTRON HTTPS deployment, set `ULTRON_ASSISTANT_URL` before starting the companion:
 
 ```powershell
-$env:ULTRON_ASSISTANT_URL = "https://your-ultron-host.example/"
+$env:ULTRON_ASSISTANT_URL = "https://ultron.example.net/"
 Start-Process ".\\artifacts\\ultron-windows-companion\\ULTRON.Companion.exe"
 ```
 
@@ -37,7 +37,7 @@ To save the destination for future Windows sign-ins, set it once in the current 
 ```powershell
 [Environment]::SetEnvironmentVariable(
   "ULTRON_ASSISTANT_URL",
-  "https://your-ultron-host.example/",
+  "https://ultron.example.net/",
   "User"
 )
 ```
