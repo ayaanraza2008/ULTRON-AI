@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - "windows-companion/**"
+      - "windows-companion.tests/**"
       - ".github/workflows/windows-companion.yml"
   workflow_dispatch:
 
