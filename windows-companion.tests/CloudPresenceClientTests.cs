@@ -50,6 +50,8 @@ internal static class CloudPresenceClientTests
         await HeartbeatUsesTheSavedBearerToken();
         RemoteActionAllowlistIsStrict();
         await RemoteActionPollingRequiresLocalApprovalAndDoesNotExecuteWhenDeclined();
+        await ReauthorizationBlocksRevokedOrExpiredCommands();
+        await ReauthorizationAllowsExactlyOneApprovedAction();
     }
 
     private static void PublicAddressPolicyRejectsLocalAndReservedNetworks()
@@ -187,6 +189,130 @@ internal static class CloudPresenceClientTests
         Assert(resultBody is not null && resultBody.Contains("\"status\":\"rejected\"", StringComparison.Ordinal) &&
             resultBody.Contains("\"resultCode\":\"USER_REJECTED\"", StringComparison.Ordinal),
             "A local No response must be recorded as a rejection.");
+    }
+
+    private static async Task ReauthorizationBlocksRevokedOrExpiredCommands()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1", JsonSerializer.Serialize(new
+        {
+            ServerOrigin = Origin,
+            DeviceId,
+            DeviceToken
+        }));
+        var calls = new List<string>();
+        var commandId = "55555555-5555-4555-8555-555555555555";
+        using var http = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            calls.Add(path);
+            if (path == "/api/desktop-companion/commands/next")
+            {
+                var body = JsonSerializer.Serialize(new
+                {
+                    command = new
+                    {
+                        id = commandId,
+                        actionType = "launch_application",
+                        target = "notepad",
+                        expiresAt = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O")
+                    }
+                });
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, body));
+            }
+            if (path == "/api/desktop-companion/commands/" + commandId + "/authorize")
+                return Task.FromResult(JsonResponse(HttpStatusCode.Conflict,
+                    JsonSerializer.Serialize(new { error = new { code = "DESKTOP_ACTION_NO_LONGER_AUTHORIZED" } })));
+            throw new InvalidOperationException("Unexpected desktop action request: " + path);
+        }));
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cancellation = new CancellationTokenSource();
+        var executeCalls = 0;
+        var status = string.Empty;
+        await client.RunRemoteActionPollingLoopAsync(
+            (_, _) => Task.FromResult(true),
+            (_, _) => { executeCalls++; return Task.FromResult("started"); },
+            message =>
+            {
+                status = message;
+                if (message.Contains("Nothing was executed", StringComparison.Ordinal))
+                    cancellation.Cancel();
+            },
+            cancellation.Token);
+
+        Assert(executeCalls == 0, "A revoked or expired command must never invoke the local executor.");
+        Assert(calls.Contains("/api/desktop-companion/commands/" + commandId + "/authorize"),
+            "The exact command must be revalidated after local approval.");
+        Assert(!calls.Any(path => path.EndsWith("/result", StringComparison.Ordinal)),
+            "A blocked command must not be recorded as executed.");
+        Assert(status.Contains("Nothing was executed", StringComparison.Ordinal),
+            "The companion must clearly report that no local action was launched.");
+    }
+
+    private static async Task ReauthorizationAllowsExactlyOneApprovedAction()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1", JsonSerializer.Serialize(new
+        {
+            ServerOrigin = Origin,
+            DeviceId,
+            DeviceToken
+        }));
+        var calls = new List<string>();
+        var commandId = "66666666-6666-4666-8666-666666666666";
+        using var http = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            calls.Add(path);
+            if (path == "/api/desktop-companion/commands/next")
+            {
+                var body = JsonSerializer.Serialize(new
+                {
+                    command = new
+                    {
+                        id = commandId,
+                        actionType = "launch_application",
+                        target = "calculator",
+                        expiresAt = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O")
+                    }
+                });
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, body));
+            }
+            if (path == "/api/desktop-companion/commands/" + commandId + "/authorize")
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK,
+                    JsonSerializer.Serialize(new { authorized = true, commandId })));
+            if (path == "/api/desktop-companion/commands/" + commandId + "/result")
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK,
+                    JsonSerializer.Serialize(new { recorded = true })));
+            throw new InvalidOperationException("Unexpected desktop action request: " + path);
+        }));
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cancellation = new CancellationTokenSource();
+        var executeCalls = 0;
+        var status = string.Empty;
+        await client.RunRemoteActionPollingLoopAsync(
+            (command, _) => Task.FromResult(command.Id == commandId),
+            (command, _) =>
+            {
+                executeCalls++;
+                Assert(command.Target == "calculator", "The approved executor must receive the fixed calculator target.");
+                return Task.FromResult("calculator start requested");
+            },
+            message =>
+            {
+                status = message;
+                if (message.Contains("action approved and started", StringComparison.Ordinal))
+                    cancellation.Cancel();
+            },
+            cancellation.Token);
+
+        Assert(executeCalls == 1, "An authorized, locally approved command must execute exactly once.");
+        var authorizationIndex = calls.IndexOf("/api/desktop-companion/commands/" + commandId + "/authorize");
+        var resultIndex = calls.IndexOf("/api/desktop-companion/commands/" + commandId + "/result");
+        Assert(authorizationIndex >= 0 && resultIndex > authorizationIndex,
+            "Server reauthorization must happen before the result is reported.");
+        Assert(status.Contains("action approved and started", StringComparison.Ordinal),
+            "The companion must report the confirmed process-start result.");
     }
 
     private static async Task PairingUsesOneTimeCodeAndSavesOnlyValidatedDeviceCredentials()
