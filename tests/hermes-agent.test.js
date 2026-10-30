@@ -465,6 +465,26 @@ test("Hermes run status is owner-scoped, validates run IDs and bounds output", a
   assert.equal(calls, 1);
 });
 
+test("Hermes interrupted run status is terminal after gateway shutdown", async () => {
+  const result = await getHermesAgentRunStatus({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_interrupted_42",
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "https://hermes.example.com/v1/runs/run_interrupted_42");
+      assert.equal(options.method, "GET");
+      return new Response(JSON.stringify({
+        run_id: "run_interrupted_42",
+        status: "interrupted",
+        output: ""
+      }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "interrupted");
+  assert.equal(result.status, "interrupted");
+  assert.equal(result.terminal, true);
+});
+
 test("Hermes run stop requires advertised support and reports stopping, not cancelled", async () => {
   const seen = [];
   const result = await stopHermesAgentRun({
