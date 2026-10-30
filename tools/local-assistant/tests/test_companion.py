@@ -456,5 +456,37 @@ class CompanionServerTests(unittest.TestCase):
                     ):
                         self.assertTrue(_is_symlink_or_junction(identity))
 
+
+    def test_symlinked_paired_credential_file_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root) / "companion"
+            directory.mkdir()
+            outside = Path(root) / "outside-credentials.json"
+            outside.write_text("{}", encoding="utf-8")
+            credential_file = directory / "device-credentials.json"
+            try:
+                credential_file.symlink_to(outside)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(
+                    "This OS/filesystem does not permit symlink creation: "
+                    + type(error).__name__
+                )
+            with self.assertRaisesRegex(ValueError, "credential file must be a regular file"):
+                _load_device_credentials(directory)
+
+    def test_reparse_point_paired_credential_file_is_rejected(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root) / "companion"
+            directory.mkdir()
+            credential_file = directory / "device-credentials.json"
+            with patch(
+                "ultron_local_assistant.companion._is_symlink_or_junction",
+                side_effect=lambda candidate: Path(candidate) == credential_file
+            ):
+                with self.assertRaisesRegex(ValueError, "credential file must be a regular file"):
+                    _load_device_credentials(directory)
+
 if __name__ == "__main__":
     unittest.main()
