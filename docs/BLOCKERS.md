@@ -41,3 +41,10 @@ The security branch adds a transport that resolves public hostnames, rejects any
 
 - Model-generated `confirmExternalAction` is no longer passed to the local Chrome bridge; the ULTRON agent always sends false. The bridge's local operator flag remains an additional guard, not evidence of user consent.
 - Consequential external clicks remain blocked until a task-bound user approval flow can display the exact host, selector/action and intended effect, then issue a one-time authenticated approval bound to that operation.
+
+
+## Chrome DevTools consequential action approval (updated 2026-10-31)
+
+- Model-generated `confirmExternalAction` has been removed from the agent tool schema and cannot be supplied by model tool arguments. Agent dispatch always forces false, and the autonomy policy blocks consequential clicks before local bridge access.
+- Source and agent-level regression tests passed in full CI run 41116829247. This does not prove a live Chrome bridge or physical browser workflow.
+- A task-bound approval-token flow is still missing; keep consequential browser clicks blocked until the user can review and approve the exact host, selector, action and effect.
