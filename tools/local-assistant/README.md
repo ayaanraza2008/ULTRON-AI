@@ -110,6 +110,37 @@ The digest reads up to 10 unread messages from the last day using message header
 
 Google OAuth requires a Google Cloud project, API enablement, internet access, and explicit user consent. Those credentials and account-specific configuration cannot be created on your behalf from this repository commit.
 
+## Windows desktop companion (local status only)
+
+The optional companion process exposes a small authenticated status endpoint from the Windows PC itself. It is standard-library-only and does not install a service, add a startup task, or change firewall rules.
+
+Open PowerShell in the same user session as the installed CLI:
+
+~~~powershell
+# Generate a fresh 256-bit bearer token and keep it in this PowerShell session.
+# The assignment captures the token without echoing it to the console.
+$env:ULTRON_COMPANION_TOKEN = (ultron-local companion token).Trim()
+
+# Optional: permit one exact local ULTRON UI origin to call the companion from a browser.
+# Leave unset when a browser client is not being used.
+$env:ULTRON_COMPANION_ALLOWED_ORIGINS = "http://localhost:5173"
+
+# Start the companion; it binds only to IPv4 loopback.
+ultron-local companion serve --port 8765
+~~~
+
+In another PowerShell window, test the read-only status route:
+
+~~~powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8765/v1/ultron/status" -Headers @{
+  Authorization = "Bearer $env:ULTRON_COMPANION_TOKEN"
+}
+~~~
+
+The service rejects non-loopback clients, mismatched Host headers, unlisted browser origins, bad bearer tokens, unsupported routes, and excess requests. The device identity is a random UUID stored under the user's ULTRON app-data directory. The bearer token is generated on demand and is not written to the repository or a config file; generate a new token and restart the service to rotate it.
+
+**Important boundary:** this local service reports status only. It cannot execute commands, browse files, capture the screen, control the mouse/keyboard, install applications, or change Windows settings. It does not automatically connect to a cloud-hosted ULTRON backend: a Render service cannot call a PC's `127.0.0.1`. The existing server-side desktop adapter still requires a separately designed, authenticated, publicly reachable HTTPS gateway, which is not supplied by this local process. Do not expose this port to the LAN or the public internet.
+
 ## PDF and DOCX documents
 
 The standard-library install supports text/source/Markdown/CSV/JSON/HTML/YAML files. To index local PDF and DOCX files, install the optional document readers:
