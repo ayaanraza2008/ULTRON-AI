@@ -399,3 +399,29 @@ body.composer-open .core-coordinate { opacity: .2; }
 .task-cancel-control:hover:not(:disabled) { border-color: rgba(255,148,166,.8); background: rgba(92,18,35,.42); }
 .task-cancel-control:disabled { opacity: .52; cursor: wait; }
 @media (max-width: 560px) { .task-cancel-control { padding: 5px 6px; font-size: 7px; } }
+
+
+/* Installable cross-device web app control. */
+.pwa-install-control {
+  pointer-events: auto;
+  min-height: 39px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 66, 118, .42);
+  border-radius: 12px;
+  color: #ffd4e1;
+  background: linear-gradient(135deg, rgba(47, 12, 29, .76), rgba(10, 13, 29, .82));
+  box-shadow: inset 0 1px rgba(255,255,255,.05), 0 0 18px rgba(255, 42, 98, .08);
+  font: 8px "SFMono-Regular", Consolas, monospace;
+  letter-spacing: .13em;
+  cursor: pointer;
+}
+.pwa-install-control:hover {
+  border-color: rgba(255, 102, 151, .86);
+  box-shadow: 0 0 18px rgba(255, 42, 98, .18);
+}
+.pwa-install-control[hidden] { display: none !important; }
+
+@media (max-width: 520px) {
+  .header-actions { gap: 8px; }
+  .pwa-install-control { min-height: 36px; padding: 0 9px; font-size: 7px; letter-spacing: .08em; }
+}
