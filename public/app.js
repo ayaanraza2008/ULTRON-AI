@@ -3490,7 +3490,7 @@
             inventoryResult.error.code || "UNAVAILABLE", "warning");
         } else {
           const devices = Array.isArray(inventoryResult.value?.devices) ? inventoryResult.value.devices : [];
-          if (!devices.length) drawerCard("No paired Windows PCs", "Create a one-time pairing code below, then enter it in the Windows terminal using ultron-local companion pair.", "NOT PAIRED", "warning");
+          if (!devices.length) drawerCard("No paired Windows PCs", "Create a one-time pairing code below, then open ULTRON Wake Companion on the Windows PC and click Pair this PC.", "NOT PAIRED", "warning");
           for (const device of devices.slice(0, 20)) {
             const state = device.revoked ? "REVOKED" : device.online ? "ONLINE" : "OFFLINE";
             const lastSeen = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "No heartbeat received yet";
