@@ -1,10 +1,13 @@
 import json
+import sys
 import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ultron_local_assistant.companion import (
     STATUS_PATH,
