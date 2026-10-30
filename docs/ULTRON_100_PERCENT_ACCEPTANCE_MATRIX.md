@@ -26,7 +26,7 @@ Rule: a source implementation or mocked test is not live integration proof. No a
 
 | Chrome DevTools consequential-click approval | IN_PROGRESS | Agent schema no longer exposes a confirmation flag; dispatch forces false. Agent-level test proves model-supplied true cannot authorize a click even when the bridge's additional operator flag is enabled. | Keep consequential clicks disabled until a one-time user-approved token is bound to the exact task, host, selector and action; live physical Chrome validation remains separate. |
 
-| Geo-Sleuth reverse-image sharing consent | IN_PROGRESS | Model-visible opt-in removed; dispatcher derives consent only from exact canonical approval phrase at start of current user message. Parser tests cover ordinary mention, explicit/contradictory negation, phrase boundary and model-authored flags. | Full CI pending. Live Geo-Sleuth runtime/provider, actual image-sharing behavior and geolocation accuracy remain unverified; no external image search is authorized by default. |
+| Geo-Sleuth reverse-image sharing consent | TESTED_SOURCE | PR #419 merged as 33a9df4. Model-visible opt-in removed; dispatcher derives consent only from exact canonical approval phrase at start of current user message. Tests cover ordinary mention, negation, contradictory suffix, phrase boundary and model-authored flags. Full CI run 41119660470 passed (662 passed, 0 failed, 1 skipped). | Live Geo-Sleuth runtime/provider, actual image-sharing behavior and geolocation accuracy remain unverified; no external image search is authorized by default. |
 
 ## Global completion rules
 
