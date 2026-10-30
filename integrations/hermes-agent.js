@@ -294,7 +294,7 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
     let eventName = "";
     let eventId = "";
     const dataLines = [];
-    for (const line of block.split(/\\r?\\n/)) {
+    for (const line of block.split(/\r?\n/)) {
       if (!line || line.startsWith(":")) continue;
       const colon = line.indexOf(":");
       const field = colon >= 0 ? line.slice(0, colon) : line;
@@ -304,7 +304,7 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
       else if (field === "data") dataLines.push(value);
     }
     if (!dataLines.length) return;
-    const rawData = dataLines.join("\\n").slice(0, 16_000);
+    const rawData = dataLines.join("\n").slice(0, 16_000);
     let payload = rawData;
     try { payload = JSON.parse(rawData); } catch {}
     events.push(sanitizeHermesSseEvent(eventName, eventId, payload));
@@ -321,9 +321,9 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
       }
       raw += decoder.decode(value, { stream: true });
       let boundary;
-      while ((boundary = raw.search(/\\r?\\n\\r?\\n/)) >= 0 && events.length < maxEvents) {
+      while ((boundary = raw.search(/\r?\n\r?\n/)) >= 0 && events.length < maxEvents) {
         const block = raw.slice(0, boundary);
-        const sep = raw.match(/\\r?\\n\\r?\\n/);
+        const sep = raw.match(/\r?\n\r?\n/);
         raw = raw.slice(boundary + (sep?.[0].length || 2));
         processBlock(block);
       }
