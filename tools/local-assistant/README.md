@@ -1,6 +1,6 @@
 # ULTRON Local Assistant
 
-A separate Python terminal companion that adds local-first chat, specialist agents, document research with citations, guarded code tools, opt-in Gmail/Calendar digest, native speech, hardware inspection, and a reviewed skill library. It does not change ULTRON's Node backend or send private file contents to a hosted LLM.
+A separate Python terminal companion that adds local-first chat, a Windows wake-word voice loop, fixed allowlisted desktop shortcuts with typed approval, specialist agents, document research with citations, guarded code tools, opt-in Gmail/Calendar digest, native speech, hardware inspection, and a reviewed skill library. It does not change ULTRON's Node backend or send private file contents to a hosted LLM.
 
 ## Privacy and safety defaults
 
