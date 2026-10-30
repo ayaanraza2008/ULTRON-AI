@@ -48,7 +48,7 @@ const CATEGORY_TOOLS = Object.freeze({
   spaceplanner: ["create_spaceplanner_plan"],
   world_intelligence: ["world_intelligence_command"],
   paperclip: ["paperclip_read_agent_governance"],
-  hermes: ["check_hermes_agent", "hermes_agent_task"],
+  hermes: ["check_hermes_agent", "hermes_agent_task", "hermes_agent_start_run", "hermes_agent_run_status", "hermes_agent_stop_run", "hermes_agent_list_skills", "hermes_agent_list_toolsets", "hermes_agent_run_events", "hermes_agent_resolve_approval"],
   cactus: ["check_cactus"],
   comfyui: ["check_comfyui", "run_comfyui_workflow"],
   media: [
@@ -86,7 +86,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["appflowy", /\b(?:appflowy|appflowy workspace|search appflowy|appflowy documents?)\b/i],
   ["open_seo", /\b(?:openseo|open seo|seo keyword research|rank tracker cost|domain keyword suggestions|serp lookup)\b/i],
   ["paperclip", /\b(?:paperclip|agent governance|agent roster|agent budget|monthly agent cost)\b/i],
-  ["hermes", /\b(?:hermes agent|run hermes|hermes task)\b/i],
+  ["hermes", /\b(?:hermes agent|hermes runtime|hermes task|hermes run|run hermes|run_[a-z0-9_-]{1,120})\b/i],
   ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
   ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
   ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
