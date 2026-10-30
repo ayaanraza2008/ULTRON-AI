@@ -48,8 +48,19 @@ See `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md` for the evidence-based cross-
 
 Key unresolved external gates include live provider inference, Supabase auth/two-user isolation, real queued task execution, memory isolation, live speech/vision, physical Windows companion pairing, hardened code sandboxing, integration upstream verification, and Render pipeline-minute recovery. Do not claim these complete from mocked tests.
 
+## Current follow-on security work
+
+- Feature branch: fix/openseo-user-spend-consent.
+- Scope: prevent model-generated OpenSEO approval flags from authorizing paid credit-consuming lookups.
+- Changed source: agent-runtime.js, autonomy-policy.js, integrations/openseo-mcp.js.
+- Added test: tests/openseo-agent-approval.test.js; autonomy policy regression added to tests/autonomy-policy.test.js; package.json syntax check includes the new test.
+- Required approval phrase: I approve spending up to 120 OpenSEO credits for this lookup. The amount is the user's ceiling; requests estimated above it are refused before contacting OpenSEO.
+- No OpenSEO upstream request or paid credit spend was made during implementation.
+
 ## Exact next action
 
-1. Fetch the GitHub Actions run(s) for merge commit `e92d09d9dcb21c025ab3326985ec9fbe675ef86b` and verify post-merge CI.
-2. If green, leave Harness2 integrated on `main`; do not deploy.
-3. Continue with the next independently achievable ULTRON blocker from the acceptance matrix, preserving existing work and updating this checkpoint with evidence.
+1. Open a PR for fix/openseo-user-spend-consent and run full CI.
+2. Inspect the OpenSEO endpoint tests; fix any regression before merging.
+3. Verify test coverage proves absent/model-generated/deferred consent does not invoke MCP and explicit bounded consent does.
+4. Merge only after CI is green; do not deploy or change production configuration.
+5. Continue with the next independently achievable ULTRON blocker from the acceptance matrix, updating this checkpoint with evidence.
