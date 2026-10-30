@@ -47,7 +47,8 @@ test("pairing-code creation is authenticated, hashed at rest, one-time and non-c
     assert.equal(call[4].code_hash, hash(payload.pairingCode));
     assert.notEqual(call[4].code_hash, payload.pairingCode);
     assert.equal(call[4].expires_at, new Date(1_800_000_300_000).toISOString());
-    assert.equal(JSON.stringify(call).includes(payload.pairingCode), false);
+    // call[0] is the Express request; inspect only the adapter arguments.
+    assert.equal(JSON.stringify(call.slice(1)).includes(payload.pairingCode), false);
   });
 });
 
