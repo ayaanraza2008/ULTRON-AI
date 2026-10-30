@@ -80,7 +80,7 @@ class DesktopControlTests(unittest.TestCase):
     def test_known_folder_uses_fixed_shell_location_not_a_user_path(self):
         desktop_control.open_known_folder("downloads", confirm=True)
         args, _ = self.popen.call_args
-        self.assertEqual(args[0][0], str((self.system32 / "explorer.exe").resolve()))
+        self.assertEqual(args[0][0], str((self.windows_root / "explorer.exe").resolve()))
         self.assertEqual(args[0][1:], ["shell:Downloads"])
         with self.assertRaises(ValueError):
             desktop_control.open_known_folder(str(self.root), confirm=True)
