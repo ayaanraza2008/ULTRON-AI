@@ -341,7 +341,7 @@ internal sealed class CompanionContext : ApplicationContext
         }
 
         var consent = MessageBox.Show(_window,
-            "Allow this PC to send an outbound HTTPS online-status heartbeat to your ULTRON account every 30 seconds while the companion is running?\n\nOnly device name/ID and online presence are reported. ULTRON cannot run commands, inspect files, capture screenshots, or control this PC through this connection.",
+            "Allow this PC to send an outbound HTTPS online-status heartbeat to your ULTRON account every 30 seconds while the companion is running?\n\nThis switch reports device identity and online presence only. Limited app/folder requests remain disabled until you separately enable remote approvals; each request then requires a fresh Yes/No decision on this PC. No shell commands, arbitrary files, screenshots, clipboard, keyboard or mouse control are exposed.",
             "Start ULTRON cloud presence", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (consent != DialogResult.Yes) return;
 
