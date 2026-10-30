@@ -124,9 +124,10 @@ class Harness2Tests(unittest.TestCase):
         command = captured["command"]
         for flag in ("--pure", "run", "--agent", "harness2-readonly", "--format", "json", "--dir"):
             self.assertIn(flag, command)
-        self.assertEqual(captured["config"]["permission"]["*"], "deny")
-        self.assertEqual(captured["config"]["permission"]["read"], "allow")
+        self.assertEqual(captured["config"]["permission"], {"*": "deny"})
         self.assertIn("mode: primary", captured["agent"])
+        self.assertIn("No-tool Harness2 evaluator", captured["agent"])
+        self.assertNotIn("read: allow", captured["agent"])
         self.assertEqual(captured["env"]["OPENCODE_DISABLE_DEFAULT_PLUGINS"], "1")
         self.assertNotEqual(captured["cwd"], self.root.resolve())
 
