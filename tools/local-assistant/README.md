@@ -89,6 +89,24 @@ The `code apply` command asks for the exact `APPLY` confirmation, verifies that 
 
 For `code run`, scripts may use the user's ordinary file/network/process permissions; the confirmation prompt is not a security sandbox. Do not run unknown code. The shell tool is deliberately allowlisted and is not a general shell. Script and allowlisted-command output is drained concurrently and capped at 1 MB per stream to avoid unbounded memory growth; execution still runs with the user's normal account permissions and is not OS-sandboxed.
 
+## Local Windows desktop shortcuts (manual only)
+
+The local CLI can start three fixed Windows applications or open three standard Windows folders. These actions run on the PC where the ULTRON local CLI is installed and require a fresh interactive confirmation for each action:
+
+~~~powershell
+ultron-local desktop list
+ultron-local desktop launch notepad
+ultron-local desktop launch explorer
+ultron-local desktop launch calculator
+ultron-local desktop open-folder desktop
+ultron-local desktop open-folder documents
+ultron-local desktop open-folder downloads
+~~~
+
+The launch catalog is hard-coded: Notepad, File Explorer, and the Windows Calculator app. Folder targets are fixed Windows shell locations for Desktop, Documents, and Downloads. The implementation uses subprocess with shell=False; it accepts no arbitrary executable, path, command, script, or command-line arguments. A small private, bounded audit log records only the selected action, fixed target, outcome, timestamp and process ID; it does not record folder paths or file contents. Each action requires the exact LAUNCH or OPEN confirmation. The result means Windows accepted a process-start request; it does not prove that the application window became ready.
+
+**This is not full Windows PC control.** The HTTP companion remains status-only. These shortcuts are not exposed to ULTRON's cloud API or an agent tool. They do not provide arbitrary filesystem access, file editing/deletion, clipboard, screenshots, keyboard/mouse control, process management, installation, settings changes, or background actions. Device pairing and a separately reviewed, authenticated command/approval channel are still required before any remote desktop action can be considered.
+
 ## Morning digest: Gmail + Calendar + voice
 
 1. In Google Cloud, create a project, enable Gmail API and Google Calendar API, configure the consent screen, create an OAuth Client ID with application type **Desktop app**, and download the client JSON. Google documents the Python setup for [Gmail](https://developers.google.com/workspace/gmail/api/quickstart/python) and [Calendar](https://developers.google.com/workspace/calendar/api/quickstart/python).
