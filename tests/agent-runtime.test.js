@@ -2500,3 +2500,17 @@ test("agent tools expose OpenHiggsfield model catalog and disabled-by-default re
     assert.equal(appFlowyTool.state, "disabled_by_config");
   });
 });
+
+test("agent tools expose Harness2 as local-only command guidance, never hosted execution", async () => {
+  await withServer({}, async () => {
+    throw new Error("The agent tools endpoint does not call a model provider.");
+  }, async base => {
+    const response = await fetch(base + "/api/agent/tools");
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const tool = payload.tools.find(item => item.name === "harness2_guidance");
+    assert.ok(tool);
+    assert.equal(tool.available, true);
+    assert.equal(tool.execution, "local_cli_guidance_only_never_executes_on_hosted_backend");
+  });
+});

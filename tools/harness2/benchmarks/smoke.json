@@ -1,0 +1,33 @@
+{
+  "name": "smoke",
+  "version": 1,
+  "description": "Tiny deterministic harness-mechanics benchmark: structured planning and honest evidence reports.",
+  "tasks": [
+    {
+      "id": "structured_plan",
+      "title": "Structured planning response",
+      "prompt": "Give a short plan with a goal, steps, risks, and how the result will be verified.",
+      "criteria": {
+        "all_contains": [
+          "Goal:",
+          "Steps:",
+          "Risks:",
+          "Verification:"
+        ]
+      }
+    },
+    {
+      "id": "evidence_report",
+      "title": "Evidence-led test report",
+      "prompt": "State the passed, failed, and skipped counts and summarize the evidence. Do not claim external tests were run.",
+      "criteria": {
+        "all_contains": [
+          "Passed:",
+          "Failed:",
+          "Skipped:",
+          "Evidence:"
+        ]
+      }
+    }
+  ]
+}

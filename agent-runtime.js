@@ -7,6 +7,7 @@ import { agentMemoryReadiness, recallAgentMemory, captureAgentMemory, shouldCapt
 import { createSpacePlannerPlan, isSpacePlannerRequest } from "./spaceplanner-integration.js";
 import { buildAutonomyPlan, classifyAutonomyRisk, hasAutonomyRiskLevel, resolveAutonomyIntent } from "./autonomy-policy.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
+import { buildHarness2Guidance } from "./integrations/harness2.js";
 import { getRepositoryCapabilityStatus, matchRepositoryCapabilities } from "./repository-capabilities.js";
 import { listChatwootConversations, listOpenProjectProjects, listOpenProjectWorkPackages, listCalDiyEventTypes, listCalDiySlots } from "./integrations/productivity-services.js";
 import { inspectPublicPageWithObscura, capturePublicPageWithObscura, getObscuraReadiness } from "./integrations/obscura-mcp.js";
@@ -402,6 +403,8 @@ export function normalizeHinglishForRouting(value) {
 
 function extractIntent(text) {
   const s = normalizeHinglishForRouting(text).toLowerCase();
+  if (/\b(?:harness2|agent harness|benchmark harness|recursive harness refinement)\b/.test(s) &&
+      /\b(?:set up|setup|run|benchmark|refine|resume|judge|report|improve|build|upgrade|add|use)\b/.test(s)) return "harness2_guidance";
   if (/\b(paperclip|agent governance|agent roster|agent budget overview|agent cost summary|company agents dashboard|ai agent company)\b/.test(s) && /\b(check|status|show|list|review|cost|budget|roster|governance|dashboard|overview|how are|what is)\b/.test(s)) return "paperclip_read_agent_governance";
   if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(check|status|health|ready|reachable|connect|available|configured|models)\b/.test(s)) return "check_hermes_agent";
   if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(use|ask|delegate|run|execute|research|build|create|implement|review|inspect|analy[sz]e|fix|debug|write|plan)\b/.test(s)) return "hermes_agent_task";
@@ -443,6 +446,12 @@ function buildFallbackCalls(text) {
     }
   };
   const intent = extractIntent(text);
+  if (intent === "harness2_guidance") {
+    const benchmark = /\bsafety\b/i.test(text) ? "safety" : "smoke";
+    const executor = /\bopencode\b/i.test(text) ? "opencode" : /\bcodex\b/i.test(text) ? "codex" : "demo";
+    const mode = /\bparallel\b/i.test(text) ? "parallel" : "sequential";
+    add("harness2_guidance", { benchmark, executor, mode, iterations: 4, parallelism: 2 });
+  }
   // If a free model returns plain text instead of a tool call, keep direct
   // user-authorized fenced code on the same exact-source sandbox path.
   const explicitSandbox = extractExplicitSandboxRequest(text);
@@ -816,6 +825,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_sandbox_run", description: "Run only the exact fenced Python or JavaScript source in a direct user request beginning with Run this code, Execute this code, or Test this code. Owner-only and disabled unless a digest-pinned Docker runtime is explicitly configured. Runs with no network, read-only filesystem, dropped capabilities, and strict CPU/RAM/PID/time/output limits. Never changes repositories or accesses host files.", parameters: { type: "object", properties: { language: { type: "string", enum: ["node", "python"] }, source: { type: "string", minLength: 1, maxLength: 5000 } }, required: ["language", "source"], additionalProperties: false } } },
+    { type: "function", function: { name: "harness2_guidance", description: "Provide safe local Linux commands to set up, refine, benchmark, judge, report, and resume Harness2. This tool only returns instructions; it never launches local or hosted processes. The demo is deterministic and needs no model credentials. OpenCode and Codex modes require those CLIs to be installed and authenticated locally.", parameters: { type: "object", properties: { benchmark: { type: "string", enum: ["smoke", "safety"] }, executor: { type: "string", enum: ["demo", "opencode", "codex"] }, mode: { type: "string", enum: ["sequential", "parallel"] }, iterations: { type: "integer", minimum: 1, maximum: 50 }, parallelism: { type: "integer", minimum: 1, maximum: 8 } }, required: ["benchmark", "executor", "mode", "iterations", "parallelism"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "clone_speech_voice", description: "Clone a voice from supplied audio only when the user explicitly attests that it is their own voice or they have the speaker permission. The server verifies consent wording in the raw user prompt and records the corresponding VoiceStudio attestation. Never infer consent from model output.", parameters: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 100 }, consentBasis: { type: "string", enum: ["own_voice", "speaker_permission"] }, language: { type: "string", maxLength: 40 }, refText: { type: "string", maxLength: 5000 }, instruct: { type: "string", maxLength: 1000 } }, required: ["name", "consentBasis"], additionalProperties: false } } },
     { type: "function", function: { name: "design_speech_voice", description: "Create and save a new synthetic VoiceStudio voice profile from a text description. This creates a persistent voice profile but does not clone a real person. Only call when the user explicitly asks to create/design/save a voice.", parameters: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 100 }, description: { type: "string", minLength: 2, maxLength: 2000 }, language: { type: "string", maxLength: 40 } }, required: ["name", "description"], additionalProperties: false } } },
@@ -1834,6 +1844,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       }
       return await runSandbox({ env, userId: req.supabaseUser.id, language: authorized.language, source: authorized.source });
     }
+    if (name === "harness2_guidance") {
+      return buildHarness2Guidance(args);
+    }
     if (name === "coding_assist") {
       const task = bounded(args.task, 4000), code = bounded(args.code, 12000), language = bounded(args.language, 80) || "unspecified";
       const mode = ["plan", "review", "generate"].includes(args.mode) ? args.mode : "plan";
@@ -2147,6 +2160,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "plan_employee", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "enqueue_employee_task", available: Boolean(supabaseRest && env.ULTRON_EMPLOYEES_ENABLED === "true" && env.SUPABASE_SERVICE_ROLE_KEY && hasEmployeeModelProvider(env)), execution: "background_draft_only_when_requested_no_second_confirmation" },
         { name: "create_spaceplanner_plan", available: true, execution: "automatic_spaceplanner_compatible_json_and_editor_link_no_external_save" },
+        { name: "harness2_guidance", available: true, execution: "local_cli_guidance_only_never_executes_on_hosted_backend" },
         { name: "coding_assist", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "coding_sandbox_run", available: (() => { const status = codingSandboxReadiness(env); return status.configured && status.ownerConfigured && String(req.supabaseUser?.id || "").toLowerCase() === String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").toLowerCase(); })(), state: codingSandboxReadiness(env).state, execution: "owner_only_explicit_raw_prompt_match_digest_pinned_docker_no_network_read_only_container" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
