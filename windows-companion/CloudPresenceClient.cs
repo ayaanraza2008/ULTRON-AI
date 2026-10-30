@@ -467,6 +467,16 @@ public sealed class CloudPresenceClient : IDisposable
                     continue;
                 }
 
+                // A command can be revoked or expire while the local approval
+                // dialog is open. Revalidate the exact claimed command after Yes
+                // and immediately before invoking the local executor.
+                var stillAuthorized = await AuthorizeCommandAsync(credentials, command, cancellationToken);
+                if (!stillAuthorized)
+                {
+                    status("ULTRON action is no longer authorized or has expired. Nothing was launched.");
+                    continue;
+                }
+
                 string executionMessage;
                 try
                 {
@@ -569,6 +579,37 @@ public sealed class CloudPresenceClient : IDisposable
             throw new InvalidOperationException("ULTRON returned an invalid or expired desktop action request.");
 
         return new RemoteDesktopCommand(parsedId.ToString("D"), action, target, expiresAt);
+    }
+
+    private async Task<bool> AuthorizeCommandAsync(
+        StoredCredentials credentials,
+        RemoteDesktopCommand command,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            credentials.ServerOrigin + "/api/desktop-companion/commands/" + Uri.EscapeDataString(command.Id) + "/authorize")
+        {
+            Content = JsonContent.Create(new { deviceId = credentials.DeviceId })
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", credentials.DeviceToken);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Gone)
+            throw new PermissionException("The paired-device token is no longer accepted.");
+        if (response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.NotFound)
+        {
+            await ReadLimitedAsync(response.Content, MaxResponseBytes, cancellationToken);
+            return false;
+        }
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException("ULTRON could not reauthorize the desktop action (HTTP " + (int)response.StatusCode + ").");
+
+        var raw = await ReadLimitedAsync(response.Content, MaxResponseBytes, cancellationToken);
+        using var document = JsonDocument.Parse(raw);
+        return document.RootElement.TryGetProperty("authorized", out var authorized) &&
+            authorized.ValueKind == JsonValueKind.True &&
+            document.RootElement.TryGetProperty("commandId", out var commandId) &&
+            string.Equals(commandId.GetString(), command.Id, StringComparison.Ordinal);
     }
 
     private async Task CompleteCommandAsync(
