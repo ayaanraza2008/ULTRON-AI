@@ -2673,3 +2673,163 @@ test("agent can inspect actual Hermes skills and enabled toolsets through read-o
     assert.equal(providerCalls, 2);
   });
 });
+
+
+test("agent exposes Hermes progress events as a bounded owner-scoped read-only tool", async () => {
+  let providerCalls = 0;
+  const eventUrls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      providerCalls++;
+      const payload = JSON.parse(options.body);
+      if (providerCalls === 1) {
+        const names = payload.tools.map(item => item.function.name);
+        assert.ok(names.includes("hermes_agent_run_events"));
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+          id: "read-hermes-events", type: "function",
+          function: { name: "hermes_agent_run_events", arguments: JSON.stringify({ runId: "run_abc123" }) }
+        }] } }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The Hermes run has started research." } }] }), { status: 200 });
+    }
+    eventUrls.push(url);
+    if (url.endsWith("/capabilities")) {
+      return new Response(JSON.stringify({ features: { run_events_sse: true } }), { status: 200 });
+    }
+    assert.equal(url, "https://hermes.example.com/v1/runs/run_abc123/events");
+    assert.equal(options.method, "GET");
+    assert.equal(options.headers.Accept, "text/event-stream");
+    return new Response([
+      "event: message.delta",
+      'data: {"delta":"Research started."}',
+      "",
+      "event: tool.started",
+      'data: {"tool":"web_search","preview":{"query":"private query must not be echoed"}}',
+      ""
+    ].join("\n"), { status: 200, headers: { "Content-Type": "text/event-stream" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Show progress events for run_abc123." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const call = body.toolResults.find(item => item.name === "hermes_agent_run_events");
+    assert.equal(call.ok, true);
+    assert.equal(call.result.eventCount, 2);
+    assert.equal(call.result.events[0].text, "Research started.");
+    assert.equal(JSON.stringify(call.result).includes("private query"), false);
+    assert.deepEqual(eventUrls, [
+      "https://hermes.example.com/v1/capabilities",
+      "https://hermes.example.com/v1/runs/run_abc123/events"
+    ]);
+    assert.equal(providerCalls, 2);
+  });
+});
+
+test("agent resolves a Hermes approval only when the original request names exact IDs and generation", async () => {
+  let providerCalls = 0;
+  const upstreamCalls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      providerCalls++;
+      const payload = JSON.parse(options.body);
+      if (providerCalls === 1) {
+        assert.ok(payload.tools.some(item => item.function.name === "hermes_agent_resolve_approval"));
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+          id: "approve-hermes-prompt", type: "function",
+          function: { name: "hermes_agent_resolve_approval", arguments: JSON.stringify({
+            runId: "run_abc123", requestId: "prompt_safe_123", executionGeneration: 4, choice: "once"
+          }) }
+        }] } }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The exact pending approval was resolved once." } }] }), { status: 200 });
+    }
+    upstreamCalls.push(url);
+    if (url.endsWith("/capabilities")) {
+      assert.equal(options.method, "GET");
+      return new Response(JSON.stringify({ features: { run_approval: true } }), { status: 200 });
+    }
+    assert.equal(url, "https://hermes.example.com/v1/runs/run_abc123/approval");
+    assert.equal(options.method, "POST");
+    assert.deepEqual(JSON.parse(options.body), {
+      request_id: "prompt_safe_123",
+      execution_generation: 4,
+      choice: "once"
+    });
+    return new Response(JSON.stringify({ status: "running" }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Approve prompt_safe_123 in run_abc123 at generation 4 once." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const call = body.toolResults.find(item => item.name === "hermes_agent_resolve_approval");
+    assert.equal(call.ok, true);
+    assert.equal(call.result.choice, "once");
+    assert.deepEqual(upstreamCalls, [
+      "https://hermes.example.com/v1/capabilities",
+      "https://hermes.example.com/v1/runs/run_abc123/approval"
+    ]);
+    assert.equal(providerCalls, 2);
+  });
+});
+
+test("agent blocks a model-generated Hermes approval without explicit matching user decision", async () => {
+  let hermesCalls = 0;
+  let providerCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  };
+  await withServer(env, async (url, options) => {
+    if (url.startsWith("https://hermes.example.com/")) {
+      hermesCalls++;
+      throw new Error("Hermes approval must not be resolved without explicit prompt ID and generation.");
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls++;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "unauthorized-approval-call", type: "function",
+        function: { name: "hermes_agent_resolve_approval", arguments: JSON.stringify({
+          runId: "run_abc123", requestId: "prompt_safe_123", executionGeneration: 4, choice: "once"
+        }) }
+      }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "No pending approval was changed." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Show status for run_abc123." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const call = body.toolResults.find(item => item.name === "hermes_agent_resolve_approval");
+    assert.equal(call.ok, false);
+    assert.equal(call.result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(hermesCalls, 0);
+    assert.equal(providerCalls, 2);
+  });
+});
