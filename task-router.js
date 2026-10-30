@@ -23,6 +23,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "rea_inspect_model_artifact", "rea_inspect_managed_artifact", "rea_inspect_apk_signature",
     "rea_inspect_android_package", "rea_search_guidance", "rea_list_guided_workflows"
   ],
+  harness2: ["harness2_guidance"],
   coding_sandbox: ["coding_sandbox_run"],
   coding: ["coding_assist", "check_repository_capabilities", "check_openviking", "openviking_find_context", "openviking_read_context"],
   memory: ["check_openviking", "openviking_find_context", "openviking_read_context"],
@@ -64,6 +65,7 @@ const CATEGORY_TOOLS = Object.freeze({
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
+  ["harness2", /\b(?:harness2|agent harness benchmark|benchmark harness|recursive harness refinement)\b/i],
   ["coding_sandbox", /^\s*(?:please\s+)?(?:run|execute|test)\s+(?:(?:(?:this|the|following|provided)\s+)?(?:code|script|program|snippet)|(?:(?:this|the|following|provided)\s+)?(?:python|javascript|node(?:\.js)?)\s+(?:code|script|program|snippet))\b/i],
   ["reminders", /\b(?:remind me|reminder(?:s)?|snooze (?:a |the )?reminder|mark (?:a |the )?reminder|reschedule (?:a |the )?reminder)\b/i],
   ["github", /\b(?:github|git hub|github\.com|readme (?:from|on) github|latest commits for|open issues for|public github repository)\b/i],

@@ -30,6 +30,11 @@ jobs:
         run: |
           python -m py_compile tools/model-lab/ultron_model_lab.py
           python -m unittest discover -s tools/model-lab -p 'test_*.py'
+      - name: Verify Harness2 Python CLI
+        run: |
+          python -m py_compile tools/harness2/core.py tools/harness2/executors.py tools/harness2/runner.py tools/harness2/harness2.py tools/harness2/tests/test_harness2.py
+          python -m unittest discover -s tools/harness2/tests -p 'test_*.py'
+          python tools/harness2/harness2.py benchmarks list
       - name: Verify local-first Python personal assistant
         run: |
           python -m py_compile tools/local-assistant/ultron_local_assistant/__init__.py tools/local-assistant/ultron_local_assistant/__main__.py tools/local-assistant/ultron_local_assistant/core.py tools/local-assistant/ultron_local_assistant/companion.py tools/local-assistant/ultron_local_assistant/google_workspace.py tools/local-assistant/ultron_local_assistant/skills.py tools/local-assistant/ultron_local_assistant/desktop_control.py tools/local-assistant/ultron_local_assistant/voice.py tools/local-assistant/ultron_local_assistant/cli.py tools/local-assistant/tests/test_local_assistant.py tools/local-assistant/tests/test_companion.py tools/local-assistant/tests/test_desktop_control.py tools/local-assistant/tests/test_voice.py

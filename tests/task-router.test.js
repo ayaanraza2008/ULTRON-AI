@@ -143,3 +143,11 @@ test("provider-specific media routing does not accidentally hide the selected ad
   assert.deepEqual(muapi.categories, ["open_generative_ai"]);
   assert.ok(muapi.toolNames.includes("open_generative_ai"));
 });
+
+test("routes Harness2 setup and benchmark requests to local-only Harness2 guidance", () => {
+  const route = classifyTaskRoute("Set up Harness2 and run a benchmark harness refinement cycle");
+  assert.equal(route.tier, "medium");
+  assert.deepEqual(route.categories, ["harness2"]);
+  assert.equal(route.filtered, true);
+  assert.deepEqual(route.toolNames, ["harness2_guidance"]);
+});

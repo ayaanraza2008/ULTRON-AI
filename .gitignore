@@ -22,3 +22,5 @@ tools/local-assistant/credentials*.json
 tools/local-assistant/token*.json
 tools/local-assistant/models/
 tools/local-assistant/drafts/
+# Harness2 local workspace, harness files, and run checkpoints
+.harness2/

@@ -260,3 +260,13 @@ Evidence state at this checkpoint:
 - Google now documents `android sdk install` as the replacement for deprecated `sdkmanager` ([Android CLI overview](https://developer.android.com/tools/agents/android-cli), [SDK install reference](https://developer.android.com/tools/agents/android-cli/commands/sdk_install)).
 - Candidate workflow commit `854a103cd504797f8bf91ebeda988e2028713142` keeps Android setup/license handling but disables its legacy package install and uses the Android CLI to install platform 35, build-tools 35.0.0 and platform-tools.
 - The Android CLI path is checked at runtime; package installation, build and artifact upload remain **IN PROGRESS / pending CI** until the exact-head Android workflow succeeds. The earlier Gradle action upgrade to v6.4.1 is verified on the previous source head.
+
+
+## Harness2 — implementation in progress (2026-10-30)
+
+- **Implementation scope:** local Python 3.12+ standard-library tool in `tools/harness2/`; zero Python package dependencies.
+- **Included:** no-model credential deterministic demo, built-in smoke/safety benchmark fixtures, custom benchmark JSON, sequential/parallel refinement candidates, eight harness component surfaces, result persistence/resume, transparent criteria-based judge, Markdown report, OpenCode/Codex CLI adapters.
+- **ULTRON integration:** task router detects Harness2 requests and routes to `harness2_guidance`; the agent tool returns allowlisted local Linux CLI commands only. It does not execute a process on the hosted backend.
+- **Security boundaries:** temporary isolated executor directories, OpenCode read-only permission policy and plugin-disable flags, Codex read-only sandbox/no approvals/ephemeral invocation, no shell use by Harness2's process wrapper, no script/plugin installation or execution, size/time/path bounds, and symlink refusal.
+- **Local test evidence:** 12/12 Python unit tests and Python compilation passed in the staging copy. Sequential/parallel demo, judge, report, resume, setup and doctor CLI commands were exercised. Deterministic demo scores must not be interpreted as live model-quality scores.
+- **Acceptance status:** IN PROGRESS pending exact PR-head CI. Actual OpenCode/Codex CLI and model runs are not tested and require local installation/authentication; no production rollout is included.

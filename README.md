@@ -269,3 +269,20 @@ A private terminal companion now lives in [tools/local-assistant](tools/local-as
 Install it with Python 3.10+ and Ollama, then run 'ultron-local doctor'. Hardware recommendations are advisory and model downloads require explicit typed confirmation. Gmail and Calendar are opt-in integrations that use read-only OAuth scopes and call Google's APIs to retrieve data; digest generation and speech remain local. Scripts run only after confirmation but are not OS-sandboxed, so review them first. Only reviewed SKILL.md Markdown is copied from public GitHub repositories; repository code is never executed.
 
 See the [local assistant guide](tools/local-assistant/README.md) for setup, privacy boundaries, supported commands, Google OAuth, and tests.
+
+
+## Harness2 — agent-harness refinement and benchmarks
+
+Harness2 is a local Python 3.12+ tool for benchmarking and iteratively refining agent harnesses. It has a deterministic **no-credentials demo**, sequential and parallel candidate exploration, saved checkpoints/resume, judging, and Markdown reports. It covers system prompts, guardrails, memory, tool guidance, subagent guidance, skills, scripts, and plugin metadata. Scripts and plugins are documented, not executed or installed.
+
+Try it from Linux at the repository root:
+
+```bash
+python3 tools/harness2/harness2.py setup --workspace .
+python3 tools/harness2/harness2.py doctor --workspace .
+python3 tools/harness2/harness2.py run --workspace . --benchmark smoke --executor demo --mode sequential --iterations 4
+```
+
+Use `--mode parallel --parallelism 2` to explore multiple independent candidates. Use the local OpenCode or Codex CLI executor only after installing and authenticating that CLI yourself. Harness2 does not install a model, expose credentials, or run local CLI processes from ULTRON's hosted backend.
+
+See the [Harness2 guide](tools/harness2/README.md) for executors, custom benchmark JSON, resume, judge, report, and security boundaries. The demo score is a deterministic mechanics test—not model-quality evidence.
