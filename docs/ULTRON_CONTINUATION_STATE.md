@@ -136,3 +136,14 @@ Current comparison against declared bases at the time of review:
 - No production deploy/settings/secrets, production database migrations, destructive actions, paid provider quota, or account-mutating tests without authorization.
 - Do not modify PHANTOM AI or NOX AI.
 - A platform interruption must resume from the actual latest remote head after rereading this checkpoint. Never assume a queued or previous workflow run succeeded.
+
+
+## 2026-10-30 local voice, desktop and Hermes continuation
+
+- Latest known candidate PR #400 source head before this checkpoint: `505a9266f4e9602b3cf42020ef555aa30b4b1e83`. Documentation checkpoint commits are newer and must be followed by checking the current PR head.
+- Added the local Windows voice capture module and CLI. Do not assume the physical Windows recognizer or microphone is working until the user PC is installed and tested.
+- Ported the fixed local shortcut allowlist from its separate PR into this candidate; it remains local CLI only, with typed approval, fixed targets and audit.
+- Replaced the candidate Hermes adapter with the native Runs API implementation. Vision defaults off; explicit opt-in and tests added. Hermes service credentials remain unconfigured.
+- CI run #3197 `41103023686`, Windows Companion run #312 `41103023712`, Android Companion run #17 `41103023759` and Chrome DevTools run #27 `41103023697` were queued at the last observation. Re-fetch their latest job statuses and logs before claiming success.
+- Next: inspect test job output including Linux Python suite and Windows PowerShell parser; fix only demonstrated failures; update the exact latest SHA/evidence here.
+- Do not merge, deploy, update Render/Supabase, install a model, or expose a remote desktop command endpoint without the necessary separate authorization and verification.
