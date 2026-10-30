@@ -30,6 +30,7 @@ function paidLookupCall({ approvePaidLookup = true, maxEstimatedCredits = 5000 }
 
 async function startAgent(fetchImpl) {
   const app = express();
+  const warnings = [];
   app.use(express.json({ limit: "2mb" }));
   app.use("/api", createAgentRouter({
     env: openSeoEnv,
@@ -37,7 +38,7 @@ async function startAgent(fetchImpl) {
       req.supabaseUser = { id: owner };
       next();
     },
-    logger: { warn() {} },
+    logger: { warn(...args) { warnings.push(args); } },
     fetchImpl
   }));
   const server = await new Promise(resolve => {
@@ -45,6 +46,7 @@ async function startAgent(fetchImpl) {
   });
   return {
     base: "http://127.0.0.1:" + server.address().port,
+    warnings,
     close: () => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   };
 }
@@ -124,6 +126,8 @@ test("model-generated approval flags cannot authorize a paid OpenSEO lookup", as
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.equal(result.autonomy.risk.requiresConfirmation, false);
+    assert.equal(result.toolResults[0].name, "openseo");
+    assert.deepEqual(agent.warnings.filter(entry => entry[0] === "Agent tool execution failed"), []);
     assert.equal(result.toolResults[0].result.error.code, "OPENSEO_SPEND_APPROVAL_REQUIRED");
     assert.equal(mcpCalls, 0);
     assert.equal(modelCalls, 2);
