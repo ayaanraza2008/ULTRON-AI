@@ -168,7 +168,7 @@ internal static class CloudPresenceClientTests
         }, cts.Token);
         Assert(captured?.RequestUri?.ToString() == Origin + "/api/desktop-companion/heartbeat", "Heartbeat must use the fixed route.");
         Assert(captured?.Headers.Authorization?.Scheme == "Bearer", "Heartbeat must use bearer authentication.");
-        Assert(captured.Headers.Authorization.Parameter == DeviceToken, "Heartbeat must use the stored device token.");
+        Assert(captured?.Headers.Authorization?.Parameter == DeviceToken, "Heartbeat must use the stored device token.");
         Assert(message.Contains("ONLINE", StringComparison.Ordinal), "A successful heartbeat must update device status.");
     }
 }
