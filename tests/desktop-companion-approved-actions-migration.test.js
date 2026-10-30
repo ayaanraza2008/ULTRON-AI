@@ -28,6 +28,8 @@ test("action creation requires the signed-in owner and a recently online, unrevo
   assert.match(match[1], /security definer/i);
   assert.match(match[1], /set search_path = ''/i);
   assert.match(match[1], /auth\.uid\(\)/i);
+  assert.match(match[1], /p_action_type is null/i);
+  assert.match(match[1], /p_target is null/i);
   assert.match(match[1], /d\.user_id = v_user_id/i);
   assert.match(match[1], /d\.revoked_at is null/i);
   assert.match(match[1], /d\.last_seen_at >= pg_catalog\.now\(\) - interval '90 seconds'/i);
@@ -61,6 +63,7 @@ test("device command claiming and result reporting are token-bound, one-time, an
   assert.match(complete[1], /p_status not in \('completed', 'rejected', 'failed'\)/i);
   assert.match(sql, /grant execute on function public\.complete_desktop_companion_command\(text, uuid, uuid, text, text\)\s+to service_role/i);
 });
+
 
 const preflightMigrationPath = fileURLToPath(new URL("../supabase/migrations/20261031230000_desktop_companion_command_preflight_authorization.sql", import.meta.url));
 const preflightSql = readFileSync(preflightMigrationPath, "utf8");
