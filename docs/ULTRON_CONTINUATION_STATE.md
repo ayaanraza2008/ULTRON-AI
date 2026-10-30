@@ -147,3 +147,20 @@ Current comparison against declared bases at the time of review:
 - CI run #3197 `41103023686`, Windows Companion run #312 `41103023712`, Android Companion run #17 `41103023759` and Chrome DevTools run #27 `41103023697` were queued at the last observation. Re-fetch their latest job statuses and logs before claiming success.
 - Next: inspect test job output including Linux Python suite and Windows PowerShell parser; fix only demonstrated failures; update the exact latest SHA/evidence here.
 - Do not merge, deploy, update Render/Supabase, install a model, or expose a remote desktop command endpoint without the necessary separate authorization and verification.
+
+
+## 2026-10-30 resume checkpoint — current remote head and Android CI maintenance
+
+- Repository: `ayaanraza2008/ULTRON-AI`; default branch `main` remains at `6b7f09d97508fc2be2085695d862a921e1ae8487` in the latest confirmed read. PR #400 remains open, mergeable and unmerged.
+- Candidate branch: `integration/ultron-cross-sector-current-main-20261029`; exact latest head at this checkpoint: `e746927ac41f8572998a97f178156b4896c29f74`.
+- The GitHub connector was used; there is no local checkout in this execution environment. The user's local working tree, staged/unstaged files and untracked files remain unknown and untouched. Never claim local Git status is clean.
+- On immediately preceding source/workflow head `efec05ce903c73f022a18c56278a3bbd22244c74`, the core CI test job completed: **847 tests, 846 passed, 0 failed, 1 skipped**. The skip is the opt-in live two-account Supabase isolation E2E; it is not a pass. Other jobs on that SHA were still pending/in progress when last inspected. Chrome DevTools workflow run `41104194646` was reported completed/success at the run level, but its job status was inconsistent in the connector response; recheck before relying on it.
+- The Android workflow log on the prior head showed the remaining Node 20 deprecation warning came from `gradle/actions/setup-gradle@v4`. Reviewed the official `gradle/actions` latest release: `v6.4.1` (2026-10-28), which includes a security fix for GHSA-chpw-2mqm-95cc. Its official README recommends v6. The workflow now uses the exact pinned `gradle/actions/setup-gradle@v6.4.1`, preserves Gradle `8.9`, and explicitly selects `cache-provider: basic` to retain the open-source GitHub Actions cache path. This avoids the enhanced caching service and does not add a paid dependency.
+- The workflow edit is commit `e746927ac41f8572998a97f178156b4896c29f74`. New exact-head runs were queued: Android `41104536252`, core ULTRON CI `41104536323`, Windows Companion `41104536689`, Chrome DevTools `41104536548`. No result is claimed for these runs yet.
+
+### Immediate next action
+
+1. Re-fetch PR #400 and confirm the branch still points to the exact latest head; inspect all four runs above and their job logs.
+2. Confirm the Android build succeeds on Gradle action v6.4.1 and the Node 20 deprecation warning is absent. If a new warning/failure appears, inspect its exact source and make the smallest safe correction.
+3. Inspect core CI's full result, including Node test counts, Python tests, source syntax scan, dependency audits, Docker sandbox smoke and World Intelligence build/bridge. Keep the Supabase isolation test marked skipped/blocked until authorized disposable accounts exist.
+4. Update this checkpoint and the acceptance matrix with the observed exact-head results, then move to the next independently verifiable blocker. Do not merge, deploy, apply migrations, change production settings, consume paid quota, or modify PHANTOM/NOX.
