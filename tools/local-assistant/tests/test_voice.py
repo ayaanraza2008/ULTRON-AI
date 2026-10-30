@@ -88,20 +88,50 @@ class WakeWordTests(unittest.TestCase):
                         voice.listen_once()
 
 
+class LocalVoiceIntentTests(unittest.TestCase):
+    def test_explicit_read_only_local_intents_are_classified(self):
+        cases = [
+            ("what time is it", {"kind": "time"}),
+            ("samay kya hua hai", {"kind": "time"}),
+            ("what is today's date", {"kind": "date"}),
+            ("aaj ki tareekh kya hai", {"kind": "date"}),
+            ("system health", {"kind": "system_health"}),
+            ("mera pc kaisa hai", {"kind": "system_health"}),
+            ("search my documents for quantum physics", {"kind": "documents", "query": "quantum physics"}),
+            ("mere files mein quantum physics khojo", {"kind": "documents", "query": "quantum physics"}),
+        ]
+        for phrase, expected in cases:
+            with self.subTest(phrase=phrase):
+                self.assertEqual(voice.classify_local_command(phrase), expected)
+
+    def test_arbitrary_or_destructive_phrases_are_not_local_intents(self):
+        for phrase in (
+            "delete my documents",
+            "search the internet for news",
+            "shutdown my PC",
+            "run a PowerShell command",
+            "send an email",
+            "open my bank account",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIsNone(voice.classify_local_command(phrase))
+
+
 class VoiceCommandParserTests(unittest.TestCase):
     def test_voice_subcommand_and_bounded_options(self):
         from ultron_local_assistant.cli import build_parser
-        args = build_parser().parse_args(["voice", "--locale", "hi-IN", "--timeout", "9", "--once", "--no-speak"])
+        args = build_parser().parse_args(["voice", "--locale", "hi-IN", "--timeout", "9", "--root", "C:/Docs", "--once", "--no-speak"])
         self.assertEqual(args.command, "voice")
         self.assertEqual(args.locale, "hi-IN")
         self.assertEqual(args.timeout, 9)
+        self.assertEqual(args.root, "C:/Docs")
         self.assertTrue(args.once)
         self.assertTrue(args.no_speak)
 
 
 class VoiceModeSafetyTests(unittest.TestCase):
     def _args(self):
-        return SimpleNamespace(model=None, locale="auto", timeout=8, once=True, no_speak=True)
+        return SimpleNamespace(model=None, locale="auto", timeout=8, root=".", once=True, no_speak=True)
 
     def test_utterance_without_wake_word_is_ignored(self):
         from ultron_local_assistant import cli
@@ -126,6 +156,35 @@ class VoiceModeSafetyTests(unittest.TestCase):
         self.assertIn("Hindi, English, or Hinglish", system_prompt)
         self.assertIn("always answer in concise, natural English", system_prompt)
         self.assertIn("ask the user to repeat", system_prompt)
+
+
+    def test_voice_system_health_runs_locally_without_chat(self):
+        from ultron_local_assistant import cli
+        with patch.object(cli.sys, "platform", "win32"):
+            with patch.object(cli.sys, "stdin", SimpleNamespace(isatty=lambda: True)):
+                with patch.object(cli, "listen_once", return_value="Ultron, system health"):
+                    with patch.object(cli, "get_system_health", return_value={
+                        "status": "ok",
+                        "cpu": {"logical_cpus": 8},
+                        "memory": {"used_percent": 55.0},
+                        "disk": {"used_percent": 62.0},
+                    }) as health:
+                        with patch.object(cli, "local_chat") as chat:
+                            self.assertEqual(cli.voice_mode(self._args()), 0)
+        health.assert_called_once_with()
+        chat.assert_not_called()
+
+    def test_voice_document_research_stays_in_selected_local_workspace(self):
+        from ultron_local_assistant import cli
+        source = {"path": "notes/physics.md", "start_line": 4, "end_line": 8, "text": "local excerpt"}
+        with patch.object(cli.sys, "platform", "win32"):
+            with patch.object(cli.sys, "stdin", SimpleNamespace(isatty=lambda: True)):
+                with patch.object(cli, "listen_once", return_value="Ultron, search my documents for quantum physics"):
+                    with patch.object(cli, "answer_from_documents", return_value=("A local answer.", [source])) as research:
+                        with patch.object(cli, "local_chat") as chat:
+                            self.assertEqual(cli.voice_mode(self._args()), 0)
+        research.assert_called_once_with(".", "quantum physics", cli.model_name(None))
+        chat.assert_not_called()
 
     def test_voice_launch_still_requires_typed_terminal_approval(self):
         from ultron_local_assistant import cli
