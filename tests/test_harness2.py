@@ -14,6 +14,53 @@ class Harness2Tests(unittest.TestCase):
         parts = harness2.load_components(self.root / ".harness2" / "harness")
         self.assertEqual(set(parts), set(harness2.COMPONENTS))
         with self.assertRaises(harness2.Harness2Error): harness2.setup(self.root)
+    def test_resume_reuses_saved_candidate_after_interrupted_round(self):
+        workspace = self.root.resolve()
+        config = harness2.read_json(workspace / ".harness2" / "config.json")
+        benchmark = harness2.load_benchmark("smoke")
+        import datetime as dt, uuid, shutil
+        run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
+        root = harness2.run_path(workspace, run_id)
+        root.mkdir(parents=True)
+        shutil.copytree(workspace / config["harness_path"], root / "baseline-harness")
+        harness2.atomic_json(root / "benchmark.json", benchmark)
+
+        executor = harness2.Executor("demo", None, 60)
+        baseline = harness2.candidate_dir(root, "baseline")
+        baseline.mkdir(parents=True)
+        shutil.copytree(root / "baseline-harness", baseline / "harness")
+        baseline_result = harness2.evaluate(benchmark, baseline / "harness", executor)
+        harness2.atomic_json(baseline / "result.json", baseline_result)
+
+        candidate_id = "r01-c01"
+        candidate = harness2.candidate_dir(root, candidate_id)
+        candidate.mkdir(parents=True)
+        shutil.copytree(baseline / "harness", candidate / "harness")
+        harness2.apply_updates(candidate / "harness", {
+            "system_prompt": "# Include Goal in the plan\n"
+        }, {"system_prompt"})
+        candidate_result = harness2.evaluate(benchmark, candidate / "harness", executor)
+        candidate_result.update({"candidate_id": candidate_id, "round": 1, "changed_components": ["system_prompt"]})
+        harness2.atomic_json(candidate / "result.json", candidate_result)
+
+        # Simulate a crash after the result file was atomically saved but before
+        # the run checkpoint learned about this candidate.
+        state = {
+            "run_id": run_id, "status": "running", "benchmark": "smoke",
+            "executor": "demo", "model": None, "mode": "sequential",
+            "iterations": 1, "parallelism": 1, "next_round": 0,
+            "candidate_ids": ["baseline"], "best_candidate": "baseline",
+            "best_score": baseline_result["score"],
+        }
+        harness2.atomic_json(root / "run.json", state)
+        with patch.object(harness2.Executor, "refine", side_effect=AssertionError("saved candidate should be reused")):
+            harness2.execute(root, state, 60)
+
+        saved = harness2.read_json(root / "run.json")
+        self.assertIn(candidate_id, saved["candidate_ids"])
+        self.assertEqual(saved["best_candidate"], candidate_id)
+        self.assertEqual(saved["status"], "completed")
+
     def test_demo_sequential_refinement_and_report(self):
         args = type("Args", (), {"workspace":str(self.root),"benchmark":"smoke","benchmark_file":None,"executor":"demo","mode":"sequential","iterations":3,"parallelism":2,"timeout":60,"model":None})()
         workspace = self.root.resolve()
