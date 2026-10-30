@@ -3673,12 +3673,12 @@
       const companionEntry = Array.isArray(integrations?.integrations)
         ? integrations.integrations.find(item => item.id === "windows-desktop-companion")
         : null;
-      const companionNote = companionEntry?.note || "The current desktop adapter supports read-only device status only; it has no verified keyboard, mouse, file, app-launch, or system-command handlers.";
-      drawerCard("Windows companion",
+      const companionNote = companionEntry?.note || "The optional legacy desktop status adapter is not the paired-device relay. Manage device pairing and the six fixed locally approved app/folder requests in PC and mobile devices.";
+      drawerCard("Windows legacy status adapter",
         desktopConfigured
-          ? "The backend reports companion settings, but the paired device must also be online and remote approvals enabled. Only a fixed app/folder allowlist can run after local approval. " + companionNote
-          : "No Windows companion is configured. Install, pair and enable remote approvals on a local Windows companion before requesting a fixed app/folder action. " + companionNote,
-        desktopConfigured ? "CONFIGURED · NOT VERIFIED" : "NOT CONNECTED",
+          ? "Legacy status-probe settings are configured, but this does not establish tray pairing or enable local actions. Manage the paired device and its separate local approvals in PC and mobile devices. " + companionNote
+          : "This optional legacy status probe is not configured. Cross-device web access and the separate paired-device relay are managed in PC and mobile devices. " + companionNote,
+        desktopConfigured ? "LEGACY · UNVERIFIED" : "OPTIONAL",
         "warning");
       drawerCard("Mobile device",
         "No paired mobile action bridge is connected to this UI. A trusted mobile companion and OS-granted permissions are required.",
