@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using Ultron.Companion;
 
 namespace Ultron.Companion.Tests;
@@ -47,6 +48,8 @@ internal static class CloudPresenceClientTests
         await PairingDoesNotSaveUnexpectedServerIdentity();
         await RevokedHeartbeatStopsThePresenceLoop();
         await HeartbeatUsesTheSavedBearerToken();
+        RemoteActionAllowlistIsStrict();
+        await RemoteActionPollingRequiresLocalApprovalAndDoesNotExecuteWhenDeclined();
     }
 
     private static void PublicAddressPolicyRejectsLocalAndReservedNetworks()
@@ -75,6 +78,115 @@ internal static class CloudPresenceClientTests
         foreach (var value in blockedAddresses)
             Assert(!CloudPresenceClient.IsPublicGlobalAddress(IPAddress.Parse(value)),
                 $"Expected a local, reserved or documentation address to be blocked: {value}");
+    }
+
+    private static void RemoteActionAllowlistIsStrict()
+    {
+        foreach (var action in new[]
+        {
+            ("launch_application", "notepad"),
+            ("launch_application", "explorer"),
+            ("launch_application", "calculator"),
+            ("open_known_folder", "desktop"),
+            ("open_known_folder", "documents"),
+            ("open_known_folder", "downloads")
+        })
+        {
+            Assert(CloudPresenceClient.IsAllowlistedRemoteAction(action.Item1, action.Item2),
+                $"Expected fixed remote action to be allowed: {action.Item1}/{action.Item2}");
+        }
+
+        foreach (var action in new[]
+        {
+            ("run_command", "powershell"),
+            ("launch_application", "cmd"),
+            ("launch_application", "custom.exe"),
+            ("open_known_folder", "C:\\"),
+            ("open_known_folder", ".."),
+            ("", "notepad")
+        })
+        {
+            Assert(!CloudPresenceClient.IsAllowlistedRemoteAction(action.Item1, action.Item2),
+                $"Expected unsupported remote action to be rejected: {action.Item1}/{action.Item2}");
+        }
+    }
+
+    private static async Task RemoteActionPollingRequiresLocalApprovalAndDoesNotExecuteWhenDeclined()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1",
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+        string? nextAuthorization = null;
+        string? resultAuthorization = null;
+        string? nextBody = null;
+        string? resultBody = null;
+        var executeCalls = 0;
+        var commandId = "88888888-8888-4888-8888-888888888888";
+        var httpHandler = new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/next")
+            {
+                nextAuthorization = request.Headers.Authorization?.ToString();
+                nextBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                var command = new
+                {
+                    command = new
+                    {
+                        id = commandId,
+                        actionType = "launch_application",
+                        target = "notepad",
+                        expiresAt = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O")
+                    },
+                    pollIntervalSeconds = 5
+                };
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(command));
+            }
+
+            if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/" + commandId + "/result")
+            {
+                resultAuthorization = request.Headers.Authorization?.ToString();
+                resultBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                return JsonResponse(HttpStatusCode.OK, """{"recorded":true}""");
+            }
+
+            throw new InvalidOperationException("Unexpected remote-action request: " + request.RequestUri);
+        });
+        using var http = new HttpClient(httpHandler);
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cancellation = new CancellationTokenSource();
+        var approvalCalls = 0;
+        await client.RunRemoteActionPollingLoopAsync(
+            (command, _) =>
+            {
+                approvalCalls++;
+                Assert(command.Id == commandId, "The approval callback must receive the claimed command ID.");
+                Assert(command.ActionType == "launch_application" && command.Target == "notepad",
+                    "The approval callback must receive the fixed, parsed action.");
+                Assert(CloudPresenceClient.DescribeCommand(command) == "open Notepad",
+                    "The user-visible description must be derived from the fixed allowlist.");
+                return Task.FromResult(false);
+            },
+            (_, _) =>
+            {
+                executeCalls++;
+                throw new InvalidOperationException("The executor must never run after a No response.");
+            },
+            message =>
+            {
+                if (message.Contains("declined", StringComparison.OrdinalIgnoreCase))
+                    cancellation.Cancel();
+            },
+            cancellation.Token);
+
+        Assert(approvalCalls == 1, "Exactly one local approval prompt should be shown for the claimed request.");
+        Assert(executeCalls == 0, "A declined request must never invoke the local executor.");
+        Assert(nextAuthorization == "Bearer " + DeviceToken, "Command polling must use the paired device bearer token.");
+        Assert(nextBody is not null && nextBody.Contains(DeviceId, StringComparison.Ordinal),
+            "Command polling must be scoped to this device identity.");
+        Assert(resultAuthorization == "Bearer " + DeviceToken, "Command results must use the same paired token.");
+        Assert(resultBody is not null && resultBody.Contains("\"status\":\"rejected\"", StringComparison.Ordinal) &&
+            resultBody.Contains("\"resultCode\":\"USER_REJECTED\"", StringComparison.Ordinal),
+            "A local No response must be recorded as a rejection.");
     }
 
     private static async Task PairingUsesOneTimeCodeAndSavesOnlyValidatedDeviceCredentials()
