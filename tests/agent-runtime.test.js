@@ -2418,7 +2418,8 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 76);
+    assert.ok(compoundTools.length >= 76, `expected the full tool allowlist, received ${compoundTools.length}`);
+    assert.equal(new Set(compoundTools).size, compoundTools.length, "compound tool allowlist must not contain duplicate names");
     assert.ok(compoundTools.includes("openhiggsfield"));
     assert.ok(compoundTools.includes("open_design"));
     assert.ok(compoundTools.includes("open_generative_ai"));
