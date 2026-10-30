@@ -106,3 +106,9 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 - Parser rejects ordinary mentions, leading prose, explicit negation, contradictory trailing instructions, missing input and non-exact phrase extensions.
 - Full CI run `41119660470` passed: 663 tests total, 662 passed, 0 failed, 1 intentionally skipped; `npm run check` passed; Python verification steps passed; dependency audits found 0 vulnerabilities; pinned World Intelligence build and bridge injection passed.
 - No external reverse-image provider was contacted. Live Geo-Sleuth runtime, candidate geometry and location accuracy remain unverified; no production settings changed.
+
+
+## Geo-Sleuth reverse-image consent post-merge verification
+
+- Post-merge CI on main commit `33a9df4e64075ca4483f26c47a3eea6f1cc20505` passed: workflow runs `41119784359` (test + World Intelligence build) and `41119785946` (production revision verification) completed successfully.
+- The production-revision workflow is a verification job; no deployment was performed.
