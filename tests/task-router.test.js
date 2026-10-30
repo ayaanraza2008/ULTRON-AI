@@ -156,3 +156,15 @@ test("routes Hermes Agent long-running run lifecycle requests to dedicated owner
   assert.deepEqual(status.categories, ["hermes"]);
   assert.ok(status.toolNames.includes("hermes_agent_run_status"));
 });
+
+
+test("routes Hermes skills and toolset discovery to read-only capability tools", () => {
+  const skills = classifyTaskRoute("Show me the skills available in Hermes Agent.");
+  assert.deepEqual(skills.categories, ["hermes"]);
+  assert.ok(skills.toolNames.includes("hermes_agent_list_skills"));
+  assert.ok(skills.toolNames.includes("hermes_agent_list_toolsets"));
+
+  const toolsets = classifyTaskRoute("List enabled toolsets in Hermes Agent.");
+  assert.deepEqual(toolsets.categories, ["hermes"]);
+  assert.ok(toolsets.toolNames.includes("hermes_agent_list_toolsets"));
+});
