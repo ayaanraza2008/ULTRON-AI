@@ -43,7 +43,7 @@ def load_components(harness):
     result = {}
     for name, rel in COMPONENTS.items():
         path = harness / rel
-        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(harness.resolve()): raise Harness2Error(f"Missing or unsafe component: {name}")
+        if harness.is_symlink() or path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(harness.resolve()): raise Harness2Error(f"Missing or unsafe component: {name}")
         value = path.read_text(encoding="utf-8")
         if len(value) > MAX_TEXT: raise Harness2Error(f"Component too large: {name}")
         result[name] = value
@@ -167,6 +167,19 @@ class Executor:
         prompt = "Return JSON with updates containing a complete replacement for only the named component. Do not run tools or claim scores.\n" + json.dumps({"target":target,"current":components[target],"feedback":feedback},ensure_ascii=False)
         return parse_object(self.ask(prompt))
 
+CANDIDATE_ID = re.compile(r"^(?:baseline|r[0-9]{2}-c[0-9]{2})$")
+
+def candidate_dir(root, candidate_id):
+    if not isinstance(candidate_id, str) or not CANDIDATE_ID.fullmatch(candidate_id):
+        raise Harness2Error("Invalid candidate ID in saved run state")
+    parent = root / "candidates"
+    if parent.is_symlink() or not parent.resolve().is_relative_to(root.resolve()):
+        raise Harness2Error("Candidate storage may not escape the run directory")
+    folder = parent / candidate_id
+    if folder.is_symlink() or not folder.resolve().is_relative_to(parent.resolve()):
+        raise Harness2Error("Candidate folder may not be a symlink")
+    return folder
+
 def run_path(workspace,run_id):
     if not RUN_ID.fullmatch(run_id): raise Harness2Error("Invalid run ID")
     root = Path(workspace).expanduser().resolve() / ".harness2"
@@ -184,7 +197,7 @@ def evaluate(benchmark,harness,executor):
 
 def report(root):
     state = read_json(root/"run.json")
-    records = [read_json(root/"candidates"/cid/"result.json") for cid in state["candidate_ids"]]
+    records = [read_json(candidate_dir(root,cid)/"result.json") for cid in state["candidate_ids"]]
     baseline = next(x for x in records if "candidate_id" not in x)
     best = max(records,key=lambda x:(x["score"],x.get("candidate_id","baseline")))
     lines = [f"# Harness2 report: {state['run_id']}","",f"- Status: {state['status']}",f"- Benchmark: {state['benchmark']}",f"- Executor: {state['executor']}",f"- Mode: {state['mode']}",f"- Baseline: {baseline['score']:.1%}",f"- Best: {best['score']:.1%}",f"- Improvement: {best['score']-baseline['score']:+.1%}","","## Candidate comparison","","| Candidate | Score |","|---|---:|",f"| baseline | {baseline['score']:.1%} |"]
@@ -201,7 +214,7 @@ def judge_run(root):
     benchmark = read_json(root/"benchmark.json")
     records = []
     for cid in state.get("candidate_ids", []):
-        path = root / "candidates" / cid / "result.json"
+        path = candidate_dir(root,cid) / "result.json"
         record = read_json(path)
         rescored = score(benchmark, record.get("answers", []))
         record.update(rescored)
@@ -215,7 +228,7 @@ def judge_run(root):
 
 def execute(root,state,timeout):
     benchmark = read_json(root/"benchmark.json"); executor = Executor(state["executor"],state.get("model"),timeout)
-    base = root/"candidates"/"baseline"
+    base = candidate_dir(root,"baseline")
     if not (base/"result.json").exists():
         base.mkdir(parents=True,exist_ok=True); shutil.copytree(root/"baseline-harness",base/"harness")
         result = evaluate(benchmark,base/"harness",executor); atomic_json(base/"result.json",result)
@@ -225,12 +238,12 @@ def execute(root,state,timeout):
     atomic_json(root/"run.json",state)
     for round_no in range(int(state["next_round"]),int(state["iterations"])):
         best_id = state["best_candidate"]; best_record = read_json(root/"candidates"/best_id/"result.json")
-        base_harness = root/"candidates"/best_id/"harness"; components = load_components(base_harness)
+        base_harness = candidate_dir(root,best_id)/"harness"; components = load_components(base_harness)
         feedback = [{"task_id":t["task_id"],"failed":[c for c in t["checks"] if not c["passed"]]} for t in best_record["tasks"] if any(not c["passed"] for c in t["checks"])]
         count = 1 if state["mode"] == "sequential" else min(state["parallelism"],len(COMPONENTS))
         targets = [list(COMPONENTS)[(round_no*count+i)%len(COMPONENTS)] for i in range(count)]
         def make_candidate(pair):
-            index,target = pair; cid = f"r{round_no+1:02d}-c{index+1:02d}"; folder = root/"candidates"/cid
+            index,target = pair; cid = f"r{round_no+1:02d}-c{index+1:02d}"; folder = candidate_dir(root,cid)
             if (folder/"result.json").exists(): return cid,read_json(folder/"result.json")
             if folder.exists():
                 if folder.is_symlink(): raise Harness2Error("Candidate folder may not be a symlink")
@@ -245,7 +258,7 @@ def execute(root,state,timeout):
         else: results = [make_candidate(x) for x in jobs]
         for cid,_ in results:
             if cid not in state["candidate_ids"]: state["candidate_ids"].append(cid)
-        best = max((read_json(root/"candidates"/cid/"result.json") for cid in state["candidate_ids"]),key=lambda x:(x["score"],x.get("candidate_id","baseline")))
+        best = max((read_json(candidate_dir(root,cid)/"result.json") for cid in state["candidate_ids"]),key=lambda x:(x["score"],x.get("candidate_id","baseline")))
         state.update({"best_candidate":best.get("candidate_id","baseline"),"best_score":best["score"],"next_round":round_no+1,"updated_at":dt.datetime.now(dt.timezone.utc).isoformat()})
         atomic_json(root/"run.json",state)
     state["status"]="completed"; atomic_json(root/"run.json",state); report(root); return root
