@@ -677,10 +677,20 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   const explicitHermesStopIntent = /\b(stop|cancel|interrupt)\b/.test(normalizedRequest) &&
     !/\b(?:do not|don't|never)\s+(?:stop|cancel|interrupt)\b/.test(normalizedRequest);
   if (name === "hermes_agent_start_run" && !explicitHermesRunIntent) {
-    return {
-      requiresConfirmation: true,
-      risk: { level: "external_effect", reason: "Starting a long-running Hermes job requires explicit user delegation.", requiresConfirmation: true }
+    // A model-generated Hermes call is not user delegation. Keep it blocked,
+    // but report the actual delegated-task risk when it is more severe than
+    // the baseline external-effect risk (for example, destructive instructions).
+    const hermesTask = typeof args?.task === "string" ? args.task : "";
+    const hermesTaskRisk = hermesTask.trim() ? classifyAutonomyRisk(hermesTask) : null;
+    const fallbackRisk = {
+      level: "external_effect",
+      reason: "Starting a long-running Hermes job requires explicit user delegation.",
+      requiresConfirmation: true
     };
+    const risk = hermesTaskRisk && AUTONOMY_RISK_RANK[hermesTaskRisk.level] > AUTONOMY_RISK_RANK[fallbackRisk.level]
+      ? hermesTaskRisk
+      : fallbackRisk;
+    return { requiresConfirmation: true, risk: { ...risk, requiresConfirmation: true } };
   }
   if (name === "hermes_agent_stop_run") {
     const runId = String(args?.runId || "").toLowerCase();
