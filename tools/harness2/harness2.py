@@ -232,9 +232,9 @@ class Executor:
                 proc = run_bounded(cmd,input_text=prompt[:MAX_TEXT],cwd=cwd,timeout=self.timeout)
             else:
                 config = cwd / "opencode.json"
-                config.write_text(json.dumps({"$schema":"https://opencode.ai/config.json","default_agent":"harness2-readonly","subagent_depth":0,"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow","edit":"deny","write":"deny","bash":"deny","task":"deny","webfetch":"deny","websearch":"deny","lsp":"deny","skill":"deny"}}),encoding="utf-8")
+                config.write_text(json.dumps({"$schema":"https://opencode.ai/config.json","default_agent":"harness2-readonly","subagent_depth":0,"permission":{"*":"deny"}}),encoding="utf-8")
                 agents = cwd / "agents"; agents.mkdir()
-                (agents / "harness2-readonly.md").write_text("---\ndescription: Read-only Harness2 evaluator\nmode: primary\npermission:\n  \"*\": deny\n  read: allow\n  glob: allow\n  grep: allow\n  list: allow\n---\nDo not execute tools or write files.\n",encoding="utf-8")
+                (agents / "harness2-readonly.md").write_text("---\ndescription: No-tool Harness2 evaluator\nmode: primary\npermission:\n  \"*\": deny\n---\nDo not use tools, access files, or write files. Answer only from the supplied prompt.\n",encoding="utf-8")
                 env = os.environ.copy(); env.update({"OPENCODE_CONFIG":str(config),"OPENCODE_CONFIG_DIR":str(cwd),"OPENCODE_DISABLE_DEFAULT_PLUGINS":"1","OPENCODE_DISABLE_MODELS_FETCH":"1","OPENCODE_DISABLE_LSP_DOWNLOAD":"1","OPENCODE_DISABLE_EXTERNAL_SKILLS":"1","OPENCODE_DISABLE_CLAUDE_CODE":"1","OPENCODE_DISABLE_CLAUDE_CODE_PROMPT":"1","OPENCODE_DISABLE_CLAUDE_CODE_SKILLS":"1"})
                 cmd = ["opencode","--pure","run","--agent","harness2-readonly","--format","json","--dir",str(cwd)]
                 if self.model: cmd += ["--model",self.model]
