@@ -361,6 +361,9 @@ def companion_token(_):
     return 0
 
 def companion_pair(args):
+    if sys.platform != "win32":
+        print("The cloud status companion can only be paired from Windows.", file=sys.stderr)
+        return 2
     try:
         code = getpass.getpass("Enter the one-time pairing code from ULTRON (input hidden): ").strip()
         result = pair_companion(args.server_url, code)
@@ -378,15 +381,25 @@ def companion_connect(args):
     if sys.platform != "win32":
         print("The Windows companion can only send heartbeats from Windows.", file=sys.stderr)
         return 2
+    delay = 5
     while True:
         try:
             result = send_companion_heartbeat()
             print(f"ULTRON companion heartbeat: {result['status']} ({result['deviceId']})")
+        except PermissionError as exc:
+            print(f"ULTRON companion authorization was revoked: {exc}", file=sys.stderr)
+            return 1
         except Exception as exc:
             print(f"ULTRON companion heartbeat unavailable: {exc}", file=sys.stderr)
-            return 1
+            if args.once:
+                return 1
+            print(f"Retrying in {delay} seconds. Press Ctrl+C to stop.")
+            time.sleep(delay)
+            delay = min(60, delay * 2)
+            continue
         if args.once:
             return 0
+        delay = 5
         time.sleep(30)
 
 def companion_serve(args):
