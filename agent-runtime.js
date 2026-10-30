@@ -677,9 +677,15 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   const explicitHermesStopIntent = /\b(stop|cancel|interrupt)\b/.test(normalizedRequest) &&
     !/\b(?:do not|don't|never)\s+(?:stop|cancel|interrupt)\b/.test(normalizedRequest);
   if (name === "hermes_agent_start_run" && !explicitHermesRunIntent) {
+    const taskRisk = typeof args?.task === "string" && args.task.trim()
+      ? classifyAutonomyRisk(args.task)
+      : null;
+    const selectedRisk = taskRisk && AUTONOMY_RISK_RANK[taskRisk.level] > AUTONOMY_RISK_RANK.external_effect
+      ? taskRisk
+      : { level: "external_effect", reason: "Starting a long-running Hermes job requires explicit user delegation." };
     return {
       requiresConfirmation: true,
-      risk: { level: "external_effect", reason: "Starting a long-running Hermes job requires explicit user delegation.", requiresConfirmation: true }
+      risk: { ...selectedRisk, requiresConfirmation: true }
     };
   }
   if (name === "hermes_agent_stop_run") {
