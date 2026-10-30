@@ -67,19 +67,26 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
-      - name: Parse guided PowerShell installer without executing it
+      - name: Parse guided installer and voice launcher without executing them
         shell: pwsh
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
+          $scriptPaths = @(
             "tools/local-assistant/setup.ps1",
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | Format-List
-            exit 1
+            "tools/local-assistant/start-voice.ps1"
+          )
+          foreach ($scriptPath in $scriptPaths) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $scriptPath,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              Write-Error ("PowerShell parse failed: " + $scriptPath)
+              $errors | Format-List
+              exit 1
+            }
           }
 
   coding-sandbox-docker:
