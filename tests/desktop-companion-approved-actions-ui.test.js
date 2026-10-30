@@ -25,7 +25,7 @@ test("Devices view exposes only the six fixed Windows app and folder requests", 
     );
   }
   assert.match(devicesView, /if \(device\.online\)\s*\{/);
-  assert.match(devicesView, /device\.id\s*\+\s*"\/commands"/);
+  assert.match(devicesView, /encodeURIComponent\(device\.id\)\s*\+\s*"\/commands"/);
   assert.match(devicesView, /method: "POST"/);
   assert.match(devicesView, /approvalRequiredOnDevice|Approve it on the Windows PC/);
   assert.match(devicesView, /60 seconds/);
