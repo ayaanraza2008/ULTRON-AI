@@ -256,3 +256,33 @@ test("server-side action completion uses the named RPC and accepts no arbitrary 
     assert.equal(JSON.parse(calls[0].options.body).p_result_code, "USER_DENIED");
   });
 });
+
+test("server-side pre-execution authorization uses the named service-role RPC", async () => {
+  const calls = [];
+  const app = createApp({
+    env: relayEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/rest/v1/rpc/authorize_desktop_companion_action")) {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const deviceToken = "A".repeat(43);
+    const response = await fetch(base + "/api/desktop-companion/actions/" + ACTION + "/authorize", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + deviceToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload, { authorized: true, actionId: ACTION });
+    assert.equal(calls[0].url, relayEnv.SUPABASE_URL + "/rest/v1/rpc/authorize_desktop_companion_action");
+    assert.equal(calls[0].options.headers.apikey, SERVICE_KEY);
+    assert.equal(JSON.parse(calls[0].options.body).p_token_hash.length, 64);
+    assert.equal(JSON.parse(calls[0].options.body).p_action_id, ACTION);
+  });
+});
