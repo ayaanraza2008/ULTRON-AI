@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { createApp } from "../server.js";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
@@ -170,6 +171,42 @@ test("server-side command claim uses only the allowlisted service-role RPC", asy
     assert.equal(JSON.parse(calls[0].options.body).p_device_id, DEVICE);
     assert.equal(JSON.parse(calls[0].options.body).p_token_hash.length, 64);
     assert.equal(JSON.stringify(payload).includes(deviceToken), false);
+  });
+});
+
+test("server-side pre-execution authorization uses only the named service-role RPC", async () => {
+  const calls = [];
+  const app = createApp({
+    env: relayEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/rest/v1/rpc/authorize_desktop_companion_command")) {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const deviceToken = "V".repeat(43);
+    const commandId = "88888888-8888-4888-8888-888888888888";
+    const response = await fetch(base + "/api/desktop-companion/commands/" + commandId + "/authorize", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + deviceToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload, { authorized: true, commandId });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, relayEnv.SUPABASE_URL + "/rest/v1/rpc/authorize_desktop_companion_command");
+    assert.equal(calls[0].options.headers.apikey, SERVICE_KEY);
+    assert.equal(calls[0].options.headers.Authorization, undefined);
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      p_token_hash: createHash("sha256").update(deviceToken).digest("hex"),
+      p_device_id: DEVICE,
+      p_command_id: commandId
+    });
   });
 });
 
