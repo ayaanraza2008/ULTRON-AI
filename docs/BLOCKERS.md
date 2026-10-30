@@ -34,4 +34,4 @@ The security branch adds a transport that resolves public hostnames, rejects any
 
 ## Paid integration spend controls
 
-- OpenSEO paid lookup authorization is enforced server-side from the current user's explicit prompt and bounded credit ceiling. Model-generated tool arguments cannot authorize spend. This is source-level evidence; live upstream billing behavior and account quota remain unverified.
+- OpenSEO paid lookup authorization is enforced server-side from the current user's explicit prompt and bounded credit ceiling. Model-generated tool arguments cannot authorize spend. Agent-level tests and full CI passed on feature head (run 41115578469); live upstream billing behavior and account quota remain unverified. Do not treat mocked MCP responses as a live account check.
