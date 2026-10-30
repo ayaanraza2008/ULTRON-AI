@@ -9,8 +9,7 @@ static void Assert(bool condition, string message)
 var valid = new[]
 {
     "https://example.com/",
-    "https://example.com/ultron/",
-    " https://ultron.example.net/app "
+    " https://ultron.example.net "
 };
 
 foreach (var input in valid)
@@ -38,6 +37,8 @@ var invalid = new[]
     "https://host.example/",
     "https://single-label/",
     "https://user:password@example.com/",
+    "https://example.com/ultron/",
+    "https://example.com/app",
     "https://example.com/?token=secret",
     "https://example.com/#fragment",
     "https://example.com:8443/",
