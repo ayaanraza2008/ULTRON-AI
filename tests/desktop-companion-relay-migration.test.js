@@ -40,6 +40,8 @@ test("desktop companion relay functions are atomic, search-path hardened, and na
   assert.match(sql, /grant execute on function public\.complete_desktop_companion_pairing[\s\S]*?to service_role/i);
   assert.match(sql, /grant execute on function public\.record_desktop_companion_heartbeat[\s\S]*?to service_role/i);
   assert.match(sql, /grant execute on function public\.revoke_desktop_companion_device\(uuid\)\s+to authenticated/i);
-  const completionGrant = sql.match(/grant execute on function public\\.complete_desktop_companion_pairing\\(text, uuid, text, text\\)\\s+to ([a-z_]+);/i);
+  const completionGrantStart = sql.indexOf("grant execute on function public.complete_desktop_companion_pairing(");
+  const completionGrant = sql.slice(completionGrantStart).split(";")[0].replace(/\\s+/g, " ").trim();
+  assert.equal(completionGrant, "grant execute on function public.complete_desktop_companion_pairing(text, uuid, text, text) to service_role");
   assert.equal(completionGrant?.[1], "service_role");
 });
