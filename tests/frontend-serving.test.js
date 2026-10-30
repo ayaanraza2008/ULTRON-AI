@@ -32,7 +32,10 @@ test("all required UI assets are served as same-origin static files", async (t) 
   const cases = [
     ["/app.js", /javascript/],
     ["/styles.css", /text\/css/],
-    ["/favicon.svg", /image\/svg\+xml/]
+    ["/favicon.svg", /image\/svg\+xml/],
+    ["/manifest.webmanifest", /manifest\+json|json/],
+    ["/sw.js", /javascript/],
+    ["/icons/ultron.svg", /image\/svg\+xml/]
   ];
   for (const [asset, expectedType] of cases) {
     const response = await fetch(base + asset);
@@ -42,6 +45,19 @@ test("all required UI assets are served as same-origin static files", async (t) 
     const body = await response.text();
     assert.ok(body.length > 100, asset);
   }
+});
+
+test("the service worker is always revalidated and the manifest is same-origin", async (t) => {
+  const base = await startApp(t);
+  const worker = await fetch(base + "/sw.js");
+  assert.equal(worker.status, 200);
+  assert.match(worker.headers.get("cache-control") || "", /no-cache/);
+  const manifest = await fetch(base + "/manifest.webmanifest");
+  assert.equal(manifest.status, 200);
+  const payload = await manifest.json();
+  assert.equal(payload.start_url, "/");
+  assert.equal(payload.scope, "/");
+  assert.equal(payload.display, "standalone");
 });
 
 test("Living Core exposes notes, reminders and study-library routes in the navigation", async (t) => {
