@@ -57,4 +57,4 @@ Assert(!AssistantUrlPolicy.TryValidate("https://" + new string('a', 2050) + ".ex
 Console.WriteLine($"Windows companion URL policy: {valid.Length} valid and {invalid.Length + 1} invalid cases passed.");
 
 await CloudPresenceClientTests.RunAsync();
-Console.WriteLine("Windows companion cloud-pairing and heartbeat protocol: 6 cases passed.");
+Console.WriteLine("Windows companion pairing, heartbeat and remote-action security: 8 cases passed.");
