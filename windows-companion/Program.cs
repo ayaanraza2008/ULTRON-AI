@@ -315,7 +315,7 @@ internal sealed class CompanionContext : ApplicationContext
             var pairing = await _cloudPresence.PairAsync(_assistantUrl, code.Text);
             ShowStatus($"Paired {pairing.DeviceName} with ULTRON. Cloud presence is still off until you start it.");
             MessageBox.Show(_window,
-                "This PC is paired. Its credential is stored in Windows Credential Manager. Start cloud presence when you want ULTRON to show this PC as online. Pairing does not enable remote PC control.",
+                "This PC is paired. Its credential is stored in Windows Credential Manager. Start cloud presence when you want ULTRON to show this PC as online. Pairing alone does not enable remote action requests; those require a separate Windows opt-in and local approval for each request.",
                 "ULTRON pairing complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception error)
