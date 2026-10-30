@@ -18,8 +18,10 @@ internal static class Program
 
 internal sealed class CompanionContext : ApplicationContext
 {
-    private const string AssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
+    private const string DefaultAssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private readonly string _assistantUrl;
+    private readonly bool _assistantUrlConfigurationInvalid;
     private const string StartupRegistryValue = "ULTRONWakeCompanion";
     private readonly Form _window;
     private readonly Label _status;
@@ -29,6 +31,11 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly CheckBox _autoStartCheckBox;
+    private readonly Button _pairDeviceButton;
+    private readonly Button _startPresenceButton;
+    private readonly Button _stopPresenceButton;
+    private readonly CloudPresenceClient _cloudPresence = new();
+    private CancellationTokenSource? _presenceCancellation;
     private bool _suppressAutoStartChange;
     private SpeechRecognitionEngine? _recognizer;
     private bool _allowExit;
@@ -37,26 +44,46 @@ internal sealed class CompanionContext : ApplicationContext
 
     public CompanionContext(bool backgroundLaunch = false)
     {
+        var configuredAssistantUrl = Environment.GetEnvironmentVariable("ULTRON_ASSISTANT_URL");
+        if (string.IsNullOrWhiteSpace(configuredAssistantUrl))
+        {
+            _assistantUrl = DefaultAssistantUrl;
+            _assistantUrlConfigurationInvalid = false;
+        }
+        else if (AssistantUrlPolicy.TryValidate(configuredAssistantUrl, out var validatedAssistantUrl))
+        {
+            _assistantUrl = validatedAssistantUrl;
+            _assistantUrlConfigurationInvalid = false;
+        }
+        else
+        {
+            // An invalid override must never be opened. Fall back to the existing
+            // default and explain the rejected setting when the user opens ULTRON.
+            _assistantUrl = DefaultAssistantUrl;
+            _assistantUrlConfigurationInvalid = true;
+        }
+
         _window = new Form
         {
             Text = "ULTRON Wake Companion",
-            Width = 480,
-            Height = 255,
+            Width = 520,
+            Height = 330,
             StartPosition = FormStartPosition.CenterScreen,
-            MinimumSize = new System.Drawing.Size(430, 230)
+            MinimumSize = new System.Drawing.Size(490, 300)
         };
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(16)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 14));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 18));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 15));
 
         var title = new Label
         {
@@ -100,7 +127,25 @@ internal sealed class CompanionContext : ApplicationContext
         layout.Controls.Add(title, 0, 0);
         layout.Controls.Add(_status, 0, 1);
         layout.Controls.Add(buttons, 0, 2);
-        layout.Controls.Add(_autoStartCheckBox, 0, 3);
+
+        var cloudButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true
+        };
+        _pairDeviceButton = new Button { Text = "Pair this PC", AutoSize = true };
+        _startPresenceButton = new Button { Text = "Start cloud presence", AutoSize = true };
+        _stopPresenceButton = new Button { Text = "Stop cloud presence", AutoSize = true, Enabled = false };
+        _pairDeviceButton.Click += async (_, _) => await PairCloudCompanionAsync();
+        _startPresenceButton.Click += async (_, _) => await StartCloudPresenceAsync();
+        _stopPresenceButton.Click += (_, _) => StopCloudPresence();
+        cloudButtons.Controls.Add(_pairDeviceButton);
+        cloudButtons.Controls.Add(_startPresenceButton);
+        cloudButtons.Controls.Add(_stopPresenceButton);
+
+        layout.Controls.Add(cloudButtons, 0, 3);
+        layout.Controls.Add(_autoStartCheckBox, 0, 4);
         _window.Controls.Add(layout);
 
         _startItem = new ToolStripMenuItem("Start wake word", null, (_, _) => StartListening());
@@ -110,6 +155,10 @@ internal sealed class CompanionContext : ApplicationContext
         menu.Items.Add(_stopItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open ULTRON", null, (_, _) => OpenAssistant());
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Pair this PC with ULTRON", null, async (_, _) => await PairCloudCompanionAsync());
+        menu.Items.Add("Start cloud presence", null, async (_, _) => await StartCloudPresenceAsync());
+        menu.Items.Add("Stop cloud presence", null, (_, _) => StopCloudPresence());
         menu.Items.Add("Show window", null, (_, _) => ShowWindow());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => ExitApplication());
@@ -151,6 +200,128 @@ internal sealed class CompanionContext : ApplicationContext
             if (backgroundLaunch)
                 ShowStatus("Automatic listening is disabled. Enable it from this window to use wake word at sign-in.");
         }
+    }
+
+    private async Task PairCloudCompanionAsync()
+    {
+        using var dialog = new Form
+        {
+            Text = "Pair this PC with ULTRON",
+            Width = 430,
+            Height = 190,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var prompt = new Label
+        {
+            Text = "Paste the one-time pairing code from ULTRON → PC and mobile devices. It expires after five minutes.",
+            Dock = DockStyle.Top,
+            Height = 52,
+            Padding = new Padding(12)
+        };
+        var code = new TextBox
+        {
+            Dock = DockStyle.Top,
+            Margin = new Padding(12),
+            UseSystemPasswordChar = true,
+            MaxLength = 32
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 48,
+            FlowDirection = FlowDirection.RightToLeft,
+            Padding = new Padding(8)
+        };
+        var pair = new Button { Text = "Pair securely", DialogResult = DialogResult.OK, AutoSize = true };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+        buttons.Controls.Add(pair);
+        buttons.Controls.Add(cancel);
+        dialog.Controls.Add(buttons);
+        dialog.Controls.Add(code);
+        dialog.Controls.Add(prompt);
+        dialog.AcceptButton = pair;
+        dialog.CancelButton = cancel;
+        if (dialog.ShowDialog(_window) != DialogResult.OK) return;
+
+        _pairDeviceButton.Enabled = false;
+        ShowStatus("Pairing with ULTRON…");
+        try
+        {
+            var pairing = await _cloudPresence.PairAsync(_assistantUrl, code.Text);
+            ShowStatus($"Paired {pairing.DeviceName} with ULTRON. Cloud presence is still off until you start it.");
+            MessageBox.Show(_window,
+                "This PC is paired. Its credential is stored in Windows Credential Manager. Start cloud presence when you want ULTRON to show this PC as online. Pairing does not enable remote PC control.",
+                "ULTRON pairing complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            ShowStatus("ULTRON pairing failed. Check the server address and one-time code.");
+            MessageBox.Show(_window, error.Message, "ULTRON pairing failed",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _pairDeviceButton.Enabled = true;
+        }
+    }
+
+    private async Task StartCloudPresenceAsync()
+    {
+        if (_presenceCancellation is not null) return;
+        if (!_cloudPresence.HasPairing)
+        {
+            MessageBox.Show(_window, "Pair this PC from the ULTRON devices page first. The one-time code is required.",
+                "Pairing required", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var consent = MessageBox.Show(_window,
+            "Allow this PC to send an outbound HTTPS online-status heartbeat to your ULTRON account every 30 seconds while the companion is running?\n\nOnly device name/ID and online presence are reported. ULTRON cannot run commands, inspect files, capture screenshots, or control this PC through this connection.",
+            "Start ULTRON cloud presence", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (consent != DialogResult.Yes) return;
+
+        var cancellation = new CancellationTokenSource();
+        _presenceCancellation = cancellation;
+        _startPresenceButton.Enabled = false;
+        _pairDeviceButton.Enabled = false;
+        _stopPresenceButton.Enabled = true;
+        ShowStatus("Starting ULTRON cloud presence…");
+        try
+        {
+            await _cloudPresence.RunHeartbeatLoopAsync(ShowStatus, cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // User stopped presence or closed the companion.
+        }
+        catch (Exception error)
+        {
+            ShowStatus("ULTRON cloud presence stopped: " + error.GetType().Name);
+        }
+        finally
+        {
+            if (ReferenceEquals(_presenceCancellation, cancellation))
+            {
+                _presenceCancellation = null;
+                cancellation.Dispose();
+                if (!_window.IsDisposed)
+                {
+                    _startPresenceButton.Enabled = true;
+                    _pairDeviceButton.Enabled = true;
+                    _stopPresenceButton.Enabled = false;
+                    if (!_allowExit) ShowStatus("ULTRON cloud presence is stopped.");
+                }
+            }
+        }
+    }
+
+    private void StopCloudPresence()
+    {
+        _presenceCancellation?.Cancel();
+        ShowStatus("Stopping ULTRON cloud presence…");
     }
 
     private void HandleAutoStartChanged()
@@ -351,14 +522,17 @@ internal sealed class CompanionContext : ApplicationContext
     {
         try
         {
-            Process.Start(new ProcessStartInfo(AssistantUrl) { UseShellExecute = true });
-            ShowStatus("ULTRON opened in your default browser.");
+            Process.Start(new ProcessStartInfo(_assistantUrl) { UseShellExecute = true });
+            if (_assistantUrlConfigurationInvalid)
+                ShowStatus("ULTRON_ASSISTANT_URL was invalid; opened the built-in HTTPS destination instead.");
+            else
+                ShowStatus("ULTRON opened in your default browser.");
         }
         catch
         {
             ShowStatus("Could not open the browser. Use the Open ULTRON button to retry.");
             MessageBox.Show(_window,
-                "Windows could not open the default browser. Visit " + AssistantUrl,
+                "Windows could not open the default browser. Visit " + _assistantUrl,
                 "Could not open ULTRON", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
@@ -386,6 +560,7 @@ internal sealed class CompanionContext : ApplicationContext
     private void ExitApplication()
     {
         _allowExit = true;
+        StopCloudPresence();
         StopListening();
         _tray.Visible = false;
         _tray.Dispose();
@@ -397,7 +572,9 @@ internal sealed class CompanionContext : ApplicationContext
     {
         if (disposing)
         {
+            StopCloudPresence();
             StopListening();
+            _cloudPresence.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
             _window.Dispose();

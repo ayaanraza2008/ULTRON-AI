@@ -10,3 +10,15 @@ Thumbs.db
 npm-debug.log*
 .local/
 models/
+
+# Local Video Studio workspace and generated media
+.runtime/video-studio/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+tools/local-assistant/.secrets/
+tools/local-assistant/credentials*.json
+tools/local-assistant/token*.json
+tools/local-assistant/models/
+tools/local-assistant/drafts/

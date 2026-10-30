@@ -13,11 +13,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - uses: actions/setup-python@v5
+          package-manager-cache: false
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Verify Browser Use bridge policy and Python syntax
@@ -29,19 +30,91 @@ jobs:
         run: |
           python -m py_compile tools/model-lab/ultron_model_lab.py
           python -m unittest discover -s tools/model-lab -p 'test_*.py'
+      - name: Verify local-first Python personal assistant
+        run: |
+          python -m py_compile tools/local-assistant/ultron_local_assistant/__init__.py tools/local-assistant/ultron_local_assistant/__main__.py tools/local-assistant/ultron_local_assistant/core.py tools/local-assistant/ultron_local_assistant/companion.py tools/local-assistant/ultron_local_assistant/google_workspace.py tools/local-assistant/ultron_local_assistant/skills.py tools/local-assistant/ultron_local_assistant/desktop_control.py tools/local-assistant/ultron_local_assistant/voice.py tools/local-assistant/ultron_local_assistant/cli.py tools/local-assistant/tests/test_local_assistant.py tools/local-assistant/tests/test_companion.py tools/local-assistant/tests/test_desktop_control.py tools/local-assistant/tests/test_voice.py
+          python -m unittest discover -s tools/local-assistant/tests -p 'test_*.py'
       - run: npm install --ignore-scripts
       - name: Report high-severity runtime dependency advisories
         run: |
           npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: npm test
+  local-assistant-windows-script:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Verify Windows local voice and desktop policies
+        run: |
+          python -m py_compile tools/local-assistant/ultron_local_assistant/desktop_control.py tools/local-assistant/ultron_local_assistant/voice.py tools/local-assistant/ultron_local_assistant/cli.py tools/local-assistant/tests/test_desktop_control.py tools/local-assistant/tests/test_voice.py
+          python -m unittest discover -s tools/local-assistant/tests -p 'test_desktop_control.py'
+          python -m unittest discover -s tools/local-assistant/tests -p 'test_voice.py'
+      - name: Verify Windows companion loopback protocol
+        run: |
+          python -m py_compile tools/local-assistant/ultron_local_assistant/companion.py tools/local-assistant/tests/test_companion.py
+          python -m unittest discover -s tools/local-assistant/tests -p 'test_companion.py'
+      - name: Parse embedded local voice PowerShell without executing it
+        shell: pwsh
+        run: |
+          $voiceScript = python -c "import sys; sys.path.insert(0, 'tools/local-assistant'); from ultron_local_assistant.voice import _POWERSHELL_SCRIPT; print(_POWERSHELL_SCRIPT)"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $path = Join-Path $env:RUNNER_TEMP 'ultron-voice-recognizer.ps1'
+          Set-Content -LiteralPath $path -Value $voiceScript -Encoding utf8
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+      - name: Parse guided installer and voice launcher without executing them
+        shell: pwsh
+        run: |
+          $scriptPaths = @(
+            "tools/local-assistant/setup.ps1",
+            "tools/local-assistant/start-voice.ps1"
+          )
+          foreach ($scriptPath in $scriptPaths) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $scriptPath,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              Write-Error ("PowerShell parse failed: " + $scriptPath)
+              $errors | Format-List
+              exit 1
+            }
+          }
+
+  coding-sandbox-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Verify Docker daemon is available
+        run: docker info
+      - name: Pull official Python test image by immutable amd64 manifest digest
+        run: docker pull --platform linux/amd64 python:3.12-alpine@sha256:69ebe56e2a764c399514a0a6117131cb730cc4d0e71e85c08deb9af74cbb9f41
+      - name: Run real restricted-container smoke test
+        env:
+          ULTRON_CODING_SANDBOX_PYTHON_IMAGE: python:3.12-alpine@sha256:69ebe56e2a764c399514a0a6117131cb730cc4d0e71e85c08deb9af74cbb9f41
+        run: node scripts/coding-sandbox-smoke.mjs
+
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
+          package-manager-cache: false
       - name: Checkout pinned God’s Eye source
         run: |
           rm -rf .build-gods-eye-view
@@ -49,10 +122,18 @@ jobs:
           git -C .build-gods-eye-view checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad
       - name: Patch allowlisted action runner
         run: node scripts/patch-world-intelligence-source.mjs
+      - name: Apply reproducible World Intelligence dependency security lock
+        run: node scripts/patch-world-intelligence-dependencies.mjs .build-gods-eye-view
       - name: Build pinned globe
         working-directory: .build-gods-eye-view
         run: |
           npm ci --include=dev
+          npm audit --json > ../world-intelligence-audit.json || true
+          node --input-type=module -e 'import fs from "node:fs"; const report = JSON.parse(fs.readFileSync("../world-intelligence-audit.json", "utf8")); for (const [name, item] of Object.entries(report.vulnerabilities || {})) { const advisories = (item.via || []).filter(value => typeof value === "object"); console.log(JSON.stringify({ package: name, severity: item.severity, direct: item.isDirect, range: item.range, fixAvailable: item.fixAvailable, advisories: advisories.map(value => ({ title: value.title, url: value.url, range: value.range, severity: value.severity })) })); } console.log("Dependency audit totals:", JSON.stringify(report.metadata?.vulnerabilities || {}));'
+          npm audit --audit-level=moderate
+          npm audit --json > ../world-intelligence-audit.json || true
+          node --input-type=module -e 'import fs from "node:fs"; const report = JSON.parse(fs.readFileSync("../world-intelligence-audit.json", "utf8")); for (const [name, item] of Object.entries(report.vulnerabilities || {})) { const advisories = (item.via || []).filter(value => typeof value === "object"); console.log(JSON.stringify({ package: name, severity: item.severity, direct: item.isDirect, range: item.range, fixAvailable: item.fixAvailable, advisories: advisories.map(value => ({ title: value.title, url: value.url, range: value.range, severity: value.severity })) })); } console.log("Dependency audit totals:", JSON.stringify(report.metadata?.vulnerabilities || {}));'
+          npm audit --audit-level=high
           npm run build
       - name: Verify injected ULTRON bridge
         run: |

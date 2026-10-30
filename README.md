@@ -1,16 +1,22 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is an API-first assistant runtime. The current `main` baseline is backend/API-first; this cross-sector integration candidate also serves the first-party Living Core interface from `public/` on the same origin as the API. The candidate is not merged or production-deployed until its review and release checks pass.
 
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-zvd7.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
+- **Hosted API verification:** the `Ultron core` workspace's `ultron-ai-core` service (`https://ultron-ai-core.onrender.com`) is live at commit `6b7f09d97508fc2be2085695d862a921e1ae8487`; the production-revision workflow checks this service. Separately, `My Workspace` has the Blueprint's `ultron-ai` service (`https://ultron-ai-zvd7.onrender.com`); its 10 most recent deploy attempts returned by Render on 2026-10-29 failed before build because of the `pipeline_minutes_exhausted` event. The release must identify which URL is canonical before claiming all deployments are healthy.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **Frontend status:** this candidate serves `public/index.html`, `public/app.js`, `public/styles.css`, and `public/favicon.svg` from the same origin with static-serving tests and conservative security headers. The `main` baseline remains unchanged until review/merge; real browser workflows and deployment are still unverified.
+
+## Run ULTRON on other devices
+
+The integration candidate includes an installable, responsive web app (PWA). Open the same HTTPS ULTRON origin on Android, iPhone/iPad, Windows, macOS or Linux, then sign in with the same Supabase account to access server-backed conversations and account data. The service worker caches only the static app shell; chat, account data, private documents and integrations require an internet connection. Device-specific wake-word companions remain separate optional apps.
+
+See [Cross-device access and installation](docs/CROSS_DEVICE_ACCESS.md) for Android, iOS and desktop installation steps and offline boundaries.
 
 ## Backend-only capability integration phase
 
@@ -24,10 +30,10 @@ Backend additions on the feature branch:
 - `GET /api/preferences` and `PUT /api/preferences`: persist supported language, voice, memory, personality, model-provider, and voice-selection preferences per account.
 - `POST /api/speech/synthesize` and `POST /api/speech/transcribe`: optional OpenAI-compatible TTS/STT adapters using server-only keys; browser-native speech remains the free fallback. Premium routes require a compatible provider and are not enabled until configured.
 - `POST /api/documents/extract`: bounded text extraction for TXT, Markdown, CSV, JSON, HTML, PDF, and DOCX. Extraction is transient; signed-in users can explicitly save up to 20,000 characters of extracted text as an account-scoped `document_reference` in the Memory Vault.
-- Private binary document storage is implemented in source with `GET /api/documents`, `POST /api/documents/upload`, `GET /api/documents/:id/download`, and `DELETE /api/documents/:id`. The additive migration creates a private 5 MB bucket, owner-scoped Storage/table RLS, UUID-only object paths, SHA-256/size verification on download, and immutable metadata permissions. Apply `supabase/migrations/20261027181000_private_document_storage.sql` before enabling these endpoints; original files remain private and are stored only after an explicit user action.
+- Private binary document storage is implemented in source with `GET /api/documents`, `POST /api/documents/upload`, `GET /api/documents/:id/download`, and `DELETE /api/documents/:id`. The additive migration creates a private 5 MB bucket, owner-scoped Storage/table RLS, UUID-only object paths, SHA-256/size verification on download, and immutable metadata permissions. Apply `supabase/migrations/20261027185203_private_document_storage.sql` before enabling these endpoints; original files remain private and are stored only after an explicit user action.
 - `.env.example` and `render.yaml` document optional local model, research, speech, and desktop bridge settings.
 
-These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. The private original-file storage implementation requires its additive Supabase migration to be applied and live upload/download/delete E2E verification. A hardened coding sandbox, Windows PC-control action runner, live external-account integrations, and real provider/database end-to-end tests remain incomplete. Premium speech endpoints need a compatible provider configuration. The user-facing frontend and full Windows PC-control UI remain deferred. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.
+These endpoints are backend building blocks, not a claim that all requested capabilities are production-complete. The allowlisted database-polled worker exists, but real queued-task completion, retries, and result retrieval still need live verification. The private original-file storage implementation requires its additive Supabase migration to be applied and live upload/download/delete E2E verification. An opt-in owner-only Docker coding sandbox is wired but disabled by default and still needs a deliberate local Docker smoke test. Windows PC-control, live external-account integrations, and real provider/database end-to-end tests remain incomplete. Premium speech endpoints need a compatible provider configuration. The Living Core frontend is now included in this integration candidate; its live browser/device behaviour still needs verification. Full Windows PC-control UI and authenticated local bridge remain incomplete. The current Render Blueprint is the source of truth for which separate services are intended to be provisioned; previously created duplicate services must be reviewed against that configuration before use.
 
 ## Configuration
 
@@ -225,3 +231,41 @@ python -m unittest discover -s tools/model-lab -p 'test_*.py'
 ```
 
 Use a small model first on low-memory hardware. 4-bit bitsandbytes inference requires a compatible CUDA/ROCm setup; CPU fallback does not provide 4-bit acceleration. Calibration metrics are heuristic and must not be treated as safety certification.
+
+## Living Core workspaces
+
+The integration candidate includes same-origin chat history/resumption, a per-browser ULTRON/NAYA persona selector, model selection from the backend-reported catalog, voice/memory preferences, Memory Vault, private Notes, Reminders, Study Library, private document storage, AI Employee schedules, task lifecycle/approval controls, a secret-free readiness matrix, and defensive security guidance with passive HTTP-header evidence analysis. These panels call existing account-scoped backend APIs; any missing Supabase migration or unavailable provider is reported instead of being treated as success. Browser/device E2E and production deployment remain unverified.
+
+## PDF report export
+
+The authenticated backend exposes `POST /api/reports/pdf` with a JSON body containing `title`, `content`, and/or `sections: [{ heading, content }]`. It returns a paginated PDF attachment, bounds text to 40,000 characters and 40 sections, sets `Cache-Control: no-store`, and does not save the report or write to the database.
+
+The lightweight built-in PDF writer uses Helvetica/WinAnsi to avoid adding another runtime dependency. Latin/WinAnsi text is supported, but unsupported scripts such as Hindi/Devanagari are visibly replaced with question marks. Complex tables, charts and arbitrary embedded fonts are not supported yet; this is a basic report export, not a polished document-layout engine.
+
+## PowerPoint presentation export
+
+The authenticated backend exposes `POST /api/reports/pptx` for editable `.pptx` files using PptxGenJS 4.0.1 (MIT). The endpoint accepts `title`, `content`, and/or `sections: [{ heading, content }]`, creates a 16:9 deck with a title slide and editable text slides, bounds total input to 30,000 characters, and returns a transient attachment with `Cache-Control: no-store`. It does not persist report text to the database.
+
+Notes and saved study-pack views have export controls for PDF and PowerPoint. This is a text-and-shape deck generator, not a full AI presentation designer: it does not generate charts from datasets, images, video, speaker notes or branded templates yet. Real PowerPoint/LibreOffice rendering is still a release verification step.
+
+## Isolated coding sandbox (opt-in)
+
+ULTRON's agent exposes a `coding_sandbox_run` tool for the exact Python or JavaScript source in a direct request such as `Run this code:` followed by one fenced code block. It does not provide a general shell or modify repositories. The raw request must match the code exactly; model-generated substitutions are rejected.
+
+The tool is **disabled by default**. It is owner-only and requires `ULTRON_CODING_SANDBOX_ENABLED=true`, the exact `ULTRON_INTEGRATION_OWNER_USER_ID`, and at least one locally cached, trusted Docker image pinned by SHA-256 digest. ULTRON will not pull images. The container runs without network access, with a read-only filesystem, dropped capabilities, no-new-privileges, a non-root UID, 256 MiB RAM, 0.5 CPU, a 48-process limit and a short timeout. Mocked tests cover exact-source authorization and cleanup; actual Docker execution still needs a deliberate local smoke test.
+
+The sandbox runs on the machine hosting the ULTRON process, not on your Windows PC when the API is cloud-hosted. Do not enable it on Render or any public host until isolated Docker capacity, image provenance, quotas, permissions and monitoring have been reviewed. See [docs/CODING_SANDBOX.md](docs/CODING_SANDBOX.md).
+
+## Local Video Studio
+
+ULTRON includes an optional local-first video production studio for planning original videos, analyzing a reference URL or local clip, finding licensed media candidates, and rendering a reviewed edit with local FFmpeg tools. Start it separately with `npm run video-studio`; by default it binds only to `127.0.0.1:4174` and rejects non-loopback Host/Origin headers. It stores workspace media under `.runtime/video-studio/` unless `ULTRON_VIDEO_STUDIO_DATA_DIR` is set.
+
+Install FFmpeg/FFprobe and yt-dlp locally, and configure server-side `OPENROUTER_API_KEY` for AI planning. `TAVILY_API_KEY` enables current research and `PEXELS_API_KEY` enables optional stock-video search. The studio does not publish, upload or schedule content. Review media licenses, narration and music rights before rendering or sharing. See [docs/VIDEO_STUDIO.md](docs/VIDEO_STUDIO.md).
+
+## Local-first Python personal assistant
+
+A private terminal companion now lives in [tools/local-assistant](tools/local-assistant/README.md). It adds specialist morning-digest, local-document research, and code-assistant agents; hardware/model recommendations; local system speech; and a reviewed Markdown-only skill library. It runs separately from the hosted API so local files and prompts are processed by local Ollama, not ULTRON's cloud API.
+
+Install it with Python 3.10+ and Ollama, then run 'ultron-local doctor'. Hardware recommendations are advisory and model downloads require explicit typed confirmation. Gmail and Calendar are opt-in integrations that use read-only OAuth scopes and call Google's APIs to retrieve data; digest generation and speech remain local. Scripts run only after confirmation but are not OS-sandboxed, so review them first. Only reviewed SKILL.md Markdown is copied from public GitHub repositories; repository code is never executed.
+
+See the [local assistant guide](tools/local-assistant/README.md) for setup, privacy boundaries, supported commands, Google OAuth, and tests.

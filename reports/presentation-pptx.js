@@ -1,0 +1,279 @@
+import JSZip from "jszip";
+
+const MAX_CHARS = 30000;
+const MAX_SECTIONS = 24;
+const MAX_SLIDES = 40;
+const CHUNK_CHARS = 1800;
+const SLIDE_W = 12192000;
+const SLIDE_H = 6858000;
+const EMU = 914400;
+
+function clean(value, limit) {
+  return typeof value === "string"
+    ? value.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ").trim().slice(0, limit)
+    : "";
+}
+
+function xml(value) {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function chunkParagraphs(value, limit = CHUNK_CHARS) {
+  const chunks = [];
+  let current = "";
+  const flush = () => {
+    if (current.trim()) chunks.push(current.trim());
+    current = "";
+  };
+  for (const paragraph of value.split("\n")) {
+    if (paragraph.length > limit) {
+      flush();
+      const words = paragraph.split(/\s+/).filter(Boolean);
+      let line = "";
+      for (const word of words) {
+        if (word.length > limit) {
+          if (line) chunks.push(line);
+          line = "";
+          for (let offset = 0; offset < word.length; offset += limit) chunks.push(word.slice(offset, offset + limit));
+        } else if (!line) {
+          line = word;
+        } else if (line.length + word.length + 1 <= limit) {
+          line += " " + word;
+        } else {
+          chunks.push(line);
+          line = word;
+        }
+      }
+      if (line) current = line;
+    } else if (!current) {
+      current = paragraph;
+    } else if (current.length + paragraph.length + 1 <= limit) {
+      current += "\n" + paragraph;
+    } else {
+      flush();
+      current = paragraph;
+    }
+  }
+  flush();
+  return chunks.length ? chunks : [""];
+}
+
+function groupTree() {
+  return '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+    '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
+}
+
+function textParagraphs(text, { size = 1700, color = "E2E8F0", face = "Aptos", bold = false, align = "l" } = {}) {
+  return String(text).split("\n").map(line =>
+    '<a:p><a:pPr algn="' + align + '"/><a:r><a:rPr lang="en-US" sz="' + size + '"' + (bold ? ' b="1"' : '') + ' dirty="0">' +
+    '<a:solidFill><a:srgbClr val="' + color + '"/></a:solidFill>' +
+    '<a:latin typeface="' + xml(face) + '"/><a:ea typeface="' + xml(face) + '"/><a:cs typeface="' + xml(face) + '"/>' +
+    '</a:rPr><a:t xml:space="preserve">' + xml(line) + '</a:t></a:r><a:endParaRPr lang="en-US" sz="' + size + '"/></a:p>'
+  ).join("");
+}
+
+function textShape(id, name, { x, y, w, h, text, size = 1700, color = "E2E8F0", face = "Aptos", bold = false, align = "l" }) {
+  return '<p:sp><p:nvSpPr><p:cNvPr id="' + id + '" name="' + xml(name) + '"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>' +
+    '<p:spPr><a:xfrm><a:off x="' + x + '" y="' + y + '"/><a:ext cx="' + w + '" cy="' + h + '"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>' +
+    '<p:txBody><a:bodyPr wrap="square" lIns="0" rIns="0" tIns="0" bIns="0" anchor="t"><a:spAutoFit/></a:bodyPr><a:lstStyle/>' +
+    textParagraphs(text, { size, color, face, bold, align }) + '</p:txBody></p:sp>';
+}
+
+function rectShape(id, name, { x, y, w, h, color }) {
+  return '<p:sp><p:nvSpPr><p:cNvPr id="' + id + '" name="' + xml(name) + '"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>' +
+    '<p:spPr><a:xfrm><a:off x="' + x + '" y="' + y + '"/><a:ext cx="' + w + '" cy="' + h + '"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="' + color + '"/></a:solidFill>' +
+    '<a:ln><a:noFill/></a:ln></p:spPr></p:sp>';
+}
+
+function slideXml(shapes) {
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+    '<p:cSld name="ULTRON"><p:bg><p:bgPr><a:solidFill><a:srgbClr val="080B12"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>' +
+    '<p:spTree>' + groupTree() + shapes + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
+}
+
+function coverSlide(title) {
+  return rectShape(2, "Crimson top rule", { x: 0, y: 0, w: SLIDE_W, h: 110000, color: "E11D48" }) +
+    textShape(3, "ULTRON branding", { x: 731520, y: 620000, w: 5200000, h: 450000, text: "ULTRON AI", size: 1500, color: "FB7185", bold: true }) +
+    rectShape(4, "Accent line", { x: 731520, y: 1420000, w: 1005840, h: 32000, color: "E11D48" }) +
+    textShape(5, "Presentation title", { x: 731520, y: 1650000, w: 10668000, h: 1650000, text: title, size: 3200, color: "F8FAFC", face: "Aptos Display", bold: true }) +
+    textShape(6, "Generation date", { x: 750000, y: 3820000, w: 9600000, h: 420000, text: "Generated by ULTRON AI  |  " + new Date().toISOString().slice(0, 10), size: 1300, color: "94A3B8" }) +
+    textShape(7, "Editable note", { x: 750000, y: 6080000, w: 5200000, h: 320000, text: "EDITABLE POWERPOINT", size: 900, color: "64748B", bold: true });
+}
+
+function contentSlide(section, index) {
+  return rectShape(2, "Crimson top rule", { x: 0, y: 0, w: SLIDE_W, h: 110000, color: "E11D48" }) +
+    textShape(3, "Section heading", { x: 658368, y: 430000, w: 10820448, h: 720000, text: section.heading, size: 2500, color: "F8FAFC", face: "Aptos Display", bold: true }) +
+    rectShape(4, "Heading divider", { x: 658368, y: 1240000, w: 10860000, h: 16000, color: "334155" }) +
+    textShape(5, "Editable body text", { x: 713232, y: 1500000, w: 10713600, h: 4450000, text: section.content, size: 1700, color: "E2E8F0" }) +
+    textShape(6, "Slide number", { x: 10800000, y: 6200000, w: 650000, h: 250000, text: String(index + 2).padStart(2, "0"), size: 900, color: "64748B", align: "r" });
+}
+
+function presentationXml(slideCount) {
+  const ids = Array.from({ length: slideCount }, (_, i) => '<p:sldId id="' + (256 + i) + '" r:id="rId' + (i + 2) + '"/>').join("");
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+    '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>' + ids + '</p:sldIdLst>' +
+    '<p:sldSz cx="' + SLIDE_W + '" cy="' + SLIDE_H + '" type="screen16x9"/><p:notesSz cx="6858000" cy="9144000"/><p:defaultTextStyle/></p:presentation>';
+}
+
+function contentTypesXml(slideCount) {
+  const slideOverrides = Array.from({ length: slideCount }, (_, i) =>
+    '<Override PartName="/ppt/slides/slide' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'
+  ).join("");
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+    '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>' +
+    '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
+    '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>' +
+    '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+    slideOverrides + '</Types>';
+}
+
+function themeXml() {
+  const a = "http://schemas.openxmlformats.org/drawingml/2006/main";
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<a:theme xmlns:a="' + a + '" name="ULTRON"><a:themeElements>' +
+    '<a:clrScheme name="ULTRON"><a:dk1><a:srgbClr val="080B12"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>' +
+    '<a:dk2><a:srgbClr val="111827"/></a:dk2><a:lt2><a:srgbClr val="F8FAFC"/></a:lt2>' +
+    '<a:accent1><a:srgbClr val="E11D48"/></a:accent1><a:accent2><a:srgbClr val="FB7185"/></a:accent2>' +
+    '<a:accent3><a:srgbClr val="334155"/></a:accent3><a:accent4><a:srgbClr val="64748B"/></a:accent4>' +
+    '<a:accent5><a:srgbClr val="38BDF8"/></a:accent5><a:accent6><a:srgbClr val="A78BFA"/></a:accent6>' +
+    '<a:hlink><a:srgbClr val="38BDF8"/></a:hlink><a:folHlink><a:srgbClr val="A78BFA"/></a:folHlink></a:clrScheme>' +
+    '<a:fontScheme name="ULTRON"><a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface="Aptos Display"/><a:cs typeface="Aptos Display"/></a:majorFont>' +
+    '<a:minorFont><a:latin typeface="Aptos"/><a:ea typeface="Aptos"/><a:cs typeface="Aptos"/></a:minorFont></a:fontScheme>' +
+    '<a:fmtScheme name="ULTRON"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:shade val="95000"/></a:schemeClr></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:tint val="80000"/></a:schemeClr></a:solidFill></a:fillStyleLst>' +
+    '<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln></a:lnStyleLst>' +
+    '<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>' +
+    '<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:tint val="95000"/></a:schemeClr></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:shade val="95000"/></a:schemeClr></a:solidFill></a:bgFillStyleLst>' +
+    '</a:fmtScheme></a:themeElements></a:theme>';
+}
+
+function masterXml() {
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+    '<p:cSld><p:spTree>' + groupTree() + '</p:spTree></p:cSld>' +
+    '<p:clrMap accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" bg1="lt1" bg2="lt2" tx1="dk1" tx2="dk2" hlink="hlink" folHlink="folHlink"/>' +
+    '<p:sldLayoutIdLst><p:sldLayoutId id="1" r:id="rId1"/></p:sldLayoutIdLst>' +
+    '<p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr lang="en-US" sz="3200"/></a:lvl1pPr></p:titleStyle>' +
+    '<p:bodyStyle><a:lvl1pPr><a:defRPr lang="en-US" sz="1700"/></a:lvl1pPr></p:bodyStyle><p:otherStyle><a:lvl1pPr><a:defRPr lang="en-US" sz="1200"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>';
+}
+
+function layoutXml() {
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">' +
+    '<p:cSld name="Blank"><p:spTree>' + groupTree() + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>';
+}
+
+function relationshipsXml(items) {
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    items.map(item => '<Relationship Id="' + item.id + '" Type="' + item.type + '" Target="' + item.target + '"/>').join("") +
+    '</Relationships>';
+}
+
+function buildPackage(slides, title) {
+  const zip = new JSZip();
+  const rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
+  zip.file("[Content_Types].xml", contentTypesXml(slides.length));
+  zip.folder("_rels").file(".rels", relationshipsXml([
+    { id: "rId1", type: rel + "officeDocument", target: "ppt/presentation.xml" },
+    { id: "rId2", type: "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties", target: "docProps/core.xml" },
+    { id: "rId3", type: rel + "extended-properties", target: "docProps/app.xml" }
+  ]));
+  zip.folder("docProps").file("core.xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+    '<dc:title>' + xml(title) + '</dc:title><dc:creator>ULTRON AI</dc:creator><cp:lastModifiedBy>ULTRON AI</cp:lastModifiedBy>' +
+    '<dcterms:created xsi:type="dcterms:W3CDTF">' + new Date().toISOString() + '</dcterms:created></cp:coreProperties>');
+  zip.folder("docProps").file("app.xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+    '<Application>ULTRON AI</Application><PresentationFormat>Widescreen</PresentationFormat><Slides>' + slides.length + '</Slides></Properties>');
+
+  const ppt = zip.folder("ppt");
+  ppt.file("presentation.xml", presentationXml(slides.length));
+  ppt.folder("_rels").file("presentation.xml.rels", relationshipsXml([
+    { id: "rId1", type: rel + "slideMaster", target: "slideMasters/slideMaster1.xml" },
+    ...slides.map((_, i) => ({ id: "rId" + (i + 2), type: rel + "slide", target: "slides/slide" + (i + 1) + ".xml" }))
+  ]));
+  ppt.folder("slideMasters").file("slideMaster1.xml", masterXml());
+  ppt.folder("slideMasters").folder("_rels").file("slideMaster1.xml.rels", relationshipsXml([
+    { id: "rId1", type: rel + "slideLayout", target: "../slideLayouts/slideLayout1.xml" },
+    { id: "rId2", type: rel + "theme", target: "../theme/theme1.xml" }
+  ]));
+  ppt.folder("slideLayouts").file("slideLayout1.xml", layoutXml());
+  ppt.folder("slideLayouts").folder("_rels").file("slideLayout1.xml.rels", relationshipsXml([
+    { id: "rId1", type: rel + "slideMaster", target: "../slideMasters/slideMaster1.xml" }
+  ]));
+  ppt.folder("theme").file("theme1.xml", themeXml());
+  const slideFolder = ppt.folder("slides");
+  const slideRels = ppt.folder("slides").folder("_rels");
+  slides.forEach((slide, i) => {
+    slideFolder.file("slide" + (i + 1) + ".xml", slideXml(slide));
+    slideRels.file("slide" + (i + 1) + ".xml.rels", relationshipsXml([
+      { id: "rId1", type: rel + "slideLayout", target: "../slideLayouts/slideLayout1.xml" }
+    ]));
+  });
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
+}
+
+export async function generatePresentationPptx(input = {}) {
+  const title = clean(input.title || "ULTRON Presentation", 160) || "ULTRON Presentation";
+  const rawContent = typeof input.content === "string" ? input.content : "";
+  const rawSections = Array.isArray(input.sections) ? input.sections : [];
+  if (rawSections.length > MAX_SECTIONS) {
+    return { ok: false, code: "PPTX_TOO_MANY_SECTIONS", message: "A presentation can contain at most " + MAX_SECTIONS + " sections." };
+  }
+  if (rawContent.length > MAX_CHARS) {
+    return { ok: false, code: "PPTX_TOO_LARGE", message: "Presentation text must contain no more than " + MAX_CHARS + " characters." };
+  }
+  let total = title.length + rawContent.length;
+  const sections = rawSections.map((section, index) => {
+    const heading = clean(section?.heading || "Section " + (index + 1), 160) || "Section " + (index + 1);
+    const content = typeof section?.content === "string" ? section.content.replace(/\r\n?/g, "\n").replace(/\u0000/g, "") : "";
+    total += heading.length + content.length;
+    return { heading, content };
+  });
+  if (total > MAX_CHARS) {
+    return { ok: false, code: "PPTX_TOO_LARGE", message: "Combined title, headings and slide text must contain no more than " + MAX_CHARS + " characters." };
+  }
+  if (!rawContent.trim() && !sections.some(section => section.content.trim())) {
+    return { ok: false, code: "PPTX_CONTENT_REQUIRED", message: "Provide presentation content or at least one non-empty section." };
+  }
+  if (rawContent.trim()) sections.unshift({ heading: "Overview", content: clean(rawContent, MAX_CHARS) });
+
+  const slideSections = [];
+  for (const section of sections) {
+    if (!section.content.trim()) continue;
+    const chunks = chunkParagraphs(section.content, CHUNK_CHARS);
+    chunks.forEach((content, index) => slideSections.push({
+      heading: chunks.length > 1 ? section.heading + " (continued " + (index + 1) + ")" : section.heading,
+      content
+    }));
+  }
+  if (slideSections.length + 1 > MAX_SLIDES) {
+    return { ok: false, code: "PPTX_TOO_MANY_SLIDES", message: "This content would create more than " + (MAX_SLIDES - 1) + " content slides. Shorten the report and try again." };
+  }
+
+  const slides = [slideXml(coverSlide(title)), ...slideSections.map((section, index) => slideXml(contentSlide(section, index)))];
+  const buffer = await buildPackage(slides, title);
+  if (buffer.length < 500 || buffer.length > 8 * 1024 * 1024 || buffer.toString("ascii", 0, 2) !== "PK") {
+    return { ok: false, code: "PPTX_GENERATION_FAILED", message: "Presentation generation did not return a valid bounded OpenXML package." };
+  }
+  return {
+    ok: true,
+    pptx: buffer,
+    filename: "ultron-presentation.pptx",
+    slides: slides.length,
+    characters: total,
+    format: "OOXML PowerPoint; editable text and shapes; 16:9 dark theme"
+  };
+}

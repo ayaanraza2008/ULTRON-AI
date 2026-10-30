@@ -7,6 +7,13 @@ const CATEGORY_TOOLS = Object.freeze({
     "list_speech_voices", "synthesize_speech", "transcribe_audio",
     "create_talking_avatar"
   ],
+  weather: ["weather_lookup"],
+  study: ["create_study_pack"],
+  notes: ["notes_search", "notes_read", "notes_create", "notes_update"],
+  github: ["github_public_repo"],
+  reminders: ["list_reminders", "create_reminder", "update_reminder"],
+  wikipedia: ["wikipedia_lookup"],
+  time: ["world_clock"],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
   browser: ["browser_use", "chrome_devtools", "research_web", "obscura_inspect_public_page", "obscura_capture_public_page"],
   reverse_engineering: [
@@ -16,6 +23,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "rea_inspect_model_artifact", "rea_inspect_managed_artifact", "rea_inspect_apk_signature",
     "rea_inspect_android_package", "rea_search_guidance", "rea_list_guided_workflows"
   ],
+  coding_sandbox: ["coding_sandbox_run"],
   coding: ["coding_assist", "check_repository_capabilities", "check_openviking", "openviking_find_context", "openviking_read_context"],
   memory: ["check_openviking", "openviking_find_context", "openviking_read_context"],
   integrations: [
@@ -40,16 +48,30 @@ const CATEGORY_TOOLS = Object.freeze({
   spaceplanner: ["create_spaceplanner_plan"],
   world_intelligence: ["world_intelligence_command"],
   paperclip: ["paperclip_read_agent_governance"],
-  hermes: ["check_hermes_agent", "hermes_agent_task"],
+  hermes: ["check_hermes_agent", "hermes_agent_task", "hermes_agent_start_run", "hermes_agent_run_status", "hermes_agent_stop_run", "hermes_agent_list_skills", "hermes_agent_list_toolsets", "hermes_agent_run_events", "hermes_agent_resolve_approval"],
   cactus: ["check_cactus"],
   comfyui: ["check_comfyui", "run_comfyui_workflow"],
   media: [
     "create_youtube_production_plan", "check_comfyui", "run_comfyui_workflow",
-    "create_talking_avatar", "design_speech_voice", "synthesize_speech"
-  ]
+    "create_talking_avatar", "design_speech_voice", "synthesize_speech",
+    "openhiggsfield", "open_generative_ai"
+  ],
+  open_higgsfield: ["openhiggsfield", "check_integrations", "check_repository_capabilities"],
+  open_generative_ai: ["open_generative_ai", "check_integrations", "check_repository_capabilities"],
+  open_design: ["open_design", "coding_assist", "check_integrations", "check_repository_capabilities"],
+  appflowy: ["appflowy", "check_integrations", "check_repository_capabilities"],
+  open_seo: ["openseo", "research_web", "check_integrations", "check_repository_capabilities"]
 });
 
 const CATEGORY_PATTERNS = Object.freeze([
+  ["coding_sandbox", /^\s*(?:please\s+)?(?:run|execute|test)\s+(?:(?:(?:this|the|following|provided)\s+)?(?:code|script|program|snippet)|(?:(?:this|the|following|provided)\s+)?(?:python|javascript|node(?:\.js)?)\s+(?:code|script|program|snippet))\b/i],
+  ["reminders", /\b(?:remind me|reminder(?:s)?|snooze (?:a |the )?reminder|mark (?:a |the )?reminder|reschedule (?:a |the )?reminder)\b/i],
+  ["github", /\b(?:github|git hub|github\.com|readme (?:from|on) github|latest commits for|open issues for|public github repository)\b/i],
+  ["notes", /\b(?:notes? library|saved notes?|search (?:my )?notes?|find (?:my )?notes?|read (?:my |the )?note|create (?:a )?note|write (?:a )?note|save (?:a |this |the )?note|update (?:my |the )?note)\b/i],
+  ["study", /\b(?:study mode|study pack|study guide|exam mode|revision sheet|revision notes|flashcards?|make (?:me )?(?:a )?quiz|create (?:a )?quiz|generate (?:a )?quiz|practice questions|practice test|mock test|self.?test|quiz me|test me on)\b/i],
+  ["weather", /\b(?:weather\s+(?:in|for|forecast)|current weather|forecast\s+(?:in|for)|temperature\s+(?:outside|in)|rain chance\s+in|local weather)\b/i],
+  ["wikipedia", /\b(?:wikipedia|wiki article|wikipedia page)\b/i],
+  ["time", /\b(?:world clock|time zones?|timezones?|utc offset|time difference|what\s+time\b|current time in\b|local time in\b|time in\s+[a-z][a-z .'-]{1,60})\b/i],
   ["voice", /\b(?:voice|speech|tts|stt|transcrib(?:e|ing|tion)|audio|pronunciation|speak aloud|read(?:ing)? (?:it )?aloud|read (?:this|it|that) aloud|read out loud|read this to me|read it to me|voice studio|voicestudio)\b/i],
   ["browser", /\b(?:chrome devtools|devtools|performance trace|browser performance|console logs|network requests|inspect chrome|browser automation|use the browser|open the website|inspect the (?:website|page)|take a screenshot of the website|click the (?:button|link|tab)|navigate (?:the )?(?:website|page|site)|webpage|browser-use)\b/i],
   ["reverse_engineering", /\b(?:reverse engineer(?:ing)?|trace how .{1,120} work(?:s)?|trace application feature|inspect (?:this |an? )?(?:binary|executable|firmware|apk|electron app|desktop application|wasm)|analy[sz]e (?:the )?(?:binary|executable|firmware|apk|electron app|native code)|decompile|disassembl(?:e|y)|\brea\b)\b/i],
@@ -58,8 +80,13 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["world_intelligence", /\b(?:god[’']?s eye|world intelligence|live globe|earthquake map|live flights|vessel tracking)\b/i],
   ["youtube", /\b(?:youtube|video production plan|scene plan|thumbnail prompt|shorts script)\b/i],
   ["comfyui", /\b(?:comfyui|workflow json|image workflow|render an image|run the workflow)\b/i],
+  ["open_higgsfield", /\b(?:openhiggsfield|open higgsfield|higgsfield (?:image|video|model|generation)|higgsfield\s+studio)\b/i],
+  ["open_generative_ai", /\b(?:open[- ]generative[- ]ai|open gen(?:erative)? ai studio|muapi (?:image|video) generation|muapi model)\b/i],
+  ["open_design", /\b(?:opendesign|open design (?:agent|workspace|project)|headless design agent|design workspace run)\b/i],
+  ["appflowy", /\b(?:appflowy|appflowy workspace|search appflowy|appflowy documents?)\b/i],
+  ["open_seo", /\b(?:openseo|open seo|seo keyword research|rank tracker cost|domain keyword suggestions|serp lookup)\b/i],
   ["paperclip", /\b(?:paperclip|agent governance|agent roster|agent budget|monthly agent cost)\b/i],
-  ["hermes", /\b(?:hermes agent|run hermes|hermes task)\b/i],
+  ["hermes", /\b(?:hermes agent|hermes runtime|hermes task|hermes run|run hermes|run_[a-z0-9_-]{1,120})\b/i],
   ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
   ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
   ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
@@ -87,6 +114,35 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   const categories = [];
   for (const [category, pattern] of CATEGORY_PATTERNS) {
     if (pattern.test(text) && !categories.includes(category)) categories.push(category);
+  }
+  // Prefer the public GitHub adapter over generic web research when the user
+  // names GitHub; its actions are fixed, read-only and repository-scoped.
+  if (categories.includes("github")) {
+    const genericResearchIndex = categories.indexOf("research");
+    if (genericResearchIndex >= 0) categories.splice(genericResearchIndex, 1);
+  }
+  // A specific Wikipedia lookup should not be widened by the generic "look up"
+  // research matcher; the narrow route keeps it on the dedicated read-only tool.
+  if (categories.includes("wikipedia")) {
+    const genericResearchIndex = categories.indexOf("research");
+    if (genericResearchIndex >= 0) categories.splice(genericResearchIndex, 1);
+  }
+
+  // When the user explicitly delegates a background run to Hermes, words such
+  // as "research" describe Hermes' task payload; they should not widen the ULTRON
+  // tool route with separate research/planning executors.
+  const explicitHermesDelegation = categories.includes("hermes") && (
+    /\b(?:start|launch|submit|delegate)\b[\s\S]{0,100}\bhermes(?:\s+agent)?\b/i.test(text)
+    || /\bhermes(?:\s+agent)?\b[\s\S]{0,100}\b(?:background|long[- ]running)\s+(?:run|task|job)\b/i.test(text)
+  );
+  if (explicitHermesDelegation) categories.splice(0, categories.length, "hermes");
+
+  // Provider-specific intents win over generic media/research matches so the
+  // corresponding adapter is actually exposed to the agent.
+  const providerSpecific = new Set(["open_higgsfield", "open_generative_ai", "open_design", "appflowy", "open_seo"]);
+  if (categories.some(category => providerSpecific.has(category))) {
+    const matched = categories.filter(category => providerSpecific.has(category));
+    categories.splice(0, categories.length, ...matched);
   }
 
   const complex = COMPLEX_PATTERN.test(text);

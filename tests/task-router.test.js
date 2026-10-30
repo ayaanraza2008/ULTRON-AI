@@ -2,6 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { classifyTaskRoute, getToolCategories } from "../task-router.js";
 
+test("explicit fenced-code run requests route only to the opt-in sandbox", () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const direct = classifyTaskRoute("Run this code:\n" + fence + "python\nprint('ok')\n" + fence);
+  assert.deepEqual(direct.categories, ["coding_sandbox"]);
+  assert.deepEqual(direct.toolNames, ["coding_sandbox_run"]);
+  const indirect = classifyTaskRoute("Review this code, but do not run it:\n" + fence + "python\nprint('ok')\n" + fence);
+  assert.ok(!indirect.categories.includes("coding_sandbox"));
+  assert.ok(!indirect.toolNames?.includes("coding_sandbox_run"));
+});
+
 test("routes an ordinary greeting or explanation without sending tool schemas", () => {
   for (const prompt of ["Hello", "Explain energy bands in simple English", "Explain this briefly"]) {
     const route = classifyTaskRoute(prompt);
@@ -103,4 +113,69 @@ test("routes reverse-engineering investigations to REA's bounded tool family", (
   const native = classifyTaskRoute("Inspect the native binary and disassemble main");
   assert.ok(native.categories.includes("reverse_engineering"));
   assert.ok(native.toolNames.includes("rea_inspect_native_code"));
+});
+
+test("routes every newly integrated repository adapter to its dedicated agent tool", () => {
+  const cases = [
+    ["Use OpenHiggsfield to generate a cinematic video", "open_higgsfield", "openhiggsfield"],
+    ["Generate an image with Open Generative AI", "open_generative_ai", "open_generative_ai"],
+    ["Start an OpenDesign workspace run for this UI", "open_design", "open_design"],
+    ["Search my AppFlowy workspace for deployment notes", "appflowy", "appflowy"],
+    ["Use OpenSEO to look up saved keywords for my project", "open_seo", "openseo"]
+  ];
+
+  for (const [prompt, category, tool] of cases) {
+    const route = classifyTaskRoute(prompt);
+    assert.equal(route.tier, "medium", prompt);
+    assert.deepEqual(route.categories, [category], prompt);
+    assert.equal(route.filtered, true, prompt);
+    assert.ok(route.toolNames.includes(tool), prompt);
+    assert.ok(route.toolNames.includes("check_repository_capabilities"), prompt);
+  }
+});
+
+test("provider-specific media routing does not accidentally hide the selected adapter", () => {
+  const higgsfield = classifyTaskRoute("Generate a cinematic image using OpenHiggsfield");
+  assert.deepEqual(higgsfield.categories, ["open_higgsfield"]);
+  assert.ok(higgsfield.toolNames.includes("openhiggsfield"));
+
+  const muapi = classifyTaskRoute("Generate a video using Open Generative AI");
+  assert.deepEqual(muapi.categories, ["open_generative_ai"]);
+  assert.ok(muapi.toolNames.includes("open_generative_ai"));
+});
+
+
+test("routes Hermes Agent long-running run lifecycle requests to dedicated owner-scoped tools", () => {
+  const start = classifyTaskRoute("Start a background Hermes Agent run to research the official API.");
+  assert.deepEqual(start.categories, ["hermes"]);
+  assert.ok(start.toolNames.includes("hermes_agent_start_run"));
+  assert.ok(start.toolNames.includes("hermes_agent_run_status"));
+  assert.ok(start.toolNames.includes("hermes_agent_stop_run"));
+
+  const status = classifyTaskRoute("Check status for run_abc123");
+  assert.deepEqual(status.categories, ["hermes"]);
+  assert.ok(status.toolNames.includes("hermes_agent_run_status"));
+});
+
+
+test("routes Hermes skills and toolset discovery to read-only capability tools", () => {
+  const skills = classifyTaskRoute("Show me the skills available in Hermes Agent.");
+  assert.deepEqual(skills.categories, ["hermes"]);
+  assert.ok(skills.toolNames.includes("hermes_agent_list_skills"));
+  assert.ok(skills.toolNames.includes("hermes_agent_list_toolsets"));
+
+  const toolsets = classifyTaskRoute("List enabled toolsets in Hermes Agent.");
+  assert.deepEqual(toolsets.categories, ["hermes"]);
+  assert.ok(toolsets.toolNames.includes("hermes_agent_list_toolsets"));
+});
+
+
+test("routes Hermes run progress and generation-bound approval requests", () => {
+  const events = classifyTaskRoute("Show progress events for run_abc123");
+  assert.deepEqual(events.categories, ["hermes"]);
+  assert.ok(events.toolNames.includes("hermes_agent_run_events"));
+
+  const approve = classifyTaskRoute("Approve prompt_safe_123 in run_abc123 at generation 4 once");
+  assert.deepEqual(approve.categories, ["hermes"]);
+  assert.ok(approve.toolNames.includes("hermes_agent_resolve_approval"));
 });

@@ -7,8 +7,32 @@ test("readiness is explicit about missing runtime dependencies", () => {
   assert.equal(result.overallState, "partially_ready");
   assert.equal(result.verification, "configuration_and_process_snapshot_only");
   assert.equal(result.components.find((item) => item.id === "windows_companion").state, "blocked");
-  assert.equal(result.components.find((item) => item.id === "safe_code_execution").state, "not_available");
+  assert.equal(result.components.find((item) => item.id === "safe_code_execution").state, "optional");
   assert.equal(result.generatedAt, "2026-01-01T00:00:00.000Z");
+});
+
+test("readiness reports opt-in coding sandbox state without claiming live execution", () => {
+  const off = buildRuntimeReadiness({ env: {} });
+  assert.equal(off.components.find(item => item.id === "safe_code_execution").state, "optional");
+  assert.match(off.components.find(item => item.id === "safe_code_execution").note, /disabled by default/i);
+
+  const enabledButIncomplete = buildRuntimeReadiness({
+    env: { ULTRON_CODING_SANDBOX_ENABLED: "true", ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001" }
+  });
+  assert.equal(enabledButIncomplete.components.find(item => item.id === "safe_code_execution").state, "blocked");
+
+  const configured = buildRuntimeReadiness({
+    env: {
+      ULTRON_CODING_SANDBOX_ENABLED: "true",
+      ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+      ULTRON_CODING_SANDBOX_NODE_IMAGE: "node:22-alpine@sha256:" + "a".repeat(64),
+      ULTRON_CODING_SANDBOX_DOCKER_BIN: "/private/test/docker"
+    }
+  });
+  const sandbox = configured.components.find(item => item.id === "safe_code_execution");
+  assert.equal(sandbox.state, "configured_unverified");
+  assert.match(sandbox.note, /actual Docker/i);
+  assert.equal(JSON.stringify(configured).includes("/private/test/docker"), false);
 });
 
 test("readiness reports configured integrations as unverified and never exposes secrets", () => {
@@ -143,7 +167,7 @@ test("an intentionally unavailable optional capability does not permanently bloc
     workerStatus: { state: "running" }
   });
 
-  assert.equal(result.components.find((item) => item.id === "safe_code_execution").state, "not_available");
+  assert.equal(result.components.find((item) => item.id === "safe_code_execution").state, "optional");
   assert.equal(result.overallState, "ready_for_live_verification");
   assert.equal(result.summary.blockerCount, 0);
 });

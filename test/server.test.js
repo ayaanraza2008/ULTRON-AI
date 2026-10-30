@@ -63,7 +63,7 @@ test("integration catalog reports readiness without exposing secret values", asy
     const response = await fetch(base + "/api/integrations", { headers: { Cookie: cookie } });
     const payload = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(payload.integrations.length, 19);
+    assert.equal(payload.integrations.length, 24);
     assert.equal(payload.integrations.find(item => item.id === "rea-reverse-engineering").state, "disabled");
     assert.equal(payload.integrations.find(item => item.id === "comfyui").configured, true);
     assert.equal(payload.integrations.find(item => item.id === "heygem").state, "configured_unverified");
@@ -831,7 +831,7 @@ test("chat uses an explicitly selected allowlisted model", async () => {
 test("chat forwards validated image input as multimodal content to the selected model", async () => {
   let forwarded;
   const app = createApp({
-    env: { ...env, ULTRON_AVAILABLE_MODELS: "minimax/minimax-m3.1-flash:free" },
+    env: { ...env, ULTRON_AVAILABLE_MODELS: "minimax/minimax-m3.1-flash:free", ULTRON_VISION_MODELS: "minimax/minimax-m3.1-flash:free" },
     fetchImpl: async (_url, options) => {
       forwarded = JSON.parse(options.body);
       return new Response(JSON.stringify({ model: forwarded.model, choices: [{ message: { content: "A test image." } }] }), { status: 200 });
@@ -1021,3 +1021,179 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(providerCalls, 0);
   });
 });
+
+test("chat tries registry providers before direct-key billing-dependent fallbacks", async () => {
+  const calls = [];
+  const providerEnv = {
+    ...env,
+    GROQ_API_KEY: "groq-test-secret",
+    GROQ_DEFAULT_MODEL: "openai/gpt-oss-20b",
+    GEMINI_API_KEY: "gemini-test-secret",
+    GEMINI_DEFAULT_MODEL: "gemini-3.8-flash",
+    REGISTRY_API_KEY: "registry-test-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([{
+      name: "registry-alternative",
+      baseUrl: "https://registry-provider.com/v1",
+      apiKeyEnv: "REGISTRY_API_KEY",
+      model: "registry-model",
+      priority: 20
+    }])
+  };
+  const app = createApp({
+    env: providerEnv,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, authorization: options.headers.Authorization, model: JSON.parse(options.body).model });
+      if (url === "https://openrouter.ai/api/v1/chat/completions") {
+        return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+      }
+      if (url === "https://registry-provider.com/v1/chat/completions") {
+        return new Response(JSON.stringify({ error: { message: "registry fallback unavailable" } }), { status: 503 });
+      }
+      if (url === "https://api.groq.com/openai/v1/chat/completions") {
+        return new Response(JSON.stringify({ error: { message: "temporarily unavailable" } }), { status: 503 });
+      }
+      assert.equal(url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+      return new Response(JSON.stringify({
+        model: "gemini-3.8-flash",
+        choices: [{ message: { role: "assistant", content: "Gemini fallback completed." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Hello" }], stream: false })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Gemini fallback completed.");
+    const providerUrls = calls.map(call => call.url);
+    assert.ok(providerUrls.length >= 4, "primary and fallback providers should be attempted");
+    const registryUrl = "https://registry-provider.com/v1/chat/completions";
+    const registryIndex = providerUrls.indexOf(registryUrl);
+    assert.ok(registryIndex > 0, "OpenRouter model candidates should be attempted first");
+    assert.ok(providerUrls.slice(0, registryIndex).every(url => url === "https://openrouter.ai/api/v1/chat/completions"),
+      "the primary may retry configured OpenRouter models before switching providers");
+    assert.deepEqual(providerUrls.slice(registryIndex), [
+      registryUrl,
+      "https://api.groq.com/openai/v1/chat/completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    ]);
+    assert.ok(calls.slice(0, registryIndex).every(call => call.authorization === "Bearer test-key"));
+    assert.deepEqual(calls.slice(registryIndex).map(call => call.authorization), [
+      "Bearer registry-test-secret",
+      "Bearer groq-test-secret",
+      "Bearer gemini-test-secret"
+    ]);
+    assert.deepEqual(calls.slice(registryIndex).map(call => call.model), [
+      "registry-model",
+      "openai/gpt-oss-20b",
+      "gemini-3.8-flash"
+    ]);
+  });
+});
+
+test("model discovery preserves multiple configured models sharing one API base URL", async () => {
+  const registryEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "nemotron-lightning-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "nvidia/nemotron-3.5-lightning:free",
+        priority: 10,
+        supportsVision: false
+      },
+      {
+        name: "north-mini-code-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "cohere/north-mini-code:free",
+        priority: 20,
+        supportsVision: false
+      }
+    ])
+  };
+  const app = createApp({
+    env: registryEnv,
+    fetchImpl: async url => {
+      assert.equal(url, "https://openrouter.ai/api/v1/models");
+      return new Response(JSON.stringify({ data: [{ id: "provider-discovered:free" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/models", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.ok(payload.models.includes("provider-discovered:free"));
+    assert.ok(payload.models.includes("ultron/nemotron-lightning-free/nvidia/nemotron-3.5-lightning:free"));
+    assert.ok(payload.models.includes("ultron/north-mini-code-free/cohere/north-mini-code:free"));
+    assert.equal(new Set(payload.models).size, payload.models.length, "model discovery must not duplicate choices");
+  });
+});
+
+test("chat dispatches an explicitly selected registry model sharing the OpenRouter base URL", async () => {
+  const calls = [];
+  const registryEnv = {
+    ...env,
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "nemotron-lightning-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "nvidia/nemotron-3.5-lightning:free",
+        priority: 10,
+        supportsVision: false
+      },
+      {
+        name: "north-mini-code-free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        model: "cohere/north-mini-code:free",
+        priority: 20,
+        supportsVision: false
+      }
+    ])
+  };
+  const app = createApp({
+    env: registryEnv,
+    fetchImpl: async (url, options = {}) => {
+      const model = JSON.parse(options.body || "{}").model;
+      calls.push({ url, authorization: options.headers?.Authorization, model });
+      assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+      assert.equal(options.headers.Authorization, "Bearer test-key");
+      assert.equal(model, "cohere/north-mini-code:free");
+      return new Response(JSON.stringify({
+        model,
+        choices: [{ message: { role: "assistant", content: "Selected free registry model responded." } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+    logger: { warn() {}, error() {}, info() {} }
+  });
+  await withServer(app, async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        model: "ultron/north-mini-code-free/cohere/north-mini-code:free",
+        messages: [{ role: "user", content: "Say hello." }]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).content, "Selected free registry model responded.");
+    assert.equal(response.headers.get("x-ultron-provider"), "north-mini-code-free");
+    assert.equal(response.headers.get("x-ultron-model"), "cohere/north-mini-code:free");
+  });
+  assert.equal(calls.length, 1);
+});
+

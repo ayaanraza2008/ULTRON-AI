@@ -1,6 +1,6 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-27 UTC (source changes verified; production deployment blocked by Render quota)
+Last verified: 2026-10-30 UTC (candidate head 575722e passed full CI; 165 JavaScript files syntax-checked; 810 tests passed, 0 failed, 1 skipped)
 
 ## Operating constraints
 - Preserve the existing repository, backend data, and frontend. The cinematic command center has been built and merged, but is not live-verified until Render serves and reports the expected commit.
@@ -144,3 +144,85 @@ For each capability, distinguish implemented, unit-tested, integration-tested, d
 - Supabase project `opdjfhwepmcprbqojpat` remains `ACTIVE_HEALTHY`. Migration `private_document_storage` is applied at version `20261027185203`; read-only checks confirm private bucket, 5 MiB limit, RLS, and authenticated grants. Real authenticated file E2E is still unverified.
 - Latest code changes improve source-level safety and test coverage; they do not resolve the external blockers for Render build quota, live provider inference, dedicated Auth/RLS E2E accounts, the leaked-password-protection dashboard setting, or physical Windows companion verification.
 - Autonomy regression coverage includes SMS/texts, replies/messages to personal recipients, forwarded notes, and an explicit draft-only exception; a mixed request that also asks to publish remains confirmation-gated.
+
+
+## Cross-sector verification checkpoint — 2026-10-29
+
+- Latest main commit: `6b7f09d97508fc2be2085695d862a921e1ae8487`; PR #392 merged.
+- Post-merge CI [40909210938](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40909210938) passed both jobs; 653 tests, 652 passed, 0 failed, 1 skipped.
+- Production-revision verification [40909211008](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40909211008) passed its configured health/configuration/revision check. This does not prove model inference, account isolation, task execution, voice or physical desktop control.
+- Read-only Supabase audit confirmed `opdjfhwepmcprbqojpat` is `ACTIVE_HEALTHY`; all eight public tables have RLS; policies are owner-scoped; `anon` has no direct public-table/sequence grants in the inspected grants view; and worker SECURITY DEFINER RPCs use empty search_path and execute grants only to `service_role`.
+- Supabase Security Advisor still reports leaked-password protection disabled. No plan upgrade or billing change was made. See https://supabase.com/docs/guides/auth/password-security.
+- The live migration ledger lists 15 versions; repository filenames had duplicate/mismatched IDs. This branch aligns active migration filenames to the inspected ledger and archives an obsolete scaffold outside `supabase/migrations/`; no SQL was executed against the database.
+- Deprecated Fish Audio placeholders remained in `render.yaml`; this branch removes those stale Blueprint keys without modifying hosted environment variables.
+- Remaining live blockers: actual text/vision provider completions, dedicated two-user Auth/RLS E2E, worker completion with credentials/test user, signup/recovery/Google/phone delivery, voice/browser integrations, and physical Windows companion pairing. Arbitrary code execution remains unavailable until a suitable sandbox is built and tested.
+- World Intelligence CI passes, but build output reported large chunks; performance and device/browser checks remain separate.
+
+
+## Render inventory clarification — 2026-10-29
+
+Read-only Render inventory found two different ULTRON backend services connected to this repository in separate workspaces:
+- `ultron-ai-core` in workspace `Ultron core`, URL `https://ultron-ai-core.onrender.com`: latest observed deploy for commit `6b7f09d97508fc2be2085695d862a921e1ae8487` is `live`; the production-revision workflow checked this same hostname and commit.
+- `ultron-ai` in workspace `My Workspace`, URL `https://ultron-ai-zvd7.onrender.com`: the 10 most recent deploy attempts returned by Render during this audit were blocked before the application build by `pipeline_minutes_exhausted`, including the attempt for the same main commit.
+
+The CI workflow's passing production-revision result therefore confirms the `ultron-ai-core` service only, not both services. The Blueprint still names `ultron-ai`. Do not silently repoint, delete, reconfigure, or trigger either service as part of backend source work; designate the canonical service during a separately authorized deployment phase.
+
+## Repository-wide syntax verification follow-up — 2026-10-30
+
+- Added a recursive Node syntax scanner for maintained JavaScript files to the candidate's `npm run check` path.
+- Isolated fixture test passed for valid source, detected intentionally invalid source, and excluded dependency directories.
+- Latest full repository CI remains [40953760423](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40953760423) on prior head `861e863701d256bb2dd0203486d0d6acb8886455`; 808 passed, 0 failed, 1 skipped, and dependency audits reported 0 vulnerabilities.
+- Current candidate head: `af0d9e46389b72e50cc1f68bdd6ff9524165d3df`. The new whole-repository scan is not marked verified until a CI run on this exact head completes.
+- No merge, deployment, production configuration change, database mutation, or PHANTOM/NOX edit was performed.
+
+
+## Latest candidate CI result — 2026-10-30
+
+- Full CI [run 41044428018](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41044428018) passed on candidate head `5b9933fbdac689b7f01554ae851e087334081a06`.
+- `npm run check` passed, including the new recursive scanner: **164 JavaScript source files syntax-checked**.
+- `npm test`: 809 tests, 808 passed, 0 failed, 1 skipped (the opt-in live Supabase two-account isolation test).
+- Runtime dependency audit and production dependency audit each reported 0 vulnerabilities. Python local-assistant tests, Windows installer parsing, and World Intelligence build/bridge verification passed.
+- This remains source/CI evidence. It does not prove live model/vision calls, Auth/RLS isolation, background worker execution, live Docker execution, browser/device integrations, or production deployment.
+
+
+## Latest test-hardening CI — 2026-10-30
+
+- Candidate head `575722e3362ed88972cdd3dd6277bf7ce2b87cbd` passed [CI run 41044724646](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41044724646).
+- Repository-wide Node syntax scan: 165 maintained JavaScript files checked successfully.
+- Node test suite: 811 tests, 810 passed, 0 failed, 1 skipped. The skipped test is the opt-in live Supabase two-account isolation test.
+- Python assistant tests, Windows installer parsing, and World Intelligence build/bridge verification passed. Runtime and production dependency audits each reported 0 vulnerabilities.
+- These are source-level checks; provider, Auth/RLS, worker, Docker, physical-device/browser and deployment checks remain distinct.
+
+
+## Local assistant process-output hardening — 2026-10-30
+
+- Bounded stdout and stderr capture for explicitly approved local script/command execution to 1 MB per stream; output is drained concurrently so noisy programs cannot grow the assistant process's memory without bound.
+- Timed-out POSIX process groups are terminated together; Windows uses a process-group taskkill attempt before terminating the direct child.
+- Added a regression test that emits more than 1 MB on both output streams and verifies truncation. The initial test had incorrectly escaped newlines and exposed unclosed pipe handles; both were fixed. Full CI run [41072468330](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41072468330) passed on candidate head `75fd724b644554313a82d1867405f254b3d02feb`: 811 tests, 810 passed, 0 failed, 1 skipped; Python assistant tests, `npm run check`, both dependency audits (0 vulnerabilities), Windows installer parsing and World Intelligence build/bridge all passed.
+- This does not make script execution a security sandbox: approved code still runs with the user's normal account permissions. Unknown code must not be run.
+
+
+## Live Supabase security recheck — 2026-10-30
+
+- Read-only audit of project `opdjfhwepmcprbqojpat` found 8/8 inspected public tables with RLS enabled and 26 owner-scoped policies.
+- `anon` has no SELECT or INSERT privilege on those eight tables. Authenticated table access is constrained by the owner-scoped RLS policies.
+- The two inspected `SECURITY DEFINER` worker functions have an empty search path and EXECUTE grants only to `service_role`/`postgres`.
+- Security Advisor continues to report one warning: leaked-password protection is disabled. This is an owner-controlled Auth dashboard setting; it was not changed.
+- The three new study-pack, notes and reminders migrations in this PR are not applied; the live migration ledger remains at 15 versions.
+- Performance Advisor reports three currently unused indexes. No indexes were removed because low/zero usage in the present workload is not sufficient evidence that they are unnecessary.
+
+
+## Local assistant timeout regression follow-up — 2026-10-30
+
+- Added a direct regression test proving an approved child process is terminated when it exceeds its configured timeout.
+- Full CI [run 41072822198](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41072822198) passed on candidate code head `509319f71f6628ce0045238eb91e24d19c4c0705`: local assistant Python suite 19/19 passed; Node suite 811 tests, 810 passed, 0 failed, 1 skipped; 165 JavaScript files syntax-checked; runtime and production dependency audits each reported 0 vulnerabilities; Windows installer parsing and World Intelligence build/bridge passed.
+- The single skipped test remains the opt-in live two-account Supabase isolation test. This CI run is source-level verification and does not prove live model inference, auth isolation, worker E2E, physical-device control or deployment.
+
+
+## Cross-sector documentation and sandbox verification — 2026-10-30
+
+- Reconciled `docs/REPOSITORY_CAPABILITY_MAP.md` and `docs/REPOSITORY_AUDIT_2026-10-29.md` with source-present adapters for AppFlowy Cloud (read-only), OpenSEO MCP, OpenDesign (explicit approval before project-changing submissions), Open Generative AI/MuAPI, and OpenHiggsfield. Their live service/credential/credit status remains unverified; optional integrations stay disabled by default.
+- Expanded Docker coding-sandbox regression tests: verify no privileged/device/port-publishing/host-network flags, only one read-only source mount, non-root UID, no-new-privileges, and correct failure/cleanup behavior for non-zero program exit.
+- Exact candidate head `81e24771cb1f80f7bce902391b28aff1f5271380` passed [CI run 41075017410](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41075017410): 812 Node tests, 811 passed, 0 failed, 1 skipped; 165 JavaScript source files syntax-checked; 19/19 local-assistant Python tests; runtime and production dependency audits each found 0 vulnerabilities; Windows installer parsing and World Intelligence build/bridge passed.
+- Read-only Render inventory: `ultron-ai-core` in workspace `Ultron core` is free-tier, auto-deploys `main`, and its latest live deploy is main commit `6b7f09d97508fc2be2085695d862a921e1ae8487`. A separate `ultron-ai` service exists in `My Workspace`; it is not the same service. The current integration branch is not deployed. No Render configuration, deployment or environment variable was changed.
+- PR #400 remains open and unmerged. No database migrations were applied, no production secrets/settings changed, and PHANTOM/NOX repositories/services were not modified.

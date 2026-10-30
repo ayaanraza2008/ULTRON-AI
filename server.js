@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { buildIntegrationCatalog } from "./integrations/catalog.js";
 import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
+import { createDesktopCompanionRelayRouter } from "./integrations/desktop-companion-relay.js";
 import { createVoiceStudioRouter } from "./integrations/voicestudio.js";
 import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { startWorker } from "./worker.js";
@@ -265,6 +266,17 @@ function normalizeBaseUrl(value) {
 function hasConfiguredModelProvider(env) {
   const hermes = getHermesAgentReadiness(env);
   if (resolveCactusProvider(env) || resolveStrataProvider(env) || (hermes.configured && hermes.ownerGuardConfigured && hermes.directChatProviderEnabled)) return true;
+  // Optional first-class cloud fallbacks count as configured only with a valid HTTPS endpoint.
+  for (const entry of [
+    { key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1" },
+    { key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai" }
+  ]) {
+    if (!(typeof env[entry.key] === "string" && env[entry.key].trim())) continue;
+    let parsed;
+    try { parsed = new URL(env[entry.base] || entry.fallback); } catch { continue; }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) continue;
+    if (safeServiceBase(parsed.toString())) return true;
+  }
   // The runtime deliberately defaults to openrouter/free when no model is specified.
   // Health readiness must match that runtime behavior rather than requiring an optional env var.
   if (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) {
@@ -293,7 +305,7 @@ function hasConfiguredModelProvider(env) {
   });
 }
 
-function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
+function configuredChatProviders(env, openRouterBaseUrl = null, userId = null, allowSameBaseUrlModels = false) {
   const providers = [];
   const cactusProvider = resolveCactusProvider(env);
   if (cactusProvider) providers.push({ ...cactusProvider, supportsVision: false, isOpenRouter: false, isCactus: true });
@@ -344,7 +356,7 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
     const baseUrl = safeServiceBase(parsed.toString());
     if (!baseUrl) continue;
     const apiKey = typeof env[apiKeyEnv] === "string" ? env[apiKeyEnv].trim() : "";
-    if (!apiKey || providers.some(provider => provider.name === name || provider.baseUrl === baseUrl)) continue;
+    if (!apiKey || providers.some(provider => provider.name === name || (!allowSameBaseUrlModels && provider.baseUrl === baseUrl))) continue;
     providers.push({
       name,
       baseUrl,
@@ -355,11 +367,34 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
       isOpenRouter: false
     });
   }
+  // Optional direct-key fallbacks are deliberately last-resort: Groq GPT-OSS
+  // is billed per token, while Gemini free-tier eligibility/quotas are account-dependent.
+  // Explicit provider registry priorities are honored; default direct keys stay behind them.
+  // These providers are text-only until image compatibility has been verified.
+  for (const entry of [
+    { name: "groq", key: "GROQ_API_KEY", base: "GROQ_BASE_URL", fallback: "https://api.groq.com/openai/v1", modelEnv: "GROQ_DEFAULT_MODEL", model: "openai/gpt-oss-20b", priority: 1000 },
+    { name: "gemini", key: "GEMINI_API_KEY", base: "GEMINI_BASE_URL", fallback: "https://generativelanguage.googleapis.com/v1beta/openai", modelEnv: "GEMINI_DEFAULT_MODEL", model: "gemini-3.8-flash", priority: 1001 }
+  ]) {
+    const apiKey = typeof env[entry.key] === "string" ? env[entry.key].trim() : "";
+    if (!apiKey || providers.some(provider => provider.name === entry.name)) continue;
+    let parsed;
+    try { parsed = new URL(env[entry.base] || entry.fallback); } catch { continue; }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) continue;
+    const baseUrl = safeServiceBase(parsed.toString());
+    if (!baseUrl || providers.some(provider => provider.baseUrl === baseUrl)) continue;
+    const configuredModel = typeof env[entry.modelEnv] === "string" ? env[entry.modelEnv].trim().slice(0, 160) : "";
+    providers.push({
+      name: entry.name, baseUrl, apiKey, model: configuredModel || entry.model,
+      priority: entry.priority, supportsVision: false, isOpenRouter: false
+    });
+  }
   return providers.sort((a, b) => a.priority - b.priority).slice(0, 8);
 }
 
 function configuredModelPickerOptions(env, userId = null) {
-  return configuredChatProviders(env, null, userId)
+  // The picker is a list of model choices, not a list of unique HTTP hosts:
+  // multiple configured models may legitimately share one OpenAI-compatible endpoint.
+  return configuredChatProviders(env, null, userId, true)
     .filter(provider => !provider.isOpenRouter)
     .map(provider => ({
       id: "ultron/" + provider.name + "/" + provider.model,
@@ -398,12 +433,29 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     const worldIntelligence = req.path === "/world-intelligence" || req.path.startsWith("/world-intelligence/");
     if (worldIntelligence) res.removeHeader("X-Frame-Options");
     else res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
+    res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
     res.setHeader("Content-Security-Policy", worldIntelligence
       ? "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' blob: https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https: wss: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
-      : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+      : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     next();
   });
+
+  // Same-origin first-party UI. Static misses fall through to API/error handlers.
+  const publicDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+  app.use(express.static(publicDirectory, {
+    index: "index.html",
+    dotfiles: "deny",
+    fallthrough: true,
+    redirect: false,
+    maxAge: env.NODE_ENV === "production" ? 300_000 : 0,
+    setHeaders(res, filePath) {
+      const assetName = path.basename(filePath);
+      if (assetName === "sw.js") res.setHeader("Cache-Control", "no-cache, max-age=0, must-revalidate");
+      else if (assetName === "index.html") res.setHeader("Cache-Control", "no-store");
+      else if (env.NODE_ENV === "production") res.setHeader("Cache-Control", "public, max-age=300");
+      else res.setHeader("Cache-Control", "no-store");
+    }
+  }));
 
   const apiRateLimiter = createApiRateLimiter({
     windowMs: Math.max(10_000, Number(env.RATE_LIMIT_WINDOW_MS) || 60_000),
@@ -644,7 +696,13 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       redirect: "error", signal: AbortSignal.timeout(15_000)
     });
     let payload = null;
-    try { payload = await readResponseJsonLimited(response, 2_000_000); } catch { throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 }); }
+    // PostgREST return=minimal writes legitimately respond with an empty body.
+    // Do not pass that successful no-body response to the bounded JSON reader.
+    if (!(prefer === "return=minimal" && response.ok && !response.body)) {
+      try { payload = await readResponseJsonLimited(response, 2_000_000); } catch {
+        throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 });
+      }
+    }
     if (!response.ok) {
       logger.warn?.("Supabase data request failed", { table, status: response.status });
       const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : 502;
@@ -692,6 +750,53 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       logger.warn?.("Privileged task database request failed", { table, status: response.status });
       const status = response.status === 401 || response.status === 403 ? 503 : response.status === 404 ? 404 : 502;
       throw Object.assign(new Error(status === 503 ? "Server-side database operation was denied or not configured." : "Could not complete the task database operation."), { status, code: "PRIVILEGED_DATABASE_REQUEST_FAILED" });
+    }
+    return payload;
+  }
+
+  // Dedicated, function-only service-role RPC path. Never accept a function name
+  // from HTTP input and never broaden the existing privileged table helper.
+  async function privilegedSupabaseRpc(functionName, body) {
+    const allowed = new Set([
+      "complete_desktop_companion_pairing",
+      "record_desktop_companion_heartbeat"
+    ]);
+    if (!allowed.has(functionName) || !body || typeof body !== "object" || Array.isArray(body)) {
+      throw Object.assign(new Error("Privileged RPC operation is not allowed."), { status: 400, code: "PRIVILEGED_RPC_NOT_ALLOWED" });
+    }
+    const config = supabaseConfig();
+    const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+    if (!config || !serviceKey) {
+      throw Object.assign(new Error("Server-side companion operations are not configured."), { status: 503, code: "SERVICE_ROLE_NOT_CONFIGURED" });
+    }
+    let response;
+    try {
+      response = await fetchImpl(config.url + "/rest/v1/rpc/" + functionName, {
+        method: "POST",
+        headers: {
+          apikey: serviceKey,
+          ...(serviceKey.startsWith("sb_secret_") ? {} : { Authorization: "Bearer " + serviceKey }),
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify(body),
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000)
+      });
+    } catch {
+      throw Object.assign(new Error("Server-side companion RPC request failed."), { status: 502, code: "PRIVILEGED_RPC_UNAVAILABLE" });
+    }
+    let payload;
+    try { payload = await readResponseJsonLimited(response, 512_000); }
+    catch {
+      throw Object.assign(new Error("Server-side companion RPC response was invalid or too large."), { status: 502, code: "PRIVILEGED_RPC_RESPONSE_INVALID" });
+    }
+    if (!response.ok) {
+      logger.warn?.("Privileged desktop companion RPC failed", { functionName, status: response.status });
+      throw Object.assign(new Error("Could not complete the desktop companion operation."), {
+        status: response.status === 401 || response.status === 403 ? 503 : 502,
+        code: "PRIVILEGED_RPC_FAILED"
+      });
     }
     return payload;
   }
@@ -1513,12 +1618,25 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       return res.status(400).json({ error: { code: "INVALID_ATTACHMENTS", message: "Attach no more than two images per message." } });
     }
     const imageParts = [];
+    const maxImageBytes = 4 * 1024 * 1024;
+    const maxImageBase64Chars = Math.ceil(maxImageBytes / 3) * 4;
     for (const attachment of attachments) {
-      if (!attachment || typeof attachment.dataUrl !== "string" || attachment.dataUrl.length > 5600000) {
+      if (!attachment || typeof attachment.dataUrl !== "string") {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Each attachment must contain a JPEG, PNG, WebP, or GIF data URL." } });
+      }
+      if (attachment.dataUrl.length > maxImageBase64Chars + 40) {
         return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
       }
-      if (!attachment.dataUrl.startsWith("data:image/") || !/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(attachment.dataUrl)) {
-        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only JPEG, PNG, WebP, or GIF image data is supported." } });
+      const match = /^data:image\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/.exec(attachment.dataUrl);
+      if (!match || match[2].length % 4 !== 0) {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only canonical base64 JPEG, PNG, WebP, or GIF image data is supported." } });
+      }
+      const imageBytes = Buffer.from(match[2], "base64");
+      if (!imageBytes.length || imageBytes.toString("base64") !== match[2]) {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Image data must be valid canonical base64." } });
+      }
+      if (imageBytes.length > maxImageBytes) {
+        return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
       }
       imageParts.push({ type: "image_url", image_url: { url: attachment.dataUrl } });
     }
@@ -1533,7 +1651,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       try { baseUrl = normalizeBaseUrl(env.OPENROUTER_BASE_URL); }
       catch { primaryProviderConfigInvalid = true; }
     }
-    const configuredProviders = configuredChatProviders(env, baseUrl, req.supabaseUser?.id);
+    const configuredProviders = configuredChatProviders(env, baseUrl, req.supabaseUser?.id, Boolean(requestedProviderOption));
     const chatProviders = requestedProviderOption
       ? [
           ...configuredProviders.filter(provider => provider.name === requestedProviderOption.name && provider.model === requestedProviderOption.model),
@@ -1570,9 +1688,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
     try {
       const openRouterCandidates = hasImageAttachments
-        // Keep backward compatibility: when no dedicated vision list is configured,
-        // try the explicitly selected/allowed model, as older ULTRON deployments did.
-        ? [...new Set(visionModels.length ? visionModels : [selectedModel, ...configuredModels].filter(Boolean))]
+        // Never send image data to an OpenRouter model merely because it is a
+        // configured/default text model. Vision capability must be explicit.
+        ? [...new Set(visionModels)]
         : [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelAttempts = [];
       for (const provider of chatProviders) {
@@ -1915,6 +2033,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
+  app.use("/api", createDesktopCompanionRelayRouter({
+    requireSupabaseUser, supabaseRest, privilegedSupabaseRpc, logger
+  }));
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));

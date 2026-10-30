@@ -1,0 +1,186 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { buildSrt, createProjectStore, makeFallbackConcepts, makeFallbackScenes, normalizeScenes, newProject, safeAssetFilename, safeProjectId, validateProjectInput, validateReferenceUrl } from "../video-studio/core.mjs";
+import { createVideoStudioServer } from "../video-studio/server.mjs";
+
+test("video studio validates briefs, format and reference URLs", () => {
+  assert.equal(validateProjectInput({ brief: "tiny" }).ok, false);
+  assert.equal(validateProjectInput({ brief: "A cinematic video about rain.", format: "portrait", durationSeconds: 30 }).value.format, "portrait");
+  assert.equal(validateReferenceUrl("https://youtu.be/abc123").ok, true);
+  assert.equal(validateReferenceUrl("http://youtube.com/watch?v=abc").ok, false);
+  assert.equal(validateReferenceUrl("https://user:pass@youtube.com/watch?v=abc").ok, false);
+  assert.equal(validateReferenceUrl("https://youtube.com.evil.test/watch?v=abc").ok, false);
+  assert.equal(validateReferenceUrl("https://127.0.0.1/video.mp4").ok, false);
+});
+
+test("fallback plans are timed and create three distinct concept options", () => {
+  const project = newProject({ brief: "A short cinematic film about a midnight train.", durationSeconds: 45, format: "portrait", sourceMode: "images" });
+  const concepts = makeFallbackConcepts(project);
+  assert.equal(concepts.length, 3);
+  assert.equal(new Set(concepts.map(c => c.id)).size, 3);
+  const scenes = makeFallbackScenes(project, concepts[2]);
+  assert.equal(scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0), 45);
+  assert.ok(scenes.every(scene => scene.mediaType === "image"));
+  assert.ok(normalizeScenes(scenes, project));
+  assert.equal(normalizeScenes([{ durationSeconds: 10 }, { durationSeconds: 10 }], project), null);
+});
+
+test("SRT output uses monotonically increasing scene-time ranges", () => {
+  const srt = buildSrt([
+    { durationSeconds: 4, narration: "First line. Second line." },
+    { durationSeconds: 3, narration: "Final thought." }
+  ]);
+  assert.match(srt, /00:00:00,000 --> 00:00:02,000/);
+  assert.match(srt, /Second line\./);
+  assert.match(srt, /00:00:04,000 --> 00:00:07,000/);
+});
+
+test("file-backed project store persists data and rejects unsafe asset paths", async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-video-store-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = createProjectStore(dir);
+  const project = await store.create({ brief: "An atmospheric short about a storm.", durationSeconds: 30 });
+  assert.equal((await store.get(project.id)).id, project.id);
+  await store.update(project.id, p => { p.status = "needs_review"; return p; });
+  assert.equal((await store.get(project.id)).status, "needs_review");
+  assert.equal((await store.list()).length, 1);
+  assert.equal(safeProjectId(project.id), project.id);
+  assert.equal(safeProjectId("../secret"), null);
+  assert.equal(safeAssetFilename("../" + project.id + ".mp4"), null);
+  await assert.rejects(() => store.assetPath(project.id, "../../secret.txt"));
+});
+
+test("local HTTP API creates projects and cannot bypass render approval", async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-video-http-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const app = createVideoStudioServer({ env: { VIDEO_STUDIO_HOST: "127.0.0.1" }, dataDir: dir, logger: { warn() {} } });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const address = server.address();
+  const base = "http://127.0.0.1:" + address.port;
+  const bad = await fetch(base + "/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brief: "tiny" }) });
+  assert.equal(bad.status, 400);
+  const created = await fetch(base + "/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brief: "An original short about a storm over the sea.", durationSeconds: 30, sourceMode: "images" }) });
+  assert.equal(created.status, 201);
+  const body = await created.json();
+  assert.ok(body.project.id);
+  const render = await fetch(base + "/api/projects/" + body.project.id + "/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+  assert.equal(render.status, 409);
+  const approval = await fetch(base + "/api/projects/" + body.project.id + "/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved: true }) });
+  assert.equal(approval.status, 409);
+  // Fetch implementations may normalize or ignore a custom Host header. Use node:http
+  // directly so this regression test proves the server sees an untrusted Host value.
+  const hostileHostStatus = await new Promise((resolve, reject) => {
+    const request = http.request({
+      hostname: "127.0.0.1",
+      port: address.port,
+      path: "/api/projects",
+      method: "GET",
+      headers: { Host: "not-local.example" }
+    }, response => {
+      response.resume();
+      response.once("end", () => resolve(response.statusCode));
+    });
+    request.once("error", reject);
+    request.end();
+  });
+  assert.equal(hostileHostStatus, 403);
+
+  const localHost = "127.0.0.1:" + address.port;
+  const originStatus = async origin => new Promise((resolve, reject) => {
+    const request = http.request({
+      hostname: "127.0.0.1",
+      port: address.port,
+      path: "/api/projects",
+      method: "GET",
+      headers: { Host: localHost, Origin: origin }
+    }, response => {
+      response.resume();
+      response.once("end", () => resolve(response.statusCode));
+    });
+    request.once("error", reject);
+    request.end();
+  });
+  assert.equal(await originStatus("http://" + localHost), 200, "same local origin should be accepted");
+  assert.equal(await originStatus("http://127.0.0.1:1"), 403, "a different loopback port is a different origin");
+  assert.equal(await originStatus("https://" + localHost), 403, "HTTPS is not the local HTTP server origin");
+  assert.equal(await originStatus("https://evil.example"), 403, "remote origins are rejected");
+
+  for (let i = 0; i < 80; i++) {
+    const state = await fetch(base + "/api/projects/" + body.project.id).then(response => response.json());
+    if (state.job === "idle") break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+});
+
+test("Video Studio sends stock search and media downloads through its outbound transport", async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-video-outbound-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const calls = [];
+  const fetchImpl = async (input, options = {}) => {
+    const url = new URL(input);
+    calls.push({ host: url.hostname, pathname: url.pathname, redirect: options.redirect, signal: Boolean(options.signal) });
+    if (url.hostname === "api.pexels.com" && url.pathname === "/v1/videos/search") {
+      return new Response(JSON.stringify({
+        videos: [{
+          id: 123,
+          url: "https://www.pexels.com/video/demo/",
+          user: { name: "ULTRON Test Creator" },
+          video_files: [{ link: "https://videos.pexels.com/video-files/demo.mp4", width: 640 }]
+        }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.hostname === "videos.pexels.com" && url.pathname === "/video-files/demo.mp4") {
+      return new Response(Buffer.from("test-video-bytes"), { status: 200, headers: { "Content-Type": "video/mp4" } });
+    }
+    throw new Error("Unexpected outbound request in regression test.");
+  };
+  const app = createVideoStudioServer({
+    env: { VIDEO_STUDIO_HOST: "127.0.0.1", PEXELS_API_KEY: "test-only-key" },
+    dataDir: dir, fetchImpl, logger: { warn() {} }
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const address = server.address();
+  const base = "http://127.0.0.1:" + address.port;
+  const created = await fetch(base + "/api/projects", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brief: "A quiet cinematic view of a storm over the sea.", durationSeconds: 30, sourceMode: "motion" })
+  });
+  assert.equal(created.status, 201);
+  const { project: initial } = await created.json();
+  let project;
+  for (let i = 0; i < 80; i++) {
+    const state = await fetch(base + "/api/projects/" + initial.id).then(response => response.json());
+    project = state.project;
+    if (state.job === "idle" && project.scenes.length) break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  assert.ok(project.scenes.length, "local fallback plan should provide a scene for the search");
+  const sceneId = project.scenes[0].id;
+  const searched = await fetch(base + "/api/projects/" + project.id + "/assets/search", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sceneId, query: "storm clouds" })
+  });
+  assert.equal(searched.status, 200);
+  const searchData = await searched.json();
+  assert.equal(searchData.provider, "Pexels");
+  assert.equal(searchData.results[0].downloadUrl, "https://videos.pexels.com/video-files/demo.mp4");
+  const imported = await fetch(base + "/api/projects/" + project.id + "/assets/import", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sceneId, candidateId: searchData.results[0].id })
+  });
+  assert.equal(imported.status, 201);
+  const importedData = await imported.json();
+  assert.equal(importedData.asset.mimeType, "video/mp4");
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls.map(call => call.host), ["api.pexels.com", "videos.pexels.com"]);
+  assert.ok(calls.every(call => call.redirect === "error" && call.signal), "outbound calls must disable redirects and use bounded abort signals");
+});
+

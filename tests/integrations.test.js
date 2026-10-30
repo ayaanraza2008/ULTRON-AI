@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { createIntegrationRouter } from "../integrations/router.js";
+import { OPEN_HIGGSFIELD_PAID_CONFIRMATION } from "../integrations/open-higgsfield.js";
+import { OPEN_DESIGN_PAID_CONFIRMATION } from "../integrations/open-design.js";
+import { OPEN_GENERATIVE_AI_PAID_CONFIRMATION } from "../integrations/open-generative-ai.js";
 
 async function withServer(env, fetchImpl, run, { userId = "00000000-0000-4000-8000-000000000001" } = {}) {
   const app = express();
@@ -429,5 +432,408 @@ test("integration catalog and live adapters block private service URLs before an
     assert.equal(heygem.status, 503);
     assert.equal((await heygem.json()).error.code, "HEYGEM_NOT_CONFIGURED");
     assert.equal(called, false);
+  });
+});
+
+test("OpenHiggsfield routes expose static 38-model catalog and safe disabled status", async () => {
+  await withServer({}, async () => {
+    throw new Error("Catalog and readiness must not contact the provider.");
+  }, async base => {
+    const catalogResponse = await fetch(base + "/api/integrations/open-higgsfield/models");
+    assert.equal(catalogResponse.status, 200);
+    const catalog = await catalogResponse.json();
+    assert.equal(catalog.modelCount, 38);
+    assert.equal(catalog.models.length, 38);
+
+    const statusResponse = await fetch(base + "/api/integrations/open-higgsfield/status");
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.configured, false);
+    assert.equal(status.state, "disabled_by_config");
+  });
+});
+
+test("OpenHiggsfield generation route requires explicit paid-use confirmation before outbound requests", async () => {
+  let calls = 0;
+  await withServer({
+    ULTRON_OPEN_HIGGSFIELD_ENABLED: "true",
+    HF_API_BASE_URL: "https://api.higgsfield.ai",
+    OPEN_HIGGSFIELD_API_KEY: "test-id:secret-value-123456",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async () => {
+    calls++;
+    throw new Error("Unapproved media generation must not reach the provider.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-higgsfield/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "soul-cinema", prompt: "a cinematic red planet", userPrompt: "Generate an image" })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).state, "approval_required");
+    assert.equal(calls, 0);
+  });
+});
+
+test("OpenHiggsfield generation route queues only after explicit confirmation and keeps credentials server-side", async () => {
+  let request;
+  const apiKey = "test-id:secret-value-123456";
+  const env = {
+    ULTRON_OPEN_HIGGSFIELD_ENABLED: "true",
+    HF_API_BASE_URL: "https://api.higgsfield.ai",
+    OPEN_HIGGSFIELD_API_KEY: apiKey,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  };
+  await withServer(env, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ request_id: "req_123", status: "queued" }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-higgsfield/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "soul-cinema",
+        prompt: "cinematic red planet at dawn",
+        settings: { batchSize: 1, aspectRatio: "1:1" },
+        confirmPaidGeneration: true,
+        confirmationText: OPEN_HIGGSFIELD_PAID_CONFIRMATION,
+        userPrompt: "I explicitly approve paid generation using my provider credits."
+      })
+    });
+    assert.equal(response.status, 202);
+    const body = await response.json();
+    assert.equal(body.state, "queued");
+    assert.equal(body.requestId, "req_123");
+    assert.equal(request.url, "https://api.higgsfield.ai/higgsfield-ai/soul/cinema");
+    assert.equal(request.options.headers.Authorization, "Key " + apiKey);
+    assert.equal(request.options.redirect, "error");
+    assert.equal(JSON.stringify(body).includes(apiKey), false);
+  });
+});
+
+
+const openDesignEnv = {
+  OPEN_DESIGN_ENABLED: "true",
+  OPEN_DESIGN_BASE_URL: "https://design.example.com",
+  OPEN_DESIGN_API_TOKEN: "od-test-daemon-token",
+  OPEN_DESIGN_PROJECT_ID: "personal_project_123",
+  OPEN_DESIGN_BYOK_PROTOCOL: "openai",
+  OPEN_DESIGN_BYOK_BASE_URL: "https://openrouter.ai/api/v1",
+  OPEN_DESIGN_BYOK_API_KEY: "provider-key-synthetic",
+  OPEN_DESIGN_BYOK_MODEL: "openrouter/free",
+  ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+};
+
+test("OpenDesign integration status remains disabled by default without network access", async () => {
+  await withServer({}, async () => {
+    throw new Error("OpenDesign status must not contact an upstream service.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/status");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.state, "disabled_by_config");
+    assert.equal(result.configured, false);
+  });
+});
+
+test("OpenDesign route lists projects only for the configured owner and keeps token server-side", async () => {
+  let request;
+  await withServer(openDesignEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ projects: [{ id: "personal_project_123", name: "Personal Design" }] }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/projects");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(result.projects, [{ id: "personal_project_123", name: "Personal Design" }]);
+    assert.equal(request.url, "https://design.example.com/api/projects");
+    assert.equal(request.options.headers.Authorization, "Bearer " + openDesignEnv.OPEN_DESIGN_API_TOKEN);
+    assert.equal(JSON.stringify(result).includes(openDesignEnv.OPEN_DESIGN_API_TOKEN), false);
+  });
+});
+
+test("OpenDesign run route rejects unapproved requests before forwarding model-provider credentials", async () => {
+  let calls = 0;
+  await withServer(openDesignEnv, async () => {
+    calls++;
+    throw new Error("Unapproved task must not reach OpenDesign.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Create a landing page", userPrompt: "Create a landing page" })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).state, "approval_required");
+    assert.equal(calls, 0);
+  });
+});
+
+test("OpenDesign run route submits a confirmed task with server-side BYOK configuration", async () => {
+  let request;
+  await withServer(openDesignEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ runId: "run_123", conversationId: "conversation_1", assistantMessageId: "message_1" }), {
+      status: 202, headers: { "content-type": "application/json" }
+    });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Create a responsive product landing page in index.html.",
+        confirmPaidRun: true,
+        confirmationText: OPEN_DESIGN_PAID_CONFIRMATION,
+        userPrompt: "I approve this task using my configured provider credits in OpenDesign."
+      })
+    });
+    assert.equal(response.status, 202);
+    const result = await response.json();
+    assert.equal(result.state, "queued");
+    assert.equal(result.runId, "run_123");
+    assert.equal(request.url, "https://design.example.com/api/runs");
+    assert.equal(request.options.headers.Authorization, "Bearer " + openDesignEnv.OPEN_DESIGN_API_TOKEN);
+    const body = JSON.parse(request.options.body);
+    assert.equal(body.projectId, openDesignEnv.OPEN_DESIGN_PROJECT_ID);
+    assert.equal(body.agentId, "byok-opencode");
+    assert.equal(body.byokProvider.apiKey, openDesignEnv.OPEN_DESIGN_BYOK_API_KEY);
+    assert.equal(JSON.stringify(result).includes(openDesignEnv.OPEN_DESIGN_API_TOKEN), false);
+    assert.equal(JSON.stringify(result).includes(openDesignEnv.OPEN_DESIGN_BYOK_API_KEY), false);
+  });
+});
+
+test("OpenDesign run status routes only return validated status and deliverable metadata", async () => {
+  let requestUrl;
+  await withServer(openDesignEnv, async url => {
+    requestUrl = url;
+    return new Response(JSON.stringify({
+      status: "succeeded",
+      deliverableValid: true,
+      deliverableEntryFile: "index.html",
+      apiKey: "must-not-return"
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-design/runs/run_123");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(requestUrl, "https://design.example.com/api/runs/run_123");
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.verified, true);
+    assert.equal(result.deliverableEntryFile, "index.html");
+    assert.equal(JSON.stringify(result).includes("must-not-return"), false);
+  });
+});
+
+
+test("Open Generative AI readiness and model catalog require no external API call", async () => {
+  await withServer({}, async () => {
+    throw new Error("MuAPI readiness and static catalog must not contact the provider.");
+  }, async base => {
+    const statusResponse = await fetch(base + "/api/integrations/open-generative-ai/status");
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.configured, false);
+    assert.equal(status.state, "disabled_by_config");
+
+    const modelsResponse = await fetch(base + "/api/integrations/open-generative-ai/models");
+    assert.equal(modelsResponse.status, 200);
+    const models = await modelsResponse.json();
+    assert.equal(models.modelCount, 38);
+    assert.equal(models.models.length, 38);
+  });
+});
+
+test("Open Generative AI generation route blocks unapproved paid requests before network", async () => {
+  let calls = 0;
+  await withServer({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: "muapi-route-secret-123456",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async () => {
+    calls++;
+    throw new Error("Unapproved generation must not reach MuAPI.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-generative-ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "nano-banana-pro",
+        prompt: "A cinematic red planet",
+        userPrompt: "Make an image."
+      })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).state, "approval_required");
+    assert.equal(calls, 0);
+  });
+});
+
+test("Open Generative AI generation route submits confirmed jobs with server-side API key only", async () => {
+  let request;
+  const apiKey = "muapi-route-secret-123456";
+  await withServer({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: apiKey,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ request_id: "req_media_123", status: "queued" }), {
+      status: 202, headers: { "content-type": "application/json" }
+    });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-generative-ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "nano-banana-pro",
+        prompt: "A cinematic red planet at sunrise",
+        settings: { aspectRatio: "16:9", resolution: "2k" },
+        confirmPaidGeneration: true,
+        confirmationText: OPEN_GENERATIVE_AI_PAID_CONFIRMATION,
+        userPrompt: "I explicitly approve this paid image generation using my MuAPI provider credits."
+      })
+    });
+    assert.equal(response.status, 202);
+    const result = await response.json();
+    assert.equal(result.state, "queued");
+    assert.equal(result.requestId, "req_media_123");
+    assert.equal(request.url, "https://api.muapi.ai/api/v1/nano-banana-pro");
+    assert.equal(request.options.headers["x-api-key"], apiKey);
+    assert.equal(JSON.stringify(result).includes(apiKey), false);
+  });
+});
+
+test("Open Generative AI status route polls only a validated job ID and sanitizes output URLs", async () => {
+  let requestUrl;
+  await withServer({
+    ULTRON_OPEN_GENERATIVE_AI_ENABLED: "true",
+    MUAPI_API_KEY: "muapi-route-secret-123456",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  }, async url => {
+    requestUrl = url;
+    return new Response(JSON.stringify({
+      status: "completed",
+      outputs: ["https://cdn.muapi.ai/video.mp4", "http://127.0.0.1/private.mp4"]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/open-generative-ai/jobs/req_media_123");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(requestUrl, "https://api.muapi.ai/api/v1/predictions/req_media_123/result");
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.outputs, ["https://cdn.muapi.ai/video.mp4"]);
+    assert.equal(JSON.stringify(result).includes("127.0.0.1"), false);
+  });
+});
+
+
+const appFlowyEnv = {
+  APPFLOWY_ENABLED: "true",
+  APPFLOWY_BASE_URL: "https://appflowy.example.com",
+  APPFLOWY_API_TOKEN: "appflowy-route-token-synthetic-123456",
+  APPFLOWY_CLIENT_VERSION: "0.9.24",
+  APPFLOWY_DEVICE_ID: "00000000-0000-4000-8000-000000000002",
+  ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+};
+
+test("AppFlowy status stays disabled by default and exposes no credentials", async () => {
+  await withServer({}, async () => {
+    throw new Error("AppFlowy status must not call an upstream API.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/appflowy/status");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.configured, false);
+    assert.equal(result.state, "disabled_by_config");
+    assert.equal(JSON.stringify(result).includes("appflowy-route-token"), false);
+  });
+});
+
+test("AppFlowy workspace route is owner-scoped and sends bearer plus client identity headers", async () => {
+  let request;
+  await withServer(appFlowyEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ data: [
+      { workspace_id: "00000000-0000-4000-8000-000000000010", name: "Engineering", role: "owner" }
+    ] }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/appflowy/workspaces");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(request.url, "https://appflowy.example.com/api/workspace");
+    assert.equal(request.options.headers.Authorization, "Bearer " + appFlowyEnv.APPFLOWY_API_TOKEN);
+    assert.equal(request.options.headers["client-version"], "0.9.24");
+    assert.equal(request.options.headers["device-id"], appFlowyEnv.APPFLOWY_DEVICE_ID);
+    assert.equal(result.workspaces[0].name, "Engineering");
+    assert.equal(JSON.stringify(result).includes(appFlowyEnv.APPFLOWY_API_TOKEN), false);
+  });
+});
+
+test("AppFlowy folder and search routes validate parameters and return read-only results", async () => {
+  const requests = [];
+  await withServer(appFlowyEnv, async (url, options) => {
+    requests.push({ url, options });
+    if (url.includes("/folder?")) return new Response(JSON.stringify({ data: {
+      view_id: "00000000-0000-4000-8000-000000000010", name: "Engineering", layout: 0,
+      children: [{ view_id: "00000000-0000-4000-8000-000000000011", name: "Planning", layout: 0, children: [] }]
+    } }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ data: [
+      { view_id: "00000000-0000-4000-8000-000000000011", name: "Planning", preview: "Current sprint plan", score: 0.9 }
+    ] }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const workspaceId = "00000000-0000-4000-8000-000000000010";
+    const folder = await fetch(base + "/api/integrations/appflowy/workspaces/" + workspaceId + "/folder?depth=3");
+    assert.equal(folder.status, 200);
+    const folderBody = await folder.json();
+    assert.equal(folderBody.tree.name, "Engineering");
+    assert.equal(folderBody.tree.children[0].name, "Planning");
+
+    const search = await fetch(base + "/api/integrations/appflowy/workspaces/" + workspaceId + "/search?q=planning%20sprint&limit=5");
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.results[0].name, "Planning");
+    assert.equal(searchBody.results[0].excerpt, "Current sprint plan");
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].url, "https://appflowy.example.com/api/search/" + workspaceId + "?query=planning+sprint&limit=5&preview_size=80");
+  });
+});
+
+test("AppFlowy rejects non-owner workspace access before upstream calls", async () => {
+  let calls = 0;
+  await withServer({
+    ...appFlowyEnv,
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000099"
+  }, async () => {
+    calls++;
+    throw new Error("Non-owner must not invoke AppFlowy.");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/appflowy/workspaces");
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "INTEGRATION_OWNER_ONLY");
+    assert.equal(calls, 0);
+  });
+});
+
+
+test("AppFlowy document route returns bounded collab JSON without exposing provider tokens", async () => {
+  let request;
+  await withServer(appFlowyEnv, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ data: {
+      collab: { document: { root: { children: [{ text: "Runbook content" }] } } },
+      apiToken: "must-not-return"
+    } }), { status: 200, headers: { "content-type": "application/json" } });
+  }, async base => {
+    const workspaceId = "00000000-0000-4000-8000-000000000010";
+    const viewId = "00000000-0000-4000-8000-000000000011";
+    const response = await fetch(base + "/api/integrations/appflowy/workspaces/" + workspaceId + "/documents/" + viewId + "?type=document");
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(request.url, "https://appflowy.example.com/api/workspace/v1/" + workspaceId + "/collab/" + viewId + "/json?collab_type=0");
+    assert.equal(result.documentType, "document");
+    assert.equal(result.collab.document.root.children[0].text, "Runbook content");
+    assert.equal(JSON.stringify(result).includes("apiToken"), false);
   });
 });
