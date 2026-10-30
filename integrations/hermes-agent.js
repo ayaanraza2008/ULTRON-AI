@@ -124,6 +124,7 @@ export function getHermesAgentReadiness(env = process.env) {
     license: "MIT",
     features: [
       "OpenAI-compatible tool-enabled agent runtime",
+      "long-running Runs API with capability-checked submission, status polling, and stop requests when advertised",
       "40+ tools and configurable toolsets",
       "persistent memory and cross-session search when enabled",
       "skills hub and self-improving skill workflow when configured",
