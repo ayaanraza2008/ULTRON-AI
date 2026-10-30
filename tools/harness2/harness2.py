@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Harness2: local, resumable agent-harness benchmark and refinement tool."""
 from __future__ import annotations
-import argparse, concurrent.futures, datetime as dt, json, os, re, shutil, subprocess, sys, tempfile, uuid
+import argparse, concurrent.futures, datetime as dt, json, os, re, shutil, signal, subprocess, sys, tempfile, threading, uuid
 from pathlib import Path
 
 VERSION = "0.1.0"
@@ -130,6 +130,80 @@ def parse_object(text):
     if not isinstance(value,dict): raise Harness2Error("Executor response must be an object")
     return value
 
+def run_bounded(command, *, cwd, timeout, env=None, input_text=None):
+    """Run a CLI while draining both pipes and enforcing memory-bounded output."""
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=False,
+        start_new_session=(os.name != "nt"),
+        creationflags=(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0),
+    )
+    captured = {"stdout": bytearray(), "stderr": bytearray()}
+    limits = {"stdout": MAX_OUTPUT, "stderr": 64_000}
+    overflow = []
+    def stop_process():
+        try:
+            if os.name != "nt":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except (ProcessLookupError, PermissionError, OSError):
+            try: process.kill()
+            except OSError: pass
+    def drain(name, stream):
+        total = 0
+        while True:
+            chunk = stream.read(65_536)
+            if not chunk: break
+            remaining = limits[name] - len(captured[name])
+            if remaining > 0: captured[name].extend(chunk[:remaining])
+            total += len(chunk)
+            if total > limits[name] and name not in overflow:
+                overflow.append(name)
+                stop_process()
+    readers = [
+        threading.Thread(target=drain, args=("stdout", process.stdout), daemon=True),
+        threading.Thread(target=drain, args=("stderr", process.stderr), daemon=True),
+    ]
+    for thread in readers: thread.start()
+    writer = None
+    if input_text is not None:
+        def write_input():
+            try:
+                process.stdin.write(input_text.encode("utf-8"))
+                process.stdin.flush()
+            except (BrokenPipeError, OSError):
+                pass
+            finally:
+                try: process.stdin.close()
+                except OSError: pass
+        writer = threading.Thread(target=write_input, daemon=True)
+        writer.start()
+    timed_out = False
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        stop_process()
+        process.wait()
+    if writer is not None: writer.join(timeout=2)
+    for thread in readers: thread.join(timeout=5)
+    for stream in (process.stdout, process.stderr):
+        try: stream.close()
+        except OSError: pass
+    if timed_out: raise subprocess.TimeoutExpired(command, timeout)
+    if overflow: raise Harness2Error(f"CLI {overflow[0]} exceeded its output limit; process was terminated")
+    return subprocess.CompletedProcess(
+        command, process.returncode,
+        captured["stdout"].decode("utf-8", errors="replace"),
+        captured["stderr"].decode("utf-8", errors="replace"),
+    )
+
 class Executor:
     def __init__(self,name,model,timeout): self.name,self.model,self.timeout = name,model,timeout
     def ask(self,prompt):
@@ -139,7 +213,7 @@ class Executor:
                 cmd = ["codex","exec","--json","--cd",str(cwd),"--sandbox","read-only","--ask-for-approval","never","--ephemeral","--ignore-user-config","--ignore-rules","--skip-git-repo-check"]
                 if self.model: cmd += ["--model",self.model]
                 cmd.append("-")
-                proc = subprocess.run(cmd,input=prompt[:MAX_TEXT],cwd=cwd,capture_output=True,text=True,timeout=self.timeout,shell=False)
+                proc = run_bounded(cmd,input_text=prompt[:MAX_TEXT],cwd=cwd,timeout=self.timeout)
             else:
                 config = cwd / "opencode.json"
                 config.write_text(json.dumps({"$schema":"https://opencode.ai/config.json","default_agent":"harness2-readonly","subagent_depth":0,"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow","edit":"deny","write":"deny","bash":"deny","task":"deny","webfetch":"deny","websearch":"deny","lsp":"deny","skill":"deny"}}),encoding="utf-8")
@@ -149,7 +223,7 @@ class Executor:
                 cmd = ["opencode","--pure","run","--agent","harness2-readonly","--format","json","--dir",str(cwd)]
                 if self.model: cmd += ["--model",self.model]
                 cmd.append(prompt[:MAX_TEXT])
-                proc = subprocess.run(cmd,cwd=cwd,env=env,capture_output=True,text=True,timeout=self.timeout,shell=False)
+                proc = run_bounded(cmd,cwd=cwd,env=env,timeout=self.timeout)
             if proc.returncode: raise Harness2Error(f"{self.name} CLI failed: {(proc.stderr or '')[-2000:]}")
             return parse_jsonl(proc.stdout,self.name)
     def solve(self,task,components):
