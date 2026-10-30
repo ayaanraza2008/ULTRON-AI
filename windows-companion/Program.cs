@@ -45,7 +45,7 @@ internal sealed class CompanionContext : ApplicationContext
             _assistantUrl = DefaultAssistantUrl;
             _assistantUrlConfigurationInvalid = false;
         }
-        else if (TryValidateAssistantUrl(configuredAssistantUrl, out var validatedAssistantUrl))
+        else if (AssistantUrlPolicy.TryValidate(configuredAssistantUrl, out var validatedAssistantUrl))
         {
             _assistantUrl = validatedAssistantUrl;
             _assistantUrlConfigurationInvalid = false;
@@ -366,34 +366,6 @@ internal sealed class CompanionContext : ApplicationContext
             catch { /* Toast notifications can be disabled by Windows. */ }
             OpenAssistant();
         }));
-    }
-
-    private static bool TryValidateAssistantUrl(string value, out string validated)
-    {
-        validated = string.Empty;
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 2048 ||
-            !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri))
-            return false;
-
-        var host = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
-        var blockedSuffixes = new[]
-        {
-            ".localhost", ".local", ".localdomain", ".internal", ".intranet",
-            ".lan", ".home", ".test", ".invalid", ".example"
-        };
-        if (uri.Scheme != Uri.UriSchemeHttps ||
-            uri.HostNameType != UriHostNameType.Dns ||
-            string.IsNullOrWhiteSpace(host) ||
-            host == "localhost" ||
-            blockedSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.Ordinal)) ||
-            !string.IsNullOrEmpty(uri.UserInfo) ||
-            !string.IsNullOrEmpty(uri.Query) ||
-            !string.IsNullOrEmpty(uri.Fragment) ||
-            !uri.IsDefaultPort)
-            return false;
-
-        validated = uri.AbsoluteUri;
-        return true;
     }
 
     private void OpenAssistant()
