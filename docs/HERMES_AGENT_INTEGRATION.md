@@ -13,32 +13,48 @@ ULTRON includes an owner-scoped adapter for the official NousResearch Hermes Age
 
 The read-only `check_hermes_agent` tool probes `GET /v1/models` and `GET /v1/capabilities`. It understands Hermes' documented nested `features` and `endpoints` payloads. Use `npm run smoke:hermes` for a live, read-only verification from the machine running ULTRON.
 
-## Configure the Hermes runtime
+## Install and configure Hermes on Windows
 
-Install and configure Hermes separately by following the [official installation guide](https://hermes-agent.nousresearch.com/docs/getting-started/installation/) and [API Server guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/).
+Hermes now supports native Windows 10/11 as well as WSL2. Native Windows is the simplest starting point for this Windows PC; WSL2 is optional when you specifically need a POSIX/Linux environment.
 
-On Windows, WSL2 is the recommended starting point when using the Linux installation path. Inside the same WSL2 environment as a locally running ULTRON backend:
+1. Install Hermes using the official Windows installer or the official PowerShell installer documented in the [installation guide](https://hermes-agent.nousresearch.com/docs/getting-started/installation/):
+   ```powershell
+   iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+   ```
+2. Open a new PowerShell window, then verify and configure a model:
+   ```powershell
+   Get-Command hermes
+   hermes --version
+   hermes setup
+   hermes model
+   hermes doctor
+   ```
+3. Configure a provider that you are entitled to use. Hermes is a separate agent runtime and does not automatically reuse ULTRON's OpenRouter credentials. Use Hermes' model setup flow and store provider credentials only in Hermes' local secret configuration. Do not paste credentials into chat or commit them to the repository.
+4. Enable the authenticated API server in Hermes' local `%LOCALAPPDATA%\hermes\.env` file:
+   ```dotenv
+   API_SERVER_ENABLED=true
+   API_SERVER_KEY=replace-with-a-long-random-secret
+   ```
+   Use a unique cryptographically random secret; do not reuse a public example or another service's token.
+5. Keep the default API bind on `127.0.0.1` for local-only use, then start the gateway:
+   ```powershell
+   hermes gateway
+   ```
+
+The default local endpoint is `http://127.0.0.1:8642/v1`. You can check the API server's model list and health endpoints from the same machine. See the [official API Server guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/) for the full API contract and current configuration options.
+
+### Optional WSL2 installation
+
+Choose WSL2 instead when you need Linux/POSIX shell behavior or a shared Linux development environment. Inside the WSL2 distribution, follow the official Linux installation path:
 
 ```bash
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 hermes setup
 hermes model
+hermes doctor
 ```
 
-Enable the authenticated API server in `~/.hermes/.env`:
-
-```dotenv
-API_SERVER_ENABLED=true
-API_SERVER_KEY=replace-with-a-long-random-secret
-```
-
-Keep the default loopback bind for local-only use, then start the gateway:
-
-```bash
-hermes gateway
-```
-
-The default local endpoint is `http://127.0.0.1:8642/v1`. Do not assume that a loopback endpoint on a personal PC is reachable by a cloud-hosted ULTRON service. For remote connectivity, use a private, authenticated HTTPS ingress/reverse proxy with strict access controls; never expose the Hermes port directly to the public internet. Hermes' API server can execute its enabled terminal tools, so configure least-privilege toolsets and an isolated terminal backend before allowing remote access.
+Configure `~/.hermes/.env` with `API_SERVER_ENABLED=true` and a strong `API_SERVER_KEY`, then start `hermes gateway`. Windows and WSL2 installs have separate data/configuration directories; do not assume a key or configuration created in one is present in the other.
 
 ## Configure ULTRON
 
@@ -54,7 +70,9 @@ HERMES_AGENT_TIMEOUT_SECONDS=90
 ULTRON_INTEGRATION_OWNER_USER_ID=the-authenticated-owner-UUID
 ```
 
-For a remote service, replace the local URL with the private HTTPS ingress URL. The adapter rejects insecure non-loopback HTTP, private/reserved remote IP literals, and unsafe destinations using ULTRON's shared network policy.
+For local development, `127.0.0.1` works only when Hermes and the ULTRON backend run on the same host/network namespace. A WSL2 process and a Windows process may need explicit host/guest networking configuration.
+
+**Important for the existing cloud-hosted ULTRON backend:** a Render service cannot reach your PC's `127.0.0.1`. Do not enter the local URL into Render and expect it to work. Remote connectivity requires either (a) running ULTRON locally beside Hermes, or (b) a private, authenticated HTTPS ingress/tunnel with strict access controls. Do not port-forward or expose Hermes' API port directly to the public internet. Hermes' API server can execute its enabled terminal tools, so configure least-privilege toolsets and an isolated terminal backend before allowing any remote access.
 
 Leave `HERMES_AGENT_CHAT_PROVIDER=false` initially. This keeps Hermes as an explicitly delegated execution tool rather than silently adding it to normal chat model routing. Enabling direct chat provider routing is a separate owner-scoped opt-in.
 
@@ -86,3 +104,4 @@ Then use ULTRON's existing authenticated agent route with a harmless task explic
 - [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
 - [Hermes Agent API Server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/)
 - [Hermes Agent installation](https://hermes-agent.nousresearch.com/docs/getting-started/installation/)
+- [Hermes Agent Windows Native guide](https://hermes-agent.nousresearch.com/docs/user-guide/windows-native/)
