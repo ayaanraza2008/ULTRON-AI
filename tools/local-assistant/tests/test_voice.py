@@ -114,6 +114,19 @@ class VoiceModeSafetyTests(unittest.TestCase):
         chat.assert_not_called()
         confirm.assert_not_called()
 
+    def test_voice_chat_accepts_hindi_hinglish_context_and_requests_english_reply(self):
+        from ultron_local_assistant import cli
+        with patch.object(cli.sys, "platform", "win32"):
+            with patch.object(cli.sys, "stdin", SimpleNamespace(isatty=lambda: True)):
+                with patch.object(cli, "listen_once", return_value="Ultron, mujhe quantum physics samjhao"):
+                    with patch.object(cli, "local_chat", return_value="Here is a simple explanation.") as chat:
+                        self.assertEqual(cli.voice_mode(self._args()), 0)
+        chat.assert_called_once()
+        system_prompt = chat.call_args.kwargs["system"]
+        self.assertIn("Hindi, English, or Hinglish", system_prompt)
+        self.assertIn("always answer in concise, natural English", system_prompt)
+        self.assertIn("ask the user to repeat", system_prompt)
+
     def test_voice_launch_still_requires_typed_terminal_approval(self):
         from ultron_local_assistant import cli
         with patch.object(cli.sys, "platform", "win32"):
