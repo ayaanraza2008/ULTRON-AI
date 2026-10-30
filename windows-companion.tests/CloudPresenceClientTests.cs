@@ -252,8 +252,8 @@ internal static class CloudPresenceClientTests
 
         Assert(executionCalls == 1, "An approved request must invoke the executor exactly once.");
         Assert(resultBody is not null &&
-            resultBody.Contains("\\"status\\":\\"completed\\"", StringComparison.Ordinal) &&
-            resultBody.Contains("\\"resultCode\\":\\"ACTION_COMPLETED\\"", StringComparison.Ordinal),
+            resultBody.Contains("\"status\":\"completed\"", StringComparison.Ordinal) &&
+            resultBody.Contains("\"resultCode\":\"ACTION_COMPLETED\"", StringComparison.Ordinal),
             "A successful local action must report its bounded completion state.");
     }
 
