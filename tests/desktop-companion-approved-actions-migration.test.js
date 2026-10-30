@@ -23,7 +23,7 @@ test("approved desktop action queue is owner-scoped and exposes no device creden
 });
 
 test("action creation requires the signed-in owner and a recently online, unrevoked device", () => {
-  const match = sql.match(/create or replace function public\.create_desktop_companion_command\(([\s\S]*?)\$function\$/i);
+  const match = sql.match(/create or replace function public\.create_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
   assert.ok(match, "create_desktop_companion_command must exist");
   assert.match(match[1], /security definer/i);
   assert.match(match[1], /set search_path = ''/i);
@@ -39,7 +39,7 @@ test("action creation requires the signed-in owner and a recently online, unrevo
 });
 
 test("device command claiming and result reporting are token-bound, one-time, and state-checked", () => {
-  const claim = sql.match(/create or replace function public\.claim_desktop_companion_command\(([\s\S]*?)\$function\$/i);
+  const claim = sql.match(/create or replace function public\.claim_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
   assert.ok(claim, "claim_desktop_companion_command must exist");
   assert.match(claim[1], /security definer/i);
   assert.match(claim[1], /set search_path = ''/i);
@@ -51,7 +51,7 @@ test("device command claiming and result reporting are token-bound, one-time, an
   assert.match(claim[1], /set status = 'delivered'/i);
   assert.match(sql, /grant execute on function public\.claim_desktop_companion_command\(text, uuid\)\s+to service_role/i);
 
-  const complete = sql.match(/create or replace function public\.complete_desktop_companion_command\(([\s\S]*?)\$function\$/i);
+  const complete = sql.match(/create or replace function public\.complete_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
   assert.ok(complete, "complete_desktop_companion_command must exist");
   assert.match(complete[1], /security definer/i);
   assert.match(complete[1], /set search_path = ''/i);
@@ -69,7 +69,7 @@ const preflightMigrationPath = fileURLToPath(new URL("../supabase/migrations/202
 const preflightSql = readFileSync(preflightMigrationPath, "utf8");
 
 test("pre-execution authorization migration is additive and fails closed for revoked or inactive commands", () => {
-  const authorize = preflightSql.match(/create or replace function public\.authorize_desktop_companion_command\(([\s\S]*?)\$function\$/i);
+  const authorize = preflightSql.match(/create or replace function public\.authorize_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
   assert.ok(authorize, "authorize_desktop_companion_command must exist in its own additive migration");
   assert.match(authorize[1], /security definer/i);
   assert.match(authorize[1], /set search_path = ''/i);
