@@ -124,6 +124,7 @@ test("Hermes health checks only GET models/capabilities and blocks non-owner acc
   assert.equal(result.capabilities.runStatus, true);
   assert.equal(result.capabilities.runEventsSse, true);
   assert.equal(result.capabilities.runStop, true);
+  assert.equal(result.capabilities.runApproval, true);
   assert.equal(requests.length, 2);
   assert.equal(JSON.stringify(result).includes("private-hermes-api-key"), false);
 });
@@ -155,6 +156,7 @@ test("Hermes capability discovery remains compatible with legacy flat capability
   assert.equal(result.capabilities.runs, true);
   assert.equal(result.capabilities.runSubmission, false);
   assert.equal(result.capabilities.runStatus, false);
+  assert.equal(result.capabilities.runApproval, false);
 });
 
 test("Hermes delegated task requires owner UUID, sends stable account-scoped memory key and returns bounded final content", async () => {
