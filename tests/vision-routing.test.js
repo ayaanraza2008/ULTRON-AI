@@ -139,7 +139,7 @@ test("image chat permits an explicitly vision-enabled alternate provider", async
     ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
       {
         name: "alternate-vision",
-        baseUrl: "https://vision-provider.example/v1",
+        baseUrl: "https://api.groq.com/openai/v1",
         apiKeyEnv: "ALT_VISION_KEY",
         model: "provider/vision-model",
         priority: 10,
@@ -166,7 +166,7 @@ test("image chat permits an explicitly vision-enabled alternate provider", async
     });
     assert.equal(response.status, 200);
     assert.equal(seen.length, 1);
-    assert.equal(seen[0].url, "https://vision-provider.example/v1/chat/completions");
+    assert.equal(seen[0].url, "https://api.groq.com/openai/v1/chat/completions");
     assert.equal(seen[0].auth, "Bearer alternate-vision-test-secret");
     assert.equal(seen[0].body.model, "provider/vision-model");
     assert.ok(Array.isArray(seen[0].body.messages.at(-1).content));
