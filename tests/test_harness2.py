@@ -31,6 +31,23 @@ class Harness2Tests(unittest.TestCase):
         self.assertEqual(saved["status"], "completed")
         self.assertGreater(saved["best_score"], 0)
         self.assertTrue((root / "report.md").is_file())
+    def test_parallel_mode_creates_and_scores_multiple_candidates(self):
+        workspace = self.root.resolve()
+        config = harness2.read_json(workspace / ".harness2" / "config.json")
+        benchmark = harness2.load_benchmark("smoke")
+        import datetime as dt, uuid, shutil
+        run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
+        root = harness2.run_path(workspace, run_id); root.mkdir(parents=True)
+        shutil.copytree(workspace / config["harness_path"], root / "baseline-harness")
+        harness2.atomic_json(root / "benchmark.json", benchmark)
+        state = {"run_id":run_id,"status":"running","benchmark":"smoke","executor":"demo","model":None,"mode":"parallel","iterations":2,"parallelism":2,"next_round":0,"candidate_ids":[]}
+        harness2.atomic_json(root / "run.json", state)
+        harness2.execute(root, state, 60)
+        saved = harness2.read_json(root / "run.json")
+        self.assertIn("r01-c01", saved["candidate_ids"])
+        self.assertIn("r01-c02", saved["candidate_ids"])
+        self.assertEqual(saved["best_score"], 1.0)
+
     def test_parallel_refinement(self):
         self.assertEqual(harness2.judge("a b", {"all_contains":["a"]})["score"], 1)
     def test_update_allowlist_is_checked_before_write(self):
