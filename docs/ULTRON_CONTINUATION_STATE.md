@@ -32,8 +32,8 @@ Updated: 2026-10-31 UTC
 
 - Removed model-visible `consentBasis` from the clone tool schema and automatic route arguments.
 - Server derives basis only from exact opening attestation:
-  - `I confirm this is my own voice and I approve cloning the attached audio into a VoiceStudio profile.`
-  - `I confirm I have the speaker's permission and I approve cloning the attached audio into a VoiceStudio profile.`
+  - `I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile.`
+  - `I confirm I have the speaker's permission and I approve you to clone the attached audio into a VoiceStudio profile.`
 - Vague statements, negations, revocation, leading prose, phrase extensions and missing input must not authorize cloning.
 - Regression tests added; full CI pending. No profile was created or audio sent to VoiceStudio.
 
