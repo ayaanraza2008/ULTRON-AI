@@ -161,7 +161,7 @@ class DesktopControlTests(unittest.TestCase):
         with patch("ultron_local_assistant.cli.sys.stdin", SimpleNamespace(isatty=lambda: False)):
             with patch("ultron_local_assistant.cli.confirm") as prompt:
                 with patch("ultron_local_assistant.cli.launch_application") as launch:
-                    self.assertEqual(desktop_launch(args), 0)
+                    self.assertEqual(desktop_launch(args), 2)
         prompt.assert_not_called()
         launch.assert_not_called()
         self.popen.assert_not_called()
@@ -171,10 +171,29 @@ class DesktopControlTests(unittest.TestCase):
         with patch("ultron_local_assistant.cli.sys.stdin", SimpleNamespace(isatty=lambda: False)):
             with patch("ultron_local_assistant.cli.confirm") as prompt:
                 with patch("ultron_local_assistant.cli.open_known_folder") as open_folder:
-                    self.assertEqual(desktop_open_folder(args), 0)
+                    self.assertEqual(desktop_open_folder(args), 2)
         prompt.assert_not_called()
         open_folder.assert_not_called()
         self.popen.assert_not_called()
+
+
+    def test_desktop_launch_accepts_typed_confirmation_only_from_a_terminal(self):
+        args = SimpleNamespace(application="notepad")
+        with patch("ultron_local_assistant.cli.sys.stdin", SimpleNamespace(isatty=lambda: True)):
+            with patch("ultron_local_assistant.cli.confirm", return_value=True) as prompt:
+                with patch("ultron_local_assistant.cli.launch_application", return_value={"status": "process_start_requested"}) as launch:
+                    self.assertEqual(desktop_launch(args), 0)
+        prompt.assert_called_once_with("LAUNCH", "Start the 'notepad' application?")
+        launch.assert_called_once_with("notepad", confirm=True)
+
+    def test_desktop_folder_open_accepts_typed_confirmation_only_from_a_terminal(self):
+        args = SimpleNamespace(folder="documents")
+        with patch("ultron_local_assistant.cli.sys.stdin", SimpleNamespace(isatty=lambda: True)):
+            with patch("ultron_local_assistant.cli.confirm", return_value=True) as prompt:
+                with patch("ultron_local_assistant.cli.open_known_folder", return_value={"status": "process_start_requested"}) as open_folder:
+                    self.assertEqual(desktop_open_folder(args), 0)
+        prompt.assert_called_once_with("OPEN", "Open the standard 'documents' folder?")
+        open_folder.assert_called_once_with("documents", confirm=True)
 
 class DesktopCommandParserTests(unittest.TestCase):
     def test_fixed_desktop_subcommands_parse_to_expected_handlers(self):
