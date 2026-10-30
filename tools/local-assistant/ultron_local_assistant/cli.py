@@ -2,15 +2,17 @@
 from __future__ import annotations
 import argparse
 import difflib
+import getpass
 import hashlib
 import json
 import os
 import shlex
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, get_system_health, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
-from .companion import create_companion_server, generate_companion_token
+from .companion import create_companion_server, generate_companion_token, pair_companion, send_companion_heartbeat
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -358,6 +360,35 @@ def companion_token(_):
     print(generate_companion_token())
     return 0
 
+def companion_pair(args):
+    try:
+        code = getpass.getpass("Enter the one-time pairing code from ULTRON (input hidden): ").strip()
+        result = pair_companion(args.server_url, code)
+        out_json(result)
+        print("This PC is paired for outbound status heartbeats only. No remote PC-control actions are enabled.")
+        return 0
+    except (EOFError, KeyboardInterrupt):
+        print("\\nPairing cancelled.", file=sys.stderr)
+        return 130
+    except Exception as exc:
+        print(f"Pairing failed: {exc}", file=sys.stderr)
+        return 1
+
+def companion_connect(args):
+    if sys.platform != "win32":
+        print("The Windows companion can only send heartbeats from Windows.", file=sys.stderr)
+        return 2
+    while True:
+        try:
+            result = send_companion_heartbeat()
+            print(f"ULTRON companion heartbeat: {result['status']} ({result['deviceId']})")
+        except Exception as exc:
+            print(f"ULTRON companion heartbeat unavailable: {exc}", file=sys.stderr)
+            return 1
+        if args.once:
+            return 0
+        time.sleep(30)
+
 def companion_serve(args):
     if sys.platform != "win32":
         print("The Windows desktop companion can only be started on Windows.", file=sys.stderr)
@@ -393,6 +424,8 @@ def build_parser():
     c = subs.add_parser("companion", help="Run the local Windows desktop status companion")
     cs = c.add_subparsers(dest="companion_command", required=True)
     p = cs.add_parser("token", help="Generate a high-entropy local companion token"); p.set_defaults(handler=companion_token)
+    p = cs.add_parser("pair", help="Pair this PC with ULTRON using a one-time code"); p.add_argument("--server-url", required=True); p.set_defaults(handler=companion_pair)
+    p = cs.add_parser("connect", help="Send outbound-only status heartbeats to ULTRON"); p.add_argument("--once", action="store_true", help="Send one heartbeat and exit"); p.set_defaults(handler=companion_connect)
     p = cs.add_parser("serve", help="Serve the status-only API on 127.0.0.1"); p.add_argument("--port", type=int, default=8765); p.set_defaults(handler=companion_serve)
     p = subs.add_parser("chat"); p.add_argument("--model"); p.set_defaults(handler=chat)
     p = subs.add_parser("research"); p.add_argument("question", nargs="+"); p.add_argument("--root", default="."); p.add_argument("--model"); p.set_defaults(handler=research)
