@@ -57,6 +57,12 @@ test("voice chooser applies named male preference when locale and other scores a
   assert.equal(speechVoices.chooseSpeechVoice([female, male], "en-IN"), male);
 });
 
+test("voice chooser applies the female-name penalty when locale and other scores are equal", () => {
+  const female = { name: "Microsoft Zira", lang: "en-IN", localService: true };
+  const neutral = { name: "Microsoft Voice", lang: "en-IN", localService: true };
+  assert.equal(speechVoices.chooseSpeechVoice([female, neutral], "en-IN"), neutral);
+});
+
 test("voice chooser selects English independently from Hindi and handles an empty list", () => {
   const hindi = { name: "Ravi", lang: "hi-IN" };
   const english = { name: "Microsoft David Online (Natural)", lang: "en-IN", localService: false };
