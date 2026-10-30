@@ -524,10 +524,13 @@ def poll_companion_action(*, data_dir: str | Path | None = None, request_impl=No
         "open_known_folder": {"desktop", "documents", "downloads"},
     }
     if (
-        action["name"] not in allowed
+        not isinstance(action["name"], str)
+        or action["name"] not in allowed
+        or not isinstance(action["target"], str)
         or action["target"] not in allowed[action["name"]]
         or action["requiresLocalApproval"] is not True
         or not isinstance(action["expiresAt"], str)
+        or len(action["expiresAt"]) > 40
     ):
         raise ValueError("ULTRON returned an action outside the local fixed-action allowlist.")
     try:
@@ -563,7 +566,7 @@ def complete_companion_action(
         "failed": {"ACTION_FAILED"},
         "expired": {"ACTION_EXPIRED"},
     }
-    if status not in allowed or result_code not in allowed[status]:
+    if not isinstance(status, str) or not isinstance(result_code, str) or status not in allowed or result_code not in allowed[status]:
         raise ValueError("The local action outcome is not supported.")
     credentials = _load_device_credentials(data_dir)
     requester = request_impl or _cloud_json_request
