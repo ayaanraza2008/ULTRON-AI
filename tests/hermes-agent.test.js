@@ -4,7 +4,10 @@ import {
   checkHermesAgentService,
   getHermesAgentReadiness,
   resolveHermesAgentProvider,
-  runHermesAgentTask
+  runHermesAgentTask,
+  startHermesAgentRun,
+  getHermesAgentRunStatus,
+  stopHermesAgentRun
 } from "../integrations/hermes-agent.js";
 
 const ownerId = "00000000-0000-4000-8000-000000000001";
@@ -202,6 +205,152 @@ test("Hermes delegated tasks reject empty/oversized prompts before networking", 
     assert.equal(result.error.code, "HERMES_AGENT_TASK_INVALID");
   }
   assert.equal(calls, 0);
+});
+
+
+function currentRunCapabilities() {
+  return new Response(JSON.stringify({
+    object: "hermes.api_server.capabilities",
+    features: {
+      chat_completions: true,
+      run_submission: true,
+      run_status: true,
+      run_events_sse: true,
+      run_stop: true,
+      run_approval: true
+    }
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+test("Hermes long-running task starts only after run capability discovery and preserves owner-scoped session identity", async () => {
+  const seen = [];
+  const result = await startHermesAgentRun({
+    env: configuredEnv(),
+    userId: ownerId,
+    conversationId: "conversation-42",
+    task: "Research the official Hermes API and summarize its run lifecycle.",
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      if (url.endsWith("/capabilities")) return currentRunCapabilities();
+      assert.equal(url, "https://hermes.example.com/v1/runs");
+      assert.equal(options.method, "POST");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      assert.ok(options.headers["Idempotency-Key"]);
+      assert.match(options.headers["X-Hermes-Session-Key"], /^ultron-[a-f0-9]{32}$/);
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.model, "hermes-agent");
+      assert.match(payload.session_id, /^ultron-[a-f0-9]{32}$/);
+      assert.match(payload.instructions, /Do not publish/);
+      assert.equal(payload.input, "Research the official Hermes API and summarize its run lifecycle.");
+      return new Response(JSON.stringify({ run_id: "run_abc123", status: "started" }), { status: 202 });
+    }
+  });
+  assert.equal(result.state, "started");
+  assert.equal(result.runId, "run_abc123");
+  assert.equal(result.status, "started");
+  assert.equal(result.model, "hermes-agent");
+  assert.equal(seen.length, 2);
+});
+
+test("Hermes run submission fails closed when run APIs are not advertised", async () => {
+  let posts = 0;
+  const result = await startHermesAgentRun({
+    env: configuredEnv(),
+    userId: ownerId,
+    task: "Do a harmless read-only research task.",
+    fetchImpl: async url => {
+      if (url.endsWith("/capabilities")) {
+        return new Response(JSON.stringify({ features: { chat_completions: true, run_status: true } }), { status: 200 });
+      }
+      posts++;
+      throw new Error("run submission must not be attempted");
+    }
+  });
+  assert.equal(result.state, "blocked");
+  assert.equal(result.error.code, "HERMES_RUNS_UNSUPPORTED");
+  assert.equal(posts, 0);
+});
+
+test("Hermes run status is owner-scoped, validates run IDs and bounds output", async () => {
+  let calls = 0;
+  const denied = await getHermesAgentRunStatus({
+    env: configuredEnv(),
+    userId: "00000000-0000-4000-8000-000000000002",
+    runId: "run_abc123",
+    fetchImpl: async () => { calls++; throw new Error("non-owner must not reach Hermes"); }
+  });
+  assert.equal(denied.state, "blocked");
+  assert.equal(denied.error.code, "INTEGRATION_OWNER_NOT_CONFIGURED");
+  const invalid = await getHermesAgentRunStatus({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "../admin",
+    fetchImpl: async () => { calls++; throw new Error("invalid run ID must not reach Hermes"); }
+  });
+  assert.equal(invalid.state, "blocked");
+  assert.equal(invalid.error.code, "HERMES_RUN_ID_INVALID");
+  const result = await getHermesAgentRunStatus({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    fetchImpl: async (url, options) => {
+      calls++;
+      assert.equal(url, "https://hermes.example.com/v1/runs/run_abc123");
+      assert.equal(options.method, "GET");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      return new Response(JSON.stringify({
+        object: "hermes.run",
+        run_id: "run_abc123",
+        status: "completed",
+        session_id: "ultron-session",
+        model: "hermes-agent",
+        output: "Completed the public documentation review.",
+        usage: { input_tokens: 12, output_tokens: 19, total_tokens: 31 }
+      }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.terminal, true);
+  assert.equal(result.usage.totalTokens, 31);
+  assert.match(result.output, /documentation review/);
+  assert.equal(calls, 1);
+});
+
+test("Hermes run stop requires advertised support and reports stopping, not cancelled", async () => {
+  const seen = [];
+  const result = await stopHermesAgentRun({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      if (url.endsWith("/capabilities")) return currentRunCapabilities();
+      assert.equal(url, "https://hermes.example.com/v1/runs/run_abc123/stop");
+      assert.equal(options.method, "POST");
+      assert.equal(options.redirect, "error");
+      return new Response(JSON.stringify({ status: "stopping" }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "stopping");
+  assert.equal(result.status, "stopping");
+  assert.equal(result.runId, "run_abc123");
+  assert.equal(seen.length, 2);
+  let stopCalls = 0;
+  const unsupported = await stopHermesAgentRun({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    fetchImpl: async url => {
+      if (url.endsWith("/capabilities")) return new Response(JSON.stringify({ features: { run_submission: true, run_status: true } }), { status: 200 });
+      stopCalls++;
+      throw new Error("unsupported stop must not be attempted");
+    }
+  });
+  assert.equal(unsupported.state, "blocked");
+  assert.equal(unsupported.error.code, "HERMES_RUN_STOP_UNSUPPORTED");
+  assert.equal(stopCalls, 0);
 });
 
 
