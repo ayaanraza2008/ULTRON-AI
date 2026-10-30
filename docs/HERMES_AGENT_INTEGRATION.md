@@ -2,6 +2,8 @@
 
 ULTRON includes an owner-scoped adapter for the official NousResearch Hermes Agent API server. Hermes runs as a separate runtime; this repository does not vendor the upstream agent or install it as part of the Node service.
 
+**Live verification status (2026-10-31):** the adapter hardening is merged into the integration branch (PR #420, merge commit `d94583f2536320d17d763f58f73262b61d7be355`) and passes mocked/automated CI. The Hermes runtime has not been installed or connected on the user's Windows PC, so no live API smoke, delegated run, progress stream, or approval cycle has been verified. The `npm run smoke:hermes` command remains a read-only verification step to run after the local API server is configured.
+
 ## Execution path
 
 1. A signed-in ULTRON user requests a task through the existing agent runtime.
