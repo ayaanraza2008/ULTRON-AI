@@ -194,7 +194,7 @@ class LocalFirstCoreTests(unittest.TestCase):
             root = Path(temp)
             script = root / "noisy.py"
             script.write_text(
-                "import sys\\nsys.stdout.write('x' * 1100000)\\nsys.stderr.write('y' * 1100000)\\n",
+                "import sys\nsys.stdout.write('x' * 1100000)\nsys.stderr.write('y' * 1100000)\n",
                 encoding="utf-8",
             )
             result = run_script("noisy.py", root, confirm=True)
