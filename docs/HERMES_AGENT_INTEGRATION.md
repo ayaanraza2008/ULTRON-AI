@@ -82,6 +82,20 @@ The Hermes API key and ULTRON integration key must match. The owner UUID must be
 
 ## Safe acceptance sequence
 
+From the ULTRON repository checkout, the read-only verification command is:
+
+```powershell
+npm run smoke:hermes
+```
+
+It checks the configured owner, Hermes model list and capability response without submitting an agent task. After reviewing provider usage and authorizing one harmless live inference request, run:
+
+```powershell
+npm run smoke:hermes -- --run
+```
+
+That command submits a fixed, non-destructive smoke prompt, polls the returned run ID, checks for the expected response marker, and requests cancellation if the bounded timeout is reached. It never prints the API key. Optional `HERMES_AGENT_SMOKE_TIMEOUT_MS` is clamped to 15–180 seconds.
+
 1. Verify Hermes starts and completes one harmless normal chat.
 2. From the same host as ULTRON, authenticate to `GET /v1/models` and `GET /v1/capabilities`; confirm the configured model is listed and record the advertised feature flags.
 3. Start ULTRON with the owner-scoped server environment and run its read-only Hermes health check.
