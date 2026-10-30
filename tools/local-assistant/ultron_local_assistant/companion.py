@@ -421,11 +421,11 @@ def _cloud_json_request(server_url: str, route: str, payload: dict, bearer_token
 
 def _credential_file(data_dir: str | Path | None = None) -> Path:
     root = Path(data_dir) if data_dir is not None else app_data_dir() / "companion"
-    if root.is_symlink():
-        raise ValueError("Companion credential directory must not be a symlink.")
+    if _is_symlink_or_junction(root):
+        raise ValueError("Companion credential directory must not be a symlink or junction.")
     root.mkdir(parents=True, exist_ok=True)
     path = root / DEVICE_CREDENTIALS_FILE
-    if path.is_symlink() or (path.exists() and not path.is_file()):
+    if _is_symlink_or_junction(path) or (path.exists() and not path.is_file()):
         raise ValueError("Companion credential file must be a regular file.")
     return path
 
