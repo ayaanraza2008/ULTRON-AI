@@ -343,15 +343,15 @@ export function buildIntegrationCatalog(env = process.env) {
     {
       id: "windows-desktop-companion",
       name: "Windows Desktop Companion",
-      capability: "Owner-scoped read-only device pairing and status check; no command execution yet",
-      state: hasDesktopCompanion ? "configured_unverified" : "desktop_companion_required",
+      capability: "Optional legacy owner-scoped read-only desktop status probe; paired-device app/folder requests use a separate approval relay",
+      state: hasDesktopCompanion ? "configured_unverified" : "legacy_status_adapter_optional",
       configured: Boolean(hasDesktopCompanion),
-      mode: "owner_scoped_read_only_status_probe",
+      mode: "legacy_owner_scoped_read_only_status_probe",
       requiredEnv: ["ULTRON_DESKTOP_AGENT_URL", "ULTRON_DESKTOP_AGENT_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       apiRoutes: ["agent tool: check_desktop_companion"],
       note: hasDesktopCompanion
-        ? "Bridge settings are present; the protocol must return a paired Windows-device status. This adapter is read-only and cannot run commands or control the PC."
-        : "Requires a separately installed Windows companion reachable through HTTPS and an owner-scoped server token. Shell/keyboard/mouse actions are not exposed by this status adapter."
+        ? "Legacy adapter credentials are present; this integration remains a read-only status probe. The separate signed-in paired-device relay supports only six fixed app/folder requests after a fresh local Yes/No approval on Windows."
+        : "This legacy status probe is optional and is not required for signed-in Windows device pairing. The separate paired-device relay supports only six fixed app/folder requests after local Windows approval; this adapter itself remains read-only."
     }
   ];
 }
