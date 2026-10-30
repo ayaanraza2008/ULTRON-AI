@@ -415,7 +415,7 @@ class CompanionServerTests(unittest.TestCase):
 
     def test_malformed_persisted_device_id_is_rejected(self):
         with tempfile.TemporaryDirectory() as root:
-            (Path(root) / "device-id").write_text("not-a-uuid\\n", encoding="ascii")
+            (Path(root) / "device-id").write_text("not-a-uuid\n", encoding="ascii")
             with self.assertRaisesRegex(ValueError, "identity file is invalid"):
                 create_companion_server(TOKEN, port=0, data_dir=Path(root))
 
@@ -423,7 +423,7 @@ class CompanionServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             directory = Path(root)
             target = directory / "external-device-id"
-            target.write_text("00000000-0000-4000-8000-000000000001\\n", encoding="ascii")
+            target.write_text("00000000-0000-4000-8000-000000000001\n", encoding="ascii")
             identity = directory / "device-id"
             try:
                 identity.symlink_to(target)
@@ -434,6 +434,28 @@ class CompanionServerTests(unittest.TestCase):
                 )
             with self.assertRaisesRegex(ValueError, "identity file is not a regular file"):
                 create_companion_server(TOKEN, port=0, data_dir=directory)
+
+
+    def test_windows_junction_or_reparse_identity_path_is_rejected(self):
+        from types import SimpleNamespace
+        from ultron_local_assistant.companion import _is_symlink_or_junction
+
+        class JunctionPath:
+            def is_symlink(self):
+                return False
+            def is_junction(self):
+                return True
+
+        class ReparsePath:
+            def is_symlink(self):
+                return False
+            def is_junction(self):
+                return False
+            def lstat(self):
+                return SimpleNamespace(st_file_attributes=0x400)
+
+        self.assertTrue(_is_symlink_or_junction(JunctionPath()))
+        self.assertTrue(_is_symlink_or_junction(ReparsePath()))
 
 if __name__ == "__main__":
     unittest.main()
