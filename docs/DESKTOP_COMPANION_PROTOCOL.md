@@ -63,6 +63,21 @@ A reachable endpoint is not sufficient proof of secure device pairing. The compa
 
 Do not add generic `run_command`, arbitrary PowerShell, unrestricted filesystem access, stealth/background control, or “execute anything” endpoints to this protocol. Any future PC actions need a separate allowlisted command schema, per-action permission and approval checks, device identity/pairing, audit events, an emergency stop, and time/size limits. Sensitive or destructive actions must require task-specific confirmation. The current adapter never calls those actions and never treats a model-generated response as permission.
 
+## Local Windows companion runtime
+
+The local-first Python package now includes `ultron-local companion token` and `ultron-local companion serve`. On Windows, the service:
+
+- binds only to `127.0.0.1` and does not accept a configurable public/LAN bind address;
+- requires a high-entropy bearer token (minimum 43 URL-safe characters);
+- checks the loopback peer address and exact Host header;
+- denies browser Origins unless the exact local origin is allowlisted through `ULTRON_COMPANION_ALLOWED_ORIGINS`;
+- rate-limits requests and returns `Cache-Control: no-store`;
+- exposes only `GET /v1/ultron/status` with the `status` capability.
+
+The local runtime reports `paired: true` only after the caller presents the local bearer token. This is local token possession, **not** proof that a ULTRON cloud account, user UUID, or remote backend has completed identity pairing. The service intentionally does not expose shell, filesystem, screenshot, process, mouse, keyboard, or general PC-control actions.
+
+This local loopback process is not reachable from Render or another hosted backend. The separate server-side adapter still requires a private, authenticated, publicly reachable HTTPS gateway and owner identity binding. Do not expose the local service port to the LAN or internet.
+
 ## Verification status
 
-The ULTRON backend now has a bounded, owner-scoped status client and automated tests for authorization, response validation, and oversized-body cancellation. This does **not** mean a Windows companion is installed or live-verified; deployment must wait until a compatible companion and its pairing/token workflow are implemented and tested.
+Automated tests cover the local HTTP service's loopback bind, authentication, Host/Origin checks, exact route, preflight restrictions, rate limiting, and stable device ID. CI execution does not prove installation or runtime behavior on the user's physical Windows PC. Physical-device smoke testing and any cloud-to-device gateway/pairing remain unverified; no PC-control capability is claimed.
