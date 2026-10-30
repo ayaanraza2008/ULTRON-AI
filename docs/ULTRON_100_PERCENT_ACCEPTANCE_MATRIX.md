@@ -243,3 +243,13 @@ Evidence state at this checkpoint:
 - Fixed an observed Android CI Node 20 deprecation warning by upgrading `gradle/actions/setup-gradle` from `v4` to pinned `v6.4.1`, retaining Gradle 8.9 and selecting `cache-provider: basic` (open-source cache path). Official release v6.4.1 is dated 2026-10-28 and includes a security fix (GHSA-chpw-2mqm-95cc).
 - Exact-head validation is pending: Android run `41104536252`, ULTRON CI `41104536323`, Windows Companion `41104536689`, Chrome DevTools `41104536548`. Do not mark this action upgrade tested until these runs complete successfully and the Android log confirms the warning is gone.
 - No production deployment/settings, Supabase migration or account-mutating test was performed. No PHANTOM AI or NOX AI work was changed.
+
+
+## Verified workflow maintenance — 2026-10-30
+
+- On exact code/workflow head `e746927ac41f8572998a97f178156b4896c29f74`, all four workflows passed: ULTRON CI [41104536323](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536323), Windows Companion [41104536689](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536689), Android Companion [41104536252](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536252), and Chrome DevTools [41104536548](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41104536548).
+- Core CI: 848 Node tests (847 passed, 0 failed, 1 skipped); 79 local-assistant Python tests passed; 175 JavaScript source files syntax-checked; both dependency audits reported 0 vulnerabilities; Docker sandbox smoke and World Intelligence build/bridge jobs succeeded. The one skipped test remains live two-account Supabase isolation and is not counted as passed.
+- Android action maintenance: pinned `gradle/actions/setup-gradle@v6.4.1`, kept Gradle 8.9, selected `cache-provider: basic`. The debug APK build and artifact upload passed; the former Node 20 deprecation warning is absent from the inspected log.
+- Remaining non-failing Android warning: three SDK Manager CLI `sdkmanager` deprecation notices from `android-actions/setup-android@v4.0.4`. Investigate the official Android CLI migration before changing the setup workflow; no unsupported replacement is assumed.
+- Documentation-only commits after the tested code head are `4f17899a14e21172bbe692e08e1526ec0bbcbea3` and `9a3dc1c61ac7c03fdcf072ea0a2c139753ade8c9`. Exact latest docs-head runs: core `41104755216`, Android `41104755369`, Windows `41104755220`, Chrome `41104755167`; recheck before treating the current PR head as fully green.
+- PR #400 remains open/unmerged. Live provider inference, Auth/RLS two-account E2E, worker E2E, physical device pairing, target-host Docker, and production deployment remain separate blockers.
