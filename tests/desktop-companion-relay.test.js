@@ -293,6 +293,54 @@ test("paired device can atomically claim only its own fixed action", async () =>
   });
 });
 
+test("paired device can reauthorize its exact delivered command immediately before local execution", async () => {
+  const deviceToken = "F".repeat(43);
+  const commandId = "88888888-8888-4888-8888-888888888888";
+  let call;
+  await withRelay({
+    privilegedSupabaseRpc: async (...values) => { call = values; return true; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/commands/" + commandId + "/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + deviceToken },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { authorized: true, commandId });
+    assert.equal(call[0], "authorize_desktop_companion_command");
+    assert.deepEqual(call[1], {
+      p_token_hash: hash(deviceToken),
+      p_device_id: DEVICE,
+      p_command_id: commandId
+    });
+  });
+});
+
+test("pre-execution authorization denies revoked or expired commands and malformed requests", async () => {
+  let calls = 0;
+  const commandId = "88888888-8888-4888-8888-888888888888";
+  await withRelay({
+    privilegedSupabaseRpc: async () => { calls += 1; return false; }
+  }, async base => {
+    const token = "G".repeat(43);
+    const response = await fetch(base + "/desktop-companion/commands/" + commandId + "/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error.code, "DESKTOP_ACTION_NO_LONGER_ACTIVE");
+
+    const malformed = await fetch(base + "/desktop-companion/commands/" + commandId + "/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ deviceId: DEVICE, allow: true })
+    });
+    assert.equal(malformed.status, 400);
+    assert.equal(calls, 1, "Malformed requests must not reach the privileged database function.");
+  });
+});
+
 test("paired device result endpoint accepts only one of the explicit result states", async () => {
   const deviceToken = "E".repeat(43);
   let call;
