@@ -85,7 +85,16 @@ test("Hermes health checks only GET models/capabilities and blocks non-owner acc
       assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
       if (url.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "hermes-agent" }, { id: "reasoner" }] }), { status: 200 });
       if (url.endsWith("/capabilities")) return new Response(JSON.stringify({
-        chat_completions: true, chat_completions_streaming: true, responses: true, runs: true
+        object: "hermes.api_server.capabilities",
+        platform: "hermes-agent",
+        model: "hermes-agent",
+        auth: { type: "bearer", required: true },
+        features: {
+          chat_completions: true, responses_api: true, run_submission: true,
+          run_status: true, run_events_sse: true, run_stop: true, run_approval: true
+        },
+        endpoints: { skills: "/v1/skills", toolsets: "/v1/toolsets" },
+        session_key_header: "X-Hermes-Session-Key"
       }), { status: 200 });
       throw new Error("unexpected Hermes endpoint");
     }
@@ -96,7 +105,15 @@ test("Hermes health checks only GET models/capabilities and blocks non-owner acc
   assert.deepEqual(result.availableModels, ["hermes-agent", "reasoner"]);
   assert.equal(result.capabilities.chatCompletions, true);
   assert.equal(result.capabilities.streaming, true);
+  assert.equal(result.capabilities.responses, true);
   assert.equal(result.capabilities.runs, true);
+  assert.equal(result.capabilities.runStatus, true);
+  assert.equal(result.capabilities.runEvents, true);
+  assert.equal(result.capabilities.runStop, true);
+  assert.equal(result.capabilities.runApproval, true);
+  assert.equal(result.capabilities.skills, true);
+  assert.equal(result.capabilities.toolsets, true);
+  assert.equal(result.capabilities.sessionKeyHeader, true);
   assert.equal(requests.length, 2);
   assert.equal(JSON.stringify(result).includes("private-hermes-api-key"), false);
 });
@@ -115,6 +132,7 @@ test("Hermes delegated task requires owner UUID, sends stable account-scoped mem
     env: configuredEnv(), userId: ownerId,
     task: "Research the public API documentation and return a concise summary.",
     fetchImpl: async (url, options) => {
+      if (url.endsWith("/runs")) return new Response("Not Found", { status: 404 });
       seen = { url, options, payload: JSON.parse(options.body) };
       assert.equal(url, "https://hermes.example.com/v1/chat/completions");
       assert.equal(options.method, "POST");
@@ -164,4 +182,84 @@ test("Hermes rejects private, metadata, and loopback HTTPS endpoints", () => {
     assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: url }), ownerId), null, url);
     assert.equal(getHermesAgentReadiness(configuredEnv({ HERMES_AGENT_BASE_URL: url })).configured, false, url);
   }
+});
+
+
+test("Hermes delegates through the native Runs API and polls a completed execution", async () => {
+  const requests = [];
+  const result = await runHermesAgentTask({
+    env: configuredEnv({ HERMES_AGENT_POLL_INTERVAL_MS: "100" }),
+    userId: ownerId,
+    conversationId: "ultron-conversation-42",
+    task: "Inspect the project tests and summarize their coverage.",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      if (url.endsWith("/runs") && options.method === "POST") {
+        const payload = JSON.parse(options.body);
+        assert.equal(payload.input, "Inspect the project tests and summarize their coverage.");
+        assert.match(payload.instructions, /least-privileged configured terminal backend/);
+        assert.match(payload.session_id, /^ultron-[a-f0-9]{32}$/);
+        assert.match(options.headers["Idempotency-Key"], /^[0-9a-f-]{36}$/i);
+        assert.match(options.headers["X-Hermes-Session-Key"], /^ultron-[a-f0-9]{32}$/);
+        return new Response(JSON.stringify({ run_id: "run-42", status: "started" }), { status: 202 });
+      }
+      if (url.endsWith("/runs/run-42") && options.method === "GET") {
+        return new Response(JSON.stringify({
+          run_id: "run-42", status: "completed", model: "hermes-agent",
+          output: "Reviewed 18 tests; found 4 coverage groups.",
+          usage: { input_tokens: 12, output_tokens: 19 }
+        }), { status: 200 });
+      }
+      throw new Error("unexpected Hermes endpoint: " + url);
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.execution, "runs_api");
+  assert.equal(result.runId, "run-42");
+  assert.match(result.sessionId, /^ultron-[a-f0-9]{32}$/);
+  assert.match(result.content, /Reviewed 18 tests/);
+  assert.deepEqual(result.usage, { promptTokens: 12, completionTokens: 19, totalTokens: 31 });
+  assert.equal(requests.length, 2);
+});
+
+test("Hermes does not auto-approve native runs waiting for approval", async () => {
+  const requests = [];
+  const result = await runHermesAgentTask({
+    env: configuredEnv(),
+    userId: ownerId,
+    task: "Prepare a code change that needs a tool approval.",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      if (url.endsWith("/runs") && options.method === "POST") {
+        return new Response(JSON.stringify({ run_id: "run-approval", status: "started" }), { status: 202 });
+      }
+      if (url.endsWith("/runs/run-approval")) {
+        return new Response(JSON.stringify({ run_id: "run-approval", status: "awaiting_approval" }), { status: 200 });
+      }
+      throw new Error("unexpected Hermes endpoint");
+    }
+  });
+  assert.equal(result.state, "awaiting_approval");
+  assert.equal(result.runId, "run-approval");
+  assert.equal(requests.length, 2);
+});
+
+test("Hermes reports native run failures instead of treating them as successful text", async () => {
+  const result = await runHermesAgentTask({
+    env: configuredEnv(),
+    userId: ownerId,
+    task: "Run a bounded verification task.",
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/runs") && options.method === "POST") {
+        return new Response(JSON.stringify({ run_id: "run-failed", status: "started" }), { status: 202 });
+      }
+      if (url.endsWith("/runs/run-failed")) {
+        return new Response(JSON.stringify({ run_id: "run-failed", status: "failed", output: "internal details" }), { status: 200 });
+      }
+      throw new Error("unexpected Hermes endpoint");
+    }
+  });
+  assert.equal(result.state, "failed");
+  assert.equal(result.error.code, "HERMES_AGENT_RUN_FAILED");
+  assert.equal(JSON.stringify(result).includes("internal details"), false);
 });
