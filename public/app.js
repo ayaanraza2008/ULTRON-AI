@@ -110,6 +110,7 @@
   let preferredMemoryEnabled = true;
   let persistenceNoticeShown = false;
   let speechEpoch = 0;
+  let speechVoiceWaitController = null;
   let audioContext = null;
   let micStream = null;
   let analyser = null;
@@ -669,39 +670,11 @@
   }
 
   function getAvailableSpeechVoices() {
-    try {
-      const voices = window.speechSynthesis?.getVoices?.();
-      return Array.isArray(voices) ? voices : [];
-    } catch {
-      return [];
-    }
+    return window.ULTRONSpeechVoices?.getAvailableSpeechVoices?.(window.speechSynthesis) || [];
   }
 
   function chooseSpeechVoice(language) {
-    const voices = getAvailableSpeechVoices();
-    if (!voices.length) return null;
-    const wanted = String(language || "en-IN").toLowerCase();
-    const base = wanted.split("-")[0];
-    const preferredLocale = base === "hi" ? "hi-in" : "en-in";
-    const maleVoiceName = /\b(prabhat|ravi|madhur|hemant|david|mark|guy|daniel|alex|james|thomas|aaron|ryan|matthew|male)\b/i;
-    const femaleVoiceName = /\b(zira|samantha|victoria|karen|hazel|heera|lekha|swara|kavya|pallavi|priya|neerja|reena|female|woman)\b/i;
-    const naturalVoiceName = /natural|neural|online|enhanced|premium/i;
-    const scoreVoice = (voice) => {
-      const lang = String(voice.lang || "").toLowerCase().replaceAll("_", "-");
-      let score = 0;
-      if (lang === preferredLocale) score += 120;
-      else if (lang.startsWith(base + "-")) score += 75;
-      else if (lang === base) score += 65;
-      else if (base === "en" && /^en-(gb|us|au|ca)/.test(lang)) score += 45;
-      else score -= 35;
-      if (naturalVoiceName.test(voice.name || "")) score += 35;
-      if (maleVoiceName.test(voice.name || "")) score += 45;
-      if (femaleVoiceName.test(voice.name || "")) score -= 70;
-      if (voice.localService === false) score += 12;
-      if (voice.default) score += 2;
-      return score;
-    };
-    return voices.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
+    return window.ULTRONSpeechVoices?.chooseSpeechVoice?.(getAvailableSpeechVoices(), language) || null;
   }
 
   function speechVoiceLabel(language) {
@@ -740,7 +713,7 @@
     return segments.map(segment => ({ ...segment, text: segment.text.trim() })).filter(segment => segment.text);
   }
 
-  function speakResponse(text, force = false) {
+  async function speakResponse(text, force = false) {
     const shouldSpeak = force || (mode === "text" && !mutedInTextMode);
     if (!shouldSpeak) return Promise.resolve(false);
     const synth = window.speechSynthesis;
@@ -753,7 +726,20 @@
     if (!segments.length) return Promise.resolve(false);
     speechEpoch += 1;
     const epoch = speechEpoch;
+    speechVoiceWaitController?.abort();
+    const voiceWaitController = new AbortController();
+    speechVoiceWaitController = voiceWaitController;
     try { synth.cancel(); } catch { /* continue with a fresh utterance */ }
+    try {
+      await window.ULTRONSpeechVoices?.waitForSpeechVoices?.(synth, {
+        timeoutMs: 1000,
+        signal: voiceWaitController.signal
+      });
+    } catch {
+      // Use the browser default if the voice list remains unavailable.
+    }
+    if (epoch !== speechEpoch) return false;
+    if (speechVoiceWaitController === voiceWaitController) speechVoiceWaitController = null;
     return new Promise((resolve) => {
       let pending = segments.length;
       let anySpoken = false;
@@ -944,8 +930,10 @@
     voiceActive = false;
     stopRecognition();
     releaseMicVisualizer();
-    if (window.speechSynthesis && window.speechSynthesis.speaking && mode !== "text") {
-      try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+    if (speechVoiceWaitController || (window.speechSynthesis && window.speechSynthesis.speaking && mode !== "text")) {
+      speechVoiceWaitController?.abort();
+      speechVoiceWaitController = null;
+      try { window.speechSynthesis?.cancel?.(); } catch { /* ignore */ }
       speechEpoch += 1;
     }
     renderMode();
@@ -1009,6 +997,8 @@
     ui.muteLabel.textContent = mutedInTextMode ? "UNMUTE VOICE" : "MUTE VOICE";
     ui.muteToggle.title = mutedInTextMode ? "Allow ULTRON to speak in Text Mode" : "Mute spoken replies in Text Mode";
     if (mutedInTextMode && window.speechSynthesis) {
+      speechVoiceWaitController?.abort();
+      speechVoiceWaitController = null;
       try { window.speechSynthesis.cancel(); } catch { /* no active utterance */ }
       speechEpoch += 1;
       if (coreState === "speaking") setCoreState("idle");
