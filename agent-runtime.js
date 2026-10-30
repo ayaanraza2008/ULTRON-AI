@@ -655,10 +655,10 @@ const SAFE_PREPARATION_TOOLS = new Set([
 
 function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   const normalizedRequest = typeof requestText === "string" ? requestText.toLowerCase() : "";
-  const explicitHermesRunIntent = /\\bhermes\\b/.test(normalizedRequest) &&
-    /\\b(start|launch|run|delegate|execute|background|submit)\\b/.test(normalizedRequest);
-  const explicitHermesStopIntent = /\\b(stop|cancel|interrupt)\\b/.test(normalizedRequest) &&
-    !/\\b(?:do not|don't|never)\\s+(?:stop|cancel|interrupt)\\b/.test(normalizedRequest);
+  const explicitHermesRunIntent = /\bhermes\b/.test(normalizedRequest) &&
+    /\b(start|launch|run|delegate|execute|background|submit)\b/.test(normalizedRequest);
+  const explicitHermesStopIntent = /\b(stop|cancel|interrupt)\b/.test(normalizedRequest) &&
+    !/\b(?:do not|don't|never)\s+(?:stop|cancel|interrupt)\b/.test(normalizedRequest);
   if (name === "hermes_agent_start_run" && !explicitHermesRunIntent) {
     return {
       requiresConfirmation: true,
