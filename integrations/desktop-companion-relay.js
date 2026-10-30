@@ -194,5 +194,158 @@ export function createDesktopCompanionRelayRouter({
     }
   });
 
+  // Queue only a fixed, low-impact action for a recently online owned PC.
+  // The Windows client shows the exact action and requires a fresh local typed approval.
+  const allowedTargets = {
+    launch_application: new Set(["notepad", "explorer", "calculator"]),
+    open_known_folder: new Set(["desktop", "documents", "downloads"])
+  };
+  router.post("/desktop-companion/devices/:id/actions", requireSupabaseUser, async (req, res) => {
+    const recordId = cleanString(req.params.id, 64);
+    const actionName = req.body?.action;
+    const actionTarget = req.body?.target;
+    const keys = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+      ? Object.keys(req.body).sort().join(",") : "";
+    const userId = typeof req.supabaseUser?.id === "string" ? req.supabaseUser.id : "";
+    if (!UUID_RE.test(recordId) || !UUID_RE.test(userId) ||
+        keys !== "action,target" ||
+        !Object.hasOwn(allowedTargets, actionName) ||
+        !allowedTargets[actionName].has(actionTarget)) {
+      return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION", message: "Choose one fixed application or standard folder action." } });
+    }
+    try {
+      const rows = await supabaseRest(
+        req,
+        "desktop_companion_devices",
+        "GET",
+        "?select=id,device_id,device_name,platform,last_seen_at,revoked_at&id=eq." + encodeURIComponent(recordId) + "&limit=1"
+      );
+      const device = Array.isArray(rows) ? rows[0] : null;
+      if (!device || device.revoked_at != null || device.platform !== "windows") {
+        return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "The active Windows device was not found for this account." } });
+      }
+      const lastSeen = typeof device.last_seen_at === "string" ? Date.parse(device.last_seen_at) : NaN;
+      const age = now() - lastSeen;
+      if (!Number.isFinite(lastSeen) || age < -30_000 || age > ONLINE_WINDOW_MS) {
+        return res.status(409).json({ error: { code: "DEVICE_OFFLINE", message: "The Windows companion must be online before it can receive a local action request." } });
+      }
+
+      const expiresAt = new Date(now() + 120_000).toISOString();
+      const inserted = await supabaseRest(
+        req,
+        "desktop_companion_actions",
+        "POST",
+        "?select=id,status,expires_at",
+        {
+          user_id: userId,
+          device_record_id: recordId,
+          device_id: device.device_id,
+          action_name: actionName,
+          action_target: actionTarget,
+          expires_at: expiresAt
+        },
+        "return=representation"
+      );
+      const action = Array.isArray(inserted) ? inserted[0] : inserted;
+      if (!action?.id) {
+        throw Object.assign(new Error("The local action request was not stored."), { code: "DESKTOP_ACTION_INSERT_FAILED", status: 502 });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(201).json({
+        actionId: cleanString(action.id, 64),
+        status: "pending",
+        action: actionName,
+        target: actionTarget,
+        expiresAt: action.expires_at || expiresAt,
+        requiresLocalApproval: true,
+        notice: "Queued only. The Windows companion must display this exact request and receive local interactive approval before doing anything."
+      });
+    } catch (error) {
+      logger.warn?.("Desktop companion local action could not be queued", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_QUEUE_FAILED", "Could not queue the local desktop action.");
+    }
+  });
+
+  // A paired Windows client can claim at most one pending request. The SQL RPC
+  // atomically claims it and returns only the fixed action enum and target.
+  router.post("/desktop-companion/actions/next", async (req, res) => {
+    const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
+    const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
+    const deviceId = cleanString(req.body?.deviceId, 64);
+    if (!match || !UUID_RE.test(deviceId) ||
+        Object.keys(req.body || {}).sort().join(",") !== "deviceId") {
+      return res.status(401).json({ error: { code: "DEVICE_AUTH_REQUIRED", message: "A valid paired-device token and identity are required." } });
+    }
+    try {
+      const result = await privilegedSupabaseRpc("claim_desktop_companion_action", {
+        p_token_hash: sha256(match[1]),
+        p_device_id: deviceId
+      });
+      const action = Array.isArray(result) ? result[0] : result;
+      if (!action?.action_id) {
+        res.setHeader("Cache-Control", "no-store");
+        return res.json({ action: null });
+      }
+      const name = action.action_name;
+      const target = action.action_target;
+      if (!UUID_RE.test(String(action.action_id)) ||
+          !Object.hasOwn(allowedTargets, name) || !allowedTargets[name].has(target) ||
+          typeof action.expires_at !== "string" || !Number.isFinite(Date.parse(action.expires_at))) {
+        logger.warn?.("Desktop companion claimed action failed protocol validation");
+        return res.status(502).json({ error: { code: "DESKTOP_ACTION_PROTOCOL_MISMATCH", message: "The queued action was not in the supported fixed-action format." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({
+        action: {
+          id: action.action_id,
+          name,
+          target,
+          expiresAt: action.expires_at,
+          requiresLocalApproval: true
+        }
+      });
+    } catch (error) {
+      logger.warn?.("Desktop companion action claim failed", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_CLAIM_FAILED", "Could not retrieve a local action request.");
+    }
+  });
+
+  router.post("/desktop-companion/actions/:id/complete", async (req, res) => {
+    const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
+    const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
+    const actionId = cleanString(req.params.id, 64);
+    const deviceId = cleanString(req.body?.deviceId, 64);
+    const status = req.body?.status;
+    const resultCode = req.body?.resultCode;
+    const keys = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+      ? Object.keys(req.body).sort().join(",") : "";
+    const allowedResults = new Set(["ACTION_COMPLETED", "USER_DENIED", "LOCAL_APPROVAL_REQUIRED", "ACTION_EXPIRED", "ACTION_FAILED"]);
+    const validPair = status === "completed" && resultCode === "ACTION_COMPLETED" ||
+      status === "denied" && ["USER_DENIED", "LOCAL_APPROVAL_REQUIRED"].includes(resultCode) ||
+      status === "failed" && resultCode === "ACTION_FAILED" ||
+      status === "expired" && resultCode === "ACTION_EXPIRED";
+    if (!match || !UUID_RE.test(actionId) || !UUID_RE.test(deviceId) ||
+        keys !== "deviceId,resultCode,status" || !allowedResults.has(resultCode) || !validPair) {
+      return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_RESULT", message: "Provide a valid action ID, device identity, and supported outcome." } });
+    }
+    try {
+      const accepted = await privilegedSupabaseRpc("complete_desktop_companion_action", {
+        p_token_hash: sha256(match[1]),
+        p_device_id: deviceId,
+        p_action_id: actionId,
+        p_status: status,
+        p_result_code: resultCode
+      });
+      if (accepted !== true) {
+        return res.status(409).json({ error: { code: "DESKTOP_ACTION_STALE_OR_UNAUTHORIZED", message: "The action is stale, already resolved, or not owned by this device." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ accepted: true, actionId, status });
+    } catch (error) {
+      logger.warn?.("Desktop companion action completion failed", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_COMPLETE_FAILED", "Could not record the local action outcome.");
+    }
+  });
+
   return router;
 }
