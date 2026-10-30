@@ -3,7 +3,7 @@
 **Snapshot under review:** 2026-10-30  
 **Base candidate:** `integration/ultron-cross-sector-current-main-20261029`  
 **Initial CI evidence commit:** `75089c38baf61d47d99daba3f23b2e76b3973826`  
-**Matrix review branch base:** `75711594340fef6c01ed6890b3024faf0a38ac88`  
+**Matrix review branch base:** `cd9b828a14dc32bc791d8225eee3549aa6c04c1f`  
 **Base PR:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **This document's rule:** source presence, a green mock test, configuration, or a successful build is not proof of live behavior.
 
@@ -38,15 +38,17 @@ The one skipped Node test remains the explicitly opt-in live two-account Supabas
 
 ## External dependency risk: pinned World Intelligence source
 
-The separate `.build-gods-eye-view` checkout is pinned to upstream commit `7be5937fc3e3b10cdfa8d3f833536167268768ad`. Its own `npm audit` reports **5 high-severity vulnerabilities** even though its build and ULTRON bridge injection pass. The report names these affected packages and states `fixAvailable: true` for each:
+The separate `.build-gods-eye-view` checkout is pinned to upstream commit `7be5937fc3e3b10cdfa8d3f833536167268768ad`. Its initial `npm ci` reported **5 high-severity vulnerabilities** across `chromium-bidi`, `puppeteer`, `puppeteer-core`, `vite`, and `zod`. The current workflow then runs:
 
-- `chromium-bidi`
-- `puppeteer`
-- `puppeteer-core`
-- `vite` (the report includes Windows editor-command and filesystem-path advisories, among others)
-- `zod` (the report includes an oversized constrained-collection memory-exhaustion advisory)
+```sh
+npm audit fix --ignore-scripts --audit-level=high
+npm audit --audit-level=high
+npm run build
+```
 
-These findings are isolated to the separately cloned/pinned World Intelligence dependency tree; they are **not** the ULTRON application dependency audit, which reported zero vulnerabilities in the same CI run. Do not silently suppress this upstream audit or apply blind dependency upgrades. Before release, review the upstream fixed versions/lockfile compatibility and either update the pinned upstream revision or apply a reviewed, reproducible dependency override, then rerun the complete World Intelligence build and audit. Treat this as an outstanding supply-chain blocker for that optional visualization component.
+In [candidate CI run 41079498952](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41079498952), the post-fix audit reported **0 vulnerabilities** and the World Intelligence build plus ULTRON bridge verification passed. The main ULTRON repository install/runtime audits also reported 0 vulnerabilities in that run.
+
+**Remaining issue: reproducibility.** `npm audit fix` changes the cloned upstream dependency tree during CI, but the resulting lockfile/resolutions are not committed. Thus CI has evidence that compatible fixes were found and that this particular post-fix tree builds, but not a repository-pinned, reproducible dependency resolution. Release acceptance requires either (a) an updated pinned upstream revision containing a reviewed fixed lockfile, or (b) an explicit, reviewed and version-pinned dependency override/patch committed with ULTRON. Keep install scripts disabled for the audit-fix step and rerun build, audit and bridge tests after making the resolution deterministic. Do not claim the World Intelligence supply chain is fully closed until this is done.
 
 ## Windows local companion CI follow-up
 
