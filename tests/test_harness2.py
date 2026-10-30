@@ -14,6 +14,53 @@ class Harness2Tests(unittest.TestCase):
         parts = harness2.load_components(self.root / ".harness2" / "harness")
         self.assertEqual(set(parts), set(harness2.COMPONENTS))
         with self.assertRaises(harness2.Harness2Error): harness2.setup(self.root)
+    def test_resume_reuses_saved_candidate_after_interrupted_round(self):
+        workspace = self.root.resolve()
+        config = harness2.read_json(workspace / ".harness2" / "config.json")
+        benchmark = harness2.load_benchmark("smoke")
+        import datetime as dt, uuid, shutil
+        run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
+        root = harness2.run_path(workspace, run_id)
+        root.mkdir(parents=True)
+        shutil.copytree(workspace / config["harness_path"], root / "baseline-harness")
+        harness2.atomic_json(root / "benchmark.json", benchmark)
+
+        executor = harness2.Executor("demo", None, 60)
+        baseline = harness2.candidate_dir(root, "baseline")
+        baseline.mkdir(parents=True)
+        shutil.copytree(root / "baseline-harness", baseline / "harness")
+        baseline_result = harness2.evaluate(benchmark, baseline / "harness", executor)
+        harness2.atomic_json(baseline / "result.json", baseline_result)
+
+        candidate_id = "r01-c01"
+        candidate = harness2.candidate_dir(root, candidate_id)
+        candidate.mkdir(parents=True)
+        shutil.copytree(baseline / "harness", candidate / "harness")
+        harness2.apply_updates(candidate / "harness", {
+            "system_prompt": "# Include Goal in the plan\n"
+        }, {"system_prompt"})
+        candidate_result = harness2.evaluate(benchmark, candidate / "harness", executor)
+        candidate_result.update({"candidate_id": candidate_id, "round": 1, "changed_components": ["system_prompt"]})
+        harness2.atomic_json(candidate / "result.json", candidate_result)
+
+        # Simulate a crash after the result file was atomically saved but before
+        # the run checkpoint learned about this candidate.
+        state = {
+            "run_id": run_id, "status": "running", "benchmark": "smoke",
+            "executor": "demo", "model": None, "mode": "sequential",
+            "iterations": 1, "parallelism": 1, "next_round": 0,
+            "candidate_ids": ["baseline"], "best_candidate": "baseline",
+            "best_score": baseline_result["score"],
+        }
+        harness2.atomic_json(root / "run.json", state)
+        with patch.object(harness2.Executor, "refine", side_effect=AssertionError("saved candidate should be reused")):
+            harness2.execute(root, state, 60)
+
+        saved = harness2.read_json(root / "run.json")
+        self.assertIn(candidate_id, saved["candidate_ids"])
+        self.assertEqual(saved["best_candidate"], candidate_id)
+        self.assertEqual(saved["status"], "completed")
+
     def test_demo_sequential_refinement_and_report(self):
         args = type("Args", (), {"workspace":str(self.root),"benchmark":"smoke","benchmark_file":None,"executor":"demo","mode":"sequential","iterations":3,"parallelism":2,"timeout":60,"model":None})()
         workspace = self.root.resolve()
@@ -62,6 +109,27 @@ class Harness2Tests(unittest.TestCase):
             path = Path(temp) / "bad.json"
             path.write_text(json.dumps({"tasks":[{"id":"same","prompt":"one"},{"id":"same","prompt":"two"}]}))
             with self.assertRaises(harness2.Harness2Error): harness2.load_benchmark("custom", str(path))
+
+    def test_benchmark_rejects_unknown_and_oversized_criteria(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "bad-criteria.json"
+            path.write_text(json.dumps({"tasks":[{"id":"one","prompt":"test","criteria":{"regex":"unsafe"}}]}))
+            with self.assertRaisesRegex(harness2.Harness2Error, "unsupported fields"):
+                harness2.load_benchmark("custom", str(path))
+            path.write_text(json.dumps({"tasks":[{"id":"one","prompt":"test","criteria":{"all_contains":["x" * 513]}}]}))
+            with self.assertRaisesRegex(harness2.Harness2Error, "Invalid all_contains"):
+                harness2.load_benchmark("custom", str(path))
+
+    def test_score_rejects_duplicate_and_unknown_answer_ids(self):
+        benchmark = {"tasks":[{"id":"one","prompt":"test","criteria":{"all_contains":["yes"]}}]}
+        with self.assertRaisesRegex(harness2.Harness2Error, "Duplicate"):
+            harness2.score(benchmark, [
+                {"task_id":"one","answer":"yes"},
+                {"task_id":"one","answer":"no"},
+            ])
+        with self.assertRaisesRegex(harness2.Harness2Error, "unknown task"):
+            harness2.score(benchmark, [{"task_id":"not-in-benchmark","answer":"yes"}])
+        self.assertEqual(harness2.score(benchmark, [])[ "score" ], 0.0)
     def test_cli_setup_run_judge_report_and_resume(self):
         script = Path(__file__).resolve().parents[1] / "tools" / "harness2" / "harness2.py"
         workspace = self.root / "cli-workspace"
@@ -95,7 +163,7 @@ class Harness2Tests(unittest.TestCase):
     def test_codex_executor_uses_readonly_ephemeral_cli(self):
         stdout = json.dumps({"type":"item.completed","item":{"type":"agent_message","text":"hello"}})
         completed = subprocess.CompletedProcess([], 0, stdout, "")
-        with patch.object(harness2.subprocess, "run", return_value=completed) as mocked:
+        with patch.object(harness2, "run_bounded", return_value=completed) as mocked:
             self.assertEqual(harness2.Executor("codex", None, 30).ask("prompt"), "hello")
         command = mocked.call_args.args[0]
         for flag in ("exec", "--json", "--sandbox", "read-only", "--ask-for-approval",
@@ -103,7 +171,8 @@ class Harness2Tests(unittest.TestCase):
                      "--skip-git-repo-check"):
             self.assertIn(flag, command)
         self.assertEqual(command[-1], "-")
-        self.assertEqual(mocked.call_args.kwargs["input"], "prompt")
+        self.assertEqual(mocked.call_args.kwargs["input_text"], "prompt")
+        self.assertEqual(mocked.call_args.kwargs["timeout"], 30)
         self.assertNotEqual(Path(mocked.call_args.kwargs["cwd"]).resolve(), self.root.resolve())
 
     def test_opencode_executor_uses_temporary_deny_by_default_agent(self):
@@ -118,14 +187,15 @@ class Harness2Tests(unittest.TestCase):
             agent = Path(kwargs["env"]["OPENCODE_CONFIG_DIR"]) / "agents" / "harness2-readonly.md"
             captured["agent"] = agent.read_text()
             return completed
-        with patch.object(harness2.subprocess, "run", side_effect=fake_run):
+        with patch.object(harness2, "run_bounded", side_effect=fake_run):
             self.assertEqual(harness2.Executor("opencode", None, 30).ask("prompt"), "hello")
         command = captured["command"]
         for flag in ("--pure", "run", "--agent", "harness2-readonly", "--format", "json", "--dir"):
             self.assertIn(flag, command)
-        self.assertEqual(captured["config"]["permission"]["*"], "deny")
-        self.assertEqual(captured["config"]["permission"]["read"], "allow")
+        self.assertEqual(captured["config"]["permission"], {"*": "deny"})
         self.assertIn("mode: primary", captured["agent"])
+        self.assertIn("No-tool Harness2 evaluator", captured["agent"])
+        self.assertNotIn("read: allow", captured["agent"])
         self.assertEqual(captured["env"]["OPENCODE_DISABLE_DEFAULT_PLUGINS"], "1")
         self.assertNotEqual(captured["cwd"], self.root.resolve())
 
@@ -134,5 +204,41 @@ class Harness2Tests(unittest.TestCase):
         codex = json.dumps({"type":"item.completed","item":{"type":"agent_message","text":"world"}})
         self.assertEqual(harness2.parse_jsonl(opencode,"opencode"),"hello")
         self.assertEqual(harness2.parse_jsonl(codex,"codex"),"world")
+
+    def test_bounded_runner_captures_small_output(self):
+        command = [sys.executable, "-c", "import sys; print('ok'); print('notice', file=sys.stderr)"]
+        result = harness2.run_bounded(command, cwd=self.root, timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("ok", result.stdout)
+        self.assertIn("notice", result.stderr)
+
+    def test_bounded_runner_terminates_output_flood(self):
+        command = [sys.executable, "-c", "import sys; sys.stdout.write('x' * (1024 * 1024 + 100000)); sys.stdout.flush()"]
+        with self.assertRaisesRegex(harness2.Harness2Error, "stdout exceeded its output limit"):
+            harness2.run_bounded(command, cwd=self.root, timeout=10)
+
+    def test_atomic_writes_ignore_planted_temporary_symlinks(self):
+        outside = self.root / "outside.txt"
+        outside.write_text("keep me", encoding="utf-8")
+
+        config = self.root / ".harness2" / "config.json"
+        planted_json_tmp = config.with_suffix(config.suffix + ".tmp")
+        planted_json_tmp.symlink_to(outside)
+        harness2.atomic_json(config, {"safe": True})
+        self.assertEqual(outside.read_text(encoding="utf-8"), "keep me")
+        self.assertTrue(planted_json_tmp.is_symlink())
+        self.assertEqual(harness2.read_json(config), {"safe": True})
+
+        component = self.root / ".harness2" / "harness" / "system_prompt.md"
+        planted_component_tmp = component.with_suffix(component.suffix + ".tmp")
+        planted_component_tmp.symlink_to(outside)
+        harness2.apply_updates(
+            self.root / ".harness2" / "harness",
+            {"system_prompt": "# Updated safely\n"},
+            {"system_prompt"},
+        )
+        self.assertEqual(outside.read_text(encoding="utf-8"), "keep me")
+        self.assertTrue(planted_component_tmp.is_symlink())
+        self.assertEqual(component.read_text(encoding="utf-8"), "# Updated safely\n")
 
 if __name__ == "__main__": unittest.main()
