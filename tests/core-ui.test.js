@@ -161,6 +161,34 @@ test("the proxy serves local assets and does not forward unknown public paths", 
   assert.equal(page.status, 200);
   assert.match(page.headers.get("content-type") || "", /text\/html/);
   assert.match(await page.text(), /ULTRON AI — Living Core/);
+  assert.equal(page.headers.get("cache-control"), "no-store");
+
+  const manifestResponse = await fetch(base + "/manifest.webmanifest");
+  assert.equal(manifestResponse.status, 200);
+  assert.match(manifestResponse.headers.get("content-type") || "", /application\\/manifest\\+json/);
+  assert.equal(manifestResponse.headers.get("cache-control"), "no-cache");
+  assert.equal((await manifestResponse.json()).icons.length, 2);
+
+  const workerResponse = await fetch(base + "/service-worker.js");
+  assert.equal(workerResponse.status, 200);
+  assert.match(workerResponse.headers.get("content-type") || "", /javascript/);
+  assert.equal(workerResponse.headers.get("cache-control"), "no-cache");
+  assert.match(await workerResponse.text(), /const SHELL_PATHS = new Set/);
+
+  for (const [path, expectedSize] of [
+    ["/icons/icon-180.png", 180],
+    ["/icons/icon-192.png", 192],
+    ["/icons/icon-512.png", 512]
+  ]) {
+    const icon = await fetch(base + path);
+    assert.equal(icon.status, 200);
+    assert.match(icon.headers.get("content-type") || "", /image\\/png/);
+    assert.equal(icon.headers.get("cache-control"), "public, max-age=300");
+    const png = Buffer.from(await icon.arrayBuffer());
+    assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(png.readUInt32BE(16), expectedSize);
+    assert.equal(png.readUInt32BE(20), expectedSize);
+  }
   assert.equal(calls.length, 0);
 
   const unknown = await fetch(base + "/admin-secret");
