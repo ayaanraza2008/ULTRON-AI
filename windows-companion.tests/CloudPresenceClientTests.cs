@@ -118,7 +118,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+            $$"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
         string? nextAuthorization = null;
         string? resultAuthorization = null;
         string? nextBody = null;
@@ -196,7 +196,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+            $$"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
         var commandId = "99999999-9999-4999-8999-999999999999";
         string? resultBody = null;
         var executionCalls = 0;
@@ -424,7 +424,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $$"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
         using var http = new HttpClient(new StubHttpHandler((_, _) =>
             Task.FromResult(JsonResponse(HttpStatusCode.Unauthorized, """{"error":{"code":"DEVICE_TOKEN_REVOKED_OR_UNKNOWN"}}"""))));
         using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
@@ -438,7 +438,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $$"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
         HttpRequestMessage? captured = null;
         using var http = new HttpClient(new StubHttpHandler((request, _) =>
         {
