@@ -12,12 +12,14 @@ ULTRON's `integrations/hermes-agent.js` currently provides:
 - Bounded, authenticated `POST /v1/chat/completions` task delegation.
 - Capability-checked Runs API submission (`POST /v1/runs`), status polling (`GET /v1/runs/{run_id}`) and cancellation requests (`POST /v1/runs/{run_id}/stop`), using a stable per-owner memory/session key, idempotency key, timeouts and bounded responses.
 - Read-only discovery of actual enabled Hermes skills (`GET /v1/skills`) and toolsets (`GET /v1/toolsets`), with bounded output and owner checks.
+- Bounded SSE run-progress windows (`GET /v1/runs/{run_id}/events`); event parsing discards raw tool argument/result previews.
+- Exact pending-control resolution (`POST /v1/runs/{run_id}/approval`) with only `once` or `deny`, and a mandatory matching run ID, prompt ID and execution generation from the original user request.
 - Remote HTTPS-only URL validation, DNS-pinned network requests and no redirects.
 - Explicit vision opt-in: vision is off unless `HERMES_AGENT_SUPPORTS_VISION=true`.
 
 The capability check now understands the current nested `features` document and retains compatibility with the older flat flags. It can report whether the server advertises Chat Completions, Responses, run submission/status, SSE run events and run stopping.
 
-Capability discovery is not the same as full feature integration. ULTRON can now start a Hermes run, retrieve its status/output, and request that it stop. It does not yet forward Hermes SSE progress events, use the Responses API, or integrate the human approval decision lifecycle. The capability endpoint's `run_approval` flag is detected but ULTRON does not approve runs on the model's behalf.
+Capability discovery is not the same as full feature integration. ULTRON can start a Hermes run, retrieve its status/output, request that it stop, read a bounded window of SSE progress events, and resolve one exact pending approval only after the original user explicitly identifies the run, prompt and generation plus chooses `once` or `deny`. ULTRON never auto-approves or selects an "always" permission. The Responses API and a continuously attached frontend event stream are still not integrated.
 
 ## Install and verify Hermes on Windows
 
@@ -103,9 +105,11 @@ That command submits a fixed, non-destructive smoke prompt, polls the returned r
 4. Submit one harmless, read-only task from the authenticated ULTRON agent flow.
 5. Start one harmless long-running task; retain the returned `run_id`, poll status to a terminal state, and test stop/cancellation in a disposable workspace.
 6. Inspect the real Hermes skill and toolset inventories from ULTRON and verify disabled/unconfigured tools are reported honestly.
-7. Verify a different ULTRON user is denied without any upstream Hermes request.
-8. Test vision separately with a known image challenge before setting `HERMES_AGENT_SUPPORTS_VISION=true`.
-9. Implement and test SSE progress forwarding and human approval controls before exposing Hermes' approval endpoint to the UI.
+7. Inspect progress with a bounded event query; confirm tool argument/result previews are not copied into the UI or model context.
+8. For an actual pending tool approval, read the exact `run_id`, `prompt_id` and `execution_generation` from status. Only after a human decision, issue a request naming all three identifiers and either `once` or `deny`; never use a model-generated decision as consent.
+9. Verify a different ULTRON user is denied without any upstream Hermes request.
+10. Test vision separately with a known image challenge before setting `HERMES_AGENT_SUPPORTS_VISION=true`.
+11. Integrate a continuously attached frontend event stream and Responses API only after separate bounded, reconnect and UI approval tests.
 
 Record mocked tests, live API checks and physical-device checks separately. A green CI run is not proof that Hermes is installed, that provider credentials work, or that a task ran on the target PC.
 
@@ -113,4 +117,4 @@ Record mocked tests, live API checks and physical-device checks separately. A gr
 
 PR [#406](https://github.com/ayaanraza2008/ULTRON-AI/pull/406) adds current capability-schema parsing, legacy compatibility and the fail-closed vision default. CI run [41098869935](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41098869935) passed: 837 Node tests (836 passed, 0 failed, 1 skipped) and all four CI jobs. The skipped test is the live two-account Supabase isolation test.
 
-**Still unverified:** a reachable Hermes API server, real text/task delegation, semantic image understanding, target-PC sandbox behavior, cloud-to-Hermes networking, SSE progress delivery and the human approval lifecycle. Run submission/status/stop are source-tested but have not yet been exercised against a live Hermes server. PR #406 is a draft and has not been merged. No production settings, secrets, databases or deployments were changed by this increment.
+**Still unverified:** a reachable Hermes API server, real text/task delegation, semantic image understanding, target-PC sandbox behavior, cloud-to-Hermes networking, real SSE event delivery and live generation-bound approval/deny behavior. The code parses bounded events and implements exact-identity approval requests, but neither has been exercised against a live Hermes server or a real pending tool prompt. The continuously attached frontend event stream and Responses API remain incomplete. PR #406 is a draft and has not been merged. No production settings, secrets, databases or deployments were changed by this increment.
