@@ -322,7 +322,7 @@ class CompanionServerTests(unittest.TestCase):
             self.assertEqual(action["name"], "launch_application")
             self.assertEqual(action["target"], "notepad")
             self.assertEqual(seen["route"], "/api/desktop-companion/actions/next")
-            self.assertEqual(seen["payload"], {"deviceId": action_id if False else _load_device_credentials(Path(root) / "companion")["deviceId"]})
+            self.assertEqual(seen["payload"], {"deviceId": _load_device_credentials(Path(root) / "companion")["deviceId"]})
             self.assertEqual(seen["bearer_token"], "T" * 43)
 
     def test_poll_companion_action_rejects_anything_outside_the_allowlist(self):
