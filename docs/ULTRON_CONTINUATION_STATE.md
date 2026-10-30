@@ -1,105 +1,113 @@
 # ULTRON AI — Continuation State
 
 **Checkpoint date:** 2026-10-30  
-**Working candidate:** `integration/ultron-cross-sector-current-main-20261029`  
-**Latest verified PR #400 candidate head:** `b1eff10a4ebcd59ad2ce1ecd448b05e9277428f7`  
-**Acceptance matrix refresh commit:** `e9a388bc99d17f775bbbf2ebd20c307a74ee049a`  
+**Working candidate branch:** `integration/ultron-cross-sector-current-main-20261029`  
+**Latest source/workflow head before documentation refresh:** `0fd8c84c3198674a4ec04357b2b593c6b3821b6a`  
+**Latest acceptance-matrix commit:** `11fe766899129ff6ce2ac6b811a1b2d550688685`  
 **Pull request:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
-**Default branch:** `main`  
-**Operating rule:** resume from this remote Git state; preserve all existing changes; do not deploy, modify production settings, apply production migrations, spend paid quota, or touch PHANTOM/NOX.
+**Default branch:** `main`
 
-## Repository access and state
+## Non-negotiable operating rules
 
-- The connected GitHub repository is `ayaanraza2008/ULTRON-AI`; default branch is `main`.
-- The observed `main` head at checkpoint start was `6b7f09d97508fc2be2085695d862a921e1ae8487` (2026-10-29, task-aware Build Your Own X guidance).
-- There is no local repository checkout available in this execution environment. GitHub remote branches, commits, files and Actions runs were inspected through the connected repository integration. Local uncommitted/unstaged files on the user's own computer therefore remain unknown; they were not accessed or overwritten.
-- PR #400 is open and unmerged. Keep it as a reviewable integration candidate; do not merge automatically.
-- `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md` was absent on `main` and the PR #400 branch at the beginning of this work. It was copied from the existing PR #401 review matrix, refreshed with current PR #400 CI evidence plus the separate PR #405 local-shortcut increment, and is tracked on the PR #400 branch.
-- `docs/ULTRON_CONTINUATION_STATE.md` is tracked on the PR #400 branch as the durable remote resume point.
+Resume from the remote Git state below. Preserve all existing branches and work. Do not merge or force-push PRs, deploy, alter Render production settings/secrets, apply migrations to production, run account-mutating smoke tests, consume paid API quota, or modify PHANTOM AI / NOX AI. Ask the owner only for genuine credential, account authorization, production, paid-resource, destructive or explicit security/privacy dependencies.
 
-## Last completed engineering task
+## Repository access and actual working-tree scope
 
-The latest PR #400 CI run before these documentation-only checkpoint commits failed in three desktop pairing regression tests. Root causes were confirmed from GitHub Actions logs:
+- Repository: `ayaanraza2008/ULTRON-AI`; default branch: `main`.
+- Initial observed `main` head: `6b7f09d97508fc2be2085695d862a921e1ae8487` (2026-10-29).
+- Work in this session used the GitHub repository connector. There is **no local clone/checkout** in this execution environment. The user's own local working tree, staged/unstaged changes and untracked files were not visible and were not changed. Do not claim that local Git status is clean.
+- PR #400 remains an open, unmerged candidate. All current changes are on its candidate branch; no PR merge/rebase/force-push occurred.
+- The acceptance matrix is `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`; this continuation file is the durable resume pointer. Re-read both and inspect the actual remote branch head before every new implementation batch.
 
-1. A migration regression test used an over-escaped whitespace regex and incorrectly indexed a string.
-2. A relay test serialized an Express request object containing circular references.
-3. The authenticated Supabase insert path attempted to parse a successful empty PostgREST `return=minimal` response and returned HTTP 502.
+## Verified prior baseline (last completed end-to-end CI before current maintenance batch)
 
-The following fixes were committed on the same PR #400 branch:
+Candidate head `5d90eef3c3ca88380e8bfbfe336648ea353f824a` passed:
+- [ULTRON CI run 41099743848](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41099743848): all four jobs green; **836 Node tests, 835 passed, 0 failed, 1 skipped**; **43 local-assistant Python tests passed**; both ULTRON npm audit invocations reported **0 vulnerabilities**; JavaScript syntax checks passed; disposable GitHub-hosted Ubuntu Docker sandbox smoke passed with an immutable Python image digest; pinned World Intelligence build and bridge injection passed.
+- [Windows Companion run 41099743853](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41099743853): .NET 8 Release build **0 warnings / 0 errors**, URL policy **3 valid and 20 invalid cases passed**, self-contained `win-x64` publish and artifact upload passed.
+- The single Node test skip is the opt-in live two-account Supabase Auth/conversation/message/memory isolation test. It requires dedicated disposable test identities and explicit write authorization. Do not count this as passed.
+- Docker smoke is GH-hosted Ubuntu evidence, not Docker Desktop validation on the user's Windows PC. Green CI does not mean live AI, Supabase, worker, physical device or production verification.
 
-| File | Change | Commit |
-|---|---|---|
-| `server.js` | Treat a successful empty `return=minimal` insert response as success; retain bounded JSON parsing for other responses. | `bcac39ff7d1393f6f3865c58e2c6d06526c0a055` |
-| `tests/desktop-companion-relay-migration.test.js` | Normalize SQL whitespace correctly and assert the service-role grant suffix without indexing the string. | `eb773dc4ae6a6773e57ff596fe79270804dc779a` |
-| `tests/desktop-companion-relay.test.js` | Avoid circular serialization by checking only safe adapter arguments, not the Express request object. | `9ddc50474efde5705572a7f52ae3f635fb8c89bc` |
+## Implemented code changes on the PR #400 candidate
 
-No SQL grant, RLS policy, RPC allowlist or production setting was broadened or changed for these test fixes.
+### 1. Desktop pairing relay CI regressions fixed
 
-## Verified test evidence
+Three errors from initial PR #400 CI [run 41093747376](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41093747376) were fixed:
+- `server.js`: accepts a successful empty PostgREST `return=minimal` write response without attempting to parse it as JSON (commit `bcac39ff7d1393f6f3865c58e2c6d06526c0a055`).
+- `tests/desktop-companion-relay-migration.test.js`: correct SQL whitespace normalization and service-role grant assertion (commit `eb773dc4ae6a6773e57ff596fe79270804dc779a`).
+- `tests/desktop-companion-relay.test.js`: inspect only adapter arguments, not the circular Express request object (commit `9ddc50474efde5705572a7f52ae3f635fb8c89bc`).
+- No SQL grants, RLS policies, service-role RPC allowlists or production settings were broadened.
 
-The exact code-fix head `9ddc50474efde5705572a7f52ae3f635fb8c89bc` passed:
+### 2. Companion persisted-identity hardening
 
-- [ULTRON CI run 41096891819](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41096891819): all four jobs passed — Node/Python tests and syntax checks, real Docker sandbox smoke, Windows local-assistant protocol tests, dependency audit, pinned World Intelligence build and bridge injection.
-- Node test suite: **836 total, 835 passed, 0 failed, 1 skipped**. The one skip is the explicitly opt-in live two-account Supabase Auth/conversation/message/memory isolation test; CI lacked dedicated disposable accounts and explicit write-confirmation settings.
-- Local assistant Python suite: **43 passed** on Ubuntu.
-- Windows local companion protocol suite: **24 passed**.
-- Both ULTRON dependency audit invocations reported **0 vulnerabilities**.
-- Real Docker sandbox smoke passed on a disposable GitHub-hosted Ubuntu runner using a digest-pinned image. This is not target-PC Docker Desktop verification.
-- [Windows Companion run 41096891978](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41096891978): .NET build succeeded with **0 warnings, 0 errors**; URL policy tests, self-contained x64 publish and artifact upload succeeded.
+- Current source `tools/local-assistant/ultron_local_assistant/companion.py` rejects symlinked identity paths and now also rejects Windows junctions/reparse points using `lstat().st_file_attributes` with a Python 3.10-compatible feature check. Relevant commits: `70810054af6efff5d50a470bb161b9495972991f` and `9ee1c90bb4402c97f69a4e79cfd7ca0492067fc3`.
+- `tools/local-assistant/tests/test_companion.py` tests malformed persisted UUIDs, symlinked identity files, and simulated junction/reparse metadata. Fixtures write actual newline characters (not literal backslash-n). The symlink test skips only where symlink creation is unavailable. Test update `19d761712384e4993000ac55d3671cc8dc3f5ed5`.
+- These tests were carried forward from stale PR #402 after comparing the delta; they are now directly on the PR #400 candidate.
+- These identity/reparse changes have **not yet been confirmed by a completed Actions run** on the exact current branch head. Do not mark them tested until Windows and Ubuntu jobs execute successfully.
 
-The checkpoint-document update initially produced head `6c0913ccc5bdfd3391382553b74a79221adc24df`; its own full ULTRON CI [run 41097677959](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41097677959) completed with all four jobs successful, and Windows Companion [run 41097677840](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41097677840) also completed successfully. The acceptance matrix was subsequently refreshed in commit `ea250aab5f6f05c48f10574bd36d46d64f8dee15`; check Actions again for that latest docs commit before reporting it tested.
+### 3. GitHub Actions Node 24 runtime modernization
 
-## Persistent acceptance matrix
+- `.github/workflows/ci.yml`: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-python@v7`; `package-manager-cache: false` for Node steps (no cache is required by this workflow). Commit `c1ce80c83aa49892dd2f2b1a9d75ace822289c8e`.
+- `.github/workflows/windows-companion.yml`: `actions/checkout@v7`, `actions/setup-dotnet@v6`, `actions/upload-artifact@v7`. Commit `fc2856eb04f8cfeeb723175730b8409a0faa58dc`.
+- This was prompted by the Node 20 deprecation warning in the previous Windows workflow log. Official releases checked: checkout v7, setup-node v7, setup-python v7, setup-dotnet v6, upload-artifact v7. The workflow action upgrades await fresh exact-head CI; do not claim the deprecation warning is resolved until the current log confirms it.
+- The prior workflow runs on source/test head `19d7617` were still queued at the last check: [ULTRON CI 41101512098](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41101512098), [Windows Companion 41101512199](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41101512199).
 
-See `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`.
+### 4. Reproducible World Intelligence dependency security lock
 
-The matrix deliberately does not treat source presence, mocked tests or a green CI run as proof of live behavior. The candidate now has source-tested one-time pairing/status-relay endpoints and a source-only database migration, but this does not mean remote Windows PC control is implemented or verified.
+- The PR #403 dependency-only delta was reviewed and forward-ported into current PR #400. The upstream source remains pinned to `bilawalsidhu/gods-eye-view` commit `7be5937fc3e3b10cdfa8d3f833536167268768ad`, package version `0.2.1`; the broad upstream source history was not imported.
+- Added `scripts/patch-world-intelligence-dependencies.mjs` (commit `b9441288fb0b0edf29cc23a682f492a2784db373`), `scripts/world-intelligence-dependency-lock-overrides.json` (`b28d44a276d4afea9989ce665bcb19c79ffd831f`), and `tests/world-intelligence-dependency-patch.test.js` (`1fd5840a6b8794e9edcdd9bf6a1ba115642fcafb`).
+- The patcher checks the project/version/lockfile version, base dependency declarations and expected old package versions; updates 15 reviewed lock entries, removes a vulnerable nested Zod entry, stages both files, creates exclusive backups and rolls back partial replacement. It fails closed on source drift.
+- Current `.github/workflows/ci.yml` applies the patch before `npm ci`, then audits with `npm audit --audit-level=moderate`. This removes the previous non-reproducible `npm audit fix` operation from the build.
+- Standalone PR #403 run [41085911433](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41085911433) passed its own patcher tests, `npm ci`, build/bridge and strict audit with **0 vulnerabilities**, but that is a stale PR branch and not proof that the forward-port on PR #400 works. The current forward-port needs its own exact-head CI.
 
-## Current blockers and acceptance gaps
+## PR #400 desktop pairing relay security review
 
-- **Live AI text inference and vision:** require a valid provider/model configuration and an authorized live smoke request. CI mocks do not prove real model access, quota or semantic image understanding.
-- **Supabase Auth and account isolation:** the two-account E2E test remains skipped pending two dedicated disposable test identities and explicit test-write configuration.
-- **Background worker:** live queue-to-terminal-state verification needs a running worker, test-user UUID, server-only service-role credential and explicit smoke authorization.
-- **Leaked-password protection:** Supabase Security Advisor previously reported the owner-controlled Auth setting disabled; this cannot be corrected safely from repository source and still needs owner action and recheck.
-- **Desktop companion:** source pairing/status relay and CI do not prove the migration has been applied, a real device can pair, or the physical Windows application has been installed. The relay has no remote command/control channel. Physical Windows pairing, microphone, wake-word and action-permission verification remain.
-- **Coding sandbox:** real Docker isolation passed on GitHub-hosted Linux; local Windows Docker Desktop/Engine verification is still required before enabling on the target host.
-- **Documents, study packs, notes and reminders:** new Supabase migrations are source-only until safely applied to an approved test project; two-account RLS, real browser flows and document upload/download/delete need live evidence.
-- **Optional external services and speech providers:** require per-service credentials, endpoint/model readiness, license review and safe live workflow checks.
-- **Browser/mobile quality and performance:** real browser interaction, keyboard/screen-reader accessibility, responsive layout, microphone/speaker quality and measured target-device resource tests are not established by source CI.
-- **Production release:** Render deployment/build quota and the canonical service revision remain separate release blockers. No deployment or production setting changes are authorized by this task.
+Source review found: API-level rate limiting; high-entropy single-use pairing codes; hashed device tokens; atomic expiry/consumption and device registration; narrowly named service-role RPC calls; owner-scoped device inventory/revocation; narrow migration grants/RLS; and no remote command/control endpoint. This is not live migration or pairing verification. The separate relay currently provides pairing/status/heartbeat only.
 
-## PR #405 review completed
+## Other open PRs and integration ancestry
 
-Open PR [#405 — safe local Windows desktop shortcuts](https://github.com/ayaanraza2008/ULTRON-AI/pull/405) adds fixed Notepad/Explorer/Calculator launches and Desktop/Documents/Downloads folder shortcuts to the local Python CLI only. Targets are allowlisted, subprocess uses `shell=False`, Windows-only gating is present, and a bounded local JSONL audit is written. A follow-up security fix requires `stdin.isatty()` for desktop approvals, rejects piped/non-interactive confirmation with exit code 2, and retains ordinary cancellation behavior for a user decline. Tests cover both blocked piped input and the interactive approval path. Exact head `94651272cc16f35c9c47ac10a42838529eae343a` passed all four jobs in [PR #405 run 41098732849](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41098732849): 823 Node tests (822 passed, 0 failed, 1 skipped), 47 local-assistant Python tests, 10 Windows companion tests and 18 Windows desktop-shortcut tests; both audits reported 0 vulnerabilities. Popen is mocked, so no actual application was launched. PR #405 is current against its direct base #401, but #401 is 45 commits behind #400; the stacked PR is therefore not ready for integration until the base is reconciled.
+Current comparison against declared bases at the time of review:
+- #401 acceptance matrix: 15 ahead / 45 behind, diverged; delta is the matrix file.
+- #402 persisted identity test: 5 ahead / 45 behind, diverged; delta is `tools/local-assistant/tests/test_companion.py`. Its useful tests have been forward-ported.
+- #403 World Intelligence security lock: 12 ahead / 45 behind, diverged; delta comprises workflow, patcher, lock overrides and tests. These have been forward-ported and adapted to current Node24 workflow.
+- #404 speech voice name scoring: 5 ahead / 45 behind, diverged; delta was only `tests/speech-voices.test.js` (source fix already exists on candidate at time reviewed).
+- #405 local Windows shortcuts: current against its direct base #401, but #401 is 45 behind current #400; therefore stacked PR #405 is not ready to merge into the current candidate without reconciling its base.
+- #406 Hermes: 8 ahead / 9 behind PR #400, diverged. Its latest tested head `62caadce1dadff1ed81af75fc247db8e1259d94d` passed [run 41099567731](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41099567731): 837 Node tests (836 pass, 0 fail, 1 skip), 43 Python tests, all four jobs, dependency audits clean. It reads documented nested `features` and legacy flat flags and disables vision unless explicitly enabled. HTTP is mocked; no live Hermes API/task was run.
+- No PR was merged, rebased, force-pushed or closed. Reconcile each branch deliberately and rerun tests before any merge; do not merge stale heads automatically.
 
+## Windows companion destination mismatch
 
-## PR #406 review completed
+- `windows-companion/Program.cs` currently defaults to `https://ultron-ai-zvd7.onrender.com/`.
+- Repository deployment inventory in `README.md` and `docs/ULTRON_CROSS_SECTOR_VERIFICATION.md` says `https://ultron-ai-core.onrender.com` in Render workspace `Ultron core` was live at main SHA `6b7f09d`, while `ultron-ai-zvd7.onrender.com` in `My Workspace` had ten attempts blocked by `pipeline_minutes_exhausted` as of 2026-10-29.
+- Public endpoint access was unavailable from this session. Render context has two workspaces, so the canonical destination must be confirmed before changing the companion default. No Render settings, secrets or deployment were changed.
 
-Open PR [#406 — detect current Hermes API capability schema](https://github.com/ayaanraza2008/ULTRON-AI/pull/406) is based on the PR #400 integration branch. Exact head `4e837f9bce5487539db75375c0f9e2672a528ceb` passed all four jobs in [run 41098869935](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41098869935): 837 Node tests (836 passed, 0 failed, 1 skipped) and both dependency audits reported 0 vulnerabilities. The adapter now parses the documented `features` object for Chat Completions, Responses, runs, run-event SSE and stop flags; supports legacy flat flags; and fails closed for vision unless `HERMES_AGENT_SUPPORTS_VISION=true`. Tests mock endpoint responses; there is no live Hermes API request or task execution. The feature object matches the current official [Hermes API Server capability docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server). Keep this PR open for review; do not merge automatically.
+## Remaining external/live acceptance blockers
 
-
-## Candidate security review and integration branch comparison
-
-The PR #400 desktop pairing relay was reviewed in source: the `/api` route is behind the global API rate limiter; pairing codes are high entropy and one-time; device tokens are stored/compared as hashes; expiry/consumption and device registration are atomic in the database function; service-role RPC calls are limited to the named pairing/heartbeat functions; device inventory and revocation are owner-scoped; there is no remote command/control endpoint. The migration retains narrow grants and RLS. This is source review, not live migration/pairing verification.
-
-PR #402's current compare against PR #400 is 5 commits ahead / 45 behind; its current base-to-head delta is only `tools/local-assistant/tests/test_companion.py`. Its two focused tests (malformed persisted UUID and symlinked identity file) have been copied into the current PR #400 candidate in commit `88cbcb8b9452322205385c2c8abd78d1fc2b7fe5`; the PR #400 CI for that head was queued, so the tests remain unverified pending run 41100872163.
-
-The current PR ancestry comparison is important for safe integration: #401, #402, #403 and #404 are each 45 commits behind/diverged from the current PR #400 base. Their base-to-head deltas are respectively one matrix file, one companion test file, four World Intelligence dependency/CI files, and one speech test file. PR #405 is current relative to #401 but inherits that stale base. PR #406 is 8 commits ahead / 9 behind #400 and diverged; its tested head `62caadce1dadff1ed81af75fc247db8e1259d94d` passed [run 41099567731](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41099567731): 837 Node tests (836 passed, 0 failed, 1 skipped), 43 Python tests and all four jobs. Its six-file change includes README/feature registry/guide additions plus adapter/tests. No PR has been merged, rebased, closed or force-pushed; do not merge stale heads automatically.
-
-The companion source fallback remains `https://ultron-ai-zvd7.onrender.com/`, while repository deployment inventory records `https://ultron-ai-core.onrender.com` in the `Ultron core` workspace as live at main SHA `6b7f09d`, and the former `My Workspace` service as blocked by Render pipeline minutes on 2026-10-29. Public endpoint access was unavailable from this session; workspace/canonical destination must be confirmed before changing the fallback. No Render settings or deployments were changed.
-
+- Live AI text/vision: needs authorized provider/model configuration and safe live request.
+- Supabase account isolation: two dedicated disposable user accounts and explicit test-write authorization; current one opt-in test remains skipped.
+- Background worker: disposable test user, worker runtime, service-role credential and explicit write smoke authorization.
+- Leaked-password protection: owner-controlled Supabase Auth setting and Security Advisor recheck.
+- Companion pairing: apply candidate migration only to approved test project, pair actual Windows PC, verify revoke/heartbeat/device cleanup; don't apply to production.
+- PC actions: PR #405 provides local manual-confirmation CLI shortcuts only; relay provides no remote command endpoint. Real Windows execution tests and all remote-control capability remain incomplete.
+- Coding sandbox: GitHub-hosted Linux Docker smoke passed; target Windows Docker Desktop must be validated before enabling on user host.
+- Hermes: reachable API/model, real text task, owner denial and vision need live test. Runs/Responses/SSE/cancel/approval lifecycle are not integrated.
+- Browser/mobile/accessibility/performance: target-device/browser end-to-end test and resource measurements.
+- Optional external services/speech: per-service credentials, license checks, model readiness and authorized workflows.
+- Production deploy/release: deployment pipeline quota and canonical Render service revision; no deployment was authorized.
 
 ## Immediate next action when resuming
 
-1. Read this checkpoint and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`.
-2. Inspect PR #400's current head `4ef84c034868f8d1fa24a1b52cd82e95fd450b1f`; fetch its workflow runs and inspect all job conclusions/log summaries. The latest completed exact-head PR #400 CI before the next docs-only refresh is for `b1eff10a4ebcd59ad2ce1ecd448b05e9277428f7`: run 41099205295 passed all four jobs and Windows Companion run 41099205347 passed. The acceptance matrix was then refreshed in commit `cc1342c5a9279e59857945c33c41ae74e8e5db46`; inspect Actions on the current PR #400 head and record its result separately.
-3. Confirm whether the updated PR #405 head and PR #406 head are still current; their exact heads `94651272` and `4e837f9b` passed runs 41098732849 and 41098869935 respectively. Review new failures before further feature work.
-4. Keep PR #405 local shortcuts separate from a remote Windows command channel. The full PC-control acceptance row remains IN PROGRESS; no device actions were verified on physical hardware.
-5. Continue only independently safe source/test/documentation work. External actions requiring credentials, accounts, physical devices, owner settings or paid resources remain explicitly blocked until available and authorized.
+1. Re-read this file and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`; inspect PR #400 actual head (latest source/workflow head was `0fd8c84c3198674a4ec04357b2b593c6b3821b6a`; matrix refresh commit was `11fe766899129ff6ce2ac6b811a1b2d550688685`).
+2. Fetch Actions runs for the current exact PR #400 head. The new action upgrades, identity/reparse tests, and World Intelligence patch-forward are not complete until all current ULTRON CI and Windows Companion jobs pass.
+3. Inspect the Node test output and Python logs: confirm malformed UUID, symlink and junction/reparse tests were actually executed on Ubuntu/Windows; verify both audits show zero vulnerabilities, pinned World Intelligence build and bridge pass, and Windows artifact upload succeeds.
+4. Check the Windows workflow logs for the prior Node20 deprecation warning; confirm it has disappeared after moving to Node24-compatible action majors.
+5. If any CI failure occurs, inspect exact failing test/log, fix only the cause, rerun and re-record the actual head.
+6. Reconcile stale #401–#404 and stacked #405 / diverged #406 intentionally; do not merge or force-push automatically.
+7. Keep the Render default URL mismatch unresolved until the owner confirms the canonical workspace/destination.
+8. Continue with next independently safe security/regression item. After every meaningful batch, update this file and the matrix, then verify the new exact head.
 
 ## Safety boundaries
 
-- Preserve every existing branch, commit, file and uncommitted local change. This remote-only session did not have access to the user's local working tree.
-- Do not merge PRs, deploy, modify Render production settings/secrets, apply migrations to production, run account-mutating smoke tests, or consume paid provider quota without the relevant explicit authorization.
+- Preserve every existing branch/commit/file and unknown local user changes.
+- No production deploy/settings/secrets, production database migrations, destructive actions, paid provider quota, or account-mutating tests without authorization.
 - Do not modify PHANTOM AI or NOX AI.
-- Never mark a row complete without evidence for every applicable acceptance criterion. A platform/session interruption should resume from this file and the linked matrix, after re-reading the actual latest remote state.
+- A platform interruption must resume from the actual latest remote head after rereading this checkpoint. Never assume a queued or previous workflow run succeeded.
