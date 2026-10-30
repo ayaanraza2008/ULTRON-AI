@@ -74,6 +74,8 @@ declare
 begin
   if v_user_id is null
      or p_device_record_id is null
+     or p_action_type is null
+     or p_target is null
      or p_action_type not in ('launch_application', 'open_known_folder')
      or not (
        (p_action_type = 'launch_application' and p_target in ('notepad', 'explorer', 'calculator'))
