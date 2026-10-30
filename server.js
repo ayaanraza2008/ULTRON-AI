@@ -694,7 +694,13 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       redirect: "error", signal: AbortSignal.timeout(15_000)
     });
     let payload = null;
-    try { payload = await readResponseJsonLimited(response, 2_000_000); } catch { throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 }); }
+    // PostgREST return=minimal writes legitimately respond with an empty body.
+    // Do not pass that successful no-body response to the bounded JSON reader.
+    if (!(prefer === "return=minimal" && response.ok && !response.body)) {
+      try { payload = await readResponseJsonLimited(response, 2_000_000); } catch {
+        throw Object.assign(new Error("Supabase data response was invalid or too large."), { status: 502 });
+      }
+    }
     if (!response.ok) {
       logger.warn?.("Supabase data request failed", { table, status: response.status });
       const status = response.status === 401 || response.status === 403 ? 403 : response.status === 404 ? 404 : 502;
