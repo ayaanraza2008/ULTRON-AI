@@ -32,7 +32,8 @@ test("the service worker caches only the static shell and never caches private A
   assert.ok(serviceWorker.includes('request.method !== "GET"'));
   assert.ok(serviceWorker.includes('url.origin !== self.location.origin'));
   assert.ok(serviceWorker.includes('url.pathname === "/api" || url.pathname.startsWith("/api/")'));
-  assert.ok(serviceWorker.includes('url.pathname === "/world-intelligence" || url.pathname.startsWith("/world-intelligence/")'));
+  assert.ok(serviceWorker.includes('const isWorldIntelligence = url.pathname === "/world-intelligence"'));
+  assert.ok(serviceWorker.includes('url.pathname.startsWith("/world-intelligence/")'));
   assert.ok(serviceWorker.includes("const SHELL_PATHS = new Set("));
   assert.ok(serviceWorker.includes("if (!SHELL_PATHS.has(url.pathname)) return;"));
   assert.ok(serviceWorker.includes("const CACHE_NAME ="));
