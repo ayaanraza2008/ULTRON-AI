@@ -7,7 +7,9 @@ import {
   runHermesAgentTask,
   startHermesAgentRun,
   getHermesAgentRunStatus,
-  stopHermesAgentRun
+  stopHermesAgentRun,
+  listHermesAgentSkills,
+  listHermesAgentToolsets
 } from "../integrations/hermes-agent.js";
 
 const ownerId = "00000000-0000-4000-8000-000000000001";
@@ -353,6 +355,73 @@ test("Hermes run stop requires advertised support and reports stopping, not canc
   assert.equal(unsupported.state, "blocked");
   assert.equal(unsupported.error.code, "HERMES_RUN_STOP_UNSUPPORTED");
   assert.equal(stopCalls, 0);
+});
+
+
+test("Hermes skills discovery is read-only, bounded and owner-scoped", async () => {
+  let calls = 0;
+  const denied = await listHermesAgentSkills({
+    env: configuredEnv(),
+    userId: "00000000-0000-4000-8000-000000000002",
+    fetchImpl: async () => { calls++; throw new Error("non-owner must not reach Hermes"); }
+  });
+  assert.equal(denied.state, "blocked");
+  assert.equal(denied.error.code, "INTEGRATION_OWNER_NOT_CONFIGURED");
+  const result = await listHermesAgentSkills({
+    env: configuredEnv(),
+    userId: ownerId,
+    fetchImpl: async (url, options) => {
+      calls++;
+      assert.equal(url, "https://hermes.example.com/v1/skills");
+      assert.equal(options.method, "GET");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      return new Response(JSON.stringify([
+        { name: "deep-research", description: "Research with citations.", category: "research" },
+        { name: "coding", description: "Review and patch code." }
+      ]), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.count, 2);
+  assert.equal(result.skills[0].name, "deep-research");
+  assert.equal(result.skills[0].category, "research");
+  assert.equal(calls, 1);
+});
+
+test("Hermes toolsets discovery reports only bounded, documented catalog fields", async () => {
+  const result = await listHermesAgentToolsets({
+    env: configuredEnv(),
+    userId: ownerId,
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "https://hermes.example.com/v1/toolsets");
+      assert.equal(options.method, "GET");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      return new Response(JSON.stringify({ toolsets: [
+        {
+          name: "terminal",
+          label: "Terminal",
+          description: "Isolated terminal tools.",
+          enabled: true,
+          configured: true,
+          tools: ["terminal", "read_file", "write_file"]
+        },
+        {
+          name: "browser",
+          enabled: false,
+          configured: false,
+          tools: ["browser"]
+        }
+      ] }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.count, 2);
+  assert.equal(result.toolsets[0].enabled, true);
+  assert.equal(result.toolsets[0].configured, true);
+  assert.deepEqual(result.toolsets[0].tools, ["terminal", "read_file", "write_file"]);
+  assert.equal(result.toolsets[1].configured, false);
 });
 
 
