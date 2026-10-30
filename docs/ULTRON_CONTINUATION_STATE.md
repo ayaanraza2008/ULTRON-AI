@@ -5,45 +5,32 @@ Updated: 2026-10-31 UTC
 ## Repository state
 
 - Project: `ayaanraza2008/ULTRON-AI`
-- Default branch at start of this follow-on work: `main` @ `9909f3ef30c663cb582b1380a44ecd40040de1df`
-- Active feature branch: `fix/openseo-user-spend-consent`
-- Pull request: https://github.com/ayaanraza2008/ULTRON-AI/pull/413
-- Feature head verified by CI: `4cf941d65b009848528081fa9c7dd526b7d22f33`
-- Latest complete workflow run: [41115578469](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41115578469) — success in both `test` and `world-intelligence-build`.
-- Deployment / production settings: not changed. No live OpenSEO calls or credit spend made.
+- Default branch: `main`
+- Latest merged OpenSEO spend-consent fix: `70a12c1e9b5d0c6f9bf92a4e0152f7df9cf7745b` (PR #413).
+- Post-merge CI for that merge commit succeeded in runs `41115973277` and `41115973551`.
+- Current follow-on branch: `fix/chrome-devtools-no-model-self-approval`.
+- Current follow-on commits: agent change `cc158d9d1a29301698bb25336ceb7f09b20c682b`, test `c47dc2edc1d349781780687a3c1541f0b4132081`, package check `b48190714be9cebbd7581bcfeef6702c1614752c`.
+- Deployment / production settings: unchanged; no Render deployment, external browser control or paid action was performed.
 
-## OpenSEO paid-credit authorization fix
+## Completed OpenSEO security improvement
 
-Implemented on the feature branch:
-- Remove approval and credit-ceiling parameters from the model-visible OpenSEO tool schema.
-- Derive paid authorization exclusively from the authenticated user's current prompt using the leading canonical phrase: `I approve spending up to 120 OpenSEO credits for this lookup.`
-- Parse a numeric ceiling (1–5000 credits); adapter-computed estimates above the ceiling are blocked before MCP network calls.
-- Reject absent, non-leading/quoted, negated, out-of-range, and deferred consent phrases.
-- Classify credit spending as an external effect and retain the owner-only integration boundary.
-- Add a dedicated `open_seo` task-router category so OpenSEO is not hidden by narrow research routing.
-- Fix an undefined `isObject` helper reference in the agent OpenSEO dispatcher using a strict object/non-array check.
-- Add endpoint-level regression tests for model-invented approval denial, explicit user cap, over-cap denial before network, parser edge cases, and task routing.
-- Add bounded error diagnostics (tool, error code/name; missing identifier only for ReferenceError) to agent tool-failure logs.
+- Paid lookup approval is derived only from the current authenticated user prompt using the canonical bounded credit phrase; model-authored approval fields are ignored.
+- A dedicated task-router category keeps OpenSEO visible for its intent; an undefined object helper was fixed in dispatch.
+- CI passed with 658 Node tests, 0 failed, 1 skipped, all 11 Browser Use Python tests, 11 Harness2 Python tests, 9 Model Lab Python tests, both dependency audits at 0 vulnerabilities, and the pinned World Intelligence build/bridge check.
+- PR #413 is merged. Live OpenSEO account billing/quotas remain unverified; no credits were spent.
 
-## Verification evidence
+## Current Chrome DevTools model-approval hardening
 
-Full CI on feature head `4cf941d65b009848528081fa9c7dd526b7d22f33` passed in run 41115578469:
-- `npm run check` passed.
-- Node tests: 659 total, 658 passed, 0 failed, 1 intentionally skipped.
-- All four OpenSEO agent consent tests passed; OpenSEO-only task routing passed.
-- Existing Python Browser Use, Harness2 and Model Lab suites passed (11, 11 and 9 tests respectively).
-- Both dependency audit checks reported 0 vulnerabilities.
-- Pinned World Intelligence build and ULTRON bridge injection succeeded.
+- Model-visible Chrome DevTools schema no longer includes `confirmExternalAction`.
+- Agent dispatcher always passes `confirmExternalAction: false`, regardless of any tool argument the model fabricates.
+- Added `tests/chrome-devtools-agent-approval.test.js`: it deliberately sets `CHROME_ALLOW_EXTERNAL_ACTIONS=true`, makes the model emit true, and expects the bridge to reject the consequential click with `EXTERNAL_ACTION_CONFIRMATION_REQUIRED`; the mocked test asserts the request actually sent by ULTRON carries false.
+- `package.json` syntax check includes the test. Docs/acceptance records are being updated in this branch.
+- A dedicated per-action user-confirmation token/flow does not yet exist, so consequential external clicks remain unavailable from the hosted agent. The local bridge's operator flag is not a substitute for user consent.
 
-What this does not prove:
-- Actual OpenSEO API reachability, real account credit estimation, or live billing/quota behaviour.
-- No paid request was made in CI; OpenSEO network behaviour is tested with mocks.
-- Other ULTRON blockers remain as recorded in `docs/BLOCKERS.md` and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`.
+## Exact next actions
 
-## Exact next action
-
-1. Verify PR #413 still points to the CI-tested head `4cf941d65b009848528081fa9c7dd526b7d22f33`.
-2. Merge only that exact head after confirming PR diff contains only the listed security/router/test/docs changes.
-3. Verify merge commit and post-merge main CI.
-4. Do not deploy, modify production configuration, or spend OpenSEO credits.
-5. Continue with the next independently achievable source-level blocker from the acceptance matrix.
+1. Complete docs update on this branch and open a PR.
+2. Run full CI; fix all test failures before merge.
+3. Confirm no model-supplied confirmation value reaches the Chrome bridge.
+4. Merge only the exact CI-green head and verify post-merge CI.
+5. Continue security and live-verification work from the acceptance matrix. Do not deploy or change production configuration without authorization.
