@@ -75,7 +75,7 @@ async function readJsonLimited(response, maxBytes = MAX_RESPONSE_BYTES) {
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) { streamDone = true; break; }
       size += value.byteLength;
       if (size > maxBytes) {
         try { await reader.cancel(); } catch {}
@@ -262,8 +262,14 @@ function sanitizeHermesSseEvent(eventName, eventId, payload) {
   const event = bounded(eventName || data.type, 80) || "message";
   const safe = { event };
   if (eventId) safe.eventId = bounded(eventId, 120);
-  if (typeof data.text === "string") safe.text = data.text.slice(0, 2400);
-  else if (typeof data.delta === "string") safe.text = data.delta.slice(0, 2400);
+  // Only expose text from known user-facing message events. Tool/function/
+  // approval/result events may place command arguments or private results in
+  // a generic text/delta field, so unknown event payloads fail closed.
+  const safeMessageEvent = /^(?:message(?:\\.delta)?|assistant(?:\\.(?:message|delta))?|response\\.output_text(?:\\.delta)?)$/i.test(event);
+  if (safeMessageEvent && typeof data.tool !== "string") {
+    if (typeof data.text === "string") safe.text = data.text.slice(0, 2400);
+    else if (typeof data.delta === "string") safe.text = data.delta.slice(0, 2400);
+  }
   if (typeof data.already_streamed === "boolean") safe.alreadyStreamed = data.already_streamed;
   if (typeof data.tool === "string") safe.tool = bounded(data.tool, 100);
   if (typeof data.duration === "number" && Number.isFinite(data.duration)) safe.duration = Math.max(0, Math.min(data.duration, 86_400));
@@ -289,6 +295,7 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
   const events = [];
   let raw = "";
   let bytes = 0;
+  let streamDone = false;
   const processBlock = block => {
     if (events.length >= maxEvents) return;
     let eventName = "";
@@ -332,6 +339,7 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
     if (error?.name === "TimeoutError" || error?.name === "AbortError") timedOut = true;
     else throw error;
   } finally {
+    if (!streamDone) { try { await reader.cancel(); } catch {} }
     try { reader.releaseLock(); } catch {}
   }
   if (raw.trim() && events.length < maxEvents) processBlock(raw);
@@ -342,6 +350,12 @@ function validateHermesRunId(value) {
   return typeof value === "string" && /^run[-_][A-Za-z0-9._:-]{1,120}$/.test(value.trim())
     ? value.trim()
     : null;
+}
+
+function getHermesTimeoutMs(env = process.env) {
+  const configuredSeconds = Number(env.HERMES_AGENT_TIMEOUT_SECONDS);
+  const seconds = Number.isFinite(configuredSeconds) && configuredSeconds > 0 ? configuredSeconds : 90;
+  return Math.max(15_000, Math.min(120_000, Math.floor(seconds * 1000)));
 }
 
 function getHermesRunSessionId(userId, conversationId) {
@@ -481,7 +495,7 @@ export async function startHermesAgentRun({ env = process.env, fetchImpl = safeP
         session_id: sessionId
       }),
       redirect: "error",
-      signal: AbortSignal.timeout(Math.max(15_000, Math.min(120_000, Number(env.HERMES_AGENT_TIMEOUT_SECONDS || 90) * 1000)))
+      signal: AbortSignal.timeout(getHermesTimeoutMs(env))
     });
     const data = await readJsonLimited(response, 1_000_000);
     if (!response.ok) {
@@ -717,9 +731,7 @@ export async function runHermesAgentTask({ env = process.env, fetchImpl = safePi
   const sessionId = safeConversationId
     ? "ultron-" + createHash("sha256").update(userId + ":" + safeConversationId).digest("hex").slice(0, 32)
     : null;
-  const configuredTimeout = Number(env.HERMES_AGENT_TIMEOUT_SECONDS);
-  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
-    ? Math.max(15_000, Math.min(120_000, configuredTimeout * 1000)) : 90_000;
+  const timeoutMs = getHermesTimeoutMs(env);
   const configuredPollInterval = Number(env.HERMES_AGENT_POLL_INTERVAL_MS);
   let pollIntervalMs = Number.isFinite(configuredPollInterval) && configuredPollInterval > 0
     ? Math.max(100, Math.min(2_000, configuredPollInterval)) : 350;
