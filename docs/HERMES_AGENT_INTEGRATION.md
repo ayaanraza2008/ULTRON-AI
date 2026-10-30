@@ -9,13 +9,14 @@ ULTRON's `integrations/hermes-agent.js` currently provides:
 - An opt-in adapter, disabled unless `HERMES_AGENT_ENABLED=true`.
 - Exact Supabase owner-UUID checks for delegated tasks and optional direct chat-provider access.
 - Read-only `GET /v1/models` and `GET /v1/capabilities` health discovery.
-- Bounded, authenticated `POST /v1/chat/completions` task delegation, with a stable per-owner session key, an idempotency key, timeout/response limits and a safety-focused delegation prompt.
+- Bounded, authenticated `POST /v1/chat/completions` task delegation.
+- Capability-checked Runs API submission (`POST /v1/runs`), status polling (`GET /v1/runs/{run_id}`) and cancellation requests (`POST /v1/runs/{run_id}/stop`), using a stable per-owner memory/session key, idempotency key, timeouts and bounded responses.
 - Remote HTTPS-only URL validation, DNS-pinned network requests and no redirects.
 - Explicit vision opt-in: vision is off unless `HERMES_AGENT_SUPPORTS_VISION=true`.
 
 The capability check now understands the current nested `features` document and retains compatibility with the older flat flags. It can report whether the server advertises Chat Completions, Responses, run submission/status, SSE run events and run stopping.
 
-**Capability discovery is not the same as feature integration.** ULTRON's current task adapter still sends Chat Completions requests. It does not yet drive Hermes' `/v1/runs`, `/v1/responses`, SSE progress stream, stop or approval lifecycle. Those must remain marked incomplete until implemented and tested.
+Capability discovery is not the same as full feature integration. ULTRON can now start a Hermes run, retrieve its status/output, and request that it stop. It does not yet forward Hermes SSE progress events, use the Responses API, or integrate the human approval decision lifecycle. The capability endpoint's `run_approval` flag is detected but ULTRON does not approve runs on the model's behalf.
 
 ## Install and verify Hermes on Windows
 
@@ -84,10 +85,11 @@ The Hermes API key and ULTRON integration key must match. The owner UUID must be
 1. Verify Hermes starts and completes one harmless normal chat.
 2. From the same host as ULTRON, authenticate to `GET /v1/models` and `GET /v1/capabilities`; confirm the configured model is listed and record the advertised feature flags.
 3. Start ULTRON with the owner-scoped server environment and run its read-only Hermes health check.
-4. Submit one harmless, read-only task from the authenticated ULTRON agent flow. Confirm the result, latency, timeout handling and redacted logs.
-5. Verify a different ULTRON user is denied without any upstream Hermes request.
-6. Test vision separately with a known image challenge before setting `HERMES_AGENT_SUPPORTS_VISION=true`.
-7. Only then consider a separately reviewed increment for Hermes Runs API, streaming progress, cancellation, approvals and session continuation.
+4. Submit one harmless, read-only task from the authenticated ULTRON agent flow.
+5. Start one harmless long-running task; retain the returned `run_id`, poll status to a terminal state, and test stop/cancellation in a disposable workspace.
+6. Verify a different ULTRON user is denied without any upstream Hermes request.
+7. Test vision separately with a known image challenge before setting `HERMES_AGENT_SUPPORTS_VISION=true`.
+8. Implement and test SSE progress forwarding and human approval controls before exposing Hermes' approval endpoint to the UI.
 
 Record mocked tests, live API checks and physical-device checks separately. A green CI run is not proof that Hermes is installed, that provider credentials work, or that a task ran on the target PC.
 
@@ -95,4 +97,4 @@ Record mocked tests, live API checks and physical-device checks separately. A gr
 
 PR [#406](https://github.com/ayaanraza2008/ULTRON-AI/pull/406) adds current capability-schema parsing, legacy compatibility and the fail-closed vision default. CI run [41098869935](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41098869935) passed: 837 Node tests (836 passed, 0 failed, 1 skipped) and all four CI jobs. The skipped test is the live two-account Supabase isolation test.
 
-**Still unverified:** a reachable Hermes API server, real text/task delegation, semantic image understanding, target-PC sandbox behavior, cloud-to-Hermes networking and any Hermes Runs/SSE/stop/approval workflow. PR #406 is a draft and has not been merged. No production settings, secrets, databases or deployments were changed by this increment.
+**Still unverified:** a reachable Hermes API server, real text/task delegation, semantic image understanding, target-PC sandbox behavior, cloud-to-Hermes networking, SSE progress delivery and the human approval lifecycle. Run submission/status/stop are source-tested but have not yet been exercised against a live Hermes server. PR #406 is a draft and has not been merged. No production settings, secrets, databases or deployments were changed by this increment.
