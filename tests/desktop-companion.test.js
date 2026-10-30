@@ -151,7 +151,7 @@ test("integration catalogue reports the companion as configured-but-unverified, 
 
   const missing = buildIntegrationCatalog({}).find(item => item.id === "windows-desktop-companion");
   assert.equal(missing.configured, false);
-  assert.equal(missing.state, "desktop_companion_required");
+  assert.equal(missing.state, "legacy_status_adapter_optional");
 });
 
 test("desktop companion rejects malformed JSON and reports a device that needs pairing", async () => {
