@@ -2613,3 +2613,63 @@ test("agent blocks a model-generated destructive Hermes background run before co
     assert.equal(providerCalls, 2);
   });
 });
+
+
+test("agent can inspect actual Hermes skills and enabled toolsets through read-only catalogs", async () => {
+  let providerCalls = 0;
+  const upstreamCalls = [];
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  };
+  await withServer(env, async (url, options) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      providerCalls++;
+      const payload = JSON.parse(options.body);
+      if (providerCalls === 1) {
+        const offered = payload.tools.map(item => item.function.name);
+        assert.ok(offered.includes("hermes_agent_list_skills"));
+        assert.ok(offered.includes("hermes_agent_list_toolsets"));
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [
+          { id: "list-hermes-skills", type: "function", function: { name: "hermes_agent_list_skills", arguments: "{}" } },
+          { id: "list-hermes-toolsets", type: "function", function: { name: "hermes_agent_list_toolsets", arguments: "{}" } }
+        ] } }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Hermes skills and toolsets were read successfully." } }] }), { status: 200 });
+    }
+    upstreamCalls.push(url);
+    assert.equal(options.method, "GET");
+    assert.equal(options.redirect, "error");
+    assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+    if (url.endsWith("/skills")) {
+      return new Response(JSON.stringify([{ name: "deep-research", description: "Cited research" }]), { status: 200 });
+    }
+    if (url.endsWith("/toolsets")) {
+      return new Response(JSON.stringify([{ name: "core", enabled: true, configured: true, tools: ["read_file", "terminal"] }]), { status: 200 });
+    }
+    throw new Error("Unexpected Hermes catalog path: " + url);
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Show me the skills and enabled toolsets available in Hermes Agent." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const skills = body.toolResults.find(item => item.name === "hermes_agent_list_skills");
+    const toolsets = body.toolResults.find(item => item.name === "hermes_agent_list_toolsets");
+    assert.equal(skills.ok, true);
+    assert.equal(skills.result.skills[0].name, "deep-research");
+    assert.equal(toolsets.ok, true);
+    assert.equal(toolsets.result.toolsets[0].enabled, true);
+    assert.deepEqual(upstreamCalls.sort(), [
+      "https://hermes.example.com/v1/skills",
+      "https://hermes.example.com/v1/toolsets"
+    ]);
+    assert.equal(providerCalls, 2);
+  });
+});
