@@ -243,7 +243,7 @@ class CompanionServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             def request(*_args, **_kwargs):
                 return {"deviceId": "22222222-2222-4222-8222-222222222222", "platform": "windows", "deviceToken": "short"}
-            with self.assertRaisesRegex(ValueError, "invalid device token"):
+            with self.assertRaisesRegex(ValueError, "valid device token"):
                 pair_companion(
                     "https://ultron.example.com", "P" * 32,
                     data_dir=Path(root) / "companion", request_impl=request
