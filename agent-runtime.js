@@ -14,7 +14,7 @@ import { runReaTool } from "./integrations/rea-mcp.js";
 import { checkCactusService, resolveCactusProvider, getCactusReadiness } from "./integrations/cactus.js";
 import { resolveStrataProvider } from "./integrations/strata.js";
 import { getPaperclipAgentDashboard } from "./integrations/paperclip-services.js";
-import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentProvider, runHermesAgentTask, startHermesAgentRun, getHermesAgentRunStatus, stopHermesAgentRun, listHermesAgentSkills, listHermesAgentToolsets } from "./integrations/hermes-agent.js";
+import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentProvider, runHermesAgentTask, startHermesAgentRun, getHermesAgentRunStatus, stopHermesAgentRun, listHermesAgentSkills, listHermesAgentToolsets, getHermesAgentRunEvents, resolveHermesAgentRunApproval } from "./integrations/hermes-agent.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 import { findOpenVikingContext, getOpenVikingReadiness, readOpenVikingContext } from "./integrations/openviking.js";
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrations/desktop-companion.js";
@@ -408,6 +408,8 @@ function extractIntent(text) {
   if ((hermesRequested || hermesRunId) && hermesRunId && /\b(stop|cancel|interrupt)\b/.test(s)) return "hermes_agent_stop_run";
   if ((hermesRequested || hermesRunId) && hermesRunId && /\b(status|progress|result|output|check)\b/.test(s)) return "hermes_agent_run_status";
   if (hermesRequested && /\b(start|submit|launch|background|long[- ]running)\b/.test(s) && /\b(run|task|job)\b/.test(s)) return "hermes_agent_start_run";
+  if ((hermesRequested || hermesRunId) && hermesRunId && /\b(events|progress|activity|stream)\b/.test(s)) return "hermes_agent_run_events";
+  if ((hermesRequested || hermesRunId) && hermesRunId && /\b(?:prompt_[a-z0-9._:-]{1,128}|request_[a-z0-9._:-]{1,128})\b/.test(s) && /\b(approve|allow|once|deny|reject|decline)\b/.test(s)) return "hermes_agent_resolve_approval";
   if (hermesRequested && /\b(skill|skills|skills hub)\b/.test(s) && /\b(list|show|available|installed|what|which|discover)\b/.test(s)) return "hermes_agent_list_skills";
   if (hermesRequested && /\b(toolset|toolsets|tools)\b/.test(s) && /\b(list|show|available|enabled|configured|what|which|discover)\b/.test(s)) return "hermes_agent_list_toolsets";
   if (hermesRequested && /\b(check|status|health|ready|reachable|connect|available|configured|models)\b/.test(s)) return "check_hermes_agent";
@@ -481,6 +483,16 @@ function buildFallbackCalls(text) {
   }
   if (intent === "hermes_agent_list_skills") add("hermes_agent_list_skills");
   if (intent === "hermes_agent_list_toolsets") add("hermes_agent_list_toolsets");
+  if (intent === "hermes_agent_run_events" || intent === "hermes_agent_resolve_approval") {
+    const runId = text.match(/\brun_[A-Za-z0-9_-]{1,120}\b/)?.[0];
+    if (intent === "hermes_agent_run_events" && runId) add(intent, { runId });
+    if (intent === "hermes_agent_resolve_approval" && runId) {
+      const requestId = text.match(/\b(?:prompt_|request_)[A-Za-z0-9._:-]{1,128}\b/)?.[0];
+      const generation = text.match(/\b(?:execution[-_ ]generation|generation)\s*[:=#]?\s*(\d{1,12})\b/i)?.[1];
+      const choice = /\b(deny|reject|decline)\b/i.test(text) ? "deny" : "once";
+      if (requestId && generation) add(intent, { runId, requestId, executionGeneration: Number(generation), choice });
+    }
+  }
   const openVikingRequested = /\b(openviking|open viking)\b/i.test(text);
   if (openVikingRequested && /\b(check|status|health|ready|reachable|configured|available)\b/i.test(text)) {
     add("check_openviking");
@@ -669,11 +681,29 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
       risk: { level: "external_effect", reason: "Starting a long-running Hermes job requires explicit user delegation.", requiresConfirmation: true }
     };
   }
-  if (name === "hermes_agent_stop_run" && !explicitHermesStopIntent) {
+  if (name === "hermes_agent_stop_run" && (!explicitHermesStopIntent || !String(args?.runId || "").trim() || !normalizedRequest.includes(String(args.runId).toLowerCase()))) {
     return {
       requiresConfirmation: true,
-      risk: { level: "device_control", reason: "Cancelling a Hermes job requires an explicit user stop request.", requiresConfirmation: true }
+      risk: { level: "device_control", reason: "Cancelling a Hermes job requires an explicit user stop request naming the exact run ID.", requiresConfirmation: true }
     };
+  }
+  if (name === "hermes_agent_resolve_approval") {
+    const runId = String(args?.runId || "").toLowerCase();
+    const requestId = String(args?.requestId || "").toLowerCase();
+    const generation = String(args?.executionGeneration ?? "");
+    const mentionsIds = runId && requestId && normalizedRequest.includes(runId) && normalizedRequest.includes(requestId);
+    const mentionsGeneration = generation && new RegExp("\\b(?:execution[-_ ]generation|generation)\\s*[:=#]?\\s*" + generation + "\\b").test(normalizedRequest);
+    const explicitChoice = args?.choice === "once"
+      ? /\b(approve|allow|once)\b/.test(normalizedRequest)
+      : args?.choice === "deny"
+        ? /\b(deny|reject|decline|block)\b/.test(normalizedRequest)
+        : false;
+    if (!mentionsIds || !mentionsGeneration || !explicitChoice) {
+      return {
+        requiresConfirmation: true,
+        risk: { level: "external_effect", reason: "Resolving a Hermes approval requires the user's explicit decision naming the exact run ID, prompt ID and execution generation.", requiresConfirmation: true }
+      };
+    }
   }
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "hermes_agent_start_run" || name === "browser_use") delegatedTask = args?.task;
@@ -837,6 +867,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "hermes_agent_stop_run", description: "Cancel a Hermes run explicitly identified by its ULTRON-issued run ID. Only requests interruption; the caller must poll status until the run is terminal. Owner-scoped.", parameters: { type: "object", properties: { runId: { type: "string", pattern: "^run_[A-Za-z0-9_-]{1,120}$", maxLength: 124 } }, required: ["runId"], additionalProperties: false } } },
     { type: "function", function: { name: "hermes_agent_list_skills", description: "Read-only: list the skills actually available from the connected Hermes Agent API server. Owner-scoped; returns bounded names, descriptions and categories.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "hermes_agent_list_toolsets", description: "Read-only: list configured Hermes toolsets, enabled/configured flags and bounded tool names. Owner-scoped; does not enable or change any toolset.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "hermes_agent_run_events", description: "Read a short, bounded window of Hermes run progress events. Raw tool arguments/results are omitted. Owner-scoped and read-only.", parameters: { type: "object", properties: { runId: { type: "string", pattern: "^run_[A-Za-z0-9_-]{1,120}$", maxLength: 124 } }, required: ["runId"], additionalProperties: false } } },
+    { type: "function", function: { name: "hermes_agent_resolve_approval", description: "Resolve one pending Hermes tool approval only when the original user message explicitly names the exact run ID, prompt ID and execution generation plus an approve-once or deny decision. Never auto-approve or approve all.", parameters: { type: "object", properties: { runId: { type: "string", pattern: "^run_[A-Za-z0-9_-]{1,120}$", maxLength: 124 }, requestId: { type: "string", minLength: 1, maxLength: 128 }, executionGeneration: { type: "integer", minimum: 0 }, choice: { type: "string", enum: ["once", "deny"] } }, required: ["runId", "requestId", "executionGeneration", "choice"], additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "create_study_pack", description: "Generate a structured study aid using the configured AI provider: flashcards, multiple-choice quiz, revision sheet, or mixed pack. Persist it only when the user explicitly asks to save the study pack; storage is per-user and requires the study_packs migration. Uses bounded supplied source material if given; otherwise marks output as a general-knowledge draft. Does not claim syllabus/source verification.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1200 }, level: { type: "string", enum: ["beginner", "intermediate", "advanced", "exam"] }, format: { type: "string", enum: ["mixed", "flashcards", "quiz", "revision_sheet"] }, language: { type: "string", maxLength: 60 }, questionCount: { type: "integer", minimum: 3, maximum: 12 }, sourceContent: { type: "string", maxLength: 8000 }, save: { type: "boolean" } }, required: ["topic", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "list_reminders", description: "List private reminder records for the signed-in user. This only reads stored reminders; it does not send notifications or guarantee that an alert will fire.", parameters: { type: "object", properties: { status: { type: "string", enum: ["scheduled", "completed", "cancelled", "all"] }, limit: { type: "integer", minimum: 1, maximum: 20 } }, additionalProperties: false } } },
@@ -1728,6 +1760,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (name === "hermes_agent_stop_run") return stopHermesAgentRun({ env, fetchImpl, userId: req.supabaseUser?.id, runId: args.runId });
     if (name === "hermes_agent_list_skills") return listHermesAgentSkills({ env, fetchImpl, userId: req.supabaseUser?.id });
     if (name === "hermes_agent_list_toolsets") return listHermesAgentToolsets({ env, fetchImpl, userId: req.supabaseUser?.id });
+    if (name === "hermes_agent_run_events") return getHermesAgentRunEvents({ env, fetchImpl, userId: req.supabaseUser?.id, runId: args.runId });
+    if (name === "hermes_agent_resolve_approval") return resolveHermesAgentRunApproval({ env, fetchImpl, userId: req.supabaseUser?.id, runId: args.runId, requestId: args.requestId, executionGeneration: args.executionGeneration, choice: args.choice });
     if (name === "check_repository_capabilities") {
       const task = bounded(args.task, 1200);
       const limit = Number.isInteger(args.limit) ? Math.max(1, Math.min(args.limit, 12)) : 6;
@@ -2181,6 +2215,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "hermes_agent_stop_run", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_run_stop_request_then_poll_terminal_status" },
         { name: "hermes_agent_list_skills", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_read_only_skills_catalog" },
         { name: "hermes_agent_list_toolsets", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_read_only_toolsets_catalog" },
+        { name: "hermes_agent_run_events", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_bounded_read_only_sse_progress_window" },
+        { name: "hermes_agent_resolve_approval", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_human_supplied_prompt_and_generation_bound_approval_or_deny" },
         { name: "check_cactus", available: Boolean(getCactusReadiness(env).configured), execution: "read_only_health_and_model_list_no_download_or_inference" },
         { name: "obscura_inspect_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_navigation_and_dom_snapshot_only" },
         { name: "obscura_capture_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_screenshot_or_pdf_capture_bounded_artifact_payload" },
