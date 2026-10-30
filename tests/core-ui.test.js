@@ -7,6 +7,39 @@ const html = await readFile(new URL("../public/index.html", import.meta.url), "u
 const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
 const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 const proxySource = await readFile(new URL("../core-ui-proxy.mjs", import.meta.url), "utf8");
+const pwaManifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
+const serviceWorker = await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8");
+
+
+test("the interface has an installable standalone PWA manifest for phones and desktops", () => {
+  assert.equal(pwaManifest.name, "ULTRON AI — Living Core");
+  assert.equal(pwaManifest.short_name, "ULTRON");
+  assert.equal(pwaManifest.start_url, "/");
+  assert.equal(pwaManifest.scope, "/");
+  assert.equal(pwaManifest.display, "standalone");
+  assert.equal(pwaManifest.theme_color, "#020205");
+  assert.deepEqual(
+    pwaManifest.icons.map(icon => icon.sizes).sort(),
+    ["192x192", "512x512"]
+  );
+  assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(html, /rel="apple-touch-icon" href="\/icons\/icon-180\.png"/);
+  assert.match(html, /apple-mobile-web-app-capable/);
+  assert.ok(app.includes('navigator.serviceWorker.register("/service-worker.js", { scope: "/" })'));
+});
+
+test("the service worker caches only the static shell and never caches private API traffic", () => {
+  assert.ok(serviceWorker.includes('request.method !== "GET"'));
+  assert.ok(serviceWorker.includes('url.origin !== self.location.origin'));
+  assert.ok(serviceWorker.includes('url.pathname === "/api" || url.pathname.startsWith("/api/")'));
+  assert.ok(serviceWorker.includes('const isWorldIntelligence = url.pathname === "/world-intelligence"'));
+  assert.ok(serviceWorker.includes('url.pathname.startsWith("/world-intelligence/")'));
+  assert.ok(serviceWorker.includes("const SHELL_PATHS = new Set("));
+  assert.ok(serviceWorker.includes("if (!SHELL_PATHS.has(url.pathname)) return;"));
+  assert.ok(serviceWorker.includes("const CACHE_NAME ="));
+  assert.match(proxySource, /worker-src 'self'/);
+  assert.match(proxySource, /filename === "service-worker\.js" \|\| filename === "manifest\.webmanifest" \? "no-cache"/);
+});
 
 test("the default screen is a black, minimal living-core interface", () => {
   assert.match(html, /id="core-canvas"/);
@@ -129,6 +162,34 @@ test("the proxy serves local assets and does not forward unknown public paths", 
   assert.equal(page.status, 200);
   assert.match(page.headers.get("content-type") || "", /text\/html/);
   assert.match(await page.text(), /ULTRON AI — Living Core/);
+  assert.equal(page.headers.get("cache-control"), "no-store");
+
+  const manifestResponse = await fetch(base + "/manifest.webmanifest");
+  assert.equal(manifestResponse.status, 200);
+  assert.match(manifestResponse.headers.get("content-type") || "", /application\/manifest\+json/);
+  assert.equal(manifestResponse.headers.get("cache-control"), "no-cache");
+  assert.equal((await manifestResponse.json()).icons.length, 2);
+
+  const workerResponse = await fetch(base + "/service-worker.js");
+  assert.equal(workerResponse.status, 200);
+  assert.match(workerResponse.headers.get("content-type") || "", /javascript/);
+  assert.equal(workerResponse.headers.get("cache-control"), "no-cache");
+  assert.match(await workerResponse.text(), /const SHELL_PATHS = new Set/);
+
+  for (const [path, expectedSize] of [
+    ["/icons/icon-180.png", 180],
+    ["/icons/icon-192.png", 192],
+    ["/icons/icon-512.png", 512]
+  ]) {
+    const icon = await fetch(base + path);
+    assert.equal(icon.status, 200);
+    assert.match(icon.headers.get("content-type") || "", /image\/png/);
+    assert.equal(icon.headers.get("cache-control"), "public, max-age=300");
+    const png = Buffer.from(await icon.arrayBuffer());
+    assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(png.readUInt32BE(16), expectedSize);
+    assert.equal(png.readUInt32BE(20), expectedSize);
+  }
   assert.equal(calls.length, 0);
 
   const unknown = await fetch(base + "/admin-secret");

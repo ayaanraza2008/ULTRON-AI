@@ -12,7 +12,12 @@ const STATIC_ASSETS = new Map([
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
-  ["/favicon.svg", ["favicon.svg", "image/svg+xml; charset=utf-8"]]
+  ["/favicon.svg", ["favicon.svg", "image/svg+xml; charset=utf-8"]],
+  ["/manifest.webmanifest", ["manifest.webmanifest", "application/manifest+json; charset=utf-8"]],
+  ["/service-worker.js", ["service-worker.js", "text/javascript; charset=utf-8"]],
+  ["/icons/icon-180.png", ["icons/icon-180.png", "image/png"]],
+  ["/icons/icon-192.png", ["icons/icon-192.png", "image/png"]],
+  ["/icons/icon-512.png", ["icons/icon-512.png", "image/png"]]
 ]);
 const ALLOWED_PROXY_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 const RESPONSE_HEADERS = [
@@ -25,7 +30,7 @@ function securityHeaders(res) {
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self)");
-  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'");
 }
 
 async function readRequestBody(req) {
@@ -66,7 +71,7 @@ async function serveAsset(req, res, asset) {
   securityHeaders(res);
   res.statusCode = 200;
   res.setHeader("Content-Type", contentType);
-  res.setHeader("Cache-Control", filename === "index.html" ? "no-store" : "public, max-age=300");
+  res.setHeader("Cache-Control", filename === "index.html" ? "no-store" : filename === "service-worker.js" || filename === "manifest.webmanifest" ? "no-cache" : "public, max-age=300");
   res.setHeader("Content-Length", String(bytes.length));
   if (req.method === "HEAD") res.end();
   else res.end(bytes);
