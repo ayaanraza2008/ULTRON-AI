@@ -86,3 +86,9 @@ Last inspected: 2026-10-29 UTC. This matrix separates source/CI evidence from li
 - The scanner addition is included in candidate head `5b9933fbdac689b7f01554ae851e087334081a06`. Full CI [run 41044428018](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41044428018) completed successfully on this exact head: `npm run check` passed and reported **164 JavaScript source files syntax-checked**; `npm test` reported 809 tests, 808 passed, 0 failed, 1 skipped; local-assistant Python tests, Windows installer parser and World Intelligence build/bridge all passed; both dependency audits reported 0 vulnerabilities.
 - No deployment, production setting, database, or PHANTOM/NOX project was changed.
 
+## Syntax-scanner regression tests — 2026-10-30
+
+- Added automated tests for nested-file discovery, dependency-directory exclusion, and precise malformed-file diagnostics.
+- The first test run correctly exposed a too-strict assertion that expected the phrase `Syntax error` instead of Node's actual `SyntaxError` diagnostic. The assertion was corrected; the earlier run failed only this new test, and the corrected head passed.
+- Full CI [run 41044724646](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41044724646) passed on head `575722e3362ed88972cdd3dd6277bf7ce2b87cbd`: **165 JavaScript source files syntax-checked; 811 tests, 810 passed, 0 failed, 1 skipped**; Python tests, Windows installer parsing, and World Intelligence build/bridge passed; both dependency audits reported 0 vulnerabilities.
+- The single skipped test remains the opt-in live Supabase two-account isolation check. No production deployment or database mutation was performed.
