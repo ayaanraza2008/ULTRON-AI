@@ -1,8 +1,8 @@
-"""Loopback-only, status-only HTTP companion for a user's Windows PC.
+"""Windows companion client plus a loopback-only local status HTTP endpoint.
 
-This service deliberately exposes no shell, filesystem, input, screenshot, or
-process-control endpoints. It is intended for a local ULTRON client only; a
-hosted ULTRON backend cannot reach a PC's loopback interface.
+The cloud client sends outbound HTTPS heartbeats and retrieves only fixed
+actions that require fresh local typed approval. The separate loopback server
+continues to expose status only; hosted ULTRON cannot reach PC loopback.
 """
 from __future__ import annotations
 
@@ -545,6 +545,35 @@ def poll_companion_action(*, data_dir: str | Path | None = None, request_impl=No
         "target": action["target"],
         "expiresAt": expiry.astimezone(timezone.utc).isoformat(),
     }
+
+
+def authorize_companion_action(
+    action_id: str,
+    *,
+    data_dir: str | Path | None = None,
+    request_impl=None
+) -> bool:
+    """Revalidate the paired device and claimed action immediately before local execution."""
+    try:
+        normalized_id = str(uuid.UUID(action_id))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError("A valid local action ID is required.") from exc
+    credentials = _load_device_credentials(data_dir)
+    requester = request_impl or _cloud_json_request
+    try:
+        result = requester(
+            credentials["serverUrl"],
+            "/api/desktop-companion/actions/" + normalized_id + "/authorize",
+            {"deviceId": credentials["deviceId"]},
+            bearer_token=credentials["deviceToken"]
+        )
+    except CloudHTTPError as exc:
+        if exc.status in {401, 403, 404}:
+            raise PermissionError("This Windows companion is no longer authorized. Revoke or pair it again in ULTRON.") from exc
+        raise
+    if not isinstance(result, dict) or result.get("authorized") is not True or result.get("actionId") != normalized_id:
+        return False
+    return True
 
 
 def complete_companion_action(
