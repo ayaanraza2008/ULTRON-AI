@@ -237,7 +237,7 @@ def execute(root,state,timeout):
     state.setdefault("best_candidate","baseline"); state.setdefault("best_score",baseline_result["score"])
     atomic_json(root/"run.json",state)
     for round_no in range(int(state["next_round"]),int(state["iterations"])):
-        best_id = state["best_candidate"]; best_record = read_json(root/"candidates"/best_id/"result.json")
+        best_id = state["best_candidate"]; best_record = read_json(candidate_dir(root,best_id)/"result.json")
         base_harness = candidate_dir(root,best_id)/"harness"; components = load_components(base_harness)
         feedback = [{"task_id":t["task_id"],"failed":[c for c in t["checks"] if not c["passed"]]} for t in best_record["tasks"] if any(not c["passed"] for c in t["checks"])]
         count = 1 if state["mode"] == "sequential" else min(state["parallelism"],len(COMPONENTS))
