@@ -688,6 +688,64 @@ export async function resolveHermesAgentRunApproval({
   }
 }
 
+
+/** Resolve exactly one advertised pending control. Only "once" and "deny" are accepted. */
+export async function resolveHermesAgentRunApproval({
+  env = process.env, fetchImpl = safePinnedFetch, userId, runId, requestId, executionGeneration, choice
+} = {}) {
+  const config = getConfig(env, userId, true);
+  if (config.error) return config.error;
+  const id = validateHermesRunId(runId);
+  const promptId = validateHermesPromptId(requestId);
+  if (!id || !promptId || !Number.isSafeInteger(executionGeneration) || executionGeneration < 0 ||
+      !["once", "deny"].includes(choice)) {
+    return blocked("HERMES_RUN_APPROVAL_INVALID", "A valid run ID, pending prompt ID, non-negative execution generation, and once/deny decision are required.");
+  }
+  try {
+    const capabilities = await getHermesApiCapabilities({ config, fetchImpl });
+    if (!capabilities.runApproval) {
+      return blocked("HERMES_RUN_APPROVAL_UNSUPPORTED", "The configured Hermes API server does not advertise run-approval support.");
+    }
+    const response = await fetchImpl(config.baseUrl + "/runs/" + encodeURIComponent(id) + "/approval", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + config.token
+      },
+      body: JSON.stringify({
+        request_id: promptId,
+        execution_generation: executionGeneration,
+        choice
+      }),
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000)
+    });
+    const data = await readJsonLimited(response, 250_000);
+    if (!response.ok) {
+      return {
+        state: "failed", provider: "hermes-agent",
+        error: {
+          code: response.status === 409 ? "HERMES_RUN_APPROVAL_STALE" : response.status === 404 ? "HERMES_RUN_NOT_FOUND" : "HERMES_RUN_APPROVAL_FAILED",
+          message: "Hermes Agent rejected this run approval decision (HTTP " + response.status + "). Refresh run status and its pending controls before retrying."
+        }
+      };
+    }
+    return {
+      state: "resolved",
+      provider: "hermes-agent",
+      runId: id,
+      requestId: promptId,
+      executionGeneration,
+      choice,
+      status: bounded(data?.status, 40) || "pending",
+      notice: "Hermes accepted the specific approval decision. Poll status; this does not prove that the approved tool call completed."
+    };
+  } catch (error) {
+    return sanitizeError(error);
+  }
+}
+
 export async function runHermesAgentTask({ env = process.env, fetchImpl = safePinnedFetch, userId, task, conversationId } = {}) {
   const config = getConfig(env, userId, true);
   if (config.error) return config.error;
