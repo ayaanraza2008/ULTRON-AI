@@ -33,8 +33,11 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly Button _pairDeviceButton;
     private readonly Button _startPresenceButton;
     private readonly Button _stopPresenceButton;
+    private readonly Button _startActionsButton;
+    private readonly Button _stopActionsButton;
     private readonly CloudPresenceClient _cloudPresence = new();
     private CancellationTokenSource? _presenceCancellation;
+    private CancellationTokenSource? _actionsCancellation;
     private bool _suppressAutoStartChange;
     private SpeechRecognitionEngine? _recognizer;
     private bool _allowExit;
@@ -49,9 +52,9 @@ internal sealed class CompanionContext : ApplicationContext
         {
             Text = "ULTRON Wake Companion",
             Width = 520,
-            Height = 330,
+            Height = 385,
             StartPosition = FormStartPosition.CenterScreen,
-            MinimumSize = new System.Drawing.Size(490, 300)
+            MinimumSize = new System.Drawing.Size(490, 350)
         };
 
         var layout = new TableLayoutPanel
@@ -122,12 +125,18 @@ internal sealed class CompanionContext : ApplicationContext
         _pairDeviceButton = new Button { Text = "Pair this PC", AutoSize = true };
         _startPresenceButton = new Button { Text = "Start cloud presence", AutoSize = true };
         _stopPresenceButton = new Button { Text = "Stop cloud presence", AutoSize = true, Enabled = false };
+        _startActionsButton = new Button { Text = "Enable local action approvals", AutoSize = true, Enabled = false };
+        _stopActionsButton = new Button { Text = "Stop action approvals", AutoSize = true, Enabled = false };
         _pairDeviceButton.Click += async (_, _) => await PairCloudCompanionAsync();
         _startPresenceButton.Click += async (_, _) => await StartCloudPresenceAsync();
         _stopPresenceButton.Click += (_, _) => StopCloudPresence();
+        _startActionsButton.Click += async (_, _) => await StartRemoteActionApprovalsAsync();
+        _stopActionsButton.Click += (_, _) => StopRemoteActionApprovals();
         cloudButtons.Controls.Add(_pairDeviceButton);
         cloudButtons.Controls.Add(_startPresenceButton);
         cloudButtons.Controls.Add(_stopPresenceButton);
+        cloudButtons.Controls.Add(_startActionsButton);
+        cloudButtons.Controls.Add(_stopActionsButton);
 
         layout.Controls.Add(cloudButtons, 0, 3);
         layout.Controls.Add(_autoStartCheckBox, 0, 4);
@@ -145,6 +154,8 @@ internal sealed class CompanionContext : ApplicationContext
         menu.Items.Add("Pair this PC with ULTRON", null, async (_, _) => await PairCloudCompanionAsync());
         menu.Items.Add("Start cloud presence", null, async (_, _) => await StartCloudPresenceAsync());
         menu.Items.Add("Stop cloud presence", null, (_, _) => StopCloudPresence());
+        menu.Items.Add("Enable local action approvals", null, async (_, _) => await StartRemoteActionApprovalsAsync());
+        menu.Items.Add("Stop action approvals", null, (_, _) => StopRemoteActionApprovals());
         menu.Items.Add("Show window", null, (_, _) => ShowWindow());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => ExitApplication());
@@ -304,7 +315,7 @@ internal sealed class CompanionContext : ApplicationContext
             var pairing = await _cloudPresence.PairAsync(_assistantUrl, code.Text);
             ShowStatus($"Paired {pairing.DeviceName} with ULTRON. Cloud presence is still off until you start it.");
             MessageBox.Show(_window,
-                "This PC is paired. Its credential is stored in Windows Credential Manager. Start cloud presence when you want ULTRON to show this PC as online. Pairing does not enable remote PC control.",
+                "This PC is paired. Its credential is stored in Windows Credential Manager. Start cloud presence to show this PC as online. Fixed remote shortcuts remain disabled until you separately enable local action approvals; every shortcut then requires a fresh Yes/No confirmation on this PC.",
                 "ULTRON pairing complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception error)
@@ -363,14 +374,125 @@ internal sealed class CompanionContext : ApplicationContext
                     _startPresenceButton.Enabled = true;
                     _pairDeviceButton.Enabled = true;
                     _stopPresenceButton.Enabled = false;
+                    _startActionsButton.Enabled = false;
+                    StopRemoteActionApprovals();
                     if (!_allowExit) ShowStatus("ULTRON cloud presence is stopped.");
                 }
             }
         }
     }
 
+    private async Task StartRemoteActionApprovalsAsync()
+    {
+        if (_actionsCancellation is not null) return;
+        if (!_cloudPresence.HasPairing)
+        {
+            MessageBox.Show(_window, "Pair this PC with ULTRON before enabling local action approvals.",
+                "Pairing required", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (_presenceCancellation is null)
+        {
+            MessageBox.Show(_window, "Start cloud presence first. Local action approvals use the same paired outbound connection.",
+                "Cloud presence required", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var consent = MessageBox.Show(_window,
+            "Enable requests for six fixed shortcuts on this PC? ULTRON may ask to open Notepad, File Explorer, Calculator, or the standard Desktop, Documents or Downloads folder.\n\nEvery request is shown here as a separate Yes/No prompt. Nothing runs without your local approval. This does not enable shell commands, arbitrary files, screenshots, clipboard, keyboard or mouse control.",
+            "Enable ULTRON local action approvals", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (consent != DialogResult.Yes) return;
+
+        var cancellation = new CancellationTokenSource();
+        _actionsCancellation = cancellation;
+        _startActionsButton.Enabled = false;
+        _stopActionsButton.Enabled = true;
+        ShowStatus("ULTRON local action approvals are starting…");
+        try
+        {
+            await _cloudPresence.RunRemoteActionPollingLoopAsync(
+                ApproveRemoteCommandAsync,
+                ExecuteRemoteCommandAsync,
+                ShowStatus,
+                cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // The local user stopped action approvals.
+        }
+        catch (Exception error)
+        {
+            ShowStatus("ULTRON local action approvals stopped: " + error.GetType().Name);
+        }
+        finally
+        {
+            if (ReferenceEquals(_actionsCancellation, cancellation))
+            {
+                _actionsCancellation = null;
+                cancellation.Dispose();
+                if (!_window.IsDisposed)
+                {
+                    _startActionsButton.Enabled = _presenceCancellation is not null && _cloudPresence.HasPairing;
+                    _stopActionsButton.Enabled = false;
+                    if (!_allowExit) ShowStatus("ULTRON local action approvals are stopped.");
+                }
+            }
+        }
+    }
+
+    private Task<bool> ApproveRemoteCommandAsync(RemoteDesktopCommand command, CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void ShowApproval()
+        {
+            if (cancellationToken.IsCancellationRequested || _allowExit || _window.IsDisposed)
+            {
+                completion.TrySetResult(false);
+                return;
+            }
+            var result = MessageBox.Show(
+                _window,
+                "ULTRON requests permission to " + CloudPresenceClient.DescribeCommand(command) + ".\n\nThis is a one-time fixed shortcut. It cannot run commands or access arbitrary files.\n\nAllow this action on this PC?",
+                "ULTRON action approval required",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            completion.TrySetResult(result == DialogResult.Yes && !cancellationToken.IsCancellationRequested);
+        }
+
+        if (_window.IsDisposed) return Task.FromResult(false);
+        try
+        {
+            if (_window.InvokeRequired) _window.BeginInvoke((Action)ShowApproval);
+            else ShowApproval();
+        }
+        catch
+        {
+            completion.TrySetResult(false);
+        }
+        return completion.Task;
+    }
+
+    private static Task<string> ExecuteRemoteCommandAsync(RemoteDesktopCommand command, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(RemoteDesktopActionExecutor.Execute(command));
+    }
+
+    private void StopRemoteActionApprovals()
+    {
+        _actionsCancellation?.Cancel();
+        if (!_window.IsDisposed)
+        {
+            _startActionsButton.Enabled = false;
+            _stopActionsButton.Enabled = _actionsCancellation is not null;
+        }
+        ShowStatus("Stopping ULTRON local action approvals…");
+    }
+
     private void StopCloudPresence()
     {
+        StopRemoteActionApprovals();
         _presenceCancellation?.Cancel();
         ShowStatus("Stopping ULTRON cloud presence…");
     }
@@ -611,6 +733,7 @@ internal sealed class CompanionContext : ApplicationContext
     private void ExitApplication()
     {
         _allowExit = true;
+        StopRemoteActionApprovals();
         StopCloudPresence();
         StopListening();
         _tray.Visible = false;
@@ -623,6 +746,7 @@ internal sealed class CompanionContext : ApplicationContext
     {
         if (disposing)
         {
+            StopRemoteActionApprovals();
             StopCloudPresence();
             StopListening();
             _cloudPresence.Dispose();
