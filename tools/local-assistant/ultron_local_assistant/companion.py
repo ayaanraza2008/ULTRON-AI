@@ -27,6 +27,8 @@ STATUS_PATH = "/v1/ultron/status"
 DEFAULT_PORT = 8765
 MIN_TOKEN_LENGTH = 43  # 32 random bytes encoded as unpadded URL-safe base64.
 MAX_ORIGIN_LENGTH = 512
+MAX_CONCURRENT_REQUESTS = 16
+REQUEST_TIMEOUT_SECONDS = 5.0
 
 
 def generate_companion_token() -> str:
@@ -90,10 +92,29 @@ class _CompanionHTTPServer(ThreadingHTTPServer):
         self.device_name = (platform.node() or "Windows PC")[:120]
         self.allowed_origins = frozenset(allowed_origins)
         self.request_limit = request_limit
+        self.max_concurrent_requests = MAX_CONCURRENT_REQUESTS
+        self.request_slots = threading.BoundedSemaphore(self.max_concurrent_requests)
         self.rate_lock = threading.Lock()
         self.requests_by_ip: dict[str, deque[float]] = defaultdict(deque)
         super().__init__(("127.0.0.1", port), _CompanionRequestHandler)
         self.expected_host = f"127.0.0.1:{self.server_port}"
+
+    def process_request(self, request, client_address) -> None:
+        # Bound handler threads before parsing attacker-controlled request headers.
+        if not self.request_slots.acquire(blocking=False):
+            request.close()
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.request_slots.release()
 
     def permit_request(self, client_ip: str) -> bool:
         now = time.monotonic()
@@ -111,18 +132,26 @@ class _CompanionRequestHandler(BaseHTTPRequestHandler):
     server: _CompanionHTTPServer
     protocol_version = "HTTP/1.1"
 
+    def setup(self) -> None:
+        # A local client must not hold a handler thread indefinitely with a
+        # partial request line or slow headers.
+        self.request.settimeout(REQUEST_TIMEOUT_SECONDS)
+        super().setup()
+
     def log_message(self, _format: str, *_args: object) -> None:
         # Do not log headers, tokens, query strings, or caller-provided values.
         return
 
     def _send_json(self, status: int, payload: dict, origin: str | None = None) -> None:
         body = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        self.close_connection = True
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Connection", "close")
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
@@ -154,9 +183,11 @@ class _CompanionRequestHandler(BaseHTTPRequestHandler):
         if self.headers.get("Access-Control-Request-Method", "").upper() != "GET":
             self._send_json(405, {"error": "method_not_allowed"}, origin)
             return
+        self.close_connection = True
         self.send_response(204)
         self.send_header("Content-Length", "0")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
