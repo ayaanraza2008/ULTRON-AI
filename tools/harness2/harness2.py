@@ -90,16 +90,38 @@ def load_benchmark(name, custom=None):
     path = Path(custom).expanduser().resolve() if custom else Path(__file__).parent / "benchmarks" / f"{name}.json"
     data = read_json(path)
     tasks = data.get("tasks") if isinstance(data, dict) else None
-    if not isinstance(tasks, list) or not tasks: raise Harness2Error("Benchmark needs a non-empty tasks list")
+    if not isinstance(tasks, list) or not tasks or len(tasks) > 200:
+        raise Harness2Error("Benchmark needs 1-200 tasks")
     seen = set()
+    allowed_task_fields = {"id", "title", "prompt", "criteria"}
+    allowed_criteria = {"all_contains", "any_contains", "forbidden_contains", "min_chars"}
     for task in tasks:
-        if not isinstance(task, dict) or not isinstance(task.get("id"), str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", task["id"]) or task["id"] in seen or not isinstance(task.get("prompt"), str) or not task["prompt"].strip(): raise Harness2Error("Invalid or duplicate benchmark task")
-        seen.add(task["id"])
+        if not isinstance(task, dict) or set(task) - allowed_task_fields:
+            raise Harness2Error("Invalid benchmark task fields")
+        task_id, prompt = task.get("id"), task.get("prompt")
+        if (not isinstance(task_id, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", task_id)
+                or task_id in seen or not isinstance(prompt, str)
+                or not prompt.strip() or len(prompt) > MAX_TEXT or "\\x00" in prompt):
+            raise Harness2Error("Invalid or duplicate benchmark task")
+        title = task.get("title", task_id)
+        if not isinstance(title, str) or len(title) > 200 or "\\x00" in title:
+            raise Harness2Error("Invalid benchmark task title")
+        seen.add(task_id)
         criteria = task.get("criteria", {})
-        if not isinstance(criteria, dict): raise Harness2Error("Task criteria must be an object")
-        for key in ("all_contains","any_contains","forbidden_contains"):
-            if key in criteria and (not isinstance(criteria[key], list) or not all(isinstance(x,str) for x in criteria[key])): raise Harness2Error(f"Invalid {key}")
-        if "min_chars" in criteria and (not isinstance(criteria["min_chars"], int) or isinstance(criteria["min_chars"], bool) or not 0 <= criteria["min_chars"] <= MAX_TEXT): raise Harness2Error("Invalid min_chars")
+        if not isinstance(criteria, dict) or set(criteria) - allowed_criteria:
+            raise Harness2Error("Task criteria contain unsupported fields")
+        for key in ("all_contains", "any_contains", "forbidden_contains"):
+            if key in criteria:
+                values = criteria[key]
+                if (not isinstance(values, list) or len(values) > 100
+                        or not all(isinstance(value, str) and value.strip()
+                                   and len(value) <= 512 and "\\x00" not in value for value in values)):
+                    raise Harness2Error(f"Invalid {key}")
+        if "min_chars" in criteria and (
+                not isinstance(criteria["min_chars"], int)
+                or isinstance(criteria["min_chars"], bool)
+                or not 0 <= criteria["min_chars"] <= MAX_TEXT):
+            raise Harness2Error("Invalid min_chars")
     return data
 
 def judge(answer, criteria):
@@ -113,11 +135,26 @@ def judge(answer, criteria):
     return {"score":passed/len(checks),"checks":checks}
 
 def score(benchmark, answers):
-    by_id = {x["task_id"]:x for x in answers}
+    if not isinstance(answers, list):
+        raise Harness2Error("Saved benchmark answers must be a list")
+    expected_ids = {task["id"] for task in benchmark["tasks"]}
+    by_id = {}
+    for item in answers:
+        if not isinstance(item, dict) or not isinstance(item.get("task_id"), str):
+            raise Harness2Error("Saved benchmark answer has an invalid task ID")
+        task_id = item["task_id"]
+        if task_id not in expected_ids:
+            raise Harness2Error(f"Saved benchmark answer references unknown task: {task_id}")
+        if task_id in by_id:
+            raise Harness2Error(f"Duplicate saved benchmark answer: {task_id}")
+        answer = item.get("answer", "")
+        if not isinstance(answer, str) or len(answer) > MAX_TEXT or "\\x00" in answer:
+            answer = ""
+        by_id[task_id] = answer
     tasks = []
     for task in benchmark["tasks"]:
-        answer = by_id.get(task["id"],{}).get("answer","")
-        result = judge(answer if isinstance(answer,str) else "", task.get("criteria",{}))
+        answer = by_id.get(task["id"], "")
+        result = judge(answer, task.get("criteria", {}))
         tasks.append({"task_id":task["id"],"title":task.get("title",task["id"]),"answer":answer,**result})
     return {"score":sum(x["score"] for x in tasks)/len(tasks),"tasks":tasks}
 
