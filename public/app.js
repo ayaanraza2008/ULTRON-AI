@@ -3475,8 +3475,8 @@
       drawerCard("Universal ULTRON web app", "Works in a browser on Windows, macOS, Linux, Android, iPhone and iPad. The same signed-in account loads your saved cloud conversations on each device.", "CROSS-DEVICE", "ready");
         const desktop = capabilities?.providers?.desktop || {};
         drawerCard("Windows companion relay",
-          "Cloud pairing is available for status only. The PC connects outbound over HTTPS every 30 seconds; the server never opens a connection to your PC.",
-          "STATUS ONLY", "warning");
+          "The PC connects outbound over HTTPS. In addition to presence, it can receive six fixed app/folder requests when remote approvals are separately enabled on Windows. Every request needs a fresh local Yes/No approval.",
+          "LOCAL APPROVAL REQUIRED", "warning");
         drawerCard("Local companion service",
           desktop.localAgentConfigured
             ? "Local status-service configuration is present, but the cloud pairing token is separate and does not enable local PC-control actions."
@@ -3510,6 +3510,53 @@
                   showToast(error.message || "Could not revoke this device.");
                 }
               }, true);
+
+              drawerCard("Approved local actions",
+                "Requests expire after 60 seconds. The Windows companion must have remote approvals enabled, and you must approve the exact action in its visible Windows dialog.",
+                device.online ? "READY TO REQUEST" : "DEVICE OFFLINE",
+                device.online ? "ready" : "warning");
+              if (device.online) {
+                const localActions = [
+                  { actionType: "launch_application", target: "notepad", label: "REQUEST OPEN NOTEPAD" },
+                  { actionType: "launch_application", target: "explorer", label: "REQUEST OPEN FILE EXPLORER" },
+                  { actionType: "launch_application", target: "calculator", label: "REQUEST OPEN CALCULATOR" },
+                  { actionType: "open_known_folder", target: "desktop", label: "REQUEST OPEN DESKTOP" },
+                  { actionType: "open_known_folder", target: "documents", label: "REQUEST OPEN DOCUMENTS" },
+                  { actionType: "open_known_folder", target: "downloads", label: "REQUEST OPEN DOWNLOADS" }
+                ];
+                for (const action of localActions) {
+                  drawerButton(action.label, async () => {
+                    try {
+                      await apiRequest("/api/desktop-companion/devices/" + encodeURIComponent(device.id) + "/commands", {
+                        method: "POST",
+                        body: { actionType: action.actionType, target: action.target }
+                      });
+                      showToast("Action request sent. Approve it on the Windows PC within 60 seconds.");
+                      await showDrawerView("devices");
+                    } catch (error) {
+                      showToast(error.message || "Could not send the action request.");
+                    }
+                  });
+                }
+              }
+
+              try {
+                const history = await apiRequest("/api/desktop-companion/devices/" + encodeURIComponent(device.id) + "/commands");
+                for (const command of (Array.isArray(history?.commands) ? history.commands : []).slice(0, 5)) {
+                  const actionName = {
+                    notepad: "Notepad", explorer: "File Explorer", calculator: "Calculator",
+                    desktop: "Desktop", documents: "Documents", downloads: "Downloads"
+                  }[command.target] || "Local action";
+                  const state = String(command.status || "unknown").toUpperCase();
+                  const created = command.createdAt ? new Date(command.createdAt).toLocaleString() : "Recent request";
+                  drawerCard(actionName + " · " + command.actionType.replaceAll("_", " "),
+                    created + (command.resultCode ? " · " + command.resultCode.replaceAll("_", " ") : ""),
+                    state,
+                    ["completed"].includes(command.status) ? "ready" : ["rejected", "failed", "expired"].includes(command.status) ? "warning" : "neutral");
+                }
+              } catch (error) {
+                drawerCard("Action history unavailable", error.message || "Could not load local action history.", error.code || "UNAVAILABLE", "warning");
+              }
             }
           }
         }
@@ -3563,7 +3610,7 @@
               else showToast("Clipboard access is unavailable; select the command manually.");
             });
             const nextSteps = document.createElement("p");
-            nextSteps.textContent = "On the Windows PC, run the pair command and enter this code when prompted. Then run ultron-local companion connect to keep status online; leave that terminal running.";
+            nextSteps.textContent = "On the Windows PC, open ULTRON Wake Companion, click Pair this PC, and paste this code. Then start cloud presence in the companion. Remote action requests are a separate opt-in on the Windows PC."
             pairResult.append(expiry, codeValue, copyCode, commandText, copyCommand, nextSteps);
             pairResult.hidden = false;
           } catch (error) {
@@ -3580,7 +3627,7 @@
         }
         ui.drawerContent.appendChild(pairResult);
         drawerCard("Windows setup",
-          "Install the ULTRON Local Assistant on Windows. Run ultron-local companion pair --server-url " + window.location.origin + ", then ultron-local companion connect. The connect command sends one status heartbeat every 30 seconds and stays in the foreground.",
+          "Install and open the ULTRON Windows Wake Companion. Choose Server settings and enter this exact HTTPS origin, pair the PC here, then start cloud presence and separately enable remote action approvals on Windows.",
           "OUTBOUND HTTPS");
         drawerCard("Android wake companion",
           "An optional Android debug companion is available for on-device wake-word detection and a notification that opens ULTRON. For the full ULTRON interface, install this web app and sign in with the same account.",
@@ -3592,8 +3639,8 @@
           "Conversations, saved documents, notes and other account-backed data are loaded from ULTRON's server after sign-in. Installing the app does not copy private data into a public offline cache.",
           "ACCOUNT SYNC", "ready");
         drawerCard("Access boundaries",
-          "This relay reports whether a paired PC is online and supports revocation only. It cannot execute commands, access files, capture screens, or control keyboard/mouse input.",
-          "NO REMOTE PC CONTROL", "warning");
+          "Only Notepad, File Explorer, Calculator, Desktop, Documents and Downloads can be requested. Each action requires a fresh approval dialog on the paired PC and expires after 60 seconds. No arbitrary shell, scripts, file reads/uploads, screenshots, keyboard or mouse control are available.",
+          "FIXED ALLOWLIST ONLY", "warning");
       } catch (error) {
         ui.drawerContent.replaceChildren();
         drawerHeading("PC and mobile devices", "Pairing and device inventory require an authenticated Supabase account.");
@@ -3603,7 +3650,7 @@
       return;
     }
     if (name === "control") {
-      drawerHeading("Full system control", "Request a user-authorized control session for a paired device. ULTRON will show exactly which scopes are requested and whether a compatible companion can execute them.");
+      drawerHeading("Local approved actions", "Request one of the fixed app/folder actions from a paired online Windows PC. The PC user must approve each request locally.");
       drawerCard("Control session", "Checking device pairing and available action handlers…", "CHECKING", "warning");
       let capabilities = null;
       let integrations = null;
@@ -3614,13 +3661,13 @@
         ]);
       } catch (error) {
         ui.drawerContent.replaceChildren();
-        drawerHeading("Full system control", "The backend must confirm authentication and companion readiness before a control session can be considered.");
+        drawerHeading("Local approved actions", "The backend must confirm authentication and companion readiness before a local action can be requested.");
         drawerCard("Cannot check control readiness", error.message, error.code || "REQUEST FAILED", "error");
         if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
         return;
       }
       ui.drawerContent.replaceChildren();
-      drawerHeading("Full system control", "Choose the minimum permissions ULTRON may request. This is not an operating-system bypass; the device must be paired and the companion must enforce each permission.");
+      drawerHeading("Local approved actions", "Only fixed application and standard-folder actions are supported. The companion must be paired, online, and have remote approvals enabled; the user at that PC must approve each request.");
       const desktop = capabilities?.providers?.desktop || {};
       const desktopConfigured = desktop.localAgentConfigured === true;
       const companionEntry = Array.isArray(integrations?.integrations)
@@ -3629,8 +3676,8 @@
       const companionNote = companionEntry?.note || "The current desktop adapter supports read-only device status only; it has no verified keyboard, mouse, file, app-launch, or system-command handlers.";
       drawerCard("Windows companion",
         desktopConfigured
-          ? "The backend reports companion settings, but has not proved the device is paired, online, or able to execute actions. " + companionNote
-          : "No Windows companion is configured. Install and pair a local companion before device-control actions can run. " + companionNote,
+          ? "The backend reports companion settings, but the paired device must also be online and remote approvals enabled. Only a fixed app/folder allowlist can run after local approval. " + companionNote
+          : "No Windows companion is configured. Install, pair and enable remote approvals on a local Windows companion before requesting a fixed app/folder action. " + companionNote,
         desktopConfigured ? "CONFIGURED · NOT VERIFIED" : "NOT CONNECTED",
         "warning");
       drawerCard("Mobile device",
