@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult, sanitizeToolResultForClient, parseGeoSleuthReverseSearchConsent, buildGeoSleuthInvestigationOptions } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult, sanitizeToolResultForClient, parseGeoSleuthReverseSearchConsent, buildGeoSleuthInvestigationOptions, parseVoiceCloneConsent } from "../agent-runtime.js";
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
@@ -2346,4 +2346,19 @@ test("Geo-Sleuth investigation options ignore model-authored reverse-search flag
     env: {}
   });
   assert.equal(approved.includeReverseSearch, true);
+});
+
+
+test("voice cloning consent requires an exact own-voice or speaker-permission attestation", () => {
+  const own = "I confirm this is my own voice and I approve cloning the attached audio into a VoiceStudio profile.";
+  const speaker = "I confirm I have the speaker's permission and I approve cloning the attached audio into a VoiceStudio profile.";
+  assert.equal(parseVoiceCloneConsent(own), "own_voice");
+  assert.equal(parseVoiceCloneConsent(speaker), "speaker_permission");
+  assert.equal(parseVoiceCloneConsent("This is my voice."), null);
+  assert.equal(parseVoiceCloneConsent("I have permission to clone this voice."), null);
+  assert.equal(parseVoiceCloneConsent("I don't have the speaker's permission to clone this voice."), null);
+  assert.equal(parseVoiceCloneConsent("I confirm I have the speaker's permission and I approve cloning the attached audio into a VoiceStudio profile, but I withdraw permission."), null);
+  assert.equal(parseVoiceCloneConsent("Please clone this voice. " + own), null);
+  assert.equal(parseVoiceCloneConsent("I confirm this is my own voice and I approve cloning the attached audio into a VoiceStudio profile later."), null);
+  assert.equal(parseVoiceCloneConsent(undefined), null);
 });
