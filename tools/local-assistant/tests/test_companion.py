@@ -443,7 +443,7 @@ class CompanionServerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as root:
             identity = Path(root) / "device-id"
-            identity.write_text("00000000-0000-4000-8000-000000000001\\n", encoding="ascii")
+            identity.write_text("00000000-0000-4000-8000-000000000001\n", encoding="ascii")
             # Path.is_junction() exists on newer Python versions; create=True keeps
             # this policy test compatible with the project's Python 3.10 minimum.
             with patch.object(Path, "is_symlink", return_value=False):
