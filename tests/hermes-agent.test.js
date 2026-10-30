@@ -669,3 +669,24 @@ test("Hermes approval resolver requires an advertised approval feature and exact
   assert.equal(unsupported.error.code, "HERMES_RUN_APPROVAL_UNSUPPORTED");
   assert.equal(approvalCalls, 0);
 });
+
+
+test("Hermes run status accepts hyphenated native Hermes run IDs", async () => {
+  const result = await getHermesAgentRunStatus({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run-42",
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "https://hermes.example.com/v1/runs/run-42");
+      assert.equal(options.method, "GET");
+      return new Response(JSON.stringify({
+        run_id: "run-42",
+        status: "completed",
+        output: "The run completed."
+      }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.runId, "run-42");
+  assert.match(result.output, /run completed/);
+});
