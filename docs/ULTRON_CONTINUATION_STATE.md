@@ -2,8 +2,8 @@
 
 **Checkpoint date:** 2026-10-30  
 **Working candidate branch:** `integration/ultron-cross-sector-current-main-20261029`  
-**Latest source/workflow head before documentation refresh:** `0fd8c84c3198674a4ec04357b2b593c6b3821b6a`  
-**Latest acceptance-matrix commit:** `11fe766899129ff6ce2ac6b811a1b2d550688685`  
+**Latest source/workflow head before documentation refresh:** `27077e2c84d9f34beb26ed42705e190cc8c68a26`  
+**Latest acceptance-matrix commit:** `9d4e689f7103a9168a1814870d378d8d4794596c`  
 **Pull request:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **Default branch:** `main`
 
@@ -59,6 +59,11 @@ Three errors from initial PR #400 CI [run 41093747376](https://github.com/ayaanr
 - Current `.github/workflows/ci.yml` applies the patch before `npm ci`, then audits with `npm audit --audit-level=moderate`. This removes the previous non-reproducible `npm audit fix` operation from the build.
 - Standalone PR #403 run [41085911433](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41085911433) passed its own patcher tests, `npm ci`, build/bridge and strict audit with **0 vulnerabilities**, but that is a stale PR branch and not proof that the forward-port on PR #400 works. The current forward-port needs its own exact-head CI.
 
+
+## Browser speech voice scoring regression tests
+
+The active PR #400 source `public/speech-voices.js` already contains correct male/female name regexes with actual word boundaries. The only remaining PR #404 delta was two direct regressions in `tests/speech-voices.test.js`; they were forward-ported in commit `27077e2c84d9f34beb26ed42705e190cc8c68a26`. One test verifies Microsoft David outranks Microsoft Zira when locale and other factors are equal; the second verifies Zira is penalized versus a neutral voice. The prior PR #404 run [41083912987](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41083912987) passed the standalone branch tests, but the forward-ported tests still require current PR #400 CI. Actual voice output, pronunciation, speech latency and microphone/browser quality remain unverified.
+
 ## PR #400 desktop pairing relay security review
 
 Source review found: API-level rate limiting; high-entropy single-use pairing codes; hashed device tokens; atomic expiry/consumption and device registration; narrowly named service-role RPC calls; owner-scoped device inventory/revocation; narrow migration grants/RLS; and no remote command/control endpoint. This is not live migration or pairing verification. The separate relay currently provides pairing/status/heartbeat only.
@@ -97,7 +102,7 @@ Current comparison against declared bases at the time of review:
 ## Immediate next action when resuming
 
 1. Re-read this file and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`; inspect PR #400 actual head (latest source/workflow head was `0fd8c84c3198674a4ec04357b2b593c6b3821b6a`; matrix refresh commit was `11fe766899129ff6ce2ac6b811a1b2d550688685`).
-2. Fetch Actions runs for the current exact PR #400 head. The new action upgrades, identity/reparse tests, and World Intelligence patch-forward are not complete until all current ULTRON CI and Windows Companion jobs pass.
+2. Fetch Actions runs for the actual latest PR #400 head (the last observed head before this checkpoint update was `9d4e689f7103a9168a1814870d378d8d4794596c`). The new action upgrades, identity/reparse tests, World Intelligence patch-forward and speech scoring tests are not complete until all current ULTRON CI and Windows Companion jobs pass. A run lookup for this exact head returned no workflow runs; never infer a pass from older runs.
 3. Inspect the Node test output and Python logs: confirm malformed UUID, symlink and junction/reparse tests were actually executed on Ubuntu/Windows; verify both audits show zero vulnerabilities, pinned World Intelligence build and bridge pass, and Windows artifact upload succeeds.
 4. Check the Windows workflow logs for the prior Node20 deprecation warning; confirm it has disappeared after moving to Node24-compatible action majors.
 5. If any CI failure occurs, inspect exact failing test/log, fix only the cause, rerun and re-record the actual head.
