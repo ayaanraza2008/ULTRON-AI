@@ -10,7 +10,7 @@ create table if not exists public.desktop_companion_pairings (
   consumed_at timestamptz,
   created_at timestamptz not null default now(),
   constraint desktop_companion_pairings_expiry_after_creation
-    check (expires_at > created_at)
+    check (expires_at > created_at and expires_at <= created_at + interval '5 minutes')
 );
 
 create index if not exists desktop_companion_pairings_user_created_idx
