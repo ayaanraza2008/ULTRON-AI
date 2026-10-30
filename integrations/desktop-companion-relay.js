@@ -170,6 +170,156 @@ export function createDesktopCompanionRelayRouter({
     }
   });
 
+  const allowedActions = new Map([
+    ["launch_application", new Set(["notepad", "explorer", "calculator"])],
+    ["open_known_folder", new Set(["desktop", "documents", "downloads"])]
+  ]);
+
+  // The browser may request only one of six fixed actions. Supabase RLS and the
+  // SECURITY DEFINER function verify that the device belongs to this user and
+  // has sent a heartbeat within the last 90 seconds.
+  router.post("/desktop-companion/devices/:id/commands", requireSupabaseUser, async (req, res) => {
+    const deviceRecordId = cleanString(req.params.id, 64);
+    const actionType = cleanString(req.body?.actionType, 40);
+    const target = cleanString(req.body?.target, 40);
+    if (!UUID_RE.test(deviceRecordId) || !allowedActions.get(actionType)?.has(target)) {
+      return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION", message: "Choose an allowlisted application or standard folder." } });
+    }
+
+    try {
+      const created = await supabaseRest(
+        req,
+        "rpc/create_desktop_companion_command",
+        "POST",
+        "",
+        { p_device_record_id: deviceRecordId, p_action_type: actionType, p_target: target }
+      );
+      const command = Array.isArray(created) ? created[0] : created;
+      if (!command?.command_id) {
+        return res.status(409).json({ error: { code: "DEVICE_NOT_READY_OR_ACTION_PENDING", message: "The device must be online, and it can handle only one outstanding action at a time." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(201).json({
+        command: {
+          id: cleanString(command.command_id, 64),
+          actionType,
+          target,
+          status: "pending",
+          expiresAt: cleanString(command.command_expires_at, 40) || null
+        },
+        approvalRequiredOnDevice: true
+      });
+    } catch (error) {
+      logger.warn?.("Desktop action request could not be created", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_CREATE_FAILED", "Could not request an action on this device.");
+    }
+  });
+
+  router.get("/desktop-companion/devices/:id/commands", requireSupabaseUser, async (req, res) => {
+    const deviceRecordId = cleanString(req.params.id, 64);
+    if (!UUID_RE.test(deviceRecordId)) {
+      return res.status(400).json({ error: { code: "INVALID_DEVICE_ID", message: "Provide a valid device record ID." } });
+    }
+    try {
+      const rows = await supabaseRest(
+        req,
+        "desktop_companion_commands",
+        "GET",
+        "?select=id,device_record_id,action_type,target,status,created_at,expires_at,delivered_at,completed_at,result_code&device_record_id=eq." +
+          encodeURIComponent(deviceRecordId) + "&order=created_at.desc&limit=10"
+      );
+      const commands = (Array.isArray(rows) ? rows : []).map(item => ({
+        id: cleanString(item.id, 64),
+        actionType: allowedActions.has(item.action_type) ? item.action_type : "unknown",
+        target: cleanString(item.target, 40),
+        status: ["pending", "delivered", "completed", "rejected", "failed", "expired"].includes(item.status) ? item.status : "unknown",
+        createdAt: cleanString(item.created_at, 40) || null,
+        expiresAt: cleanString(item.expires_at, 40) || null,
+        completedAt: cleanString(item.completed_at, 40) || null,
+        resultCode: cleanString(item.result_code, 40) || null
+      }));
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ commands });
+    } catch (error) {
+      logger.warn?.("Desktop action history could not be loaded", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_HISTORY_FAILED", "Could not load this device's action history.");
+    }
+  });
+
+  // Device polling is outbound-only. A paired device token can claim one fresh
+  // command for its own UUID; it cannot list or control another device.
+  router.post("/desktop-companion/commands/next", async (req, res) => {
+    const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
+    const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
+    const deviceId = cleanString(req.body?.deviceId, 64);
+    if (!match || !DEVICE_TOKEN_RE.test(match[1]) || !UUID_RE.test(deviceId)) {
+      return res.status(401).json({ error: { code: "DEVICE_AUTH_REQUIRED", message: "A valid paired-device token and identity are required." } });
+    }
+    try {
+      const claimed = await privilegedSupabaseRpc("claim_desktop_companion_command", {
+        p_token_hash: sha256(match[1]),
+        p_device_id: deviceId
+      });
+      const command = Array.isArray(claimed) ? claimed[0] : claimed;
+      const actionType = command?.action_type;
+      const target = command?.target;
+      if (!command?.command_id || !allowedActions.get(actionType)?.has(target)) {
+        res.setHeader("Cache-Control", "no-store");
+        return res.json({ command: null, pollIntervalSeconds: 5 });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({
+        command: {
+          id: cleanString(command.command_id, 64),
+          actionType,
+          target,
+          expiresAt: cleanString(command.expires_at, 40) || null
+        },
+        pollIntervalSeconds: 5
+      });
+    } catch (error) {
+      logger.warn?.("Desktop action command claim failed", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_CLAIM_FAILED", "Could not check for an approved desktop action request.");
+    }
+  });
+
+  router.post("/desktop-companion/commands/:id/result", async (req, res) => {
+    const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
+    const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
+    const deviceId = cleanString(req.body?.deviceId, 64);
+    const commandId = cleanString(req.params.id, 64);
+    const resultCode = cleanString(req.body?.resultCode, 40);
+    const resultStatus = req.body?.status;
+    const statusByResult = new Map([
+      ["USER_APPROVED", "completed"],
+      ["USER_REJECTED", "rejected"],
+      ["ACTION_COMPLETED", "completed"],
+      ["ACTION_FAILED", "failed"]
+    ]);
+    if (!match || !DEVICE_TOKEN_RE.test(match[1]) || !UUID_RE.test(deviceId) ||
+        !UUID_RE.test(commandId) || !statusByResult.has(resultCode) ||
+        statusByResult.get(resultCode) !== resultStatus) {
+      return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_RESULT", message: "The desktop action result was invalid." } });
+    }
+    try {
+      const accepted = await privilegedSupabaseRpc("complete_desktop_companion_command", {
+        p_token_hash: sha256(match[1]),
+        p_device_id: deviceId,
+        p_command_id: commandId,
+        p_status: resultStatus,
+        p_result_code: resultCode
+      });
+      if (accepted !== true) {
+        return res.status(409).json({ error: { code: "DESKTOP_ACTION_NO_LONGER_ACTIVE", message: "This action expired, was already handled, or is not assigned to this device." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ recorded: true, commandId, status: resultStatus, resultCode });
+    } catch (error) {
+      logger.warn?.("Desktop action result could not be recorded", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_RESULT_FAILED", "Could not record the desktop action result.");
+    }
+  });
+
   router.post("/desktop-companion/devices/:id/revoke", requireSupabaseUser, async (req, res) => {
     const deviceId = cleanString(req.params.id, 64);
     if (!UUID_RE.test(deviceId)) {
