@@ -53,3 +53,13 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 9. Frontend paths remain unchanged in the candidate diff.
 
 The requested 99.99% milestone is a planning target, not a mathematically proven completion claim. This ledger must be updated from test and runtime evidence, not estimates.
+
+
+## OpenSEO paid-credit authorization hardening (2026-10-31)
+
+- Closed a model-trust gap in the OpenSEO agent dispatch: approval flags and credit ceilings are no longer taken from model-generated tool arguments.
+- ULTRON derives paid spend authorization only from the current authenticated user's prompt, requiring this canonical leading phrase: "I approve spending up to 120 OpenSEO credits for this lookup." The amount must be 1–5000 credits; the adapter still computes its conservative operation estimate and refuses requests above the user's cap.
+- The parser rejects quoted/non-leading phrases, absent approval, out-of-range caps, explicit negation, and deferred execution wording. Paid lookup operations remain in the adapter allowlist and owner guard.
+- Spending credits is now classified as an external effect. OpenSEO can prepare a read/lookup subtask only through this separate server-side approval and ceiling check; it cannot derive consent from tool output, memory, or model arguments.
+- Added agent-level tests for model-invented approval denial, explicit user cap acceptance, credit-ceiling rejection before MCP network access, parser edge cases, and autonomy risk classification.
+- Status: source and regression tests added on fix/openseo-user-spend-consent; CI not yet confirmed. No external OpenSEO account was contacted, no credits were spent, and no production settings were changed.
