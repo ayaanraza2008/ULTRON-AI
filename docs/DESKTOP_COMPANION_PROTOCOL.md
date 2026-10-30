@@ -14,7 +14,7 @@ Configure these variables on the ULTRON server, not in a public client:
 - `ULTRON_DESKTOP_AGENT_TOKEN`: a high-entropy server-to-companion bearer token.
 - `ULTRON_INTEGRATION_OWNER_USER_ID`: exact Supabase Auth UUID of the one account allowed to use this shared companion credential.
 
-Do not commit or return the bearer token. Public remote endpoints must use HTTPS. The adapter rejects local/private/link-local/metadata/reserved network targets using the shared upstream host policy; production also needs outbound network controls and DNS-rebinding protections. A cloud-hosted Render process cannot connect to a PC's private LAN or its `localhost` without a separately reachable, authenticated gateway.
+Do not commit or return the bearer token. Public remote endpoints must use HTTPS. The adapter uses `safePinnedFetch`: it resolves the host, rejects private/reserved DNS answers, pins the validated addresses to the connection, and blocks redirects. Production should still apply outbound network controls as an independent defense. A cloud-hosted Render process cannot connect to a PC's private LAN or its `localhost` without a separately reachable, authenticated gateway.
 
 ## Request
 
