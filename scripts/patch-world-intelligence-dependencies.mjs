@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { copyFileSync, readFileSync, renameSync, rmSync, writeFileSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -14,13 +14,15 @@ function assert(condition, message) {
  * Apply the reviewed dependency-only security resolution to the exact pinned
  * God’s Eye source tree. Fail closed when the upstream manifest/lockfile drifts.
  */
-export function patchWorldIntelligenceDependencies(targetDirectory) {
+const defaultFileOperations = { copyFileSync, readFileSync, renameSync, rmSync, writeFileSync };
+
+export function patchWorldIntelligenceDependencies(targetDirectory, fileOperations = defaultFileOperations) {
   assert(typeof targetDirectory === "string" && targetDirectory.trim(), "Provide the cloned World Intelligence directory.");
   const root = path.resolve(targetDirectory);
   const manifestPath = path.join(root, "package.json");
   const lockPath = path.join(root, "package-lock.json");
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+  const manifest = JSON.parse(fileOperations.readFileSync(manifestPath, "utf8"));
+  const lock = JSON.parse(fileOperations.readFileSync(lockPath, "utf8"));
   const lockRoot = lock.packages?.[""];
 
   assert(manifest.name === overrides.expectedProject.name, "Unexpected World Intelligence package name; refusing dependency patch.");
@@ -70,18 +72,67 @@ export function patchWorldIntelligenceDependencies(targetDirectory) {
 
   const manifestTemp = manifestPath + ".ultron-patch.tmp";
   const lockTemp = lockPath + ".ultron-patch.tmp";
-  writeFileSync(manifestTemp, JSON.stringify(manifest, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+  const manifestBackup = manifestPath + ".ultron-patch.bak";
+  const lockBackup = lockPath + ".ultron-patch.bak";
+  let manifestBackupCreated = false;
+  let lockBackupCreated = false;
+  let manifestReplaced = false;
+  let lockReplaced = false;
+
   try {
-    writeFileSync(lockTemp, JSON.stringify(lock, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
-    renameSync(manifestTemp, manifestPath);
-    renameSync(lockTemp, lockPath);
+    // Stage both complete files and preserve both originals before replacing
+    // either one. Exclusive backups prevent overwriting recovery files.
+    fileOperations.writeFileSync(manifestTemp, JSON.stringify(manifest, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+    fileOperations.writeFileSync(lockTemp, JSON.stringify(lock, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+    fileOperations.copyFileSync(manifestPath, manifestBackup, fsConstants.COPYFILE_EXCL);
+    manifestBackupCreated = true;
+    fileOperations.copyFileSync(lockPath, lockBackup, fsConstants.COPYFILE_EXCL);
+    lockBackupCreated = true;
+
+    fileOperations.renameSync(manifestTemp, manifestPath);
+    manifestReplaced = true;
+    fileOperations.renameSync(lockTemp, lockPath);
+    lockReplaced = true;
   } catch (error) {
-    // If the second staged file could not be created, remove the first staging
-    // file; the original package files remain unchanged until rename begins.
-    try { renameSync(manifestTemp, manifestPath + ".ultron-patch.failed"); } catch {}
-    try { renameSync(lockTemp, lockPath + ".ultron-patch.failed"); } catch {}
+    const recoveryErrors = [];
+    if (manifestBackupCreated) {
+      try {
+        if (manifestReplaced) {
+          fileOperations.rmSync(manifestPath, { force: true });
+          fileOperations.renameSync(manifestBackup, manifestPath);
+        } else {
+          fileOperations.rmSync(manifestBackup, { force: true });
+        }
+      } catch (restoreError) {
+        recoveryErrors.push(restoreError);
+      }
+    }
+    if (lockBackupCreated) {
+      try {
+        if (lockReplaced) {
+          fileOperations.rmSync(lockPath, { force: true });
+          fileOperations.renameSync(lockBackup, lockPath);
+        } else {
+          fileOperations.rmSync(lockBackup, { force: true });
+        }
+      } catch (restoreError) {
+        recoveryErrors.push(restoreError);
+      }
+    }
+    if (recoveryErrors.length) {
+      throw new AggregateError(
+        [error, ...recoveryErrors],
+        "Dependency patch failed and rollback requires manual recovery; preserve any .ultron-patch.bak files."
+      );
+    }
     throw error;
+  } finally {
+    fileOperations.rmSync(manifestTemp, { force: true });
+    fileOperations.rmSync(lockTemp, { force: true });
   }
+
+  fileOperations.rmSync(manifestBackup, { force: true });
+  fileOperations.rmSync(lockBackup, { force: true });
 
   return {
     project: manifest.name,
