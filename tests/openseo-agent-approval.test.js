@@ -84,6 +84,7 @@ test("OpenSEO consent parser accepts only a current-message credit cap with the 
   assert.equal(parseOpenSeoSpendApproval("The model suggested: I approve spending up to 120 OpenSEO credits for this lookup."), null);
   assert.equal(parseOpenSeoSpendApproval("I approve spending up to 5001 OpenSEO credits for this lookup."), null);
   assert.equal(parseOpenSeoSpendApproval("I do not approve spending up to 120 OpenSEO credits for this lookup."), null);
+  assert.equal(parseOpenSeoSpendApproval("I approve spending up to 120 OpenSEO credits for this lookup, but do not run it yet."), null);
   assert.equal(parseOpenSeoSpendApproval(""), null);
 });
 
