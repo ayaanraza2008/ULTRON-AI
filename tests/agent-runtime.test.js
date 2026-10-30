@@ -2359,6 +2359,8 @@ test("voice cloning consent requires an exact own-voice or speaker-permission at
   assert.equal(parseVoiceCloneConsent("I don't have the speaker's permission to clone this voice."), null);
   assert.equal(parseVoiceCloneConsent("I confirm I have the speaker's permission and I approve cloning the attached audio into a VoiceStudio profile, but I withdraw permission."), null);
   assert.equal(parseVoiceCloneConsent("Please clone this voice. " + own), null);
-  assert.equal(parseVoiceCloneConsent("I confirm this is my own voice and I approve cloning the attached audio into a VoiceStudio profile later."), null);
+  assert.equal(parseVoiceCloneConsent("I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile later."), null);
+  assert.equal(parseVoiceCloneConsent("I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile. I no longer consent."), null);
+  assert.equal(parseVoiceCloneConsent("I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile. I changed my mind."), null);
   assert.equal(parseVoiceCloneConsent(undefined), null);
 });
