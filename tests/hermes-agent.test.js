@@ -50,7 +50,13 @@ test("Hermes direct chat provider is restricted to the configured owner", () => 
   assert.equal(local.baseUrl, "http://127.0.0.1:8642/v1");
   assert.equal(local.priority, -5);
   assert.equal(local.supportsTools, true);
-  assert.equal(local.supportsVision, true);
+  assert.equal(local.supportsVision, false);
+  const visionEnabled = resolveHermesAgentProvider(configuredEnv({
+    HERMES_AGENT_BASE_URL: "http://127.0.0.1:8642/v1",
+    HERMES_AGENT_API_KEY: "local-key",
+    HERMES_AGENT_SUPPORTS_VISION: "true"
+  }), ownerId);
+  assert.equal(visionEnabled.supportsVision, true);
   assert.equal(local.apiKey, "local-key");
 });
 
@@ -61,6 +67,8 @@ test("Hermes readiness lists supported feature families without leaking API key"
   assert.equal(readiness.license, "MIT");
   assert.ok(readiness.features.some(feature => feature.includes("self-improving skill")));
   assert.ok(readiness.features.some(feature => feature.includes("subagents")));
+  assert.equal(readiness.supportsVision, false);
+  assert.equal(getHermesAgentReadiness(configuredEnv({ HERMES_AGENT_SUPPORTS_VISION: "true" })).supportsVision, true);
   assert.equal(JSON.stringify(readiness).includes("private-hermes-api-key"), false);
 });
 
