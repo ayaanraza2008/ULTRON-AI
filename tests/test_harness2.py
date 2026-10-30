@@ -1,4 +1,4 @@
-import json, sys, tempfile, unittest
+import json, subprocess, sys, tempfile, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools" / "harness2"))
 import harness2
@@ -61,6 +61,22 @@ class Harness2Tests(unittest.TestCase):
             path = Path(temp) / "bad.json"
             path.write_text(json.dumps({"tasks":[{"id":"same","prompt":"one"},{"id":"same","prompt":"two"}]}))
             with self.assertRaises(harness2.Harness2Error): harness2.load_benchmark("custom", str(path))
+    def test_cli_setup_run_judge_report_and_resume(self):
+        script = Path(__file__).resolve().parents[1] / "tools" / "harness2" / "harness2.py"
+        def call(*args):
+            return subprocess.run([sys.executable, str(script), *args], cwd=self.root,
+                capture_output=True, text=True, timeout=30, check=True)
+        call("setup", "--workspace", str(self.root))
+        run_result = call("run", "--workspace", str(self.root), "--benchmark", "smoke",
+            "--executor", "demo", "--mode", "sequential", "--iterations", "2")
+        match = __import__("re").search(r"Run ID: ([0-9]{8}-[0-9]{6}-[a-f0-9]{8})", run_result.stdout)
+        self.assertIsNotNone(match)
+        run_id = match.group(1)
+        self.assertIn("Report:", run_result.stdout)
+        self.assertIn("Rejudged saved results", call("judge", run_id, "--workspace", str(self.root)).stdout)
+        self.assertIn("# Harness2 report", call("report", run_id, "--workspace", str(self.root)).stdout)
+        self.assertIn("Resumed:", call("resume", run_id, "--workspace", str(self.root)).stdout)
+
     def test_candidate_paths_reject_traversal_and_symlinks(self):
         run_root = self.root / ".harness2" / "runs" / "20261031-120000-abcdef12"
         candidates = run_root / "candidates"
