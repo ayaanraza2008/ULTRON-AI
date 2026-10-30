@@ -45,11 +45,32 @@ class CompanionLocalApprovalTests(unittest.TestCase):
     def test_typed_allow_runs_only_the_fixed_local_launcher_and_records_completion(self):
         action = future_action()
         with patch.object(cli, "confirm_interactive", return_value=True):
-            with patch.object(cli, "launch_application", return_value={"status": "process_start_requested"}) as launch:
-                with patch.object(cli, "complete_companion_action") as complete:
-                    cli.process_companion_action(action)
+            with patch.object(cli, "authorize_companion_action", return_value=True) as authorize:
+                with patch.object(cli, "launch_application", return_value={"status": "process_start_requested"}) as launch:
+                    with patch.object(cli, "complete_companion_action") as complete:
+                        cli.process_companion_action(action)
+        authorize.assert_called_once_with(ACTION_ID)
         launch.assert_called_once_with("notepad", confirm=True)
         complete.assert_called_once_with(ACTION_ID, "completed", "ACTION_COMPLETED")
+
+    def test_revoked_or_expired_action_is_not_launched_after_local_allow(self):
+        action = future_action()
+        with patch.object(cli, "confirm_interactive", return_value=True):
+            with patch.object(cli, "authorize_companion_action", return_value=False) as authorize:
+                with patch.object(cli, "launch_application") as launch:
+                    with patch.object(cli, "complete_companion_action") as complete:
+                        cli.process_companion_action(action)
+        authorize.assert_called_once_with(ACTION_ID)
+        launch.assert_not_called()
+        complete.assert_not_called()
+
+    def test_authorization_error_fails_closed_before_launch(self):
+        action = future_action()
+        with patch.object(cli, "confirm_interactive", return_value=True):
+            with patch.object(cli, "authorize_companion_action", side_effect=RuntimeError("network unavailable")):
+                with patch.object(cli, "launch_application") as launch:
+                    cli.process_companion_action(action)
+        launch.assert_not_called()
 
     def test_action_expiring_during_the_prompt_is_never_run(self):
         start = RealDateTime.now(timezone.utc).replace(microsecond=0)
