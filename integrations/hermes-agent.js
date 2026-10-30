@@ -56,7 +56,7 @@ function getConfig(env = process.env, userId, requireOwner = false) {
     ...parsed, token, model,
     priority: Number.isFinite(Number(env.HERMES_AGENT_PRIORITY))
       ? Math.max(-100, Math.min(100, Number(env.HERMES_AGENT_PRIORITY))) : -5,
-    supportsVision: env.HERMES_AGENT_SUPPORTS_VISION !== "false",
+    supportsVision: env.HERMES_AGENT_SUPPORTS_VISION === "true",
     maxPromptChars: Number.isFinite(Number(env.HERMES_AGENT_MAX_PROMPT_CHARS))
       ? Math.max(1000, Math.min(MAX_PROMPT_CHARS, Number(env.HERMES_AGENT_MAX_PROMPT_CHARS))) : 8000
   };
@@ -119,7 +119,7 @@ export function getHermesAgentReadiness(env = process.env) {
     model: bounded(env.HERMES_AGENT_MODEL, 180) || "hermes-agent",
     priority: Number.isFinite(Number(env.HERMES_AGENT_PRIORITY))
       ? Math.max(-100, Math.min(100, Number(env.HERMES_AGENT_PRIORITY))) : -5,
-    supportsVision: env.HERMES_AGENT_SUPPORTS_VISION !== "false",
+    supportsVision: env.HERMES_AGENT_SUPPORTS_VISION === "true",
     source: "https://github.com/NousResearch/hermes-agent",
     license: "MIT",
     features: [
