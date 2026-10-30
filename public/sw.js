@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "ultron-shell-v2";
+const CACHE_NAME = "ultron-shell-v3";
 const SHELL_URLS = [
   "/",
   "/index.html",
@@ -10,6 +10,7 @@ const SHELL_URLS = [
   "/favicon.svg",
   "/manifest.webmanifest",
   "/icons/ultron.svg",
+  "/icons/ultron-180.png",
   "/icons/ultron-192.png",
   "/icons/ultron-512.png"
 ];
