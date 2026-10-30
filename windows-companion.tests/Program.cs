@@ -53,3 +53,6 @@ Assert(!AssistantUrlPolicy.TryValidate("https://" + new string('a', 2050) + ".ex
     "Overlong URL must be rejected");
 
 Console.WriteLine($"Windows companion URL policy: {valid.Length} valid and {invalid.Length + 1} invalid cases passed.");
+
+await CloudPresenceClientTests.RunAsync();
+Console.WriteLine("Windows companion cloud-pairing and heartbeat protocol: 5 cases passed.");
