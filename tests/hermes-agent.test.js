@@ -85,7 +85,18 @@ test("Hermes health checks only GET models/capabilities and blocks non-owner acc
       assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
       if (url.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "hermes-agent" }, { id: "reasoner" }] }), { status: 200 });
       if (url.endsWith("/capabilities")) return new Response(JSON.stringify({
-        chat_completions: true, chat_completions_streaming: true, responses: true, runs: true
+        object: "hermes.api_server.capabilities",
+        platform: "hermes-agent",
+        model: "hermes-agent",
+        auth: { type: "bearer", required: true },
+        features: {
+          chat_completions: true,
+          responses_api: true,
+          run_submission: true,
+          run_status: true,
+          run_events_sse: true,
+          run_stop: true
+        }
       }), { status: 200 });
       throw new Error("unexpected Hermes endpoint");
     }
@@ -96,9 +107,43 @@ test("Hermes health checks only GET models/capabilities and blocks non-owner acc
   assert.deepEqual(result.availableModels, ["hermes-agent", "reasoner"]);
   assert.equal(result.capabilities.chatCompletions, true);
   assert.equal(result.capabilities.streaming, true);
+  assert.equal(result.capabilities.responses, true);
   assert.equal(result.capabilities.runs, true);
+  assert.equal(result.capabilities.runSubmission, true);
+  assert.equal(result.capabilities.runStatus, true);
+  assert.equal(result.capabilities.runEventsSse, true);
+  assert.equal(result.capabilities.runStop, true);
   assert.equal(requests.length, 2);
   assert.equal(JSON.stringify(result).includes("private-hermes-api-key"), false);
+});
+
+
+test("Hermes capability discovery remains compatible with legacy flat capability flags", async () => {
+  const result = await checkHermesAgentService({
+    env: configuredEnv(),
+    userId: ownerId,
+    fetchImpl: async url => {
+      if (url.endsWith("/models")) {
+        return new Response(JSON.stringify({ data: [{ id: "hermes-agent" }] }), { status: 200 });
+      }
+      if (url.endsWith("/capabilities")) {
+        return new Response(JSON.stringify({
+          chat_completions: true,
+          chat_completions_streaming: true,
+          responses: true,
+          runs: true
+        }), { status: 200 });
+      }
+      throw new Error("unexpected Hermes endpoint");
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.capabilities.chatCompletions, true);
+  assert.equal(result.capabilities.streaming, true);
+  assert.equal(result.capabilities.responses, true);
+  assert.equal(result.capabilities.runs, true);
+  assert.equal(result.capabilities.runSubmission, false);
+  assert.equal(result.capabilities.runStatus, false);
 });
 
 test("Hermes delegated task requires owner UUID, sends stable account-scoped memory key and returns bounded final content", async () => {
