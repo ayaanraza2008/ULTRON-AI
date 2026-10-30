@@ -32,7 +32,7 @@ test("Devices view exposes only the six fixed Windows app and folder requests", 
 });
 
 test("Devices view shows action history and keeps revoke available", () => {
-  assert.match(devicesView, /\/commands\);/);
+  assert.match(devicesView, /\/commands"\);/);
   assert.match(devicesView, /command\.resultCode/);
   assert.match(devicesView, /REVOKE /);
   assert.match(devicesView, /Windows companion revoked/);
