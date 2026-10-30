@@ -517,6 +517,26 @@ export function buildChromeDevToolsActionInput(args = {}) {
   };
 }
 
+/**
+ * Reverse-image lookup can disclose image-derived information to third parties.
+ * Require a clear, current-message opt-in rather than trusting model tool args.
+ */
+export function parseGeoSleuthReverseSearchConsent(value) {
+  const text = typeof value === "string" ? value.slice(0, 6000) : "";
+  const match = text.match(/^\\s*i approve sending image-derived information from this photo to external reverse-image search providers for this investigation(?:[.!?](?:\\s|$)|\\s|$)/i);
+  if (!match || /\\b(?:do not|don't|never|not yet|hold off|wait|cancel)\\b/i.test(text.slice(match[0].length))) return false;
+  return true;
+}
+
+export function buildGeoSleuthInvestigationOptions({ imageBase64, prompt, env, args } = {}) {
+  // args is intentionally ignored: a model-generated boolean never grants permission.
+  return {
+    imageBase64,
+    includeReverseSearch: parseGeoSleuthReverseSearchConsent(prompt),
+    env
+  };
+}
+
 export function parseOpenSeoSpendApproval(value) {
   const text = typeof value === "string" ? value.slice(0, 6000) : "";
   const match = text.match(/^\s*i approve spending up to ([1-9]\d{0,3}) open\s*seo credits? for this lookup(?:[.!?](?:\s|$)|\s|$)/i);
@@ -657,7 +677,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "research_web", description: "Search public web sources for current information and return source URLs/snippets. Use when the user asks to research or look something up.", parameters: { type: "object", properties: { query: { type: "string", minLength: 2, maxLength: 500 } }, required: ["query"], additionalProperties: false } } },
     { type: "function", function: { name: "plan_employee", description: "Create a plan, draft, review, or report for one of ULTRON's AI Employee roles. Drafting only; does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
-    { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search is off unless explicitly opted into.", parameters: { type: "object", properties: { includeReverseSearch: { type: "boolean", description: "Opt in to sending image-derived information to external reverse-image providers. Defaults to false." } }, additionalProperties: false } } },
+    { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search sends image-derived information to external providers and is off unless the user begins their current message with: I approve sending image-derived information from this photo to external reverse-image search providers for this investigation.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_cactus", description: "Read-only: check whether the configured local Cactus/Needle OpenAI-compatible model server is reachable and list its available model IDs. Does not download models or run inference.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_desktop_companion", description: "Read-only: check the authenticated Windows companion status and paired-device capabilities. Never executes commands, reads local files, captures screenshots, or controls the PC.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
@@ -961,9 +981,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (name === "geo_sleuth_investigate") {
       const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};
       const imageBase64 = bounded(requestBody.imageBase64 || media.imageBase64, 12000000);
-      const promptText = bounded(requestBody.prompt || requestBody.message || "", 6000).toLowerCase();
-      const includeReverseSearch = args.includeReverseSearch === true && /reverse[- ]image search|search similar images online|use reverse search/.test(promptText);
-      return runGeoSleuthInvestigation({ imageBase64, includeReverseSearch, env });
+      return runGeoSleuthInvestigation(buildGeoSleuthInvestigationOptions({
+        imageBase64,
+        prompt: requestBody.prompt || requestBody.message || "",
+        args,
+        env
+      }));
     }
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
     if (name === "check_openviking") return getOpenVikingReadiness({ env, userId: req.supabaseUser?.id });
