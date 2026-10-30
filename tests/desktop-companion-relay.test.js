@@ -355,3 +355,57 @@ test("action history returns only bounded status fields and never token hashes",
     assert.equal(JSON.stringify(payload).includes("must-not-appear"), false);
   });
 });
+
+test("paired device must reauthorize its delivered command after local approval", async () => {
+  const deviceToken = "F".repeat(43);
+  const commandId = "77777777-7777-4777-8777-777777777777";
+  let call;
+  await withRelay({
+    privilegedSupabaseRpc: async (...values) => { call = values; return true; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/commands/" + commandId + "/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + deviceToken },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload, { authorized: true, commandId });
+    assert.equal(call[0], "authorize_desktop_companion_command");
+    assert.deepEqual(call[1], {
+      p_token_hash: hash(deviceToken),
+      p_device_id: DEVICE,
+      p_command_id: commandId
+    });
+    assert.equal(JSON.stringify(payload).includes(deviceToken), false);
+  });
+
+  let calls = 0;
+  await withRelay({
+    privilegedSupabaseRpc: async () => { calls++; return false; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/commands/" + commandId + "/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + deviceToken },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error.code, "DESKTOP_ACTION_NO_LONGER_AUTHORIZED");
+    assert.equal(calls, 1);
+  });
+});
+
+test("command authorization rejects malformed IDs, bearer tokens and extra body fields", async () => {
+  let calls = 0;
+  await withRelay({
+    privilegedSupabaseRpc: async () => { calls++; return true; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/commands/not-a-uuid/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + "Z".repeat(43) },
+      body: JSON.stringify({ deviceId: DEVICE, command: "unexpected" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal(calls, 0);
+  });
+});
