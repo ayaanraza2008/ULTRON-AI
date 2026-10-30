@@ -87,7 +87,7 @@ ultron-local skills list
 
 The `code apply` command asks for the exact `APPLY` confirmation, verifies that both the draft and original source still match their recorded SHA-256 hashes, creates a private backup first, and refuses to overwrite source changes made since the draft was prepared.
 
-For `code run`, scripts may use the user's ordinary file/network/process permissions; the confirmation prompt is not a security sandbox. Do not run unknown code. The shell tool is deliberately allowlisted and is not a general shell.
+For `code run`, scripts may use the user's ordinary file/network/process permissions; the confirmation prompt is not a security sandbox. Do not run unknown code. The shell tool is deliberately allowlisted and is not a general shell. Script and allowlisted-command output is drained concurrently and capped at 1 MB per stream to avoid unbounded memory growth; execution still runs with the user's normal account permissions and is not OS-sandboxed.
 
 ## Morning digest: Gmail + Calendar + voice
 
