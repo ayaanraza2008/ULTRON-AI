@@ -8,6 +8,12 @@ The GitHub Actions workflow compiles a debug APK and publishes it as a downloada
 
 Requirements: Java 17, Android SDK 35, and Gradle 8.9. From this directory run `gradle --no-daemon assembleDebug`. Output: `app/build/outputs/apk/debug/app-debug.apk`.
 
+## Choose the ULTRON server
+
+Open the companion, enter the public HTTPS origin of the same ULTRON deployment you use in your browser, and tap **Save server address**. Use an origin only, for example `https://your-ultron-host.example`; do not include a path, port, login credentials, query string, or fragment. The value is stored in the app's private preferences and is used by both **Open ULTRON** and the notification shown when the wake word is detected. The built-in address is only a fallback; check the current canonical deployment before pairing devices.
+
+The browser PWA is the full cross-device ULTRON interface. The Android companion is a wake-word notification bridge: it does not stream microphone audio, open the assistant automatically in the background, operate the phone, or provide remote-control actions. After tapping the notification, use the PWA's Voice Mode button to begin a live conversation with browser microphone permission.
+
 ## Limitations
 
 - Android 12 or newer is required.
