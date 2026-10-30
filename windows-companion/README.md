@@ -25,24 +25,11 @@ Windows must have an installed compatible English speech-recognition engine and 
 
 ### Choose the ULTRON web destination
 
-The launcher keeps its existing default hosted destination. To open a different ULTRON HTTPS deployment, set `ULTRON_ASSISTANT_URL` before starting the companion:
+Open **Server settings** from the Windows companion window or tray menu. Paste the exact public HTTPS address from the ULTRON web app and save it. The companion validates the address and stores it in the current Windows user's registry profile. It is then used by **Open ULTRON**, wake-word activation, and future device pairings.
 
-```powershell
-$env:ULTRON_ASSISTANT_URL = "https://ultron.example.net/"
-Start-Process ".\\artifacts\\ultron-windows-companion\\ULTRON.Companion.exe"
-```
+The original default address remains a fallback only. The correct canonical deployment must be selected before using cloud pairing. An existing paired device keeps its original heartbeat server even if the launch address is changed; revoke it in ULTRON and pair it again to move the device to another deployment.
 
-To save the destination for future Windows sign-ins, set it once in the current user's environment and then sign out/in (or restart the companion):
-
-```powershell
-[Environment]::SetEnvironmentVariable(
-  "ULTRON_ASSISTANT_URL",
-  "https://ultron.example.net/",
-  "User"
-)
-```
-
-Only absolute HTTPS URLs with a DNS hostname and the default HTTPS port are accepted. URLs containing credentials, query strings, fragments, localhost or local-network suffixes are rejected; an invalid override falls back to the built-in destination and is reported in the app status.
+For managed/headless setups, `ULTRON_ASSISTANT_URL` remains available as a fallback when no valid saved server setting exists. Only absolute HTTPS destinations with a DNS hostname and the default HTTPS port are accepted.
 
 ### Pair this PC with your ULTRON account
 
