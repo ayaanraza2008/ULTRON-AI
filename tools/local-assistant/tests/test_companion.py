@@ -15,6 +15,8 @@ from ultron_local_assistant.companion import (
     STATUS_PATH,
     create_companion_server,
     generate_companion_token,
+    CloudHTTPError,
+    _cloud_json_request,
     pair_companion,
     send_companion_heartbeat,
     _load_device_credentials,
@@ -292,6 +294,118 @@ class CompanionServerTests(unittest.TestCase):
                 send_companion_heartbeat(
                     data_dir=Path(root) / "companion",
                     request_impl=lambda *_args, **_kwargs: {"status": "revoked"}
+                )
+
+
+    def test_cloud_request_pins_the_connection_to_a_validated_public_address(self):
+        requests = []
+        class Response:
+            status = 200
+            def getheader(self, name):
+                return str(len(b'{"status":"online"}')) if name == "Content-Length" else None
+            def read(self, limit):
+                return b'{"status":"online"}'
+        class Connection:
+            def request(self, method, route, *, body, headers):
+                requests.append((method, route, json.loads(body), headers))
+            def getresponse(self):
+                return Response()
+            def close(self):
+                pass
+        def resolver(host, port, type=None):
+            self.assertEqual(host, "ultron.example.com")
+            self.assertEqual(port, 443)
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
+        created = []
+        def connection_factory(host, address, timeout):
+            created.append((host, address, timeout))
+            return Connection()
+        result = _cloud_json_request(
+            "https://ultron.example.com", "/api/desktop-companion/heartbeat",
+            {"deviceId": "22222222-2222-4222-8222-222222222222"},
+            bearer_token="T" * 43, resolver=resolver, connection_factory=connection_factory
+        )
+        self.assertEqual(result, {"status": "online"})
+        self.assertEqual(created[0][0:2], ("ultron.example.com", "8.8.8.8"))
+        self.assertEqual(requests[0][0:2], ("POST", "/api/desktop-companion/heartbeat"))
+        self.assertEqual(requests[0][3]["Authorization"], "Bearer " + ("T" * 43))
+        self.assertEqual(requests[0][3]["Connection"], "close")
+
+    def test_cloud_request_does_not_follow_redirects_or_forward_device_token(self):
+        requests = []
+        class Response:
+            status = 302
+            def getheader(self, name):
+                return "https://attacker.example/steal" if name == "Location" else None
+            def read(self, limit):
+                return b""
+        class Connection:
+            def request(self, method, route, *, body, headers):
+                requests.append((route, headers))
+            def getresponse(self):
+                return Response()
+            def close(self):
+                pass
+        with self.assertRaises(CloudHTTPError) as caught:
+            _cloud_json_request(
+                "https://ultron.example.com", "/api/desktop-companion/heartbeat",
+                {"deviceId": "22222222-2222-4222-8222-222222222222"},
+                bearer_token="T" * 43,
+                resolver=lambda *_args, **_kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))],
+                connection_factory=lambda *_args: Connection()
+            )
+        self.assertEqual(caught.exception.status, 302)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0][1]["Authorization"], "Bearer " + ("T" * 43))
+
+    def test_cloud_request_rejects_private_dns_answers_before_connecting(self):
+        calls = []
+        def resolver(*_args, **_kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.4", 443))]
+        with self.assertRaisesRegex(ValueError, "private or reserved"):
+            _cloud_json_request(
+                "https://ultron.example.com", "/api/desktop-companion/pair",
+                {"pairingCode": "P" * 32}, resolver=resolver,
+                connection_factory=lambda *_args: calls.append(True)
+            )
+        self.assertEqual(calls, [])
+
+    def test_cloud_request_rejects_oversized_response(self):
+        class Response:
+            status = 200
+            def getheader(self, name):
+                return str(CLOUD_MAX_RESPONSE_BYTES + 1) if name == "Content-Length" else None
+            def read(self, limit):
+                raise AssertionError("oversized declared response must be rejected before reading")
+        class Connection:
+            def request(self, *_args, **_kwargs):
+                pass
+            def getresponse(self):
+                return Response()
+            def close(self):
+                pass
+        from ultron_local_assistant.companion import CLOUD_MAX_RESPONSE_BYTES
+        with self.assertRaisesRegex(ValueError, "exceeded the safe size limit"):
+            _cloud_json_request(
+                "https://ultron.example.com", "/api/desktop-companion/heartbeat", {},
+                resolver=lambda *_args, **_kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))],
+                connection_factory=lambda *_args: Connection()
+            )
+
+    def test_revoked_http_token_is_reported_as_an_authorization_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            with self.assertRaisesRegex(PermissionError, "no longer authorized"):
+                send_companion_heartbeat(
+                    data_dir=Path(root) / "companion",
+                    request_impl=lambda *_args, **_kwargs: (_ for _ in ()).throw(CloudHTTPError(401))
                 )
 
     def test_generated_token_has_sufficient_entropy_length(self):
