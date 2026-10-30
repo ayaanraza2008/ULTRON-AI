@@ -138,3 +138,75 @@ test("device inventory cannot be accessed with a password-only web session", asy
     assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
   });
 });
+
+
+test("server-side command claim uses only the allowlisted service-role RPC", async () => {
+  const calls = [];
+  const app = createApp({
+    env: relayEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/rest/v1/rpc/claim_desktop_companion_command")) {
+        return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const deviceToken = "Q".repeat(43);
+    const response = await fetch(base + "/api/desktop-companion/commands/next", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + deviceToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.command, null);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, relayEnv.SUPABASE_URL + "/rest/v1/rpc/claim_desktop_companion_command");
+    assert.equal(calls[0].options.headers.apikey, SERVICE_KEY);
+    assert.equal(calls[0].options.headers.Authorization, undefined);
+    assert.equal(JSON.parse(calls[0].options.body).p_device_id, DEVICE);
+    assert.equal(JSON.parse(calls[0].options.body).p_token_hash.length, 64);
+    assert.equal(JSON.stringify(payload).includes(deviceToken), false);
+  });
+});
+
+test("server-side command result uses only the allowlisted service-role RPC", async () => {
+  const calls = [];
+  const app = createApp({
+    env: relayEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/rest/v1/rpc/complete_desktop_companion_command")) {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const deviceToken = "R".repeat(43);
+    const commandId = "88888888-8888-4888-8888-888888888888";
+    const response = await fetch(base + "/api/desktop-companion/commands/" + commandId + "/result", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + deviceToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: DEVICE, status: "completed", resultCode: "ACTION_COMPLETED" })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.recorded, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, relayEnv.SUPABASE_URL + "/rest/v1/rpc/complete_desktop_companion_command");
+    assert.equal(calls[0].options.headers.apikey, SERVICE_KEY);
+    assert.equal(calls[0].options.headers.Authorization, undefined);
+    const rpcBody = JSON.parse(calls[0].options.body);
+    assert.equal(rpcBody.p_device_id, DEVICE);
+    assert.equal(rpcBody.p_command_id, commandId);
+    assert.equal(rpcBody.p_status, "completed");
+    assert.equal(rpcBody.p_result_code, "ACTION_COMPLETED");
+    assert.equal(rpcBody.p_token_hash.length, 64);
+    assert.equal(JSON.stringify(payload).includes(deviceToken), false);
+  });
+});
