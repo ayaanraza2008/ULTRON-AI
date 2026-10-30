@@ -1148,8 +1148,16 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (name === "clone_speech_voice") {
       const voiceStudio = voiceStudioSettings(env);
       if (!voiceStudio) return { provider: "voicestudio", state: "blocked", blocker: "Configure VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY. A cloud ULTRON cannot reach localhost on your PC." };
-      const prompt = bounded(requestBody.prompt, 6000);
-      const basis = parseVoiceCloneConsent(prompt);
+      // Consent must come from the raw current user message on the HTTP
+      // request, never from model arguments or internally rewritten context.
+      const consentMessage = typeof req.body?.prompt === "string"
+        ? req.body.prompt
+        : Array.isArray(req.body?.messages)
+          ? [...req.body.messages].reverse().find(message =>
+              message?.role === "user" && typeof message.content === "string"
+            )?.content || ""
+          : "";
+      const basis = parseVoiceCloneConsent(consentMessage);
       if (!basis) return { provider: "voicestudio", state: "needs_consent", requiredInputs: ["exact own-voice or speaker-permission attestation"], message: "Voice cloning requires one exact consent statement at the start of your current message. Model-generated consent fields are ignored." };
       const name = bounded(args.name, 100);
       const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};
