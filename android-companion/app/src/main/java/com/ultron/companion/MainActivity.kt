@@ -8,17 +8,25 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.speech.SpeechRecognizer
+import android.text.InputType
 import android.view.Gravity
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 class MainActivity : Activity() {
     private lateinit var status: TextView
+    private lateinit var endpointInput: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildLayout()
+        if (intent?.action == ACTION_OPEN_ASSISTANT) {
+            openAssistant()
+            finish()
+        }
     }
 
     private fun buildLayout() {
@@ -37,6 +45,29 @@ class MainActivity : Activity() {
             text = "Wake word is off. Enable it to start local on-device recognition."
             setPadding(0, 0, 0, 24)
         }
+        val endpointLabel = TextView(this).apply {
+            text = "ULTRON server (HTTPS)"
+            textSize = 15f
+            setPadding(0, 12, 0, 6)
+        }
+        endpointInput = EditText(this).apply {
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            hint = "https://your-ultron-host"
+            setText(AssistantEndpointStore.get(this@MainActivity))
+        }
+        val saveEndpoint = Button(this).apply {
+            text = "Save server address"
+            setOnClickListener {
+                val saved = AssistantEndpointStore.save(this@MainActivity, endpointInput.text.toString())
+                if (saved == null) {
+                    status.text = "Rejected. Use a public HTTPS hostname only, without a path, port, credentials, query, or fragment."
+                } else {
+                    endpointInput.setText(saved)
+                    status.text = "Server address saved. Both Open ULTRON and future wake alerts will use this address."
+                }
+            }
+        }
         val start = Button(this).apply {
             text = "Enable wake word"
             setOnClickListener { enableWakeWord() }
@@ -54,10 +85,16 @@ class MainActivity : Activity() {
         }
         layout.addView(title)
         layout.addView(status)
+        layout.addView(endpointLabel)
+        layout.addView(endpointInput)
+        layout.addView(saveEndpoint)
         layout.addView(start)
         layout.addView(stop)
         layout.addView(open)
-        setContentView(layout)
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(layout)
+        })
     }
 
     private fun enableWakeWord() {
@@ -111,11 +148,11 @@ class MainActivity : Activity() {
     }
 
     private fun openAssistant() {
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ASSISTANT_URL)))
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(AssistantEndpointStore.get(this))))
     }
 
     companion object {
         private const val REQUEST_PERMISSIONS = 4701
-        private const val ASSISTANT_URL = "https://ultron-ai-zvd7.onrender.com/"
+        const val ACTION_OPEN_ASSISTANT = "com.ultron.companion.OPEN_ASSISTANT"
     }
 }
