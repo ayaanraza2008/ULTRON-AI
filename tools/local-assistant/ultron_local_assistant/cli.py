@@ -459,6 +459,12 @@ def process_companion_action(action):
         "ALLOW",
         "ULTRON requests to " + label + ". This is a fixed local shortcut; it cannot run shell commands or access arbitrary files."
     )
+    # Approval must still be fresh when the user finishes typing; a request
+    # that expires while the prompt is open is never executed.
+    if datetime.now(timezone.utc) >= expires_at:
+        complete_companion_action(action["id"], "expired", "ACTION_EXPIRED")
+        print("The ULTRON action expired while awaiting approval and was not run.")
+        return
     if approved is None:
         complete_companion_action(action["id"], "denied", "LOCAL_APPROVAL_REQUIRED")
         print("Action denied: local interactive approval is required.")
