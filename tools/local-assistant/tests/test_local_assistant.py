@@ -9,7 +9,7 @@ from unittest.mock import mock_open, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ultron_local_assistant.core import (
-    DEFAULT_OLLAMA_URL, apply_workspace_draft, detect_hardware, get_system_health, _available_memory_bytes, load_relevant_skill_context, recommend_models, resolve_workspace_file,
+    DEFAULT_OLLAMA_URL, _run_bounded_process, apply_workspace_draft, detect_hardware, get_system_health, _available_memory_bytes, load_relevant_skill_context, recommend_models, resolve_workspace_file,
     safe_shell_argv, search_documents, validate_local_ollama_url,
     run_approved_command, run_script,
 )
@@ -202,6 +202,15 @@ class LocalFirstCoreTests(unittest.TestCase):
             self.assertIn("[output truncated at 1 MB]", result.stderr)
             self.assertLessEqual(len(result.stdout.encode("utf-8")), 1_000_100)
             self.assertLessEqual(len(result.stderr.encode("utf-8")), 1_000_100)
+
+    def test_bounded_process_terminates_a_timed_out_child(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(RuntimeError, "time limit"):
+                _run_bounded_process(
+                    [sys.executable, "-c", "import time; time.sleep(5)"],
+                    Path(temp),
+                    timeout=0.1,
+                )
 
     def test_shell_execution_requires_explicit_confirmation(self):
         with tempfile.TemporaryDirectory() as temp:
