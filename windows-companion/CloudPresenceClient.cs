@@ -194,8 +194,10 @@ public sealed record CloudCompanionPairing(string DeviceId, string DeviceName, s
 public sealed record RemoteDesktopCommand(string Id, string ActionType, string Target, DateTimeOffset ExpiresAt);
 
 /// <summary>
-/// Outbound-only Windows presence client. It can pair and send heartbeats, but
-/// it deliberately has no command polling, shell, file, screenshot or input API.
+/// Outbound-only Windows companion client. It can pair, send heartbeats and
+/// retrieve a fixed remote-action queue; each action requires local approval
+/// and a fresh server authorization check before launch. No shell, file,
+/// screenshot or keyboard/mouse control API is exposed.
 /// </summary>
 public sealed class CloudPresenceClient : IDisposable
 {
