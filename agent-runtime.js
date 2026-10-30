@@ -1650,7 +1650,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           } else {
             result = await executeTool(name, args, { ...(req.body || {}), prompt: userText }, req);
           }
-        } catch (error) { logger.warn?.("Agent tool execution failed", { tool: bounded(name, 80), code: bounded(error?.code, 80) || "TOOL_FAILED", errorName: bounded(error?.name, 40) || "Error" }); result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
+        } catch (error) { logger.warn?.("Agent tool execution failed", { tool: bounded(name, 80), code: bounded(error?.code, 80) || "TOOL_FAILED", errorName: bounded(error?.name, 40) || "Error", ...(error?.name === "ReferenceError" ? { referenceError: bounded(error.message, 120) } : {}) }); result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
         used.push({ name, ok: !result?.error, result });
         toolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)).slice(0, 18000) });
       }
@@ -1703,7 +1703,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
               } else {
                 result = await executeTool(name, args, { ...(req.body || {}), prompt: userText }, req);
               }
-            } catch (error) { logger.warn?.("Agent tool execution failed", { tool: bounded(name, 80), code: bounded(error?.code, 80) || "TOOL_FAILED", errorName: bounded(error?.name, 40) || "Error" }); result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
+            } catch (error) { logger.warn?.("Agent tool execution failed", { tool: bounded(name, 80), code: bounded(error?.code, 80) || "TOOL_FAILED", errorName: bounded(error?.name, 40) || "Error", ...(error?.name === "ReferenceError" ? { referenceError: bounded(error.message, 120) } : {}) }); result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
             used.push({ name, ok: !result?.error, result });
             followToolMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(modelSafeResult(result)).slice(0, 18000) });
           }
