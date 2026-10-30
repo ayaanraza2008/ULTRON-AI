@@ -265,7 +265,7 @@ function sanitizeHermesSseEvent(eventName, eventId, payload) {
   // Only expose text from known user-facing message events. Tool/function/
   // approval/result events may place command arguments or private results in
   // a generic text/delta field, so unknown event payloads fail closed.
-  const safeMessageEvent = /^(?:message(?:\\.delta)?|assistant(?:\\.(?:message|delta))?|response\\.output_text(?:\\.delta)?)$/i.test(event);
+  const safeMessageEvent = /^(?:message(?:\.delta)?|assistant(?:\.(?:message|delta))?|response\.output_text(?:\.delta)?)$/i.test(event);
   if (safeMessageEvent && typeof data.tool !== "string") {
     if (typeof data.text === "string") safe.text = data.text.slice(0, 2400);
     else if (typeof data.delta === "string") safe.text = data.delta.slice(0, 2400);
@@ -320,7 +320,7 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
   try {
     while (events.length < maxEvents) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) { streamDone = true; break; }
       bytes += value.byteLength;
       if (bytes > maxBytes) {
         try { await reader.cancel(); } catch {}
