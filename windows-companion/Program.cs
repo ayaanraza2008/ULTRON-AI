@@ -20,8 +20,8 @@ internal sealed class CompanionContext : ApplicationContext
 {
     private const string DefaultAssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private readonly string _assistantUrl;
-    private readonly bool _assistantUrlConfigurationInvalid;
+    private string _assistantUrl;
+    private bool _assistantUrlConfigurationInvalid;
     private const string StartupRegistryValue = "ULTRONWakeCompanion";
     private readonly Form _window;
     private readonly Label _status;
@@ -44,24 +44,7 @@ internal sealed class CompanionContext : ApplicationContext
 
     public CompanionContext(bool backgroundLaunch = false)
     {
-        var configuredAssistantUrl = Environment.GetEnvironmentVariable("ULTRON_ASSISTANT_URL");
-        if (string.IsNullOrWhiteSpace(configuredAssistantUrl))
-        {
-            _assistantUrl = DefaultAssistantUrl;
-            _assistantUrlConfigurationInvalid = false;
-        }
-        else if (AssistantUrlPolicy.TryValidate(configuredAssistantUrl, out var validatedAssistantUrl))
-        {
-            _assistantUrl = validatedAssistantUrl;
-            _assistantUrlConfigurationInvalid = false;
-        }
-        else
-        {
-            // An invalid override must never be opened. Fall back to the existing
-            // default and explain the rejected setting when the user opens ULTRON.
-            _assistantUrl = DefaultAssistantUrl;
-            _assistantUrlConfigurationInvalid = true;
-        }
+        _assistantUrl = AssistantUrlStore.Resolve(out _assistantUrlConfigurationInvalid);
 
         _window = new Form
         {
@@ -123,6 +106,9 @@ internal sealed class CompanionContext : ApplicationContext
         buttons.Controls.Add(_startButton);
         buttons.Controls.Add(_stopButton);
         buttons.Controls.Add(openButton);
+        var serverSettingsButton = new Button { Text = "Server settings", AutoSize = true };
+        serverSettingsButton.Click += (_, _) => ConfigureAssistantUrl();
+        buttons.Controls.Add(serverSettingsButton);
 
         layout.Controls.Add(title, 0, 0);
         layout.Controls.Add(_status, 0, 1);
@@ -155,6 +141,7 @@ internal sealed class CompanionContext : ApplicationContext
         menu.Items.Add(_stopItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open ULTRON", null, (_, _) => OpenAssistant());
+        menu.Items.Add("Server settings", null, (_, _) => ConfigureAssistantUrl());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Pair this PC with ULTRON", null, async (_, _) => await PairCloudCompanionAsync());
         menu.Items.Add("Start cloud presence", null, async (_, _) => await StartCloudPresenceAsync());
@@ -199,6 +186,71 @@ internal sealed class CompanionContext : ApplicationContext
             _window.Show();
             if (backgroundLaunch)
                 ShowStatus("Automatic listening is disabled. Enable it from this window to use wake word at sign-in.");
+        }
+    }
+
+    private void ConfigureAssistantUrl()
+    {
+        using var dialog = new Form
+        {
+            Text = "ULTRON server settings",
+            Width = 520,
+            Height = 220,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var prompt = new Label
+        {
+            Text = "Use the same public HTTPS origin shown in the ULTRON browser app. This setting is saved for the current Windows user.",
+            Dock = DockStyle.Top,
+            Height = 58,
+            Padding = new Padding(12)
+        };
+        var address = new TextBox
+        {
+            Text = _assistantUrl,
+            Dock = DockStyle.Top,
+            Margin = new Padding(12),
+            MaxLength = 2048
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 48,
+            FlowDirection = FlowDirection.RightToLeft,
+            Padding = new Padding(8)
+        };
+        var save = new Button { Text = "Save server", DialogResult = DialogResult.None, AutoSize = true };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+        save.Click += (_, _) =>
+        {
+            if (!AssistantUrlStore.TrySave(address.Text, out var validated, out var error))
+            {
+                MessageBox.Show(dialog, error, "ULTRON server address rejected",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            _assistantUrl = validated;
+            _assistantUrlConfigurationInvalid = false;
+            dialog.DialogResult = DialogResult.OK;
+            dialog.Close();
+        };
+        buttons.Controls.Add(save);
+        buttons.Controls.Add(cancel);
+        dialog.Controls.Add(buttons);
+        dialog.Controls.Add(address);
+        dialog.Controls.Add(prompt);
+        dialog.AcceptButton = save;
+        dialog.CancelButton = cancel;
+
+        if (dialog.ShowDialog(_window) == DialogResult.OK)
+        {
+            ShowStatus("ULTRON server address saved. Open ULTRON and future new pairings will use this origin. Existing paired heartbeats remain bound to their original server.");
+            MessageBox.Show(_window,
+                "Server address saved. New pairings will use this origin. Existing device heartbeat credentials remain tied to the deployment where they were paired; revoke and pair again to move a device to another deployment.",
+                "ULTRON server updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 
