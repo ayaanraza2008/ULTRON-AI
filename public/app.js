@@ -3472,6 +3472,7 @@
         ]);
         ui.drawerContent.replaceChildren();
         drawerHeading("Your ULTRON devices", "Use the web app on any device and sign in with the same account. Only the Windows companion currently has a separate heartbeat pairing; web-app access itself does not need pairing.");
+      drawerCard("Universal ULTRON web app", "Works in a browser on Windows, macOS, Linux, Android, iPhone and iPad. The same signed-in account loads your saved cloud conversations on each device.", "CROSS-DEVICE", "ready");
         const desktop = capabilities?.providers?.desktop || {};
         drawerCard("Windows companion relay",
           "Cloud pairing is available for status only. The PC connects outbound over HTTPS every 30 seconds; the server never opens a connection to your PC.",
