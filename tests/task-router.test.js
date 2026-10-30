@@ -143,3 +143,16 @@ test("provider-specific media routing does not accidentally hide the selected ad
   assert.deepEqual(muapi.categories, ["open_generative_ai"]);
   assert.ok(muapi.toolNames.includes("open_generative_ai"));
 });
+
+
+test("routes Hermes Agent long-running run lifecycle requests to dedicated owner-scoped tools", () => {
+  const start = classifyTaskRoute("Start a background Hermes Agent run to research the official API.");
+  assert.deepEqual(start.categories, ["hermes"]);
+  assert.ok(start.toolNames.includes("hermes_agent_start_run"));
+  assert.ok(start.toolNames.includes("hermes_agent_run_status"));
+  assert.ok(start.toolNames.includes("hermes_agent_stop_run"));
+
+  const status = classifyTaskRoute("Check status for run_abc123");
+  assert.deepEqual(status.categories, ["hermes"]);
+  assert.ok(status.toolNames.includes("hermes_agent_run_status"));
+});
