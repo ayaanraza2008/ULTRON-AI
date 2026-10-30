@@ -12,6 +12,12 @@ ULTRON AI is an API-first assistant runtime. The current `main` baseline is back
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
 - **Frontend status:** this candidate serves `public/index.html`, `public/app.js`, `public/styles.css`, and `public/favicon.svg` from the same origin with static-serving tests and conservative security headers. The `main` baseline remains unchanged until review/merge; real browser workflows and deployment are still unverified.
 
+## Run ULTRON on other devices
+
+The integration candidate includes an installable, responsive web app (PWA). Open the same HTTPS ULTRON origin on Android, iPhone/iPad, Windows, macOS or Linux, then sign in with the same Supabase account to access server-backed conversations and account data. The service worker caches only the static app shell; chat, account data, private documents and integrations require an internet connection. Device-specific wake-word companions remain separate optional apps.
+
+See [Cross-device access and installation](docs/CROSS_DEVICE_ACCESS.md) for Android, iOS and desktop installation steps and offline boundaries.
+
 ## Backend-only capability integration phase
 
 Backend additions on the feature branch:
