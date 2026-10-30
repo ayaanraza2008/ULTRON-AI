@@ -466,10 +466,11 @@ export function modelSafeResult(value, depth = 0) {
 
 const AUTONOMY_RISK_RANK = { routine: 0, private_data: 1, device_control: 2, external_effect: 3, destructive: 4 };
 
-// These tools only perform public/read-only checks or return drafts. They may
-// prepare safe parts of a mixed request while a separate consequential action
-// remains gated. Do not add private-data reads, device controls, publishing,
-// messaging, generation jobs, or arbitrary delegated runtimes to this set.
+// These tools perform public/read-only checks, return drafts, or enforce a separate
+// server-side approval gate (OpenSEO credit spend is parsed from the user's current
+// message, never model arguments). They may prepare safe parts of mixed requests.
+// Do not add private-data reads, device controls, publishing, messaging, generation
+// jobs, or arbitrary delegated runtimes to this set.
 const SAFE_PREPARATION_TOOLS = new Set([
   // Public read-only preparation and draft-only tools. Keep state-changing
   // tasks (including durable queueing, media jobs, publishing, or messaging)
@@ -526,7 +527,9 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
       requiresConfirmation: false,
       risk: {
         level: "routine",
-        reason: "Independent read-only or draft-only preparation; consequential action remains gated",
+        reason: name === "openseo"
+          ? "OpenSEO preparation uses an independent server-side user-authored credit approval and ceiling gate"
+          : "Independent read-only or draft-only preparation; consequential action remains gated",
         requiresConfirmation: false
       }
     };
@@ -676,7 +679,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "transcribe_audio", description: "Transcribe supplied audio using VoiceStudio when configured, otherwise the Handy desktop bridge. Audio must be supplied with this agent request.", parameters: { type: "object", properties: { language: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
     { type: "function", function: { name: "browser_use", description: "Use the optional Browser Use bridge for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, and website tests. Include explicit public HTTPS URL(s) in task; only those exact hosts can be reached. Read-only only; consequential actions are blocked.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 2500 }, maxSteps: { type: "integer", minimum: 1, maximum: 12 } }, required: ["task"], additionalProperties: false } } },
     { type: "function", function: { name: "chrome_devtools", description: "Use the authenticated local Chrome DevTools bridge to navigate, click/fill non-secret fields, capture screenshots, inspect DOM/console/network logs, and run a performance trace. Supports only allowlisted actions; no arbitrary JavaScript. Shared bridge credentials are restricted to the configured owner account.", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "navigate", "click", "fill", "screenshot", "page_snapshot", "console_logs", "network_requests", "performance_trace"] }, url: { type: "string", maxLength: 2048 }, selector: { type: "string", maxLength: 600 }, text: { type: "string", maxLength: 5000 }, limit: { type: "integer", minimum: 1, maximum: 100 }, durationMs: { type: "integer", minimum: 1000, maximum: 10000 }, confirmExternalAction: { type: "boolean" } }, required: ["action"], additionalProperties: false } } },
-    { type: "function", function: { name: "openseo", description: "Use the owner-scoped OpenSEO MCP integration. Free operations include listing projects, reading project context, listing saved keywords and estimating existing rank-tracker costs. Keyword research/domain overview/SERP operations consume credits and require approvePaidLookup=true plus a maxEstimatedCredits ceiling; never spend credits without those exact fields. Tool calls are limited to the fixed allowlist and the current upstream MCP catalog.", parameters: { type: "object", properties: { operation: { type: "string", enum: ["list_projects", "get_project_context", "list_saved_keywords", "estimate_rank_tracker_cost", "research_keywords", "get_domain_overview", "get_domain_keyword_suggestions", "get_serp_results"] }, args: { type: "object" }, approvePaidLookup: { type: "boolean" }, maxEstimatedCredits: { type: "number", minimum: 1, maximum: 5000 } }, required: ["operation"], additionalProperties: false } } },
+    { type: "function", function: { name: "openseo", description: "Use the owner-scoped OpenSEO MCP integration. Free operations include listing projects, reading project context, listing saved keywords and estimating existing rank-tracker costs. Paid keyword/domain/SERP lookups are authorized only when the user begins their current message with: I approve spending up to 120 OpenSEO credits for this lookup. Replace 120 with the user's explicit credit ceiling. Never infer or generate this approval yourself. Tool calls are limited to the fixed allowlist and current upstream MCP catalog.", parameters: { type: "object", properties: { operation: { type: "string", enum: ["list_projects", "get_project_context", "list_saved_keywords", "estimate_rank_tracker_cost", "research_keywords", "get_domain_overview", "get_domain_keyword_suggestions", "get_serp_results"] }, args: { type: "object" } }, required: ["operation"], additionalProperties: false } } },
     { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
 
