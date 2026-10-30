@@ -94,7 +94,10 @@ Invoke-Checked -Executable $VenvPython -Arguments @("-m", "ultron_local_assistan
 Write-Host ""
 Write-Host "Installed command: $Launcher"
 Write-Host "Start local chat:  $Launcher chat"
+Write-Host "Start local voice: .\tools\local-assistant\start-voice.ps1"
+Write-Host "Hindi voice mode:  .\tools\local-assistant\start-voice.ps1 -Locale hi-IN"
 Write-Host "List agents:       $Launcher agents"
+Write-Host "Desktop actions:   $Launcher desktop list"
 
 if ($PullModel) {
     Write-Host ""
