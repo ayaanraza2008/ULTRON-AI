@@ -359,7 +359,7 @@ def desktop_list(_):
 
 def desktop_launch(args):
     print("This starts only a fixed, allowlisted Windows application. No shell command or arbitrary arguments are accepted.")
-    if not confirm("LAUNCH", f"Start the '{args.application}' application?"):
+    if not confirm_interactive("LAUNCH", f"Start the '{args.application}' application?"):
         print("Launch cancelled.")
         return 0
     try:
@@ -371,7 +371,7 @@ def desktop_launch(args):
 
 def desktop_open_folder(args):
     print("This opens only one of the standard Windows folders. It does not read, modify, upload, or delete files.")
-    if not confirm("OPEN", f"Open the standard '{args.folder}' folder?"):
+    if not confirm_interactive("OPEN", f"Open the standard '{args.folder}' folder?"):
         print("Folder opening cancelled.")
         return 0
     try:
