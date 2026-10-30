@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Ultron.Companion;
 
@@ -40,11 +41,40 @@ internal static class CloudPresenceClientTests
 
     public static async Task RunAsync()
     {
+        PublicAddressPolicyRejectsLocalAndReservedNetworks();
         await PairingUsesOneTimeCodeAndSavesOnlyValidatedDeviceCredentials();
         await PairingRejectsInvalidCodeBeforeNetworkAccess();
         await PairingDoesNotSaveUnexpectedServerIdentity();
         await RevokedHeartbeatStopsThePresenceLoop();
         await HeartbeatUsesTheSavedBearerToken();
+    }
+
+    private static void PublicAddressPolicyRejectsLocalAndReservedNetworks()
+    {
+        var publicAddresses = new[]
+        {
+            "1.1.1.1",
+            "8.8.8.8",
+            "2606:4700:4700::1111",
+            "2001:4860:4860::8888"
+        };
+        foreach (var value in publicAddresses)
+            Assert(CloudPresenceClient.IsPublicGlobalAddress(IPAddress.Parse(value)),
+                $"Expected a public global address to pass: {value}");
+
+        var blockedAddresses = new[]
+        {
+            "0.0.0.0", "10.1.2.3", "100.64.0.1", "127.0.0.1",
+            "169.254.169.254", "172.16.0.1", "192.0.2.1",
+            "192.168.1.1", "198.18.0.1", "198.51.100.5",
+            "203.0.113.9", "224.0.0.1", "240.0.0.1",
+            "::1", "fc00::1", "fe80::1", "2001:db8::1",
+            "2001::1", "2002::1", "3fff::1",
+            "::ffff:127.0.0.1"
+        };
+        foreach (var value in blockedAddresses)
+            Assert(!CloudPresenceClient.IsPublicGlobalAddress(IPAddress.Parse(value)),
+                $"Expected a local, reserved or documentation address to be blocked: {value}");
     }
 
     private static async Task PairingUsesOneTimeCodeAndSavesOnlyValidatedDeviceCredentials()
