@@ -47,6 +47,9 @@ internal static class CloudPresenceClientTests
         await PairingDoesNotSaveUnexpectedServerIdentity();
         await RevokedHeartbeatStopsThePresenceLoop();
         await HeartbeatUsesTheSavedBearerToken();
+        await RevokedOrExpiredCommandNeverExecutesAfterApproval();
+        await AuthorizedCommandExecutesOnceAndRecordsItsResult();
+        FixedWindowsExecutorRejectsAnythingOutsideTheAllowlist();
     }
 
     private static void PublicAddressPolicyRejectsLocalAndReservedNetworks()
@@ -145,6 +148,123 @@ internal static class CloudPresenceClientTests
         using var cts = new CancellationTokenSource();
         await client.RunHeartbeatLoopAsync(value => message = value, cts.Token);
         Assert(message.Contains("revoked", StringComparison.OrdinalIgnoreCase), "A revoked device must stop with a clear status.");
+    }
+
+    private static async Task RevokedOrExpiredCommandNeverExecutesAfterApproval()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1",
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+        var calls = new List<string>();
+        var commandId = "55555555-5555-4555-8555-555555555555";
+        using var http = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            calls.Add(path);
+            if (path.EndsWith("/commands/next", StringComparison.Ordinal))
+            {
+                var expiry = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O");
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK,
+                    $"""{"command":{"id":"{{commandId}}","actionType":"launch_application","target":"notepad","expiresAt":"{{expiry}}"}}"""));
+            }
+            if (path.EndsWith("/commands/" + commandId + "/authorize", StringComparison.Ordinal))
+                return Task.FromResult(JsonResponse(HttpStatusCode.Conflict, """{"error":{"code":"DESKTOP_ACTION_NO_LONGER_AUTHORIZED"}}"""));
+            throw new InvalidOperationException("Unexpected request " + path);
+        }));
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cts = new CancellationTokenSource();
+        var executionCount = 0;
+        var status = string.Empty;
+        await client.RunRemoteActionPollingLoopAsync(
+            (_, _) => Task.FromResult(true),
+            (_, _) => { executionCount++; return Task.FromResult("started"); },
+            message =>
+            {
+                status = message;
+                if (message.Contains("Nothing was executed", StringComparison.Ordinal)) cts.Cancel();
+            },
+            cts.Token);
+        Assert(executionCount == 0, "A stale or revoked command must never reach the local executor.");
+        Assert(calls.Contains("/api/desktop-companion/commands/" + commandId + "/authorize"),
+            "The client must revalidate the exact command after local approval.");
+        Assert(!calls.Any(path => path.EndsWith("/result", StringComparison.Ordinal)),
+            "A stale command must not report a successful local execution.");
+        Assert(status.Contains("Nothing was executed", StringComparison.Ordinal),
+            "The companion must report that stale commands were blocked.");
+    }
+
+    private static async Task AuthorizedCommandExecutesOnceAndRecordsItsResult()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1",
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+        var calls = new List<string>();
+        var commandId = "66666666-6666-4666-8666-666666666666";
+        using var http = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            calls.Add(path);
+            if (path.EndsWith("/commands/next", StringComparison.Ordinal))
+            {
+                var expiry = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O");
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK,
+                    $"""{"command":{"id":"{{commandId}}","actionType":"launch_application","target":"calculator","expiresAt":"{{expiry}}"}}"""));
+            }
+            if (path.EndsWith("/commands/" + commandId + "/authorize", StringComparison.Ordinal))
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK,
+                    $"""{"authorized":true,"commandId":"{{commandId}}"}"""));
+            if (path.EndsWith("/commands/" + commandId + "/result", StringComparison.Ordinal))
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, """{"recorded":true}"""));
+            throw new InvalidOperationException("Unexpected request " + path);
+        }));
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cts = new CancellationTokenSource();
+        var executionCount = 0;
+        var status = string.Empty;
+        await client.RunRemoteActionPollingLoopAsync(
+            (command, _) => Task.FromResult(command.Id == commandId),
+            (command, _) =>
+            {
+                executionCount++;
+                Assert(command.Target == "calculator", "The executor must receive the exact allowlisted target.");
+                return Task.FromResult("calculator start requested");
+            },
+            message =>
+            {
+                status = message;
+                if (message.Contains("action approved and started", StringComparison.Ordinal)) cts.Cancel();
+            },
+            cts.Token);
+        Assert(executionCount == 1, "An authorized and locally approved command must execute once.");
+        var authorizeIndex = calls.IndexOf("/api/desktop-companion/commands/" + commandId + "/authorize");
+        var resultIndex = calls.IndexOf("/api/desktop-companion/commands/" + commandId + "/result");
+        Assert(authorizeIndex >= 0 && resultIndex > authorizeIndex,
+            "Authorization must be checked before the result is recorded.");
+        Assert(status.Contains("action approved and started", StringComparison.Ordinal),
+            "The companion must report the actual fixed action start.");
+    }
+
+    private static void FixedWindowsExecutorRejectsAnythingOutsideTheAllowlist()
+    {
+        var startInfo = RemoteDesktopActionExecutor.CreateStartInfo(
+            new RemoteDesktopCommand("77777777-7777-4777-8777-777777777777",
+                "launch_application", "calculator", DateTimeOffset.UtcNow.AddMinutes(1)));
+        Assert(startInfo.FileName == "calc.exe", "Calculator must map to the fixed calc.exe application.");
+        Assert(startInfo.UseShellExecute, "Fixed app launch must use shell execution without a shell command string.");
+        Assert(string.IsNullOrEmpty(startInfo.Arguments), "Fixed app launch must not accept caller-provided arguments.");
+
+        var rejected = false;
+        try
+        {
+            RemoteDesktopActionExecutor.CreateStartInfo(
+                new RemoteDesktopCommand("77777777-7777-4777-8777-777777777777",
+                    "launch_application", "powershell.exe", DateTimeOffset.UtcNow.AddMinutes(1)));
+        }
+        catch (ArgumentException)
+        {
+            rejected = true;
+        }
+        Assert(rejected, "The Windows executor must reject shell or arbitrary executable targets.");
     }
 
     private static async Task HeartbeatUsesTheSavedBearerToken()
