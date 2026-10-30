@@ -302,6 +302,7 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
     try { payload = JSON.parse(rawData); } catch {}
     events.push(sanitizeHermesSseEvent(eventName, eventId, payload));
   };
+  let timedOut = false;
   try {
     while (events.length < maxEvents) {
       const { done, value } = await reader.read();
@@ -320,12 +321,14 @@ async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 1
         processBlock(block);
       }
     }
-    raw += decoder.decode();
-    if (raw.trim() && events.length < maxEvents) processBlock(raw);
+  } catch (error) {
+    if (error?.name === "TimeoutError" || error?.name === "AbortError") timedOut = true;
+    else throw error;
   } finally {
     try { reader.releaseLock(); } catch {}
   }
-  return { events, bytes, truncated: events.length >= maxEvents || bytes >= maxBytes };
+  if (raw.trim() && events.length < maxEvents) processBlock(raw);
+  return { events, bytes, timedOut, truncated: timedOut || events.length >= maxEvents || bytes >= maxBytes };
 }
 
 function validateHermesRunId(value) {
@@ -605,14 +608,17 @@ export async function getHermesAgentRunEvents({ env = process.env, fetchImpl = s
     try {
       const result = await readHermesSseWindow(response);
       return {
-        state: result.events.length ? "completed" : "empty",
+        state: result.timedOut ? "partial" : result.events.length ? "completed" : "empty",
         provider: "hermes-agent",
         runId: id,
         events: result.events,
         eventCount: result.events.length,
         bytesRead: result.bytes,
         truncated: result.truncated,
-        notice: "Event previews and raw tool arguments/results are deliberately omitted. Poll run status for the authoritative final output."
+        timedOut: result.timedOut,
+        notice: result.timedOut
+          ? "The bounded event window ended; the run may still be executing. Poll again or use run status."
+          : "Event previews and raw tool arguments/results are deliberately omitted. Poll run status for the authoritative final output."
       };
     } catch (error) {
       if (error?.name === "TimeoutError" || error?.name === "AbortError") {
