@@ -165,7 +165,7 @@ test("the proxy serves local assets and does not forward unknown public paths", 
 
   const manifestResponse = await fetch(base + "/manifest.webmanifest");
   assert.equal(manifestResponse.status, 200);
-  assert.match(manifestResponse.headers.get("content-type") || "", /application\\/manifest\\+json/);
+  assert.match(manifestResponse.headers.get("content-type") || "", /application\/manifest\+json/);
   assert.equal(manifestResponse.headers.get("cache-control"), "no-cache");
   assert.equal((await manifestResponse.json()).icons.length, 2);
 
@@ -182,7 +182,7 @@ test("the proxy serves local assets and does not forward unknown public paths", 
   ]) {
     const icon = await fetch(base + path);
     assert.equal(icon.status, 200);
-    assert.match(icon.headers.get("content-type") || "", /image\\/png/);
+    assert.match(icon.headers.get("content-type") || "", /image\/png/);
     assert.equal(icon.headers.get("cache-control"), "public, max-age=300");
     const png = Buffer.from(await icon.arrayBuffer());
     assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
