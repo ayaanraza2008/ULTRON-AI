@@ -40,19 +40,11 @@ test("routes Google Workspace requests to its bounded read-only tool set", () =>
 });
 
 test("routes OpenSEO-only requests to its owner-scoped tool", () => {
-  const route = classifyTaskRoute("Research OpenSEO keywords for running shoes");
+  const route = classifyTaskRoute("Check OpenSEO project context");
   assert.equal(route.tier, "medium");
-  assert.ok(route.categories.includes("open_seo"));
-  assert.ok(route.toolNames.includes("openseo"));
+  assert.deepEqual(route.categories, ["open_seo"]);
+  assert.equal(route.filtered, true);
   assert.deepEqual(route.toolNames, ["openseo"]);
-});
-
-test("routes OpenSEO-only requests to its owner-scoped tool", () => {
-  const route = classifyTaskRoute("Research OpenSEO keywords for running shoes");
-  assert.equal(route.tier, "medium");
-  assert.deepEqual(route.categories, ["open_seo", "research"]);
-  assert.equal(route.filtered, false);
-  assert.equal(route.toolNames, null);
 });
 
 test("retains the full tool list for compound or uncertain actions", () => {
