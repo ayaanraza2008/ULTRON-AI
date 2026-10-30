@@ -35,7 +35,7 @@ test("repository syntax scanner reports the path of malformed source", async () 
     const result = spawnSync(process.execPath, ["check-source.mjs"], { cwd: root, encoding: "utf8" });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /src[\\/]broken\.mjs/);
-    assert.match(result.stderr, /Syntax error/);
+    assert.match(result.stderr, /SyntaxError/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
