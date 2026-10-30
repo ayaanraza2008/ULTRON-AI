@@ -28,6 +28,8 @@ test("action creation requires the signed-in owner and a recently online, unrevo
   assert.match(match[1], /security definer/i);
   assert.match(match[1], /set search_path = ''/i);
   assert.match(match[1], /auth\.uid\(\)/i);
+  assert.match(match[1], /p_action_type is null/i);
+  assert.match(match[1], /p_target is null/i);
   assert.match(match[1], /d\.user_id = v_user_id/i);
   assert.match(match[1], /d\.revoked_at is null/i);
   assert.match(match[1], /d\.last_seen_at >= pg_catalog\.now\(\) - interval '90 seconds'/i);
