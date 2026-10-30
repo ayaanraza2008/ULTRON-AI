@@ -105,7 +105,7 @@ export function createDesktopCompanionRelayRouter({
         platform: "windows",
         deviceToken,
         heartbeatIntervalSeconds: HEARTBEAT_INTERVAL_SECONDS,
-        notice: "Store this device token privately. It is shown only once and grants status heartbeat access, not PC control."
+        notice: "Store this device token privately. It is shown only once and grants heartbeat plus narrowly fixed shortcuts that always require local typed approval; it does not grant general PC control."
       });
     } catch (error) {
       logger.warn?.("Desktop companion pairing exchange failed", { code: error?.code || "DATABASE_ERROR" });
@@ -113,8 +113,8 @@ export function createDesktopCompanionRelayRouter({
     }
   });
 
-  // The companion initiates every heartbeat over HTTPS. No server-to-device
-  // connection or command channel exists in this relay.
+  // The companion initiates every heartbeat over HTTPS. The cloud never opens
+  // a connection to the PC; fixed action requests are retrieved by outbound poll.
   router.post("/desktop-companion/heartbeat", async (req, res) => {
     const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
     const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
