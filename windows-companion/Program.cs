@@ -382,7 +382,7 @@ internal sealed class CompanionContext : ApplicationContext
         {
             ShowStatus("Could not open the browser. Use the Open ULTRON button to retry.");
             MessageBox.Show(_window,
-                "Windows could not open the default browser. Visit " + AssistantUrl,
+                "Windows could not open the default browser. Visit " + _assistantUrl,
                 "Could not open ULTRON", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
