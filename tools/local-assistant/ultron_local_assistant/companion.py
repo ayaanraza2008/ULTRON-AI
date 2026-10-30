@@ -345,7 +345,6 @@ def _cloud_json_request(server_url: str, route: str, payload: dict, bearer_token
     origin = _validated_cloud_server_url(server_url)
     parsed = urlsplit(origin)
     addresses = _resolve_public_addresses(parsed.hostname, resolver=resolver)
-    errors = []
     for address in addresses:
         connection = None
         try:
@@ -370,13 +369,13 @@ def _cloud_json_request(server_url: str, route: str, payload: dict, bearer_token
                 response.read(CLOUD_MAX_RESPONSE_BYTES + 1)
                 raise CloudHTTPError(response.status)
             declared = response.getheader("Content-Length")
-            if declared:
+            if declared is not None:
                 try:
-                    if int(declared) > CLOUD_MAX_RESPONSE_BYTES:
-                        raise ValueError("ULTRON server response exceeded the safe size limit.")
-                except ValueError as exc:
-                    if "exceeded" in str(exc):
-                        raise
+                    declared_bytes = int(declared)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("ULTRON server returned an invalid response length.") from exc
+                if declared_bytes < 0 or declared_bytes > CLOUD_MAX_RESPONSE_BYTES:
+                    raise ValueError("ULTRON server response exceeded the safe size limit.")
             raw = response.read(CLOUD_MAX_RESPONSE_BYTES + 1)
             if len(raw) > CLOUD_MAX_RESPONSE_BYTES:
                 raise ValueError("ULTRON server response exceeded the safe size limit.")
@@ -390,7 +389,6 @@ def _cloud_json_request(server_url: str, route: str, payload: dict, bearer_token
         except (RuntimeError, ValueError):
             raise
         except (OSError, ssl.SSLError, http.client.HTTPException, TimeoutError) as exc:
-            errors.append(type(exc).__name__)
         finally:
             if connection is not None:
                 try:
