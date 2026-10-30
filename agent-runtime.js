@@ -499,6 +499,24 @@ const SAFE_PREPARATION_TOOLS = new Set([
  * model-generated tool arguments, conversation history, or retrieved content.
  * Canonical form: "I approve spending up to 120 OpenSEO credits for this lookup."
  */
+/**
+ * Build the narrow Chrome DevTools dispatch payload. Approval is deliberately
+ * not sourced from model arguments; a task-bound user approval flow is not yet
+ * implemented, so consequential external clicks must remain blocked.
+ */
+export function buildChromeDevToolsActionInput(args = {}) {
+  const source = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+  return {
+    action: bounded(source.action, 40),
+    ...(typeof source.url === "string" ? { url: source.url } : {}),
+    ...(typeof source.selector === "string" ? { selector: source.selector } : {}),
+    ...(typeof source.text === "string" ? { text: source.text } : {}),
+    ...(Number.isInteger(source.limit) ? { limit: source.limit } : {}),
+    ...(Number.isInteger(source.durationMs) ? { durationMs: source.durationMs } : {}),
+    confirmExternalAction: false
+  };
+}
+
 export function parseOpenSeoSpendApproval(value) {
   const text = typeof value === "string" ? value.slice(0, 6000) : "";
   const match = text.match(/^\s*i approve spending up to ([1-9]\d{0,3}) open\s*seo credits? for this lookup(?:[.!?](?:\s|$)|\s|$)/i);
@@ -883,17 +901,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       });
     }
     if (name === "chrome_devtools") {
-      const input = {
-        action: bounded(args.action, 40),
-        ...(typeof args.url === "string" ? { url: args.url } : {}),
-        ...(typeof args.selector === "string" ? { selector: args.selector } : {}),
-        ...(typeof args.text === "string" ? { text: args.text } : {}),
-        ...(Number.isInteger(args.limit) ? { limit: args.limit } : {}),
-        ...(Number.isInteger(args.durationMs) ? { durationMs: args.durationMs } : {}),
-        // A model-authored tool argument is never a user confirmation.
-        confirmExternalAction: false
-      };
-      return runChromeDevToolsAction({ env, fetchImpl, userId: req.supabaseUser?.id, input });
+      return runChromeDevToolsAction({
+        env,
+        fetchImpl,
+        userId: req.supabaseUser?.id,
+        input: buildChromeDevToolsActionInput(args)
+      });
     }
     if (name === "browser_use") {
       const task = bounded(args.task, 2500);
