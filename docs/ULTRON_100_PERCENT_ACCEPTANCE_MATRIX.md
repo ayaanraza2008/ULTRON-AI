@@ -23,21 +23,37 @@ A row is **not** 100% complete until every applicable automated, integration, se
 
 ## Current CI evidence
 
-Latest observed candidate CI is [GitHub Actions run 41076988615](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41076988615), for exact integration head `75711594340fef6c01ed6890b3024faf0a38ac88`. All three jobs completed successfully:
+Latest complete candidate CI is [run 41079498952](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41079498952), for exact PR #400 candidate head `cd9b828a14dc32bc791d8225eee3549aa6c04c1f`. All three jobs completed successfully:
 
-- Node test/build job: `npm run check` passed and syntax-checked **165 JavaScript source files**; `npm test` reported **812 tests, 811 passed, 0 failed, 1 skipped**.
-- Python local assistant: **29 tests passed**; dedicated Windows companion protocol suite: **10 tests passed**; Python compilation passed for the assistant and companion files.
-- Dependency audits: install audit and `npm audit --omit=dev --audit-level=high` each reported **0 vulnerabilities**.
-- Windows installer PowerShell parsing and the pinned World Intelligence build/ULTRON bridge verification passed.
+- Node test/build job: `npm run check` passed and syntax-checked **165 JavaScript source files**; `npm test` reported **815 tests, 814 passed, 0 failed, 1 skipped**.
+- Python local assistant discovery: **29 tests passed**; dedicated Windows companion protocol suite: **10 tests passed**; Python compilation passed for assistant and companion files.
+- ULTRON repository dependency audits: install audit and `npm audit --omit=dev --audit-level=high` each reported **0 vulnerabilities**.
+- Windows installer PowerShell parsing and pinned World Intelligence build/ULTRON bridge verification passed.
 
-The one skipped Node test is the explicitly opt-in live two-account Supabase isolation test. CI does not prove real model inference, authenticated live database flows, worker completion, Docker execution on the target host, microphone/speaker quality, physical Windows pairing, or real external-service actions.
+Additional review-branch verification on the same candidate base:
+- [PR #402 run 41079595712](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41079595712) passed all three jobs after adding persisted-device-identity regression tests: Python suite **31 tests**, dedicated Windows companion suite **12 tests**. This includes the new invalid-UUID and symlinked identity-file cases.
+- [PR #401 run 41079586397](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41079586397) passed all three jobs with the acceptance-matrix review branch.
+
+The one skipped Node test remains the explicitly opt-in live two-account Supabase isolation test. CI does not prove real model inference, authenticated live database flows, worker completion, Docker execution on the target host, microphone/speaker quality, physical Windows pairing, or real external-service actions.
+
+## External dependency risk: pinned World Intelligence source
+
+The separate `.build-gods-eye-view` checkout is pinned to upstream commit `7be5937fc3e3b10cdfa8d3f833536167268768ad`. Its own `npm audit` reports **5 high-severity vulnerabilities** even though its build and ULTRON bridge injection pass. The report names these affected packages and states `fixAvailable: true` for each:
+
+- `chromium-bidi`
+- `puppeteer`
+- `puppeteer-core`
+- `vite` (the report includes Windows editor-command and filesystem-path advisories, among others)
+- `zod` (the report includes an oversized constrained-collection memory-exhaustion advisory)
+
+These findings are isolated to the separately cloned/pinned World Intelligence dependency tree; they are **not** the ULTRON application dependency audit, which reported zero vulnerabilities in the same CI run. Do not silently suppress this upstream audit or apply blind dependency upgrades. Before release, review the upstream fixed versions/lockfile compatibility and either update the pinned upstream revision or apply a reviewed, reproducible dependency override, then rerun the complete World Intelligence build and audit. Treat this as an outstanding supply-chain blocker for that optional visualization component.
 
 ## Windows local companion CI follow-up
 
 - Candidate source adds `tools/local-assistant/ultron_local_assistant/companion.py`, a bearer-token-protected, rate-limited, exact-Host/Origin-checked HTTP status endpoint bound to `127.0.0.1`. Its only advertised capability is `status`; it does not expose shell, filesystem, screen capture, keyboard/mouse, or process-control actions.
 - The first companion test run failed during import because `test_companion.py` did not add `tools/local-assistant` to Python's import path. The active candidate corrected this in commit `a574ec03a7c67ed7c8c0dd0eab01264cfad4f3af` by matching the existing local-assistant test bootstrap.
 - The next run exposed a test-helper bug: `start_server` passed `data_dir` twice when exercising stable device identity. Candidate commit `75711594340fef6c01ed6890b3024faf0a38ac88` fixed this by extracting an optional `data_dir` from `kwargs` before invoking the server factory.
-- Exact-head PR CI [run 41076988615](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41076988615) completed successfully across all three jobs. Its Node suite reported 812 tests (811 passed, 0 failed, 1 skipped); Python local-assistant discovery ran 29 tests; the dedicated companion protocol step ran 10 tests; 165 JavaScript files were syntax-checked; both dependency audits reported 0 vulnerabilities; Windows installer parsing and the World Intelligence build/bridge passed. The one Node skip remains the opt-in live Supabase two-account isolation test. These are source/CI tests, not physical Windows pairing or cloud/provider E2E evidence.
+- Exact-head PR CI [run 41076988615](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41076988615) completed successfully across all three jobs. It verified the 10-test companion protocol suite before the additional persisted-identity cases were added; the expanded **12-test** suite is now green in [PR #402 run 41079595712](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41079595712). Its Node suite reported 812 tests (811 passed, 0 failed, 1 skipped); Python local-assistant discovery ran 29 tests; the dedicated companion protocol step ran 10 tests; 165 JavaScript files were syntax-checked; both dependency audits reported 0 vulnerabilities; Windows installer parsing and the World Intelligence build/bridge passed. The one Node skip remains the opt-in live Supabase two-account isolation test. These are source/CI tests, not physical Windows pairing or cloud/provider E2E evidence.
 - The candidate CI workflow now explicitly compiles the companion service and its test file and runs a dedicated loopback-protocol test step. Even after source CI passes, physical Windows installation/pairing is still required; the current companion is status-only, not full Windows computer control.
 
 ## Sector acceptance matrix
