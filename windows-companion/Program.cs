@@ -307,10 +307,13 @@ internal sealed class CompanionContext : ApplicationContext
             {
                 _presenceCancellation = null;
                 cancellation.Dispose();
-                _startPresenceButton.Enabled = true;
-                _pairDeviceButton.Enabled = true;
-                _stopPresenceButton.Enabled = false;
-                if (!_allowExit) ShowStatus("ULTRON cloud presence is stopped.");
+                if (!_window.IsDisposed)
+                {
+                    _startPresenceButton.Enabled = true;
+                    _pairDeviceButton.Enabled = true;
+                    _stopPresenceButton.Enabled = false;
+                    if (!_allowExit) ShowStatus("ULTRON cloud presence is stopped.");
+                }
             }
         }
     }
