@@ -2,42 +2,54 @@
 
 Updated: 2026-10-31 UTC
 
-## Active work
+## Repository state
 
 - Project: `ayaanraza2008/ULTRON-AI`
-- Base branch at task start: `main` @ `6b7f09d97508fc2be2085695d862a921e1ae8487`
-- Feature branch: `feat/harness2-agent-benchmark-tool`
-- Pull request: https://github.com/ayaanraza2008/ULTRON-AI/pull/412
-- Latest verified feature head before this checkpoint refresh: `4c5edb6ca057db40c739d51c9d56a8d9e38894df`
-- Full CI run for that head: https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41112778968 — success (both `test` and `world-intelligence-build` jobs).
-- Deployment / production settings: not changed.
+- Default branch: `main`
+- Harness2 PR: [#412](https://github.com/ayaanraza2008/ULTRON-AI/pull/412) — merged.
+- Harness2 merge commit: `e92d09d9dcb21c025ab3326985ec9fbe675ef86b`.
+- Latest documentation commit: `934e7486bbf6f906992940c36ff272605fcbd543` (acceptance matrix).
+- Full pre-merge CI passed on exact feature head `74ace121a5de188631e8c7fba81baa037ec7b58f`: [run 41112928271](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41112928271). Both `test` and `world-intelligence-build` jobs succeeded.
+- Post-merge CI for merge commit is pending/being checked.
+- Deployment / production settings: not changed. No Render deploy, environment change, or paid resource action performed.
 
 ## Harness2 implementation status
 
-Implemented on the feature branch:
-- Python 3.12+ standard-library CLI under `tools/harness2/harness2.py`.
+Merged into `main`:
+- Python 3.12+ standard-library CLI at `tools/harness2/harness2.py`.
 - Local setup creates eight editable Markdown harness components: system prompt, guardrails, memory, tool guidance, subagents, skills, scripts, and plugins.
 - Credential-free deterministic `demo` executor.
-- `smoke` and `safety` JSON benchmarks with transparent substring/length judging.
+- Built-in `smoke` and `safety` JSON benchmarks with transparent substring/length judging.
 - Sequential and parallel iterative candidate refinement.
-- Per-candidate harness snapshots and JSON results; resumable run state under ignored `.harness2/runs/`.
-- `resume`, `judge`, and `report` commands; CLI lifecycle exercised end-to-end in tests.
-- Optional OpenCode and Codex local CLI executors, each invoked from a temporary directory with read-only restrictions. Mocked tests verify invocation flags/configuration; real local CLI calls remain untested.
-- Path allowlists and symlink/traversal rejection for harness components and candidate storage.
-- Documentation in `docs/HARNESS2.md`, README entry, feature-registry entry, package test command, CI Python test step, and ignored local run/cache paths.
+- Candidate snapshots, JSON results, saved checkpoints, and resumable runs under ignored `.harness2/runs/`.
+- `resume`, `judge`, and `report` commands; CLI lifecycle covered by automated tests.
+- OpenCode and Codex local CLI executors, configured for temporary working directories and read-only tool policies. Invocation flags and generated policy are covered by mocked tests; actual local CLI/model calls have not been run.
+- Candidate/component path allowlists and symlink/traversal protections.
+- Docs: `docs/HARNESS2.md`; project README, feature registry, Python test command, CI step, and ignore rules updated.
 
-## Verification evidence
+## Verified test evidence
 
-- Python 3.12 CI compiled Harness2 and ran all 11 Harness2 unit/integration tests successfully, including sequential demo, parallel candidate runs, CLI setup/run/judge/report/resume lifecycle, executor argument/configuration checks, and path traversal/symlink rejection.
-- The same full CI run passed the existing browser-use Python tests (11), Model Lab Python tests (9), Node syntax checks and all Node tests (652 passed, 1 intentionally skipped), npm dependency audits (0 vulnerabilities), and the pinned World Intelligence build/bridge verification.
-- The deterministic demo proves Harness2 workflow mechanics only; it is not a model-quality benchmark or safety certification.
-- OpenCode/Codex actual CLI compatibility, installed versions, authentication, and provider behavior require local CLI installs and credentials; no credentials were supplied.
-- A previous CLI lifecycle test failed because it reused a temporary workspace already initialized by the test fixture. The test now uses an isolated child workspace and passed on the verified head.
-- The prior acceptance-matrix file was absent on `main`; existing broad ULTRON status sources inspected were `docs/BACKEND_COMPLETION_LEDGER.md`, `docs/BLOCKERS.md`, and `docs/FEATURE_REGISTRY.md`.
+On pre-merge feature head `74ace121a5de188631e8c7fba81baa037ec7b58f`, full GitHub Actions run 41112928271 passed:
+- Harness2 Python 3.12 syntax compilation and all 11 Harness2 tests.
+- Existing Browser Use Python checks: 11 tests passed.
+- Model Lab Python tests: 9 tests passed.
+- Node tests: 652 passed, 0 failed, 1 intentionally skipped.
+- npm audit and production dependency audit: 0 vulnerabilities reported.
+- Pinned World Intelligence build and ULTRON bridge injection succeeded.
 
-## Exact next actions
+Harness2's deterministic demo validates workflow mechanics only. It is not a model-quality benchmark or safety certification. Real OpenCode/Codex execution still depends on local CLI installation, authentication, and provider availability.
 
-1. Fetch the updated PR #412 head and check CI for this checkpoint-only commit.
-2. If required checks remain green, squash-merge PR #412 into `main`.
-3. Verify the merge commit, main tree, and final PR state.
-4. Do not deploy or change production settings. Keep real OpenCode/Codex local CLI smoke tests as an explicit external verification item.
+## Remaining ULTRON blockers
+
+See `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md` for the evidence-based cross-project view and the canonical details in:
+- `docs/BACKEND_COMPLETION_LEDGER.md`
+- `docs/BLOCKERS.md`
+- `docs/FEATURE_REGISTRY.md`
+
+Key unresolved external gates include live provider inference, Supabase auth/two-user isolation, real queued task execution, memory isolation, live speech/vision, physical Windows companion pairing, hardened code sandboxing, integration upstream verification, and Render pipeline-minute recovery. Do not claim these complete from mocked tests.
+
+## Exact next action
+
+1. Fetch the GitHub Actions run(s) for merge commit `e92d09d9dcb21c025ab3326985ec9fbe675ef86b` and verify post-merge CI.
+2. If green, leave Harness2 integrated on `main`; do not deploy.
+3. Continue with the next independently achievable ULTRON blocker from the acceptance matrix, preserving existing work and updating this checkpoint with evidence.
