@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult, sanitizeToolResultForClient } from "../agent-runtime.js";
+import { createAgentRouter, buildBrowserUseGuidance, normalizeHinglishForRouting, modelSafeResult, sanitizeToolResultForClient, parseGeoSleuthReverseSearchConsent, buildGeoSleuthInvestigationOptions } from "../agent-runtime.js";
 
 async function withServer(env, fetchImpl, run, extras = {}) {
   const app = express();
@@ -2313,4 +2313,37 @@ test("simple task routing sends no tool schemas and blocks provider-invented too
   });
   assert.equal(providerCalls, 1);
   assert.equal(bridgeCalls, 0);
+});
+
+
+test("Geo-Sleuth reverse-image search requires the exact current-user approval phrase", () => {
+  const approval = "I approve sending image-derived information from this photo to external reverse-image search providers for this investigation.";
+  assert.equal(parseGeoSleuthReverseSearchConsent(approval), true);
+  assert.equal(parseGeoSleuthReverseSearchConsent("Please investigate this photo using reverse image search."), false);
+  assert.equal(parseGeoSleuthReverseSearchConsent("I do not approve sending image-derived information from this photo to external reverse-image search providers for this investigation."), false);
+  assert.equal(parseGeoSleuthReverseSearchConsent("I approve sending image-derived information from this photo to external reverse-image search providers for this investigation, but don't send it anywhere."), false);
+  assert.equal(parseGeoSleuthReverseSearchConsent("Do not use reverse-image search. I approve sending image-derived information from this photo to external reverse-image search providers for this investigation."), false);
+  assert.equal(parseGeoSleuthReverseSearchConsent("I approve sending image-derived information from this photo to external reverse-image search providers for this investigation later."), false);
+  assert.equal(parseGeoSleuthReverseSearchConsent(undefined), false);
+});
+
+test("Geo-Sleuth investigation options ignore model-authored reverse-search flags", () => {
+  const imageBase64 = "image";
+  const prompt = "Find where this photo was taken.";
+  const options = buildGeoSleuthInvestigationOptions({
+    imageBase64,
+    prompt,
+    args: { includeReverseSearch: true },
+    env: { GEO_SLEUTH_ENABLED: "true" }
+  });
+  assert.equal(options.imageBase64, imageBase64);
+  assert.equal(options.includeReverseSearch, false);
+  assert.deepEqual(options.env, { GEO_SLEUTH_ENABLED: "true" });
+  const approved = buildGeoSleuthInvestigationOptions({
+    imageBase64,
+    prompt: "I approve sending image-derived information from this photo to external reverse-image search providers for this investigation.",
+    args: { includeReverseSearch: false },
+    env: {}
+  });
+  assert.equal(approved.includeReverseSearch, true);
 });

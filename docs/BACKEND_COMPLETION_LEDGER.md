@@ -84,3 +84,14 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 - Agent-level tests prove the payload builder discards model-authored approval and that a consequential click request is stopped by the autonomy approval gate before any local Chrome bridge request.
 - Full pre-merge CI run 41116829247 passed: 661 Node tests total, 660 passed, 0 failed, 1 intentionally skipped; Python suites and syntax checks passed; dependency audits reported 0 vulnerabilities; pinned World Intelligence build and bridge injection passed.
 - No live Chrome action was performed. The authenticated task-bound approval token flow and physical-device/browser validation remain unimplemented. Consequential external clicks stay blocked.
+
+
+## Geo-Sleuth reverse-image data-sharing consent hardening (2026-10-31)
+
+- The model-visible `includeReverseSearch` parameter has been removed from the Geo-Sleuth tool schema.
+- The agent now derives reverse-image sharing exclusively from the current user's message, not model-generated tool arguments.
+- Consent requires the exact canonical phrase at the beginning of the current user message: `I approve sending image-derived information from this photo to external reverse-image search providers for this investigation.`
+- The parser rejects ordinary mentions of reverse-image search, missing/leading prose, explicit negation, cancellation language, trailing contradictory consent language, and phrase extensions such as "later".
+- Added regression tests for exact approval, ordinary mention, denial, contradictory trailing text, leading denial, non-exact phrase boundary, missing input, and model-authored true/false flags.
+- Source and tests are on `fix/geo-sleuth-reverse-search-user-consent`; full CI pending. No image was uploaded to an external reverse-image provider and no production configuration changed.
+- This is source-level consent hardening only. The Geo-Sleuth runtime, candidate board, location accuracy, and external-provider behaviour remain unverified.
