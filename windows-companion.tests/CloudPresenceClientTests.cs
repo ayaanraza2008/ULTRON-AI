@@ -217,6 +217,13 @@ internal static class CloudPresenceClientTests
                 return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(payload));
             }
 
+            if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/" + commandId + "/authorize")
+            {
+                Assert(request.Headers.Authorization?.ToString() == "Bearer " + DeviceToken,
+                    "An approved action must be reauthorized with the paired device token.");
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new { authorized = true, commandId }));
+            }
+
             if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/" + commandId + "/result")
             {
                 resultBody = await request.Content!.ReadAsStringAsync(cancellationToken);
