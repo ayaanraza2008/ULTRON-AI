@@ -146,7 +146,7 @@ test("provider-specific media routing does not accidentally hide the selected ad
 
 
 test("routes Hermes Agent long-running run lifecycle requests to dedicated owner-scoped tools", () => {
-  const start = classifyTaskRoute("Start a background Hermes Agent run to research the official API.");
+  const start = classifyTaskRoute("Start a background Hermes Agent run.");
   assert.ok(start.categories.includes("hermes"));
   assert.ok(start.toolNames.includes("hermes_agent_start_run"));
   assert.ok(start.toolNames.includes("hermes_agent_run_status"));
