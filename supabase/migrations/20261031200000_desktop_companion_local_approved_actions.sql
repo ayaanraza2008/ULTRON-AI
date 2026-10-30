@@ -45,6 +45,10 @@ create index if not exists desktop_companion_actions_device_pending_idx
 create index if not exists desktop_companion_actions_user_created_idx
   on public.desktop_companion_actions (user_id, created_at desc);
 
+create unique index if not exists desktop_companion_actions_one_active_per_device_idx
+  on public.desktop_companion_actions (device_record_id)
+  where status in ('pending', 'claimed');
+
 alter table public.desktop_companion_actions enable row level security;
 
 drop policy if exists desktop_companion_actions_insert_owner
@@ -119,7 +123,7 @@ begin
          result_code = 'ACTION_EXPIRED',
          completed_at = pg_catalog.now()
    where a.device_record_id = v_device_record_id
-     and a.status = 'pending'
+     and a.status in ('pending', 'claimed')
      and a.expires_at <= pg_catalog.now();
 
   return query
@@ -160,9 +164,11 @@ begin
   if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$'
      or p_device_id is null or p_action_id is null
      or p_status not in ('completed', 'denied', 'failed', 'expired')
-     or p_result_code not in (
-       'ACTION_COMPLETED', 'USER_DENIED', 'LOCAL_APPROVAL_REQUIRED',
-       'ACTION_EXPIRED', 'ACTION_FAILED'
+     or not (
+       (p_status = 'completed' and p_result_code = 'ACTION_COMPLETED')
+       or (p_status = 'denied' and p_result_code in ('USER_DENIED', 'LOCAL_APPROVAL_REQUIRED'))
+       or (p_status = 'failed' and p_result_code = 'ACTION_FAILED')
+       or (p_status = 'expired' and p_result_code = 'ACTION_EXPIRED')
      ) then
     return false;
   end if;
