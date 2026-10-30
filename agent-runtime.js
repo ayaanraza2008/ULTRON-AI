@@ -499,6 +499,24 @@ const SAFE_PREPARATION_TOOLS = new Set([
  * model-generated tool arguments, conversation history, or retrieved content.
  * Canonical form: "I approve spending up to 120 OpenSEO credits for this lookup."
  */
+/**
+ * Build the narrow Chrome DevTools dispatch payload. Approval is deliberately
+ * not sourced from model arguments; a task-bound user approval flow is not yet
+ * implemented, so consequential external clicks must remain blocked.
+ */
+export function buildChromeDevToolsActionInput(args = {}) {
+  const source = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+  return {
+    action: bounded(source.action, 40),
+    ...(typeof source.url === "string" ? { url: source.url } : {}),
+    ...(typeof source.selector === "string" ? { selector: source.selector } : {}),
+    ...(typeof source.text === "string" ? { text: source.text } : {}),
+    ...(Number.isInteger(source.limit) ? { limit: source.limit } : {}),
+    ...(Number.isInteger(source.durationMs) ? { durationMs: source.durationMs } : {}),
+    confirmExternalAction: false
+  };
+}
+
 export function parseOpenSeoSpendApproval(value) {
   const text = typeof value === "string" ? value.slice(0, 6000) : "";
   const match = text.match(/^\s*i approve spending up to ([1-9]\d{0,3}) open\s*seo credits? for this lookup(?:[.!?](?:\s|$)|\s|$)/i);
@@ -679,7 +697,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "create_talking_avatar", description: "Create a talking-head/lip-sync job through configured HeyGem. Requires user-provided image and audio media; never invent media.", parameters: { type: "object", properties: { prompt: { type: "string", maxLength: 1000 } }, additionalProperties: false } } },
     { type: "function", function: { name: "transcribe_audio", description: "Transcribe supplied audio using VoiceStudio when configured, otherwise the Handy desktop bridge. Audio must be supplied with this agent request.", parameters: { type: "object", properties: { language: { type: "string", maxLength: 40 } }, additionalProperties: false } } },
     { type: "function", function: { name: "browser_use", description: "Use the optional Browser Use bridge for interactive public websites, JavaScript-rendered pages, clicking, typing, screenshots, extraction, and website tests. Include explicit public HTTPS URL(s) in task; only those exact hosts can be reached. Read-only only; consequential actions are blocked.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 2500 }, maxSteps: { type: "integer", minimum: 1, maximum: 12 } }, required: ["task"], additionalProperties: false } } },
-    { type: "function", function: { name: "chrome_devtools", description: "Use the authenticated local Chrome DevTools bridge to navigate, click/fill non-secret fields, capture screenshots, inspect DOM/console/network logs, and run a performance trace. Supports only allowlisted actions; no arbitrary JavaScript. Shared bridge credentials are restricted to the configured owner account.", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "navigate", "click", "fill", "screenshot", "page_snapshot", "console_logs", "network_requests", "performance_trace"] }, url: { type: "string", maxLength: 2048 }, selector: { type: "string", maxLength: 600 }, text: { type: "string", maxLength: 5000 }, limit: { type: "integer", minimum: 1, maximum: 100 }, durationMs: { type: "integer", minimum: 1000, maximum: 10000 }, confirmExternalAction: { type: "boolean" } }, required: ["action"], additionalProperties: false } } },
+    { type: "function", function: { name: "chrome_devtools", description: "Use the authenticated local Chrome DevTools bridge to navigate, click/fill non-secret fields, capture screenshots, inspect DOM/console/network logs, and run a performance trace. Supports only allowlisted actions; no arbitrary JavaScript. Consequential external clicks remain blocked because model tool calls cannot authorize them; a task-specific user confirmation flow is not yet implemented. Shared bridge credentials are restricted to the configured owner account.", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "navigate", "click", "fill", "screenshot", "page_snapshot", "console_logs", "network_requests", "performance_trace"] }, url: { type: "string", maxLength: 2048 }, selector: { type: "string", maxLength: 600 }, text: { type: "string", maxLength: 5000 }, limit: { type: "integer", minimum: 1, maximum: 100 }, durationMs: { type: "integer", minimum: 1000, maximum: 10000 } }, required: ["action"], additionalProperties: false } } },
     { type: "function", function: { name: "openseo", description: "Use the owner-scoped OpenSEO MCP integration. Free operations include listing projects, reading project context, listing saved keywords and estimating existing rank-tracker costs. Paid keyword/domain/SERP lookups are authorized only when the user begins their current message with: I approve spending up to 120 OpenSEO credits for this lookup. Replace 120 with the user's explicit credit ceiling. Never infer or generate this approval yourself. Tool calls are limited to the fixed allowlist and current upstream MCP catalog.", parameters: { type: "object", properties: { operation: { type: "string", enum: ["list_projects", "get_project_context", "list_saved_keywords", "estimate_rank_tracker_cost", "research_keywords", "get_domain_overview", "get_domain_keyword_suggestions", "get_serp_results"] }, args: { type: "object" } }, required: ["operation"], additionalProperties: false } } },
     { type: "function", function: { name: "run_comfyui_workflow", description: "Queue the exact ComfyUI workflow attached by the user. Requires explicit confirmation flag and a supplied workflow; never invent or run arbitrary workflows.", parameters: { type: "object", properties: { reason: { type: "string", maxLength: 300 } }, required: ["reason"], additionalProperties: false } } }
   ];
@@ -883,16 +901,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       });
     }
     if (name === "chrome_devtools") {
-      const input = {
-        action: bounded(args.action, 40),
-        ...(typeof args.url === "string" ? { url: args.url } : {}),
-        ...(typeof args.selector === "string" ? { selector: args.selector } : {}),
-        ...(typeof args.text === "string" ? { text: args.text } : {}),
-        ...(Number.isInteger(args.limit) ? { limit: args.limit } : {}),
-        ...(Number.isInteger(args.durationMs) ? { durationMs: args.durationMs } : {}),
-        ...(typeof args.confirmExternalAction === "boolean" ? { confirmExternalAction: args.confirmExternalAction } : {})
-      };
-      return runChromeDevToolsAction({ env, fetchImpl, userId: req.supabaseUser?.id, input });
+      return runChromeDevToolsAction({
+        env,
+        fetchImpl,
+        userId: req.supabaseUser?.id,
+        input: buildChromeDevToolsActionInput(args)
+      });
     }
     if (name === "browser_use") {
       const task = bounded(args.task, 2500);

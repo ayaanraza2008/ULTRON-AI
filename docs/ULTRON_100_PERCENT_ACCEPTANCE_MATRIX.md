@@ -24,6 +24,8 @@ Rule: a source implementation or mocked test is not live integration proof. No a
 
 | Paid integration spend authorization | TESTED_SOURCE | OpenSEO paid lookup dispatch ignores model-generated approval/credit fields and requires a canonical user-authored current-message credit cap. CI run 41115578469 passed model-invention denial, bounded user approval, over-cap rejection before upstream request, and routing tests. | Live OpenSEO account billing/quota still requires the authorized owner account and explicit capped spend; no credits were spent in CI. |
 
+| Chrome DevTools consequential-click approval | IN_PROGRESS | Agent schema no longer exposes a confirmation flag; dispatch forces false. Agent-level test proves model-supplied true cannot authorize a click even when the bridge's additional operator flag is enabled. | Keep consequential clicks disabled until a one-time user-approved token is bound to the exact task, host, selector and action; live physical Chrome validation remains separate. |
+
 ## Global completion rules
 
 1. Use the exact commit and workflow run when reporting test status.

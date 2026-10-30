@@ -65,3 +65,12 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 - Fixed an uncovered dispatch bug: OpenSEO's agent branch referenced a nonexistent `isObject` helper; it now validates object arguments inline. The task router now has a dedicated `open_seo` category so narrow intent routing does not hide the tool.
 - Full CI passed on the clean feature head (workflow run 41115578469): Node test suite 658 passed / 0 failed / 1 skipped; npm syntax check passed; both dependency audits reported 0 vulnerabilities; pinned World Intelligence build and bridge injection succeeded.
 - The deterministic/mocked regression suite does not prove external billing behaviour. No external OpenSEO account was contacted, no credits were spent, and no production settings were changed.
+
+
+## Chrome DevTools model self-approval hardening (2026-10-31)
+
+- Removed `confirmExternalAction` from the model-visible Chrome DevTools tool schema.
+- The agent runtime now always sends `confirmExternalAction: false` to the local bridge; model-authored confirmation arguments are ignored.
+- Added an agent-level regression test with `CHROME_ALLOW_EXTERNAL_ACTIONS=true` to prove a model-supplied true flag still does not approve a consequential click. The test expects the local bridge to return `EXTERNAL_ACTION_CONFIRMATION_REQUIRED` and confirms the request sent by ULTRON has confirmation false.
+- The additional local bridge environment flag is not a substitute for task-specific user approval. Since a proper authenticated approval-token flow is not implemented, ULTRON's agent path keeps consequential external clicks blocked.
+- Status: source/test added on fix/chrome-devtools-no-model-self-approval; CI pending. No live browser or device action was performed and no production setting changed.
