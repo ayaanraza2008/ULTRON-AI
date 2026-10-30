@@ -62,6 +62,27 @@ class Harness2Tests(unittest.TestCase):
             path = Path(temp) / "bad.json"
             path.write_text(json.dumps({"tasks":[{"id":"same","prompt":"one"},{"id":"same","prompt":"two"}]}))
             with self.assertRaises(harness2.Harness2Error): harness2.load_benchmark("custom", str(path))
+
+    def test_benchmark_rejects_unknown_and_oversized_criteria(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "bad-criteria.json"
+            path.write_text(json.dumps({"tasks":[{"id":"one","prompt":"test","criteria":{"regex":"unsafe"}}]}))
+            with self.assertRaisesRegex(harness2.Harness2Error, "unsupported fields"):
+                harness2.load_benchmark("custom", str(path))
+            path.write_text(json.dumps({"tasks":[{"id":"one","prompt":"test","criteria":{"all_contains":["x" * 513]}}]}))
+            with self.assertRaisesRegex(harness2.Harness2Error, "Invalid all_contains"):
+                harness2.load_benchmark("custom", str(path))
+
+    def test_score_rejects_duplicate_and_unknown_answer_ids(self):
+        benchmark = {"tasks":[{"id":"one","prompt":"test","criteria":{"all_contains":["yes"]}}]}
+        with self.assertRaisesRegex(harness2.Harness2Error, "Duplicate"):
+            harness2.score(benchmark, [
+                {"task_id":"one","answer":"yes"},
+                {"task_id":"one","answer":"no"},
+            ])
+        with self.assertRaisesRegex(harness2.Harness2Error, "unknown task"):
+            harness2.score(benchmark, [{"task_id":"not-in-benchmark","answer":"yes"}])
+        self.assertEqual(harness2.score(benchmark, [])[ "score" ], 0.0)
     def test_cli_setup_run_judge_report_and_resume(self):
         script = Path(__file__).resolve().parents[1] / "tools" / "harness2" / "harness2.py"
         workspace = self.root / "cli-workspace"
