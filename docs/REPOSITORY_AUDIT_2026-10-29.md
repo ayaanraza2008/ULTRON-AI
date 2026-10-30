@@ -1,4 +1,4 @@
-# ULTRON upstream repository integration audit — 2026-10-29
+# ULTRON upstream repository integration audit — 2026-10-30
 
 ## Scope
 
@@ -6,10 +6,10 @@ This audit tracks the 41 repository names shown in the supplied screenshots, the
 
 ## What is present in ULTRON source
 
-- **Existing API/service adapters:** Chatwoot, Cal.diy, OpenProject, VoiceStudio, Geo-Sleuth, HeyGem, ComfyUI, OmniVoice, Handy, OpenViking, AgentMemory, Browser Use, God's Eye View action contract, Paperclip read-only connector, REA MCP connector, Obscura MCP connector, Cactus/Needle, Hermes Agent, and read-only Google Workspace integrations.
+- **Existing API/service adapters:** Chatwoot, Cal.diy, OpenProject, VoiceStudio, Geo-Sleuth, HeyGem, ComfyUI, OmniVoice, Handy, OpenViking, AgentMemory, Browser Use, God's Eye View action contract, Paperclip read-only connector, REA MCP connector, Obscura MCP connector, Cactus/Needle, Hermes Agent, read-only Google Workspace integrations, AppFlowy Cloud, OpenDesign, Open Generative AI/MuAPI, OpenHiggsfield and OpenSEO MCP.
 - **Existing task-aware/reference workflows:** ECC skill selection (TDD, security review, backend patterns, research and verification), awesome-harness-engineering guidance, cybersecurity skills, diagram design, scientific-agent skills, YouTube production-plan drafting, and a curated public-API reference.
 - **New capability wiring in this work:** Chrome DevTools CDP bridge (TypeScript HTTP + MCP) and an optional Strata OpenAI-compatible model provider. Strata provider routing is opt-in; it never installs Strata or downloads models. Tool-call and vision compatibility default to disabled.
-- **Separate services / native apps:** Cap, OpenWhispr, AppFlowy, OpenSEO, OpenHiggsfield, OpenDesign, and macOS-only Atticus cannot be made operational merely by copying their README files. They require a supported service API/MCP contract, desktop companion, provider keys, and/or model assets.
+- **Separate services / native apps:** Cap, OpenWhispr and macOS-only Atticus cannot be made operational merely by copying their README files. AppFlowy, OpenDesign, OpenSEO, OpenHiggsfield and MuAPI now have guarded source adapters, but still require separate services, credentials, provider/model availability, budgets and live end-to-end verification.
 - **Upstream source needs verification:** Heretic, free-cloud-code, Not-AI, jcode, Open-Generative-AI, dramadaw, OpenDudley, and agency-agents are recorded with explicit `review_required_upstream_unverified` state where the current source/API/license could not be verified through the connected repository source. No upstream code or prompt packs are claimed as imported for those entries.
 
 ## Security and cost constraints
@@ -35,3 +35,11 @@ No Render deployment or production environment changes are part of this audit.
 The candidate adds guarded adapters for AppFlowy Cloud (read-only workspace/page/document-collab JSON/search), OpenDesign (explicitly approved headless runs), Open Generative AI/MuAPI (allowlisted image/video models with approval gates), and OpenHiggsfield (38 allowlisted models with credit-consumption approval gates). OpenSEO MCP is exposed in the integration catalog and capability readiness. These are source-integrated adapters, not proof of live upstream authorization, provider quotas, paid credits, output quality, or completed end-to-end tasks. Default configuration remains disabled/optional.
 
 See `integrations/appflowy.js`, `integrations/open-design.js`, `integrations/open-generative-ai.js`, `integrations/open-higgsfield.js`, and their focused tests.
+
+
+## 2026-10-30 cross-sector source reconciliation
+
+- Reconciled the capability map's older rows with the candidate's actual source: AppFlowy Cloud read-only connector; OpenSEO MCP connector; OpenDesign owner-scoped headless daemon; Open Generative AI/MuAPI allowlisted generation; and OpenHiggsfield allowlisted generation.
+- Updated each integration's prerequisites and risk boundary. No paid generation was invoked; all optional adapters remain disabled unless configured, and credit-consuming jobs require explicit approval.
+- The candidate also contains a separate local-first Python terminal assistant. Its script execution requires interactive approval but is not an OS sandbox; the Node coding sandbox is a distinct Docker-backed, digest-pinned, network-disabled, owner-only path and remains unverified on the target host until Docker is installed and an authorized smoke test is run.
+- These updates correct documentation drift; they do not change the underlying live-verification status of any external service.
