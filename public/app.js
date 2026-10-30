@@ -3507,6 +3507,11 @@
             pairButton.textContent = "GENERATE ONE-TIME PAIRING CODE";
           }
         });
+        if (inventoryResult.error?.status === 401) {
+          pairButton.disabled = true;
+          pairButton.textContent = "SIGN IN WITH SUPABASE TO PAIR";
+          pairButton.title = "Device pairing belongs to a Supabase user account; a password-only session is not sufficient.";
+        }
         ui.drawerContent.appendChild(pairResult);
         drawerCard("Windows setup",
           "Install the ULTRON Local Assistant on Windows. Run ultron-local companion pair --server-url " + window.location.origin + ", then ultron-local companion connect. The connect command sends one status heartbeat every 30 seconds and stays in the foreground.",
