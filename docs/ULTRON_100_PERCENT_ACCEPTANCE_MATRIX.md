@@ -1,11 +1,40 @@
 # ULTRON AI — 100% Acceptance Matrix
 
-**Snapshot under review:** 2026-10-30  
+**Snapshot under review:** 2026-10-31  
 **Base candidate:** `integration/ultron-cross-sector-current-main-20261029`  
 **Initial CI evidence commit:** `75089c38baf61d47d99daba3f23b2e76b3973826`  
 **Matrix review branch base:** `cd9b828a14dc32bc791d8225eee3549aa6c04c1f`  
 **Base PR:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **This document's rule:** source presence, a green mock test, configuration, or a successful build is not proof of live behavior.
+
+**Current integration head:** `d94583f2536320d17d763f58f73262b61d7be355` (integration branch only; not a production deployment).
+
+## Latest verified integration updates — 2026-10-31
+
+### Windows desktop companion: fixed actions now have a post-approval authorization check
+
+PR [#417](https://github.com/ayaanraza2008/ULTRON-AI/pull/417) merged into the integration branch at `1ead1f1f8823324184e242bd149f85d5ec812c26`.
+
+- The Windows companion still supports only its fixed local shortcut allowlist and requires visible local approval.
+- After the user approves, the companion rechecks the exact delivered command, paired-device token hash, device identity, revocation state and expiry immediately before launching the local process. Authorization failure is fail-closed.
+- The additive migration `20261031230000_desktop_companion_command_preflight_authorization.sql` is present but **has not been applied to the live Supabase project**.
+- Exact-head ULTRON CI [run 41118895806](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41118895806) passed **889 Node tests (888 passed, 0 failed, 1 skipped)**. Windows companion [run 41118895798](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41118895798) passed: .NET Release build, 2 valid / 22 invalid URL-policy cases, 11 pairing/heartbeat/remote-action protocol cases, self-contained `win-x64` publish and artifact upload.
+- Status: **TESTED**, not VERIFIED. No physical Windows PC pairing or real local action execution was performed.
+
+### Hermes delegated runtime: progress redaction and bounded execution hardened
+
+PR [#420](https://github.com/ayaanraza2008/ULTRON-AI/pull/420) merged into the integration branch at `d94583f2536320d17d763f58f73262b61d7be355`.
+
+- Hermes progress text is now exposed only for known user-facing message events. Tool/function/approval/result event `text` or `delta` fields are not forwarded.
+- The SSE reader cancels the upstream stream when its byte/event window ends.
+- Native run submission and delegated tasks share a validated 15–120 second timeout; malformed configuration safely falls back to 90 seconds.
+- Exact-head ULTRON CI [run 41120001329](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41120001329) passed **891 Node tests (890 passed, 0 failed, 1 skipped)**; all four workflow jobs succeeded.
+- The one skipped test is the opt-in live Supabase isolation test. The Hermes runtime is **not installed or connected on the user's Windows PC**, and no live Hermes API smoke or delegated task has been run.
+- Status: **TESTED**, not VERIFIED.
+
+### Deployment boundary
+
+Both PRs target the integration branch. No Render deployment, production environment-variable change, production Supabase migration, or paid model request was made. Main-branch and live-service status must not be inferred from these integration CI results.
 
 ## Status vocabulary
 
