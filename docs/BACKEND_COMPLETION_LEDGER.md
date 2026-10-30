@@ -95,3 +95,14 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 - Added regression tests for exact approval, ordinary mention, denial, contradictory trailing text, leading denial, non-exact phrase boundary, missing input, and model-authored true/false flags.
 - Source and tests are on `fix/geo-sleuth-reverse-search-user-consent`; full CI pending. No image was uploaded to an external reverse-image provider and no production configuration changed.
 - This is source-level consent hardening only. The Geo-Sleuth runtime, candidate board, location accuracy, and external-provider behaviour remain unverified.
+
+
+## Geo-Sleuth reverse-image data-sharing consent hardening (2026-10-31)
+
+- PR #419 merged into main as `33a9df4e64075ca4483f26c47a3eea6f1cc20505`.
+- Removed the model-visible `includeReverseSearch` parameter from the Geo-Sleuth tool schema.
+- The agent derives reverse-image sharing permission only from the current user's message, not model-generated tool arguments.
+- Consent requires the exact canonical phrase at the beginning of the current user message: `I approve sending image-derived information from this photo to external reverse-image search providers for this investigation.`
+- Parser rejects ordinary mentions, leading prose, explicit negation, contradictory trailing instructions, missing input and non-exact phrase extensions.
+- Full CI run `41119660470` passed: 663 tests total, 662 passed, 0 failed, 1 intentionally skipped; `npm run check` passed; Python verification steps passed; dependency audits found 0 vulnerabilities; pinned World Intelligence build and bridge injection passed.
+- No external reverse-image provider was contacted. Live Geo-Sleuth runtime, candidate geometry and location accuracy remain unverified; no production settings changed.
