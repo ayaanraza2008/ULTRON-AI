@@ -2507,4 +2507,14 @@
   void checkSession();
   void checkBackend();
   window.setInterval(() => { void checkBackend(); }, 60000);
+
+  // Installable shell: offline support is limited to public static assets.
+  // Authenticated API responses, conversations, memory, and uploads are never cached.
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch((error) => {
+        console.warn("ULTRON offline shell registration unavailable:", error?.message || error);
+      });
+    }, { once: true });
+  }
 })();
