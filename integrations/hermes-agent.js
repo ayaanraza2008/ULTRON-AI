@@ -228,6 +228,106 @@ const HERMES_RUN_INSTRUCTIONS = [
   "Report what actually completed, what was verified, and what remains blocked. Never claim a tool ran without evidence."
 ].join(" ");
 
+
+function validateHermesPromptId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value.trim())
+    ? value.trim()
+    : null;
+}
+
+function boundedPendingControls(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).map(item => {
+    const requestId = validateHermesPromptId(item?.prompt_id ?? item?.request_id ?? item?.id);
+    const generation = item?.execution_generation;
+    if (!requestId || !Number.isSafeInteger(generation) || generation < 0) return null;
+    return {
+      requestId,
+      executionGeneration: generation,
+      kind: bounded(item?.kind ?? item?.type, 80) || undefined,
+      description: bounded(item?.description ?? item?.message ?? item?.title, 400) || undefined
+    };
+  }).filter(Boolean);
+}
+
+function sanitizeHermesSseEvent(eventName, eventId, payload) {
+  const data = payload && typeof payload === "object" ? payload : {};
+  const event = bounded(eventName || data.type, 80) || "message";
+  const safe = { event };
+  if (eventId) safe.eventId = bounded(eventId, 120);
+  if (typeof data.text === "string") safe.text = data.text.slice(0, 2400);
+  else if (typeof data.delta === "string") safe.text = data.delta.slice(0, 2400);
+  if (typeof data.already_streamed === "boolean") safe.alreadyStreamed = data.already_streamed;
+  if (typeof data.tool === "string") safe.tool = bounded(data.tool, 100);
+  if (typeof data.duration === "number" && Number.isFinite(data.duration)) safe.duration = Math.max(0, Math.min(data.duration, 86_400));
+  if (typeof data.error === "boolean") safe.error = data.error;
+  if (typeof data.status === "string") safe.status = bounded(data.status, 40);
+  const requestId = validateHermesPromptId(data.prompt_id ?? data.request_id);
+  if (requestId) safe.requestId = requestId;
+  if (Number.isSafeInteger(data.execution_generation) && data.execution_generation >= 0) {
+    safe.executionGeneration = data.execution_generation;
+  }
+  return safe;
+}
+
+async function readHermesSseWindow(response, { maxBytes = 500_000, maxEvents = 100 } = {}) {
+  const contentType = String(response.headers?.get?.("content-type") || "").toLowerCase();
+  if (!contentType.includes("text/event-stream")) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("Hermes did not return an event stream."), { code: "HERMES_RUN_EVENTS_INVALID_CONTENT_TYPE" });
+  }
+  const reader = response.body?.getReader?.();
+  if (!reader) throw Object.assign(new Error("Hermes event stream has no readable body."), { code: "HERMES_RUN_EVENTS_UNREADABLE" });
+  const decoder = new TextDecoder();
+  const events = [];
+  let raw = "";
+  let bytes = 0;
+  const processBlock = block => {
+    if (events.length >= maxEvents) return;
+    let eventName = "";
+    let eventId = "";
+    const dataLines = [];
+    for (const line of block.split(/\\r?\\n/)) {
+      if (!line || line.startsWith(":")) continue;
+      const colon = line.indexOf(":");
+      const field = colon >= 0 ? line.slice(0, colon) : line;
+      const value = colon >= 0 ? line.slice(colon + 1).replace(/^ /, "") : "";
+      if (field === "event") eventName = value;
+      else if (field === "id") eventId = value;
+      else if (field === "data") dataLines.push(value);
+    }
+    if (!dataLines.length) return;
+    const rawData = dataLines.join("\\n").slice(0, 16_000);
+    let payload = rawData;
+    try { payload = JSON.parse(rawData); } catch {}
+    events.push(sanitizeHermesSseEvent(eventName, eventId, payload));
+  };
+  try {
+    while (events.length < maxEvents) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("Hermes event stream exceeded its size limit."), { code: "HERMES_RUN_EVENTS_TOO_LARGE" });
+      }
+      raw += decoder.decode(value, { stream: true });
+      let boundary;
+      while ((boundary = raw.search(/\\r?\\n\\r?\\n/)) >= 0 && events.length < maxEvents) {
+        const block = raw.slice(0, boundary);
+        const sep = raw.match(/\\r?\\n\\r?\\n/);
+        raw = raw.slice(boundary + (sep?.[0].length || 2));
+        processBlock(block);
+      }
+    }
+    raw += decoder.decode();
+    if (raw.trim() && events.length < maxEvents) processBlock(raw);
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+  return { events, bytes, truncated: events.length >= maxEvents || bytes >= maxBytes };
+}
+
 function validateHermesRunId(value) {
   return typeof value === "string" && /^run_[A-Za-z0-9_-]{1,120}$/.test(value.trim())
     ? value.trim()
@@ -430,6 +530,7 @@ export async function getHermesAgentRunStatus({ env = process.env, fetchImpl = s
       sessionId: bounded(data?.session_id, 100),
       model: bounded(data?.model, 180) || undefined,
       output: typeof data?.output === "string" ? data.output.slice(0, 18_000) : undefined,
+      pendingControls: boundedPendingControls(data?.pending_controls),
       usage: normalizeHermesUsage(data?.usage),
       errorCode: status === "failed" ? bounded(data?.error?.code ?? data?.error_code, 90) || "HERMES_RUN_FAILED" : undefined,
       notice: "Status is read from the Hermes API server. A non-terminal state means the run may still be executing."
@@ -469,6 +570,112 @@ export async function stopHermesAgentRun({ env = process.env, fetchImpl = safePi
       runId: id,
       status: bounded(data?.status, 40) || "stopping",
       notice: "Hermes accepted the stop request. Poll the run status until it reaches a terminal state; stopping is not the same as cancelled."
+    };
+  } catch (error) {
+    return sanitizeError(error);
+  }
+}
+
+
+/** Read a bounded window of live run progress events without exposing raw tool arguments/results. */
+export async function getHermesAgentRunEvents({ env = process.env, fetchImpl = safePinnedFetch, userId, runId } = {}) {
+  const config = getConfig(env, userId, true);
+  if (config.error) return config.error;
+  const id = validateHermesRunId(runId);
+  if (!id) return blocked("HERMES_RUN_ID_INVALID", "Provide a valid Hermes run ID returned by ULTRON.");
+  try {
+    const capabilities = await getHermesApiCapabilities({ config, fetchImpl });
+    if (!capabilities.runEventsSse) {
+      return blocked("HERMES_RUN_EVENTS_UNSUPPORTED", "The configured Hermes API server does not advertise run-event SSE support.");
+    }
+    const timeoutValue = Number(env.HERMES_AGENT_EVENT_WINDOW_MS);
+    const timeoutMs = Number.isFinite(timeoutValue) ? Math.max(1000, Math.min(15_000, Math.floor(timeoutValue))) : 5000;
+    const response = await fetchImpl(config.baseUrl + "/runs/" + encodeURIComponent(id) + "/events", {
+      method: "GET",
+      headers: { Accept: "text/event-stream", Authorization: "Bearer " + config.token },
+      redirect: "error",
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (!response.ok) {
+      return {
+        state: "failed", provider: "hermes-agent",
+        error: { code: response.status === 404 ? "HERMES_RUN_NOT_FOUND" : "HERMES_RUN_EVENTS_FAILED", message: "Hermes Agent could not read run events (HTTP " + response.status + ")." }
+      };
+    }
+    try {
+      const result = await readHermesSseWindow(response);
+      return {
+        state: result.events.length ? "completed" : "empty",
+        provider: "hermes-agent",
+        runId: id,
+        events: result.events,
+        eventCount: result.events.length,
+        bytesRead: result.bytes,
+        truncated: result.truncated,
+        notice: "Event previews and raw tool arguments/results are deliberately omitted. Poll run status for the authoritative final output."
+      };
+    } catch (error) {
+      if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+        return { state: "partial", provider: "hermes-agent", runId: id, events: [], eventCount: 0, notice: "The bounded event window expired before an event arrived; poll again or use run status." };
+      }
+      throw error;
+    }
+  } catch (error) {
+    return sanitizeError(error);
+  }
+}
+
+/** Resolve a specific pending run approval only after the owner supplies exact IDs and generation. */
+export async function resolveHermesAgentRunApproval({
+  env = process.env, fetchImpl = safePinnedFetch, userId, runId, requestId, executionGeneration, choice
+} = {}) {
+  const config = getConfig(env, userId, true);
+  if (config.error) return config.error;
+  const id = validateHermesRunId(runId);
+  const promptId = validateHermesPromptId(requestId);
+  if (!id || !promptId || !Number.isSafeInteger(executionGeneration) || executionGeneration < 0 ||
+      !["once", "deny"].includes(choice)) {
+    return blocked("HERMES_RUN_APPROVAL_INVALID", "A valid run ID, pending prompt ID, non-negative execution generation, and once/deny decision are required.");
+  }
+  try {
+    const capabilities = await getHermesApiCapabilities({ config, fetchImpl });
+    if (!capabilities.runApproval) {
+      return blocked("HERMES_RUN_APPROVAL_UNSUPPORTED", "The configured Hermes API server does not advertise run-approval support.");
+    }
+    const response = await fetchImpl(config.baseUrl + "/runs/" + encodeURIComponent(id) + "/approval", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + config.token
+      },
+      body: JSON.stringify({
+        request_id: promptId,
+        execution_generation: executionGeneration,
+        choice
+      }),
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000)
+    });
+    const data = await readJsonLimited(response, 250_000);
+    if (!response.ok) {
+      return {
+        state: "failed", provider: "hermes-agent",
+        error: {
+          code: response.status === 409 ? "HERMES_RUN_APPROVAL_STALE" : response.status === 404 ? "HERMES_RUN_NOT_FOUND" : "HERMES_RUN_APPROVAL_FAILED",
+          message: "Hermes Agent rejected this run approval decision (HTTP " + response.status + "). Refresh run status and its pending controls before retrying."
+        }
+      };
+    }
+    return {
+      state: "resolved",
+      provider: "hermes-agent",
+      runId: id,
+      requestId: promptId,
+      executionGeneration,
+      choice,
+      status: bounded(data?.status, 40) || "pending",
+      notice: "Hermes accepted the specific approval decision. Poll status; this does not prove that the approved tool call completed."
     };
   } catch (error) {
     return sanitizeError(error);
