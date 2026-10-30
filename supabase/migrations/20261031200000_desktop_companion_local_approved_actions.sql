@@ -163,6 +163,7 @@ declare
 begin
   if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$'
      or p_device_id is null or p_action_id is null
+     or p_status is null or p_result_code is null
      or p_status not in ('completed', 'denied', 'failed', 'expired')
      or not (
        (p_status = 'completed' and p_result_code = 'ACTION_COMPLETED')
