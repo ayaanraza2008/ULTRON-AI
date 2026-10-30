@@ -877,7 +877,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         fetchImpl,
         userId: req.supabaseUser?.id,
         operation: bounded(args.operation, 80),
-        args: isObject(args.args) ? args.args : {},
+        args: args.args && typeof args.args === "object" && !Array.isArray(args.args) ? args.args : {},
         approvePaidLookup: parseOpenSeoSpendApproval(requestBody.prompt) !== null,
         maxEstimatedCredits: parseOpenSeoSpendApproval(requestBody.prompt) ?? undefined
       });
