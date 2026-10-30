@@ -257,6 +257,12 @@ CLOUD_HEARTBEAT_INTERVAL_SECONDS = 30
 CLOUD_REQUEST_TIMEOUT_SECONDS = 10
 CLOUD_MAX_RESPONSE_BYTES = 64 * 1024
 DEVICE_CREDENTIALS_FILE = "device-credentials.json"
+
+
+class CloudHTTPError(RuntimeError):
+    def __init__(self, status: int):
+        self.status = int(status)
+        super().__init__(f"ULTRON server rejected the companion request (HTTP {self.status}).")
 PAIRING_CODE_PATTERN = __import__("re").compile(r"^[A-Za-z0-9_-]{32}$")
 DEVICE_TOKEN_PATTERN = __import__("re").compile(r"^[A-Za-z0-9_-]{43}$")
 LOCAL_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".intranet", ".lan", ".home", ".test", ".invalid", ".example")
@@ -361,7 +367,7 @@ def _cloud_json_request(server_url: str, route: str, payload: dict, bearer_token
             if response.status < 200 or response.status >= 300:
                 # Never follow redirects: credentials must not be forwarded to a new host.
                 response.read(CLOUD_MAX_RESPONSE_BYTES + 1)
-                raise RuntimeError(f"ULTRON server rejected the companion request (HTTP {response.status}).")
+                raise CloudHTTPError(response.status)
             declared = response.getheader("Content-Length")
             if declared:
                 try:
@@ -380,7 +386,7 @@ def _cloud_json_request(server_url: str, route: str, payload: dict, bearer_token
             if not isinstance(data, dict):
                 raise ValueError("ULTRON server returned an unexpected response.")
             return data
-        except RuntimeError:
+        except (RuntimeError, ValueError):
             raise
         except (OSError, ssl.SSLError, http.client.HTTPException, TimeoutError) as exc:
             errors.append(type(exc).__name__)
@@ -472,10 +478,15 @@ def pair_companion(server_url: str, pairing_code: str, *, data_dir: str | Path |
 def send_companion_heartbeat(*, data_dir: str | Path | None = None, request_impl=None) -> dict:
     credentials = _load_device_credentials(data_dir)
     requester = request_impl or _cloud_json_request
-    result = requester(
-        credentials["serverUrl"], "/api/desktop-companion/heartbeat",
-        {"deviceId": credentials["deviceId"]}, bearer_token=credentials["deviceToken"]
-    )
+    try:
+        result = requester(
+            credentials["serverUrl"], "/api/desktop-companion/heartbeat",
+            {"deviceId": credentials["deviceId"]}, bearer_token=credentials["deviceToken"]
+        )
+    except CloudHTTPError as exc:
+        if exc.status in {401, 403, 404}:
+            raise PermissionError("This Windows companion is no longer authorized. Revoke or pair it again in ULTRON.") from exc
+        raise
     if result.get("status") != "online":
         raise RuntimeError("ULTRON did not confirm this companion heartbeat.")
     return {"status": "online", "deviceId": credentials["deviceId"],
