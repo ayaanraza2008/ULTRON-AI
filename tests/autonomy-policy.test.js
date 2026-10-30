@@ -333,3 +333,9 @@ test("autonomy risk decisions expose the current policy version", () => {
   assert.equal(classifyAutonomyRisk("Research public energy trends.").policyVersion, "1.4.0");
   assert.equal(classifyAutonomyRisk("Send a text to my manager.").policyVersion, "1.4.0");
 });
+
+test("spending credits is an external effect requiring explicit approval", () => {
+  const risk = classifyAutonomyRisk("Spend 100 OpenSEO credits on keyword research.");
+  assert.equal(risk.level, "external_effect");
+  assert.equal(risk.requiresConfirmation, true);
+});
