@@ -65,6 +65,23 @@ jobs:
             exit 1
           }
 
+  coding-sandbox-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify Docker daemon is available
+        run: docker info
+      - name: Pull official Python test image by immutable amd64 manifest digest
+        run: docker pull --platform linux/amd64 python:3.12-alpine@sha256:69ebe56e2a764c399514a0a6117131cb730cc4d0e71e85c08deb9af74cbb9f41
+      - name: Run real restricted-container smoke test
+        env:
+          ULTRON_CODING_SANDBOX_PYTHON_IMAGE: python:3.12-alpine@sha256:69ebe56e2a764c399514a0a6117131cb730cc4d0e71e85c08deb9af74cbb9f41
+        run: node scripts/coding-sandbox-smoke.mjs
+
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
