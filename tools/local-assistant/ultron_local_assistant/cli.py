@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, get_system_health, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
 from .desktop_control import list_desktop_actions, launch_application, open_known_folder
-from .voice import listen_once, wake_command, classify_desktop_command
+from .voice import listen_once, wake_command, classify_desktop_command, classify_local_command
 from .companion import create_companion_server, generate_companion_token, pair_companion, send_companion_heartbeat
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
@@ -554,8 +554,47 @@ def voice_mode(args):
                     message = "Folder opening cancelled."
             print("ULTRON: " + message)
         else:
-            try:
-                answer = local_chat(
+            local_action = classify_local_command(command)
+            if local_action:
+                try:
+                    if local_action["kind"] == "time":
+                        now = datetime.now().astimezone()
+                        message = "It is " + now.strftime("%I:%M %p %Z") + "."
+                    elif local_action["kind"] == "date":
+                        now = datetime.now().astimezone()
+                        message = "Today is " + now.strftime("%A, %B %d, %Y") + "."
+                    elif local_action["kind"] == "system_health":
+                        report = get_system_health()
+                        memory_used = report.get("memory", {}).get("used_percent")
+                        disk_used = report.get("disk", {}).get("used_percent")
+                        details = [
+                            "Your PC health is " + str(report.get("status", "unknown")) + ".",
+                            str(report.get("cpu", {}).get("logical_cpus", "unknown")) + " logical CPU cores are available.",
+                        ]
+                        if isinstance(memory_used, (int, float)):
+                            details.append("Memory use is " + str(memory_used) + " percent.")
+                        if isinstance(disk_used, (int, float)):
+                            details.append("Disk use is " + str(disk_used) + " percent.")
+                        message = " ".join(details)
+                    elif local_action["kind"] == "documents":
+                        answer, sources = answer_from_documents(
+                            getattr(args, "root", "."),
+                            local_action["query"],
+                            chosen,
+                        )
+                        if sources:
+                            print("Local document sources:")
+                            for source in sources:
+                                print(f"[{source['path']}:{source['start_line']}-{source['end_line']}]")
+                        message = answer
+                    else:
+                        message = "That local command is not supported."
+                except Exception as exc:
+                    message = "Local command failed: " + str(exc)
+                print("\nULTRON: " + message)
+            else:
+                try:
+                    answer = local_chat(
                     command,
                     model=chosen,
                     system=(
@@ -608,6 +647,7 @@ def build_parser():
     v.add_argument("--model")
     v.add_argument("--locale", choices=("auto", "en-IN", "hi-IN", "en-US", "en-GB"), default="auto")
     v.add_argument("--timeout", type=int, choices=tuple(range(4, 26)), default=10)
+    v.add_argument("--root", default=".", help="Local document workspace for spoken search/research")
     v.add_argument("--once", action="store_true", help="Process one utterance and exit")
     v.add_argument("--no-speak", action="store_true", help="Print answers without local speech output")
     v.set_defaults(handler=voice_mode)
