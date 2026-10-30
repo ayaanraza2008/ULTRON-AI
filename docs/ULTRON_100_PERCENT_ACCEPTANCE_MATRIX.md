@@ -23,7 +23,7 @@ A row is **not** 100% complete until every applicable automated, integration, se
 
 ## Current CI evidence — PR #400 candidate, 2026-10-30
 
-**Latest PR #400 head:** `6c0913ccc5bdfd3391382553b74a79221adc24df` on `integration/ultron-cross-sector-current-main-20261029`.  
+**Latest PR #400 head:** `b1eff10a4ebcd59ad2ce1ecd448b05e9277428f7` on `integration/ultron-cross-sector-current-main-20261029`.  
 **PR:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400).  
 **Latest full ULTRON CI for this exact head:** [run 41097677959](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41097677959) — all four jobs succeeded.  
 **Windows companion build for this exact head:** [run 41097677840](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41097677840) — completed successfully.
