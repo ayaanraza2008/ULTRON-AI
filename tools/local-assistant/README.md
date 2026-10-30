@@ -38,6 +38,19 @@ The guided script creates an isolated virtual environment, installs the CLI, and
 .\tools\local-assistant\setup.ps1 -PullModel
 ~~~
 
+After setup, the executable is inside the private virtual environment and is not added to the Windows-wide PATH. To use the short `ultron-local` commands in the examples below, activate that environment in the current PowerShell window:
+
+~~~powershell
+& .\tools\local-assistant\.venv\Scripts\Activate.ps1
+~~~
+
+For voice mode, you can skip activation and call the direct launcher:
+
+~~~powershell
+.\tools\local-assistant\start-voice.ps1
+.\tools\local-assistant\start-voice.ps1 -Locale hi-IN
+~~~
+
 If you prefer a manual install:
 
 ~~~powershell
@@ -179,10 +192,10 @@ This package is a local companion integrated into the ULTRON repository; it does
 
 ## Local voice mode: wake word + on-device answers
 
-On Windows 10/11, run:
+On Windows 10/11, run this direct launcher after setup:
 
 ~~~powershell
-ultron-local voice
+.\tools\local-assistant\start-voice.ps1
 ~~~
 
 Say **“Ultron”** before every request, for example “Ultron, explain this error” or “Ultron, open Notepad”. Voice capture uses an already-installed Windows System.Speech recognition language and the default microphone. It recognises one bounded utterance at a time; it does not stream audio to ULTRON's cloud API. Ordinary questions are sent only to the local Ollama loopback endpoint and answered with the selected local model (the default is qwen2.5:1.5b). The existing Windows system speech engine reads responses aloud. No speech model is downloaded automatically.
@@ -190,10 +203,10 @@ Say **“Ultron”** before every request, for example “Ultron, explain this e
 Optional settings:
 
 ~~~powershell
-ultron-local voice --locale auto
-ultron-local voice --locale hi-IN
-ultron-local voice --once
-ultron-local voice --no-speak
+.\tools\local-assistant\start-voice.ps1 -Locale auto
+.\tools\local-assistant\start-voice.ps1 -Locale hi-IN
+.\tools\local-assistant\start-voice.ps1 -Once
+.\tools\local-assistant\start-voice.ps1 -NoSpeak
 ~~~
 
 If the requested recognizer/language is not installed, voice mode stops with an explanation instead of downloading one. Recognition quality and Hindi/Hinglish accuracy depend on Windows language packs and microphone conditions; test them on the target PC.
