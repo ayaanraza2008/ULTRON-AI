@@ -11,6 +11,7 @@ ULTRON's `integrations/hermes-agent.js` currently provides:
 - Read-only `GET /v1/models` and `GET /v1/capabilities` health discovery.
 - Bounded, authenticated `POST /v1/chat/completions` task delegation.
 - Capability-checked Runs API submission (`POST /v1/runs`), status polling (`GET /v1/runs/{run_id}`) and cancellation requests (`POST /v1/runs/{run_id}/stop`), using a stable per-owner memory/session key, idempotency key, timeouts and bounded responses.
+- Read-only discovery of actual enabled Hermes skills (`GET /v1/skills`) and toolsets (`GET /v1/toolsets`), with bounded output and owner checks.
 - Remote HTTPS-only URL validation, DNS-pinned network requests and no redirects.
 - Explicit vision opt-in: vision is off unless `HERMES_AGENT_SUPPORTS_VISION=true`.
 
@@ -101,9 +102,10 @@ That command submits a fixed, non-destructive smoke prompt, polls the returned r
 3. Start ULTRON with the owner-scoped server environment and run its read-only Hermes health check.
 4. Submit one harmless, read-only task from the authenticated ULTRON agent flow.
 5. Start one harmless long-running task; retain the returned `run_id`, poll status to a terminal state, and test stop/cancellation in a disposable workspace.
-6. Verify a different ULTRON user is denied without any upstream Hermes request.
-7. Test vision separately with a known image challenge before setting `HERMES_AGENT_SUPPORTS_VISION=true`.
-8. Implement and test SSE progress forwarding and human approval controls before exposing Hermes' approval endpoint to the UI.
+6. Inspect the real Hermes skill and toolset inventories from ULTRON and verify disabled/unconfigured tools are reported honestly.
+7. Verify a different ULTRON user is denied without any upstream Hermes request.
+8. Test vision separately with a known image challenge before setting `HERMES_AGENT_SUPPORTS_VISION=true`.
+9. Implement and test SSE progress forwarding and human approval controls before exposing Hermes' approval endpoint to the UI.
 
 Record mocked tests, live API checks and physical-device checks separately. A green CI run is not proof that Hermes is installed, that provider credentials work, or that a task ran on the target PC.
 
