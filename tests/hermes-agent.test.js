@@ -9,7 +9,9 @@ import {
   getHermesAgentRunStatus,
   stopHermesAgentRun,
   listHermesAgentSkills,
-  listHermesAgentToolsets
+  listHermesAgentToolsets,
+  getHermesAgentRunEvents,
+  resolveHermesAgentRunApproval
 } from "../integrations/hermes-agent.js";
 
 const ownerId = "00000000-0000-4000-8000-000000000001";
@@ -311,6 +313,10 @@ test("Hermes run status is owner-scoped, validates run IDs and bounds output", a
         session_id: "ultron-session",
         model: "hermes-agent",
         output: "Completed the public documentation review.",
+        pending_controls: [
+          { prompt_id: "prompt_safe_123", execution_generation: 4, description: "Run a workspace write?" },
+          { prompt_id: "prompt_bad", execution_generation: "4", description: "Malformed generation must be discarded." }
+        ],
         usage: { input_tokens: 12, output_tokens: 19, total_tokens: 31 }
       }), { status: 200 });
     }
@@ -319,6 +325,12 @@ test("Hermes run status is owner-scoped, validates run IDs and bounds output", a
   assert.equal(result.terminal, true);
   assert.equal(result.usage.totalTokens, 31);
   assert.match(result.output, /documentation review/);
+  assert.deepEqual(result.pendingControls, [{
+    requestId: "prompt_safe_123",
+    executionGeneration: 4,
+    kind: undefined,
+    description: "Run a workspace write?"
+  }]);
   assert.equal(calls, 1);
 });
 
@@ -424,6 +436,112 @@ test("Hermes toolsets discovery reports only bounded, documented catalog fields"
   assert.equal(result.toolsets[1].configured, false);
 });
 
+
+
+
+test("Hermes run events read a bounded SSE window and omit raw tool argument previews", async () => {
+  const seen = [];
+  const result = await getHermesAgentRunEvents({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      if (url.endsWith("/capabilities")) {
+        return new Response(JSON.stringify({ features: {
+          run_submission: true, run_status: true, run_events_sse: true
+        } }), { status: 200 });
+      }
+      assert.equal(url, "https://hermes.example.com/v1/runs/run_abc123/events");
+      assert.equal(options.method, "GET");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Accept, "text/event-stream");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      return new Response([
+        "event: message.delta",
+        'data: {"delta":"Research started."}',
+        "",
+        "event: tool.started",
+        'data: {"tool":"terminal","preview":{"command":"cat private-file"}}',
+        "",
+        "event: tool.completed",
+        'data: {"tool":"terminal","duration":1.2,"error":false,"preview":{"secret":"never surface"}}',
+        ""
+      ].join("\n"), { status: 200, headers: { "Content-Type": "text/event-stream" } });
+    }
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(result.eventCount, 3);
+  assert.equal(result.events[0].event, "message.delta");
+  assert.equal(result.events[0].text, "Research started.");
+  assert.equal(result.events[1].tool, "terminal");
+  assert.equal(Object.hasOwn(result.events[1], "preview"), false);
+  assert.equal(Object.hasOwn(result.events[2], "preview"), false);
+  assert.equal(JSON.stringify(result).includes("private-file"), false);
+  assert.equal(seen.length, 2);
+});
+
+test("Hermes approval resolver requires an advertised approval feature and exact pending-control identity", async () => {
+  const seen = [];
+  const invalid = await resolveHermesAgentRunApproval({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    requestId: "prompt_123",
+    executionGeneration: 4,
+    choice: "always",
+    fetchImpl: async () => { throw new Error("invalid choice must be rejected before networking"); }
+  });
+  assert.equal(invalid.state, "blocked");
+  assert.equal(invalid.error.code, "HERMES_RUN_APPROVAL_INVALID");
+
+  const result = await resolveHermesAgentRunApproval({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    requestId: "prompt_123",
+    executionGeneration: 4,
+    choice: "once",
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      if (url.endsWith("/capabilities")) {
+        return new Response(JSON.stringify({ features: { run_approval: true } }), { status: 200 });
+      }
+      assert.equal(url, "https://hermes.example.com/v1/runs/run_abc123/approval");
+      assert.equal(options.method, "POST");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, "Bearer private-hermes-api-key");
+      assert.deepEqual(JSON.parse(options.body), {
+        request_id: "prompt_123",
+        execution_generation: 4,
+        choice: "once"
+      });
+      return new Response(JSON.stringify({ status: "running" }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "resolved");
+  assert.equal(result.choice, "once");
+  assert.equal(result.executionGeneration, 4);
+  assert.equal(seen.length, 2);
+
+  let approvalCalls = 0;
+  const unsupported = await resolveHermesAgentRunApproval({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    requestId: "prompt_123",
+    executionGeneration: 4,
+    choice: "deny",
+    fetchImpl: async url => {
+      if (url.endsWith("/capabilities")) return new Response(JSON.stringify({ features: { run_status: true } }), { status: 200 });
+      approvalCalls++;
+      throw new Error("unsupported approval endpoint must not be called");
+    }
+  });
+  assert.equal(unsupported.state, "blocked");
+  assert.equal(unsupported.error.code, "HERMES_RUN_APPROVAL_UNSUPPORTED");
+  assert.equal(approvalCalls, 0);
+});
 
 test("Hermes rejects private, metadata, and loopback HTTPS endpoints", () => {
   for (const url of [
