@@ -88,6 +88,39 @@ This performs only the authenticated `GET /v1/models` and `GET /v1/capabilities`
 
 Then use ULTRON's existing authenticated agent route with a harmless task explicitly requesting Hermes delegation. Verify the completion output and Hermes-side tool logs. Mock tests validate request contracts and safety guards; only the live smoke and a successful delegated task verify the configured runtime.
 
+## ULTRON run progress, cancellation and explicit approvals
+
+ULTRON exposes these owner-scoped tools through the existing authenticated agent route:
+
+- `hermes_agent_start_run`: starts a native Hermes run after a capability check and returns its run ID.
+- `hermes_agent_run_status`: reads bounded status/output and validated pending-control identifiers.
+- `hermes_agent_stop_run`: requests a cooperative stop; the response reports `stopping`, not `cancelled`. Poll status for the terminal state.
+- `hermes_agent_run_events`: reads a short bounded SSE window. Raw tool previews/arguments/results are intentionally discarded.
+- `hermes_agent_list_skills` and `hermes_agent_list_toolsets`: inspect the live catalogs; they do not enable or change a toolset.
+- `hermes_agent_resolve_approval`: resolves one exact pending control with `once` or `deny` only. The original user message must name the exact run ID, prompt ID, execution generation and decision. No auto-approve or “approve all” option exists.
+
+The existing `runHermesAgentTask` execution path continues to prefer the native Runs API, polls to an authoritative terminal state, distinguishes failed/interrupted/unknown outcomes, and falls back to Chat Completions only when run submission explicitly returns HTTP 404 or 405. Network errors and ambiguous responses do not trigger a second execution.
+
+These controls are source-tested but still require a live Hermes server test. The event tool provides a bounded snapshot, not a continuously attached frontend stream. A decision accepted by Hermes is not proof that the approved tool action completed; inspect the subsequent run status.
+
+
+
+## Additional opt-in run smoke
+
+The default command remains read-only:
+
+```powershell
+npm run smoke:hermes
+```
+
+After explicitly authorizing one harmless live inference and reviewing the selected Hermes model/provider quota, the `--run` option submits a fixed non-destructive smoke task, polls its run ID, validates an expected marker, and requests a cooperative stop at the bounded timeout:
+
+```powershell
+npm run smoke:hermes -- --run
+```
+
+The script does not print API keys or execute user-provided shell commands.
+
 ## Operational and safety boundaries
 
 - The configured ULTRON owner UUID is required for both delegated tasks and direct provider routing.

@@ -143,3 +143,39 @@ test("provider-specific media routing does not accidentally hide the selected ad
   assert.deepEqual(muapi.categories, ["open_generative_ai"]);
   assert.ok(muapi.toolNames.includes("open_generative_ai"));
 });
+
+
+test("routes Hermes Agent long-running run lifecycle requests to dedicated owner-scoped tools", () => {
+  const start = classifyTaskRoute("Start a background Hermes Agent run to research the official API.");
+  assert.deepEqual(start.categories, ["hermes"]);
+  assert.ok(start.toolNames.includes("hermes_agent_start_run"));
+  assert.ok(start.toolNames.includes("hermes_agent_run_status"));
+  assert.ok(start.toolNames.includes("hermes_agent_stop_run"));
+
+  const status = classifyTaskRoute("Check status for run_abc123");
+  assert.deepEqual(status.categories, ["hermes"]);
+  assert.ok(status.toolNames.includes("hermes_agent_run_status"));
+});
+
+
+test("routes Hermes skills and toolset discovery to read-only capability tools", () => {
+  const skills = classifyTaskRoute("Show me the skills available in Hermes Agent.");
+  assert.deepEqual(skills.categories, ["hermes"]);
+  assert.ok(skills.toolNames.includes("hermes_agent_list_skills"));
+  assert.ok(skills.toolNames.includes("hermes_agent_list_toolsets"));
+
+  const toolsets = classifyTaskRoute("List enabled toolsets in Hermes Agent.");
+  assert.deepEqual(toolsets.categories, ["hermes"]);
+  assert.ok(toolsets.toolNames.includes("hermes_agent_list_toolsets"));
+});
+
+
+test("routes Hermes run progress and generation-bound approval requests", () => {
+  const events = classifyTaskRoute("Show progress events for run_abc123");
+  assert.deepEqual(events.categories, ["hermes"]);
+  assert.ok(events.toolNames.includes("hermes_agent_run_events"));
+
+  const approve = classifyTaskRoute("Approve prompt_safe_123 in run_abc123 at generation 4 once");
+  assert.deepEqual(approve.categories, ["hermes"]);
+  assert.ok(approve.toolNames.includes("hermes_agent_resolve_approval"));
+});
