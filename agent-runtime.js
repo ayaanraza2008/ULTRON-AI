@@ -530,7 +530,7 @@ export function parseVoiceCloneConsent(value) {
   const own = text.match(/^\s*i confirm this is my own voice and i approve you to clone the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
   const speaker = text.match(/^\s*i confirm i have the speaker's permission and i approve you to clone the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
   const match = own || speaker;
-  if (!match || /\b(?:do not|don't|never|not|withdraw|revoke|cancel|hold off|wait)\b/i.test(text.slice(match[0].length))) return null;
+  if (!match || /\b(?:do not|don't|never|not|no longer|not anymore|withdraw\w*|revoke\w*|cancel\w*|hold off|wait|stop|changed my mind)\b/i.test(text.slice(match[0].length))) return null;
   return own ? "own_voice" : "speaker_permission";
 }
 
