@@ -71,7 +71,7 @@ The local-first Python package now includes `ultron-local companion token` and `
 - requires a high-entropy bearer token (minimum 43 URL-safe characters);
 - checks the loopback peer address and exact Host header;
 - denies browser Origins unless the exact local origin is allowlisted through `ULTRON_COMPANION_ALLOWED_ORIGINS`;
-- rate-limits requests and returns `Cache-Control: no-store`;
+- rate-limits requests, caps concurrent request handlers at 16, applies a five-second socket timeout, closes each response connection, and returns `Cache-Control: no-store`;
 - exposes only `GET /v1/ultron/status` with the `status` capability.
 
 The local runtime reports `paired: true` only after the caller presents the local bearer token. This is local token possession, **not** proof that a ULTRON cloud account, user UUID, or remote backend has completed identity pairing. The service intentionally does not expose shell, filesystem, screenshot, process, mouse, keyboard, or general PC-control actions.
