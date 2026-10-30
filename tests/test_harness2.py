@@ -40,7 +40,7 @@ class Harness2Tests(unittest.TestCase):
         root = harness2.run_path(workspace, run_id); root.mkdir(parents=True)
         shutil.copytree(workspace / config["harness_path"], root / "baseline-harness")
         harness2.atomic_json(root / "benchmark.json", benchmark)
-        state = {"run_id":run_id,"status":"running","benchmark":"smoke","executor":"demo","model":None,"mode":"parallel","iterations":2,"parallelism":2,"next_round":0,"candidate_ids":[]}
+        state = {"run_id":run_id,"status":"running","benchmark":"smoke","executor":"demo","model":None,"mode":"parallel","iterations":5,"parallelism":2,"next_round":0,"candidate_ids":[]}
         harness2.atomic_json(root / "run.json", state)
         harness2.execute(root, state, 60)
         saved = harness2.read_json(root / "run.json")
