@@ -99,3 +99,97 @@ test("image chat does not silently fall back to text-only model IDs", async () =
     assert.deepEqual(seen.map(item => item.model), ["vendor/vision-a:free", "vendor/vision-b:free"]);
   });
 });
+
+
+test("image chat refuses to send image bytes to an OpenRouter text model when no vision model is configured", async () => {
+  const seen = [];
+  const fetchImpl = async (_url, options) => {
+    seen.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ choices: [{ message: { content: "Should not be reached" } }] }), { status: 200 });
+  };
+  await withApp({
+    ...baseEnv,
+    ULTRON_VISION_MODELS: "",
+    OPENROUTER_VISION_MODEL: "",
+    ULTRON_AVAILABLE_MODELS: "vendor/text-model"
+  }, fetchImpl, async (base, cookie) => {
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "Describe this image" }],
+        attachments: [{ dataUrl: "data:image/png;base64,aGVsbG8=" }]
+      })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "VISION_MODEL_NOT_CONFIGURED");
+    assert.equal(seen.length, 0, "no text-only model should receive the image request");
+  });
+});
+
+test("image chat permits an explicitly vision-enabled alternate provider", async () => {
+  const seen = [];
+  const visionEnv = {
+    ...baseEnv,
+    ULTRON_VISION_MODELS: "",
+    OPENROUTER_VISION_MODEL: "",
+    ULTRON_AVAILABLE_MODELS: "vendor/text-model",
+    ALT_VISION_KEY: "alternate-vision-test-secret",
+    ULTRON_MODEL_PROVIDERS_JSON: JSON.stringify([
+      {
+        name: "alternate-vision",
+        baseUrl: "https://vision-provider.example/v1",
+        apiKeyEnv: "ALT_VISION_KEY",
+        model: "provider/vision-model",
+        priority: 10,
+        supportsVision: true
+      }
+    ])
+  };
+  const fetchImpl = async (url, options) => {
+    seen.push({ url, auth: options.headers.Authorization, body: JSON.parse(options.body) });
+    return new Response(JSON.stringify({
+      model: "provider/vision-model",
+      choices: [{ message: { content: "The image is a test image." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  await withApp(visionEnv, fetchImpl, async (base, cookie) => {
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "What is in the image?" }],
+        attachments: [{ dataUrl: "data:image/png;base64,aGVsbG8=" }]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].url, "https://vision-provider.example/v1/chat/completions");
+    assert.equal(seen[0].auth, "Bearer alternate-vision-test-secret");
+    assert.equal(seen[0].body.model, "provider/vision-model");
+    assert.ok(Array.isArray(seen[0].body.messages.at(-1).content));
+  });
+});
+
+test("image chat rejects non-canonical base64 before contacting providers", async () => {
+  let calls = 0;
+  await withApp({ ...baseEnv }, async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ choices: [{ message: { content: "Unexpected" } }] }), { status: 200 });
+  }, async (base, cookie) => {
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "Inspect this" }],
+        attachments: [{ dataUrl: "data:image/png;base64,aGVsbG8" }]
+      })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_IMAGE");
+    assert.equal(calls, 0);
+  });
+});
