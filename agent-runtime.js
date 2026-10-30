@@ -406,9 +406,9 @@ function extractIntent(text) {
   const hermesRunId = s.match(/\brun_[a-z0-9_-]{1,120}\b/)?.[0];
   const hermesRequested = /\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s);
   if ((hermesRequested || hermesRunId) && hermesRunId && /\b(stop|cancel|interrupt)\b/.test(s)) return "hermes_agent_stop_run";
-  if ((hermesRequested || hermesRunId) && hermesRunId && /\b(status|progress|result|output|check)\b/.test(s)) return "hermes_agent_run_status";
-  if (hermesRequested && /\b(start|submit|launch|background|long[- ]running)\b/.test(s) && /\b(run|task|job)\b/.test(s)) return "hermes_agent_start_run";
   if ((hermesRequested || hermesRunId) && hermesRunId && /\b(events|progress|activity|stream)\b/.test(s)) return "hermes_agent_run_events";
+  if ((hermesRequested || hermesRunId) && hermesRunId && /\b(status|result|output|check)\b/.test(s)) return "hermes_agent_run_status";
+  if (hermesRequested && /\b(start|submit|launch|background|long[- ]running)\b/.test(s) && /\b(run|task|job)\b/.test(s)) return "hermes_agent_start_run";
   if ((hermesRequested || hermesRunId) && hermesRunId && /\b(?:prompt_[a-z0-9._:-]{1,128}|request_[a-z0-9._:-]{1,128})\b/.test(s) && /\b(approve|allow|once|deny|reject|decline)\b/.test(s)) return "hermes_agent_resolve_approval";
   if (hermesRequested && /\b(skill|skills|skills hub)\b/.test(s) && /\b(list|show|available|installed|what|which|discover)\b/.test(s)) return "hermes_agent_list_skills";
   if (hermesRequested && /\b(toolset|toolsets|tools)\b/.test(s) && /\b(list|show|available|enabled|configured|what|which|discover)\b/.test(s)) return "hermes_agent_list_toolsets";
