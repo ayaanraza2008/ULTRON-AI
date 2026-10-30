@@ -39,6 +39,14 @@ test("routes Google Workspace requests to its bounded read-only tool set", () =>
   assert.ok(!route.toolNames.includes("browser_use"));
 });
 
+test("routes OpenSEO-only requests to its owner-scoped tool", () => {
+  const route = classifyTaskRoute("Research OpenSEO keywords for running shoes");
+  assert.equal(route.tier, "medium");
+  assert.ok(route.categories.includes("open_seo"));
+  assert.ok(route.toolNames.includes("openseo"));
+  assert.deepEqual(route.toolNames, ["openseo"]);
+});
+
 test("retains the full tool list for compound or uncertain actions", () => {
   const route = classifyTaskRoute("Research the topic and then create a YouTube production plan");
   assert.equal(route.tier, "complex");
