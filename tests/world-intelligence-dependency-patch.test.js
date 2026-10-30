@@ -74,6 +74,7 @@ test("applies only the pinned dependency security lock updates", () => {
     }
     assert.equal(result.updatedLockEntries, Object.keys(overrides.packageLockUpdates).length);
     assert.equal(lock.packages["node_modules/zod"].version, "4.6.7");
+    assert.equal(lock.packages["node_modules/vite"].version, "6.4.5");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
