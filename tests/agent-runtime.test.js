@@ -2350,8 +2350,8 @@ test("Geo-Sleuth investigation options ignore model-authored reverse-search flag
 
 
 test("voice cloning consent requires an exact own-voice or speaker-permission attestation", () => {
-  const own = "I confirm this is my own voice and I approve cloning the attached audio into a VoiceStudio profile.";
-  const speaker = "I confirm I have the speaker's permission and I approve cloning the attached audio into a VoiceStudio profile.";
+  const own = "I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile.";
+  const speaker = "I confirm I have the speaker's permission and I approve you to clone the attached audio into a VoiceStudio profile.";
   assert.equal(parseVoiceCloneConsent(own), "own_voice");
   assert.equal(parseVoiceCloneConsent(speaker), "speaker_permission");
   assert.equal(parseVoiceCloneConsent("This is my voice."), null);
