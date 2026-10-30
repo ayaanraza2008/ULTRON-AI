@@ -1,4 +1,5 @@
 import json
+import socket
 import sys
 import tempfile
 import threading
@@ -55,6 +56,7 @@ class CompanionServerTests(unittest.TestCase):
         self.assertEqual(payload["capabilities"], ["status"])
         self.assertEqual(headers.get("Cache-Control"), "no-store")
         self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(headers.get("Connection"), "close")
         self.assertNotIn(TOKEN, body.decode("utf-8"))
         self.assertFalse(any("command" in item or "file" in item for item in payload["capabilities"]))
 
@@ -148,6 +150,20 @@ class CompanionServerTests(unittest.TestCase):
             create_companion_server(TOKEN, allowed_origins=("https://example.com",))
         with self.assertRaises(ValueError):
             create_companion_server(TOKEN, request_limit=0)
+
+    def test_concurrent_request_handlers_are_bounded_before_header_parsing(self):
+        server, _ = self.start_server()
+        acquired = [server.request_slots.acquire(blocking=False) for _ in range(server.max_concurrent_requests)]
+        self.assertTrue(all(acquired))
+        self.assertFalse(server.request_slots.acquire(blocking=False))
+        client, rejected_socket = socket.socketpair()
+        try:
+            server.process_request(rejected_socket, ("127.0.0.1", 12345))
+            self.assertEqual(client.recv(1), b"")
+        finally:
+            client.close()
+            for _ in acquired:
+                server.request_slots.release()
 
     def test_generated_token_has_sufficient_entropy_length(self):
         self.assertGreaterEqual(len(generate_companion_token()), 43)
