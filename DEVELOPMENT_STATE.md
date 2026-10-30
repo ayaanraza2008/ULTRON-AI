@@ -1,14 +1,24 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-27 UTC (source changes verified; production deployment blocked by Render quota)
+Last verified: 2026-10-31 UTC (main CI and exact Render production revision verified; external provider, account and device flows remain open)
 
 ## Operating constraints
-- Preserve the existing repository, backend data, and frontend. The cinematic command center has been built and merged, but is not live-verified until Render serves and reports the expected commit.
+- Preserve the existing repository, backend data, and the separately provisioned interface service. The API/backend and interface are separate Render services; verify each independently and do not infer full UI readiness from a backend health check.
 - Preserve the existing repository, Render service, and Supabase project.
 - Free-first; never expose secrets in repository documentation.
 - Treat configuration as unverified until the relevant live workflow succeeds.
 - Consequential external actions require explicit approval.
 
+
+## 2026-10-31 current verified checkpoint (supersedes earlier Render-quota status for this revision)
+- Repository `main` is at commit `70748b91da5ae06c6688647eda49248cae04baff`.
+- Main source CI [run 41132849782](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41132849782) passed both `test` and `world-intelligence-build`.
+- Production revision verification [run 41132849731](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41132849731) passed the deployed health, required-configuration and exact-commit checks for `https://ultron-ai-core.onrender.com`.
+- In the Render workspace **Ultron core** only, `ultron-ai-core`, `ultron-rea-gateway`, and `ultron-browser-use-core` report live deploys at the same main commit. The separate `ultron-core-interface` service reports a live deploy at commit `5962f6dd4174df2a211705fb6d9fef3a2160bc88` from branch `feature/ultron-live-core-interface-20261029`; its UI-to-API account/session workflows have not been independently verified in this checkpoint.
+- Render's log query service returned HTTP 503 during inspection, so application logs could not be audited. Recent CPU, request-count and latency metrics were empty; a single memory metric point for the API was about 80 MB and is not a performance benchmark.
+- PR #424 (`agent/harness2-hardening-current-main-20261031`) ports only Harness2 source/tests/docs onto current main. CI [run 41133618620](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41133618620) passed both jobs. PR #424 is ready for review and remains unmerged to avoid triggering an unrequested production auto-deploy.
+- Remaining acceptance gates: real OpenRouter text/vision requests; Auth signup/recovery and two-account RLS/history/memory E2E; a live queued task/worker completion; controlled DNS-pinned outbound test; real STT/TTS and external-provider flows; physical Windows/Android pairing; UI account-safe end-to-end verification; hardened sandbox runtime validation; and owner-side Supabase leaked-password protection.
+- Maintain free-first operation. Do not store secrets in source or chat, and do not claim 100% autonomy from configuration, mocked tests or health responses. Consequential actions remain permission-gated.
 
 ## 2026-10-28 current checkpoint (supersedes earlier frontend-deferred notes)
 - Main commit `5811ba00fc78065b33c06f171801c39ad5194aad` includes the cinematic command-center frontend, corrected wiring to implemented task/research/coding/document/automation/tool APIs, and private original-file storage routes.
