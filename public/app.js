@@ -3475,8 +3475,8 @@
       drawerCard("Universal ULTRON web app", "Works in a browser on Windows, macOS, Linux, Android, iPhone and iPad. The same signed-in account loads your saved cloud conversations on each device.", "CROSS-DEVICE", "ready");
         const desktop = capabilities?.providers?.desktop || {};
         drawerCard("Windows companion relay",
-          "Cloud pairing is available for status only. The PC connects outbound over HTTPS every 30 seconds; the server never opens a connection to your PC.",
-          "STATUS ONLY", "warning");
+          "The PC connects outbound over HTTPS. ULTRON can queue only fixed app/folder shortcuts; the Windows terminal must display each request and receive a fresh typed ALLOW before it runs.",
+          "LOCAL APPROVAL", "warning");
         drawerCard("Local companion service",
           desktop.localAgentConfigured
             ? "Local status-service configuration is present, but the cloud pairing token is separate and does not enable local PC-control actions."
@@ -3511,9 +3511,36 @@
                 }
               }, true);
             }
+
+            if (!device.revoked && device.online && device.id) {
+              const fixedActions = [
+                ["launch_application", "notepad", "REQUEST OPEN NOTEPAD"],
+                ["launch_application", "calculator", "REQUEST OPEN CALCULATOR"],
+                ["open_known_folder", "documents", "REQUEST OPEN DOCUMENTS"]
+              ];
+              for (const [action, target, label] of fixedActions) {
+                drawerButton(label, async () => {
+                  try {
+                    const queued = await apiRequest(
+                      "/api/desktop-companion/devices/" + encodeURIComponent(device.id) + "/actions",
+                      { method: "POST", body: { action, target } }
+                    );
+                    if (!queued?.requiresLocalApproval || queued.status !== "pending") {
+                      throw new Error("ULTRON did not confirm that the action is waiting for local approval.");
+                    }
+                    showToast("Request queued. The Windows terminal must show it and receive typed ALLOW. No action runs automatically.");
+                  } catch (error) {
+                    showToast(error.message || "Could not queue the Windows action.");
+                  }
+                }, true);
+              }
+            }
           }
         }
 
+        drawerCard("What the remote shortcuts can do",
+          "Only Notepad, Calculator and the standard Documents folder are available from this panel. One request can be pending per PC. The local user can deny it; requests expire after two minutes.",
+          "FIXED ALLOWLIST");
         const pairHeading = document.createElement("h3");
         pairHeading.className = "drawer-view-title";
         pairHeading.textContent = "Pair this Windows PC";
