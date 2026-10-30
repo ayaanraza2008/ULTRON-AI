@@ -153,5 +153,24 @@ class CompanionServerTests(unittest.TestCase):
         self.assertGreaterEqual(len(generate_companion_token()), 43)
 
 
+    def test_malformed_persisted_device_id_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "device-id").write_text("not-a-uuid\\n", encoding="ascii")
+            with self.assertRaisesRegex(ValueError, "identity file is invalid"):
+                create_companion_server(TOKEN, port=0, data_dir=Path(root))
+
+    def test_symlinked_device_identity_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root)
+            target = directory / "external-device-id"
+            target.write_text("00000000-0000-4000-8000-000000000001\\n", encoding="ascii")
+            identity = directory / "device-id"
+            try:
+                identity.symlink_to(target)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest("This Windows/filesystem environment does not permit symlink creation: " + type(error).__name__)
+            with self.assertRaisesRegex(ValueError, "identity file is not a regular file"):
+                create_companion_server(TOKEN, port=0, data_dir=directory)
+
 if __name__ == "__main__":
     unittest.main()
