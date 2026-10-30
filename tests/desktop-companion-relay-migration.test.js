@@ -67,7 +67,7 @@ test("companion actions migration permits only fixed locally approved applicatio
 });
 
 test("companion action SQL functions pin search_path and bind claims/completion to the paired device", () => {
-  for (const name of ["claim_desktop_companion_action", "complete_desktop_companion_action"]) {
+  for (const name of ["claim_desktop_companion_action", "authorize_desktop_companion_action", "complete_desktop_companion_action"]) {
     const match = actionsSql.match(new RegExp("create or replace function public\\." + name + "([\\s\\S]*?)\\$function\\$", "i"));
     assert.ok(match, name + " must exist");
     assert.match(match[1], /security definer/i);
@@ -76,6 +76,10 @@ test("companion action SQL functions pin search_path and bind claims/completion 
     assert.match(match[1], /device_id = p_device_id/i);
   }
   assert.match(actionsSql, /for update skip locked/i);
+  assert.match(actionsSql, /create or replace function public\\.authorize_desktop_companion_action\\(text, uuid, uuid\\)/i);
+  assert.match(actionsSql, /a\\.status = 'claimed'[\\s\\S]*?a\\.expires_at > pg_catalog\\.now\\(\\)/i);
+  assert.match(actionsSql, /d\\.revoked_at is null/i);
+  assert.match(actionsSql, /grant execute on function public\\.authorize_desktop_companion_action\\(text, uuid, uuid\\)\\s+to service_role/i);
   assert.match(actionsSql, /a\.status = 'claimed'/i);
   assert.match(actionsSql, /p_status = 'denied' and p_result_code in \('USER_DENIED', 'LOCAL_APPROVAL_REQUIRED'\)/i);
 });
