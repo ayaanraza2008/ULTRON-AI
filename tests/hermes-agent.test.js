@@ -609,23 +609,75 @@ test("Hermes run events read a bounded SSE window and omit raw tool argument pre
         'data: {"delta":"Research started."}',
         "",
         "event: tool.started",
-        'data: {"tool":"terminal","preview":{"command":"cat private-file"}}',
+        'data: {"tool":"terminal","text":"cat private-file","preview":{"command":"cat private-file"}}',
         "",
         "event: tool.completed",
-        'data: {"tool":"terminal","duration":1.2,"error":false,"preview":{"secret":"never surface"}}',
+        'data: {"tool":"terminal","delta":"private tool result","duration":1.2,"error":false,"preview":{"secret":"never surface"}}',
+        "",
+        "event: approval.requested",
+        'data: {"text":"approve this terminal command","prompt_id":"prompt_123","execution_generation":2}',
         ""
       ].join("\n"), { status: 200, headers: { "Content-Type": "text/event-stream" } });
     }
   });
   assert.equal(result.state, "completed");
-  assert.equal(result.eventCount, 3);
+  assert.equal(result.eventCount, 4);
   assert.equal(result.events[0].event, "message.delta");
   assert.equal(result.events[0].text, "Research started.");
   assert.equal(result.events[1].tool, "terminal");
+  assert.equal(Object.hasOwn(result.events[1], "text"), false);
   assert.equal(Object.hasOwn(result.events[1], "preview"), false);
+  assert.equal(Object.hasOwn(result.events[2], "text"), false);
   assert.equal(Object.hasOwn(result.events[2], "preview"), false);
+  assert.equal(Object.hasOwn(result.events[3], "text"), false);
+  assert.equal(result.events[3].requestId, "prompt_123");
   assert.equal(JSON.stringify(result).includes("private-file"), false);
+  assert.equal(JSON.stringify(result).includes("private tool result"), false);
+  assert.equal(JSON.stringify(result).includes("approve this terminal command"), false);
   assert.equal(seen.length, 2);
+});
+
+test("Hermes SSE reader cancels the upstream stream after its 100-event window", async () => {
+  let next = 0;
+  let cancelled = false;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    pull(controller) {
+      controller.enqueue(encoder.encode("event: message.delta\n" + "data: " + JSON.stringify({ delta: "event-" + next }) + "\n\n"));
+      next++;
+    },
+    cancel() { cancelled = true; }
+  });
+  const result = await getHermesAgentRunEvents({
+    env: configuredEnv(),
+    userId: ownerId,
+    runId: "run_abc123",
+    fetchImpl: async url => url.endsWith("/capabilities")
+      ? new Response(JSON.stringify({ features: { run_submission: true, run_status: true, run_events_sse: true } }), { status: 200 })
+      : new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })
+  });
+  assert.equal(result.eventCount, 100);
+  assert.equal(result.truncated, true);
+  assert.equal(cancelled, true);
+});
+
+test("Hermes native run start uses a safe default timeout for malformed configuration", async () => {
+  const seen = [];
+  const result = await startHermesAgentRun({
+    env: configuredEnv({ HERMES_AGENT_TIMEOUT_SECONDS: "not-a-number" }),
+    userId: ownerId,
+    task: "Run a harmless local status check.",
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      if (url.endsWith("/capabilities")) {
+        return new Response(JSON.stringify({ features: { run_submission: true, run_status: true } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ run_id: "run_timeout_safe", status: "started" }), { status: 200 });
+    }
+  });
+  assert.equal(result.state, "started");
+  assert.equal(seen.length, 2);
+  assert.ok(seen[1].options.signal instanceof AbortSignal);
 });
 
 test("Hermes approval resolver requires an advertised approval feature and exact pending-control identity", async () => {
