@@ -135,4 +135,16 @@ class Harness2Tests(unittest.TestCase):
         self.assertEqual(harness2.parse_jsonl(opencode,"opencode"),"hello")
         self.assertEqual(harness2.parse_jsonl(codex,"codex"),"world")
 
+    def test_bounded_runner_captures_small_output(self):
+        command = [sys.executable, "-c", "import sys; print('ok'); print('notice', file=sys.stderr)"]
+        result = harness2.run_bounded(command, cwd=self.root, timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("ok", result.stdout)
+        self.assertIn("notice", result.stderr)
+
+    def test_bounded_runner_terminates_output_flood(self):
+        command = [sys.executable, "-c", "import sys; sys.stdout.write('x' * (1024 * 1024 + 100000)); sys.stdout.flush()"]
+        with self.assertRaisesRegex(harness2.Harness2Error, "stdout exceeded its output limit"):
+            harness2.run_bounded(command, cwd=self.root, timeout=10)
+
 if __name__ == "__main__": unittest.main()
