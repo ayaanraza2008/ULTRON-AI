@@ -198,5 +198,15 @@ The CI workflow's passing production-revision result therefore confirms the `ult
 
 - Bounded stdout and stderr capture for explicitly approved local script/command execution to 1 MB per stream; output is drained concurrently so noisy programs cannot grow the assistant process's memory without bound.
 - Timed-out POSIX process groups are terminated together; Windows uses a process-group taskkill attempt before terminating the direct child.
-- Added a regression test that emits more than 1 MB on both output streams and verifies truncation. This change is pending a fresh CI run on its exact branch head.
+- Added a regression test that emits more than 1 MB on both output streams and verifies truncation. The initial test had incorrectly escaped newlines and exposed unclosed pipe handles; both were fixed. Full CI run [41072468330](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41072468330) passed on candidate head `75fd724b644554313a82d1867405f254b3d02feb`: 811 tests, 810 passed, 0 failed, 1 skipped; Python assistant tests, `npm run check`, both dependency audits (0 vulnerabilities), Windows installer parsing and World Intelligence build/bridge all passed.
 - This does not make script execution a security sandbox: approved code still runs with the user's normal account permissions. Unknown code must not be run.
+
+
+## Live Supabase security recheck — 2026-10-30
+
+- Read-only audit of project `opdjfhwepmcprbqojpat` found 8/8 inspected public tables with RLS enabled and 26 owner-scoped policies.
+- `anon` has no SELECT or INSERT privilege on those eight tables. Authenticated table access is constrained by the owner-scoped RLS policies.
+- The two inspected `SECURITY DEFINER` worker functions have an empty search path and EXECUTE grants only to `service_role`/`postgres`.
+- Security Advisor continues to report one warning: leaked-password protection is disabled. This is an owner-controlled Auth dashboard setting; it was not changed.
+- The three new study-pack, notes and reminders migrations in this PR are not applied; the live migration ledger remains at 15 versions.
+- Performance Advisor reports three currently unused indexes. No indexes were removed because low/zero usage in the present workload is not sufficient evidence that they are unnecessary.
