@@ -449,7 +449,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     redirect: false,
     maxAge: env.NODE_ENV === "production" ? 300_000 : 0,
     setHeaders(res, filePath) {
-      if (path.basename(filePath) === "index.html") res.setHeader("Cache-Control", "no-store");
+      const assetName = path.basename(filePath);
+      if (assetName === "sw.js") res.setHeader("Cache-Control", "no-cache, max-age=0, must-revalidate");
+      else if (assetName === "index.html") res.setHeader("Cache-Control", "no-store");
       else if (env.NODE_ENV === "production") res.setHeader("Cache-Control", "public, max-age=300");
       else res.setHeader("Cache-Control", "no-store");
     }
