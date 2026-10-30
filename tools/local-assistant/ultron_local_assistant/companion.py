@@ -12,6 +12,7 @@ import ipaddress
 import json
 import os
 import platform
+import re
 import socket
 import ssl
 import threading
@@ -263,8 +264,8 @@ class CloudHTTPError(RuntimeError):
     def __init__(self, status: int):
         self.status = int(status)
         super().__init__(f"ULTRON server rejected the companion request (HTTP {self.status}).")
-PAIRING_CODE_PATTERN = __import__("re").compile(r"^[A-Za-z0-9_-]{32}$")
-DEVICE_TOKEN_PATTERN = __import__("re").compile(r"^[A-Za-z0-9_-]{43}$")
+PAIRING_CODE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32}$")
+DEVICE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
 LOCAL_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".intranet", ".lan", ".home", ".test", ".invalid", ".example")
 
 
