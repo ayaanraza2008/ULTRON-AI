@@ -24,10 +24,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Setup Android SDK
+      - name: Setup Android SDK tools and accept licenses
         uses: android-actions/setup-android@v4
         with:
-          packages: "platforms;android-35 build-tools;35.0.0"
+          packages: ""
+      - name: Install Android SDK packages with Android CLI
+        shell: bash
+        run: |
+          ANDROID_CLI="$ANDROID_HOME/cmdline-tools/latest/bin/android"
+          test -x "$ANDROID_CLI"
+          "$ANDROID_CLI" --version
+          "$ANDROID_CLI" sdk install platforms/android-35 build-tools/35.0.0 platform-tools
       - uses: gradle/actions/setup-gradle@v6.4.1
         with:
           gradle-version: "8.9"
