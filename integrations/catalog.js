@@ -297,7 +297,7 @@ export function buildIntegrationCatalog(env = process.env) {
       mode: "owner_scoped_agent_gateway",
       requiredEnv: ["HERMES_AGENT_ENABLED=true", "HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       optionalEnv: ["HERMES_AGENT_MODEL", "HERMES_AGENT_CHAT_PROVIDER=true"],
-      apiRoutes: ["agent tools: check_hermes_agent, hermes_agent_task, hermes_agent_start_run, hermes_agent_run_status, hermes_agent_stop_run"],
+      apiRoutes: ["agent tools: check_hermes_agent, hermes_agent_task, hermes_agent_start_run, hermes_agent_run_status, hermes_agent_stop_run, hermes_agent_list_skills, hermes_agent_list_toolsets"],
       note: hermesReadiness.configured
         ? "Configured but not live-verified; Hermes-side toolsets, model provider, skills, memory, terminal sandbox and integrations must be configured separately."
         : "Requires a separately installed and authenticated Hermes Agent API server. ULTRON does not install the runtime or enable external messaging/cron actions automatically."
