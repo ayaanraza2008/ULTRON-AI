@@ -761,7 +761,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       "complete_desktop_companion_pairing",
       "record_desktop_companion_heartbeat",
       "claim_desktop_companion_command",
-      "complete_desktop_companion_command"
+      "complete_desktop_companion_command",
+      "authorize_desktop_companion_command"
     ]);
     if (!allowed.has(functionName) || !body || typeof body !== "object" || Array.isArray(body)) {
       throw Object.assign(new Error("Privileged RPC operation is not allowed."), { status: 400, code: "PRIVILEGED_RPC_NOT_ALLOWED" });
