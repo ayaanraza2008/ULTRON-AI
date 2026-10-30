@@ -284,7 +284,9 @@ def main(argv=None):
             atomic_json(root/"run.json",state); print("Run ID:",run_id); execute(root,state,a.timeout); print("Report:",root/"report.md")
         else:
             root=run_path(a.workspace,a.run_id); state=read_json(root/"run.json")
-            if a.command=="resume" and state["status"]!="completed": state["status"]="running"; execute(root,state,a.timeout); print("Resumed:",root/"report.md")
+            if a.command=="resume":
+                if state["status"]!="completed": state["status"]="running"; execute(root,state,a.timeout)
+                print("Resumed:",root/"report.md")
             elif a.command=="judge": judge_run(root); print("Rejudged saved results:",root/"report.md")
             else: print((root/"report.md").read_text(encoding="utf-8"))
     except (Harness2Error,OSError,KeyError,ValueError,subprocess.SubprocessError) as exc:
