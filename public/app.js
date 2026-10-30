@@ -3398,107 +3398,130 @@
       return;
     }
     if (name === "devices") {
-      drawerHeading("PC and mobile devices", "Cloud ULTRON cannot directly operate your personal devices just because this page is open. A paired local companion and explicit scopes are required.");
-      drawerCard("Windows PC", "Checking whether the backend knows about a configured companion…", "CHECKING", "warning");
+      drawerHeading("PC and mobile devices", "Pair a Windows PC with a short-lived code. The companion initiates HTTPS status heartbeats; it does not expose remote control.");
+      drawerCard("Windows PC companion", "Loading paired devices…", "CHECKING", "warning");
       try {
-        const payload = await apiRequest("/api/capabilities");
+        const [capabilities, inventoryResult] = await Promise.all([
+          apiRequest("/api/capabilities"),
+          apiRequest("/api/desktop-companion/devices").then(value => ({ value })).catch(error => ({ error }))
+        ]);
         ui.drawerContent.replaceChildren();
-        drawerHeading("PC and mobile devices", "The browser and cloud service have limited access. Device control must be paired, visible, scoped, and revocable.");
-        const desktop = payload?.providers?.desktop || {};
-        drawerCard("Windows PC companion",
+        drawerHeading("PC and mobile devices", "Pairing registers an owner-owned Windows device and its heartbeat. No keyboard, mouse, shell, screenshot, process, or file actions are available.");
+        const desktop = capabilities?.providers?.desktop || {};
+        drawerCard("Windows companion relay",
+          "Cloud pairing is available for status only. The PC connects outbound over HTTPS every 30 seconds; the server never opens a connection to your PC.",
+          "STATUS ONLY", "warning");
+        drawerCard("Local companion service",
           desktop.localAgentConfigured
-            ? "Companion configuration is present, but this alone does not prove a PC is paired, online, or authorized for actions."
-            : "No configured companion was reported. Install and securely pair a local companion before any PC actions can be enabled.",
-          desktop.localAgentConfigured ? "CONFIGURED · UNVERIFIED" : "NOT PAIRED",
-          desktop.localAgentConfigured ? "warning" : "warning");
-        drawerCard("Mobile companion",
-          "No mobile control companion is connected through this interface yet. Mobile permissions and supported actions must be implemented by a trusted mobile app.",
-          "NOT CONNECTED", "warning");
-        drawerCard("Access boundaries",
-          "The browser cannot bypass operating-system permissions. Sensitive, destructive, external or money-related actions must require a separate confirmation.",
-          "SCOPED ACCESS");
-
-        const scopeHeading = document.createElement("h3");
-        scopeHeading.className = "drawer-view-title";
-        scopeHeading.textContent = "Request device permissions";
-        const scopeText = document.createElement("p");
-        scopeText.className = "drawer-view-description";
-        scopeText.textContent = "Select only the capabilities you want a future paired companion to request. These selections are a draft policy—not an active grant.";
-        ui.drawerContent.append(scopeHeading, scopeText);
-        const scopeList = document.createElement("div");
-        scopeList.className = "device-scope-list";
-        const scopes = [
-          ["screen-view", "View screen", "Capture a visible screen only after the companion displays an active indicator."],
-          ["selected-files", "User-selected files", "Read files or folders you explicitly select in the local companion."],
-          ["approved-apps", "Launch approved apps", "Open only apps listed in a user-reviewed allowlist."],
-          ["keyboard-mouse", "Keyboard and mouse", "Perform visible interaction after a per-session confirmation."],
-          ["allowlisted-system", "Allowlisted system actions", "Use reviewed settings and diagnostics; no arbitrary shell commands."],
-          ["mobile-bridge", "Paired mobile actions", "Request only permissions supported by a separately installed mobile companion."]
-        ];
-        for (const scopeInfo of scopes) {
-          const label = document.createElement("label");
-          label.className = "device-scope";
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.value = scopeInfo[0];
-          checkbox.checked = requestedDeviceScopes.has(scopeInfo[0]);
-          checkbox.addEventListener("change", () => {
-            if (checkbox.checked) requestedDeviceScopes.add(scopeInfo[0]);
-            else requestedDeviceScopes.delete(scopeInfo[0]);
-          });
-          const textBox = document.createElement("span");
-          const name = document.createElement("strong");
-          name.textContent = scopeInfo[1];
-          const detail = document.createElement("small");
-          detail.textContent = scopeInfo[2];
-          textBox.append(name, detail);
-          label.append(checkbox, textBox);
-          scopeList.appendChild(label);
+            ? "Local status-service configuration is present, but the cloud pairing token is separate and does not enable local PC-control actions."
+            : "The local loopback status service is optional. Cloud presence uses the outbound-only companion client instead.",
+          desktop.localAgentConfigured ? "LOCAL CONFIGURED" : "OPTIONAL");
+        if (inventoryResult.error) {
+          drawerCard("Paired device inventory unavailable",
+            inventoryResult.error.status === 401
+              ? "Sign in with your Supabase account to view and manage paired devices. A shared password-only session cannot own device records."
+              : inventoryResult.error.message,
+            inventoryResult.error.code || "UNAVAILABLE", "warning");
+        } else {
+          const devices = Array.isArray(inventoryResult.value?.devices) ? inventoryResult.value.devices : [];
+          if (!devices.length) drawerCard("No paired Windows PCs", "Create a one-time pairing code below, then enter it in the Windows terminal using ultron-local companion pair.", "NOT PAIRED", "warning");
+          for (const device of devices.slice(0, 20)) {
+            const state = device.revoked ? "REVOKED" : device.online ? "ONLINE" : "OFFLINE";
+            const lastSeen = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "No heartbeat received yet";
+            drawerCard(
+              String(device.name || "Windows PC").slice(0, 100),
+              "Device ID: " + String(device.deviceId || "unknown") + " · Last heartbeat: " + lastSeen,
+              state,
+              device.revoked ? "error" : device.online ? "ready" : "warning"
+            );
+            if (!device.revoked && device.id) {
+              drawerButton("REVOKE " + String(device.name || "DEVICE").slice(0, 40).toUpperCase(), async () => {
+                try {
+                  const result = await apiRequest("/api/desktop-companion/devices/" + encodeURIComponent(device.id) + "/revoke", { method: "POST", body: {} });
+                  if (result?.revoked) showToast("Windows companion revoked. Its next heartbeat will be rejected.");
+                  await showDrawerView("devices");
+                } catch (error) {
+                  showToast(error.message || "Could not revoke this device.");
+                }
+              }, true);
+            }
+          }
         }
-        ui.drawerContent.appendChild(scopeList);
-        const manifestOutput = document.createElement("div");
-        manifestOutput.className = "drawer-note";
-        manifestOutput.hidden = true;
-        const makeManifest = document.createElement("button");
-        makeManifest.type = "button";
-        makeManifest.className = "drawer-action";
-        makeManifest.textContent = "PREPARE PERMISSION POLICY";
-        makeManifest.addEventListener("click", () => {
-          if (!requestedDeviceScopes.size) {
-            showToast("Select at least one permission scope first.");
+
+        const pairHeading = document.createElement("h3");
+        pairHeading.className = "drawer-view-title";
+        pairHeading.textContent = "Pair this Windows PC";
+        const pairText = document.createElement("p");
+        pairText.className = "drawer-view-description";
+        pairText.textContent = "Generate a code that expires in five minutes and can be redeemed only once. The raw code and device token are never stored in the browser or database.";
+        ui.drawerContent.append(pairHeading, pairText);
+        const pairResult = document.createElement("div");
+        pairResult.className = "drawer-note";
+        pairResult.hidden = true;
+        const pairButton = drawerButton("GENERATE ONE-TIME PAIRING CODE", async () => {
+          if (window.location.protocol !== "https:") {
+            showToast("Secure device pairing requires the HTTPS ULTRON web address.");
             return;
           }
-          const brief = [
-            "ULTRON device permission request",
-            "Device target: user-owned, explicitly paired device",
-            "Requested scopes: " + Array.from(requestedDeviceScopes).join(", "),
-            "Grant status: NOT GRANTED by this web page",
-            "Activation requirements: install a trusted local/mobile companion, pair this account and device, show an obvious active indicator, persist a revocable least-privilege policy, and require confirmation for sensitive actions.",
-            "Disallowed by default: arbitrary shell commands, stealth capture, credential extraction, persistence, and actions outside the user's selected device."
-          ].join("\n");
-          manifestOutput.replaceChildren();
-          const text = document.createElement("pre");
-          text.className = "permission-manifest";
-          text.textContent = brief;
-          manifestOutput.appendChild(text);
-          const copy = document.createElement("button");
-          copy.type = "button";
-          copy.className = "drawer-action secondary";
-          copy.textContent = "COPY PERMISSION POLICY";
-          copy.addEventListener("click", () => {
-            if (navigator.clipboard?.writeText) {
-              navigator.clipboard.writeText(brief).then(() => showToast("Permission policy copied."), () => showToast(brief, 9000));
-            } else showToast(brief, 9000);
-          });
-          manifestOutput.appendChild(copy);
-          manifestOutput.hidden = false;
+          pairButton.disabled = true;
+          pairButton.textContent = "GENERATING…";
+          try {
+            const pairing = await apiRequest("/api/desktop-companion/pairings", { method: "POST", body: {} });
+            const code = String(pairing?.pairingCode || "");
+            if (!/^[A-Za-z0-9_-]{32}$/.test(code)) throw new Error("ULTRON returned an invalid pairing code.");
+            const serverUrl = window.location.origin;
+            const pairCommand = "ultron-local companion pair --server-url " + serverUrl;
+            pairResult.replaceChildren();
+            const expiry = document.createElement("p");
+            expiry.textContent = "One-time pairing code · expires " + (pairing.expiresAt ? new Date(pairing.expiresAt).toLocaleTimeString() : "in five minutes");
+            const codeValue = document.createElement("pre");
+            codeValue.className = "permission-manifest";
+            codeValue.textContent = code;
+            const commandText = document.createElement("pre");
+            commandText.className = "permission-manifest";
+            commandText.textContent = pairCommand;
+            const copyCode = document.createElement("button");
+            copyCode.type = "button";
+            copyCode.className = "drawer-action secondary";
+            copyCode.textContent = "COPY ONE-TIME CODE";
+            copyCode.addEventListener("click", () => {
+              if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(() => showToast("Pairing code copied."), () => showToast("Copy failed; select the code manually."));
+              else showToast("Clipboard access is unavailable; select the code manually.");
+            });
+            const copyCommand = document.createElement("button");
+            copyCommand.type = "button";
+            copyCommand.className = "drawer-action secondary";
+            copyCommand.textContent = "COPY WINDOWS PAIR COMMAND";
+            copyCommand.addEventListener("click", () => {
+              if (navigator.clipboard?.writeText) navigator.clipboard.writeText(pairCommand).then(() => showToast("Pair command copied."), () => showToast("Copy failed; select the command manually."));
+              else showToast("Clipboard access is unavailable; select the command manually.");
+            });
+            const nextSteps = document.createElement("p");
+            nextSteps.textContent = "On the Windows PC, run the pair command and enter this code when prompted. Then run ultron-local companion connect to keep status online; leave that terminal running.";
+            pairResult.append(expiry, codeValue, copyCode, commandText, copyCommand, nextSteps);
+            pairResult.hidden = false;
+          } catch (error) {
+            showToast(error.message || "Could not generate a pairing code.");
+          } finally {
+            pairButton.disabled = false;
+            pairButton.textContent = "GENERATE ONE-TIME PAIRING CODE";
+          }
         });
-        ui.drawerContent.append(makeManifest, manifestOutput);
-        drawerButton("VIEW INTEGRATIONS", () => { void showDrawerView("apps"); });
+        ui.drawerContent.appendChild(pairResult);
+        drawerCard("Windows setup",
+          "Install the ULTRON Local Assistant on Windows. Run ultron-local companion pair --server-url " + window.location.origin + ", then ultron-local companion connect. The connect command sends one status heartbeat every 30 seconds and stays in the foreground.",
+          "OUTBOUND HTTPS");
+        drawerCard("Mobile companion",
+          "No mobile companion is currently connected. Mobile pairing and OS permissions require a separate trusted mobile app.",
+          "NOT CONNECTED", "warning");
+        drawerCard("Access boundaries",
+          "This relay reports whether a paired PC is online and supports revocation only. It cannot execute commands, access files, capture screens, or control keyboard/mouse input.",
+          "NO REMOTE PC CONTROL", "warning");
       } catch (error) {
         ui.drawerContent.replaceChildren();
-        drawerHeading("PC and mobile devices", "The backend capability endpoint could not be read.");
-        drawerCard("Device status unavailable", error.message, error.code || "REQUEST FAILED", "error");
+        drawerHeading("PC and mobile devices", "Pairing and device inventory require an authenticated Supabase account.");
+        drawerCard("Device setup unavailable", error.message, error.code || "REQUEST FAILED", "error");
+        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
       }
       return;
     }
