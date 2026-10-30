@@ -138,3 +138,121 @@ test("device inventory cannot be accessed with a password-only web session", asy
     assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
   });
 });
+
+const ACTION = "88888888-8888-4888-8888-888888888888";
+
+test("server queues a fixed local action through the signed-in owner's Supabase token", async () => {
+  const calls = [];
+  const app = createApp({
+    env: relayEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/auth/v1/user")) return new Response(JSON.stringify({ id: OWNER }), { status: 200 });
+      if (url.includes("/rest/v1/desktop_companion_devices?")) {
+        return new Response(JSON.stringify([{
+          id: RECORD, device_id: DEVICE, device_name: "Ayaan-PC", platform: "windows",
+          last_seen_at: new Date().toISOString(), revoked_at: null
+        }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/rest/v1/desktop_companion_actions?")) {
+        return new Response(JSON.stringify([{ id: ACTION, status: "pending", expires_at: new Date(Date.now() + 120_000).toISOString() }]), {
+          status: 201, headers: { "Content-Type": "application/json" }
+        });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/desktop-companion/devices/" + RECORD + "/actions", {
+      method: "POST",
+      headers: { Cookie: ownerCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "launch_application", target: "notepad" })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(payload.actionId, ACTION);
+    assert.equal(payload.requiresLocalApproval, true);
+    const insert = calls.find(call => call.url.includes("/rest/v1/desktop_companion_actions?"));
+    assert.equal(insert.options.headers.Authorization, "Bearer " + ACCESS_TOKEN);
+    assert.equal(insert.options.headers.apikey, relayEnv.SUPABASE_PUBLISHABLE_KEY);
+    assert.equal(insert.options.headers.Prefer, "return=representation");
+    const inserted = JSON.parse(insert.options.body);
+    assert.deepEqual({
+      user_id: inserted.user_id,
+      device_record_id: inserted.device_record_id,
+      device_id: inserted.device_id,
+      action_name: inserted.action_name,
+      action_target: inserted.action_target
+    }, {
+      user_id: OWNER, device_record_id: RECORD, device_id: DEVICE,
+      action_name: "launch_application", action_target: "notepad"
+    });
+    assert.equal(JSON.stringify(calls).includes(SERVICE_KEY), false);
+  });
+});
+
+test("server-side action claim uses the allowlisted service-role RPC and returns no token", async () => {
+  const calls = [];
+  const app = createApp({
+    env: relayEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/rest/v1/rpc/claim_desktop_companion_action")) {
+        return new Response(JSON.stringify([{
+          action_id: ACTION, action_name: "launch_application", action_target: "calculator",
+          expires_at: "2026-10-31T12:02:00.000Z"
+        }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const deviceToken = "C".repeat(43);
+    const response = await fetch(base + "/api/desktop-companion/actions/next", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + deviceToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.action, {
+      id: ACTION, name: "launch_application", target: "calculator",
+      expiresAt: "2026-10-31T12:02:00.000Z", requiresLocalApproval: true
+    });
+    assert.equal(calls[0].url, relayEnv.SUPABASE_URL + "/rest/v1/rpc/claim_desktop_companion_action");
+    assert.equal(calls[0].options.headers.apikey, SERVICE_KEY);
+    assert.equal(JSON.parse(calls[0].options.body).p_token_hash.length, 64);
+    assert.equal(JSON.stringify(payload).includes(deviceToken), false);
+  });
+});
+
+test("server-side action completion uses the named RPC and accepts no arbitrary outcome", async () => {
+  const calls = [];
+  const app = createApp({
+    env: relayEnv,
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/rest/v1/rpc/complete_desktop_companion_action")) {
+        return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error("Unexpected upstream request: " + url);
+    },
+    logger: { warn() {}, error() {} }
+  });
+  await withServer(app, async base => {
+    const deviceToken = "R".repeat(43);
+    const response = await fetch(base + "/api/desktop-companion/actions/" + ACTION + "/complete", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + deviceToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: DEVICE, status: "denied", resultCode: "USER_DENIED" })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.accepted, true);
+    assert.equal(calls[0].url, relayEnv.SUPABASE_URL + "/rest/v1/rpc/complete_desktop_companion_action");
+    assert.equal(JSON.parse(calls[0].options.body).p_status, "denied");
+    assert.equal(JSON.parse(calls[0].options.body).p_result_code, "USER_DENIED");
+  });
+});
