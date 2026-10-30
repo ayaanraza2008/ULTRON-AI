@@ -33,7 +33,7 @@ python3 tools/harness2/harness2.py run --workspace . --benchmark smoke --executo
 python3 tools/harness2/harness2.py run --workspace . --benchmark smoke --executor codex --mode parallel --parallelism 2
 ```
 
-Harness2 does not install CLIs or collect credentials. OpenCode is invoked in pure mode with a temporary primary agent and deny-by-default tool permissions. Codex uses `codex exec` in a temporary directory with read-only sandboxing, no approvals, ephemeral session data, and user-config/rules ignored. Local CLI authentication remains the user's responsibility; provider usage may incur cost.
+Harness2 does not install CLIs or collect credentials. OpenCode is invoked in pure mode with a temporary primary agent and **all tools denied**; the evaluator answers only from the supplied prompt. Codex uses `codex exec` in a temporary directory with read-only sandboxing, no approvals, ephemeral session data, and user-config/rules ignored. Both CLI adapters enforce a 1 MB stdout cap, a 64 KB stderr cap, and a bounded process timeout; an output flood terminates the child process. Local CLI authentication remains the user's responsibility; provider usage may incur cost.
 
 ## Harness components and results
 
@@ -49,12 +49,12 @@ python3 tools/harness2/harness2.py report <run-id> --workspace .
 
 ## Custom benchmarks
 
-Pass `--benchmark-file path/to/benchmark.json`. JSON must contain a non-empty `tasks` array. Each task requires a unique simple `id` and non-empty `prompt`; optional criteria include `all_contains`, `any_contains`, `forbidden_contains`, and `min_chars`. The built-in judge is transparent substring/length matching, not an LLM judge or execution-based benchmark. Review per-task evidence; scores are comparable only under the same dataset and executor.
+Pass `--benchmark-file path/to/benchmark.json`. JSON must contain 1–200 tasks. Each task requires a unique simple `id` and a non-empty prompt (maximum 100,000 characters); optional criteria include `all_contains`, `any_contains`, `forbidden_contains`, and `min_chars`. Unknown task/criteria fields, duplicate IDs, oversized criteria, duplicate answer records and answers for unknown tasks are rejected. Missing answers score as empty responses. The built-in judge is transparent substring/length matching, not an LLM judge or execution-based benchmark. Review per-task evidence; scores are comparable only under the same dataset and executor.
 
 ## Boundaries
 
 - Python standard library only; Python 3.12+.
 - Benchmark tasks run serially within each candidate; candidate refinement is sequential or parallel.
-- Executor invocations run from temporary directories outside the ULTRON source tree.
+- Executor invocations run from temporary directories outside the ULTRON source tree; stdout/stderr capture is bounded and process timeouts terminate the child.
 - Do not put secrets or sensitive personal data in harness memory.
 - CLI failures/timeouts are recorded as empty answers and reduce scores.
