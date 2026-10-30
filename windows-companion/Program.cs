@@ -66,10 +66,10 @@ internal sealed class CompanionContext : ApplicationContext
         _window = new Form
         {
             Text = "ULTRON Wake Companion",
-            Width = 480,
-            Height = 255,
+            Width = 520,
+            Height = 330,
             StartPosition = FormStartPosition.CenterScreen,
-            MinimumSize = new System.Drawing.Size(430, 230)
+            MinimumSize = new System.Drawing.Size(490, 300)
         };
 
         var layout = new TableLayoutPanel
@@ -79,11 +79,11 @@ internal sealed class CompanionContext : ApplicationContext
             RowCount = 5,
             Padding = new Padding(16)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 14));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 18));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 15));
 
         var title = new Label
         {
