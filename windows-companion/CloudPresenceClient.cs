@@ -264,7 +264,7 @@ public sealed class CloudPresenceClient : IDisposable
         throw new HttpRequestException("Could not connect to a validated ULTRON host address.", lastError);
     }
 
-    internal static bool IsPublicGlobalAddress(IPAddress address)
+    public static bool IsPublicGlobalAddress(IPAddress address)
     {
         ArgumentNullException.ThrowIfNull(address);
         if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
