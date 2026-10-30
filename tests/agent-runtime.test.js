@@ -2615,6 +2615,50 @@ test("agent blocks a model-generated destructive Hermes background run before co
 });
 
 
+
+
+test("agent blocks a model-generated Hermes run when the user explicitly said not to start it", async () => {
+  let hermesCalls = 0;
+  let providerCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "openrouter-test-key",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    HERMES_AGENT_ENABLED: "true",
+    HERMES_AGENT_BASE_URL: "https://hermes.example.com/v1",
+    HERMES_AGENT_API_KEY: "private-hermes-api-key",
+    HERMES_AGENT_MODEL: "hermes-agent"
+  };
+  await withServer(env, async (url) => {
+    if (url.startsWith("https://hermes.example.com/")) {
+      hermesCalls++;
+      throw new Error("A negated Hermes run request must never contact Hermes.");
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls++;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "negated-hermes-run", type: "function",
+        function: { name: "hermes_agent_start_run", arguments: JSON.stringify({
+          task: "Research the public Hermes API documentation and return a summary."
+        }) }
+      }] } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "No Hermes run was started." } }] }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Do not start a background Hermes Agent run; just explain the API." })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const call = body.toolResults.find(item => item.name === "hermes_agent_start_run");
+    assert.equal(call.ok, false);
+    assert.equal(call.result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(hermesCalls, 0);
+    assert.equal(providerCalls, 2);
+  });
+});
+
 test("agent can inspect actual Hermes skills and enabled toolsets through read-only catalogs", async () => {
   let providerCalls = 0;
   const upstreamCalls = [];
