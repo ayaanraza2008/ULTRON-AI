@@ -672,7 +672,9 @@ const SAFE_PREPARATION_TOOLS = new Set([
 
 function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   const normalizedRequest = typeof requestText === "string" ? requestText.toLowerCase() : "";
-  const explicitHermesRunIntent = /\bhermes\b/.test(normalizedRequest) &&
+  const negatedHermesRunIntent = /\b(?:do not|don't|never|avoid)\s+(?:start|launch|run|delegate|execute|submit)\b/.test(normalizedRequest);
+  const explicitHermesRunIntent = !negatedHermesRunIntent &&
+    /\bhermes\b/.test(normalizedRequest) &&
     /\b(start|launch|run|delegate|execute|background|submit)\b/.test(normalizedRequest);
   const explicitHermesStopIntent = /\b(stop|cancel|interrupt)\b/.test(normalizedRequest) &&
     !/\b(?:do not|don't|never)\s+(?:stop|cancel|interrupt)\b/.test(normalizedRequest);
@@ -707,10 +709,12 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
     const generation = String(args?.executionGeneration ?? "");
     const mentionsIds = runId && requestId && normalizedRequest.includes(runId) && normalizedRequest.includes(requestId);
     const mentionsGeneration = generation && new RegExp("\\b(?:execution[-_ ]generation|generation)\\s*[:=#]?\\s*" + generation + "\\b").test(normalizedRequest);
+    const negatedOnce = /\b(?:do not|don't|never|avoid)\s+(?:approve|allow|once)\b/.test(normalizedRequest);
+    const negatedDeny = /\b(?:do not|don't|never|avoid)\s+(?:deny|reject|decline|block)\b/.test(normalizedRequest);
     const explicitChoice = args?.choice === "once"
-      ? /\b(approve|allow|once)\b/.test(normalizedRequest)
+      ? /\b(approve|allow|once)\b/.test(normalizedRequest) && !negatedOnce
       : args?.choice === "deny"
-        ? /\b(deny|reject|decline|block)\b/.test(normalizedRequest)
+        ? /\b(deny|reject|decline|block)\b/.test(normalizedRequest) && !negatedDeny
         : false;
     if (!mentionsIds || !mentionsGeneration || !explicitChoice) {
       return {
