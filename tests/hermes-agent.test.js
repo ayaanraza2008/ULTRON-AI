@@ -187,6 +187,18 @@ test("Hermes rejects private, metadata, and loopback HTTPS endpoints", () => {
   }
 });
 
+test("Hermes rejects public IPv4 and IPv6 literals because remote endpoints must use a hostname", () => {
+  for (const url of [
+    "https://1.1.1.1/v1",
+    "https://[2606:4700:4700::1111]/v1"
+  ]) {
+    const readiness = getHermesAgentReadiness(configuredEnv({ HERMES_AGENT_BASE_URL: url }));
+    assert.equal(readiness.baseConfigured, false, url);
+    assert.equal(readiness.configured, false, url);
+    assert.equal(resolveHermesAgentProvider(configuredEnv({ HERMES_AGENT_BASE_URL: url }), ownerId), null, url);
+  }
+});
+
 
 test("Hermes delegates through the native Runs API and polls a completed execution", async () => {
   const requests = [];
