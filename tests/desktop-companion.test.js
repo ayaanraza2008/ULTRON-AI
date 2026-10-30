@@ -146,7 +146,8 @@ test("integration catalogue reports the companion as configured-but-unverified, 
   assert.equal(configured.configured, true);
   assert.equal(configured.state, "configured_unverified");
   assert.match(configured.note, /status/i);
-  assert.match(configured.note, /cannot run commands/i);
+  assert.match(configured.note, /six fixed app\/folder requests/i);
+  assert.match(configured.note, /fresh local Yes\/No approval/i);
 
   const missing = buildIntegrationCatalog({}).find(item => item.id === "windows-desktop-companion");
   assert.equal(missing.configured, false);
