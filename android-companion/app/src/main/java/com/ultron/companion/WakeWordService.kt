@@ -9,7 +9,6 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -154,7 +153,7 @@ class WakeWordService : Service() {
         val openIntent = PendingIntent.getActivity(
             this,
             OPEN_REQUEST_CODE,
-            Intent(Intent.ACTION_VIEW, Uri.parse(ASSISTANT_URL)),
+            Intent(this, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_ASSISTANT),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = Notification.Builder(this, CHANNEL_ID)
@@ -181,7 +180,7 @@ class WakeWordService : Service() {
         val openIntent = PendingIntent.getActivity(
             this,
             OPEN_REQUEST_CODE,
-            Intent(Intent.ACTION_VIEW, Uri.parse(ASSISTANT_URL)),
+            Intent(this, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_ASSISTANT),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return Notification.Builder(this, CHANNEL_ID)
@@ -239,6 +238,5 @@ class WakeWordService : Service() {
         private const val STOP_REQUEST_CODE = 3103
         private const val OPEN_REQUEST_CODE = 3104
         private const val WAKE_COOLDOWN_MS = 8_000L
-        private const val ASSISTANT_URL = "https://ultron-ai-zvd7.onrender.com/"
     }
 }
