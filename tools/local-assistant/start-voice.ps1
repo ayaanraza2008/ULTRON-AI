@@ -6,7 +6,8 @@ param(
     [int]$Timeout = 10,
     [switch]$Once,
     [switch]$NoSpeak,
-    [string]$Model
+    [string]$Model,
+    [string]$Root = "."
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,7 +21,8 @@ if (-not (Test-Path -LiteralPath $Launcher -PathType Leaf)) {
 $Arguments = @(
     "voice",
     "--locale", $Locale,
-    "--timeout", [string]$Timeout
+    "--timeout", [string]$Timeout,
+    "--root", $Root
 )
 if ($Once) { $Arguments += "--once" }
 if ($NoSpeak) { $Arguments += "--no-speak" }
