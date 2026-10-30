@@ -60,8 +60,8 @@
     const wanted = String(language || "en-IN").toLowerCase();
     const base = wanted.split("-")[0];
     const preferredLocale = base === "hi" ? "hi-in" : "en-in";
-    const maleVoiceName = /\\b(prabhat|ravi|madhur|hemant|david|mark|guy|daniel|alex|james|thomas|aaron|ryan|matthew|male)\\b/i;
-    const femaleVoiceName = /\\b(zira|samantha|victoria|karen|hazel|heera|lekha|swara|kavya|pallavi|priya|neerja|reena|female|woman)\\b/i;
+    const maleVoiceName = /\b(prabhat|ravi|madhur|hemant|david|mark|guy|daniel|alex|james|thomas|aaron|ryan|matthew|male)\b/i;
+    const femaleVoiceName = /\b(zira|samantha|victoria|karen|hazel|heera|lekha|swara|kavya|pallavi|priya|neerja|reena|female|woman)\b/i;
     const naturalVoiceName = /natural|neural|online|enhanced|premium/i;
     const scoreVoice = voice => {
       const lang = String(voice.lang || "").toLowerCase().replaceAll("_", "-");
