@@ -19,6 +19,8 @@ from ultron_local_assistant.companion import (
     _cloud_json_request,
     pair_companion,
     send_companion_heartbeat,
+    poll_companion_action,
+    complete_companion_action,
     _load_device_credentials,
     _resolve_public_addresses,
     _validated_cloud_server_url,
@@ -296,6 +298,82 @@ class CompanionServerTests(unittest.TestCase):
                     request_impl=lambda *_args, **_kwargs: {"status": "revoked"}
                 )
 
+
+    def test_poll_companion_action_accepts_only_a_fixed_locally_approved_action(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            seen = {}
+            action_id = "88888888-8888-4888-8888-888888888888"
+            def request(server_url, route, payload, bearer_token=None):
+                seen.update(server_url=server_url, route=route, payload=payload, bearer_token=bearer_token)
+                return {"action": {
+                    "id": action_id, "name": "launch_application", "target": "notepad",
+                    "expiresAt": "2026-10-31T12:02:00+00:00", "requiresLocalApproval": True
+                }}
+            action = poll_companion_action(data_dir=Path(root) / "companion", request_impl=request)
+            self.assertEqual(action["id"], action_id)
+            self.assertEqual(action["name"], "launch_application")
+            self.assertEqual(action["target"], "notepad")
+            self.assertEqual(seen["route"], "/api/desktop-companion/actions/next")
+            self.assertEqual(seen["payload"], {"deviceId": action_id if False else _load_device_credentials(Path(root) / "companion")["deviceId"]})
+            self.assertEqual(seen["bearer_token"], "T" * 43)
+
+    def test_poll_companion_action_rejects_anything_outside_the_allowlist(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            malicious = {
+                "id": "88888888-8888-4888-8888-888888888888",
+                "name": "run_shell", "target": "Remove-Item",
+                "expiresAt": "2026-10-31T12:02:00+00:00", "requiresLocalApproval": True
+            }
+            with self.assertRaisesRegex(ValueError, "outside the local fixed-action allowlist"):
+                poll_companion_action(
+                    data_dir=Path(root) / "companion",
+                    request_impl=lambda *_args, **_kwargs: {"action": malicious}
+                )
+
+    def test_complete_companion_action_records_only_fixed_outcome_codes(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            seen = {}
+            action_id = "88888888-8888-4888-8888-888888888888"
+            def request(server_url, route, payload, bearer_token=None):
+                seen.update(server_url=server_url, route=route, payload=payload, bearer_token=bearer_token)
+                return {"accepted": True, "actionId": action_id, "status": "completed"}
+            result = complete_companion_action(
+                action_id, "completed", "ACTION_COMPLETED",
+                data_dir=Path(root) / "companion", request_impl=request
+            )
+            self.assertEqual(result, {"accepted": True, "actionId": action_id, "status": "completed"})
+            self.assertEqual(seen["route"], "/api/desktop-companion/actions/" + action_id + "/complete")
+            self.assertEqual(seen["payload"]["status"], "completed")
+            self.assertEqual(seen["payload"]["resultCode"], "ACTION_COMPLETED")
+            with self.assertRaisesRegex(ValueError, "outcome is not supported"):
+                complete_companion_action(
+                    action_id, "completed", "USER_DENIED",
+                    data_dir=Path(root) / "companion", request_impl=request
+                )
 
     def test_cloud_request_pins_the_connection_to_a_validated_public_address(self):
         requests = []
