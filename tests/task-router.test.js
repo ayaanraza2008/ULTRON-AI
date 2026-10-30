@@ -40,7 +40,7 @@ test("routes Google Workspace requests to its bounded read-only tool set", () =>
 });
 
 test("routes OpenSEO-only requests to its owner-scoped tool", () => {
-  const route = classifyTaskRoute("Check OpenSEO project context");
+  const route = classifyTaskRoute("OpenSEO");
   assert.equal(route.tier, "medium");
   assert.deepEqual(route.categories, ["open_seo"]);
   assert.equal(route.filtered, true);
