@@ -502,7 +502,8 @@ const SAFE_PREPARATION_TOOLS = new Set([
 export function parseOpenSeoSpendApproval(value) {
   const text = typeof value === "string" ? value.slice(0, 6000) : "";
   const match = text.match(/^\s*i approve spending up to ([1-9]\d{0,3}) open\s*seo credits? for this lookup(?:[.!?](?:\s|$)|\s|$)/i);
-  const ceiling = match ? Number(match[1]) : null;
+  if (!match || /\b(?:do not|don't|never|not yet|hold off|wait|cancel)\b/i.test(text.slice(match[0].length))) return null;
+  const ceiling = Number(match[1]);
   return Number.isSafeInteger(ceiling) && ceiling >= 1 && ceiling <= 5000 ? ceiling : null;
 }
 
