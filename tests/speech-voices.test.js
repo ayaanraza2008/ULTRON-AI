@@ -51,6 +51,12 @@ test("voice chooser prefers a natural male-leaning voice for the requested India
   assert.equal(speechVoices.chooseSpeechVoice([female, generic, naturalMale], "hi-IN"), naturalMale);
 });
 
+test("voice chooser applies named male preference when locale and other scores are equal", () => {
+  const female = { name: "Microsoft Zira", lang: "en-IN", localService: true };
+  const male = { name: "Microsoft David", lang: "en-IN", localService: true };
+  assert.equal(speechVoices.chooseSpeechVoice([female, male], "en-IN"), male);
+});
+
 test("voice chooser selects English independently from Hindi and handles an empty list", () => {
   const hindi = { name: "Ravi", lang: "hi-IN" };
   const english = { name: "Microsoft David Online (Natural)", lang: "en-IN", localService: false };
