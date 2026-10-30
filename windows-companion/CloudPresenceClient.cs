@@ -455,6 +455,11 @@ public sealed class CloudPresenceClient : IDisposable
 
                 status("ULTRON is asking for approval on this PC: " + DescribeCommand(command) + ".");
                 var approved = await approve(command, cancellationToken);
+                if (command.ExpiresAt <= DateTimeOffset.UtcNow)
+                {
+                    status("ULTRON action request expired before approval completed.");
+                    continue;
+                }
                 if (!approved)
                 {
                     await CompleteCommandAsync(credentials, command, "rejected", "USER_REJECTED", cancellationToken);
