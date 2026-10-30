@@ -43,7 +43,7 @@ def load_components(harness):
     result = {}
     for name, rel in COMPONENTS.items():
         path = harness / rel
-        if path.is_symlink() or not path.is_file(): raise Harness2Error(f"Missing or unsafe component: {name}")
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(harness.resolve()): raise Harness2Error(f"Missing or unsafe component: {name}")
         value = path.read_text(encoding="utf-8")
         if len(value) > MAX_TEXT: raise Harness2Error(f"Component too large: {name}")
         result[name] = value
@@ -77,6 +77,7 @@ def load_benchmark(name, custom=None):
         if not isinstance(criteria, dict): raise Harness2Error("Task criteria must be an object")
         for key in ("all_contains","any_contains","forbidden_contains"):
             if key in criteria and (not isinstance(criteria[key], list) or not all(isinstance(x,str) for x in criteria[key])): raise Harness2Error(f"Invalid {key}")
+        if "min_chars" in criteria and (not isinstance(criteria["min_chars"], int) or isinstance(criteria["min_chars"], bool) or not 0 <= criteria["min_chars"] <= MAX_TEXT): raise Harness2Error("Invalid min_chars")
     return data
 
 def judge(answer, criteria):
@@ -138,7 +139,7 @@ class Executor:
                 config.write_text(json.dumps({"$schema":"https://opencode.ai/config.json","default_agent":"harness2-readonly","subagent_depth":0,"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow","edit":"deny","write":"deny","bash":"deny","task":"deny","webfetch":"deny","websearch":"deny","lsp":"deny","skill":"deny"}}),encoding="utf-8")
                 agents = cwd / "agents"; agents.mkdir()
                 (agents / "harness2-readonly.md").write_text("---\ndescription: Read-only Harness2 evaluator\nmode: primary\npermission:\n  \"*\": deny\n  read: allow\n  glob: allow\n  grep: allow\n  list: allow\n---\nDo not execute tools or write files.\n",encoding="utf-8")
-                env = os.environ.copy(); env.update({"OPENCODE_CONFIG":str(config),"OPENCODE_CONFIG_DIR":str(cwd),"OPENCODE_DISABLE_DEFAULT_PLUGINS":"1","OPENCODE_DISABLE_MODELS_FETCH":"1","OPENCODE_DISABLE_LSP_DOWNLOAD":"1"})
+                env = os.environ.copy(); env.update({"OPENCODE_CONFIG":str(config),"OPENCODE_CONFIG_DIR":str(cwd),"OPENCODE_DISABLE_DEFAULT_PLUGINS":"1","OPENCODE_DISABLE_MODELS_FETCH":"1","OPENCODE_DISABLE_LSP_DOWNLOAD":"1","OPENCODE_DISABLE_EXTERNAL_SKILLS":"1","OPENCODE_DISABLE_CLAUDE_CODE":"1","OPENCODE_DISABLE_CLAUDE_CODE_PROMPT":"1","OPENCODE_DISABLE_CLAUDE_CODE_SKILLS":"1"})
                 cmd = ["opencode","--pure","run","--agent","harness2-readonly","--format","json","--dir",str(cwd)]
                 if self.model: cmd += ["--model",self.model]
                 cmd.append(prompt[:MAX_TEXT])
@@ -263,8 +264,9 @@ def main(argv=None):
         elif a.command=="run":
             if not (1<=a.iterations<=50 and 1<=a.parallelism<=8 and 10<=a.timeout<=1800): p.error("iterations 1-50, parallelism 1-8, timeout 10-1800 required")
             workspace=Path(a.workspace).expanduser().resolve(); config=read_json(workspace/".harness2"/"config.json"); benchmark=load_benchmark(a.benchmark,a.benchmark_file)
+            harness_source=workspace/".harness2"/"harness"; load_components(harness_source)
             run_id=dt.datetime.now().strftime("%Y%m%d-%H%M%S")+"-"+uuid.uuid4().hex[:8]; root=run_path(workspace,run_id); root.mkdir(parents=True)
-            shutil.copytree(workspace/config["harness_path"],root/"baseline-harness"); atomic_json(root/"benchmark.json",benchmark)
+            shutil.copytree(harness_source,root/"baseline-harness"); atomic_json(root/"benchmark.json",benchmark)
             state={"run_id":run_id,"status":"running","benchmark":a.benchmark,"executor":a.executor,"model":a.model,"mode":a.mode,"iterations":a.iterations,"parallelism":a.parallelism,"next_round":0,"candidate_ids":[]}
             atomic_json(root/"run.json",state); print("Run ID:",run_id); execute(root,state,a.timeout); print("Report:",root/"report.md")
         else:
