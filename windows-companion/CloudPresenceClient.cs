@@ -645,5 +645,7 @@ public sealed class CloudPresenceClient : IDisposable
         if (_ownsHttp) _http.Dispose();
     }
 
+    private sealed class PermissionException(string message) : Exception(message);
+
     private sealed record StoredCredentials(string ServerOrigin, string DeviceId, string DeviceToken);
 }
