@@ -647,7 +647,7 @@ public sealed class CloudPresenceClient : IDisposable
             : "open the " + names[command.Target];
     }
 
-    private sealed class PermissionException(string message) : Exception(message);
+    private sealed class PermissionException(string message) : Exception(message) { }
 
     private StoredCredentials? LoadCredentials()
     {
