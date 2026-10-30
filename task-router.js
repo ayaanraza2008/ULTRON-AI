@@ -8,6 +8,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "create_talking_avatar"
   ],
   research: ["research_web", "check_openviking", "openviking_find_context", "openviking_read_context"],
+  open_seo: ["openseo"],
   browser: ["browser_use", "chrome_devtools", "research_web", "obscura_inspect_public_page", "obscura_capture_public_page"],
   reverse_engineering: [
     "rea_analyze_application", "rea_investigate_application_feature", "rea_inspect_native_code",
@@ -66,6 +67,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["productivity", /\b(?:chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
   ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
   ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|we (?:decided|agreed|chose)|decision noted|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
+  ["open_seo", /\b(?:open\s*seo|openseo)\b/i],
   ["research", /\b(?:research|look up|search the web|search online|latest (?:news|information|release)|find sources|fact check|current information)\b/i],
   ["integrations", /\b(?:integration status|check integrations|what integrations|connected services|capability status|provider status|list capabilities|which tools are available|tools available for|connector readiness|repository readiness)\b/i],
   ["planning", /\b(?:plan (?:my|the|a|an)|create a plan|multi[- ]step task|schedule (?:a|an|the) (?:task|employee|routine)|background task|enqueue task|queue (?:a |the |this )?(?:background )?(?:research |review |report |task|employee)|queue .*\b(?:background|research|review|report|task)\b|\b(?:background|queue|enqueue)\b.{0,80}\b(?:task|report|research|review|employee)\b|run this in the background)\b/i],
