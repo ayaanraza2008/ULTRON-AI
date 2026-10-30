@@ -105,7 +105,15 @@ test("sandbox starts only an isolated container and cleans up after successful e
   assert.match(createArgs, /--memory=256m/);
   assert.match(createArgs, /--cpus=0\.5/);
   assert.match(createArgs, /--pids-limit=48/);
+  assert.match(createArgs, /--network=none/);
+  assert.match(createArgs, /--read-only/);
+  assert.match(createArgs, /--cap-drop=ALL/);
+  assert.match(createArgs, /--security-opt=no-new-privileges:true/);
+  assert.match(createArgs, /--user=65534:65534/);
+  assert.match(createArgs, /--tmpfs \/tmp:rw,noexec,nosuid,nodev,size=64m/);
   assert.match(createArgs, /@sha256:/);
+  assert.doesNotMatch(createArgs, /--privileged|--device(?:=|\s)|(?:^|\s)-p(?:\s|$)|--publish(?:=|\s)|--network=host/);
+  assert.equal((createArgs.match(/type=bind/g) || []).length, 1, "only the read-only source directory may be mounted");
   assert.ok(calls.some(item => item.args[0] === "kill"), "container cleanup should kill the container");
   assert.ok(calls.some(item => item.args[0] === "rm"), "container cleanup should remove the container");
   assert.ok(calls.every(item => item.options.timeout <= 11000), "Docker calls must have bounded timeouts");
@@ -125,6 +133,31 @@ test("sandbox timeout is reported and still cleans up the container", async () =
   });
   assert.equal(result.state, "timed_out");
   assert.equal(result.code, "SANDBOX_TIMEOUT");
+  assert.ok(calls.some(args => args[0] === "kill"));
+  assert.ok(calls.some(args => args[0] === "rm"));
+});
+
+
+test("sandbox reports a non-zero program exit as failure and still removes the container", async () => {
+  const calls = [];
+  const execFileImpl = async (_bin, args) => {
+    calls.push(args);
+    if (args[0] === "image") return { stdout: "", stderr: "" };
+    if (args[0] === "create") return { stdout: "abcdef0123456789abcdef0123456789", stderr: "" };
+    if (args[0] === "start") {
+      throw Object.assign(new Error("container exited with code 7"), {
+        code: 7, stdout: "", stderr: "intentional failure"
+      });
+    }
+    return { stdout: "", stderr: "" };
+  };
+  const result = await runCodeInSandbox({
+    env: configured, userId: ownerId, language: "node", source: "process.exit(7)", execFileImpl
+  });
+  assert.equal(result.state, "failed");
+  assert.equal(result.success, false);
+  assert.equal(result.exitCode, 7);
+  assert.match(result.stderr, /intentional failure/);
   assert.ok(calls.some(args => args[0] === "kill"));
   assert.ok(calls.some(args => args[0] === "rm"));
 });
