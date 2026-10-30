@@ -132,8 +132,8 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
   // as "research" describe Hermes' task payload; they should not widen the ULTRON
   // tool route with separate research/planning executors.
   const explicitHermesDelegation = categories.includes("hermes") && (
-    /\\b(?:start|launch|submit|delegate)\\b[\\s\\S]{0,100}\\bhermes(?:\\s+agent)?\\b/i.test(text)
-    || /\\bhermes(?:\\s+agent)?\\b[\\s\\S]{0,100}\\b(?:background|long[- ]running)\\s+(?:run|task|job)\\b/i.test(text)
+    /\b(?:start|launch|submit|delegate)\b[\s\S]{0,100}\bhermes(?:\s+agent)?\b/i.test(text)
+    || /\bhermes(?:\s+agent)?\b[\s\S]{0,100}\b(?:background|long[- ]running)\s+(?:run|task|job)\b/i.test(text)
   );
   if (explicitHermesDelegation) categories.splice(0, categories.length, "hermes");
 
