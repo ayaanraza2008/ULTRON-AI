@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import sys
 import tempfile
@@ -14,6 +15,11 @@ from ultron_local_assistant.companion import (
     STATUS_PATH,
     create_companion_server,
     generate_companion_token,
+    pair_companion,
+    send_companion_heartbeat,
+    _load_device_credentials,
+    _resolve_public_addresses,
+    _validated_cloud_server_url,
 )
 
 TOKEN = "test-" + ("x" * 48)
@@ -164,6 +170,129 @@ class CompanionServerTests(unittest.TestCase):
             client.close()
             for _ in acquired:
                 server.request_slots.release()
+
+
+    def test_cloud_server_url_must_be_a_public_https_origin(self):
+        self.assertEqual(_validated_cloud_server_url("https://ultron.example.com/"), "https://ultron.example.com")
+        for value in (
+            "http://ultron.example.com",
+            "https://localhost",
+            "https://pc.local",
+            "https://ultron.example.com:8443",
+            "https://user:password@ultron.example.com",
+            "https://ultron.example.com/api",
+            "https://ultron.example.com?next=other",
+            "https://192.0.2.10",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    _validated_cloud_server_url(value)
+
+    def test_cloud_dns_rejects_mixed_public_and_private_answers(self):
+        def resolver(_host, _port, type=None):
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.10", 443)),
+            ]
+        with self.assertRaisesRegex(ValueError, "private or reserved"):
+            _resolve_public_addresses("ultron.example.com", resolver=resolver)
+
+    def test_cloud_dns_returns_only_validated_public_addresses(self):
+        def resolver(_host, _port, type=None):
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+                (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:4860:4860::8888", 443, 0, 0)),
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+            ]
+        self.assertEqual(
+            _resolve_public_addresses("ultron.example.com", resolver=resolver),
+            ["8.8.8.8", "2001:4860:4860::8888"]
+        )
+
+    def test_pairing_saves_a_valid_token_privately_without_printing_it(self):
+        with tempfile.TemporaryDirectory() as root:
+            device_token = "T" * 43
+            seen = {}
+            def request(server_url, route, payload, bearer_token=None):
+                seen.update(server_url=server_url, route=route, payload=payload, bearer_token=bearer_token)
+                return {
+                    "deviceId": payload["deviceId"],
+                    "deviceName": "Ayaan-PC",
+                    "platform": "windows",
+                    "deviceToken": device_token
+                }
+            result = pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion", request_impl=request
+            )
+            self.assertTrue(result["paired"])
+            self.assertEqual(result["deviceId"], seen["payload"]["deviceId"])
+            self.assertEqual(seen["server_url"], "https://ultron.example.com")
+            self.assertEqual(seen["route"], "/api/desktop-companion/pair")
+            self.assertEqual(seen["payload"]["pairingCode"], "P" * 32)
+            self.assertIsNone(seen["bearer_token"])
+            saved = _load_device_credentials(Path(root) / "companion")
+            self.assertEqual(saved["deviceToken"], device_token)
+            self.assertEqual(saved["serverUrl"], "https://ultron.example.com")
+            self.assertEqual(Path(result["credentialFile"]).name, "device-credentials.json")
+            self.assertNotIn(device_token, json.dumps(result))
+
+    def test_pairing_rejects_a_bad_server_token_before_persisting_credentials(self):
+        with tempfile.TemporaryDirectory() as root:
+            def request(*_args, **_kwargs):
+                return {"deviceId": "22222222-2222-4222-8222-222222222222", "platform": "windows", "deviceToken": "short"}
+            with self.assertRaisesRegex(ValueError, "invalid device token"):
+                pair_companion(
+                    "https://ultron.example.com", "P" * 32,
+                    data_dir=Path(root) / "companion", request_impl=request
+                )
+            self.assertFalse((Path(root) / "companion" / "device-credentials.json").exists())
+
+    def test_pairing_rejects_invalid_one_time_code_before_any_network(self):
+        calls = []
+        with self.assertRaisesRegex(ValueError, "32-character"):
+            pair_companion(
+                "https://ultron.example.com", "not-a-code",
+                request_impl=lambda *args, **kwargs: calls.append((args, kwargs))
+            )
+        self.assertEqual(calls, [])
+
+    def test_heartbeat_uses_the_paired_token_and_returns_only_status(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            seen = {}
+            def request(server_url, route, payload, bearer_token=None):
+                seen.update(server_url=server_url, route=route, payload=payload, bearer_token=bearer_token)
+                return {"status": "online"}
+            result = send_companion_heartbeat(data_dir=Path(root) / "companion", request_impl=request)
+            self.assertEqual(result["status"], "online")
+            self.assertEqual(seen["route"], "/api/desktop-companion/heartbeat")
+            self.assertEqual(seen["payload"]["deviceId"], result["deviceId"])
+            self.assertEqual(seen["bearer_token"], "T" * 43)
+            self.assertNotIn("deviceToken", json.dumps(result))
+
+    def test_heartbeat_treats_revocation_as_a_failed_connection(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            with self.assertRaisesRegex(RuntimeError, "did not confirm"):
+                send_companion_heartbeat(
+                    data_dir=Path(root) / "companion",
+                    request_impl=lambda *_args, **_kwargs: {"status": "revoked"}
+                )
 
     def test_generated_token_has_sufficient_entropy_length(self):
         self.assertGreaterEqual(len(generate_companion_token()), 43)
