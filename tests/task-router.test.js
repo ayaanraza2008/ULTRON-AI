@@ -47,6 +47,14 @@ test("routes OpenSEO-only requests to its owner-scoped tool", () => {
   assert.deepEqual(route.toolNames, ["openseo"]);
 });
 
+test("routes OpenSEO-only requests to its owner-scoped tool", () => {
+  const route = classifyTaskRoute("Research OpenSEO keywords for running shoes");
+  assert.equal(route.tier, "medium");
+  assert.deepEqual(route.categories, ["open_seo", "research"]);
+  assert.equal(route.filtered, false);
+  assert.equal(route.toolNames, null);
+});
+
 test("retains the full tool list for compound or uncertain actions", () => {
   const route = classifyTaskRoute("Research the topic and then create a YouTube production plan");
   assert.equal(route.tier, "complex");
