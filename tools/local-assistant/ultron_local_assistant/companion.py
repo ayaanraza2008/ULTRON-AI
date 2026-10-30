@@ -388,7 +388,8 @@ def _cloud_json_request(server_url: str, route: str, payload: dict, bearer_token
             return data
         except (RuntimeError, ValueError):
             raise
-        except (OSError, ssl.SSLError, http.client.HTTPException, TimeoutError) as exc:
+        except (OSError, ssl.SSLError, http.client.HTTPException, TimeoutError):
+            continue
         finally:
             if connection is not None:
                 try:
