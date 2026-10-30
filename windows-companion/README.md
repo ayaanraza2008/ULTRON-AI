@@ -23,6 +23,27 @@ The GitHub Actions workflow builds this project on Windows and uploads a downloa
 
 Windows must have an installed compatible English speech-recognition engine and microphone permission. If no compatible recognizer is installed, the listener stays off and reports the problem. Audio is not sent to ULTRON by this app.
 
+### Choose the ULTRON web destination
+
+The launcher keeps its existing default hosted destination. To open a different ULTRON HTTPS deployment, set `ULTRON_ASSISTANT_URL` before starting the companion:
+
+```powershell
+$env:ULTRON_ASSISTANT_URL = "https://your-ultron-host.example/"
+Start-Process ".\\artifacts\\ultron-windows-companion\\ULTRON.Companion.exe"
+```
+
+To save the destination for future Windows sign-ins, set it once in the current user's environment and then sign out/in (or restart the companion):
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "ULTRON_ASSISTANT_URL",
+  "https://your-ultron-host.example/",
+  "User"
+)
+```
+
+Only absolute HTTPS URLs with a DNS hostname and the default HTTPS port are accepted. URLs containing credentials, query strings, fragments, localhost or local-network suffixes are rejected; an invalid override falls back to the built-in destination and is reported in the app status.
+
 ## Boundaries
 
 - This is a wake-word launcher, not a completed Windows PC-control agent or a full live voice conversation client.
