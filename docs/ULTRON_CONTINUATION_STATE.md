@@ -2,7 +2,7 @@
 
 **Checkpoint date:** 2026-10-30  
 **Working candidate:** `integration/ultron-cross-sector-current-main-20261029`  
-**Latest checkpoint head:** `ea250aab5f6f05c48f10574bd36d46d64f8dee15`  
+**Latest checkpoint head:** `4ef84c034868f8d1fa24a1b52cd82e95fd450b1f`  
 **Pull request:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **Default branch:** `main`  
 **Operating rule:** resume from this remote Git state; preserve all existing changes; do not deploy, modify production settings, apply production migrations, spend paid quota, or touch PHANTOM/NOX.
@@ -69,13 +69,18 @@ The matrix deliberately does not treat source presence, mocked tests or a green 
 
 ## PR #405 review completed
 
-Open PR [#405 — safe local Windows desktop shortcuts](https://github.com/ayaanraza2008/ULTRON-AI/pull/405) was inspected. It adds fixed Notepad/Explorer/Calculator launches and Desktop/Documents/Downloads folder shortcuts to the local Python CLI only. Each action requires an interactive LAUNCH/OPEN confirmation; targets are allowlisted, subprocess uses `shell=False`, Windows-only gating is present, and a bounded local JSONL audit is written. There is no HTTP or agent command endpoint. Tests cover the allowlist, denied arguments, shell=False, cancellation, symlink rejection, audit integrity, errors and parser options. [PR #405 run 41092121016](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41092121016) passed; Windows tests ran 10 companion tests and 14 desktop-shortcut tests. Popen is mocked, so no actual application was launched. PR #405 is open and based on PR #401, not merged into PR #400; keep integration order explicit.
+Open PR [#405 — safe local Windows desktop shortcuts](https://github.com/ayaanraza2008/ULTRON-AI/pull/405) adds fixed Notepad/Explorer/Calculator launches and Desktop/Documents/Downloads folder shortcuts to the local Python CLI only. Targets are allowlisted, subprocess uses `shell=False`, Windows-only gating is present, and a bounded local JSONL audit is written. A follow-up security fix requires `stdin.isatty()` for desktop approvals, rejects piped/non-interactive confirmation with exit code 2, and retains ordinary cancellation behavior for a user decline. Tests cover both blocked piped input and the interactive approval path. Exact head `94651272cc16f35c9c47ac10a42838529eae343a` passed all four jobs in [PR #405 run 41098732849](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41098732849): 823 Node tests (822 passed, 0 failed, 1 skipped), 47 local-assistant Python tests, 10 Windows companion tests and 18 Windows desktop-shortcut tests; both audits reported 0 vulnerabilities. Popen is mocked, so no actual application was launched. PR #405 is open and based on PR #401, not merged into PR #400; keep integration order explicit.
+
+
+## PR #406 review completed
+
+Open PR [#406 — detect current Hermes API capability schema](https://github.com/ayaanraza2008/ULTRON-AI/pull/406) is based on the PR #400 integration branch. Exact head `4e837f9bce5487539db75375c0f9e2672a528ceb` passed all four jobs in [run 41098869935](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41098869935): 837 Node tests (836 passed, 0 failed, 1 skipped) and both dependency audits reported 0 vulnerabilities. The adapter now parses the documented `features` object for Chat Completions, Responses, runs, run-event SSE and stop flags; supports legacy flat flags; and fails closed for vision unless `HERMES_AGENT_SUPPORTS_VISION=true`. Tests mock endpoint responses; there is no live Hermes API request or task execution. The feature object matches the current official [Hermes API Server capability docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server). Keep this PR open for review; do not merge automatically.
 
 ## Immediate next action when resuming
 
 1. Read this checkpoint and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`.
-2. Inspect PR #400's current head `ea250aab5f6f05c48f10574bd36d46d64f8dee15`; fetch its workflow runs and inspect all job conclusions/log summaries. The last completed exact-head CI is for `6c0913c` (run 41097677959 plus Windows Companion run 41097677840); do not silently reuse it as verification of the newer matrix-document commit.
-3. Review any new PR #400 CI failure before additional feature work; otherwise continue with the next independent high-priority security/regression task.
+2. Inspect PR #400's current head `4ef84c034868f8d1fa24a1b52cd82e95fd450b1f`; fetch its workflow runs and inspect all job conclusions/log summaries. The last completed exact-head PR #400 CI is for `5ea38bfd` (run 41098108091 plus Windows Companion run 41098110141); the matrix was refreshed afterwards and must receive its own CI result.
+3. Confirm whether the updated PR #405 head and PR #406 head are still current; their exact heads `94651272` and `4e837f9b` passed runs 41098732849 and 41098869935 respectively. Review new failures before further feature work.
 4. Keep PR #405 local shortcuts separate from a remote Windows command channel. The full PC-control acceptance row remains IN PROGRESS; no device actions were verified on physical hardware.
 5. Continue only independently safe source/test/documentation work. External actions requiring credentials, accounts, physical devices, owner settings or paid resources remain explicitly blocked until available and authorized.
 
