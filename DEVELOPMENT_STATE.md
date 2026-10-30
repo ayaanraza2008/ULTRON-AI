@@ -210,3 +210,10 @@ The CI workflow's passing production-revision result therefore confirms the `ult
 - Security Advisor continues to report one warning: leaked-password protection is disabled. This is an owner-controlled Auth dashboard setting; it was not changed.
 - The three new study-pack, notes and reminders migrations in this PR are not applied; the live migration ledger remains at 15 versions.
 - Performance Advisor reports three currently unused indexes. No indexes were removed because low/zero usage in the present workload is not sufficient evidence that they are unnecessary.
+
+
+## Local assistant timeout regression follow-up — 2026-10-30
+
+- Added a direct regression test proving an approved child process is terminated when it exceeds its configured timeout.
+- Full CI [run 41072822198](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41072822198) passed on candidate code head `509319f71f6628ce0045238eb91e24d19c4c0705`: local assistant Python suite 19/19 passed; Node suite 811 tests, 810 passed, 0 failed, 1 skipped; 165 JavaScript files syntax-checked; runtime and production dependency audits each reported 0 vulnerabilities; Windows installer parsing and World Intelligence build/bridge passed.
+- The single skipped test remains the opt-in live two-account Supabase isolation test. This CI run is source-level verification and does not prove live model inference, auth isolation, worker E2E, physical-device control or deployment.
