@@ -36,6 +36,7 @@ test("all required UI assets are served as same-origin static files", async (t) 
     ["/manifest.webmanifest", /manifest\+json|json/],
     ["/sw.js", /javascript/],
     ["/icons/ultron.svg", /image\/svg\+xml/],
+    ["/icons/ultron-180.png", /image\/png/],
     ["/icons/ultron-192.png", /image\/png/],
     ["/icons/ultron-512.png", /image\/png/]
   ];
