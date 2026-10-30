@@ -50,6 +50,7 @@ internal static class CloudPresenceClientTests
         await HeartbeatUsesTheSavedBearerToken();
         RemoteActionAllowlistIsStrict();
         await RemoteActionPollingRequiresLocalApprovalAndDoesNotExecuteWhenDeclined();
+        await RemoteActionPollingExecutesOnlyAfterApprovalAndReportsTheResult();
         await RemoteActionIsReauthorizedAfterApprovalAndBeforeExecution();
         await RevokedActionIsNotExecutedAfterLocalApproval();
     }
@@ -191,11 +192,76 @@ internal static class CloudPresenceClientTests
             "A local No response must be recorded as a rejection.");
     }
 
+    private static async Task RemoteActionPollingExecutesOnlyAfterApprovalAndReportsTheResult()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1",
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+        var commandId = "99999999-9999-4999-8999-999999999999";
+        string? resultBody = null;
+        var executionCalls = 0;
+        var handler = new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/next")
+            {
+                var payload = new
+                {
+                    command = new
+                    {
+                        id = commandId,
+                        actionType = "open_known_folder",
+                        target = "documents",
+                        expiresAt = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O")
+                    }
+                };
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(payload));
+            }
+
+            if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/" + commandId + "/result")
+            {
+                resultBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                return JsonResponse(HttpStatusCode.OK, """{"recorded":true}""");
+            }
+
+            throw new InvalidOperationException("Unexpected remote-action request: " + request.RequestUri);
+        });
+        using var http = new HttpClient(handler);
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cancellation = new CancellationTokenSource();
+
+        await client.RunRemoteActionPollingLoopAsync(
+            (command, _) =>
+            {
+                Assert(command.Id == commandId, "The approval callback must receive the claimed command.");
+                Assert(CloudPresenceClient.DescribeCommand(command) == "open the Documents folder",
+                    "The approval dialog description must use a fixed friendly label.");
+                return Task.FromResult(true);
+            },
+            (command, _) =>
+            {
+                executionCalls++;
+                Assert(command.Target == "documents", "The executor must receive only the approved target.");
+                return Task.FromResult("Windows accepted the Documents folder request.");
+            },
+            message =>
+            {
+                if (message.Contains("approved and started", StringComparison.OrdinalIgnoreCase))
+                    cancellation.Cancel();
+            },
+            cancellation.Token);
+
+        Assert(executionCalls == 1, "An approved request must invoke the executor exactly once.");
+        Assert(resultBody is not null &&
+            resultBody.Contains("\\"status\\":\\"completed\\"", StringComparison.Ordinal) &&
+            resultBody.Contains("\\"resultCode\\":\\"ACTION_COMPLETED\\"", StringComparison.Ordinal),
+            "A successful local action must report its bounded completion state.");
+    }
+
     private static async Task RemoteActionIsReauthorizedAfterApprovalAndBeforeExecution()
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $"""{"ServerOrigin":"{Origin}","DeviceId":"{DeviceId}","DeviceToken":"{DeviceToken}"}""");
+            $"""{ "ServerOrigin":"{Origin}","DeviceId":"{DeviceId}","DeviceToken":"{DeviceToken}" }""");
         var commandId = "88888888-8888-4888-8888-888888888888";
         var sequence = new List<string>();
         var handler = new StubHttpHandler(async (request, cancellationToken) =>
@@ -257,7 +323,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $"""{"ServerOrigin":"{Origin}","DeviceId":"{DeviceId}","DeviceToken":"{DeviceToken}"}""");
+            $"""{ "ServerOrigin":"{Origin}","DeviceId":"{DeviceId}","DeviceToken":"{DeviceToken}" }""");
         var commandId = "99999999-9999-4999-8999-999999999999";
         var executeCalls = 0;
         var handler = new StubHttpHandler(async (request, cancellationToken) =>
