@@ -29,6 +29,22 @@ def confirm(phrase, message):
         print("\nCancelled.")
         return False
 
+def confirm_interactive(phrase, message):
+    """Require an actual terminal before accepting approval for local desktop actions."""
+    isatty = getattr(sys.stdin, "isatty", None)
+    try:
+        interactive = callable(isatty) and bool(isatty())
+    except OSError:
+        interactive = False
+    if not interactive:
+        print(
+            "This desktop action requires an interactive terminal; piped confirmation is not accepted.",
+            file=sys.stderr,
+        )
+        return False
+    return confirm(phrase, message)
+
+
 def health(args):
     report = get_system_health(args.path)
     out_json(report)
