@@ -20,6 +20,12 @@ The execution container disables networking, uses a read-only root filesystem, d
 
 Before enabling the feature on a trusted local host, preload and inspect the chosen runtime image, verify its digest and license, run the tests, then perform one explicit disposable-code smoke test while observing that the container is removed. Do not enable it on a public hosted service until Docker isolation, per-user resource quotas, image provenance and operational monitoring are reviewed. A cloud-hosted API's Docker daemon runs on the cloud host, not the user's Windows PC.
 
+## Automated real-Docker smoke
+
+The CI workflow now runs a separate `coding-sandbox-docker` job on a disposable Ubuntu runner. It pulls the official Python 3.12 Alpine amd64 image by immutable manifest digest, passes that already-cached digest to the sandbox, and executes a real Python program in Docker. The smoke checks the actual container configuration (non-root UID, read-only root filesystem, no network, dropped capabilities, no-new-privileges, one read-only source mount, and `/tmp` noexec/nosuid/nodev), then checks those properties from inside the container and verifies the container is removed afterward. The sandbox itself still never pulls an image.
+
+This CI test verifies the Linux Docker execution path on GitHub's disposable runner. It does **not** prove Docker Desktop/Engine is installed or configured on the user's Windows PC, and it does not authorize enabling the sandbox in production. The actual target host still needs its own image provenance/license review, cached digest-pinned runtime, and explicit disposable smoke test.
+
 ## Remaining limitation
 
-This is an opt-in constrained execution path, not a complete coding-agent workflow that autonomously edits the repository, runs all project tests and opens/merges pull requests. The sandbox needs target-host Docker verification before being marked live.
+This is an opt-in constrained execution path, not a complete coding-agent workflow that autonomously edits the repository, runs all project tests and opens/merges pull requests. The GitHub-hosted Docker smoke does not replace target-host verification.
