@@ -30,3 +30,8 @@
 ## DNS-pinned outbound transport (PR #293)
 
 The security branch adds a transport that resolves public hostnames, rejects any private/reserved DNS answer, pins validated addresses into the actual outbound socket lookup, blocks unvalidated redirects, and honors aborts while resolving DNS. It is not live until merged and deployed. This is application-layer defence in depth; deployment-level outbound egress controls remain recommended.
+
+
+## Paid integration spend controls
+
+- OpenSEO paid lookup authorization is enforced server-side from the current user's explicit prompt and bounded credit ceiling. Model-generated tool arguments cannot authorize spend. This is source-level evidence; live upstream billing behavior and account quota remain unverified.
