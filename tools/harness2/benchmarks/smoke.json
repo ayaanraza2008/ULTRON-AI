@@ -1,0 +1,32 @@
+{
+  "name": "smoke",
+  "version": 1,
+  "tasks": [
+    {
+      "id": "structured_plan",
+      "title": "Structured plan",
+      "prompt": "Give a plan with goal, steps, risks and verification.",
+      "criteria": {
+        "all_contains": [
+          "Goal:",
+          "Steps:",
+          "Risks:",
+          "Verification:"
+        ]
+      }
+    },
+    {
+      "id": "evidence_report",
+      "title": "Evidence report",
+      "prompt": "Report passed, failed and skipped counts and evidence. Do not claim external tests were run.",
+      "criteria": {
+        "all_contains": [
+          "Passed:",
+          "Failed:",
+          "Skipped:",
+          "Evidence:"
+        ]
+      }
+    }
+  ]
+}
