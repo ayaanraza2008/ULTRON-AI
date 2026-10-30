@@ -1,4 +1,5 @@
 import json, subprocess, sys, tempfile, unittest
+from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools" / "harness2"))
 import harness2
@@ -88,6 +89,43 @@ class Harness2Tests(unittest.TestCase):
         (candidates / "baseline").symlink_to(outside, target_is_directory=True)
         with self.assertRaises(harness2.Harness2Error):
             harness2.candidate_dir(run_root, "baseline")
+
+    def test_codex_executor_uses_readonly_ephemeral_cli(self):
+        stdout = json.dumps({"type":"item.completed","item":{"type":"agent_message","text":"hello"}})
+        completed = subprocess.CompletedProcess([], 0, stdout, "")
+        with patch.object(harness2.subprocess, "run", return_value=completed) as mocked:
+            self.assertEqual(harness2.Executor("codex", None, 30).ask("prompt"), "hello")
+        command = mocked.call_args.args[0]
+        for flag in ("exec", "--json", "--sandbox", "read-only", "--ask-for-approval",
+                     "never", "--ephemeral", "--ignore-user-config", "--ignore-rules",
+                     "--skip-git-repo-check"):
+            self.assertIn(flag, command)
+        self.assertEqual(command[-1], "-")
+        self.assertEqual(mocked.call_args.kwargs["input"], "prompt")
+        self.assertNotEqual(Path(mocked.call_args.kwargs["cwd"]).resolve(), self.root.resolve())
+
+    def test_opencode_executor_uses_temporary_deny_by_default_agent(self):
+        stdout = json.dumps({"type":"text","part":{"text":"hello"}})
+        completed = subprocess.CompletedProcess([], 0, stdout, "")
+        captured = {}
+        def fake_run(command, **kwargs):
+            captured["command"] = command
+            captured["cwd"] = Path(kwargs["cwd"]).resolve()
+            captured["env"] = kwargs["env"]
+            captured["config"] = json.loads(Path(kwargs["env"]["OPENCODE_CONFIG"]).read_text())
+            agent = Path(kwargs["env"]["OPENCODE_CONFIG_DIR"]) / "agents" / "harness2-readonly.md"
+            captured["agent"] = agent.read_text()
+            return completed
+        with patch.object(harness2.subprocess, "run", side_effect=fake_run):
+            self.assertEqual(harness2.Executor("opencode", None, 30).ask("prompt"), "hello")
+        command = captured["command"]
+        for flag in ("--pure", "run", "--agent", "harness2-readonly", "--format", "json", "--dir"):
+            self.assertIn(flag, command)
+        self.assertEqual(captured["config"]["permission"]["*"], "deny")
+        self.assertEqual(captured["config"]["permission"]["read"], "allow")
+        self.assertIn("mode: primary", captured["agent"])
+        self.assertEqual(captured["env"]["OPENCODE_DISABLE_DEFAULT_PLUGINS"], "1")
+        self.assertNotEqual(captured["cwd"], self.root.resolve())
 
     def test_executor_jsonl_parsing(self):
         opencode = json.dumps({"type":"text","part":{"text":"hello"}})
