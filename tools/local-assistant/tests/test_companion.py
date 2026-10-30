@@ -20,6 +20,7 @@ from ultron_local_assistant.companion import (
     pair_companion,
     send_companion_heartbeat,
     poll_companion_action,
+    authorize_companion_action,
     complete_companion_action,
     _load_device_credentials,
     _resolve_public_addresses,
@@ -345,6 +346,44 @@ class CompanionServerTests(unittest.TestCase):
                     data_dir=Path(root) / "companion",
                     request_impl=lambda *_args, **_kwargs: {"action": malicious}
                 )
+
+    def test_authorize_companion_action_revalidates_claim_using_paired_device_token(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            seen = {}
+            action_id = "88888888-8888-4888-8888-888888888888"
+            def request(server_url, route, payload, bearer_token=None):
+                seen.update(server_url=server_url, route=route, payload=payload, bearer_token=bearer_token)
+                return {"authorized": True, "actionId": action_id}
+            self.assertTrue(authorize_companion_action(
+                action_id, data_dir=Path(root) / "companion", request_impl=request
+            ))
+            self.assertEqual(seen["route"], "/api/desktop-companion/actions/" + action_id + "/authorize")
+            self.assertEqual(seen["payload"]["deviceId"], _load_device_credentials(Path(root) / "companion")["deviceId"])
+            self.assertEqual(seen["bearer_token"], "T" * 43)
+
+    def test_authorize_companion_action_fails_closed_when_revoked_or_expired(self):
+        with tempfile.TemporaryDirectory() as root:
+            pair_companion(
+                "https://ultron.example.com", "P" * 32,
+                data_dir=Path(root) / "companion",
+                request_impl=lambda _url, _route, payload, bearer_token=None: {
+                    "deviceId": payload["deviceId"], "deviceName": "Ayaan-PC",
+                    "platform": "windows", "deviceToken": "T" * 43
+                }
+            )
+            self.assertFalse(authorize_companion_action(
+                "88888888-8888-4888-8888-888888888888",
+                data_dir=Path(root) / "companion",
+                request_impl=lambda *_args, **_kwargs: {"authorized": False, "actionId": "88888888-8888-4888-8888-888888888888"}
+            ))
 
     def test_complete_companion_action_records_only_fixed_outcome_codes(self):
         with tempfile.TemporaryDirectory() as root:
