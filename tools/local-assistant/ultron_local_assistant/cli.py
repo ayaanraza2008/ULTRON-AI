@@ -12,6 +12,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, get_system_health, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
+from .desktop_control import list_desktop_actions, launch_application, open_known_folder
+from .voice import listen_once, wake_command, classify_desktop_command
 from .companion import create_companion_server, generate_companion_token, pair_companion, send_companion_heartbeat
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
@@ -29,6 +31,23 @@ def confirm(phrase, message):
     except (EOFError, KeyboardInterrupt):
         print("\nCancelled.")
         return False
+
+
+def confirm_interactive(phrase, message):
+    """Require an actual terminal before accepting approval for local desktop actions."""
+    isatty = getattr(sys.stdin, "isatty", None)
+    try:
+        interactive = callable(isatty) and bool(isatty())
+    except OSError:
+        interactive = False
+    if not interactive:
+        print(
+            "This desktop action requires an interactive terminal; piped confirmation is not accepted.",
+            file=sys.stderr,
+        )
+        return None
+    return confirm(phrase, message)
+
 
 def health(args):
     report = get_system_health(args.path)
@@ -354,6 +373,41 @@ def skills_list(_):
     out_json(list_installed_skills())
     return 0
 
+
+def desktop_list(_):
+    out_json(list_desktop_actions())
+    return 0
+
+def desktop_launch(args):
+    print("This starts only a fixed, allowlisted Windows application. No shell command or arbitrary arguments are accepted.")
+    approved = confirm_interactive("LAUNCH", f"Start the '{args.application}' application?")
+    if approved is None:
+        return 2
+    if not approved:
+        print("Launch cancelled.")
+        return 0
+    try:
+        out_json(launch_application(args.application, confirm=True))
+        return 0
+    except Exception as exc:
+        print(f"Desktop launch blocked or failed: {exc}", file=sys.stderr)
+        return 1
+
+def desktop_open_folder(args):
+    print("This opens only one of the standard Windows folders. It does not read, modify, upload, or delete files.")
+    approved = confirm_interactive("OPEN", f"Open the standard '{args.folder}' folder?")
+    if approved is None:
+        return 2
+    if not approved:
+        print("Folder opening cancelled.")
+        return 0
+    try:
+        out_json(open_known_folder(args.folder, confirm=True))
+        return 0
+    except Exception as exc:
+        print(f"Folder opening blocked or failed: {exc}", file=sys.stderr)
+        return 1
+
 def companion_token(_):
     # The token is printed once so PowerShell can capture it into the current
     # process environment without persisting it in project files or CLI args.
@@ -428,18 +482,133 @@ def companion_serve(args):
         server.server_close()
     return 0
 
+
+
+def voice_mode(args):
+    if sys.platform != "win32":
+        print("Local microphone voice mode is supported only on Windows.", file=sys.stderr)
+        return 2
+    if not getattr(sys.stdin, "isatty", lambda: False)():
+        print("Voice mode requires an interactive terminal for typed action approval.", file=sys.stderr)
+        return 2
+
+    chosen = model_name(args.model)
+    print("ULTRON local voice mode. Say 'Ultron' before each request. Audio stays on this PC.")
+    print("Desktop shortcuts require typing LAUNCH or OPEN. Press Ctrl+C to stop.")
+    handled = 0
+    while True:
+        try:
+            transcript = listen_once(locale=args.locale, timeout=args.timeout)
+        except RuntimeError as exc:
+            print("Voice unavailable: " + str(exc), file=sys.stderr)
+            return 1
+        if not transcript:
+            if args.once:
+                return 0
+            continue
+        print("Heard: " + transcript)
+        command = wake_command(transcript)
+        if command is None:
+            if args.once:
+                return 0
+            continue
+        if not command:
+            print("Yes?")
+            if args.once:
+                return 0
+            continue
+        normalized = " ".join(command.casefold().split())
+        if normalized in {"stop listening", "stop voice mode", "exit", "goodbye"}:
+            print("Voice mode stopped.")
+            return 0
+
+        action = classify_desktop_command(command)
+        if action:
+            if action["kind"] == "launch":
+                approved = confirm_interactive(
+                    "LAUNCH", f"Voice requested launching the fixed application '{action['target']}'."
+                )
+                if approved is None:
+                    return 2
+                if approved:
+                    try:
+                        out_json(launch_application(action["target"], confirm=True))
+                        message = f"Launch request sent for {action['target']}."
+                    except Exception as exc:
+                        message = "Desktop action blocked: " + str(exc)
+                else:
+                    message = "Launch cancelled."
+            else:
+                approved = confirm_interactive(
+                    "OPEN", f"Voice requested opening the standard '{action['target']}' folder."
+                )
+                if approved is None:
+                    return 2
+                if approved:
+                    try:
+                        out_json(open_known_folder(action["target"], confirm=True))
+                        message = f"Open request sent for {action['target']}."
+                    except Exception as exc:
+                        message = "Folder action blocked: " + str(exc)
+                else:
+                    message = "Folder opening cancelled."
+            print("ULTRON: " + message)
+        else:
+            try:
+                answer = local_chat(
+                    command,
+                    model=chosen,
+                    system=(
+                        "You are ULTRON, a private local desktop assistant. Answer helpfully and concisely. "
+                        "Do not claim to have changed files, executed commands, opened apps, sent messages, "
+                        "or accessed the internet. Only the separate fixed desktop shortcut handler can "
+                        "start Notepad, File Explorer, Calculator, or open Desktop/Documents/Downloads, "
+                        "and those actions require a typed approval."
+                    ),
+                    use_skills=True,
+                )
+                print("\nULTRON: " + answer)
+                message = answer
+            except Exception as exc:
+                message = "Local model unavailable: " + str(exc)
+                print("ULTRON: " + message, file=sys.stderr)
+        if not args.no_speak and message:
+            ok, speech_message = speak_text(message[:6000])
+            if not ok:
+                print("Voice output unavailable: " + speech_message, file=sys.stderr)
+        handled += 1
+        if args.once and handled:
+            return 0
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="ultron-local", description="Local-first terminal assistant. Private prompts/documents are sent only to local Ollama.")
     subs = parser.add_subparsers(dest="command", required=True)
     p = subs.add_parser("health", help="Show local CPU, memory and disk health without network access"); p.add_argument("--path"); p.set_defaults(handler=health)
     p = subs.add_parser("doctor"); p.set_defaults(handler=doctor)
     p = subs.add_parser("agents"); p.set_defaults(handler=agents)
+    d = subs.add_parser("desktop", help="Run manually confirmed, allowlisted local Windows shortcuts")
+    ds = d.add_subparsers(dest="desktop_command", required=True)
+    p = ds.add_parser("list", help="List the fixed local desktop actions")
+    p.set_defaults(handler=desktop_list)
+    p = ds.add_parser("launch", help="Start a fixed Windows application after confirmation")
+    p.add_argument("application", choices=("notepad", "explorer", "calculator"))
+    p.set_defaults(handler=desktop_launch)
+    p = ds.add_parser("open-folder", help="Open a standard Windows folder after confirmation")
+    p.add_argument("folder", choices=("desktop", "documents", "downloads"))
+    p.set_defaults(handler=desktop_open_folder)
     c = subs.add_parser("companion", help="Run the local Windows desktop status companion")
     cs = c.add_subparsers(dest="companion_command", required=True)
     p = cs.add_parser("token", help="Generate a high-entropy local companion token"); p.set_defaults(handler=companion_token)
     p = cs.add_parser("pair", help="Pair this PC with ULTRON using a one-time code"); p.add_argument("--server-url", required=True); p.set_defaults(handler=companion_pair)
     p = cs.add_parser("connect", help="Send outbound-only status heartbeats to ULTRON"); p.add_argument("--once", action="store_true", help="Send one heartbeat and exit"); p.set_defaults(handler=companion_connect)
     p = cs.add_parser("serve", help="Serve the status-only API on 127.0.0.1"); p.add_argument("--port", type=int, default=8765); p.set_defaults(handler=companion_serve)
+    v = subs.add_parser("voice", help="Local Windows microphone chat with wake-word gating and typed desktop approvals")
+    v.add_argument("--model")
+    v.add_argument("--locale", choices=("auto", "en-IN", "hi-IN", "en-US", "en-GB"), default="auto")
+    v.add_argument("--timeout", type=int, choices=tuple(range(4, 26)), default=10)
+    v.add_argument("--once", action="store_true", help="Process one utterance and exit")
+    v.add_argument("--no-speak", action="store_true", help="Print answers without local speech output")
+    v.set_defaults(handler=voice_mode)
     p = subs.add_parser("chat"); p.add_argument("--model"); p.set_defaults(handler=chat)
     p = subs.add_parser("research"); p.add_argument("question", nargs="+"); p.add_argument("--root", default="."); p.add_argument("--model"); p.set_defaults(handler=research)
     p = subs.add_parser("search"); p.add_argument("query", nargs="+"); p.add_argument("--root", default="."); p.set_defaults(handler=search)
