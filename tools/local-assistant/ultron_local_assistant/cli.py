@@ -41,7 +41,7 @@ def confirm_interactive(phrase, message):
             "This desktop action requires an interactive terminal; piped confirmation is not accepted.",
             file=sys.stderr,
         )
-        return False
+        return None
     return confirm(phrase, message)
 
 
@@ -375,7 +375,10 @@ def desktop_list(_):
 
 def desktop_launch(args):
     print("This starts only a fixed, allowlisted Windows application. No shell command or arbitrary arguments are accepted.")
-    if not confirm_interactive("LAUNCH", f"Start the '{args.application}' application?"):
+    approved = confirm_interactive("LAUNCH", f"Start the '{args.application}' application?")
+    if approved is None:
+        return 2
+    if not approved:
         print("Launch cancelled.")
         return 0
     try:
@@ -387,7 +390,10 @@ def desktop_launch(args):
 
 def desktop_open_folder(args):
     print("This opens only one of the standard Windows folders. It does not read, modify, upload, or delete files.")
-    if not confirm_interactive("OPEN", f"Open the standard '{args.folder}' folder?"):
+    approved = confirm_interactive("OPEN", f"Open the standard '{args.folder}' folder?")
+    if approved is None:
+        return 2
+    if not approved:
         print("Folder opening cancelled.")
         return 0
     try:
