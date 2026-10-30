@@ -33,8 +33,11 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly Button _pairDeviceButton;
     private readonly Button _startPresenceButton;
     private readonly Button _stopPresenceButton;
+    private readonly Button _enableActionRequestsButton;
+    private readonly Button _disableActionRequestsButton;
     private readonly CloudPresenceClient _cloudPresence = new();
     private CancellationTokenSource? _presenceCancellation;
+    private CancellationTokenSource? _actionPollingCancellation;
     private bool _suppressAutoStartChange;
     private SpeechRecognitionEngine? _recognizer;
     private bool _allowExit;
@@ -49,9 +52,9 @@ internal sealed class CompanionContext : ApplicationContext
         {
             Text = "ULTRON Wake Companion",
             Width = 520,
-            Height = 330,
+            Height = 380,
             StartPosition = FormStartPosition.CenterScreen,
-            MinimumSize = new System.Drawing.Size(490, 300)
+            MinimumSize = new System.Drawing.Size(490, 340)
         };
 
         var layout = new TableLayoutPanel
@@ -122,12 +125,18 @@ internal sealed class CompanionContext : ApplicationContext
         _pairDeviceButton = new Button { Text = "Pair this PC", AutoSize = true };
         _startPresenceButton = new Button { Text = "Start cloud presence", AutoSize = true };
         _stopPresenceButton = new Button { Text = "Stop cloud presence", AutoSize = true, Enabled = false };
+        _enableActionRequestsButton = new Button { Text = "Enable remote approvals", AutoSize = true };
+        _disableActionRequestsButton = new Button { Text = "Disable remote approvals", AutoSize = true, Enabled = false };
         _pairDeviceButton.Click += async (_, _) => await PairCloudCompanionAsync();
         _startPresenceButton.Click += async (_, _) => await StartCloudPresenceAsync();
         _stopPresenceButton.Click += (_, _) => StopCloudPresence();
+        _enableActionRequestsButton.Click += async (_, _) => await StartRemoteActionRequestsAsync();
+        _disableActionRequestsButton.Click += (_, _) => StopRemoteActionRequests();
         cloudButtons.Controls.Add(_pairDeviceButton);
         cloudButtons.Controls.Add(_startPresenceButton);
         cloudButtons.Controls.Add(_stopPresenceButton);
+        cloudButtons.Controls.Add(_enableActionRequestsButton);
+        cloudButtons.Controls.Add(_disableActionRequestsButton);
 
         layout.Controls.Add(cloudButtons, 0, 3);
         layout.Controls.Add(_autoStartCheckBox, 0, 4);
@@ -145,6 +154,8 @@ internal sealed class CompanionContext : ApplicationContext
         menu.Items.Add("Pair this PC with ULTRON", null, async (_, _) => await PairCloudCompanionAsync());
         menu.Items.Add("Start cloud presence", null, async (_, _) => await StartCloudPresenceAsync());
         menu.Items.Add("Stop cloud presence", null, (_, _) => StopCloudPresence());
+        menu.Items.Add("Enable remote action approvals", null, async (_, _) => await StartRemoteActionRequestsAsync());
+        menu.Items.Add("Disable remote action approvals", null, (_, _) => StopRemoteActionRequests());
         menu.Items.Add("Show window", null, (_, _) => ShowWindow());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => ExitApplication());
@@ -356,6 +367,7 @@ internal sealed class CompanionContext : ApplicationContext
         {
             if (ReferenceEquals(_presenceCancellation, cancellation))
             {
+                StopRemoteActionRequests();
                 _presenceCancellation = null;
                 cancellation.Dispose();
                 if (!_window.IsDisposed)
@@ -369,8 +381,187 @@ internal sealed class CompanionContext : ApplicationContext
         }
     }
 
+    private async Task StartRemoteActionRequestsAsync()
+    {
+        if (_actionPollingCancellation is not null) return;
+        if (!_cloudPresence.HasPairing)
+        {
+            MessageBox.Show(_window, "Pair this PC with your ULTRON account before enabling remote action requests.",
+                "Pairing required", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (_presenceCancellation is null)
+        {
+            MessageBox.Show(_window, "Start cloud presence first. Remote action requests are available only while this PC is visibly online.",
+                "Cloud presence required", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var consent = MessageBox.Show(_window,
+            "Enable remote action requests for this PC?\n\nULTRON may ask to open only these fixed targets: Notepad, File Explorer, Calculator, Desktop, Documents, or Downloads.\n\nEvery request opens a visible Windows approval dialog. Nothing runs unless you click Yes on this PC. Requests expire after 60 seconds. No shell commands, scripts, file reads/uploads, screenshots, keyboard/mouse control, or background actions are supported.",
+            "Enable ULTRON remote action approvals",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+        if (consent != DialogResult.Yes) return;
+
+        var cancellation = new CancellationTokenSource();
+        _actionPollingCancellation = cancellation;
+        _enableActionRequestsButton.Enabled = false;
+        _disableActionRequestsButton.Enabled = true;
+        ShowStatus("Remote action requests enabled. Every action requires approval on this PC.");
+        try
+        {
+            await _cloudPresence.RunRemoteActionPollingLoopAsync(
+                RequestLocalActionApprovalAsync,
+                ExecuteAllowlistedLocalActionAsync,
+                ShowStatus,
+                cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // Disabled by the user, or cloud presence was stopped.
+        }
+        catch (Exception error)
+        {
+            ShowStatus("ULTRON remote action requests stopped: " + error.GetType().Name);
+        }
+        finally
+        {
+            if (ReferenceEquals(_actionPollingCancellation, cancellation))
+            {
+                _actionPollingCancellation = null;
+                cancellation.Dispose();
+                if (!_window.IsDisposed)
+                {
+                    _enableActionRequestsButton.Enabled = true;
+                    _disableActionRequestsButton.Enabled = false;
+                    if (!_allowExit) ShowStatus("ULTRON remote action approvals are disabled.");
+                }
+            }
+        }
+    }
+
+    private async Task<bool> RequestLocalActionApprovalAsync(
+        RemoteDesktopCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (!CloudPresenceClient.IsAllowlistedRemoteAction(command.ActionType, command.Target))
+            return false;
+        if (command.ExpiresAt <= DateTimeOffset.UtcNow) return false;
+        if (_window.IsDisposed || !_window.IsHandleCreated) return false;
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
+        _window.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                if (cancellationToken.IsCancellationRequested || _window.IsDisposed)
+                {
+                    completion.TrySetResult(false);
+                    return;
+                }
+                ShowWindow();
+                var remaining = Math.Max(0, (int)Math.Ceiling((command.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds));
+                if (remaining <= 0)
+                {
+                    completion.TrySetResult(false);
+                    return;
+                }
+                var description = CloudPresenceClient.DescribeCommand(command);
+                var answer = MessageBox.Show(
+                    _window,
+                    "ULTRON is requesting permission to " + description + ".\n\nThis is a one-time request for this PC. It expires in about " + remaining + " seconds.\n\nChoose Yes to allow this one fixed action, or No to reject it.",
+                    "ULTRON action approval required",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button2);
+                completion.TrySetResult(answer == DialogResult.Yes &&
+                    command.ExpiresAt > DateTimeOffset.UtcNow);
+            }
+            catch (Exception error)
+            {
+                completion.TrySetException(error);
+            }
+        }));
+        return await completion.Task.WaitAsync(cancellationToken);
+    }
+
+    private static Task<string> ExecuteAllowlistedLocalActionAsync(
+        RemoteDesktopCommand command,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Remote desktop shortcuts are supported only on Windows.");
+        if (!CloudPresenceClient.IsAllowlistedRemoteAction(command.ActionType, command.Target))
+            throw new InvalidOperationException("The requested target is not part of ULTRON's fixed local allowlist.");
+        if (command.ExpiresAt <= DateTimeOffset.UtcNow)
+            throw new InvalidOperationException("The action request expired before the local action could start.");
+
+        var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrWhiteSpace(windowsDirectory))
+            throw new InvalidOperationException("The Windows directory could not be resolved.");
+
+        var explorer = Path.Combine(windowsDirectory, "explorer.exe");
+        string executable;
+        string arguments = string.Empty;
+        if (command.ActionType == "launch_application")
+        {
+            switch (command.Target)
+            {
+                case "notepad":
+                    executable = Path.Combine(windowsDirectory, "System32", "notepad.exe");
+                    break;
+                case "explorer":
+                    executable = explorer;
+                    break;
+                case "calculator":
+                    executable = explorer;
+                    arguments = @"shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App";
+                    break;
+                default:
+                    throw new InvalidOperationException("Unsupported application target.");
+            }
+        }
+        else
+        {
+            executable = explorer;
+            arguments = command.Target switch
+            {
+                "desktop" => "shell:Desktop",
+                "documents" => "shell:Personal",
+                "downloads" => "shell:Downloads",
+                _ => throw new InvalidOperationException("Unsupported folder target.")
+            };
+        }
+
+        if (!File.Exists(executable))
+            throw new FileNotFoundException("The fixed Windows application launcher is unavailable.", executable);
+
+        // FileName and Arguments above come exclusively from literal allowlist
+        // cases. No browser-provided path, executable, argument, or shell text is used.
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = arguments,
+            UseShellExecute = true
+        };
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Windows did not return a process handle for the approved action.");
+        return Task.FromResult("Windows accepted the start request for " +
+            CloudPresenceClient.DescribeCommand(command) + " (PID " + process.Id + ").");
+    }
+
+    private void StopRemoteActionRequests()
+    {
+        _actionPollingCancellation?.Cancel();
+        ShowStatus("Stopping ULTRON remote action approvals…");
+    }
+
     private void StopCloudPresence()
     {
+        StopRemoteActionRequests();
         _presenceCancellation?.Cancel();
         ShowStatus("Stopping ULTRON cloud presence…");
     }
@@ -611,6 +802,7 @@ internal sealed class CompanionContext : ApplicationContext
     private void ExitApplication()
     {
         _allowExit = true;
+        StopRemoteActionRequests();
         StopCloudPresence();
         StopListening();
         _tray.Visible = false;
@@ -623,6 +815,7 @@ internal sealed class CompanionContext : ApplicationContext
     {
         if (disposing)
         {
+            StopRemoteActionRequests();
             StopCloudPresence();
             StopListening();
             _cloudPresence.Dispose();
