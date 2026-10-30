@@ -19,8 +19,8 @@ jobs:
   build-windows-companion:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
       - name: Restore dependencies
@@ -31,7 +31,7 @@ jobs:
         run: dotnet run --project windows-companion.tests/WindowsCompanion.PolicyTests.csproj --configuration Release
       - name: Publish standalone x64 executable
         run: dotnet publish windows-companion/Ultron.Companion.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output artifacts/ultron-windows-companion
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ULTRON-Windows-Wake-Companion
           path: artifacts/ultron-windows-companion/ULTRON.Companion.exe
