@@ -319,7 +319,7 @@ export async function runOpenSeoTool({
         execution: "not_started",
         operation,
         estimatedCredits,
-        error: { code: "OPENSEO_SPEND_APPROVAL_REQUIRED", message: "This SEO lookup may consume OpenSEO credits. No request was sent. Begin your current message with: "I approve spending up to 120 OpenSEO credits for this lookup." Replace 120 with your explicit credit ceiling." }
+        error: { code: "OPENSEO_SPEND_APPROVAL_REQUIRED", message: "This SEO lookup may consume OpenSEO credits. No request was sent. Begin your current message with the exact words I approve spending up to 120 OpenSEO credits for this lookup. Replace 120 with your explicit credit ceiling." }
       };
     }
     if (estimatedCredits > maxEstimatedCredits) {
