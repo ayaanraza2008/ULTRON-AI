@@ -664,6 +664,7 @@ const SAFE_PREPARATION_TOOLS = new Set([
   "check_openviking",
   "check_hermes_agent",
   "hermes_agent_run_status",
+  "hermes_agent_run_events",
   "check_comfyui",
   "obscura_inspect_public_page",
   "obscura_capture_public_page"
@@ -681,10 +682,17 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
       risk: { level: "external_effect", reason: "Starting a long-running Hermes job requires explicit user delegation.", requiresConfirmation: true }
     };
   }
-  if (name === "hermes_agent_stop_run" && (!explicitHermesStopIntent || !String(args?.runId || "").trim() || !normalizedRequest.includes(String(args.runId).toLowerCase()))) {
+  if (name === "hermes_agent_stop_run") {
+    const runId = String(args?.runId || "").toLowerCase();
+    if (!explicitHermesStopIntent || !runId || !normalizedRequest.includes(runId)) {
+      return {
+        requiresConfirmation: true,
+        risk: { level: "device_control", reason: "Cancelling a Hermes job requires an explicit user stop request naming the exact run ID.", requiresConfirmation: true }
+      };
+    }
     return {
-      requiresConfirmation: true,
-      risk: { level: "device_control", reason: "Cancelling a Hermes job requires an explicit user stop request naming the exact run ID.", requiresConfirmation: true }
+      requiresConfirmation: false,
+      risk: { level: "routine", reason: "The user explicitly requested cancellation of this exact owner-scoped Hermes run.", requiresConfirmation: false }
     };
   }
   if (name === "hermes_agent_resolve_approval") {
@@ -704,6 +712,10 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
         risk: { level: "external_effect", reason: "Resolving a Hermes approval requires the user's explicit decision naming the exact run ID, prompt ID and execution generation.", requiresConfirmation: true }
       };
     }
+    return {
+      requiresConfirmation: false,
+      risk: { level: "routine", reason: "The user explicitly supplied the exact pending Hermes prompt identity, generation and once/deny decision.", requiresConfirmation: false }
+    };
   }
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "hermes_agent_start_run" || name === "browser_use") delegatedTask = args?.task;
