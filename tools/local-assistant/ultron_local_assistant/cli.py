@@ -9,12 +9,13 @@ import os
 import shlex
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, get_system_health, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
 from .desktop_control import list_desktop_actions, launch_application, open_known_folder
 from .voice import listen_once, wake_command, classify_desktop_command, classify_local_command
-from .companion import create_companion_server, generate_companion_token, pair_companion, send_companion_heartbeat
+from .companion import (create_companion_server, generate_companion_token, pair_companion, send_companion_heartbeat,
+                        poll_companion_action, complete_companion_action)
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -431,9 +432,65 @@ def companion_pair(args):
         print(f"Pairing failed: {exc}", file=sys.stderr)
         return 1
 
+def process_companion_action(action):
+    """Execute exactly one claimed allowlisted action after fresh local approval."""
+    if not getattr(sys.stdin, "isatty", lambda: False)():
+        complete_companion_action(action["id"], "denied", "LOCAL_APPROVAL_REQUIRED")
+        print("A remote action was denied because no interactive local terminal is attached.")
+        return
+    now = datetime.now(timezone.utc)
+    expires_at = datetime.fromisoformat(action["expiresAt"])
+    if now >= expires_at:
+        complete_companion_action(action["id"], "expired", "ACTION_EXPIRED")
+        print("An expired ULTRON action request was discarded.")
+        return
+
+    labels = {
+        ("launch_application", "notepad"): "open Notepad",
+        ("launch_application", "explorer"): "open File Explorer",
+        ("launch_application", "calculator"): "open Calculator",
+        ("open_known_folder", "desktop"): "open the Desktop folder",
+        ("open_known_folder", "documents"): "open the Documents folder",
+        ("open_known_folder", "downloads"): "open the Downloads folder",
+    }
+    label = labels.get((action["name"], action["target"]))
+    if not label:
+        complete_companion_action(action["id"], "failed", "ACTION_FAILED")
+        print("An unsupported ULTRON desktop request was rejected.", file=sys.stderr)
+        return
+
+    approved = confirm_interactive(
+        "ALLOW",
+        "ULTRON requests to " + label + ". This is a fixed local shortcut; it cannot run shell commands or access arbitrary files."
+    )
+    if approved is None:
+        complete_companion_action(action["id"], "denied", "LOCAL_APPROVAL_REQUIRED")
+        print("Action denied: local interactive approval is required.")
+        return
+    if not approved:
+        complete_companion_action(action["id"], "denied", "USER_DENIED")
+        print("Action denied locally.")
+        return
+
+    try:
+        if action["name"] == "launch_application":
+            result = launch_application(action["target"], confirm=True)
+        else:
+            result = open_known_folder(action["target"], confirm=True)
+        complete_companion_action(action["id"], "completed", "ACTION_COMPLETED")
+        out_json(result)
+        print("The local process-start request was accepted. Application readiness was not verified.")
+    except Exception as exc:
+        try:
+            complete_companion_action(action["id"], "failed", "ACTION_FAILED")
+        except Exception as ack_error:
+            print(f"Action outcome could not be acknowledged: {ack_error}", file=sys.stderr)
+        print(f"Locally approved desktop action failed: {exc}", file=sys.stderr)
+
+
 def companion_connect(args):
     if sys.platform != "win32":
-        print("The Windows companion can only send heartbeats from Windows.", file=sys.stderr)
+        print("The Windows companion can only connect from Windows.", file=sys.stderr)
         return 2
     delay = 5
     while True:
@@ -451,6 +508,17 @@ def companion_connect(args):
             time.sleep(delay)
             delay = min(60, delay * 2)
             continue
+
+        try:
+            action = poll_companion_action()
+            if action:
+                process_companion_action(action)
+        except PermissionError as exc:
+            print(f"ULTRON companion authorization was revoked: {exc}", file=sys.stderr)
+            return 1
+        except Exception as exc:
+            print(f"ULTRON local action queue unavailable; no action was run: {exc}", file=sys.stderr)
+
         if args.once:
             return 0
         delay = 5
@@ -641,7 +709,7 @@ def build_parser():
     cs = c.add_subparsers(dest="companion_command", required=True)
     p = cs.add_parser("token", help="Generate a high-entropy local companion token"); p.set_defaults(handler=companion_token)
     p = cs.add_parser("pair", help="Pair this PC with ULTRON using a one-time code"); p.add_argument("--server-url", required=True); p.set_defaults(handler=companion_pair)
-    p = cs.add_parser("connect", help="Send outbound-only status heartbeats to ULTRON"); p.add_argument("--once", action="store_true", help="Send one heartbeat and exit"); p.set_defaults(handler=companion_connect)
+    p = cs.add_parser("connect", help="Send outbound heartbeats and receive locally approved fixed desktop shortcuts"); p.add_argument("--once", action="store_true", help="Send one heartbeat and exit"); p.set_defaults(handler=companion_connect)
     p = cs.add_parser("serve", help="Serve the status-only API on 127.0.0.1"); p.add_argument("--port", type=int, default=8765); p.set_defaults(handler=companion_serve)
     v = subs.add_parser("voice", help="Local Windows microphone chat with wake-word gating and typed desktop approvals")
     v.add_argument("--model")
