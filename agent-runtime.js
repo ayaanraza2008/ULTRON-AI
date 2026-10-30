@@ -523,8 +523,8 @@ export function buildChromeDevToolsActionInput(args = {}) {
  */
 export function parseGeoSleuthReverseSearchConsent(value) {
   const text = typeof value === "string" ? value.slice(0, 6000) : "";
-  const match = text.match(/^\\s*i approve sending image-derived information from this photo to external reverse-image search providers for this investigation(?:[.!?](?:\\s|$)|\\s|$)/i);
-  if (!match || /\\b(?:do not|don't|never|not yet|hold off|wait|cancel)\\b/i.test(text.slice(match[0].length))) return false;
+  const match = text.match(/^\s*i approve sending image-derived information from this photo to external reverse-image search providers for this investigation(?:[.!?](?:\s|$)|\s|$)/i);
+  if (!match || /\b(?:do not|don't|never|not yet|hold off|wait|cancel)\b/i.test(text.slice(match[0].length))) return false;
   return true;
 }
 
