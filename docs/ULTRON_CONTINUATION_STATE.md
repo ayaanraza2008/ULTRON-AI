@@ -2,7 +2,8 @@
 
 **Checkpoint date:** 2026-10-30  
 **Working candidate:** `integration/ultron-cross-sector-current-main-20261029`  
-**Latest checkpoint head:** `4ef84c034868f8d1fa24a1b52cd82e95fd450b1f`  
+**Latest verified PR #400 candidate head:** `b1eff10a4ebcd59ad2ce1ecd448b05e9277428f7`  
+**Acceptance matrix refresh commit:** `cc1342c5a9279e59857945c33c41ae74e8e5db46`  
 **Pull request:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **Default branch:** `main`  
 **Operating rule:** resume from this remote Git state; preserve all existing changes; do not deploy, modify production settings, apply production migrations, spend paid quota, or touch PHANTOM/NOX.
@@ -79,7 +80,7 @@ Open PR [#406 — detect current Hermes API capability schema](https://github.co
 ## Immediate next action when resuming
 
 1. Read this checkpoint and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`.
-2. Inspect PR #400's current head `4ef84c034868f8d1fa24a1b52cd82e95fd450b1f`; fetch its workflow runs and inspect all job conclusions/log summaries. The last completed exact-head PR #400 CI is for `5ea38bfd` (run 41098108091 plus Windows Companion run 41098110141); the matrix was refreshed afterwards and must receive its own CI result.
+2. Inspect PR #400's current head `4ef84c034868f8d1fa24a1b52cd82e95fd450b1f`; fetch its workflow runs and inspect all job conclusions/log summaries. The latest completed exact-head PR #400 CI before the next docs-only refresh is for `b1eff10a4ebcd59ad2ce1ecd448b05e9277428f7`: run 41099205295 passed all four jobs and Windows Companion run 41099205347 passed. The acceptance matrix was then refreshed in commit `cc1342c5a9279e59857945c33c41ae74e8e5db46`; inspect Actions on the current PR #400 head and record its result separately.
 3. Confirm whether the updated PR #405 head and PR #406 head are still current; their exact heads `94651272` and `4e837f9b` passed runs 41098732849 and 41098869935 respectively. Review new failures before further feature work.
 4. Keep PR #405 local shortcuts separate from a remote Windows command channel. The full PC-control acceptance row remains IN PROGRESS; no device actions were verified on physical hardware.
 5. Continue only independently safe source/test/documentation work. External actions requiring credentials, accounts, physical devices, owner settings or paid resources remain explicitly blocked until available and authorized.
