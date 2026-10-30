@@ -199,3 +199,24 @@ For every changed row, append:
 - PR #400 remains open and unmerged. This acceptance matrix and `docs/ULTRON_CONTINUATION_STATE.md` are committed on the PR #400 integration candidate branch. PRs #401, #405 and #406 remain separate open review branches (with #405 stacked on #401 and #406 based on #400); do not merge them automatically.
 - This execution session accessed GitHub files and Actions through the connected repository integration; it did not have a local repository checkout. The user's local working tree/unstaged changes were not inspected or changed. All test counts above come from the cited GitHub Actions logs, not local execution.
 - Never mark a row `VERIFIED` solely because CI passed. Keep source-tested and live-verified evidence separate.
+
+
+## Local Jarvis-style voice + desktop capability checkpoint — 2026-10-30
+
+The following changes are now included in this integration candidate branch. They are source additions and automated policy tests; they are **not** evidence of physical microphone quality, live local-model inference, or real PC application startup.
+
+- Local voice command: `ultron-local voice` uses the installed Windows System.Speech recognizer for one bounded utterance at a time, requires the leading wake word “Ultron”, and routes ordinary questions only to the existing loopback-only Ollama client. Answers can be spoken with the installed local Windows system voice. Supported recognizer locales are `auto`, `en-IN`, `hi-IN`, `en-US`, and `en-GB`; actual language availability and recognition quality depend on Windows language packs and the microphone.
+- Local desktop shortcuts: `ultron-local desktop list`, `desktop launch notepad|explorer|calculator`, and `desktop open-folder desktop|documents|downloads`. Only fixed executables and fixed shell folder identifiers are accepted. Each launch/open requires a fresh typed terminal confirmation and writes a bounded local audit record.
+- Spoken desktop requests use the same fixed allowlist, but voice itself is never an approval. A separate typed `LAUNCH` or `OPEN` confirmation is required. Arbitrary shell, arbitrary paths, file mutation, screenshots, keyboard/mouse control, shutdown, purchases, external messages and security changes are not exposed.
+- The Windows companion cloud relay remains outbound heartbeat/status only; this update does not create a cloud-to-PC command channel. No public listener or firewall rule was added.
+- Hermes Agent now uses the native `/v1/runs` API with bounded polling, status reporting, cooperative stop request and explicit-only fallback to chat completions for HTTP 404/405. Capability discovery handles the nested API schema. Vision is disabled unless `HERMES_AGENT_SUPPORTS_VISION=true` is explicitly configured.
+- Added `npm run smoke:hermes`, Python tests for wake-word gating and the desktop allowlist, and a Windows CI PowerShell-parser check that parses the embedded recognizer script without executing it.
+
+Changed paths include:
+`integrations/hermes-agent.js`, `tests/hermes-agent.test.js`, `scripts/hermes-agent-smoke.mjs`, `.env.example`, `package.json`, `.github/workflows/ci.yml`, `tools/local-assistant/ultron_local_assistant/desktop_control.py`, `tools/local-assistant/ultron_local_assistant/voice.py`, `tools/local-assistant/ultron_local_assistant/cli.py`, `tools/local-assistant/tests/test_desktop_control.py`, `tools/local-assistant/tests/test_voice.py`, `tools/local-assistant/README.md`, and `docs/HERMES_AGENT_INTEGRATION.md`.
+
+Evidence state at this checkpoint:
+- The full candidate CI run #3197 (`41103023686`) and the Windows Companion, Android Companion and Chrome DevTools workflows were queued after the source updates. **Do not mark them green until their conclusions and job steps are inspected.**
+- Tests added to the branch validate recognition-script construction, input bounds, wake-word requirement, exact action phrase matching, non-allowlisted request rejection, typed desktop approvals and audit behavior. The physical microphone, installed recognizer, local Ollama model, system TTS voice, real application readiness, and live Hermes service remain unverified on the user's Windows PC.
+- Hermes live connectivity requires the independently installed runtime, an API server key, a matching owner UUID and a reachable endpoint. Render cannot reach the PC's loopback address; no tunnel, port-forward, Render environment variable or production endpoint was configured.
+- No main-branch merge, deployment, production setting, Supabase mutation/migration, paid model download, or PHANTOM/NOX change was made.
