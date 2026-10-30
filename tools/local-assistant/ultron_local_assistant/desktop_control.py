@@ -68,11 +68,17 @@ def _windows_executable(name: str) -> str:
         raise RuntimeError("The Windows installation directory must not be a symbolic link.")
     try:
         resolved_root = root.resolve(strict=True)
-        system32 = resolved_root / "System32"
-        if system32.is_symlink() or not system32.is_dir():
-            raise RuntimeError("The Windows System32 directory is unavailable or linked.")
-        resolved_system32 = system32.resolve(strict=True)
-        executable = system32 / name
+        if name == "notepad.exe":
+            system32 = resolved_root / "System32"
+            if system32.is_symlink() or not system32.is_dir():
+                raise RuntimeError("The Windows System32 directory is unavailable or linked.")
+            allowed_directory = system32.resolve(strict=True)
+        elif name == "explorer.exe":
+            allowed_directory = resolved_root
+        else:
+            raise ValueError("The requested executable is not part of the fixed Windows allowlist.")
+
+        executable = allowed_directory / name
         if executable.is_symlink():
             raise RuntimeError("The allowlisted Windows executable must not be a symbolic link.")
         resolved_executable = executable.resolve(strict=True)
@@ -81,9 +87,9 @@ def _windows_executable(name: str) -> str:
 
     if (
         not resolved_executable.is_file()
-        or not resolved_executable.is_relative_to(resolved_system32)
+        or not resolved_executable.is_relative_to(allowed_directory)
     ):
-        raise RuntimeError("The allowlisted Windows executable is not a regular System32 file.")
+        raise RuntimeError("The allowlisted Windows executable is outside its fixed Windows directory.")
     return str(resolved_executable)
 
 
