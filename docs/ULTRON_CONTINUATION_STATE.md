@@ -2,6 +2,7 @@
 
 **Checkpoint date:** 2026-10-30  
 **Working candidate:** `integration/ultron-cross-sector-current-main-20261029`  
+**Latest checkpoint head:** `ea250aab5f6f05c48f10574bd36d46d64f8dee15`  
 **Pull request:** [#400 — Cross-sector ULTRON integration candidate](https://github.com/ayaanraza2008/ULTRON-AI/pull/400)  
 **Default branch:** `main`  
 **Operating rule:** resume from this remote Git state; preserve all existing changes; do not deploy, modify production settings, apply production migrations, spend paid quota, or touch PHANTOM/NOX.
@@ -12,8 +13,8 @@
 - The observed `main` head at checkpoint start was `6b7f09d97508fc2be2085695d862a921e1ae8487` (2026-10-29, task-aware Build Your Own X guidance).
 - There is no local repository checkout available in this execution environment. GitHub remote branches, commits, files and Actions runs were inspected through the connected repository integration. Local uncommitted/unstaged files on the user's own computer therefore remain unknown; they were not accessed or overwritten.
 - PR #400 is open and unmerged. Keep it as a reviewable integration candidate; do not merge automatically.
-- `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md` was absent on `main` and the PR #400 branch at the beginning of this work. The matrix was copied from the existing review matrix in PR #401, refreshed with PR #400's exact latest CI evidence and added to the PR #400 integration branch.
-- `docs/ULTRON_CONTINUATION_STATE.md` is being created alongside the acceptance matrix on the PR #400 branch, so future work has a durable resume point.
+- `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md` was absent on `main` and the PR #400 branch at the beginning of this work. It was copied from the existing PR #401 review matrix, refreshed with current PR #400 CI evidence plus the separate PR #405 local-shortcut increment, and is tracked on the PR #400 branch.
+- `docs/ULTRON_CONTINUATION_STATE.md` is tracked on the PR #400 branch as the durable remote resume point.
 
 ## Last completed engineering task
 
@@ -45,7 +46,7 @@ The exact code-fix head `9ddc50474efde5705572a7f52ae3f635fb8c89bc` passed:
 - Real Docker sandbox smoke passed on a disposable GitHub-hosted Ubuntu runner using a digest-pinned image. This is not target-PC Docker Desktop verification.
 - [Windows Companion run 41096891978](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41096891978): .NET build succeeded with **0 warnings, 0 errors**; URL policy tests, self-contained x64 publish and artifact upload succeeded.
 
-The two checkpoint-document commits occur after the exact code-fix head above. Check Actions again for the new branch head and record that result separately; do not silently reuse the prior run as verification of a later commit.
+The checkpoint-document update initially produced head `6c0913ccc5bdfd3391382553b74a79221adc24df`; its own full ULTRON CI [run 41097677959](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41097677959) completed with all four jobs successful, and Windows Companion [run 41097677840](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41097677840) also completed successfully. The acceptance matrix was subsequently refreshed in commit `ea250aab5f6f05c48f10574bd36d46d64f8dee15`; check Actions again for that latest docs commit before reporting it tested.
 
 ## Persistent acceptance matrix
 
@@ -66,12 +67,16 @@ The matrix deliberately does not treat source presence, mocked tests or a green 
 - **Browser/mobile quality and performance:** real browser interaction, keyboard/screen-reader accessibility, responsive layout, microphone/speaker quality and measured target-device resource tests are not established by source CI.
 - **Production release:** Render deployment/build quota and the canonical service revision remain separate release blockers. No deployment or production setting changes are authorized by this task.
 
+## PR #405 review completed
+
+Open PR [#405 — safe local Windows desktop shortcuts](https://github.com/ayaanraza2008/ULTRON-AI/pull/405) was inspected. It adds fixed Notepad/Explorer/Calculator launches and Desktop/Documents/Downloads folder shortcuts to the local Python CLI only. Each action requires an interactive LAUNCH/OPEN confirmation; targets are allowlisted, subprocess uses `shell=False`, Windows-only gating is present, and a bounded local JSONL audit is written. There is no HTTP or agent command endpoint. Tests cover the allowlist, denied arguments, shell=False, cancellation, symlink rejection, audit integrity, errors and parser options. [PR #405 run 41092121016](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41092121016) passed; Windows tests ran 10 companion tests and 14 desktop-shortcut tests. Popen is mocked, so no actual application was launched. PR #405 is open and based on PR #401, not merged into PR #400; keep integration order explicit.
+
 ## Immediate next action when resuming
 
 1. Read this checkpoint and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`.
-2. Inspect PR #400's current head SHA after the checkpoint-file commits; fetch its workflow runs and inspect all job conclusions/log summaries. If CI is pending, do not claim it passed.
-3. Review open PR #405 (safe local Windows shortcuts) against its base PR #401 and candidate #400. Confirm exact source files and CI evidence; keep local shortcut execution separate from cloud/remote control, and never relabel it as complete PC control.
-4. Reconcile the matrix with current PR #400 / PR #405 source and evidence. Continue with the next narrow security or regression issue; add tests, rerun checks, and update this checkpoint after each meaningful batch.
+2. Inspect PR #400's current head `ea250aab5f6f05c48f10574bd36d46d64f8dee15`; fetch its workflow runs and inspect all job conclusions/log summaries. The last completed exact-head CI is for `6c0913c` (run 41097677959 plus Windows Companion run 41097677840); do not silently reuse it as verification of the newer matrix-document commit.
+3. Review any new PR #400 CI failure before additional feature work; otherwise continue with the next independent high-priority security/regression task.
+4. Keep PR #405 local shortcuts separate from a remote Windows command channel. The full PC-control acceptance row remains IN PROGRESS; no device actions were verified on physical hardware.
 5. Continue only independently safe source/test/documentation work. External actions requiring credentials, accounts, physical devices, owner settings or paid resources remain explicitly blocked until available and authorized.
 
 ## Safety boundaries
