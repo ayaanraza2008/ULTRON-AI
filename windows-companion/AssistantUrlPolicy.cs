@@ -19,7 +19,7 @@ public static class AssistantUrlPolicy
         if (uri.Scheme != Uri.UriSchemeHttps ||
             uri.HostNameType != UriHostNameType.Dns ||
             string.IsNullOrWhiteSpace(host) ||
-            !host.Contains('.', StringComparison.Ordinal) ||
+            !host.Contains('.') ||
             host == "localhost" ||
             BlockedSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.Ordinal)) ||
             !string.IsNullOrEmpty(uri.UserInfo) ||
