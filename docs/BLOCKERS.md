@@ -48,3 +48,10 @@ The security branch adds a transport that resolves public hostnames, rejects any
 - Model-generated `confirmExternalAction` has been removed from the agent tool schema and cannot be supplied by model tool arguments. Agent dispatch always forces false, and the autonomy policy blocks consequential clicks before local bridge access.
 - Source and agent-level regression tests passed in full CI run 41116829247. This does not prove a live Chrome bridge or physical browser workflow.
 - A task-bound approval-token flow is still missing; keep consequential browser clicks blocked until the user can review and approve the exact host, selector, action and effect.
+
+
+## Geo-Sleuth reverse-image sharing consent
+
+- Model-generated `includeReverseSearch: true` must never authorize sending image-derived information to external reverse-image providers.
+- The agent schema no longer exposes that flag. The dispatcher derives opt-in from the current user-authored message using an exact canonical approval phrase; ordinary mention, negation, contradictory suffixes and non-exact wording default to off.
+- Regression tests added; CI pending. Keep reverse-image search disabled by default and do not treat source tests as proof of provider behavior or location accuracy.
