@@ -175,3 +175,31 @@ python -m unittest discover -s tools/local-assistant/tests -p 'test_*.py'
 ~~~
 
 This package is a local companion integrated into the ULTRON repository; it does not magically install Ollama or configure the user's PC from GitHub CI. Real Google OAuth, local-model inference, installed system voices, and script behavior must be verified on the target device.
+
+
+## Local voice mode: wake word + on-device answers
+
+On Windows 10/11, run:
+
+~~~powershell
+ultron-local voice
+~~~
+
+Say **“Ultron”** before every request, for example “Ultron, explain this error” or “Ultron, open Notepad”. Voice capture uses an already-installed Windows System.Speech recognition language and the default microphone. It recognises one bounded utterance at a time; it does not stream audio to ULTRON's cloud API. Ordinary questions are sent only to the local Ollama loopback endpoint and answered with the selected local model (the default is qwen2.5:1.5b). The existing Windows system speech engine reads responses aloud. No speech model is downloaded automatically.
+
+Optional settings:
+
+~~~powershell
+ultron-local voice --locale auto
+ultron-local voice --locale hi-IN
+ultron-local voice --once
+ultron-local voice --no-speak
+~~~
+
+If the requested recognizer/language is not installed, voice mode stops with an explanation instead of downloading one. Recognition quality and Hindi/Hinglish accuracy depend on Windows language packs and microphone conditions; test them on the target PC.
+
+### Voice-triggered desktop actions
+
+Voice mode recognises only these fixed desktop intents: open Notepad, File Explorer or Calculator; open Desktop, Documents or Downloads. It does **not** interpret arbitrary spoken shell commands, URLs, paths, file changes, messaging, purchases, shutdown, or security changes.
+
+Every desktop action requires a separate typed **LAUNCH** or **OPEN** confirmation in the interactive terminal after the voice request. The target is still restricted by the local allowlist and recorded in the private bounded audit file. Speech alone is never accepted as approval. This voice loop is local-only; the cloud pairing relay remains status/heartbeat-only and does not remotely control the PC.
