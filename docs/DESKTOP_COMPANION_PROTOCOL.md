@@ -1,83 +1,109 @@
 # Windows Desktop Companion Protocol (v1)
 
-## Scope
+## Scope and safety boundary
 
-This document defines the first ULTRON backend contract for checking whether a Windows companion is paired and reachable. The current ULTRON adapter is **status-only**. It does not execute PowerShell or shell commands, read local files, click/press keys, move the mouse, capture screenshots, install software, or shut down/restart the PC.
+The cloud companion relay records only Windows device pairing and recent heartbeat presence. The Windows client initiates outbound HTTPS requests; the ULTRON server never opens a network connection to the PC and never sends commands to it.
 
-A Windows companion runtime and its pairing flow must be installed and independently verified before ULTRON can report a device as paired.
+The relay does **not** execute PowerShell or shell commands, read or write local files, click/press keys, move the mouse, capture screenshots, inspect processes, install software, or shut down/restart the PC. The UI must continue to show remote control as unavailable.
 
-## Configuration
+## Pairing flow
 
-Configure these variables on the ULTRON server, not in a public client:
+1. Sign in to the ULTRON web app with the Supabase account that should own the device.
+2. Open **PC and mobile devices** and generate a one-time pairing code. The code is returned once, expires after five minutes, and is consumed atomically.
+3. On the Windows PC, run:
 
-- `ULTRON_DESKTOP_AGENT_URL`: the companion HTTPS origin, without a path, query, or fragment.
-- `ULTRON_DESKTOP_AGENT_TOKEN`: a high-entropy server-to-companion bearer token.
-- `ULTRON_INTEGRATION_OWNER_USER_ID`: exact Supabase Auth UUID of the one account allowed to use this shared companion credential.
+   ```powershell
+   ultron-local companion pair --server-url https://YOUR-ULTRON-HOST
+   ```
 
-Do not commit or return the bearer token. Public remote endpoints must use HTTPS. The adapter uses `safePinnedFetch`: it resolves the host, rejects private/reserved DNS answers, pins the validated addresses to the connection, and blocks redirects. Production should still apply outbound network controls as an independent defense. A cloud-hosted Render process cannot connect to a PC's private LAN or its `localhost` without a separately reachable, authenticated gateway.
+   The CLI prompts for the code using hidden terminal input. It sends the code and a stable local device UUID to the HTTPS endpoint. It validates public DNS answers, pins the selected IP to the TLS connection, checks the hostname certificate, rejects redirects, and accepts only bounded JSON responses.
+4. Start the foreground heartbeat client:
 
-## Request
+   ```powershell
+   ultron-local companion connect
+   ```
 
-The owner-scoped `check_desktop_companion` agent tool makes one request:
+   To send one test heartbeat and exit, use `ultron-local companion connect --once`.
+
+The CLI saves the device token to the user's ULTRON app-data folder, outside the repository. The token is shown once by the server, never printed by the CLI, and only its SHA-256 hash is stored in Supabase. Protect the Windows user account and its local app-data directory. The token file is not a Windows Credential Manager integration; local account compromise can expose it.
+
+## Cloud API
+
+All routes are mounted beneath `/api`.
+
+### Create a pairing code (authenticated)
 
 ```http
-GET /v1/ultron/status
-Accept: application/json
-Authorization: Bearer <server-side-token>
-X-ULTRON-Protocol-Version: 1
+POST /api/desktop-companion/pairings
+Cookie: <Supabase-authenticated ULTRON session>
+Content-Type: application/json
+
+{}
 ```
 
-The request must not be redirected. The request timeout is 8 seconds. A response over 64 KiB or a non-streamable/unbounded body is rejected.
+The server creates 24 cryptographically random bytes, stores only the SHA-256 hash with the authenticated owner UUID and a database-enforced maximum five-minute expiry, and returns the raw code once with `Cache-Control: no-store`.
 
-## Successful response
+### Redeem a pairing code (one-time device exchange)
 
-Return HTTP 200 with JSON matching the following shape:
+```http
+POST /api/desktop-companion/pair
+Content-Type: application/json
 
-```json
 {
-  "protocolVersion": 1,
-  "device": {
-    "id": "stable-device-id",
-    "name": "Ayaan-PC",
-    "platform": "windows",
-    "paired": true,
-    "online": true,
-    "lastSeenAt": "2026-10-25T15:00:00.000Z"
-  },
-  "capabilities": ["status", "system_info"]
+  "pairingCode": "<32-character-base64url-code>",
+  "deviceId": "<stable-device-uuid>",
+  "deviceName": "Ayaan-PC"
 }
 ```
 
-`protocolVersion` must be the integer `1`. `device.id` and `device.name` must be non-empty strings. `platform` must equal `windows`. `paired` and `online` must be booleans. `lastSeenAt` is optional. `capabilities` must be an array; the ULTRON adapter only reports the currently allowlisted read-only capabilities `status` and `system_info`. Unknown capability names are ignored.
+The server generates a 256-bit random device token. A narrow service-role RPC consumes the unexpired pairing code exactly once and creates/rotates the device record with only the token hash. The raw token is returned once with no-store headers. The RPC is allowlisted in server code; no generic caller-selected database function is exposed.
 
-The adapter returns one of these states:
+### Heartbeat (device-authenticated)
 
-- `completed`: valid protocol response, paired device, and device reports online.
-- `needs_pairing`: the endpoint is reachable, but the device reports not paired.
-- `offline`: the endpoint responds but the device reports offline.
-- `blocked` or `failed`: missing configuration, owner denial, authentication failure, timeout, unsafe/unreadable response, or protocol mismatch.
+```http
+POST /api/desktop-companion/heartbeat
+Authorization: Bearer <device-token>
+Content-Type: application/json
 
-A reachable endpoint is not sufficient proof of secure device pairing. The companion must authenticate the server token, bind the pairing to the expected owner/device, use a protected local IPC boundary, and provide clear user consent before any future action.
+{ "deviceId": "<stable-device-uuid>" }
+```
 
-## Security boundary for future actions
+The service-role RPC matches both the token hash and device UUID, requires `revoked_at is null`, and updates `last_seen_at`. Heartbeats are expected every 30 seconds. The UI reports a device online for at most 90 seconds after its last heartbeat. This endpoint does not accept task text, command names, file paths, or action payloads.
 
-Do not add generic `run_command`, arbitrary PowerShell, unrestricted filesystem access, stealth/background control, or “execute anything” endpoints to this protocol. Any future PC actions need a separate allowlisted command schema, per-action permission and approval checks, device identity/pairing, audit events, an emergency stop, and time/size limits. Sensitive or destructive actions must require task-specific confirmation. The current adapter never calls those actions and never treats a model-generated response as permission.
+### Inventory and revocation (authenticated owner)
 
-## Local Windows companion runtime
+- `GET /api/desktop-companion/devices` returns only the signed-in user's own device metadata. The token hash is not selectable by authenticated users.
+- `POST /api/desktop-companion/devices/:id/revoke` calls an owner-checked database function using `auth.uid()`. The next heartbeat from a revoked device is rejected.
 
-The local-first Python package now includes `ultron-local companion token` and `ultron-local companion serve`. On Windows, the service:
+RLS is enabled on both tables. Anonymous/public table access is revoked. Authenticated users may insert their own pairing records and read only their own device inventory; service-role access is limited to the server-side pairing/heartbeat paths. Function definitions use an empty `search_path` and schema-qualified object names.
 
-- binds only to `127.0.0.1` and does not accept a configurable public/LAN bind address;
-- requires a high-entropy bearer token (minimum 43 URL-safe characters);
-- checks the loopback peer address and exact Host header;
-- denies browser Origins unless the exact local origin is allowlisted through `ULTRON_COMPANION_ALLOWED_ORIGINS`;
-- rate-limits requests, caps concurrent request handlers at 16, applies a five-second socket timeout, closes each response connection, and returns `Cache-Control: no-store`;
-- exposes only `GET /v1/ultron/status` with the `status` capability.
+## Network and credential protections
 
-The local runtime reports `paired: true` only after the caller presents the local bearer token. This is local token possession, **not** proof that a ULTRON cloud account, user UUID, or remote backend has completed identity pairing. The service intentionally does not expose shell, filesystem, screenshot, process, mouse, keyboard, or general PC-control actions.
+- The CLI accepts only an HTTPS origin on port 443; credentials, URL paths, queries, fragments, local hostnames and literal IP server URLs are rejected.
+- DNS lookup must return only public/global IP addresses. If any result is private, loopback, link-local, multicast, reserved or otherwise non-global, the request is blocked.
+- The CLI connects to a previously validated IP while retaining the original hostname for TLS SNI and certificate validation. It does not follow redirects.
+- Request/response timeouts and a 64 KiB response limit bound the client. The service-side API uses the existing API rate limiter.
+- Pairing codes and device tokens are high-entropy random values. Supabase stores only SHA-256 hashes; server responses and diagnostics do not return stored tokens or provider output.
+- The local client initiates every heartbeat. No inbound PC port, LAN listener, tunnel, reverse shell, command queue or remote-control channel is created.
 
-This local loopback process is not reachable from Render or another hosted backend. The separate server-side adapter still requires a private, authenticated, publicly reachable HTTPS gateway and owner identity binding. Do not expose the local service port to the LAN or internet.
+## Revoke or remove a device
 
-## Verification status
+Use **REVOKE** beside the device in the web UI. Revocation is owner-scoped and immediately prevents the next token-authenticated heartbeat from updating presence. To remove the local token file too, stop `ultron-local companion connect` and run:
 
-Automated tests cover the local HTTP service's loopback bind, authentication, Host/Origin checks, exact route, preflight restrictions, rate limiting, and stable device ID. CI execution does not prove installation or runtime behavior on the user's physical Windows PC. Physical-device smoke testing and any cloud-to-device gateway/pairing remain unverified; no PC-control capability is claimed.
+```powershell
+Remove-Item "$env:LOCALAPPDATA\ULTRON\local-assistant\companion\device-credentials.json"
+```
+
+Pair the PC again with a fresh code to restore status reporting.
+
+## Optional legacy loopback status server
+
+The separate `ultron-local companion token` and `ultron-local companion serve` commands start a local-only status endpoint for local development. It binds only to `127.0.0.1`, checks the loopback peer and exact Host header, requires a high-entropy bearer token, denies unlisted browser Origins, rate-limits requests, caps concurrent handlers at 16, applies a five-second socket timeout, closes responses, and exposes only `GET /v1/ultron/status`.
+
+This loopback server is not used by the cloud pairing/heartbeat relay. Do not expose its port to the LAN or internet.
+
+## Verification boundary
+
+Automated tests cover API route behavior, hashing, one-time code handling, heartbeat identity checks, inventory online-window logic, revocation paths, local DNS validation, secure credential-file handling, and SQL policy/function source properties. These are not a substitute for running the migration against a dedicated Supabase test project, pairing a physical Windows PC, and confirming live heartbeat/revocation in the deployed environment.
+
+The migration is not applied to the production Supabase project, and this PR is not deployed. No remote PC-control feature is claimed.
