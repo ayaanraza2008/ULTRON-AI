@@ -8,6 +8,18 @@ class FakeSpeechSynthesis extends EventTarget {
   constructor(voices = []) {
     super();
     this.voices = voices;
+    this.addedVoiceListeners = 0;
+    this.removedVoiceListeners = 0;
+  }
+
+  addEventListener(type, listener, options) {
+    if (type === "voiceschanged") this.addedVoiceListeners += 1;
+    return super.addEventListener(type, listener, options);
+  }
+
+  removeEventListener(type, listener, options) {
+    if (type === "voiceschanged") this.removedVoiceListeners += 1;
+    return super.removeEventListener(type, listener, options);
   }
 
   getVoices() {
@@ -59,7 +71,8 @@ test("voice readiness waits for voiceschanged and removes its listener", async (
   const voice = { name: "Ravi", lang: "hi-IN" };
   synth.setVoices([voice]);
   assert.deepEqual(await pending, [voice]);
-  assert.equal(synth.listenerCount?.("voiceschanged"), undefined);
+  assert.equal(synth.addedVoiceListeners, 1);
+  assert.equal(synth.removedVoiceListeners, 1);
 });
 
 test("voice readiness can be cancelled before its timeout", async () => {
