@@ -18,7 +18,6 @@ internal static class Program
 
 internal sealed class CompanionContext : ApplicationContext
 {
-    private const string DefaultAssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private string _assistantUrl;
     private bool _assistantUrlConfigurationInvalid;
