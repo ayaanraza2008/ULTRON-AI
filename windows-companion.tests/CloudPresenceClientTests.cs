@@ -51,6 +51,8 @@ internal static class CloudPresenceClientTests
         RemoteActionAllowlistIsStrict();
         await RemoteActionPollingRequiresLocalApprovalAndDoesNotExecuteWhenDeclined();
         await RemoteActionPollingExecutesOnlyAfterApprovalAndReportsTheResult();
+        await RemoteActionIsReauthorizedAfterApprovalAndBeforeExecution();
+        await RevokedActionIsNotExecutedAfterLocalApproval();
     }
 
     private static void PublicAddressPolicyRejectsLocalAndReservedNetworks()
@@ -215,6 +217,13 @@ internal static class CloudPresenceClientTests
                 return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(payload));
             }
 
+            if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/" + commandId + "/authorize")
+            {
+                Assert(request.Headers.Authorization?.ToString() == "Bearer " + DeviceToken,
+                    "An approved action must be reauthorized with the paired device token.");
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new { authorized = true, commandId }));
+            }
+
             if (request.RequestUri?.AbsolutePath == "/api/desktop-companion/commands/" + commandId + "/result")
             {
                 resultBody = await request.Content!.ReadAsStringAsync(cancellationToken);
@@ -250,9 +259,116 @@ internal static class CloudPresenceClientTests
 
         Assert(executionCalls == 1, "An approved request must invoke the executor exactly once.");
         Assert(resultBody is not null &&
-            resultBody.Contains("\\"status\\":\\"completed\\"", StringComparison.Ordinal) &&
-            resultBody.Contains("\\"resultCode\\":\\"ACTION_COMPLETED\\"", StringComparison.Ordinal),
+            resultBody.Contains("\"status\":\"completed\"", StringComparison.Ordinal) &&
+            resultBody.Contains("\"resultCode\":\"ACTION_COMPLETED\"", StringComparison.Ordinal),
             "A successful local action must report its bounded completion state.");
+    }
+
+    private static async Task RemoteActionIsReauthorizedAfterApprovalAndBeforeExecution()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1",
+            JsonSerializer.Serialize(new { ServerOrigin = Origin, DeviceId = DeviceId, DeviceToken = DeviceToken }));
+        var commandId = "88888888-8888-4888-8888-888888888888";
+        var sequence = new List<string>();
+        var handler = new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            var path = request.RequestUri?.AbsolutePath;
+            if (path == "/api/desktop-companion/commands/next")
+            {
+                sequence.Add("claim");
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                {
+                    command = new
+                    {
+                        id = commandId,
+                        actionType = "launch_application",
+                        target = "notepad",
+                        expiresAt = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O")
+                    }
+                }));
+            }
+            if (path == "/api/desktop-companion/commands/" + commandId + "/authorize")
+            {
+                sequence.Add("authorize");
+                Assert(request.Headers.Authorization?.ToString() == "Bearer " + DeviceToken,
+                    "Pre-execution authorization must use the paired device token.");
+                var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+                Assert(body.Contains(DeviceId, StringComparison.Ordinal),
+                    "Pre-execution authorization must be scoped to this device.");
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new { authorized = true, commandId }));
+            }
+            if (path == "/api/desktop-companion/commands/" + commandId + "/result")
+            {
+                sequence.Add("result");
+                return JsonResponse(HttpStatusCode.OK, """{"recorded":true}""");
+            }
+            throw new InvalidOperationException("Unexpected request in pre-execution authorization test: " + path);
+        });
+        using var http = new HttpClient(handler);
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cancellation = new CancellationTokenSource();
+        await client.RunRemoteActionPollingLoopAsync(
+            (_, _) => Task.FromResult(true),
+            (_, _) =>
+            {
+                sequence.Add("execute");
+                return Task.FromResult("Notepad");
+            },
+            message =>
+            {
+                if (message.Contains("action approved and started", StringComparison.OrdinalIgnoreCase))
+                    cancellation.Cancel();
+            },
+            cancellation.Token);
+
+        Assert(sequence.SequenceEqual(new[] { "claim", "authorize", "execute", "result" }),
+            "The exact command must be reauthorized after local approval and before execution.");
+    }
+
+    private static async Task RevokedActionIsNotExecutedAfterLocalApproval()
+    {
+        var store = new FakeCredentialStore();
+        store.Save("ULTRON:DesktopCompanion:v1",
+            JsonSerializer.Serialize(new { ServerOrigin = Origin, DeviceId = DeviceId, DeviceToken = DeviceToken }));
+        var commandId = "99999999-9999-4999-8999-999999999999";
+        var executeCalls = 0;
+        var handler = new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            var path = request.RequestUri?.AbsolutePath;
+            if (path == "/api/desktop-companion/commands/next")
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                {
+                    command = new
+                    {
+                        id = commandId,
+                        actionType = "launch_application",
+                        target = "notepad",
+                        expiresAt = DateTimeOffset.UtcNow.AddSeconds(45).ToString("O")
+                    }
+                }));
+            if (path == "/api/desktop-companion/commands/" + commandId + "/authorize")
+                return JsonResponse(HttpStatusCode.Conflict, """{"error":{"code":"DESKTOP_ACTION_NO_LONGER_ACTIVE"}}""");
+            throw new InvalidOperationException("No result or execution request is allowed after revocation: " + path);
+        });
+        using var http = new HttpClient(handler);
+        using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
+        using var cancellation = new CancellationTokenSource();
+        await client.RunRemoteActionPollingLoopAsync(
+            (_, _) => Task.FromResult(true),
+            (_, _) =>
+            {
+                executeCalls++;
+                return Task.FromResult("must not execute");
+            },
+            message =>
+            {
+                if (message.Contains("no longer authorized", StringComparison.OrdinalIgnoreCase))
+                    cancellation.Cancel();
+            },
+            cancellation.Token);
+
+        Assert(executeCalls == 0, "A revoked or expired command must never reach the local executor.");
     }
 
     private static async Task PairingUsesOneTimeCodeAndSavesOnlyValidatedDeviceCredentials()
@@ -315,7 +431,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $$$"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+            JsonSerializer.Serialize(new { ServerOrigin = Origin, DeviceId = DeviceId, DeviceToken = DeviceToken }));
         using var http = new HttpClient(new StubHttpHandler((_, _) =>
             Task.FromResult(JsonResponse(HttpStatusCode.Unauthorized, """{"error":{"code":"DEVICE_TOKEN_REVOKED_OR_UNKNOWN"}}"""))));
         using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
@@ -329,7 +445,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $$$"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
+            JsonSerializer.Serialize(new { ServerOrigin = Origin, DeviceId = DeviceId, DeviceToken = DeviceToken }));
         HttpRequestMessage? captured = null;
         using var http = new HttpClient(new StubHttpHandler((request, _) =>
         {
