@@ -49,6 +49,18 @@ test("device command claiming and result reporting are token-bound, one-time, an
   assert.match(claim[1], /set status = 'delivered'/i);
   assert.match(sql, /grant execute on function public\.claim_desktop_companion_command\(text, uuid\)\s+to service_role/i);
 
+  const authorize = sql.match(/create or replace function public\.authorize_desktop_companion_command\(([\s\S]*?)\$function\$/i);
+  assert.ok(authorize, "authorize_desktop_companion_command must exist");
+  assert.match(authorize[1], /security definer/i);
+  assert.match(authorize[1], /set search_path = ''/i);
+  assert.match(authorize[1], /c\.id = p_command_id/i);
+  assert.match(authorize[1], /d\.token_hash = p_token_hash/i);
+  assert.match(authorize[1], /d\.device_id = p_device_id/i);
+  assert.match(authorize[1], /d\.revoked_at is null/i);
+  assert.match(authorize[1], /c\.status = 'delivered'/i);
+  assert.match(authorize[1], /c\.expires_at > pg_catalog\.now\(\)/i);
+  assert.match(sql, /grant execute on function public\.authorize_desktop_companion_command\(text, uuid, uuid\)\s+to service_role/i);
+
   const complete = sql.match(/create or replace function public\.complete_desktop_companion_command\(([\s\S]*?)\$function\$/i);
   assert.ok(complete, "complete_desktop_companion_command must exist");
   assert.match(complete[1], /security definer/i);
