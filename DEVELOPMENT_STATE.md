@@ -192,3 +192,11 @@ The CI workflow's passing production-revision result therefore confirms the `ult
 - Node test suite: 811 tests, 810 passed, 0 failed, 1 skipped. The skipped test is the opt-in live Supabase two-account isolation test.
 - Python assistant tests, Windows installer parsing, and World Intelligence build/bridge verification passed. Runtime and production dependency audits each reported 0 vulnerabilities.
 - These are source-level checks; provider, Auth/RLS, worker, Docker, physical-device/browser and deployment checks remain distinct.
+
+
+## Local assistant process-output hardening — 2026-10-30
+
+- Bounded stdout and stderr capture for explicitly approved local script/command execution to 1 MB per stream; output is drained concurrently so noisy programs cannot grow the assistant process's memory without bound.
+- Timed-out POSIX process groups are terminated together; Windows uses a process-group taskkill attempt before terminating the direct child.
+- Added a regression test that emits more than 1 MB on both output streams and verifies truncation. This change is pending a fresh CI run on its exact branch head.
+- This does not make script execution a security sandbox: approved code still runs with the user's normal account permissions. Unknown code must not be run.
