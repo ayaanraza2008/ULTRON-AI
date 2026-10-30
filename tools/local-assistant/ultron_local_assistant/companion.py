@@ -14,6 +14,7 @@ import os
 import platform
 import re
 import socket
+import stat
 import ssl
 import threading
 import time
@@ -41,13 +42,32 @@ def generate_companion_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _is_symlink_or_junction(path: Path) -> bool:
+    """Reject final-path symlinks and Windows reparse points without requiring Python 3.12."""
+    path = Path(path)
+    try:
+        if path.is_symlink():
+            return True
+        is_junction = getattr(path, "is_junction", None)
+        if callable(is_junction) and is_junction():
+            return True
+        details = path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        # An unreadable identity path is not safe to follow.
+        return True
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(getattr(details, "st_file_attributes", 0) & reparse_flag)
+
+
 def _device_id(data_dir: Path) -> str:
     data_dir = Path(data_dir)
-    if data_dir.is_symlink():
-        raise ValueError("Companion data directory must not be a symlink.")
+    if _is_symlink_or_junction(data_dir):
+        raise ValueError("Companion data directory must not be a symlink or junction.")
     data_dir.mkdir(parents=True, exist_ok=True)
     identity_file = data_dir / "device-id"
-    if identity_file.is_symlink() or (identity_file.exists() and not identity_file.is_file()):
+    if _is_symlink_or_junction(identity_file) or (identity_file.exists() and not identity_file.is_file()):
         raise ValueError("Companion device identity file is not a regular file.")
     if identity_file.exists():
         try:
