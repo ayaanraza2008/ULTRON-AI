@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest.mock import patch
 
 from ultron_local_assistant import desktop_control
-from ultron_local_assistant.cli import build_parser
+from ultron_local_assistant.cli import build_parser, desktop_launch, desktop_open_folder
 
 
 class DesktopControlTests(unittest.TestCase):
@@ -154,6 +154,27 @@ class DesktopControlTests(unittest.TestCase):
         self.assertEqual([record["outcome"] for record in records], ["approved", "launch_failed"])
         self.assertEqual(records[-1]["error_code"], "FileNotFoundError")
         self.assertNotIn("private-path-not-for-audit", audit_text)
+
+
+    def test_desktop_launch_rejects_piped_confirmation(self):
+        args = SimpleNamespace(application="notepad")
+        with patch("ultron_local_assistant.cli.sys.stdin", SimpleNamespace(isatty=lambda: False)), \\
+             patch("ultron_local_assistant.cli.confirm") as prompt, \\
+             patch("ultron_local_assistant.cli.launch_application") as launch:
+            self.assertEqual(desktop_launch(args), 0)
+        prompt.assert_not_called()
+        launch.assert_not_called()
+        self.popen.assert_not_called()
+
+    def test_desktop_folder_open_rejects_piped_confirmation(self):
+        args = SimpleNamespace(folder="documents")
+        with patch("ultron_local_assistant.cli.sys.stdin", SimpleNamespace(isatty=lambda: False)), \\
+             patch("ultron_local_assistant.cli.confirm") as prompt, \\
+             patch("ultron_local_assistant.cli.open_known_folder") as open_folder:
+            self.assertEqual(desktop_open_folder(args), 0)
+        prompt.assert_not_called()
+        open_folder.assert_not_called()
+        self.popen.assert_not_called()
 
 
 class DesktopCommandParserTests(unittest.TestCase):
