@@ -37,7 +37,7 @@ Use HTTPS and the same official ULTRON origin on every device. Do not install co
 
 ## Separate device companions
 
-- Windows companion: optional wake-word tray launcher and a separate local Python assistant. Its cloud heartbeat is outbound-only status; it is not remote PC control.
+- Windows companion: optional wake-word tray launcher and a separate local Python assistant. Its cloud heartbeat is outbound-only; ULTRON can request only fixed app/folder shortcuts, each requiring a fresh typed ALLOW in the Windows terminal. It has no general remote shell or desktop-control API.
 - Android companion APK: optional on-device wake-word listener that raises a notification to open ULTRON. It is not the full mobile app and does not control the phone.
 - iPhone/iPad: use the installable web app. Background wake-word listening is not provided by the iOS web app.
 
