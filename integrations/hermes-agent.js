@@ -278,6 +278,66 @@ async function getHermesApiCapabilities({ config, fetchImpl }) {
   };
 }
 
+
+/** List the skills that the configured Hermes API server actually exposes. */
+export async function listHermesAgentSkills({ env = process.env, fetchImpl = safePinnedFetch, userId } = {}) {
+  const config = getConfig(env, userId, true);
+  if (config.error) return config.error;
+  try {
+    const response = await fetchImpl(config.baseUrl + "/skills", {
+      method: "GET",
+      headers: { Accept: "application/json", Authorization: "Bearer " + config.token },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000)
+    });
+    const data = await readJsonLimited(response, 1_000_000);
+    if (!response.ok) {
+      return { state: "failed", provider: "hermes-agent", error: { code: "HERMES_AGENT_SKILLS_FAILED", message: "Hermes Agent skill discovery failed with HTTP " + response.status + "." } };
+    }
+    const rows = Array.isArray(data) ? data : Array.isArray(data?.skills) ? data.skills : null;
+    if (!rows) return { state: "failed", provider: "hermes-agent", error: { code: "HERMES_AGENT_SKILLS_INVALID", message: "Hermes Agent returned an unsupported skills catalog format." } };
+    const skills = rows.slice(0, 100).map(item => ({
+      name: bounded(item?.name ?? item?.id, 120),
+      description: bounded(item?.description, 500),
+      category: bounded(item?.category, 100) || undefined
+    })).filter(item => item.name);
+    return { state: "completed", provider: "hermes-agent", count: skills.length, skills };
+  } catch (error) {
+    return sanitizeError(error);
+  }
+}
+
+/** List enabled/configured Hermes toolsets and their bounded tool-name inventory. */
+export async function listHermesAgentToolsets({ env = process.env, fetchImpl = safePinnedFetch, userId } = {}) {
+  const config = getConfig(env, userId, true);
+  if (config.error) return config.error;
+  try {
+    const response = await fetchImpl(config.baseUrl + "/toolsets", {
+      method: "GET",
+      headers: { Accept: "application/json", Authorization: "Bearer " + config.token },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000)
+    });
+    const data = await readJsonLimited(response, 1_000_000);
+    if (!response.ok) {
+      return { state: "failed", provider: "hermes-agent", error: { code: "HERMES_AGENT_TOOLSETS_FAILED", message: "Hermes Agent toolset discovery failed with HTTP " + response.status + "." } };
+    }
+    const rows = Array.isArray(data) ? data : Array.isArray(data?.toolsets) ? data.toolsets : null;
+    if (!rows) return { state: "failed", provider: "hermes-agent", error: { code: "HERMES_AGENT_TOOLSETS_INVALID", message: "Hermes Agent returned an unsupported toolsets catalog format." } };
+    const toolsets = rows.slice(0, 100).map(item => ({
+      name: bounded(item?.name ?? item?.id, 120),
+      label: bounded(item?.label, 160) || undefined,
+      description: bounded(item?.description, 500) || undefined,
+      enabled: typeof item?.enabled === "boolean" ? item.enabled : null,
+      configured: typeof item?.configured === "boolean" ? item.configured : null,
+      tools: Array.isArray(item?.tools) ? item.tools.slice(0, 100).map(value => bounded(value, 120)).filter(Boolean) : []
+    })).filter(item => item.name);
+    return { state: "completed", provider: "hermes-agent", count: toolsets.length, toolsets };
+  } catch (error) {
+    return sanitizeError(error);
+  }
+}
+
 /** Start a long-running, owner-scoped Hermes run. The run itself remains on Hermes. */
 export async function startHermesAgentRun({ env = process.env, fetchImpl = safePinnedFetch, userId, task, conversationId } = {}) {
   const config = getConfig(env, userId, true);
