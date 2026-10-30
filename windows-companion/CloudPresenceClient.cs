@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Net;
+using System.Net.Sockets;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -214,7 +215,13 @@ public sealed class CloudPresenceClient : IDisposable
         TimeSpan? heartbeatInterval = null)
     {
         _ownsHttp = httpClient is null;
-        _http = httpClient ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+        _http = httpClient ?? new HttpClient(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            ConnectCallback = ConnectPublicPinnedAsync
+        })
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
@@ -223,6 +230,88 @@ public sealed class CloudPresenceClient : IDisposable
         _heartbeatInterval = heartbeatInterval ?? TimeSpan.FromSeconds(30);
         if (_heartbeatInterval < TimeSpan.FromSeconds(1) || _heartbeatInterval > TimeSpan.FromMinutes(5))
             throw new ArgumentOutOfRangeException(nameof(heartbeatInterval));
+    }
+
+    /// <summary>
+    /// Resolve DNS once for each new socket and pin the connection to one of
+    /// those validated public addresses. Mixed public/private answers fail closed.
+    /// TLS certificate validation remains bound to the original HTTPS hostname.
+    /// </summary>
+    private static async ValueTask<Stream> ConnectPublicPinnedAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
+        if (addresses.Length == 0 || addresses.Any(address => !IsPublicGlobalAddress(address)))
+            throw new HttpRequestException("The ULTRON host resolved to a private, local, reserved or non-global address. Connection blocked.");
+
+        Exception? lastError = null;
+        foreach (var address in addresses)
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellationToken);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (Exception error) when (error is SocketException or OperationCanceledException)
+            {
+                socket.Dispose();
+                if (error is OperationCanceledException) throw;
+                lastError = error;
+            }
+        }
+        throw new HttpRequestException("Could not connect to a validated ULTRON host address.", lastError);
+    }
+
+    internal static bool IsPublicGlobalAddress(IPAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var blocked = new (byte[] Network, int Prefix)[]
+            {
+                (new byte[] { 0, 0, 0, 0 }, 8),
+                (new byte[] { 10, 0, 0, 0 }, 8),
+                (new byte[] { 100, 64, 0, 0 }, 10),
+                (new byte[] { 127, 0, 0, 0 }, 8),
+                (new byte[] { 169, 254, 0, 0 }, 16),
+                (new byte[] { 172, 16, 0, 0 }, 12),
+                (new byte[] { 192, 0, 0, 0 }, 24),
+                (new byte[] { 192, 0, 2, 0 }, 24),
+                (new byte[] { 192, 88, 99, 0 }, 24),
+                (new byte[] { 192, 168, 0, 0 }, 16),
+                (new byte[] { 198, 18, 0, 0 }, 15),
+                (new byte[] { 198, 51, 100, 0 }, 24),
+                (new byte[] { 203, 0, 113, 0 }, 24),
+                (new byte[] { 224, 0, 0, 0 }, 4),
+                (new byte[] { 240, 0, 0, 0 }, 4)
+            };
+            return !blocked.Any(range => InPrefix(address.GetAddressBytes(), range.Network, range.Prefix));
+        }
+
+        if (address.AddressFamily != AddressFamily.InterNetworkV6) return false;
+        var bytes = address.GetAddressBytes();
+        if (!InPrefix(bytes, new byte[] { 0x20, 0x00 }, 3)) return false;
+        if (InPrefix(bytes, new byte[] { 0x20, 0x01, 0x0d, 0xb8 }, 32) ||
+            InPrefix(bytes, new byte[] { 0x20, 0x01, 0x00, 0x00 }, 23) ||
+            InPrefix(bytes, new byte[] { 0x20, 0x02 }, 16) ||
+            InPrefix(bytes, new byte[] { 0x3f, 0xff }, 20))
+            return false;
+        return true;
+    }
+
+    private static bool InPrefix(byte[] address, byte[] network, int prefixLength)
+    {
+        var fullBytes = prefixLength / 8;
+        var remainingBits = prefixLength % 8;
+        for (var index = 0; index < fullBytes; index++)
+            if (address[index] != network[index]) return false;
+        if (remainingBits == 0) return true;
+        var mask = (byte)(0xff << (8 - remainingBits));
+        return (address[fullBytes] & mask) == (network[fullBytes] & mask);
     }
 
     public bool HasPairing
