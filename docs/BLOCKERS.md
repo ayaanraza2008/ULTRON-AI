@@ -35,3 +35,9 @@ The security branch adds a transport that resolves public hostnames, rejects any
 ## Paid integration spend controls
 
 - OpenSEO paid lookup authorization is enforced server-side from the current user's explicit prompt and bounded credit ceiling. Model-generated tool arguments cannot authorize spend. Agent-level tests and full CI passed on feature head (run 41115578469); live upstream billing behavior and account quota remain unverified. Do not treat mocked MCP responses as a live account check.
+
+
+## Chrome DevTools consequential action approval
+
+- Model-generated `confirmExternalAction` is no longer passed to the local Chrome bridge; the ULTRON agent always sends false. The bridge's local operator flag remains an additional guard, not evidence of user consent.
+- Consequential external clicks remain blocked until a task-bound user approval flow can display the exact host, selector/action and intended effect, then issue a one-time authenticated approval bound to that operation.
