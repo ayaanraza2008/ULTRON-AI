@@ -197,6 +197,7 @@ test("Hermes delegates through the native Runs API and polls a completed executi
       if (url.endsWith("/runs") && options.method === "POST") {
         const payload = JSON.parse(options.body);
         assert.equal(payload.input, "Inspect the project tests and summarize their coverage.");
+        assert.equal(payload.model, "hermes-agent");
         assert.match(payload.instructions, /least-privileged configured terminal backend/);
         assert.match(payload.session_id, /^ultron-[a-f0-9]{32}$/);
         assert.match(options.headers["Idempotency-Key"], /^[0-9a-f-]{36}$/i);
@@ -262,4 +263,32 @@ test("Hermes reports native run failures instead of treating them as successful 
   assert.equal(result.state, "failed");
   assert.equal(result.error.code, "HERMES_AGENT_RUN_FAILED");
   assert.equal(JSON.stringify(result).includes("internal details"), false);
+});
+
+
+test("Hermes reports interrupted and unknown run outcomes without claiming success", async (t) => {
+  for (const status of ["interrupted", "unknown"]) {
+    await t.test(status, async () => {
+      const result = await runHermesAgentTask({
+        env: configuredEnv(),
+        userId: ownerId,
+        task: "Check a previously submitted run.",
+        fetchImpl: async (url, options) => {
+          if (url.endsWith("/runs") && options.method === "POST") {
+            return new Response(JSON.stringify({ run_id: "run-" + status, status: "started" }), { status: 202 });
+          }
+          if (url.endsWith("/runs/run-" + status)) {
+            return new Response(JSON.stringify({ run_id: "run-" + status, status, output: "should not be trusted" }), { status: 200 });
+          }
+          throw new Error("unexpected Hermes endpoint");
+        }
+      });
+      assert.equal(result.state, status);
+      assert.notEqual(result.state, "completed");
+      assert.equal(JSON.stringify(result).includes("should not be trusted"), false);
+      assert.equal(result.error.code, status === "unknown"
+        ? "HERMES_AGENT_RUN_OUTCOME_UNKNOWN"
+        : "HERMES_AGENT_RUN_INTERRUPTED");
+    });
+  }
 });

@@ -340,6 +340,7 @@ export async function runHermesAgentTask({ env = process.env, fetchImpl = safePi
       headers: postHeaders,
       body: JSON.stringify({
         input: prompt,
+        model: config.model,
         instructions,
         ...(sessionId ? { session_id: sessionId } : {})
       }),
@@ -418,15 +419,24 @@ export async function runHermesAgentTask({ env = process.env, fetchImpl = safePi
         };
       }
 
-      if (status === "failed" || status === "cancelled") {
+      if (status === "failed" || status === "cancelled" || status === "interrupted" || status === "unknown") {
+        const code = {
+          failed: "HERMES_AGENT_RUN_FAILED",
+          cancelled: "HERMES_AGENT_RUN_CANCELLED",
+          interrupted: "HERMES_AGENT_RUN_INTERRUPTED",
+          unknown: "HERMES_AGENT_RUN_OUTCOME_UNKNOWN"
+        }[status];
+        const message = {
+          failed: "Hermes Agent failed the delegated run. Check the Hermes operator logs.",
+          cancelled: "Hermes Agent cancelled the delegated run.",
+          interrupted: "Hermes Agent reports that the delegated run was interrupted before completion.",
+          unknown: "Hermes Agent cannot determine whether the delegated run completed after a gateway restart. Do not replay it automatically."
+        }[status];
         return {
           state: status,
           provider: "hermes-agent",
           runId,
-          error: {
-            code: status === "cancelled" ? "HERMES_AGENT_RUN_CANCELLED" : "HERMES_AGENT_RUN_FAILED",
-            message: status === "cancelled" ? "Hermes Agent cancelled the delegated run." : "Hermes Agent failed the delegated run. Check the Hermes operator logs."
-          }
+          error: { code, message }
         };
       }
 
