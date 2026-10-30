@@ -654,6 +654,23 @@ const SAFE_PREPARATION_TOOLS = new Set([
 ]);
 
 function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
+  const normalizedRequest = typeof requestText === "string" ? requestText.toLowerCase() : "";
+  const explicitHermesRunIntent = /\\bhermes\\b/.test(normalizedRequest) &&
+    /\\b(start|launch|run|delegate|execute|background|submit)\\b/.test(normalizedRequest);
+  const explicitHermesStopIntent = /\\b(stop|cancel|interrupt)\\b/.test(normalizedRequest) &&
+    !/\\b(?:do not|don't|never)\\s+(?:stop|cancel|interrupt)\\b/.test(normalizedRequest);
+  if (name === "hermes_agent_start_run" && !explicitHermesRunIntent) {
+    return {
+      requiresConfirmation: true,
+      risk: { level: "external_effect", reason: "Starting a long-running Hermes job requires explicit user delegation.", requiresConfirmation: true }
+    };
+  }
+  if (name === "hermes_agent_stop_run" && !explicitHermesStopIntent) {
+    return {
+      requiresConfirmation: true,
+      risk: { level: "device_control", reason: "Cancelling a Hermes job requires an explicit user stop request.", requiresConfirmation: true }
+    };
+  }
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "hermes_agent_start_run" || name === "browser_use") delegatedTask = args?.task;
   else if (name === "enqueue_employee_task") delegatedTask = args?.goal;
