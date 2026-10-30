@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createAgentRouter } from "../agent-runtime.js";
+import { buildChromeDevToolsActionInput, createAgentRouter } from "../agent-runtime.js";
 
 const owner = "00000000-0000-4000-8000-000000000001";
 const token = "chrome-devtools-test-token-that-is-long-enough";
@@ -36,24 +36,19 @@ async function startAgent(fetchImpl) {
   };
 }
 
+test("Chrome dispatch discards model-authored confirmation and always forces false", () => {
+  const input = buildChromeDevToolsActionInput({ action: "click", selector: "button#continue", confirmExternalAction: true });
+  assert.deepEqual(input, { action: "click", selector: "button#continue", confirmExternalAction: false });
+  assert.equal(buildChromeDevToolsActionInput({ action: "status", confirmExternalAction: true }).confirmExternalAction, false);
+});
+
 test("model cannot self-approve a consequential Chrome click", async () => {
   let providerCalls = 0;
   let bridgeCalls = 0;
-  let capturedBridgeAction;
   const agent = await startAgent(async (url, options = {}) => {
     if (url === "https://chrome-bridge.example.com/action") {
       bridgeCalls += 1;
-      assert.equal(options.headers.Authorization, "Bearer " + token);
-      assert.equal(options.redirect, "error");
-      capturedBridgeAction = JSON.parse(options.body);
-      // Mirrors the local bridge's consequential-action guard. No click is made.
-      return new Response(JSON.stringify({
-        ok: false,
-        error: {
-          code: "EXTERNAL_ACTION_CONFIRMATION_REQUIRED",
-          message: "A user-confirmed task-specific approval is required. No click was performed."
-        }
-      }), { status: 403, headers: { "content-type": "application/json" } });
+      throw new Error("The autonomy approval gate must block before contacting the local bridge.");
     }
 
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
@@ -90,13 +85,13 @@ test("model cannot self-approve a consequential Chrome click", async () => {
     const toolMessages = body.messages.filter(message => message.role === "tool");
     assert.equal(toolMessages.length, 1);
     const result = JSON.parse(toolMessages[0].content);
-    assert.equal(result.state, "failed");
-    assert.equal(result.error.code, "EXTERNAL_ACTION_CONFIRMATION_REQUIRED");
+    assert.equal(result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(result.approvalRequired, true);
     return new Response(JSON.stringify({
       choices: [{
         message: {
           role: "assistant",
-          content: "The click was blocked because a separate user confirmation flow is not available. No action was performed."
+          content: "The click was blocked by ULTRON autonomy approval. No action was performed."
         }
       }]
     }), { status: 200 });
@@ -113,12 +108,9 @@ test("model cannot self-approve a consequential Chrome click", async () => {
     assert.equal(responseBody.toolResults.length, 1);
     assert.equal(responseBody.toolResults[0].name, "chrome_devtools");
     assert.equal(responseBody.toolResults[0].ok, false);
-    assert.equal(responseBody.toolResults[0].result.error.code, "EXTERNAL_ACTION_CONFIRMATION_REQUIRED");
-    assert.equal(capturedBridgeAction.action, "click");
-    assert.equal(capturedBridgeAction.selector, "button#continue");
-    assert.equal(capturedBridgeAction.confirmExternalAction, false,
-      "ULTRON must force false even when the model emits true");
-    assert.equal(bridgeCalls, 1);
+    assert.equal(responseBody.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(responseBody.toolResults[0].result.approvalRequired, true);
+    assert.equal(bridgeCalls, 0, "no Chrome bridge request may occur before task-specific user approval");
     assert.equal(providerCalls, 2);
     assert.match(responseBody.content, /no action was performed/i);
   } finally {
