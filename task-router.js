@@ -48,7 +48,7 @@ const CATEGORY_TOOLS = Object.freeze({
   spaceplanner: ["create_spaceplanner_plan"],
   world_intelligence: ["world_intelligence_command"],
   paperclip: ["paperclip_read_agent_governance"],
-  hermes: ["check_hermes_agent", "hermes_agent_task"],
+  hermes: ["check_hermes_agent", "hermes_agent_task", "hermes_agent_start_run", "hermes_agent_run_status", "hermes_agent_stop_run", "hermes_agent_list_skills", "hermes_agent_list_toolsets", "hermes_agent_run_events", "hermes_agent_resolve_approval"],
   cactus: ["check_cactus"],
   comfyui: ["check_comfyui", "run_comfyui_workflow"],
   media: [
@@ -86,7 +86,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["appflowy", /\b(?:appflowy|appflowy workspace|search appflowy|appflowy documents?)\b/i],
   ["open_seo", /\b(?:openseo|open seo|seo keyword research|rank tracker cost|domain keyword suggestions|serp lookup)\b/i],
   ["paperclip", /\b(?:paperclip|agent governance|agent roster|agent budget|monthly agent cost)\b/i],
-  ["hermes", /\b(?:hermes agent|run hermes|hermes task)\b/i],
+  ["hermes", /\b(?:hermes agent|hermes runtime|hermes task|hermes run|run hermes|run_[a-z0-9_-]{1,120})\b/i],
   ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
   ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
   ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
@@ -127,6 +127,15 @@ export function classifyTaskRoute(value, { hasHistory = false } = {}) {
     const genericResearchIndex = categories.indexOf("research");
     if (genericResearchIndex >= 0) categories.splice(genericResearchIndex, 1);
   }
+
+  // When the user explicitly delegates a background run to Hermes, words such
+  // as "research" describe Hermes' task payload; they should not widen the ULTRON
+  // tool route with separate research/planning executors.
+  const explicitHermesDelegation = categories.includes("hermes") && (
+    /\\b(?:start|launch|submit|delegate)\\b[\\s\\S]{0,100}\\bhermes(?:\\s+agent)?\\b/i.test(text)
+    || /\\bhermes(?:\\s+agent)?\\b[\\s\\S]{0,100}\\b(?:background|long[- ]running)\\s+(?:run|task|job)\\b/i.test(text)
+  );
+  if (explicitHermesDelegation) categories.splice(0, categories.length, "hermes");
 
   // Provider-specific intents win over generic media/research matches so the
   // corresponding adapter is actually exposed to the agent.
