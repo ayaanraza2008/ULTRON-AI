@@ -21,7 +21,7 @@ function parseHermesBase(value) {
   let url;
   try { url = new URL(normalized); } catch { return null; }
   const local = isLoopback(url.hostname);
-  const host = url.hostname.replace(/^\\[|\\]$/g, "");
+  const host = url.hostname.replace(/^\[|\]$/g, "");
   // The shared URL policy blocks private/LAN/metadata and reserved IP ranges.
   // Hermes additionally requires a hostname rather than a remote IP literal.
   if (!local && isIP(host) !== 0) return null;
