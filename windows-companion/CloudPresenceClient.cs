@@ -462,11 +462,10 @@ public sealed class CloudPresenceClient : IDisposable
                     continue;
                 }
 
+                string executionMessage;
                 try
                 {
-                    var executionMessage = await execute(command, cancellationToken);
-                    await CompleteCommandAsync(credentials, command, "completed", "ACTION_COMPLETED", cancellationToken);
-                    status("ULTRON action approved and started: " + executionMessage);
+                    executionMessage = await execute(command, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -484,6 +483,25 @@ public sealed class CloudPresenceClient : IDisposable
                         // cannot be recorded. The command is never re-executed here.
                     }
                     status("Approved ULTRON action could not be started (" + error.GetType().Name + ").");
+                    continue;
+                }
+
+                try
+                {
+                    await CompleteCommandAsync(credentials, command, "completed", "ACTION_COMPLETED", cancellationToken);
+                    status("ULTRON action approved and started: " + executionMessage);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    status("The approved local action started, but ULTRON shutdown interrupted result reporting.");
+                    return;
+                }
+                catch (Exception error)
+                {
+                    // The local process was already started. Do not report that it
+                    // failed or attempt to start it a second time because only the
+                    // result acknowledgement failed.
+                    status("The approved local action started, but its result could not be synced (" + error.GetType().Name + ").");
                 }
                 retrySeconds = 5;
             }
