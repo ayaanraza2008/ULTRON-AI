@@ -643,7 +643,7 @@ test("Hermes SSE reader cancels the upstream stream after its 100-event window",
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     pull(controller) {
-      controller.enqueue(encoder.encode("event: message.delta\\ndata: {\\"delta\\":\\"event-" + next + "\\"}\\n\\n"));
+      controller.enqueue(encoder.encode("event: message.delta\n" + "data: " + JSON.stringify({ delta: "event-" + next }) + "\n\n"));
       next++;
     },
     cancel() { cancelled = true; }
