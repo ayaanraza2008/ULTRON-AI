@@ -55,3 +55,11 @@ The security branch adds a transport that resolves public hostnames, rejects any
 - Model-generated `includeReverseSearch: true` must never authorize sending image-derived information to external reverse-image providers.
 - The agent schema no longer exposes that flag. The dispatcher derives opt-in from the current user-authored message using an exact canonical approval phrase; ordinary mention, negation, contradictory suffixes and non-exact wording default to off.
 - Regression tests added; CI pending. Keep reverse-image search disabled by default and do not treat source tests as proof of provider behavior or location accuracy.
+
+
+## Geo-Sleuth reverse-image sharing consent (updated 2026-10-31)
+
+- PR #419 merged as `33a9df4`. The model-visible opt-in flag is removed; the dispatcher derives consent only from the exact canonical approval phrase at the start of the current user message.
+- Ordinary mention, explicit denial, contradictory trailing text, missing input and non-exact wording default to no external image sharing.
+- Full CI run `41119660470` passed (662 passed, 0 failed, 1 skipped; dependency audits clean; pinned World Intelligence build green).
+- No external image search was performed. Live provider behavior and geolocation accuracy remain unverified.
