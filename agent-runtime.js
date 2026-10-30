@@ -475,6 +475,8 @@ const SAFE_PREPARATION_TOOLS = new Set([
   // tasks (including durable queueing, media jobs, publishing, or messaging)
   // outside this exception.
   "research_web",
+  // Paid operations are separately protected by the explicit user-message credit gate.
+  "openseo",
   "create_youtube_production_plan",
   "create_spaceplanner_plan",
   "plan_employee",
@@ -490,6 +492,18 @@ const SAFE_PREPARATION_TOOLS = new Set([
   "obscura_inspect_public_page",
   "obscura_capture_public_page"
 ]);
+
+/**
+ * Paid OpenSEO consent must come from the user's current message, never from
+ * model-generated tool arguments, conversation history, or retrieved content.
+ * Canonical form: "I approve spending up to 120 OpenSEO credits for this lookup."
+ */
+export function parseOpenSeoSpendApproval(value) {
+  const text = typeof value === "string" ? value.slice(0, 6000) : "";
+  const match = text.match(/^\s*i approve spending up to ([1-9]\d{0,3}) open\s*seo credits? for this lookup(?:[.!?](?:\s|$)|\s|$)/i);
+  const ceiling = match ? Number(match[1]) : null;
+  return Number.isSafeInteger(ceiling) && ceiling >= 1 && ceiling <= 5000 ? ceiling : null;
+}
 
 function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   let delegatedTask = "";
@@ -860,8 +874,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         userId: req.supabaseUser?.id,
         operation: bounded(args.operation, 80),
         args: isObject(args.args) ? args.args : {},
-        approvePaidLookup: args.approvePaidLookup === true,
-        maxEstimatedCredits: Number.isFinite(args.maxEstimatedCredits) ? args.maxEstimatedCredits : undefined
+        approvePaidLookup: parseOpenSeoSpendApproval(requestBody.prompt) !== null,
+        maxEstimatedCredits: parseOpenSeoSpendApproval(requestBody.prompt) ?? undefined
       });
     }
     if (name === "chrome_devtools") {
@@ -1630,7 +1644,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name) && call?._ultronDeterministicFallback !== true) {
             result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated tool is outside the task router's allowed tool set; no action was executed." } };
           } else {
-            result = await executeTool(name, args, req.body || {}, req);
+            result = await executeTool(name, args, { ...(req.body || {}), prompt: userText }, req);
           }
         } catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
         used.push({ name, ok: !result?.error, result });
@@ -1683,7 +1697,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
               } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name)) {
                 result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated follow-up tool is outside the task router's allowed tool set; no action was executed." } };
               } else {
-                result = await executeTool(name, args, req.body || {}, req);
+                result = await executeTool(name, args, { ...(req.body || {}), prompt: userText }, req);
               }
             } catch (error) { result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
             used.push({ name, ok: !result?.error, result });
