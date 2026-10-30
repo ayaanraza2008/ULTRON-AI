@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { createApp } from "../server.js";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
@@ -202,7 +203,7 @@ test("server-side pre-execution authorization uses only the named service-role R
     assert.equal(calls[0].options.headers.apikey, SERVICE_KEY);
     assert.equal(calls[0].options.headers.Authorization, undefined);
     assert.deepEqual(JSON.parse(calls[0].options.body), {
-      p_token_hash: (await import("node:crypto")).createHash("sha256").update(deviceToken).digest("hex"),
+      p_token_hash: createHash("sha256").update(deviceToken).digest("hex"),
       p_device_id: DEVICE,
       p_command_id: commandId
     });
