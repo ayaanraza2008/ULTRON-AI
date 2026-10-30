@@ -25,6 +25,10 @@ jobs:
           python -m py_compile browser-use-bridge/main.py browser-use-bridge/navigation_policy.py browser-use-bridge/startup_smoke.py browser-use-bridge/test_navigation_policy.py browser-use-bridge/test_startup_smoke.py
           python browser-use-bridge/test_navigation_policy.py
           python browser-use-bridge/test_startup_smoke.py
+      - name: Verify Harness2 local agent-harness benchmark tool
+        run: |
+          python -m py_compile tools/harness2/harness2.py tests/test_harness2.py
+          python -m unittest discover -s tests -p 'test_harness2.py' -v
       - name: Verify ULTRON Model Lab Python CLI
         run: |
           python -m py_compile tools/model-lab/ultron_model_lab.py
