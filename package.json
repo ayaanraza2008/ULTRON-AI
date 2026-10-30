@@ -19,6 +19,7 @@
     "diagnose:auth": "node scripts/supabase-auth-diagnostics.mjs",
     "test:supabase:e2e": "node --test tests/supabase-isolation.e2e.test.js",
     "smoke:google-workspace": "node scripts/google-workspace-smoke.mjs",
+    "smoke:hermes": "node scripts/hermes-agent-smoke.mjs",
     "video-studio": "node scripts/start-video-studio.mjs"
   },
   "dependencies": {
