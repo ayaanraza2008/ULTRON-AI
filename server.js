@@ -1562,12 +1562,25 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       return res.status(400).json({ error: { code: "INVALID_ATTACHMENTS", message: "Attach no more than two images per message." } });
     }
     const imageParts = [];
+    const maxImageBytes = 4 * 1024 * 1024;
+    const maxImageBase64Chars = Math.ceil(maxImageBytes / 3) * 4;
     for (const attachment of attachments) {
-      if (!attachment || typeof attachment.dataUrl !== "string" || attachment.dataUrl.length > 5600000) {
+      if (!attachment || typeof attachment.dataUrl !== "string") {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Each attachment must contain a JPEG, PNG, WebP, or GIF data URL." } });
+      }
+      if (attachment.dataUrl.length > maxImageBase64Chars + 40) {
         return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
       }
-      if (!attachment.dataUrl.startsWith("data:image/") || !/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(attachment.dataUrl)) {
-        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only JPEG, PNG, WebP, or GIF image data is supported." } });
+      const match = /^data:image\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/.exec(attachment.dataUrl);
+      if (!match || match[2].length % 4 !== 0) {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Only canonical base64 JPEG, PNG, WebP, or GIF image data is supported." } });
+      }
+      const imageBytes = Buffer.from(match[2], "base64");
+      if (!imageBytes.length || imageBytes.toString("base64") !== match[2]) {
+        return res.status(400).json({ error: { code: "INVALID_IMAGE", message: "Image data must be valid canonical base64." } });
+      }
+      if (imageBytes.length > maxImageBytes) {
+        return res.status(413).json({ error: { code: "IMAGE_TOO_LARGE", message: "Each image must be 4 MB or smaller." } });
       }
       imageParts.push({ type: "image_url", image_url: { url: attachment.dataUrl } });
     }
@@ -1619,9 +1632,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
     try {
       const openRouterCandidates = hasImageAttachments
-        // Keep backward compatibility: when no dedicated vision list is configured,
-        // try the explicitly selected/allowed model, as older ULTRON deployments did.
-        ? [...new Set(visionModels.length ? visionModels : [selectedModel, ...configuredModels].filter(Boolean))]
+        // Never send image data to an OpenRouter model merely because it is a
+        // configured/default text model. Vision capability must be explicit.
+        ? [...new Set(visionModels)]
         : [...new Set([selectedModel, ...configuredModels, ...knownModels].filter(Boolean))];
       const modelAttempts = [];
       for (const provider of chatProviders) {
