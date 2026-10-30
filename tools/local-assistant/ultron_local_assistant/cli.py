@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, get_system_health, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
 from .companion import create_companion_server, generate_companion_token
+from .desktop_control import list_desktop_actions, launch_application, open_known_folder
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -352,6 +353,34 @@ def skills_list(_):
     out_json(list_installed_skills())
     return 0
 
+def desktop_list(_):
+    out_json(list_desktop_actions())
+    return 0
+
+def desktop_launch(args):
+    print("This starts only a fixed, allowlisted Windows application. No shell command or arbitrary arguments are accepted.")
+    if not confirm("LAUNCH", f"Start the '{args.application}' application?"):
+        print("Launch cancelled.")
+        return 0
+    try:
+        out_json(launch_application(args.application, confirm=True))
+        return 0
+    except Exception as exc:
+        print(f"Desktop launch blocked or failed: {exc}", file=sys.stderr)
+        return 1
+
+def desktop_open_folder(args):
+    print("This opens only one of the standard Windows folders. It does not read, modify, upload, or delete files.")
+    if not confirm("OPEN", f"Open the standard '{args.folder}' folder?"):
+        print("Folder opening cancelled.")
+        return 0
+    try:
+        out_json(open_known_folder(args.folder, confirm=True))
+        return 0
+    except Exception as exc:
+        print(f"Folder opening blocked or failed: {exc}", file=sys.stderr)
+        return 1
+
 def companion_token(_):
     # The token is printed once so PowerShell can capture it into the current
     # process environment without persisting it in project files or CLI args.
@@ -390,6 +419,16 @@ def build_parser():
     p = subs.add_parser("health", help="Show local CPU, memory and disk health without network access"); p.add_argument("--path"); p.set_defaults(handler=health)
     p = subs.add_parser("doctor"); p.set_defaults(handler=doctor)
     p = subs.add_parser("agents"); p.set_defaults(handler=agents)
+    d = subs.add_parser("desktop", help="Run manually confirmed, allowlisted local Windows shortcuts")
+    ds = d.add_subparsers(dest="desktop_command", required=True)
+    p = ds.add_parser("list", help="List the fixed local desktop actions")
+    p.set_defaults(handler=desktop_list)
+    p = ds.add_parser("launch", help="Start a fixed Windows application after confirmation")
+    p.add_argument("application", choices=("notepad", "explorer", "calculator"))
+    p.set_defaults(handler=desktop_launch)
+    p = ds.add_parser("open-folder", help="Open a standard Windows folder after confirmation")
+    p.add_argument("folder", choices=("desktop", "documents", "downloads"))
+    p.set_defaults(handler=desktop_open_folder)
     c = subs.add_parser("companion", help="Run the local Windows desktop status companion")
     cs = c.add_subparsers(dest="companion_command", required=True)
     p = cs.add_parser("token", help="Generate a high-entropy local companion token"); p.set_defaults(handler=companion_token)
