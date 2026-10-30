@@ -261,7 +261,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $"""{ "ServerOrigin":"{Origin}","DeviceId":"{DeviceId}","DeviceToken":"{DeviceToken}" }""");
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
         var commandId = "88888888-8888-4888-8888-888888888888";
         var sequence = new List<string>();
         var handler = new StubHttpHandler(async (request, cancellationToken) =>
@@ -323,7 +323,7 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         store.Save("ULTRON:DesktopCompanion:v1",
-            $"""{ "ServerOrigin":"{Origin}","DeviceId":"{DeviceId}","DeviceToken":"{DeviceToken}" }""");
+            $"""{"ServerOrigin":"{{Origin}}","DeviceId":"{{DeviceId}}","DeviceToken":"{{DeviceToken}}"}""");
         var commandId = "99999999-9999-4999-8999-999999999999";
         var executeCalls = 0;
         var handler = new StubHttpHandler(async (request, cancellationToken) =>
