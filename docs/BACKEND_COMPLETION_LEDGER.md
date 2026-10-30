@@ -118,8 +118,8 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 
 - Removed `consentBasis` from the model-visible `clone_speech_voice` schema and deterministic routing arguments.
 - The server derives the consent basis solely from the current raw user message using one of two exact opening attestations:
-  - `I confirm this is my own voice and I approve cloning the attached audio into a VoiceStudio profile.`
-  - `I confirm I have the speaker's permission and I approve cloning the attached audio into a VoiceStudio profile.`
+  - `I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile.`
+  - `I confirm I have the speaker's permission and I approve you to clone the attached audio into a VoiceStudio profile.`
 - Replaced broad substring matching (which could accept vague or negated phrases) with a strict parser. Missing, vague, leading-prose, negated, withdrawn, revoked, cancelled, or non-exact attestations return no consent.
 - Model-generated `consentBasis` is ignored even if fabricated.
 - Added parser regression tests for own-voice and speaker-permission approvals, vague claims, explicit denial, contradictory revocation, leading prose, phrase extension, and missing input.
