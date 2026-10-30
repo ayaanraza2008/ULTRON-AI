@@ -253,3 +253,10 @@ Evidence state at this checkpoint:
 - Remaining non-failing Android warning: three SDK Manager CLI `sdkmanager` deprecation notices from `android-actions/setup-android@v4.0.4`. Investigate the official Android CLI migration before changing the setup workflow; no unsupported replacement is assumed.
 - Documentation-only commits after the tested code head are `4f17899a14e21172bbe692e08e1526ec0bbcbea3` and `9a3dc1c61ac7c03fdcf072ea0a2c139753ade8c9`. Exact latest docs-head runs: core `41104755216`, Android `41104755369`, Windows `41104755220`, Chrome `41104755167`; recheck before treating the current PR head as fully green.
 - PR #400 remains open/unmerged. Live provider inference, Auth/RLS two-account E2E, worker E2E, physical device pairing, target-host Docker, and production deployment remain separate blockers.
+
+
+## Android CLI migration — implementation pending verification
+
+- Google now documents `android sdk install` as the replacement for deprecated `sdkmanager` ([Android CLI overview](https://developer.android.com/tools/agents/android-cli), [SDK install reference](https://developer.android.com/tools/agents/android-cli/commands/sdk_install)).
+- Candidate workflow commit `854a103cd504797f8bf91ebeda988e2028713142` keeps Android setup/license handling but disables its legacy package install and uses the Android CLI to install platform 35, build-tools 35.0.0 and platform-tools.
+- The Android CLI path is checked at runtime; package installation, build and artifact upload remain **IN PROGRESS / pending CI** until the exact-head Android workflow succeeds. The earlier Gradle action upgrade to v6.4.1 is verified on the previous source head.
