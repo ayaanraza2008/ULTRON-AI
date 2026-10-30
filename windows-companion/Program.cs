@@ -18,8 +18,10 @@ internal static class Program
 
 internal sealed class CompanionContext : ApplicationContext
 {
-    private const string AssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
+    private const string DefaultAssistantUrl = "https://ultron-ai-zvd7.onrender.com/";
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private readonly string _assistantUrl;
+    private readonly bool _assistantUrlConfigurationInvalid;
     private const string StartupRegistryValue = "ULTRONWakeCompanion";
     private readonly Form _window;
     private readonly Label _status;
@@ -37,6 +39,25 @@ internal sealed class CompanionContext : ApplicationContext
 
     public CompanionContext(bool backgroundLaunch = false)
     {
+        var configuredAssistantUrl = Environment.GetEnvironmentVariable("ULTRON_ASSISTANT_URL");
+        if (string.IsNullOrWhiteSpace(configuredAssistantUrl))
+        {
+            _assistantUrl = DefaultAssistantUrl;
+            _assistantUrlConfigurationInvalid = false;
+        }
+        else if (TryValidateAssistantUrl(configuredAssistantUrl, out var validatedAssistantUrl))
+        {
+            _assistantUrl = validatedAssistantUrl;
+            _assistantUrlConfigurationInvalid = false;
+        }
+        else
+        {
+            // An invalid override must never be opened. Fall back to the existing
+            // default and explain the rejected setting when the user opens ULTRON.
+            _assistantUrl = DefaultAssistantUrl;
+            _assistantUrlConfigurationInvalid = true;
+        }
+
         _window = new Form
         {
             Text = "ULTRON Wake Companion",
@@ -347,12 +368,43 @@ internal sealed class CompanionContext : ApplicationContext
         }));
     }
 
+    private static bool TryValidateAssistantUrl(string value, out string validated)
+    {
+        validated = string.Empty;
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 2048 ||
+            !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri))
+            return false;
+
+        var host = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        var blockedSuffixes = new[]
+        {
+            ".localhost", ".local", ".localdomain", ".internal", ".intranet",
+            ".lan", ".home", ".test", ".invalid", ".example"
+        };
+        if (uri.Scheme != Uri.UriSchemeHttps ||
+            uri.HostNameType != UriHostNameType.Dns ||
+            string.IsNullOrWhiteSpace(host) ||
+            host == "localhost" ||
+            blockedSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.Ordinal)) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment) ||
+            !uri.IsDefaultPort)
+            return false;
+
+        validated = uri.AbsoluteUri;
+        return true;
+    }
+
     private void OpenAssistant()
     {
         try
         {
-            Process.Start(new ProcessStartInfo(AssistantUrl) { UseShellExecute = true });
-            ShowStatus("ULTRON opened in your default browser.");
+            Process.Start(new ProcessStartInfo(_assistantUrl) { UseShellExecute = true });
+            if (_assistantUrlConfigurationInvalid)
+                ShowStatus("ULTRON_ASSISTANT_URL was invalid; opened the built-in HTTPS destination instead.");
+            else
+                ShowStatus("ULTRON opened in your default browser.");
         }
         catch
         {
