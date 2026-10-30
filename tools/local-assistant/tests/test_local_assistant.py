@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ultron_local_assistant.core import (
     DEFAULT_OLLAMA_URL, apply_workspace_draft, detect_hardware, get_system_health, _available_memory_bytes, load_relevant_skill_context, recommend_models, resolve_workspace_file,
     safe_shell_argv, search_documents, validate_local_ollama_url,
-    run_approved_command,
+    run_approved_command, run_script,
 )
 from ultron_local_assistant.skills import normalize_github_repo, scan_skill_text
 from ultron_local_assistant.cli import build_parser
@@ -188,6 +188,20 @@ class LocalFirstCoreTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "changed since the draft"):
                     apply_workspace_draft(draft, root, confirm=True)
             self.assertEqual(source.read_text(encoding="utf-8"), "print('newer manual work')\n")
+
+    def test_script_output_is_bounded_to_protect_memory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / "noisy.py"
+            script.write_text(
+                "import sys\\nsys.stdout.write('x' * 1100000)\\nsys.stderr.write('y' * 1100000)\\n",
+                encoding="utf-8",
+            )
+            result = run_script("noisy.py", root, confirm=True)
+            self.assertIn("[output truncated at 1 MB]", result.stdout)
+            self.assertIn("[output truncated at 1 MB]", result.stderr)
+            self.assertLessEqual(len(result.stdout.encode("utf-8")), 1_000_100)
+            self.assertLessEqual(len(result.stderr.encode("utf-8")), 1_000_100)
 
     def test_shell_execution_requires_explicit_confirmation(self):
         with tempfile.TemporaryDirectory() as temp:
