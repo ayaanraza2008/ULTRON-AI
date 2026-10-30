@@ -181,14 +181,18 @@ export async function checkHermesAgentService({ env = process.env, fetchImpl = s
       });
       const data = await readJsonLimited(response);
       if (!response.ok) throw Object.assign(new Error("Hermes capability discovery failed."), { code: "HERMES_AGENT_CAPABILITIES_FAILED", status: response.status });
+      const featureFlags = data?.features && typeof data.features === "object" ? data.features : data;
       return { ok: true, capabilities: data && typeof data === "object" ? {
-        chatCompletions: data.chat_completions === true || data.chat_completions_streaming === true,
-        streaming: data.chat_completions_streaming === true,
-        responses: data.responses === true,
-        runs: data.runs === true,
-        imageInput: data.image_input === true || data.vision === true,
-        tools: data.tools === true || data.function_calling === true,
-        raw: undefined
+        chatCompletions: featureFlags.chat_completions === true || featureFlags.chat_completions_streaming === true,
+        streaming: featureFlags.chat_completions_streaming === true || featureFlags.run_events_sse === true,
+        responses: featureFlags.responses_api === true || featureFlags.responses === true,
+        runs: (featureFlags.run_submission === true && featureFlags.run_status === true) || featureFlags.runs === true,
+        runSubmission: featureFlags.run_submission === true,
+        runStatus: featureFlags.run_status === true,
+        runEventsSse: featureFlags.run_events_sse === true,
+        runStop: featureFlags.run_stop === true,
+        imageInput: featureFlags.image_input === true || featureFlags.vision === true,
+        tools: featureFlags.tools === true || featureFlags.function_calling === true
       } : {} };
     })()
   ].map(p => p.then(value => value).catch(error => ({ ok: false, error: {
