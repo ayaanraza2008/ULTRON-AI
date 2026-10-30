@@ -75,7 +75,7 @@ The previous standalone PR #403 CI run [41085911433](https://github.com/ayaanraz
 
 ## Browser speech voice selection follow-up
 
-The current browser speech helper waits for asynchronously populated browser voices, with bounded timeout and cancellation cleanup, and scores locale/natural/voice-name preferences. A source review found the male/female name patterns had double-escaped word boundaries, so names such as `David` and `Zira` were not scored correctly. Draft PR #404 fixes both patterns and adds direct male-positive and female-negative regressions. Current-base [run 41083912987](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41083912987) passed both. Actual pronunciation, recognition accuracy, latency, barge-in, and microphone permissions still require physical device/browser testing.
+The current browser speech helper waits for asynchronously populated browser voices, with bounded timeout and cancellation cleanup, and scores locale/natural/voice-name preferences. The male/female name regexes in the active PR #400 source now use real word boundaries. The two direct scoring regressions from PR #404 were forward-ported into `tests/speech-voices.test.js` in commit `27077e2c84d9f34beb26ed42705e190cc8c68a26`: equal-locale `David` must beat `Zira`, and `Zira` must lose to a neutral-named voice when other scoring factors tie. The prior standalone [PR #404 run 41083912987](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41083912987) passed its test branch; the forward-ported tests still require current PR #400 CI. Actual pronunciation, recognition accuracy, latency, barge-in, and microphone permissions still require physical device/browser testing.
 
 ## Sector acceptance matrix
 
