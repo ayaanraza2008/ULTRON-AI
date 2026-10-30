@@ -74,3 +74,13 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 - Added an agent-level regression test with `CHROME_ALLOW_EXTERNAL_ACTIONS=true` to prove a model-supplied true flag still does not approve a consequential click. The test expects the local bridge to return `EXTERNAL_ACTION_CONFIRMATION_REQUIRED` and confirms the request sent by ULTRON has confirmation false.
 - The additional local bridge environment flag is not a substitute for task-specific user approval. Since a proper authenticated approval-token flow is not implemented, ULTRON's agent path keeps consequential external clicks blocked.
 - Status: source/test added on fix/chrome-devtools-no-model-self-approval; CI pending. No live browser or device action was performed and no production setting changed.
+
+
+## Chrome DevTools model self-approval hardening (2026-10-31)
+
+- Merged PR #414 as `143de2001acc78bc7afb34780ca4882c98dac5e4`.
+- Removed `confirmExternalAction` from the model-visible Chrome DevTools tool schema.
+- Extracted `buildChromeDevToolsActionInput`; it only forwards allowlisted bounded fields and always forces `confirmExternalAction: false`, ignoring model-supplied true values.
+- Agent-level tests prove the payload builder discards model-authored approval and that a consequential click request is stopped by the autonomy approval gate before any local Chrome bridge request.
+- Full pre-merge CI run 41116829247 passed: 661 Node tests total, 660 passed, 0 failed, 1 intentionally skipped; Python suites and syntax checks passed; dependency audits reported 0 vulnerabilities; pinned World Intelligence build and bridge injection passed.
+- No live Chrome action was performed. The authenticated task-bound approval token flow and physical-device/browser validation remain unimplemented. Consequential external clicks stay blocked.
