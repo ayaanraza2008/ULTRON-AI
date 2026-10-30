@@ -99,5 +99,51 @@ class VoiceCommandParserTests(unittest.TestCase):
         self.assertTrue(args.no_speak)
 
 
+class VoiceModeSafetyTests(unittest.TestCase):
+    def _args(self):
+        return SimpleNamespace(model=None, locale="auto", timeout=8, once=True, no_speak=True)
+
+    def test_utterance_without_wake_word_is_ignored(self):
+        from ultron_local_assistant import cli
+        with patch.object(cli.sys, "platform", "win32"):
+            with patch.object(cli.sys, "stdin", SimpleNamespace(isatty=lambda: True)):
+                with patch.object(cli, "listen_once", return_value="open Notepad"):
+                    with patch.object(cli, "local_chat") as chat:
+                        with patch.object(cli, "confirm_interactive") as confirm:
+                            self.assertEqual(cli.voice_mode(self._args()), 0)
+        chat.assert_not_called()
+        confirm.assert_not_called()
+
+    def test_voice_launch_still_requires_typed_terminal_approval(self):
+        from ultron_local_assistant import cli
+        with patch.object(cli.sys, "platform", "win32"):
+            with patch.object(cli.sys, "stdin", SimpleNamespace(isatty=lambda: True)):
+                with patch.object(cli, "listen_once", return_value="Ultron, open Notepad"):
+                    with patch.object(cli, "confirm_interactive", return_value=True) as confirm:
+                        with patch.object(cli, "launch_application", return_value={"status": "process_start_requested"}) as launch:
+                            with patch.object(cli, "speak_text"):
+                                self.assertEqual(cli.voice_mode(self._args()), 0)
+        confirm.assert_called_once_with("LAUNCH", "Voice requested launching the fixed application 'notepad'.")
+        launch.assert_called_once_with("notepad", confirm=True)
+
+    def test_voice_launch_cancellation_never_starts_process(self):
+        from ultron_local_assistant import cli
+        with patch.object(cli.sys, "platform", "win32"):
+            with patch.object(cli.sys, "stdin", SimpleNamespace(isatty=lambda: True)):
+                with patch.object(cli, "listen_once", return_value="Ultron, launch Calculator"):
+                    with patch.object(cli, "confirm_interactive", return_value=False):
+                        with patch.object(cli, "launch_application") as launch:
+                            self.assertEqual(cli.voice_mode(self._args()), 0)
+        launch.assert_not_called()
+
+    def test_voice_mode_refuses_noninteractive_terminal_before_microphone_access(self):
+        from ultron_local_assistant import cli
+        with patch.object(cli.sys, "platform", "win32"):
+            with patch.object(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False)):
+                with patch.object(cli, "listen_once") as listen:
+                    self.assertEqual(cli.voice_mode(self._args()), 2)
+        listen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
