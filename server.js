@@ -748,7 +748,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
   // Dedicated, function-only service-role RPC path. Never accept a function name
   // from HTTP input and never broaden the existing privileged table helper.
-  async function supabasePrivilegedRpc(functionName, body) {
+  async function privilegedSupabaseRpc(functionName, body) {
     const allowed = new Set([
       "complete_desktop_companion_pairing",
       "record_desktop_companion_heartbeat"
