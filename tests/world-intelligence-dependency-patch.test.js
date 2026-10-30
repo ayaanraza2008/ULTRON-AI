@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { patchWorldIntelligenceDependencies } from "../scripts/patch-world-intelligence-dependencies.mjs";
@@ -75,6 +75,43 @@ test("applies only the pinned dependency security lock updates", () => {
     assert.equal(result.updatedLockEntries, Object.keys(overrides.packageLockUpdates).length);
     assert.equal(lock.packages["node_modules/zod"].version, "4.6.7");
     assert.equal(lock.packages["node_modules/vite"].version, "6.4.5");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("restores both original files when the second replacement fails", () => {
+  const root = fixture();
+  const manifestPath = path.join(root, "package.json");
+  const lockPath = path.join(root, "package-lock.json");
+  const originalManifest = readFileSync(manifestPath, "utf8");
+  const originalLock = readFileSync(lockPath, "utf8");
+  let failLockReplacement = true;
+  const fileOperations = {
+    copyFileSync,
+    readFileSync,
+    writeFileSync,
+    rmSync,
+    renameSync(source, destination) {
+      if (source === lockPath + ".ultron-patch.tmp" && destination === lockPath && failLockReplacement) {
+        failLockReplacement = false;
+        throw new Error("simulated lockfile replacement failure");
+      }
+      return renameSync(source, destination);
+    }
+  };
+
+  try {
+    assert.throws(
+      () => patchWorldIntelligenceDependencies(root, fileOperations),
+      /simulated lockfile replacement failure/
+    );
+    assert.equal(readFileSync(manifestPath, "utf8"), originalManifest);
+    assert.equal(readFileSync(lockPath, "utf8"), originalLock);
+    assert.equal(existsSync(manifestPath + ".ultron-patch.bak"), false);
+    assert.equal(existsSync(lockPath + ".ultron-patch.bak"), false);
+    assert.equal(existsSync(manifestPath + ".ultron-patch.tmp"), false);
+    assert.equal(existsSync(lockPath + ".ultron-patch.tmp"), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
