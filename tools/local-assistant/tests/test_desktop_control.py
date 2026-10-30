@@ -1,9 +1,11 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest.mock import patch
 
 from ultron_local_assistant import desktop_control
@@ -19,7 +21,7 @@ class DesktopControlTests(unittest.TestCase):
         self.system32 = self.windows_root / "System32"
         self.system32.mkdir(parents=True)
         (self.system32 / "notepad.exe").write_bytes(b"fixture")
-        (self.system32 / "explorer.exe").write_bytes(b"fixture")
+        (self.windows_root / "explorer.exe").write_bytes(b"fixture")
         self.data_dir = self.root / "private-user-data"
         self.platform_patch = patch("ultron_local_assistant.desktop_control.platform.system", return_value="Windows")
         self.platform_patch.start()
@@ -69,7 +71,7 @@ class DesktopControlTests(unittest.TestCase):
     def test_calculator_uses_only_the_fixed_windows_app_identity(self):
         desktop_control.launch_application("calculator", confirm=True)
         args, _ = self.popen.call_args
-        self.assertEqual(args[0][0], str((self.system32 / "explorer.exe").resolve()))
+        self.assertEqual(args[0][0], str((self.windows_root / "explorer.exe").resolve()))
         self.assertEqual(
             args[0][1:],
             [r"shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"],
