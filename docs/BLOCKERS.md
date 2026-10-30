@@ -66,3 +66,10 @@ The security branch adds a transport that resolves public hostnames, rejects any
 
 
 - Post-merge verification for Geo-Sleuth consent merge `33a9df4` is green: CI runs `41119784359` (test/build) and `41119785946` (production revision verification) succeeded. No deployment was triggered.
+
+
+## Voice cloning consent provenance
+
+- The former broad phrase checks could accept vague text such as "my voice" or "I have permission" and could match negated statements.
+- Model-visible `consentBasis` has been removed. Server-side consent must now match one of two exact current-user attestations at the start of the raw prompt.
+- Parser tests added; CI pending. Until CI passes, do not claim the new consent gate is verified. Live VoiceStudio profile creation/attestation remains unverified.

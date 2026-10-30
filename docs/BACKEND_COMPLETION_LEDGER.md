@@ -112,3 +112,15 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 
 - Post-merge CI on main commit `33a9df4e64075ca4483f26c47a3eea6f1cc20505` passed: workflow runs `41119784359` (test + World Intelligence build) and `41119785946` (production revision verification) completed successfully.
 - The production-revision workflow is a verification job; no deployment was performed.
+
+
+## Voice-clone consent provenance hardening (2026-10-31)
+
+- Removed `consentBasis` from the model-visible `clone_speech_voice` schema and deterministic routing arguments.
+- The server derives the consent basis solely from the current raw user message using one of two exact opening attestations:
+  - `I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile.`
+  - `I confirm I have the speaker's permission and I approve you to clone the attached audio into a VoiceStudio profile.`
+- Replaced broad substring matching (which could accept vague or negated phrases) with a strict parser. Missing, vague, leading-prose, negated, withdrawn, revoked, cancelled, or non-exact attestations return no consent.
+- Model-generated `consentBasis` is ignored even if fabricated.
+- Added parser regression tests for own-voice and speaker-permission approvals, vague claims, explicit denial, contradictory revocation, leading prose, phrase extension, and missing input.
+- Source/test/docs are on `fix/voice-clone-exact-user-consent`; full CI pending. No VoiceStudio profile was created and no audio was uploaded to a provider.

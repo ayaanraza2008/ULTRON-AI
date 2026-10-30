@@ -371,7 +371,7 @@ function buildFallbackCalls(text) {
     add("world_intelligence_command", { command: bounded(text, 1000) });
   }
   if (/\b(transcribe|transcription|speech to text)\b/.test(s)) add("transcribe_audio", { language: /\bhindi|hinglish\b/.test(s) ? "Hindi" : "auto" });
-  if (/\bclone\b/.test(s) && /\bvoice\b/.test(s)) add("clone_speech_voice", { name: "ULTRON Cloned Voice", consentBasis: /\b(my own voice|my voice|meri apni awaaz|meri khud ki awaaz)\b/i.test(text) ? "own_voice" : "speaker_permission", language: /\bhindi|indian\b/i.test(text) ? "hi" : "Auto" });
+  if (/\bclone\b/.test(s) && /\bvoice\b/.test(s)) add("clone_speech_voice", { name: "ULTRON Cloned Voice", language: /\bhindi|indian\b/i.test(text) ? "hi" : "Auto" });
   if (/\b(list|show|available|what)\b/.test(s) && /\b(voices|voice profiles|voice options)\b/.test(s) && /\b(voicestudio|speech|tts|voice)\b/.test(s)) add("list_speech_voices");
   if (/\b(create|design|save|make)\b.{0,100}\bvoice\b/.test(s) && !/\bvoice note\b/.test(s)) add("design_speech_voice", { name: "ULTRON Custom Voice", description: bounded(text, 2000), language: /\bhindi|indian\b/i.test(text) ? "hi" : "Auto" });
   if (/\b(describe|preview|map)\b/.test(s) && /\b(voice|accent|pitch|timbre)\b/.test(s)) add("describe_speech_voice", { description: bounded(text, 2000) });
@@ -521,6 +521,19 @@ export function buildChromeDevToolsActionInput(args = {}) {
  * Reverse-image lookup can disclose image-derived information to third parties.
  * Require a clear, current-message opt-in rather than trusting model tool args.
  */
+/**
+ * Derive voice-cloning consent only from a canonical statement in the current
+ * user message. Model tool arguments are never an authority for consent.
+ */
+export function parseVoiceCloneConsent(value) {
+  const text = typeof value === "string" ? value.slice(0, 6000) : "";
+  const own = text.match(/^\s*i confirm this is my own voice and i approve you to clone the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
+  const speaker = text.match(/^\s*i confirm i have the speaker's permission and i approve you to clone the attached audio into a voicestudio profile(?:[.!?](?:\s|$)|$)/i);
+  const match = own || speaker;
+  if (!match || /\b(?:do not|don't|never|not|no longer|not anymore|withdraw\w*|revoke\w*|cancel\w*|hold off|wait|stop|changed my mind)\b/i.test(text.slice(match[0].length))) return null;
+  return own ? "own_voice" : "speaker_permission";
+}
+
 export function parseGeoSleuthReverseSearchConsent(value) {
   const text = typeof value === "string" ? value.slice(0, 6000) : "";
   const match = text.match(/^\s*i approve sending image-derived information from this photo to external reverse-image search providers for this investigation(?:[.!?,](?:\s|$)|$)/i);
@@ -709,7 +722,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "world_intelligence_command", description: "Convert a user request into one allowlisted God’s Eye / World Intelligence browser action. Return the action contract only; the browser client must dispatch it to the open globe.", parameters: { type: "object", properties: { command: { type: "string", minLength: 2, maxLength: 1000 } }, required: ["command"], additionalProperties: false } } },
     { type: "function", function: { name: "create_spaceplanner_plan", description: "Generate a SpacePlanner-compatible starter floor plan automatically for house, room, office, or interior layout requests. Returns JSON and the editor link; does not claim to import or save the plan in the external website.", parameters: { type: "object", properties: { request: { type: "string", minLength: 2, maxLength: 3000 }, widthCm: { type: "number", minimum: 100, maximum: 100000 }, heightCm: { type: "number", minimum: 100, maximum: 100000 }, units: { type: "string", enum: ["cm", "m", "ft-in"] } }, required: ["request"], additionalProperties: false } } },
     { type: "function", function: { name: "coding_assist", description: "Generate or review code as a draft. Never executes code or changes repositories.", parameters: { type: "object", properties: { task: { type: "string", minLength: 2, maxLength: 4000 }, language: { type: "string", maxLength: 80 }, code: { type: "string", maxLength: 12000 }, mode: { type: "string", enum: ["plan", "review", "generate"] } }, required: ["task", "mode"], additionalProperties: false } } },
-    { type: "function", function: { name: "clone_speech_voice", description: "Clone a voice from supplied audio only when the user explicitly attests that it is their own voice or they have the speaker permission. The server verifies consent wording in the raw user prompt and records the corresponding VoiceStudio attestation. Never infer consent from model output.", parameters: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 100 }, consentBasis: { type: "string", enum: ["own_voice", "speaker_permission"] }, language: { type: "string", maxLength: 40 }, refText: { type: "string", maxLength: 5000 }, instruct: { type: "string", maxLength: 1000 } }, required: ["name", "consentBasis"], additionalProperties: false } } },
+    { type: "function", function: { name: "clone_speech_voice", description: "Clone a voice from supplied audio only when the current user message begins with one of the exact consent attestations: I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile. OR I confirm I have the speaker's permission and I approve you to clone the attached audio into a VoiceStudio profile. Consent basis is derived server-side; model arguments cannot grant consent.", parameters: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 100 }, language: { type: "string", maxLength: 40 }, refText: { type: "string", maxLength: 5000 }, instruct: { type: "string", maxLength: 1000 } }, required: ["name"], additionalProperties: false } } },
     { type: "function", function: { name: "design_speech_voice", description: "Create and save a new synthetic VoiceStudio voice profile from a text description. This creates a persistent voice profile but does not clone a real person. Only call when the user explicitly asks to create/design/save a voice.", parameters: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 100 }, description: { type: "string", minLength: 2, maxLength: 2000 }, language: { type: "string", maxLength: 40 } }, required: ["name", "description"], additionalProperties: false } } },
     { type: "function", function: { name: "describe_speech_voice", description: "Preview how a free-text voice description maps to VoiceStudio supported attributes. Read-only; does not save a profile or clone a real person.", parameters: { type: "object", properties: { description: { type: "string", minLength: 2, maxLength: 2000 } }, required: ["description"], additionalProperties: false } } },
     { type: "function", function: { name: "list_speech_voices", description: "List voices available from the configured VoiceStudio speech service so ULTRON can select a voice for later speech synthesis. Does not create or clone voices.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
@@ -1135,11 +1148,17 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (name === "clone_speech_voice") {
       const voiceStudio = voiceStudioSettings(env);
       if (!voiceStudio) return { provider: "voicestudio", state: "blocked", blocker: "Configure VOICESTUDIO_BASE_URL; remote endpoints also require VOICESTUDIO_API_KEY. A cloud ULTRON cannot reach localhost on your PC." };
-      const prompt = bounded(requestBody.prompt, 6000);
-      const basis = args.consentBasis === "own_voice" || args.consentBasis === "speaker_permission" ? args.consentBasis : "";
-      const ownVoiceConsent = /\b(my own voice|my voice|it is my voice|it\x27s my voice|this is my voice|meri apni awaaz|meri khud ki awaaz|ye meri awaaz)\b/i.test(prompt);
-      const speakerConsent = /\b(i have permission|i have the speaker\x27s permission|with the speaker\x27s permission|permission to clone|speaker has consented|i have the speaker\x27s consent|speaker\x27s consent|speaker permission)\b/i.test(prompt);
-      if (!basis || (basis === "own_voice" && !ownVoiceConsent) || (basis === "speaker_permission" && !speakerConsent)) return { provider: "voicestudio", state: "needs_consent", requiredInputs: ["explicit consent statement"], message: "Before cloning, explicitly state that this is your own voice or that you have the speaker\x27s permission. Consent is checked from your message, not from the model." };
+      // Consent must come from the raw current user message on the HTTP
+      // request, never from model arguments or internally rewritten context.
+      const consentMessage = typeof req.body?.prompt === "string"
+        ? req.body.prompt
+        : Array.isArray(req.body?.messages)
+          ? [...req.body.messages].reverse().find(message =>
+              message?.role === "user" && typeof message.content === "string"
+            )?.content || ""
+          : "";
+      const basis = parseVoiceCloneConsent(consentMessage);
+      if (!basis) return { provider: "voicestudio", state: "needs_consent", requiredInputs: ["exact own-voice or speaker-permission attestation"], message: "Voice cloning requires one exact consent statement at the start of your current message. Model-generated consent fields are ignored." };
       const name = bounded(args.name, 100);
       const media = requestBody.media && typeof requestBody.media === "object" ? requestBody.media : {};
       const encoded = bounded(requestBody.audioBase64 || media.audioBase64, 11200000);
