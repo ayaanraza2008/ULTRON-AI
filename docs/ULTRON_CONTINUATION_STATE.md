@@ -184,3 +184,12 @@ Current comparison against declared bases at the time of review:
 2. Investigate the SDK Manager deprecation warning against Google's current official Android CLI documentation; do not make speculative toolchain changes.
 3. Continue the highest-priority remaining live acceptance blocker that can be addressed without owner credentials: inspect auth/account-isolation test harness and diagnostics for correctness, but keep live two-account isolation blocked until disposable identities and write authorization are supplied.
 4. Preserve the production/deployment and PHANTOM/NOX boundaries.
+
+
+## 2026-10-30 Android CLI migration — awaiting exact-head CI
+
+- Follow-up review of the Android build log confirmed Google now documents `android sdk install` as the replacement for deprecated `sdkmanager`; the Android CLI is documented at https://developer.android.com/tools/agents/android-cli and its SDK install command at https://developer.android.com/tools/agents/android-cli/commands/sdk_install. The Android CLI uses slash-style package paths and officially supports installing SDK packages.
+- The setup action's pinned default command-line tools package is version 22.0. A current GitHub Actions runner-images issue reports that 22.0 includes `cmdline-tools/latest/bin/android`; the workflow now verifies that executable exists before using it. This is deliberately tested in CI rather than assumed.
+- Workflow commit: `854a103cd504797f8bf91ebeda988e2028713142`. It retains `android-actions/setup-android@v4` for SDK setup and license acceptance, sets `packages: ""` to avoid sdkmanager package installs, then installs `platforms/android-35`, `build-tools/35.0.0`, and `platform-tools` with `android sdk install`. This should remove repeated package-install deprecation warnings while retaining the action's license setup. Exact-head CI has not yet been observed; do not mark this migration tested.
+- Next: wait for the Android Companion workflow on this exact head, inspect the full log for the Android CLI executable/version, successful package install, Gradle 8.9 build and artifact upload. Confirm whether only the license-acceptance sdkmanager warning remains. If the binary is absent or the install command fails, revert only this Android CLI migration while keeping the verified Gradle action v6.4.1 upgrade.
+- Preserve PR #400 as open/unmerged; no deployment, production setting, migration application, or PHANTOM/NOX change.
