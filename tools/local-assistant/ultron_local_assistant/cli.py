@@ -434,10 +434,6 @@ def companion_pair(args):
 
 def process_companion_action(action):
     """Execute exactly one claimed allowlisted action after fresh local approval."""
-    if not getattr(sys.stdin, "isatty", lambda: False)():
-        complete_companion_action(action["id"], "denied", "LOCAL_APPROVAL_REQUIRED")
-        print("A remote action was denied because no interactive local terminal is attached.")
-        return
     now = datetime.now(timezone.utc)
     expires_at = datetime.fromisoformat(action["expiresAt"])
     if now >= expires_at:
