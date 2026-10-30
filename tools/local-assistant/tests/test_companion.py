@@ -21,7 +21,8 @@ TOKEN = "test-" + ("x" * 48)
 class CompanionServerTests(unittest.TestCase):
     def start_server(self, **kwargs):
         temp_dir = tempfile.TemporaryDirectory()
-        server = create_companion_server(TOKEN, port=0, data_dir=Path(temp_dir.name), **kwargs)
+        data_dir = kwargs.pop("data_dir", Path(temp_dir.name))
+        server = create_companion_server(TOKEN, port=0, data_dir=data_dir, **kwargs)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(temp_dir.cleanup)
@@ -133,7 +134,7 @@ class CompanionServerTests(unittest.TestCase):
         self.assertEqual(second, 429)
         self.assertEqual(json.loads(body), {"error": "rate_limited"})
 
-    def test_device_id_is_stable_and_invalid_symlink_identity_is_rejected(self):
+    def test_device_id_is_stable_across_companion_restarts(self):
         with tempfile.TemporaryDirectory() as root:
             first, _ = self.start_server(data_dir=Path(root) / "companion")
             first_id = first.device_id
