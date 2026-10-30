@@ -11,12 +11,31 @@ MAX_TEXT, MAX_OUTPUT = 100_000, 1_000_000
 
 class Harness2Error(Exception): pass
 
+def atomic_write_text(path, value, boundary=None):
+    """Atomically write UTF-8 text without following attacker-planted temp symlinks."""
+    path = Path(path)
+    if path.is_symlink(): raise Harness2Error("Managed files may not be symlinks")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink(): raise Harness2Error("Managed file parent may not be a symlink")
+    parent = path.parent.resolve()
+    if boundary is not None and not parent.is_relative_to(Path(boundary).resolve()):
+        raise Harness2Error("Managed file path may not escape its workspace")
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=parent)
+    temporary_path = Path(temporary)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if path.is_symlink(): raise Harness2Error("Managed files may not be symlinks")
+        os.replace(temporary_path, path)
+    finally:
+        try: temporary_path.unlink(missing_ok=True)
+        except OSError: pass
+
 def atomic_json(path, value):
     if path.is_symlink(): raise Harness2Error("Managed JSON files may not be symlinks")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(path, json.dumps(value, indent=2, ensure_ascii=False) + "\n")
 
 def read_json(path):
     if path.is_symlink(): raise Harness2Error("Managed JSON files may not be symlinks")
@@ -64,10 +83,7 @@ def apply_updates(harness, updates, allowed):
         if path.is_symlink() or not path.resolve().is_relative_to(harness.resolve()): raise Harness2Error("Unsafe component path")
         prepared.append((path, value))
     for path, value in prepared:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(value, encoding="utf-8")
-        os.replace(tmp, path)
+        atomic_write_text(path, value, boundary=harness)
     return list(updates)
 
 def load_benchmark(name, custom=None):
@@ -289,7 +305,7 @@ def report(root):
     if state["executor"] == "demo": lines += ["","Demo uses deterministic fixtures; it is not a model-quality benchmark."]
     path = root/"report.md"
     if path.is_symlink(): raise Harness2Error("Report path may not be a symlink")
-    path.write_text("\n".join(lines)+"\n",encoding="utf-8"); return path
+    atomic_write_text(path, "\n".join(lines)+"\n", boundary=root); return path
 
 def judge_run(root):
     state = read_json(root/"run.json")
