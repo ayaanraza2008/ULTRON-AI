@@ -35,7 +35,9 @@ test("all required UI assets are served as same-origin static files", async (t) 
     ["/favicon.svg", /image\/svg\+xml/],
     ["/manifest.webmanifest", /manifest\+json|json/],
     ["/sw.js", /javascript/],
-    ["/icons/ultron.svg", /image\/svg\+xml/]
+    ["/icons/ultron.svg", /image\/svg\+xml/],
+    ["/icons/ultron-192.png", /image\/png/],
+    ["/icons/ultron-512.png", /image\/png/]
   ];
   for (const [asset, expectedType] of cases) {
     const response = await fetch(base + asset);
