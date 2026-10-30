@@ -81,10 +81,12 @@ internal static class CloudPresenceClientTests
     {
         var store = new FakeCredentialStore();
         HttpRequestMessage? captured = null;
-        using var http = new HttpClient(new StubHttpHandler((request, _) =>
+        var capturedBody = string.Empty;
+        using var http = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
         {
             captured = request;
-            return Task.FromResult(JsonResponse(HttpStatusCode.Created,
+            capturedBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            return JsonResponse(HttpStatusCode.Created,
                 $$"""{"deviceId":"{{DeviceId}}","deviceName":"TEST-PC","platform":"windows","deviceToken":"{{DeviceToken}}"}"""));
         }));
         using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
@@ -95,10 +97,9 @@ internal static class CloudPresenceClientTests
         Assert(result.DeviceName == "TEST-PC", "The server's bounded device display name should be returned.");
         Assert(captured?.Method == HttpMethod.Post, "Pairing must use POST.");
         Assert(captured?.RequestUri?.ToString() == Origin + "/api/desktop-companion/pair", "Pairing must use the fixed ULTRON endpoint.");
-        var body = await captured!.Content!.ReadAsStringAsync();
-        Assert(body.Contains(PairingCode, StringComparison.Ordinal), "The one-time code must be sent in the request body.");
-        Assert(body.Contains(DeviceId, StringComparison.Ordinal), "The stable device ID must be sent.");
-        Assert(!body.Contains(DeviceToken, StringComparison.Ordinal), "The server token must never be sent back in the pairing request.");
+        Assert(capturedBody.Contains(PairingCode, StringComparison.Ordinal), "The one-time code must be sent in the request body.");
+        Assert(capturedBody.Contains(DeviceId, StringComparison.Ordinal), "The stable device ID must be sent.");
+        Assert(!capturedBody.Contains(DeviceToken, StringComparison.Ordinal), "The server token must never be sent back in the pairing request.");
         Assert(client.HasPairing, "A validated pairing must be saved.");
     }
 
