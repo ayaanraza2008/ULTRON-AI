@@ -495,6 +495,98 @@ def pair_companion(server_url: str, pairing_code: str, *, data_dir: str | Path |
             "credentialFile": str(path), "heartbeatIntervalSeconds": CLOUD_HEARTBEAT_INTERVAL_SECONDS}
 
 
+def poll_companion_action(*, data_dir: str | Path | None = None, request_impl=None) -> dict | None:
+    """Claim at most one fixed action. The caller must obtain fresh local approval."""
+    credentials = _load_device_credentials(data_dir)
+    requester = request_impl or _cloud_json_request
+    try:
+        result = requester(
+            credentials["serverUrl"], "/api/desktop-companion/actions/next",
+            {"deviceId": credentials["deviceId"]}, bearer_token=credentials["deviceToken"]
+        )
+    except CloudHTTPError as exc:
+        if exc.status in {401, 403, 404}:
+            raise PermissionError("This Windows companion is no longer authorized. Revoke or pair it again in ULTRON.") from exc
+        raise
+    if not isinstance(result, dict) or set(result) != {"action"}:
+        raise ValueError("ULTRON returned an invalid local action response.")
+    action = result.get("action")
+    if action is None:
+        return None
+    if not isinstance(action, dict) or set(action) != {"id", "name", "target", "expiresAt", "requiresLocalApproval"}:
+        raise ValueError("ULTRON returned an unsupported local action payload.")
+    try:
+        action_id = str(uuid.UUID(action["id"]))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError("ULTRON returned an invalid local action ID.") from exc
+    allowed = {
+        "launch_application": {"notepad", "explorer", "calculator"},
+        "open_known_folder": {"desktop", "documents", "downloads"},
+    }
+    if (
+        action["name"] not in allowed
+        or action["target"] not in allowed[action["name"]]
+        or action["requiresLocalApproval"] is not True
+        or not isinstance(action["expiresAt"], str)
+    ):
+        raise ValueError("ULTRON returned an action outside the local fixed-action allowlist.")
+    try:
+        expiry = datetime.fromisoformat(action["expiresAt"].replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            raise ValueError("Action expiry must include a timezone.")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("ULTRON returned an invalid local action expiry.") from exc
+    return {
+        "id": action_id,
+        "name": action["name"],
+        "target": action["target"],
+        "expiresAt": expiry.astimezone(timezone.utc).isoformat(),
+    }
+
+
+def complete_companion_action(
+    action_id: str,
+    status: str,
+    result_code: str,
+    *,
+    data_dir: str | Path | None = None,
+    request_impl=None
+) -> dict:
+    """Record the outcome of a locally approved or denied fixed action."""
+    try:
+        normalized_id = str(uuid.UUID(action_id))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError("A valid local action ID is required.") from exc
+    allowed = {
+        "completed": {"ACTION_COMPLETED"},
+        "denied": {"USER_DENIED", "LOCAL_APPROVAL_REQUIRED"},
+        "failed": {"ACTION_FAILED"},
+        "expired": {"ACTION_EXPIRED"},
+    }
+    if status not in allowed or result_code not in allowed[status]:
+        raise ValueError("The local action outcome is not supported.")
+    credentials = _load_device_credentials(data_dir)
+    requester = request_impl or _cloud_json_request
+    try:
+        result = requester(
+            credentials["serverUrl"],
+            "/api/desktop-companion/actions/" + normalized_id + "/complete",
+            {
+                "deviceId": credentials["deviceId"],
+                "status": status,
+                "resultCode": result_code
+            },
+            bearer_token=credentials["deviceToken"]
+        )
+    except CloudHTTPError as exc:
+        if exc.status in {401, 403, 404}:
+            raise PermissionError("This Windows companion is no longer authorized. Revoke or pair it again in ULTRON.") from exc
+        raise
+    if not isinstance(result, dict) or result.get("accepted") is not True or result.get("actionId") != normalized_id:
+        raise RuntimeError("ULTRON did not confirm the local action outcome.")
+    return {"accepted": True, "actionId": normalized_id, "status": status}
+
+
 def send_companion_heartbeat(*, data_dir: str | Path | None = None, request_impl=None) -> dict:
     credentials = _load_device_credentials(data_dir)
     requester = request_impl or _cloud_json_request
