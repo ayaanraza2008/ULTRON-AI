@@ -1,6 +1,6 @@
 # ULTRON AI Development State
 
-Last verified: 2026-10-30 UTC (candidate source CI passed on prior head; repository-wide syntax scanner added on latest head and awaits CI)
+Last verified: 2026-10-30 UTC (candidate head 5b9933f passed full source CI; 164 JavaScript files syntax-checked; 808 tests passed, 0 failed, 1 skipped)
 
 ## Operating constraints
 - Preserve the existing repository, backend data, and frontend. The cinematic command center has been built and merged, but is not live-verified until Render serves and reports the expected commit.
@@ -174,3 +174,12 @@ The CI workflow's passing production-revision result therefore confirms the `ult
 - Latest full repository CI remains [40953760423](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40953760423) on prior head `861e863701d256bb2dd0203486d0d6acb8886455`; 808 passed, 0 failed, 1 skipped, and dependency audits reported 0 vulnerabilities.
 - Current candidate head: `af0d9e46389b72e50cc1f68bdd6ff9524165d3df`. The new whole-repository scan is not marked verified until a CI run on this exact head completes.
 - No merge, deployment, production configuration change, database mutation, or PHANTOM/NOX edit was performed.
+
+
+## Latest candidate CI result — 2026-10-30
+
+- Full CI [run 41044428018](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41044428018) passed on candidate head `5b9933fbdac689b7f01554ae851e087334081a06`.
+- `npm run check` passed, including the new recursive scanner: **164 JavaScript source files syntax-checked**.
+- `npm test`: 809 tests, 808 passed, 0 failed, 1 skipped (the opt-in live Supabase two-account isolation test).
+- Runtime dependency audit and production dependency audit each reported 0 vulnerabilities. Python local-assistant tests, Windows installer parsing, and World Intelligence build/bridge verification passed.
+- This remains source/CI evidence. It does not prove live model/vision calls, Auth/RLS isolation, background worker execution, live Docker execution, browser/device integrations, or production deployment.
