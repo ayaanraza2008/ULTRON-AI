@@ -37,6 +37,9 @@ jobs:
         with:
           gradle-version: "8.9"
           cache-provider: basic
+      - name: Test Android ULTRON endpoint validation
+        working-directory: android-companion
+        run: gradle --no-daemon testDebugUnitTest
       - name: Compile debug APK
         working-directory: android-companion
         run: gradle --no-daemon assembleDebug
