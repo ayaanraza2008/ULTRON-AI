@@ -161,6 +161,70 @@
     }, duration);
   }
 
+
+  let deferredPwaInstallPrompt = null;
+
+  function initializePwaExperience() {
+    const installButton = byId("pwa-install");
+    if (!installButton) return;
+
+    const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches === true ||
+      window.matchMedia?.("(display-mode: minimal-ui)")?.matches === true ||
+      navigator.standalone === true;
+    const isAppleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent || "") ||
+      (navigator.platform === "MacIntel" && Number(navigator.maxTouchPoints) > 1);
+
+    installButton.hidden = isStandalone;
+    if (isStandalone) return;
+
+    window.addEventListener("beforeinstallprompt", event => {
+      event.preventDefault();
+      deferredPwaInstallPrompt = event;
+      installButton.hidden = false;
+      installButton.textContent = "INSTALL APP";
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredPwaInstallPrompt = null;
+      installButton.hidden = true;
+      showToast("ULTRON is installed on this device.");
+    });
+
+    installButton.addEventListener("click", async () => {
+      if (deferredPwaInstallPrompt) {
+        const promptEvent = deferredPwaInstallPrompt;
+        deferredPwaInstallPrompt = null;
+        try {
+          await promptEvent.prompt();
+          const choice = await promptEvent.userChoice;
+          if (choice?.outcome === "accepted") {
+            installButton.hidden = true;
+            showToast("ULTRON installation accepted.");
+          } else {
+            showToast("Installation was dismissed. You can install ULTRON later from your browser menu.");
+          }
+        } catch {
+          showToast("Your browser could not open the installation prompt. Use its Install app menu instead.");
+        }
+        return;
+      }
+
+      if (isAppleMobile) {
+        showToast("On iPhone or iPad: open ULTRON in your browser, tap Share, choose Add to Home Screen, keep Open as Web App enabled, then tap Add.", 9000);
+      } else {
+        showToast("Open your browser menu and choose Install ULTRON or Add to Home Screen. Sign in with the same ULTRON account on each device to sync your data.", 9000);
+      }
+    });
+
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+          // The web app remains usable online if service-worker installation is unavailable.
+        });
+      }, { once: true });
+    }
+  }
+
   async function apiRequest(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body !== undefined && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -3398,7 +3462,8 @@
       return;
     }
     if (name === "devices") {
-      drawerHeading("PC and mobile devices", "Pair a Windows PC with a short-lived code. The companion initiates HTTPS status heartbeats; it does not expose remote control.");
+      drawerHeading("PC and mobile devices", "Open ULTRON on any phone, tablet or computer using this same HTTPS address. Sign in with the same account to sync saved conversations and account data. Install the web app on each device for an app-style shortcut.");
+      drawerCard("Universal ULTRON web app", "Works in a browser on Windows, macOS, Linux, Android, iPhone and iPad. The same signed-in account loads your saved cloud conversations on each device.", "CROSS-DEVICE", "ready");
       drawerCard("Windows PC companion", "Loading paired devices…", "CHECKING", "warning");
       try {
         const [capabilities, inventoryResult] = await Promise.all([
@@ -3406,7 +3471,7 @@
           apiRequest("/api/desktop-companion/devices").then(value => ({ value })).catch(error => ({ error }))
         ]);
         ui.drawerContent.replaceChildren();
-        drawerHeading("PC and mobile devices", "Pairing registers an owner-owned Windows device and its heartbeat. No keyboard, mouse, shell, screenshot, process, or file actions are available.");
+        drawerHeading("Your ULTRON devices", "Use the web app on any device and sign in with the same account. Only the Windows companion currently has a separate heartbeat pairing; web-app access itself does not need pairing.");
         const desktop = capabilities?.providers?.desktop || {};
         drawerCard("Windows companion relay",
           "Cloud pairing is available for status only. The PC connects outbound over HTTPS every 30 seconds; the server never opens a connection to your PC.",
@@ -3516,9 +3581,15 @@
         drawerCard("Windows setup",
           "Install the ULTRON Local Assistant on Windows. Run ultron-local companion pair --server-url " + window.location.origin + ", then ultron-local companion connect. The connect command sends one status heartbeat every 30 seconds and stays in the foreground.",
           "OUTBOUND HTTPS");
-        drawerCard("Mobile companion",
-          "No mobile companion is currently connected. Mobile pairing and OS permissions require a separate trusted mobile app.",
-          "NOT CONNECTED", "warning");
+        drawerCard("Android wake companion",
+          "An optional Android debug companion is available for on-device wake-word detection and a notification that opens ULTRON. For the full ULTRON interface, install this web app and sign in with the same account.",
+          "WAKE-WORD ONLY", "warning");
+        drawerCard("iPhone and iPad",
+          "Use the installable ULTRON web app. In Safari, open Share → Add to Home Screen, keep Open as Web App enabled, and tap Add. Native background wake-word listening is not part of the iOS web app.",
+          "WEB APP", "ready");
+        drawerCard("Shared account data",
+          "Conversations, saved documents, notes and other account-backed data are loaded from ULTRON's server after sign-in. Installing the app does not copy private data into a public offline cache.",
+          "ACCOUNT SYNC", "ready");
         drawerCard("Access boundaries",
           "This relay reports whether a paired PC is online and supports revocation only. It cannot execute commands, access files, capture screens, or control keyboard/mouse input.",
           "NO REMOTE PC CONTROL", "warning");
@@ -4153,6 +4224,7 @@
     if (window.speechSynthesis) window.speechSynthesis.cancel();
   });
 
+  initializePwaExperience();
   renderMode();
   setCoreState("idle");
   startParticleCore();
