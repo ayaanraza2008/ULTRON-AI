@@ -298,13 +298,17 @@ public sealed class CloudPresenceClient : IDisposable
         if (InPrefix(bytes, new byte[] { 0x20, 0x01, 0x0d, 0xb8 }, 32) ||
             InPrefix(bytes, new byte[] { 0x20, 0x01, 0x00, 0x00 }, 23) ||
             InPrefix(bytes, new byte[] { 0x20, 0x02 }, 16) ||
-            InPrefix(bytes, new byte[] { 0x3f, 0xff }, 20))
+            InPrefix(bytes, new byte[] { 0x3f, 0xff, 0x00 }, 20))
             return false;
         return true;
     }
 
     private static bool InPrefix(byte[] address, byte[] network, int prefixLength)
     {
+        // Prefix data must contain every byte that will be compared. Invalid or
+        // truncated ranges fail closed instead of throwing during DNS validation.
+        if (prefixLength < 0 || prefixLength > address.Length * 8 || prefixLength > network.Length * 8)
+            return false;
         var fullBytes = prefixLength / 8;
         var remainingBits = prefixLength % 8;
         for (var index = 0; index < fullBytes; index++)
