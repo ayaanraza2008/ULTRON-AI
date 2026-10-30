@@ -2,11 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#020205">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="ULTRON AI">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="ULTRON AI — a living core, voice-first command experience, and task-triggered holographic interface.">
   <title>ULTRON AI — Living Core</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/ultron.svg">
   <link rel="stylesheet" href="/styles.css">
   <script src="/speech-voices.js" defer></script>
   <script src="/app.js" defer></script>
@@ -29,6 +35,7 @@
         <span class="connection-dot"></span>
         <span id="api-status">CONNECTING TO CORE</span>
       </div>
+      <button id="pwa-install" class="pwa-install-control" type="button" hidden>INSTALL APP</button>
       <button id="drawer-toggle" class="drawer-toggle" type="button" aria-expanded="false" aria-controls="feature-drawer" aria-label="Open ULTRON features" title="ULTRON features">
         <span></span><span></span><span></span>
       </button>
