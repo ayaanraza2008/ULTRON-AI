@@ -75,7 +75,7 @@ async function readJsonLimited(response, maxBytes = MAX_RESPONSE_BYTES) {
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) { streamDone = true; break; }
+      if (done) break;
       size += value.byteLength;
       if (size > maxBytes) {
         try { await reader.cancel(); } catch {}
