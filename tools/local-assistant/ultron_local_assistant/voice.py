@@ -140,3 +140,44 @@ def classify_desktop_command(command: str) -> dict[str, str] | None:
         target = {"file explorer": "explorer", "calc": "calculator"}.get(target, target)
         return {"kind": "launch", "target": target}
     return None
+
+
+def classify_local_command(command: str) -> dict[str, str] | None:
+    """Map small, read-only local assistant intents; all other text goes to chat."""
+    if not isinstance(command, str):
+        return None
+    normalized = unicodedata.normalize("NFKC", command).casefold().strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"[?.!,;:]+$", "", normalized).strip()
+    if not normalized:
+        return None
+
+    if normalized in {
+        "what time is it", "what time is it now", "tell me the time",
+        "what's the time", "time now", "samay kya hua hai",
+        "abhi kitne baje hain", "kitne baje hain",
+    }:
+        return {"kind": "time"}
+    if normalized in {
+        "what is today's date", "what's today's date", "what is the date",
+        "today's date", "date today", "aaj kya date hai", "aaj ki tareekh kya hai",
+    }:
+        return {"kind": "date"}
+    if normalized in {
+        "system status", "system health", "pc status", "check my pc",
+        "check system health", "how is my pc", "mera pc kaisa hai",
+        "system check karo", "pc health batao",
+    }:
+        return {"kind": "system_health"}
+
+    patterns = (
+        r"(?:search|find|research) (?:in )?(?:my )?(?:local )?(?:documents|files)(?: for)? (.+)",
+        r"(?:mere )?(?:documents|files) (?:mein|me) (.+) (?:search karo|khojo|dhundo|dhoondo)",
+    )
+    for pattern in patterns:
+        match = re.fullmatch(pattern, normalized)
+        if match:
+            query = match.group(1).strip()
+            if len(query) >= 2 and len(query) <= 500:
+                return {"kind": "documents", "query": query}
+    return None
