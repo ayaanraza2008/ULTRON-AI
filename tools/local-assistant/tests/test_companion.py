@@ -438,24 +438,23 @@ class CompanionServerTests(unittest.TestCase):
 
     def test_windows_junction_or_reparse_identity_path_is_rejected(self):
         from types import SimpleNamespace
+        from unittest.mock import patch
         from ultron_local_assistant.companion import _is_symlink_or_junction
 
-        class JunctionPath:
-            def is_symlink(self):
-                return False
-            def is_junction(self):
-                return True
-
-        class ReparsePath:
-            def is_symlink(self):
-                return False
-            def is_junction(self):
-                return False
-            def lstat(self):
-                return SimpleNamespace(st_file_attributes=0x400)
-
-        self.assertTrue(_is_symlink_or_junction(JunctionPath()))
-        self.assertTrue(_is_symlink_or_junction(ReparsePath()))
+        with tempfile.TemporaryDirectory() as root:
+            identity = Path(root) / "device-id"
+            identity.write_text("00000000-0000-4000-8000-000000000001\\n", encoding="ascii")
+            # Path.is_junction() exists on newer Python versions; create=True keeps
+            # this policy test compatible with the project's Python 3.10 minimum.
+            with patch.object(Path, "is_symlink", return_value=False):
+                with patch.object(Path, "is_junction", create=True, return_value=True):
+                    self.assertTrue(_is_symlink_or_junction(identity))
+                with patch.object(Path, "is_junction", create=True, return_value=False):
+                    with patch.object(
+                        Path, "lstat",
+                        return_value=SimpleNamespace(st_file_attributes=0x400)
+                    ):
+                        self.assertTrue(_is_symlink_or_junction(identity))
 
 if __name__ == "__main__":
     unittest.main()
