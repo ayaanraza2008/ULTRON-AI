@@ -782,9 +782,15 @@ def _run_bounded_process(argv: list[str], cwd: Path, *, timeout: int = 60) -> su
         process.wait()
         for reader in readers:
             reader.join(timeout=2)
+        for stream in (process.stdout, process.stderr):
+            if stream:
+                stream.close()
         raise RuntimeError(f"Process exceeded the {timeout}-second time limit and was terminated.") from exc
     for reader in readers:
         reader.join(timeout=2)
+    for stream in (process.stdout, process.stderr):
+        if stream:
+            stream.close()
     for name in ("stdout", "stderr"):
         if truncated[name]:
             buffers[name].extend(b"\\n[output truncated at 1 MB]")
