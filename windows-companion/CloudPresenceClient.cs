@@ -191,6 +191,7 @@ public sealed class WindowsCredentialStore : ICompanionCredentialStore
 }
 
 public sealed record CloudCompanionPairing(string DeviceId, string DeviceName, string ServerOrigin);
+public sealed record RemoteDesktopCommand(string Id, string ActionType, string Target, DateTimeOffset ExpiresAt);
 
 /// <summary>
 /// Outbound-only Windows presence client. It can pair and send heartbeats, but
@@ -414,6 +415,196 @@ public sealed class CloudPresenceClient : IDisposable
                 retrySeconds = Math.Min(60, retrySeconds * 2);
             }
         }
+    }
+
+    /// <summary>
+    /// Poll the outbound-only action queue. Every claimed request is presented
+    /// to a local approval callback before the executor can run.
+    /// </summary>
+    public async Task RunRemoteActionPollingLoopAsync(
+        Func<RemoteDesktopCommand, CancellationToken, Task<bool>> approve,
+        Func<RemoteDesktopCommand, CancellationToken, Task<string>> execute,
+        Action<string> status,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(approve);
+        ArgumentNullException.ThrowIfNull(execute);
+        ArgumentNullException.ThrowIfNull(status);
+        var credentials = LoadCredentials()
+            ?? throw new InvalidOperationException("Pair this Windows PC with ULTRON before enabling action approvals.");
+
+        status("ULTRON remote-action approvals are enabled. Every request will require approval on this PC.");
+        var retrySeconds = 5;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var command = await ClaimNextCommandAsync(credentials, cancellationToken);
+                if (command is null)
+                {
+                    retrySeconds = 5;
+                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                    continue;
+                }
+
+                if (command.ExpiresAt <= DateTimeOffset.UtcNow)
+                {
+                    status("An expired ULTRON action request was ignored.");
+                    continue;
+                }
+
+                status("ULTRON is asking for approval on this PC: " + DescribeCommand(command) + ".");
+                var approved = await approve(command, cancellationToken);
+                if (!approved)
+                {
+                    await CompleteCommandAsync(credentials, command, "rejected", "USER_REJECTED", cancellationToken);
+                    status("ULTRON action declined on this PC.");
+                    continue;
+                }
+
+                try
+                {
+                    var executionMessage = await execute(command, cancellationToken);
+                    await CompleteCommandAsync(credentials, command, "completed", "ACTION_COMPLETED", cancellationToken);
+                    status("ULTRON action approved and started: " + executionMessage);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception error)
+                {
+                    try
+                    {
+                        await CompleteCommandAsync(credentials, command, "failed", "ACTION_FAILED", cancellationToken);
+                    }
+                    catch
+                    {
+                        // Keep the local failure visible even when the cloud result
+                        // cannot be recorded. The command is never re-executed here.
+                    }
+                    status("Approved ULTRON action could not be started (" + error.GetType().Name + ").");
+                }
+                retrySeconds = 5;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (PermissionException error)
+            {
+                status("ULTRON remote action access was revoked. Re-pair this PC to enable it again. " + error.Message);
+                return;
+            }
+            catch (Exception error)
+            {
+                status("ULTRON action queue unavailable (" + error.GetType().Name + "). Retrying in " + retrySeconds + "s.");
+                try { await Task.Delay(TimeSpan.FromSeconds(retrySeconds), cancellationToken); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return; }
+                retrySeconds = Math.Min(60, retrySeconds * 2);
+            }
+        }
+    }
+
+    private async Task<RemoteDesktopCommand?> ClaimNextCommandAsync(
+        StoredCredentials credentials,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, credentials.ServerOrigin + "/api/desktop-companion/commands/next")
+        {
+            Content = JsonContent.Create(new { deviceId = credentials.DeviceId })
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", credentials.DeviceToken);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Gone)
+            throw new PermissionException("The paired-device token is no longer accepted.");
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException("ULTRON returned HTTP " + (int)response.StatusCode + " while checking the action queue.");
+
+        var raw = await ReadLimitedAsync(response.Content, MaxResponseBytes, cancellationToken);
+        using var document = JsonDocument.Parse(raw);
+        if (!document.RootElement.TryGetProperty("command", out var commandValue) ||
+            commandValue.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+
+        if (commandValue.ValueKind != JsonValueKind.Object ||
+            !commandValue.TryGetProperty("id", out var idValue) ||
+            !commandValue.TryGetProperty("actionType", out var actionValue) ||
+            !commandValue.TryGetProperty("target", out var targetValue) ||
+            !commandValue.TryGetProperty("expiresAt", out var expiryValue))
+            throw new InvalidOperationException("ULTRON returned an incomplete desktop action request.");
+
+        var id = idValue.GetString() ?? string.Empty;
+        var action = actionValue.GetString() ?? string.Empty;
+        var target = targetValue.GetString() ?? string.Empty;
+        var expiryText = expiryValue.GetString() ?? string.Empty;
+        if (!Guid.TryParse(id, out var parsedId) || !IsAllowlistedRemoteAction(action, target) ||
+            !DateTimeOffset.TryParse(expiryText, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var expiresAt) ||
+            expiresAt <= DateTimeOffset.UtcNow ||
+            expiresAt > DateTimeOffset.UtcNow.AddSeconds(90))
+            throw new InvalidOperationException("ULTRON returned an invalid or expired desktop action request.");
+
+        return new RemoteDesktopCommand(parsedId.ToString("D"), action, target, expiresAt);
+    }
+
+    private async Task CompleteCommandAsync(
+        StoredCredentials credentials,
+        RemoteDesktopCommand command,
+        string status,
+        string resultCode,
+        CancellationToken cancellationToken)
+    {
+        if (status is not ("completed" or "rejected" or "failed") ||
+            resultCode is not ("USER_REJECTED" or "ACTION_COMPLETED" or "ACTION_FAILED"))
+            throw new ArgumentException("The desktop action result is not allowlisted.");
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            credentials.ServerOrigin + "/api/desktop-companion/commands/" + Uri.EscapeDataString(command.Id) + "/result")
+        {
+            Content = JsonContent.Create(new
+            {
+                deviceId = credentials.DeviceId,
+                status,
+                resultCode
+            })
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", credentials.DeviceToken);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Gone)
+            throw new PermissionException("The paired-device token is no longer accepted.");
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException("ULTRON did not accept the desktop action result (HTTP " + (int)response.StatusCode + ").");
+        await ReadLimitedAsync(response.Content, MaxResponseBytes, cancellationToken);
+    }
+
+    public static bool IsAllowlistedRemoteAction(string actionType, string target)
+    {
+        return actionType switch
+        {
+            "launch_application" => target is "notepad" or "explorer" or "calculator",
+            "open_known_folder" => target is "desktop" or "documents" or "downloads",
+            _ => false
+        };
+    }
+
+    public static string DescribeCommand(RemoteDesktopCommand command)
+    {
+        if (!IsAllowlistedRemoteAction(command.ActionType, command.Target))
+            return "an unsupported action";
+        var names = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["notepad"] = "Notepad",
+            ["explorer"] = "File Explorer",
+            ["calculator"] = "Calculator",
+            ["desktop"] = "Desktop folder",
+            ["documents"] = "Documents folder",
+            ["downloads"] = "Downloads folder"
+        };
+        return command.ActionType == "launch_application"
+            ? "open " + names[command.Target]
+            : "open the " + names[command.Target];
     }
 
     private StoredCredentials? LoadCredentials()
