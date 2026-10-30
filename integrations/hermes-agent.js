@@ -533,7 +533,7 @@ export async function getHermesAgentRunStatus({ env = process.env, fetchImpl = s
       };
     }
     const status = bounded(data?.status, 40).toLowerCase();
-    const terminal = ["completed", "failed", "cancelled"].includes(status);
+    const terminal = ["completed", "failed", "cancelled", "interrupted"].includes(status);
     return {
       state: status || "unknown",
       provider: "hermes-agent",
