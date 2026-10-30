@@ -61,6 +61,18 @@ class Harness2Tests(unittest.TestCase):
             path = Path(temp) / "bad.json"
             path.write_text(json.dumps({"tasks":[{"id":"same","prompt":"one"},{"id":"same","prompt":"two"}]}))
             with self.assertRaises(harness2.Harness2Error): harness2.load_benchmark("custom", str(path))
+    def test_candidate_paths_reject_traversal_and_symlinks(self):
+        run_root = self.root / ".harness2" / "runs" / "20261031-120000-abcdef12"
+        candidates = run_root / "candidates"
+        candidates.mkdir(parents=True)
+        with self.assertRaises(harness2.Harness2Error):
+            harness2.candidate_dir(run_root, "../../outside")
+        outside = self.root / "outside"
+        outside.mkdir()
+        (candidates / "baseline").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(harness2.Harness2Error):
+            harness2.candidate_dir(run_root, "baseline")
+
     def test_executor_jsonl_parsing(self):
         opencode = json.dumps({"type":"text","part":{"text":"hello"}})
         codex = json.dumps({"type":"item.completed","item":{"type":"agent_message","text":"world"}})
