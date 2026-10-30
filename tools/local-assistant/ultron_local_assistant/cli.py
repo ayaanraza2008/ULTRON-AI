@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, detect_hardware, get_system_health, list_local_models, local_chat, pull_local_model, recommend_models, resolve_workspace_file, run_approved_command, run_script, apply_workspace_draft, search_documents, secure_write, speak_text
+from .companion import create_companion_server, generate_companion_token
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -351,12 +352,48 @@ def skills_list(_):
     out_json(list_installed_skills())
     return 0
 
+def companion_token(_):
+    # The token is printed once so PowerShell can capture it into the current
+    # process environment without persisting it in project files or CLI args.
+    print(generate_companion_token())
+    return 0
+
+def companion_serve(args):
+    if sys.platform != "win32":
+        print("The Windows desktop companion can only be started on Windows.", file=sys.stderr)
+        return 2
+    token = os.environ.get("ULTRON_COMPANION_TOKEN", "").strip()
+    if len(token) < 43:
+        print("Set ULTRON_COMPANION_TOKEN first, for example:", file=sys.stderr)
+        print("$env:ULTRON_COMPANION_TOKEN = (ultron-local companion token).Trim()", file=sys.stderr)
+        return 2
+    origins = tuple(item.strip() for item in os.environ.get("ULTRON_COMPANION_ALLOWED_ORIGINS", "").split(",") if item.strip())
+    try:
+        server = create_companion_server(token, port=args.port, allowed_origins=origins)
+    except (OSError, ValueError) as exc:
+        print(f"Could not start the local companion safely: {exc}", file=sys.stderr)
+        return 1
+    print(f"ULTRON local companion listening at http://127.0.0.1:{server.server_port}{'/v1/ultron/status'}")
+    print("Loopback-only, bearer-token protected, status-only. Press Ctrl+C to stop.")
+    print("A hosted ULTRON backend cannot reach this PC-local endpoint.")
+    try:
+        server.serve_forever(poll_interval=0.5)
+    except KeyboardInterrupt:
+        print("\\nStopping local companion.")
+    finally:
+        server.server_close()
+    return 0
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="ultron-local", description="Local-first terminal assistant. Private prompts/documents are sent only to local Ollama.")
     subs = parser.add_subparsers(dest="command", required=True)
     p = subs.add_parser("health", help="Show local CPU, memory and disk health without network access"); p.add_argument("--path"); p.set_defaults(handler=health)
     p = subs.add_parser("doctor"); p.set_defaults(handler=doctor)
     p = subs.add_parser("agents"); p.set_defaults(handler=agents)
+    c = subs.add_parser("companion", help="Run the local Windows desktop status companion")
+    cs = c.add_subparsers(dest="companion_command", required=True)
+    p = cs.add_parser("token", help="Generate a high-entropy local companion token"); p.set_defaults(handler=companion_token)
+    p = cs.add_parser("serve", help="Serve the status-only API on 127.0.0.1"); p.add_argument("--port", type=int, default=8765); p.set_defaults(handler=companion_serve)
     p = subs.add_parser("chat"); p.add_argument("--model"); p.set_defaults(handler=chat)
     p = subs.add_parser("research"); p.add_argument("question", nargs="+"); p.add_argument("--root", default="."); p.add_argument("--model"); p.set_defaults(handler=research)
     p = subs.add_parser("search"); p.add_argument("query", nargs="+"); p.add_argument("--root", default="."); p.set_defaults(handler=search)
