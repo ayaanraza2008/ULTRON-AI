@@ -595,24 +595,24 @@ def voice_mode(args):
             else:
                 try:
                     answer = local_chat(
-                    command,
-                    model=chosen,
-                    system=(
-                        "You are ULTRON, a private local desktop assistant. The user may speak Hindi, English, or Hinglish (mixed Hindi and English). "
-                        "Understand the spoken intent when the transcript is clear, but always answer in concise, natural English. "
-                        "If the transcript is unclear or incomplete, ask the user to repeat instead of guessing. "
-                        "Answer helpfully and concisely. Do not claim to have changed files, executed commands, opened apps, sent messages, "
-                        "or accessed the internet. Only the separate fixed desktop shortcut handler can "
-                        "start Notepad, File Explorer, Calculator, or open Desktop/Documents/Downloads, "
-                        "and those actions require a typed approval."
-                    ),
-                    use_skills=True,
-                )
-                print("\nULTRON: " + answer)
-                message = answer
-            except Exception as exc:
-                message = "Local model unavailable: " + str(exc)
-                print("ULTRON: " + message, file=sys.stderr)
+                        command,
+                        model=chosen,
+                        system=(
+                            "You are ULTRON, a private local desktop assistant. The user may speak Hindi, English, or Hinglish (mixed Hindi and English). "
+                            "Understand the spoken intent when the transcript is clear, but always answer in concise, natural English. "
+                            "If the transcript is unclear or incomplete, ask the user to repeat instead of guessing. "
+                            "Answer helpfully and concisely. Do not claim to have changed files, executed commands, opened apps, sent messages, "
+                            "or accessed the internet. Only the separate fixed desktop shortcut handler can "
+                            "start Notepad, File Explorer, Calculator, or open Desktop/Documents/Downloads, "
+                            "and those actions require a typed approval."
+                        ),
+                        use_skills=True,
+                    )
+                    print("\nULTRON: " + answer)
+                    message = answer
+                except Exception as exc:
+                    message = "Local model unavailable: " + str(exc)
+                    print("ULTRON: " + message, file=sys.stderr)
         if not args.no_speak and message:
             ok, speech_message = speak_text(message[:6000])
             if not ok:
