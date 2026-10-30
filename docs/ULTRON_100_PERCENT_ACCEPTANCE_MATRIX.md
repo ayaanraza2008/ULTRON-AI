@@ -234,3 +234,12 @@ Evidence state at this checkpoint:
 - Tests added to the branch validate recognition-script construction, input bounds, wake-word requirement, exact action phrase matching, non-allowlisted request rejection, typed desktop approvals and audit behavior. The physical microphone, installed recognizer, local Ollama model, system TTS voice, real application readiness, and live Hermes service remain unverified on the user's Windows PC.
 - Hermes live connectivity requires the independently installed runtime, an API server key, a matching owner UUID and a reachable endpoint. Render cannot reach the PC's loopback address; no tunnel, port-forward, Render environment variable or production endpoint was configured.
 - No main-branch merge, deployment, production setting, Supabase mutation/migration, paid model download, or PHANTOM/NOX change was made.
+
+
+## Workflow maintenance checkpoint — 2026-10-30
+
+- Current PR #400 head: `e746927ac41f8572998a97f178156b4896c29f74` (branch `integration/ultron-cross-sector-current-main-20261029`; open and unmerged).
+- The preceding exact source head `efec05ce903c73f022a18c56278a3bbd22244c74` passed the core Node test job: 847 tests, 846 passed, 0 failed, 1 skipped. The one skip is live two-account Supabase isolation and remains **BLOCKED**, not verified.
+- Fixed an observed Android CI Node 20 deprecation warning by upgrading `gradle/actions/setup-gradle` from `v4` to pinned `v6.4.1`, retaining Gradle 8.9 and selecting `cache-provider: basic` (open-source cache path). Official release v6.4.1 is dated 2026-10-28 and includes a security fix (GHSA-chpw-2mqm-95cc).
+- Exact-head validation is pending: Android run `41104536252`, ULTRON CI `41104536323`, Windows Companion `41104536689`, Chrome DevTools `41104536548`. Do not mark this action upgrade tested until these runs complete successfully and the Android log confirms the warning is gone.
+- No production deployment/settings, Supabase migration or account-mutating test was performed. No PHANTOM AI or NOX AI work was changed.
