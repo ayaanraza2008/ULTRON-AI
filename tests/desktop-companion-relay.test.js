@@ -342,3 +342,36 @@ test("paired device can acknowledge only a matching allowlisted action outcome",
     assert.equal(calls, 0);
   });
 });
+
+test("paired device reauthorizes a claimed action immediately before local execution", async () => {
+  const token = "F".repeat(43);
+  let call;
+  await withRelay({
+    privilegedSupabaseRpc: async (...args) => { call = args; return true; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/actions/" + ACTION + "/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(call, ["authorize_desktop_companion_action", {
+      p_token_hash: hash(token), p_device_id: DEVICE, p_action_id: ACTION
+    }]);
+    assert.deepEqual(await response.json(), { authorized: true, actionId: ACTION });
+  });
+});
+
+test("authorization route blocks an action after device revocation or expiry", async () => {
+  await withRelay({
+    privilegedSupabaseRpc: async () => false
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/actions/" + ACTION + "/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + "G".repeat(43) },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error.code, "DESKTOP_ACTION_NO_LONGER_AUTHORIZED");
+  });
+});
