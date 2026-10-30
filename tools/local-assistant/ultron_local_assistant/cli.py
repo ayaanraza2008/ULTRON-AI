@@ -15,7 +15,7 @@ from .core import DEFAULT_LOCAL_MODEL, app_data_dir, answer_from_documents, dete
 from .desktop_control import list_desktop_actions, launch_application, open_known_folder
 from .voice import listen_once, wake_command, classify_desktop_command, classify_local_command
 from .companion import (create_companion_server, generate_companion_token, pair_companion, send_companion_heartbeat,
-                        poll_companion_action, complete_companion_action)
+                        poll_companion_action, authorize_companion_action, complete_companion_action)
 from .google_workspace import configure_google_credentials, fetch_morning_digest_data, format_digest_data
 from .skills import install_skill_repository, list_installed_skills, review_skill_repository
 
@@ -472,6 +472,16 @@ def process_companion_action(action):
     if not approved:
         complete_companion_action(action["id"], "denied", "USER_DENIED")
         print("Action denied locally.")
+        return
+
+    # Last server-side authorization check after the typed approval and before
+    # process creation. A revoked device or expired/closed action fails closed.
+    try:
+        if not authorize_companion_action(action["id"]):
+            print("The action is no longer authorized by ULTRON; nothing was launched.", file=sys.stderr)
+            return
+    except Exception as exc:
+        print(f"ULTRON could not reauthorize the action; nothing was launched: {exc}", file=sys.stderr)
         return
 
     try:
