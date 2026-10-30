@@ -168,3 +168,14 @@ test("routes Hermes skills and toolset discovery to read-only capability tools",
   assert.deepEqual(toolsets.categories, ["hermes"]);
   assert.ok(toolsets.toolNames.includes("hermes_agent_list_toolsets"));
 });
+
+
+test("routes Hermes run progress and generation-bound approval requests", () => {
+  const events = classifyTaskRoute("Show progress events for run_abc123");
+  assert.deepEqual(events.categories, ["hermes"]);
+  assert.ok(events.toolNames.includes("hermes_agent_run_events"));
+
+  const approve = classifyTaskRoute("Approve prompt_safe_123 in run_abc123 at generation 4 once");
+  assert.deepEqual(approve.categories, ["hermes"]);
+  assert.ok(approve.toolNames.includes("hermes_agent_resolve_approval"));
+});
