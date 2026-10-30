@@ -283,6 +283,34 @@ export function createDesktopCompanionRelayRouter({
     }
   });
 
+  // A just-approved command is revalidated immediately before the local
+  // Windows executor runs. Revoked devices and expired commands fail closed.
+  router.post("/desktop-companion/commands/:id/authorize", async (req, res) => {
+    const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
+    const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
+    const deviceId = cleanString(req.body?.deviceId, 64);
+    const commandId = cleanString(req.params.id, 64);
+    if (!match || !DEVICE_TOKEN_RE.test(match[1]) || !UUID_RE.test(deviceId) ||
+        !UUID_RE.test(commandId) || !req.body || Object.keys(req.body).join(",") !== "deviceId") {
+      return res.status(400).json({ error: { code: "INVALID_DESKTOP_ACTION_AUTHORIZATION", message: "The local action authorization request was invalid." } });
+    }
+    try {
+      const authorized = await privilegedSupabaseRpc("authorize_desktop_companion_command", {
+        p_token_hash: sha256(match[1]),
+        p_device_id: deviceId,
+        p_command_id: commandId
+      });
+      if (authorized !== true) {
+        return res.status(409).json({ error: { code: "DESKTOP_ACTION_NO_LONGER_AUTHORIZED", message: "This command expired, was revoked, or is no longer assigned to this device." } });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ authorized: true, commandId });
+    } catch (error) {
+      logger.warn?.("Desktop action authorization failed", { code: error?.code || "DATABASE_ERROR" });
+      return sendError(res, error, "DESKTOP_ACTION_AUTHORIZATION_FAILED", "Could not authorize the local desktop action.");
+    }
+  });
+
   router.post("/desktop-companion/commands/:id/result", async (req, res) => {
     const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
     const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{43})$/);
