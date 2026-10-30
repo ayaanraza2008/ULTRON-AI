@@ -761,6 +761,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       "complete_desktop_companion_pairing",
       "record_desktop_companion_heartbeat",
       "claim_desktop_companion_action",
+      "authorize_desktop_companion_action",
       "complete_desktop_companion_action"
     ]);
     if (!allowed.has(functionName) || !body || typeof body !== "object" || Array.isArray(body)) {
