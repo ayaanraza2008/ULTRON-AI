@@ -28,7 +28,7 @@ test("VoiceStudio cloning fails closed without consent in the raw user prompt", 
   }, async base => {
     const response = await fetch(base + "/api/agent/run", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Clone this voice from the attached sample", audioBase64: Buffer.alloc(1500, 1).toString("base64"), mimeType: "audio/wav" })
+      body: JSON.stringify({ prompt: "I have the speaker's permission to clone this voice, but I don't approve this clone.", audioBase64: Buffer.alloc(1500, 1).toString("base64"), mimeType: "audio/wav" })
     });
     assert.equal(response.status, 200);
     const body = await response.json();
