@@ -123,9 +123,9 @@ The digest reads up to 10 unread messages from the last day using message header
 
 Google OAuth requires a Google Cloud project, API enablement, internet access, and explicit user consent. Those credentials and account-specific configuration cannot be created on your behalf from this repository commit.
 
-## Windows desktop companion (outbound-only cloud status)
+## Windows desktop companion (outbound HTTPS + locally approved shortcuts)
 
-The cloud companion relay allows a paired Windows PC to report whether it is online. The PC initiates HTTPS heartbeats every 30 seconds; ULTRON does not open a connection to the PC. This is a status-only presence feature, not remote PC control.
+The paired Windows PC initiates HTTPS heartbeats every 30 seconds; ULTRON never opens a network connection to the PC. The cloud panel can request a very small fixed action set, but the request is not executed until the local user approves it in the foreground Windows terminal.
 
 1. Sign in to the ULTRON web app with the Supabase account that should own the device.
 2. Open **PC and mobile devices** and choose **GENERATE ONE-TIME PAIRING CODE**. The code expires after five minutes and can be redeemed once.
@@ -135,21 +135,25 @@ The cloud companion relay allows a paired Windows PC to report whether it is onl
    ultron-local companion pair --server-url "https://YOUR-ULTRON-HOST"
    ~~~
 
-4. Start the foreground heartbeat client:
+4. Start the foreground companion in an interactive PowerShell window:
 
    ~~~powershell
-   # Send one test heartbeat and exit:
+   # Send one heartbeat and check for one request:
    ultron-local companion connect --once
 
-   # Keep the PC online in ULTRON while this terminal remains open:
+   # Keep the PC online and receive locally approved requests:
    ultron-local companion connect
    ~~~
+
+5. In the ULTRON **PC and mobile devices** panel, use one of the fixed request buttons on an online PC. The local terminal displays the exact request; type **ALLOW** to approve it. Any other response denies it. A non-interactive client always denies the request, and a request that expires while the approval prompt is open is not executed.
+
+The only remote-requestable shortcuts are Notepad, Calculator, File Explorer, and the standard Desktop/Documents/Downloads folders. The current web panel exposes Notepad, Calculator and Documents. Only one request may be pending or claimed per device; requests expire after two minutes. A completed outcome means Windows accepted a process-start request, not that the application has finished loading.
 
 The companion validates that the server URL uses HTTPS on port 443, resolves only public/global IP addresses, pins the connection to the validated IP, preserves TLS hostname verification, blocks redirects, and limits the response size/time. If the connection drops, the foreground client retries with a bounded backoff. A revoked or unknown token stops the client and requires a new pairing.
 
 The device token is returned only once and its hash—not the raw token—is stored in Supabase. The CLI saves the token in the user's private ULTRON app-data directory outside the repository. The local file is protected with restrictive permissions where the operating system supports them; it is not encrypted by Windows Credential Manager. Keep the Windows account and its app-data folder secure. The token is never printed by the CLI and is not committed to Git.
 
-To revoke the device, use **REVOKE** beside it in the web app. To also remove the local credential file, stop the heartbeat client and run:
+To revoke the device, use **REVOKE** beside it in the web app. To also remove the local credential file, stop the companion and run:
 
 ~~~powershell
 Remove-Item "$env:LOCALAPPDATA\ULTRON\local-assistant\companion\device-credentials.json"
@@ -157,13 +161,13 @@ Remove-Item "$env:LOCALAPPDATA\ULTRON\local-assistant\companion\device-credentia
 
 The web app marks a device online only while a heartbeat is newer than 90 seconds. The client must remain running in the foreground; this change does not install a Windows service or startup task.
 
-**Strict boundary:** the cloud relay supports pairing, online presence and revocation only. It has no command queue, remote shell, PowerShell, file, screenshot, process, keyboard or mouse API. The UI must continue to report device control as unavailable. This relay is separate from the optional local loopback status server described below; never expose that local server to the LAN or internet.
+**Strict boundary:** no arbitrary shell/PowerShell, user-provided executable or file paths, file contents, screenshots, clipboard, process, keyboard or mouse APIs are exposed. The local shortcut code uses a fixed allowlist, `shell=False`, and a local audit log. The database migration for the action queue is source-only until applied to a dedicated Supabase test project and promoted through the repository review process. This is separate from the optional loopback status server described below; never expose that local server to the LAN or internet.
 
 ### Optional loopback status server for local development
 
-The separate `ultron-local companion token` and `ultron-local companion serve` commands start an authenticated local-only endpoint. It binds only to `127.0.0.1`, validates peer/Host/Origin, requires a high-entropy bearer token, caps concurrent handlers at 16, applies a five-second socket timeout, rate-limits requests, closes connections, and exposes only `GET /v1/ultron/status`.
+The separate `ultron-local companion token` and `ultron-local companion serve` commands start an authenticated local-only status endpoint. It binds only to `127.0.0.1`, validates peer/Host/Origin, requires a high-entropy bearer token, caps concurrent handlers at 16, applies a five-second socket timeout, rate-limits requests, closes connections, and exposes only `GET /v1/ultron/status`.
 
-This loopback server is not needed for cloud heartbeat presence and cannot be reached from Render. Do not open its port to the LAN or internet.
+This loopback server is not needed for cloud heartbeat or fixed-action requests and cannot be reached from Render. Do not open its port to the LAN or internet.
 
 ## PDF and DOCX documents
 
