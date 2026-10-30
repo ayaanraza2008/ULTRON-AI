@@ -21,10 +21,10 @@ class CompanionServerTests(unittest.TestCase):
         server = create_companion_server(TOKEN, port=0, data_dir=Path(temp_dir.name), **kwargs)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        self.addCleanup(thread.join, 2)
         self.addCleanup(temp_dir.cleanup)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 2)
+        self.addCleanup(server.shutdown)
         self.assertEqual(server.server_address[0], "127.0.0.1")
         return server, f"http://127.0.0.1:{server.server_port}"
 
@@ -134,8 +134,6 @@ class CompanionServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             first, _ = self.start_server(data_dir=Path(root) / "companion")
             first_id = first.device_id
-            first.shutdown()
-            first.server_close()
             second, _ = self.start_server(data_dir=Path(root) / "companion")
             self.assertEqual(second.device_id, first_id)
 
