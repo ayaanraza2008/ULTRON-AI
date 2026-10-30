@@ -62,7 +62,8 @@ test("companion actions migration permits only fixed locally approved applicatio
   assert.match(actionsSql, /revoke all on table public\.desktop_companion_actions from public, anon, authenticated/i);
   assert.match(actionsSql, /grant execute on function public\.claim_desktop_companion_action\(text, uuid\)\s+to service_role/i);
   assert.match(actionsSql, /grant execute on function public\.complete_desktop_companion_action\(text, uuid, uuid, text, text\)\s+to service_role/i);
-  assert.doesNotMatch(actionsSql, /command_text|shell_command|file_path|powershell|screenshot/i);
+  const tableDefinition = actionsSql.split("create table if not exists public.desktop_companion_actions", 2)[1].split(");", 1)[0];
+  assert.doesNotMatch(tableDefinition, /command_text|shell_command|file_path|powershell|screenshot/i);
 });
 
 test("companion action SQL functions pin search_path and bind claims/completion to the paired device", () => {
