@@ -204,3 +204,141 @@ test("revocation uses the caller-scoped RLS RPC and distinguishes inactive devic
     assert.equal((await response.json()).error.code, "DEVICE_NOT_FOUND");
   });
 });
+
+const ACTION = "88888888-8888-4888-8888-888888888888";
+
+test("owner can queue only a fixed action for a recently online, unrevoked Windows device", async () => {
+  const now = 1_800_000_000_000;
+  const calls = [];
+  await withRelay({
+    now: () => now,
+    supabaseRest: async (...args) => {
+      calls.push(args);
+      if (args[1] === "desktop_companion_devices" && args[2] === "GET") {
+        return [{ id: RECORD, device_id: DEVICE, device_name: "Ayaan-PC", platform: "windows",
+          last_seen_at: new Date(now - 10_000).toISOString(), revoked_at: null }];
+      }
+      if (args[1] === "desktop_companion_actions" && args[2] === "POST") {
+        return [{ id: ACTION, status: "pending", expires_at: new Date(now + 120_000).toISOString() }];
+      }
+      throw new Error("unexpected database operation");
+    }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/devices/" + RECORD + "/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "launch_application", target: "notepad" })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(payload.actionId, ACTION);
+    assert.equal(payload.requiresLocalApproval, true);
+    assert.equal(payload.status, "pending");
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1][1], "desktop_companion_actions");
+    assert.equal(calls[1][4].user_id, OWNER);
+    assert.equal(calls[1][4].device_record_id, RECORD);
+    assert.equal(calls[1][4].device_id, DEVICE);
+    assert.equal(calls[1][4].action_name, "launch_application");
+    assert.equal(calls[1][4].action_target, "notepad");
+    assert.equal(calls[1][4].expires_at, new Date(now + 120_000).toISOString());
+    assert.equal(calls[1][5], "return=representation");
+  });
+});
+
+test("desktop action queue rejects arbitrary shell-like input before database access", async () => {
+  let calls = 0;
+  await withRelay({ supabaseRest: async () => { calls++; return []; } }, async base => {
+    const response = await fetch(base + "/desktop-companion/devices/" + RECORD + "/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "launch_application", target: "powershell", command: "Remove-Item" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_DESKTOP_ACTION");
+    assert.equal(calls, 0);
+  });
+});
+
+test("desktop action queue rejects an offline device", async () => {
+  const now = 1_800_000_000_000;
+  let inserts = 0;
+  await withRelay({
+    now: () => now,
+    supabaseRest: async (_req, table, method) => {
+      if (table === "desktop_companion_devices" && method === "GET") {
+        return [{ id: RECORD, device_id: DEVICE, platform: "windows",
+          last_seen_at: new Date(now - 120_000).toISOString(), revoked_at: null }];
+      }
+      if (method === "POST") inserts++;
+      return [];
+    }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/devices/" + RECORD + "/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "open_known_folder", target: "documents" })
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error.code, "DEVICE_OFFLINE");
+    assert.equal(inserts, 0);
+  });
+});
+
+test("paired device claims one fixed local action using its hashed device credential", async () => {
+  const token = "D".repeat(43);
+  let call;
+  await withRelay({
+    privilegedSupabaseRpc: async (...args) => {
+      call = args;
+      return [{ action_id: ACTION, action_name: "open_known_folder", action_target: "documents",
+        expires_at: "2026-10-31T12:02:00.000Z" }];
+    }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/actions/next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(call[0], "claim_desktop_companion_action");
+    assert.equal(call[1].p_token_hash, hash(token));
+    assert.equal(call[1].p_device_id, DEVICE);
+    assert.deepEqual(payload.action, {
+      id: ACTION, name: "open_known_folder", target: "documents",
+      expiresAt: "2026-10-31T12:02:00.000Z", requiresLocalApproval: true
+    });
+  });
+});
+
+test("paired device can acknowledge only a matching allowlisted action outcome", async () => {
+  const token = "E".repeat(43);
+  let call;
+  await withRelay({
+    privilegedSupabaseRpc: async (...args) => { call = args; return true; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/actions/" + ACTION + "/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ deviceId: DEVICE, status: "denied", resultCode: "USER_DENIED" })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(call, ["complete_desktop_companion_action", {
+      p_token_hash: hash(token), p_device_id: DEVICE, p_action_id: ACTION,
+      p_status: "denied", p_result_code: "USER_DENIED"
+    }]);
+    assert.equal((await response.json()).accepted, true);
+  });
+
+  let calls = 0;
+  await withRelay({ privilegedSupabaseRpc: async () => { calls++; return true; } }, async base => {
+    const response = await fetch(base + "/desktop-companion/actions/" + ACTION + "/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ deviceId: DEVICE, status: "completed", resultCode: "USER_DENIED" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal(calls, 0);
+  });
+});
