@@ -23,44 +23,44 @@ test("approved desktop action queue is owner-scoped and exposes no device creden
 });
 
 test("action creation requires the signed-in owner and a recently online, unrevoked device", () => {
-  const match = sql.match(/create or replace function public\.create_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
+  const match = sql.match(/create or replace function public\.create_desktop_companion_command\([\s\S]*?as \$function\$[\s\S]*?\$function\$/i);
   assert.ok(match, "create_desktop_companion_command must exist");
-  assert.match(match[1], /security definer/i);
-  assert.match(match[1], /set search_path = ''/i);
-  assert.match(match[1], /auth\.uid\(\)/i);
-  assert.match(match[1], /p_action_type is null/i);
-  assert.match(match[1], /p_target is null/i);
-  assert.match(match[1], /d\.user_id = v_user_id/i);
-  assert.match(match[1], /d\.revoked_at is null/i);
-  assert.match(match[1], /d\.last_seen_at >= pg_catalog\.now\(\) - interval '90 seconds'/i);
-  assert.match(match[1], /at most one|one outstanding/i);
-  assert.match(match[1], /v_expires_at := pg_catalog\.now\(\) \+ interval '60 seconds'/i);
+  assert.match(match[0], /security definer/i);
+  assert.match(match[0], /set search_path = ''/i);
+  assert.match(match[0], /auth\.uid\(\)/i);
+  assert.match(match[0], /p_action_type is null/i);
+  assert.match(match[0], /p_target is null/i);
+  assert.match(match[0], /d\.user_id = v_user_id/i);
+  assert.match(match[0], /d\.revoked_at is null/i);
+  assert.match(match[0], /d\.last_seen_at >= pg_catalog\.now\(\) - interval '90 seconds'/i);
+  assert.match(match[0], /at most one|one outstanding/i);
+  assert.match(match[0], /v_expires_at := pg_catalog\.now\(\) \+ interval '60 seconds'/i);
   assert.match(sql, /grant execute on function public\.create_desktop_companion_command\(uuid, text, text\)\s+to authenticated/i);
 });
 
 test("device command claiming and result reporting are token-bound, one-time, and state-checked", () => {
-  const claim = sql.match(/create or replace function public\.claim_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
+  const claim = sql.match(/create or replace function public\.claim_desktop_companion_command\([\s\S]*?as \$function\$[\s\S]*?\$function\$/i);
   assert.ok(claim, "claim_desktop_companion_command must exist");
-  assert.match(claim[1], /security definer/i);
-  assert.match(claim[1], /set search_path = ''/i);
-  assert.match(claim[1], /d\.token_hash = p_token_hash/i);
-  assert.match(claim[1], /d\.device_id = p_device_id/i);
-  assert.match(claim[1], /d\.revoked_at is null/i);
-  assert.match(claim[1], /c\.status = 'pending'/i);
-  assert.match(claim[1], /for update of c skip locked/i);
-  assert.match(claim[1], /set status = 'delivered'/i);
+  assert.match(claim[0], /security definer/i);
+  assert.match(claim[0], /set search_path = ''/i);
+  assert.match(claim[0], /d\.token_hash = p_token_hash/i);
+  assert.match(claim[0], /d\.device_id = p_device_id/i);
+  assert.match(claim[0], /d\.revoked_at is null/i);
+  assert.match(claim[0], /c\.status = 'pending'/i);
+  assert.match(claim[0], /for update of c skip locked/i);
+  assert.match(claim[0], /set status = 'delivered'/i);
   assert.match(sql, /grant execute on function public\.claim_desktop_companion_command\(text, uuid\)\s+to service_role/i);
 
-  const complete = sql.match(/create or replace function public\.complete_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
+  const complete = sql.match(/create or replace function public\.complete_desktop_companion_command\([\s\S]*?as \$function\$[\s\S]*?\$function\$/i);
   assert.ok(complete, "complete_desktop_companion_command must exist");
-  assert.match(complete[1], /security definer/i);
-  assert.match(complete[1], /set search_path = ''/i);
-  assert.match(complete[1], /d\.token_hash = p_token_hash/i);
-  assert.match(complete[1], /d\.device_id = p_device_id/i);
-  assert.match(complete[1], /d\.revoked_at is null/i);
-  assert.match(complete[1], /c\.status = 'delivered'/i);
-  assert.match(complete[1], /c\.expires_at > pg_catalog\.now\(\)/i);
-  assert.match(complete[1], /p_status not in \('completed', 'rejected', 'failed'\)/i);
+  assert.match(complete[0], /security definer/i);
+  assert.match(complete[0], /set search_path = ''/i);
+  assert.match(complete[0], /d\.token_hash = p_token_hash/i);
+  assert.match(complete[0], /d\.device_id = p_device_id/i);
+  assert.match(complete[0], /d\.revoked_at is null/i);
+  assert.match(complete[0], /c\.status = 'delivered'/i);
+  assert.match(complete[0], /c\.expires_at > pg_catalog\.now\(\)/i);
+  assert.match(complete[0], /p_status not in \('completed', 'rejected', 'failed'\)/i);
   assert.match(sql, /grant execute on function public\.complete_desktop_companion_command\(text, uuid, uuid, text, text\)\s+to service_role/i);
 });
 
@@ -69,16 +69,16 @@ const preflightMigrationPath = fileURLToPath(new URL("../supabase/migrations/202
 const preflightSql = readFileSync(preflightMigrationPath, "utf8");
 
 test("pre-execution authorization migration is additive and fails closed for revoked or inactive commands", () => {
-  const authorize = preflightSql.match(/create or replace function public\.authorize_desktop_companion_command\([\s\S]*?as \$function\$([\s\S]*?)\$function\$/i);
+  const authorize = preflightSql.match(/create or replace function public\.authorize_desktop_companion_command\([\s\S]*?as \$function\$[\s\S]*?\$function\$/i);
   assert.ok(authorize, "authorize_desktop_companion_command must exist in its own additive migration");
-  assert.match(authorize[1], /security definer/i);
-  assert.match(authorize[1], /set search_path = ''/i);
-  assert.match(authorize[1], /c\.id = p_command_id/i);
-  assert.match(authorize[1], /d\.token_hash = p_token_hash/i);
-  assert.match(authorize[1], /d\.device_id = p_device_id/i);
-  assert.match(authorize[1], /d\.revoked_at is null/i);
-  assert.match(authorize[1], /c\.status = 'delivered'/i);
-  assert.match(authorize[1], /c\.expires_at > pg_catalog\.now\(\)/i);
+  assert.match(authorize[0], /security definer/i);
+  assert.match(authorize[0], /set search_path = ''/i);
+  assert.match(authorize[0], /c\.id = p_command_id/i);
+  assert.match(authorize[0], /d\.token_hash = p_token_hash/i);
+  assert.match(authorize[0], /d\.device_id = p_device_id/i);
+  assert.match(authorize[0], /d\.revoked_at is null/i);
+  assert.match(authorize[0], /c\.status = 'delivered'/i);
+  assert.match(authorize[0], /c\.expires_at > pg_catalog\.now\(\)/i);
   assert.match(preflightSql, /revoke all on function public\.authorize_desktop_companion_command\(text, uuid, uuid\)\s+from public, anon, authenticated/i);
   assert.match(preflightSql, /grant execute on function public\.authorize_desktop_companion_command\(text, uuid, uuid\)\s+to service_role/i);
 });
