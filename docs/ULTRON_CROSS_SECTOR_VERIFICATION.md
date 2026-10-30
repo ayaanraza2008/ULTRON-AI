@@ -78,3 +78,11 @@ Last inspected: 2026-10-29 UTC. This matrix separates source/CI evidence from li
 - CI [run 40953486540](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40953486540), candidate head `4745258bfecb0cd76b2889915d23d587e4a4de44`: 809 tests, 808 passed, 0 failed, 1 skipped; both dependency audits reported 0 vulnerabilities; model picker/selected-provider regression tests, Windows installer parsing and World Intelligence build/bridge passed.
 - These are routing regressions with mock credentials/responses. Live provider inference, account quotas and billing behavior remain unverified; no production deployment/configuration was changed.
 
+## Repository-wide JavaScript syntax coverage — 2026-10-30
+
+- Added `scripts/check-source.mjs` and appended it to `npm run check`. It recursively syntax-checks maintained `.js`, `.mjs`, and `.cjs` files with the active Node executable, skips dependency/build/cache/vendor directories and symbolic links, and reports each failing path without invoking a shell.
+- Exercised the scanner in an isolated temporary fixture: valid nested JavaScript passed, an intentionally malformed `.mjs` file failed as expected, and invalid JavaScript inside ignored `node_modules` was not scanned. This validates scanner behavior, not the full repository contents.
+- Latest completed full CI before this change: [run 40953760423](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40953760423), candidate head `861e863701d256bb2dd0203486d0d6acb8886455`: 809 tests, 808 passed, 0 failed, 1 skipped; all three CI jobs passed; install and production dependency audits reported 0 vulnerabilities.
+- The scanner addition is now at candidate head `af0d9e46389b72e50cc1f68bdd6ff9524165d3df`. A workflow run for this new head has not yet been observed, so the full-repository scan and updated `npm run check` remain pending CI verification.
+- No deployment, production setting, database, or PHANTOM/NOX project was changed.
+
