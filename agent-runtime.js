@@ -14,7 +14,7 @@ import { runReaTool } from "./integrations/rea-mcp.js";
 import { checkCactusService, resolveCactusProvider, getCactusReadiness } from "./integrations/cactus.js";
 import { resolveStrataProvider } from "./integrations/strata.js";
 import { getPaperclipAgentDashboard } from "./integrations/paperclip-services.js";
-import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentProvider, runHermesAgentTask } from "./integrations/hermes-agent.js";
+import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentProvider, runHermesAgentTask, startHermesAgentRun, getHermesAgentRunStatus, stopHermesAgentRun } from "./integrations/hermes-agent.js";
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 import { findOpenVikingContext, getOpenVikingReadiness, readOpenVikingContext } from "./integrations/openviking.js";
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrations/desktop-companion.js";
@@ -403,8 +403,13 @@ export function normalizeHinglishForRouting(value) {
 function extractIntent(text) {
   const s = normalizeHinglishForRouting(text).toLowerCase();
   if (/\b(paperclip|agent governance|agent roster|agent budget overview|agent cost summary|company agents dashboard|ai agent company)\b/.test(s) && /\b(check|status|show|list|review|cost|budget|roster|governance|dashboard|overview|how are|what is)\b/.test(s)) return "paperclip_read_agent_governance";
-  if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(check|status|health|ready|reachable|connect|available|configured|models)\b/.test(s)) return "check_hermes_agent";
-  if (/\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s) && /\b(use|ask|delegate|run|execute|research|build|create|implement|review|inspect|analy[sz]e|fix|debug|write|plan)\b/.test(s)) return "hermes_agent_task";
+  const hermesRunId = s.match(/\brun_[a-z0-9_-]{1,120}\b/)?.[0];
+  const hermesRequested = /\b(hermes agent|hermes-agent|nousresearch hermes|hermes runtime)\b/.test(s);
+  if ((hermesRequested || hermesRunId) && hermesRunId && /\b(stop|cancel|interrupt)\b/.test(s)) return "hermes_agent_stop_run";
+  if ((hermesRequested || hermesRunId) && hermesRunId && /\b(status|progress|result|output|check)\b/.test(s)) return "hermes_agent_run_status";
+  if (hermesRequested && /\b(start|submit|launch|background|long[- ]running)\b/.test(s) && /\b(run|task|job)\b/.test(s)) return "hermes_agent_start_run";
+  if (hermesRequested && /\b(check|status|health|ready|reachable|connect|available|configured|models)\b/.test(s)) return "check_hermes_agent";
+  if (hermesRequested && /\b(use|ask|delegate|run|execute|research|build|create|implement|review|inspect|analy[sz]e|fix|debug|write|plan)\b/.test(s)) return "hermes_agent_task";
   if (/\b(cactus(?:-compute)?|needle(?: 3)?|whistle speech model|local inference server)\b/.test(s) && /\b(check|status|health|ready|reachable|connect|available|configured)\b/.test(s)) return "check_cactus";
   if (/\b(obscura|take (?:a )?screenshot|capture (?:a )?screenshot|screenshot of|browser screenshot|export (?:the )?page as pdf|save (?:the )?page as pdf|make (?:a )?pdf of|page snapshot|scrape public page|rendered page capture)\b/.test(s)) return "obscura_inspect_public_page";
   if (/\b(geolocate photo|where was this photo taken|photo geolocation|find (?:the )?location of (?:this|the) (?:photo|image|picture)|identify (?:the )?location of (?:this|the) (?:photo|image|picture)|locate this (?:photo|image|picture))\b/.test(s)) return "geo_sleuth_investigate";
@@ -467,6 +472,11 @@ function buildFallbackCalls(text) {
   if (intent === "paperclip_read_agent_governance") add("paperclip_read_agent_governance");
   if (intent === "check_hermes_agent") add("check_hermes_agent");
   if (intent === "hermes_agent_task") add("hermes_agent_task", { task: bounded(text, 8000) });
+  if (intent === "hermes_agent_start_run") add("hermes_agent_start_run", { task: bounded(text, 8000) });
+  if (intent === "hermes_agent_run_status" || intent === "hermes_agent_stop_run") {
+    const runId = text.match(/\brun_[A-Za-z0-9_-]{1,120}\b/)?.[0];
+    if (runId) add(intent, { runId });
+  }
   const openVikingRequested = /\b(openviking|open viking)\b/i.test(text);
   if (openVikingRequested && /\b(check|status|health|ready|reachable|configured|available)\b/i.test(text)) {
     add("check_openviking");
@@ -637,6 +647,7 @@ const SAFE_PREPARATION_TOOLS = new Set([
   "check_repository_capabilities",
   "check_openviking",
   "check_hermes_agent",
+  "hermes_agent_run_status",
   "check_comfyui",
   "obscura_inspect_public_page",
   "obscura_capture_public_page"
@@ -644,7 +655,7 @@ const SAFE_PREPARATION_TOOLS = new Set([
 
 function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   let delegatedTask = "";
-  if (name === "hermes_agent_task" || name === "browser_use") delegatedTask = args?.task;
+  if (name === "hermes_agent_task" || name === "hermes_agent_start_run" || name === "browser_use") delegatedTask = args?.task;
   else if (name === "enqueue_employee_task") delegatedTask = args?.goal;
   const delegatedRisk = typeof delegatedTask === "string" && delegatedTask.trim()
     ? classifyAutonomyRisk(delegatedTask)
@@ -800,6 +811,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "paperclip_read_agent_governance", description: "Read-only: inspect the configured Paperclip company agent roster, dashboard summary, and cost summary. Requires a running Paperclip service and owner guard. Never starts, hires, assigns, pauses, terminates, or changes budgets for agents.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_hermes_agent", description: "Read-only: check the configured Hermes Agent API server model list and capability endpoint. Does not execute an agent task.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "hermes_agent_task", description: "Delegate a bounded task to the configured Hermes Agent runtime, which may use its own configured tools, skills, memory, subagents and terminal backend. Owner-scoped; consequential actions are blocked pending task-specific approval.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 8000 }, conversationId: { type: "string", maxLength: 160 } }, required: ["task"], additionalProperties: false } } },
+    { type: "function", function: { name: "hermes_agent_start_run", description: "Start a long-running Hermes Agent run for an explicitly requested multi-step task. Returns a run ID for later status polling. Owner-scoped; tasks with consequential actions are blocked by ULTRON's autonomy policy.", parameters: { type: "object", properties: { task: { type: "string", minLength: 3, maxLength: 8000 }, conversationId: { type: "string", maxLength: 160 } }, required: ["task"], additionalProperties: false } } },
+    { type: "function", function: { name: "hermes_agent_run_status", description: "Read the status and bounded final output of a Hermes run ID previously returned by ULTRON. Read-only and owner-scoped.", parameters: { type: "object", properties: { runId: { type: "string", pattern: "^run_[A-Za-z0-9_-]{1,120}$", maxLength: 124 } }, required: ["runId"], additionalProperties: false } } },
+    { type: "function", function: { name: "hermes_agent_stop_run", description: "Cancel a Hermes run explicitly identified by its ULTRON-issued run ID. Only requests interruption; the caller must poll status until the run is terminal. Owner-scoped.", parameters: { type: "object", properties: { runId: { type: "string", pattern: "^run_[A-Za-z0-9_-]{1,120}$", maxLength: 124 } }, required: ["runId"], additionalProperties: false } } },
     { type: "function", function: { name: "check_comfyui", description: "Check the live ComfyUI API and queue if a ComfyUI endpoint is configured.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "create_study_pack", description: "Generate a structured study aid using the configured AI provider: flashcards, multiple-choice quiz, revision sheet, or mixed pack. Persist it only when the user explicitly asks to save the study pack; storage is per-user and requires the study_packs migration. Uses bounded supplied source material if given; otherwise marks output as a general-knowledge draft. Does not claim syllabus/source verification.", parameters: { type: "object", properties: { topic: { type: "string", minLength: 2, maxLength: 1200 }, level: { type: "string", enum: ["beginner", "intermediate", "advanced", "exam"] }, format: { type: "string", enum: ["mixed", "flashcards", "quiz", "revision_sheet"] }, language: { type: "string", maxLength: 60 }, questionCount: { type: "integer", minimum: 3, maximum: 12 }, sourceContent: { type: "string", maxLength: 8000 }, save: { type: "boolean" } }, required: ["topic", "format"], additionalProperties: false } } },
     { type: "function", function: { name: "list_reminders", description: "List private reminder records for the signed-in user. This only reads stored reminders; it does not send notifications or guarantee that an alert will fire.", parameters: { type: "object", properties: { status: { type: "string", enum: ["scheduled", "completed", "cancelled", "all"] }, limit: { type: "integer", minimum: 1, maximum: 20 } }, additionalProperties: false } } },
@@ -1686,6 +1700,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (name === "paperclip_read_agent_governance") return getPaperclipAgentDashboard({ env, fetchImpl, userId: req.supabaseUser?.id });
     if (name === "check_hermes_agent") return checkHermesAgentService({ env, fetchImpl, userId: req.supabaseUser?.id });
     if (name === "hermes_agent_task") return runHermesAgentTask({ env, fetchImpl, userId: req.supabaseUser?.id, task: args.task, conversationId: args.conversationId });
+    if (name === "hermes_agent_start_run") return startHermesAgentRun({ env, fetchImpl, userId: req.supabaseUser?.id, task: args.task, conversationId: args.conversationId });
+    if (name === "hermes_agent_run_status") return getHermesAgentRunStatus({ env, fetchImpl, userId: req.supabaseUser?.id, runId: args.runId });
+    if (name === "hermes_agent_stop_run") return stopHermesAgentRun({ env, fetchImpl, userId: req.supabaseUser?.id, runId: args.runId });
     if (name === "check_repository_capabilities") {
       const task = bounded(args.task, 1200);
       const limit = Number.isInteger(args.limit) ? Math.max(1, Math.min(args.limit, 12)) : 6;
@@ -2134,6 +2151,9 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "paperclip_read_agent_governance", available: Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID && env.PAPERCLIP_BASE_URL && env.PAPERCLIP_API_TOKEN && env.PAPERCLIP_COMPANY_ID), execution: "owner_scoped_read_only_agent_roster_dashboard_and_cost_summary_no_mutations" },
         { name: "check_hermes_agent", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_read_only_models_and_capabilities" },
         { name: "hermes_agent_task", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_bounded_delegation_with_consequential_action_guard" },
+        { name: "hermes_agent_start_run", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_long_running_task_submission_with_autonomy_guard" },
+        { name: "hermes_agent_run_status", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_read_only_run_status_and_bounded_output" },
+        { name: "hermes_agent_stop_run", available: Boolean(getHermesAgentReadiness(env).configured && env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID), execution: "owner_scoped_run_stop_request_then_poll_terminal_status" },
         { name: "check_cactus", available: Boolean(getCactusReadiness(env).configured), execution: "read_only_health_and_model_list_no_download_or_inference" },
         { name: "obscura_inspect_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_navigation_and_dom_snapshot_only" },
         { name: "obscura_capture_public_page", available: Boolean(getObscuraReadiness(env).configured), execution: "owner_scoped_public_https_screenshot_or_pdf_capture_bounded_artifact_payload" },
