@@ -5,62 +5,45 @@ Updated: 2026-10-31 UTC
 ## Repository state
 
 - Project: `ayaanraza2008/ULTRON-AI`
-- Default branch: `main`
-- Harness2 PR: [#412](https://github.com/ayaanraza2008/ULTRON-AI/pull/412) — merged.
-- Harness2 merge commit: `e92d09d9dcb21c025ab3326985ec9fbe675ef86b`.
-- Latest documentation commit: `934e7486bbf6f906992940c36ff272605fcbd543` (acceptance matrix).
-- Full pre-merge CI passed on exact feature head `74ace121a5de188631e8c7fba81baa037ec7b58f`: [run 41112928271](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41112928271). Both `test` and `world-intelligence-build` jobs succeeded.
-- Post-merge CI for merge commit is pending/being checked.
-- Deployment / production settings: not changed. No Render deploy, environment change, or paid resource action performed.
+- Default branch at start of this follow-on work: `main` @ `9909f3ef30c663cb582b1380a44ecd40040de1df`
+- Active feature branch: `fix/openseo-user-spend-consent`
+- Pull request: https://github.com/ayaanraza2008/ULTRON-AI/pull/413
+- Feature head verified by CI: `4cf941d65b009848528081fa9c7dd526b7d22f33`
+- Latest complete workflow run: [41115578469](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41115578469) — success in both `test` and `world-intelligence-build`.
+- Deployment / production settings: not changed. No live OpenSEO calls or credit spend made.
 
-## Harness2 implementation status
+## OpenSEO paid-credit authorization fix
 
-Merged into `main`:
-- Python 3.12+ standard-library CLI at `tools/harness2/harness2.py`.
-- Local setup creates eight editable Markdown harness components: system prompt, guardrails, memory, tool guidance, subagents, skills, scripts, and plugins.
-- Credential-free deterministic `demo` executor.
-- Built-in `smoke` and `safety` JSON benchmarks with transparent substring/length judging.
-- Sequential and parallel iterative candidate refinement.
-- Candidate snapshots, JSON results, saved checkpoints, and resumable runs under ignored `.harness2/runs/`.
-- `resume`, `judge`, and `report` commands; CLI lifecycle covered by automated tests.
-- OpenCode and Codex local CLI executors, configured for temporary working directories and read-only tool policies. Invocation flags and generated policy are covered by mocked tests; actual local CLI/model calls have not been run.
-- Candidate/component path allowlists and symlink/traversal protections.
-- Docs: `docs/HARNESS2.md`; project README, feature registry, Python test command, CI step, and ignore rules updated.
+Implemented on the feature branch:
+- Remove approval and credit-ceiling parameters from the model-visible OpenSEO tool schema.
+- Derive paid authorization exclusively from the authenticated user's current prompt using the leading canonical phrase: `I approve spending up to 120 OpenSEO credits for this lookup.`
+- Parse a numeric ceiling (1–5000 credits); adapter-computed estimates above the ceiling are blocked before MCP network calls.
+- Reject absent, non-leading/quoted, negated, out-of-range, and deferred consent phrases.
+- Classify credit spending as an external effect and retain the owner-only integration boundary.
+- Add a dedicated `open_seo` task-router category so OpenSEO is not hidden by narrow research routing.
+- Fix an undefined `isObject` helper reference in the agent OpenSEO dispatcher using a strict object/non-array check.
+- Add endpoint-level regression tests for model-invented approval denial, explicit user cap, over-cap denial before network, parser edge cases, and task routing.
+- Add bounded error diagnostics (tool, error code/name; missing identifier only for ReferenceError) to agent tool-failure logs.
 
-## Verified test evidence
+## Verification evidence
 
-On pre-merge feature head `74ace121a5de188631e8c7fba81baa037ec7b58f`, full GitHub Actions run 41112928271 passed:
-- Harness2 Python 3.12 syntax compilation and all 11 Harness2 tests.
-- Existing Browser Use Python checks: 11 tests passed.
-- Model Lab Python tests: 9 tests passed.
-- Node tests: 652 passed, 0 failed, 1 intentionally skipped.
-- npm audit and production dependency audit: 0 vulnerabilities reported.
+Full CI on feature head `4cf941d65b009848528081fa9c7dd526b7d22f33` passed in run 41115578469:
+- `npm run check` passed.
+- Node tests: 659 total, 658 passed, 0 failed, 1 intentionally skipped.
+- All four OpenSEO agent consent tests passed; OpenSEO-only task routing passed.
+- Existing Python Browser Use, Harness2 and Model Lab suites passed (11, 11 and 9 tests respectively).
+- Both dependency audit checks reported 0 vulnerabilities.
 - Pinned World Intelligence build and ULTRON bridge injection succeeded.
 
-Harness2's deterministic demo validates workflow mechanics only. It is not a model-quality benchmark or safety certification. Real OpenCode/Codex execution still depends on local CLI installation, authentication, and provider availability.
-
-## Remaining ULTRON blockers
-
-See `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md` for the evidence-based cross-project view and the canonical details in:
-- `docs/BACKEND_COMPLETION_LEDGER.md`
-- `docs/BLOCKERS.md`
-- `docs/FEATURE_REGISTRY.md`
-
-Key unresolved external gates include live provider inference, Supabase auth/two-user isolation, real queued task execution, memory isolation, live speech/vision, physical Windows companion pairing, hardened code sandboxing, integration upstream verification, and Render pipeline-minute recovery. Do not claim these complete from mocked tests.
-
-## Current follow-on security work
-
-- Feature branch: fix/openseo-user-spend-consent.
-- Scope: prevent model-generated OpenSEO approval flags from authorizing paid credit-consuming lookups.
-- Changed source: agent-runtime.js, autonomy-policy.js, integrations/openseo-mcp.js.
-- Added test: tests/openseo-agent-approval.test.js; autonomy policy regression added to tests/autonomy-policy.test.js; package.json syntax check includes the new test.
-- Required approval phrase: I approve spending up to 120 OpenSEO credits for this lookup. The amount is the user's ceiling; requests estimated above it are refused before contacting OpenSEO.
-- No OpenSEO upstream request or paid credit spend was made during implementation.
+What this does not prove:
+- Actual OpenSEO API reachability, real account credit estimation, or live billing/quota behaviour.
+- No paid request was made in CI; OpenSEO network behaviour is tested with mocks.
+- Other ULTRON blockers remain as recorded in `docs/BLOCKERS.md` and `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`.
 
 ## Exact next action
 
-1. Open a PR for fix/openseo-user-spend-consent and run full CI.
-2. Inspect the OpenSEO endpoint tests; fix any regression before merging.
-3. Verify test coverage proves absent/model-generated/deferred consent does not invoke MCP and explicit bounded consent does.
-4. Merge only after CI is green; do not deploy or change production configuration.
-5. Continue with the next independently achievable ULTRON blocker from the acceptance matrix, updating this checkpoint with evidence.
+1. Verify PR #413 still points to the CI-tested head `4cf941d65b009848528081fa9c7dd526b7d22f33`.
+2. Merge only that exact head after confirming PR diff contains only the listed security/router/test/docs changes.
+3. Verify merge commit and post-merge main CI.
+4. Do not deploy, modify production configuration, or spend OpenSEO credits.
+5. Continue with the next independently achievable source-level blocker from the acceptance matrix.
