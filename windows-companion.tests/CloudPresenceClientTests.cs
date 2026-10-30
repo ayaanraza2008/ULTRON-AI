@@ -87,7 +87,7 @@ internal static class CloudPresenceClientTests
             captured = request;
             capturedBody = await request.Content!.ReadAsStringAsync(cancellationToken);
             return JsonResponse(HttpStatusCode.Created,
-                $$"""{"deviceId":"{{DeviceId}}","deviceName":"TEST-PC","platform":"windows","deviceToken":"{{DeviceToken}}"}"""));
+                $$"""{"deviceId":"{{DeviceId}}","deviceName":"TEST-PC","platform":"windows","deviceToken":"{{DeviceToken}}"}""");
         }));
         using var client = new CloudPresenceClient(http, store, new FakeIdentityStore(DeviceId));
 
