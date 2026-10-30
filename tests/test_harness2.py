@@ -148,4 +148,28 @@ class Harness2Tests(unittest.TestCase):
         with self.assertRaisesRegex(harness2.Harness2Error, "stdout exceeded its output limit"):
             harness2.run_bounded(command, cwd=self.root, timeout=10)
 
+    def test_atomic_writes_ignore_planted_temporary_symlinks(self):
+        outside = self.root / "outside.txt"
+        outside.write_text("keep me", encoding="utf-8")
+
+        config = self.root / ".harness2" / "config.json"
+        planted_json_tmp = config.with_suffix(config.suffix + ".tmp")
+        planted_json_tmp.symlink_to(outside)
+        harness2.atomic_json(config, {"safe": True})
+        self.assertEqual(outside.read_text(encoding="utf-8"), "keep me")
+        self.assertTrue(planted_json_tmp.is_symlink())
+        self.assertEqual(harness2.read_json(config), {"safe": True})
+
+        component = self.root / ".harness2" / "harness" / "system_prompt.md"
+        planted_component_tmp = component.with_suffix(component.suffix + ".tmp")
+        planted_component_tmp.symlink_to(outside)
+        harness2.apply_updates(
+            self.root / ".harness2" / "harness",
+            {"system_prompt": "# Updated safely\n"},
+            {"system_prompt"},
+        )
+        self.assertEqual(outside.read_text(encoding="utf-8"), "keep me")
+        self.assertTrue(planted_component_tmp.is_symlink())
+        self.assertEqual(component.read_text(encoding="utf-8"), "# Updated safely\n")
+
 if __name__ == "__main__": unittest.main()
