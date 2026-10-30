@@ -28,6 +28,8 @@ Rule: a source implementation or mocked test is not live integration proof. No a
 
 | Geo-Sleuth reverse-image sharing consent | TESTED_SOURCE | PR #419 merged as 33a9df4. Model-visible opt-in removed; dispatcher derives consent only from exact canonical approval phrase at start of current user message. Pre-merge CI 41119660470 and post-merge CI 41119784359 passed (662 passed, 0 failed, 1 skipped); production-revision verification 41119785946 passed without deployment. | Live Geo-Sleuth runtime/provider and geolocation accuracy remain unverified; no external image search is authorized by default. |
 
+| Voice cloning consent provenance | IN_PROGRESS | Removed model-visible `consentBasis`; server derives own-voice or speaker-permission basis from exact canonical current-user attestation. Tests cover vague, negated, revoked, leading-prose and missing consent. | Full CI pending. Keep clone action gated; live VoiceStudio profile/attestation and provider behavior remain unverified. |
+
 ## Global completion rules
 
 1. Use the exact commit and workflow run when reporting test status.
