@@ -1,4 +1,5 @@
 using Ultron.Companion;
+using Ultron.Companion.Tests;
 
 static void Assert(bool condition, string message)
 {
