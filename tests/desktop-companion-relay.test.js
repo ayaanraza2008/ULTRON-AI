@@ -204,3 +204,154 @@ test("revocation uses the caller-scoped RLS RPC and distinguishes inactive devic
     assert.equal((await response.json()).error.code, "DEVICE_NOT_FOUND");
   });
 });
+
+
+test("desktop action creation permits only fixed targets and relies on the owner-scoped RPC", async () => {
+  let call;
+  await withRelay({
+    supabaseRest: async (...args) => {
+      call = args;
+      return [{
+        command_id: "88888888-8888-4888-8888-888888888888",
+        command_status: "pending",
+        command_expires_at: new Date(1_800_000_060_000).toISOString()
+      }];
+    }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/devices/" + RECORD + "/commands", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionType: "launch_application", target: "notepad" })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(payload.approvalRequiredOnDevice, true);
+    assert.equal(payload.command.actionType, "launch_application");
+    assert.equal(payload.command.target, "notepad");
+    assert.equal(call[1], "rpc/create_desktop_companion_command");
+    assert.deepEqual(call[4], {
+      p_device_record_id: RECORD,
+      p_action_type: "launch_application",
+      p_target: "notepad"
+    });
+  });
+
+  let calls = 0;
+  await withRelay({
+    supabaseRest: async () => { calls += 1; return []; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/devices/" + RECORD + "/commands", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionType: "run_shell", target: "powershell" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal(calls, 0, "Unsupported remote actions must not reach Supabase.");
+  });
+});
+
+test("paired device can atomically claim only its own fixed action", async () => {
+  const deviceToken = "D".repeat(43);
+  let call;
+  await withRelay({
+    privilegedSupabaseRpc: async (...values) => {
+      call = values;
+      return [{
+        command_id: "88888888-8888-4888-8888-888888888888",
+        action_type: "open_known_folder",
+        target: "documents",
+        expires_at: new Date(1_800_000_060_000).toISOString()
+      }];
+    }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/commands/next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + deviceToken },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.command.actionType, "open_known_folder");
+    assert.equal(payload.command.target, "documents");
+    assert.equal(call[0], "claim_desktop_companion_command");
+    assert.equal(call[1].p_token_hash, hash(deviceToken));
+    assert.equal(call[1].p_device_id, DEVICE);
+    assert.equal(JSON.stringify(payload).includes(deviceToken), false);
+  });
+
+  let calls = 0;
+  await withRelay({
+    privilegedSupabaseRpc: async () => { calls += 1; return []; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/commands/next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer malformed" },
+      body: JSON.stringify({ deviceId: DEVICE })
+    });
+    assert.equal(response.status, 401);
+    assert.equal(calls, 0);
+  });
+});
+
+test("paired device result endpoint accepts only one of the explicit result states", async () => {
+  const deviceToken = "E".repeat(43);
+  let call;
+  await withRelay({
+    privilegedSupabaseRpc: async (...values) => { call = values; return true; }
+  }, async base => {
+    const commandId = "88888888-8888-4888-8888-888888888888";
+    const response = await fetch(base + "/desktop-companion/commands/" + commandId + "/result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + deviceToken },
+      body: JSON.stringify({ deviceId: DEVICE, status: "rejected", resultCode: "USER_REJECTED" })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.recorded, true);
+    assert.equal(call[0], "complete_desktop_companion_command");
+    assert.deepEqual(call[1], {
+      p_token_hash: hash(deviceToken),
+      p_device_id: DEVICE,
+      p_command_id: commandId,
+      p_status: "rejected",
+      p_result_code: "USER_REJECTED"
+    });
+  });
+
+  let calls = 0;
+  await withRelay({
+    privilegedSupabaseRpc: async () => { calls += 1; return true; }
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/commands/88888888-8888-4888-8888-888888888888/result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + deviceToken },
+      body: JSON.stringify({ deviceId: DEVICE, status: "completed", resultCode: "SHELL_EXECUTED" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal(calls, 0);
+  });
+});
+
+test("action history returns only bounded status fields and never token hashes", async () => {
+  await withRelay({
+    supabaseRest: async () => [{
+      id: "88888888-8888-4888-8888-888888888888",
+      device_record_id: RECORD,
+      action_type: "launch_application",
+      target: "notepad",
+      status: "completed",
+      created_at: "2026-10-31T00:00:00.000Z",
+      expires_at: "2026-10-31T00:01:00.000Z",
+      completed_at: "2026-10-31T00:00:10.000Z",
+      result_code: "ACTION_COMPLETED",
+      token_hash: "must-not-appear"
+    }]
+  }, async base => {
+    const response = await fetch(base + "/desktop-companion/devices/" + RECORD + "/commands");
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.commands[0].status, "completed");
+    assert.equal(payload.commands[0].resultCode, "ACTION_COMPLETED");
+    assert.equal(JSON.stringify(payload).includes("must-not-appear"), false);
+  });
+});
