@@ -127,7 +127,7 @@ test("model-generated approval flags cannot authorize a paid OpenSEO lookup", as
     const result = await response.json();
     assert.equal(result.autonomy.risk.requiresConfirmation, false);
     assert.equal(result.toolResults[0].name, "openseo");
-    assert.deepEqual(agent.warnings.filter(entry => entry[0] === "Agent tool execution failed"), []);
+    assert.deepEqual(agent.warnings.filter(entry => entry[0] === "Agent tool execution failed"), [], JSON.stringify(agent.warnings));
     assert.equal(result.toolResults[0].result.error.code, "OPENSEO_SPEND_APPROVAL_REQUIRED");
     assert.equal(mcpCalls, 0);
     assert.equal(modelCalls, 2);
