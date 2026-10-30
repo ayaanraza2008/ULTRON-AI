@@ -3479,8 +3479,8 @@
           "LOCAL APPROVAL", "warning");
         drawerCard("Local companion service",
           desktop.localAgentConfigured
-            ? "Local status-service configuration is present, but the cloud pairing token is separate and does not enable local PC-control actions."
-            : "The local loopback status service is optional. Cloud presence uses the outbound-only companion client instead.",
+            ? "Local status-service configuration is present; cloud requests remain limited to fixed shortcuts that require typed approval at the Windows PC."
+            : "The local loopback status service is optional. Cloud requests are retrieved by the outbound companion and require fresh local typed approval.",
           desktop.localAgentConfigured ? "LOCAL CONFIGURED" : "OPTIONAL");
         if (inventoryResult.error) {
           drawerCard("Paired device inventory unavailable",
@@ -3590,7 +3590,7 @@
               else showToast("Clipboard access is unavailable; select the command manually.");
             });
             const nextSteps = document.createElement("p");
-            nextSteps.textContent = "On the Windows PC, run the pair command and enter this code when prompted. Then run ultron-local companion connect to keep status online; leave that terminal running.";
+            nextSteps.textContent = "On the Windows PC, run the pair command and enter this code when prompted. Then run ultron-local companion connect and leave its interactive terminal running to receive fixed shortcut requests. Each request requires the local user to type ALLOW.";
             pairResult.append(expiry, codeValue, copyCode, commandText, copyCommand, nextSteps);
             pairResult.hidden = false;
           } catch (error) {
