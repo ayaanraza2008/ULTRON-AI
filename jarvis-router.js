@@ -250,7 +250,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser } = 
   });
 
   router.get("/jarvis/productivity/reminders", requireOwner, (_req, res) => {
-    res.json({ reminders: productivity.listReminders() });
+    res.json({ reminders: productivity.listReminders(), persistence: "process_memory_only" });
   });
 
   // --- Audit Trail ---
