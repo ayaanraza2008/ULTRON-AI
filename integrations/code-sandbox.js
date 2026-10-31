@@ -109,7 +109,7 @@ export async function runSandboxedPython({
         // Killing the Docker CLI alone can orphan a running container. Ask the
         // daemon to stop this uniquely named container, then terminate the CLI.
         try {
-          spawnImpl("docker", ["kill", containerName], {
+          const killer = spawnImpl("docker", ["kill", containerName], {
             stdio: "ignore",
             windowsHide: true,
             env: {
@@ -117,6 +117,7 @@ export async function runSandboxedPython({
               LANG: "C.UTF-8"
             }
           });
+          killer?.on?.("error", () => {});
         } catch {}
         try { child?.kill("SIGKILL"); } catch {}
       };
