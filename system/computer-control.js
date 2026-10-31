@@ -13,6 +13,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { constants as fsConstants } from "node:fs";
 
 const execAsync = promisify(exec);
 
@@ -50,9 +51,8 @@ export class WindowsComputerControl {
   }
 
   async initialize() {
-    try {
-      await fs.mkdir(this.sandboxBase, { recursive: true });
-    } catch {}
+    await fs.mkdir(this.sandboxBase, { recursive: true });
+    await this.assertNoSymlinkTraversal(path.resolve(this.sandboxBase));
   }
 
   setEmergencyStop(halted) {
@@ -150,8 +150,38 @@ export class WindowsComputerControl {
     return resolved;
   }
 
+  async assertNoSymlinkTraversal(targetPath) {
+    const root = path.resolve(this.sandboxBase);
+    const resolved = this.resolveSafePath(path.relative(root, path.resolve(targetPath)));
+    const rootStat = await fs.lstat(root);
+    if (rootStat.isSymbolicLink()) {
+      const error = new Error("Symbolic-link traversal violation: the Ultron workspace root cannot be a symbolic link.");
+      error.code = "PATH_SYMLINK_VIOLATION";
+      throw error;
+    }
+
+    const relative = path.relative(root, resolved);
+    let current = root;
+    for (const segment of relative.split(path.sep).filter(Boolean)) {
+      current = path.join(current, segment);
+      try {
+        const stat = await fs.lstat(current);
+        if (stat.isSymbolicLink()) {
+          const error = new Error("Symbolic-link traversal violation: symbolic links are not allowed inside the Ultron workspace.");
+          error.code = "PATH_SYMLINK_VIOLATION";
+          throw error;
+        }
+      } catch (error) {
+        if (error.code === "ENOENT") break;
+        throw error;
+      }
+    }
+    return resolved;
+  }
+
   async listFiles(subDir = "") {
     const targetDir = this.resolveSafePath(subDir);
+    await this.assertNoSymlinkTraversal(targetDir);
     try {
       const entries = await fs.readdir(targetDir, { withFileTypes: true });
       return entries.map(entry => ({
@@ -167,16 +197,32 @@ export class WindowsComputerControl {
 
   async readFile(filePath) {
     const safePath = this.resolveSafePath(filePath);
-    const content = await fs.readFile(safePath, "utf-8");
-    this.recordAction("READ_FILE", safePath);
-    return { path: filePath, content, byteLength: Buffer.byteLength(content) };
+    await this.assertNoSymlinkTraversal(safePath);
+    const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0);
+    const handle = await fs.open(safePath, flags);
+    try {
+      const stats = await handle.stat();
+      if (!stats.isFile()) throw new Error("Only regular files can be read from the Ultron workspace.");
+      const content = await handle.readFile("utf-8");
+      this.recordAction("READ_FILE", safePath);
+      return { path: filePath, content, byteLength: Buffer.byteLength(content) };
+    } finally {
+      await handle.close();
+    }
   }
 
   async writeFile(filePath, content) {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
     const safePath = this.resolveSafePath(filePath);
     await fs.mkdir(path.dirname(safePath), { recursive: true });
-    await fs.writeFile(safePath, String(content), "utf-8");
+    await this.assertNoSymlinkTraversal(safePath);
+    const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | (fsConstants.O_NOFOLLOW || 0);
+    const handle = await fs.open(safePath, flags, 0o600);
+    try {
+      await handle.writeFile(String(content), "utf-8");
+    } finally {
+      await handle.close();
+    }
     this.recordAction("WRITE_FILE", safePath);
     return { success: true, path: filePath, byteLength: Buffer.byteLength(String(content)) };
   }
