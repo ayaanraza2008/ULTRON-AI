@@ -262,10 +262,7 @@ test("Hermes never replays an ambiguous native Runs submission through chat comp
       assert.equal(calls.filter(url => url.endsWith("/chat/completions")).length, 0);
       assert.equal(calls.filter(url => url.endsWith("/runs")).length, 1);
     });
-  }
-
-  function unused() {}
-});
+  }});
 
 test("Hermes does not auto-approve native runs waiting for approval", async () => {
   const requests = [];
