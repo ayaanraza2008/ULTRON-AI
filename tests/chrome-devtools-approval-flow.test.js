@@ -104,6 +104,7 @@ test("consequential click is inspected and held until an exact owner approval", 
     const click = calls.find(call => call.action.action === "click");
     assert.ok(click);
     assert.equal(click.action.confirmExternalAction, true);
+    assert.deepEqual(click.action.approvalFingerprint, inspection());
 
     const countAfterSuccess = calls.length;
     const replay = await fetch(base + "/api/agent/run", {
