@@ -177,7 +177,8 @@ export async function runChromeDevToolsAction({
   env = process.env,
   fetchImpl = safePinnedFetch,
   userId = "",
-  input
+  input,
+  forceApproval = false
 } = {}) {
   const readiness = readinessForOwner(env, userId);
   if (!readiness.configured) {
@@ -203,8 +204,11 @@ export async function runChromeDevToolsAction({
       action: { action: "inspect_click", selector: action.selector }
     });
     if (inspection.state !== "completed") return inspection;
-    if (inspection.result?.requiresConfirmation === true) {
-      const challenge = createChromeActionApproval({ userId, inspection: inspection.result });
+    if (inspection.result?.requiresConfirmation === true || forceApproval === true) {
+      const challenge = createChromeActionApproval({
+        userId,
+        inspection: { ...inspection.result, requiresConfirmation: true }
+      });
       if (!challenge.ok) {
         return { state: "failed", execution: "not_started", code: challenge.code, message: "ULTRON could not create a safe browser approval challenge." };
       }
