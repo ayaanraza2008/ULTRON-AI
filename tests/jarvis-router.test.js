@@ -110,15 +110,15 @@ test("JARVIS queues allowlisted plan work through the durable Supabase worker an
       return [row];
     }
     if (method === "GET") {
-      const params = new URLSearchParams(query.replace(/^\\?/, ""));
-      const userFilter = params.get("user_id")?.replace(/^eq\\./, "");
-      const idFilter = params.get("id")?.replace(/^eq\\./, "");
-      return [...stored.values()].filter(row => row.user_id === userFilter && (!idFilter || row.id === idFilter));
+      const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+      const userValue = params.get("user_id") || "";
+      const idValue = params.get("id") || "";
+      const userFilter = userValue.startsWith("eq.") ? userValue.slice(3) : userValue;
     }
     if (method === "PATCH") {
-      const params = new URLSearchParams(query.replace(/^\\?/, ""));
-      const userFilter = params.get("user_id")?.replace(/^eq\\./, "");
-      const rows = [...stored.values()].filter(row => row.user_id === userFilter && ["QUEUED", "RUNNING", "WAITING_FOR_PERMISSION"].includes(row.status));
+      const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+      const userValue = params.get("user_id") || "";
+      const userFilter = userValue.startsWith("eq.") ? userValue.slice(3) : userValue;\n      const rows = [...stored.values()].filter(row => row.user_id === userFilter && ["QUEUED", "RUNNING", "WAITING_FOR_PERMISSION"].includes(row.status));
       for (const row of rows) row.status = body.status;
       return rows;
     }
