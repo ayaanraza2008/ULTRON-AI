@@ -303,13 +303,13 @@ export class ChromeController {
       if (details.formAction) {
         try { formActionOrigin = new URL(details.formAction).origin; } catch { formActionOrigin = "[invalid]"; }
       }
-      const crossOriginForm = Boolean(details.formAction) && formActionOrigin !== current.origin;
+      const crossOriginForm = Boolean(details.formAction) && formActionOrigin !== currentUrl.origin;
       const requiresConfirmation = (highImpact || crossOriginForm) && !localPage;
       if (input.action === "inspect_click") {
         return {
           state: "inspection",
           action: "inspect_click",
-          origin: current.origin,
+          origin: currentUrl.origin,
           url: safeDisplayUrl(page.url()),
           selector: input.selector,
           label: details.text,
