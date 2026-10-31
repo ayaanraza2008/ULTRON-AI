@@ -333,6 +333,7 @@ test("voice quality panel reports Fish Audio readiness and can preview Hindi and
   assert.ok(app.includes('drawerButton("ENGLISH · en-IN"'));
   assert.ok(app.includes("Kamal · deep Indian male · Hindi-English"));
   assert.ok(app.includes("Auto recognition uses Fish Audio transcription when configured"));
+  assert.ok(app.includes("server-side STT detects Hindi + English when configured; browser fallback uses English (India)."));
   assert.ok(app.includes("मैं हिंदी और English दोनों में जवाब दूँगा"));
 });
 
