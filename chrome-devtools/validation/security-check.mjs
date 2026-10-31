@@ -47,6 +47,22 @@ test("action validation bounds selectors, inputs, limits and trace durations", (
   assert.deepEqual(validateChromeActionInput({ action: "navigate", url: "https://example.com" }).action, "navigate");
   assert.equal(validateChromeActionInput({ action: "inspect_click", selector: "button#pay" }).action, "inspect_click");
   assert.throws(() => validateChromeActionInput({ action: "click", selector: "button#pay", confirmExternalAction: true }));
+  const approvedFingerprint = {
+    origin: "https://example.com",
+    pageUrl: "https://example.com/checkout",
+    selector: "button#pay",
+    label: "Pay",
+    tag: "button",
+    type: "submit",
+    formActionOrigin: "https://example.com",
+    highImpact: true,
+    crossOriginForm: false
+  };
+  assert.deepEqual(
+    validateChromeActionInput({ action: "click", selector: "button#pay", confirmExternalAction: true, approvalFingerprint: approvedFingerprint }).approvalFingerprint,
+    approvedFingerprint
+  );
+  assert.throws(() => validateChromeActionInput({ action: "click", selector: "button#pay", confirmExternalAction: true, approvalFingerprint: { ...approvedFingerprint, highImpact: "true" } }));
   assert.equal(validateChromeActionInput({ action: "performance_trace" }).durationMs, 3000);
   assert.throws(() => validateChromeActionInput({ action: "click", selector: " " }));
   assert.throws(() => validateChromeActionInput({ action: "fill", selector: "input", text: "x".repeat(5001) }));
