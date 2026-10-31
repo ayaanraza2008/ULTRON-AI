@@ -59,11 +59,11 @@ test("model cannot self-approve a consequential Chrome click", async () => {
           selector: "button#continue",
           label: "Continue",
           tag: "button",
-          type: "submit",
+          type: "button",
           formActionOrigin: "https://example.com",
-          highImpact: true,
+          highImpact: false,
           crossOriginForm: false,
-          requiresConfirmation: true
+          requiresConfirmation: false
         }
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
@@ -119,7 +119,7 @@ test("model cannot self-approve a consequential Chrome click", async () => {
     const response = await fetch(agent.base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Click the Continue button on the browser page." })
+      body: JSON.stringify({ prompt: "Purchase this item by clicking the Continue button on the browser page." })
     });
     assert.equal(response.status, 200);
     const responseBody = await response.json();
