@@ -386,3 +386,10 @@ body.composer-open .core-coordinate { opacity: .2; }
 .system-control-nav .nav-chevron { color: #e975a0; }
 .drawer-action:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
 .drawer-action:disabled:hover { border-color: rgba(75,183,255,.34); box-shadow: none; }
+
+
+.jarvis-task-form { display: grid; gap: 2px; margin: 0 0 14px; }
+.drawer-field textarea { min-height: 94px; width: 100%; resize: vertical; padding: 9px 10px; border: 1px solid rgba(91,140,192,.26); border-radius: 8px; background: rgba(0,3,13,.58); color: #e8f5ff; font: 10px/1.55 inherit; }
+.drawer-field textarea:focus, .drawer-field select:focus { outline: 1px solid rgba(129,227,255,.75); border-color: rgba(129,227,255,.65); }
+.jarvis-task-form .drawer-note { margin-top: 8px; }
+.jarvis-task-form button:disabled { opacity: .45; cursor: wait; }
