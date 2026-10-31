@@ -244,7 +244,7 @@ export function validateChromeActionInput(value: unknown): ChromeActionInput {
   output.confirmExternalAction = source.confirmExternalAction === true;
 
   if (source.approvalFingerprint !== undefined) {
-    const item = source.approvalFingerprint;
+    const item = source.approvalFingerprint as Record<string, unknown>;
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       throw new ChromeActionError("INVALID_APPROVAL_FINGERPRINT", "Approval fingerprint must be an object.");
     }
