@@ -25,6 +25,19 @@ Updated: 2026-10-31 UTC
 - [PR #434](https://github.com/ayaanraza2008/ULTRON-AI/pull/434) was merged to `main` as `a9dd9dd`. The manual **ULTRON Live Worker Acceptance** workflow requires repository secrets `ULTRON_SMOKE_SUPABASE_SERVICE_ROLE_KEY` and `ULTRON_SMOKE_USER_ID`, plus a manual YES. CI run `41187572722` passed. The workflow has not been dispatched and no live task has been completed by it.
 - Important correction: merging PR #434 unexpectedly triggered Render auto-deploy on the API service even though the PR only changed `.github/workflows/worker-live-acceptance.yml` and `docs/WORKER_LIVE_ACCEPTANCE.md`. Deploy `dep-dbir30jncjis73cte3ug` went live at `a9dd9dd` at 09:15:30 UTC on 2026-10-31. The deployment built successfully, reported zero npm vulnerabilities, and startup logs show the worker started and API listened. No application JavaScript, migrations, Render env values, Supabase Auth settings, schema, or user data were changed by that commit. The connector has no cancel-deploy action; no rollback or second deploy was initiated.
 
+## Latest acceptance checkpoint (2026-10-31)
+
+This block supersedes older JARVIS feature-head/test-count entries earlier in this continuation file.
+
+- JARVIS PR #431 remains open against main at feature head `645c6c73fb8083548c26664ac622d442fbe6a298`. PR #432 hardening is merged into PR #431's feature branch only.
+- CI run `41190064315` passed on that head: syntax gate, 715 passing tests, 0 failing, 1 skipped, pinned World Intelligence build passed. Android `41190064400` and Windows `41190064298` builds also passed and produced debug APK and x64 EXE artifacts. These are build artifacts only, not installation/pairing tests.
+- JARVIS now queues only bounded owner-scoped employee plan/draft/review/report work through the existing Supabase worker; it exposes persisted owner-scoped list/detail, audit attempts, and policy-compliant status-only emergency cancellation. Arbitrary per-agent tool steps and code execution remain disabled. Queue acceptance returns QUEUED/202, not task completion.
+- Computer workspace rejects existing symlink path components and uses no-follow final opens where available. This is not a general execution sandbox or proof against all filesystem races.
+- PWA task drawer PR #439 (head `d3aff371d1b4a9304cb057401ee320b143b7bb40`) passed CI `41189957770`: 574 passed / 0 failed / 1 skipped and pinned build. It is open against the PWA feature branch and depends on PR #431.
+- PWA proxy PR #433 (`41187366080`), provider acceptance PR #435 (`41188372014`), voice-language PR #436 (`41188780119`), Fish TTS PR #437 (`41188751437`), and two-account Auth/RLS acceptance PR #438 (`41188938512`) passed CI. All remain open; provider/Auth live workflows have not run.
+- Live provider inference, two-account Auth E2E, actual worker task completion, and physical device installation/pairing remain unverified. Required GitHub Actions secrets are documented in `docs/BLOCKERS.md`; never paste secret values in chat.
+- Render main remains `a9dd9dd772214d60acdd0acdfc9112c50d206836` in Ultron core. The PR #434 auto-deploy is documented above; no further deployment was initiated.
+
 ## Merged engineering improvements
 
 ### Hermes native Runs — PR #426
