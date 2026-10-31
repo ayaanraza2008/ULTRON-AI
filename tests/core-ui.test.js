@@ -384,8 +384,15 @@ test("voice listening starts without waiting for backend readiness and submits s
   assert.ok(app.includes("if (force) {\n          enqueueStreamSpeech(streamSpeechBuffer.trim());"));
   assert.doesNotMatch(app, /streamSpeechBuffer\.length >= (?:72|22)/);
   assert.ok(app.includes("const fishAudioBlobPromise = streamSpeechUsesFish"));
-  assert.ok(app.includes("ALWAYS reply in clear, natural English, regardless of the input language"));
-  assert.ok(app.includes("one short, complete English sentence"));
+  assert.ok(app.includes('speechLanguageMode === "hi-IN"'));
+  assert.ok(app.includes("Reply in natural Hindi using Devanagari script"));
+  assert.ok(app.includes('speechLanguageMode === "en-IN"'));
+  assert.ok(app.includes("Reply in clear, natural English."));
+  assert.ok(app.includes("Detect the language and script from the user's transcript"));
+  assert.ok(app.includes("natural Hinglish"));
+  assert.ok(app.includes("never force English or translate unless asked"));
+  assert.ok(app.includes("one short, complete sentence"));
+  assert.doesNotMatch(app, /ALWAYS reply in clear, natural English, regardless of the input language/);
   assert.ok(app.includes("No greeting, filler, markdown, bullets, stage directions, or pronunciation spellings"));
 });
 
