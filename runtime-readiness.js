@@ -92,7 +92,8 @@ export function buildRuntimeReadiness({
       ["STRATA_BASE_URL", "STRATA_MODEL"], strataReadiness.note),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
-    component("safe_code_execution", "Restricted Python code execution", codeSandboxReadiness.configured ? "configured_unverified" : "blocked",
+    component("safe_code_execution", "Restricted Python code execution",
+      !codeSandboxReadiness.enabled ? "not_available" : codeSandboxReadiness.configured ? "configured_unverified" : "blocked",
       codeSandboxReadiness.requiredEnv, codeSandboxReadiness.note)
   ];
 
