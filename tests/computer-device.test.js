@@ -1,0 +1,88 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import path from "node:path";
+import os from "node:os";
+import fs from "node:fs/promises";
+import { WindowsComputerControl } from "../system/computer-control.js";
+import { DeviceHub } from "../integrations/device-hub.js";
+
+test("Computer Control: system telemetry reports CPU and RAM bounds", () => {
+  const ctrl = new WindowsComputerControl();
+  const telemetry = ctrl.getSystemTelemetry();
+
+  assert.equal(telemetry.platform, "windows");
+  assert.ok(telemetry.cpuCores >= 1);
+  assert.ok(telemetry.memory.totalBytes > 0);
+  assert.ok(telemetry.memory.usedPercent >= 0 && telemetry.memory.usedPercent <= 100);
+  assert.equal(typeof telemetry.memory.memoryPressureWarning, "boolean");
+});
+
+test("Computer Control: sandboxed file operations prevent path traversal", async () => {
+  const testDir = path.join(os.tmpdir(), "ultron-test-sandbox-" + Date.now());
+  const ctrl = new WindowsComputerControl({ sandboxBase: testDir });
+  await ctrl.initialize();
+
+  // Writing and reading valid file
+  await ctrl.writeFile("notes.txt", "ULTRON personal assistant test note.");
+  const read = await ctrl.readFile("notes.txt");
+  assert.equal(read.content, "ULTRON personal assistant test note.");
+
+  const list = await ctrl.listFiles();
+  assert.ok(list.some(f => f.name === "notes.txt"));
+
+  // Path traversal attempt MUST fail closed
+  await assert.rejects(async () => {
+    await ctrl.readFile("../../../Windows/System32/drivers/etc/hosts");
+  }, /Path traversal violation/);
+
+  // Clean up
+  try { await fs.rm(testDir, { recursive: true, force: true }); } catch {}
+});
+
+test("Computer Control: command allowlist permits safe commands and blocks arbitrary commands", async () => {
+  const ctrl = new WindowsComputerControl();
+
+  const safe = await ctrl.runApprovedCommand("node --version");
+  assert.equal(safe.exitCode, 0);
+  assert.ok(safe.stdout.startsWith("v"));
+
+  await assert.rejects(async () => {
+    await ctrl.runApprovedCommand("powershell -Command Remove-Item -Force C:\\");
+  }, /not in the approved command allowlist/);
+});
+
+test("Device Hub: pairing workflow, telemetry, and notifications", () => {
+  const hub = new DeviceHub();
+
+  const pairing = hub.createPairingCode({ name: "Ayaan Samsung Galaxy S24", platform: "android" });
+  assert.ok(pairing.code);
+  assert.equal(pairing.code.length, 6);
+
+  const verified = hub.verifyPairingCode(pairing.code);
+  assert.equal(verified.success, true);
+  assert.ok(verified.deviceId);
+  assert.ok(verified.authToken);
+
+  // Authenticate device
+  const auth = hub.authenticateDevice(verified.deviceId, verified.authToken);
+  assert.ok(auth);
+  assert.equal(auth.name, "Ayaan Samsung Galaxy S24");
+
+  // Telemetry update
+  const updated = hub.updateDeviceTelemetry(verified.deviceId, { batteryPercent: 88, isCharging: true });
+  assert.equal(updated, true);
+
+  const devices = hub.listPairedDevices();
+  assert.equal(devices.length, 1);
+  assert.equal(devices[0].battery.percent, 88);
+  assert.equal(devices[0].battery.isCharging, true);
+
+  // Send notification
+  const notif = hub.sendNotification({
+    deviceId: verified.deviceId,
+    title: "JARVIS Task Complete",
+    body: "System integrity scan finished with zero defects."
+  });
+  assert.equal(notif.delivered, true);
+  assert.equal(hub.getNotifications().length, 1);
+});

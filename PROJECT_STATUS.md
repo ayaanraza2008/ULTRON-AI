@@ -80,3 +80,20 @@
 | **Queued Task Worker Smoke** | Implemented (`smoke:worker`) | Open Acceptance Gate | Guarded by `ULTRON_CONFIRM_WORKER_SMOKE=YES` |
 | **Supabase Leaked-Password Warning**| Implemented in Auth | Dashboard Setting Pending | Needs Auth security toggle enabled by owner |
 | **Physical Windows Companion** | Protocol defined (v1) | Deferred to Local Setup | Cloud backend cannot control local PC directly |
+
+---
+
+## 5. JARVIS × ULTRON Autonomous Operating System Architecture
+
+Implemented on feature branch `agent/antigravity/jarvis-ultron-transformation-20261031`:
+
+- **Core AI Brain & Router (`core/brain-router.js`):** Task complexity classification (CPU vs Cloud tiers), Hindi / Hinglish / English automatic language detection, response hallucination / uncertainty scoring, circuit breaker for cloud providers.
+- **Specialized Multi-Agent Matrix (`agents/catalog.js`, `agents/orchestrator.js`):** 12 defined agents (ULTRON CORE, RESEARCH, CODING, SECURITY, SYSTEM, MEMORY, VOICE, VISION, AUTOMATION, PLANNING, EXECUTION, SELF-IMPROVEMENT). Full checkpointing, task resume, inter-agent delegation, and non-bypassable emergency stop.
+- **JARVIS Voice & Vision Engine (`voice/voice-engine.js`, `vision/vision-engine.js`):** Dual wake words ("Ultron", "Jarvis"), push-to-talk, VAD, natural speech formatting (stripping markdown/code), OCR credential scrubbing, and screen element parsing.
+- **Computer Control & Multi-Device Hub (`system/computer-control.js`, `integrations/device-hub.js`):** Ryzen/RAM hardware telemetry, sandboxed file operations with path traversal prevention, allowlisted shell commands (`dir`, `tasklist`, `systeminfo`), 6-digit PIN device pairing, and push notifications.
+- **Isolated Coding Sandbox (`tools/sandbox/coding-sandbox.js`):** Child process execution with 256 MB memory cap, 10s timeout, and 64 KB stdout/stderr protection.
+- **Autonomous Self-Improvement Engine (`self-improvement/engine.js`):** Failure tracking, root-cause categorization, regression proposal verification, and invariant protection for core files.
+- **Smart Home & Productivity Suite (`integrations/smart-home.js`, `integrations/productivity.js`):** Deny-by-default actuation, ambient scenes, reminders, events, and daily briefing synthesis.
+- **6-Level Autonomy Policy (`autonomy-policy.js`):** Levels 0-5 enforcement with AMD Ryzen 7 / 8 GB RAM memory pressure guard (< 85% headroom check).
+- **Unified Cyber-HUD Dashboard (`jarvis-router.js`, `public/`):** Express `/api/jarvis/*` router and cybernetic HUD interface with animated reactor core, telemetry charts, agent matrix, speech controls, and emergency stop.
+- **Deterministic Test Coverage:** 25/25 new tests pass across 6 dedicated test suites; zero regressions in existing 42 server and autonomy tests.

@@ -7,6 +7,18 @@ All notable changes to the ULTRON AI ecosystem and multi-agent development infra
 ## [Unreleased] — 2026-10-31
 
 ### Added
+- **JARVIS × ULTRON Autonomous Operating System Transformation:**
+  - Implemented core AI brain router (`core/brain-router.js`) with CPU/Cloud tiering, Hindi/Hinglish/English detection, hallucination scoring, and circuit breaker.
+  - Implemented 12 specialized agents matrix (`agents/catalog.js`, `agents/orchestrator.js`) with task decomposition, checkpoints, resume, inter-agent delegation, and non-bypassable emergency stop.
+  - Implemented JARVIS voice & vision engine (`voice/voice-engine.js`, `vision/vision-engine.js`) with dual wake words ("Ultron", "Jarvis"), push-to-talk, VAD, voice profiles, natural spoken formatting, and OCR credential redaction.
+  - Implemented computer control system (`system/computer-control.js`) with AMD Ryzen / RAM hardware metrics, path-traversal prevented filesystem sandbox, and allowlisted shell commands.
+  - Implemented multi-device pairing hub (`integrations/device-hub.js`) with 6-digit PIN verification, device telemetry, and push notifications.
+  - Implemented isolated coding sandbox (`tools/sandbox/coding-sandbox.js`) with 256 MB memory cap, 10s execution timeout, and 64 KB stdout/stderr protection.
+  - Implemented self-improvement engine (`self-improvement/engine.js`) with mistake ledger, root-cause categorization, and invariant protection for core files.
+  - Implemented smart home hub (`integrations/smart-home.js`) and personal productivity suite (`integrations/productivity.js`).
+  - Upgraded autonomy policy (`autonomy-policy.js`) with 6-level autonomy hierarchy (Levels 0-5) and AMD Ryzen 7 / 8 GB RAM memory pressure guard.
+  - Mounted `/api/jarvis/*` router (`jarvis-router.js`) and created cyber-HUD dashboard (`public/index.html`, `public/style.css`, `public/app.js`) with animated core reactor, system telemetry, agent status, voice input, and emergency stop.
+  - Added 6 comprehensive test suites (`tests/brain-router.test.js`, `tests/agents-orchestrator.test.js`, `tests/voice-vision.test.js`, `tests/computer-device.test.js`, `tests/advanced-intelligence.test.js`, `tests/autonomy-levels.test.js`) with 25/25 passing tests.
 - **Multi-Agent Development Triad Integration:**
   - Connected **Google Antigravity**, **Claude Code**, and **OpenAI Codex** as coordinated engineering agents.
   - Created shared engineering memory system:

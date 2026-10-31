@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ULTRON AI — JARVIS Command Center</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+  <header class="hud-header">
+    <div class="header-left">
+      <div class="reactor-core" id="reactorCore" title="ULTRON Core Intelligence State">
+        <div class="core-ring outer"></div>
+        <div class="core-ring inner"></div>
+        <div class="core-glow"></div>
+      </div>
+      <div class="brand">
+        <h1 class="brand-title">ULTRON <span class="accent">AI</span></h1>
+        <p class="brand-subtitle">JARVIS Personal AI Operating System</p>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="status-pill" id="coreStatusPill">
+        <span class="status-dot"></span>
+        <span class="status-text" id="coreStatusText">CORE: IDLE</span>
+      </div>
+      <div class="autonomy-selector">
+        <label for="autonomyLevelSelect">Autonomy:</label>
+        <select id="autonomyLevelSelect">
+          <option value="0">L0 - Manual</option>
+          <option value="1">L1 - Assisted</option>
+          <option value="2" selected>L2 - Supervised</option>
+          <option value="3">L3 - Conditional</option>
+          <option value="4">L4 - High Autonomy</option>
+          <option value="5">L5 - Continuous</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button class="btn btn-danger kill-switch-btn" id="killSwitchBtn">
+        <span class="btn-icon">⚡</span> EMERGENCY STOP
+      </button>
+    </div>
+  </header>
+
+  <!-- System Telemetry HUD -->
+  <section class="telemetry-bar" id="telemetryBar">
+    <div class="telemetry-item">
+      <span class="telemetry-label">CPU:</span>
+      <span class="telemetry-value" id="cpuLabel">AMD Ryzen 7 5700U (16T)</span>
+    </div>
+    <div class="telemetry-item">
+      <span class="telemetry-label">RAM:</span>
+      <span class="telemetry-value" id="ramLabel">Loading...</span>
+    </div>
+    <div class="telemetry-item">
+      <span class="telemetry-label">OS:</span>
+      <span class="telemetry-value" id="osLabel">Windows</span>
+    </div>
+    <div class="telemetry-item">
+      <span class="telemetry-label">AGENTS:</span>
+      <span class="telemetry-value" id="agentCountLabel">12 Online</span>
+    </div>
+  </section>
+
+  <!-- Navigation Tabs -->
+  <nav class="hud-nav">
+    <button class="nav-tab active" data-tab="tab-console">Console & Voice</button>
+    <button class="nav-tab" data-tab="tab-agents">12-Agent Matrix</button>
+    <button class="nav-tab" data-tab="tab-orchestrator">Task Board</button>
+    <button class="nav-tab" data-tab="tab-coding">Coding Sandbox</button>
+    <button class="nav-tab" data-tab="tab-computer">PC & Devices</button>
+    <button class="nav-tab" data-tab="tab-memory">Memory Vault</button>
+    <button class="nav-tab" data-tab="tab-smarthome">IoT & Smart Home</button>
+    <button class="nav-tab" data-tab="tab-security">Security & Audit</button>
+  </nav>
+
+  <!-- Tab Content Panels -->
+  <main class="hud-main">
+    <!-- Panel 1: Console & Voice -->
+    <section class="tab-panel active" id="tab-console">
+      <div class="console-grid">
+        <div class="chat-viewport" id="chatViewport">
+          <div class="message system">
+            <span class="sender">ULTRON CORE:</span>
+            <span class="text">All 12 specialized intelligence agents calibrated. JARVIS voice and vision bridges operational. How may I assist you, sir?</span>
+          </div>
+        </div>
+
+        <div class="voice-hud-panel">
+          <h3>JARVIS Voice Intelligence</h3>
+          <div class="voice-controls">
+            <button class="btn btn-primary" id="pushToTalkBtn">🎙️ Push To Talk</button>
+            <button class="btn" id="listenContinuousBtn">🎧 Continuous Mode</button>
+            <button class="btn btn-warning" id="stopAudioBtn">🛑 Stop Speech</button>
+          </div>
+          <div class="voice-waveform" id="voiceWaveform">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+          <div class="voice-profile-picker">
+            <label for="voiceProfileSelect">Voice Profile:</label>
+            <select id="voiceProfileSelect">
+              <option value="ultron_command" selected>ULTRON Command (Deep/Authoritative)</option>
+              <option value="jarvis_prime">JARVIS Prime (British/Refined)</option>
+              <option value="hinglish_conversational">Desi Assistant (Hindi/Hinglish Friendly)</option>
+            </select>
+          </div>
+          <div class="daily-briefing-box" id="dailyBriefingBox">
+            <h4>Daily Intelligence Briefing</h4>
+            <p id="dailyBriefingText">Loading briefing...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="console-input-bar">
+        <input type="text" id="userInput" placeholder="Ask ULTRON anything or issue an agent command (English, Hindi, or Hinglish)..." />
+        <button class="btn btn-accent" id="sendBtn">Transmit</button>
+      </div>
+    </section>
+
+    <!-- Panel 2: 12-Agent Matrix -->
+    <section class="tab-panel" id="tab-agents">
+      <h2>12 Specialized System Agents</h2>
+      <div class="agent-grid" id="agentGrid">
+        <!-- Dynamically rendered -->
+      </div>
+    </section>
+
+    <!-- Panel 3: Task Board -->
+    <section class="tab-panel" id="tab-orchestrator">
+      <div class="panel-header-actions">
+        <h2>Orchestrated Multi-Agent Tasks</h2>
+        <button class="btn btn-primary" id="newTaskModalBtn">+ Create Orchestrated Task</button>
+      </div>
+      <div class="task-list" id="orchestratorTaskList">
+        <p class="placeholder-text">No active background tasks running.</p>
+      </div>
+    </section>
+
+    <!-- Panel 4: Coding Sandbox -->
+    <section class="tab-panel" id="tab-coding">
+      <h2>Isolated Coding Sandbox</h2>
+      <p class="section-desc">Coding Agent scratchpad with CPU timeout (10s) and 256 MB memory bounding (Optimized for Ryzen 7 5700U).</p>
+      <div class="coding-editor-container">
+        <textarea id="sandboxCodeInput" rows="10" placeholder="// Enter JavaScript / Node.js snippet here...&#10;console.log('ULTRON Sandbox Active');"></textarea>
+        <div class="editor-actions">
+          <button class="btn btn-accent" id="runSandboxBtn">▶ Execute in Sandbox</button>
+        </div>
+        <div class="sandbox-terminal" id="sandboxTerminal">
+          <pre id="sandboxOutput">// Execution output will appear here...</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel 5: PC & Devices -->
+    <section class="tab-panel" id="tab-computer">
+      <div class="devices-grid">
+        <div class="card">
+          <h3>Windows PC Control</h3>
+          <div class="btn-group">
+            <button class="btn" id="launchNotepadBtn">Launch Notepad</button>
+            <button class="btn" id="launchCalcBtn">Launch Calculator</button>
+            <button class="btn" id="launchExplorerBtn">Open Workspace Folder</button>
+          </div>
+          <h4>Approved Quick Queries</h4>
+          <div class="btn-group">
+            <button class="btn" id="runGitStatusBtn">Git Status</button>
+            <button class="btn" id="runNodeVerBtn">Node Version</button>
+            <button class="btn" id="runIpconfigBtn">IP Config</button>
+          </div>
+          <pre class="terminal-mini" id="pcTerminalOutput"></pre>
+        </div>
+
+        <div class="card">
+          <h3>Android & Companion Devices</h3>
+          <button class="btn btn-primary" id="requestPairingBtn">Generate Pairing PIN</button>
+          <div class="pairing-box" id="pairingBox" style="display:none;">
+            <p>Enter this code in ULTRON Companion App:</p>
+            <div class="pairing-code" id="pairingCodeDisplay">------</div>
+          </div>
+          <div class="paired-devices-list" id="pairedDevicesList">
+            <p>No external companions paired yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel 6: Memory Vault -->
+    <section class="tab-panel" id="tab-memory">
+      <h2>Cognitive Memory Vault</h2>
+      <div class="memory-search-bar">
+        <input type="text" id="memorySearchInput" placeholder="Search long-term memory vault..." />
+      </div>
+      <div class="memory-items-list" id="memoryItemsList">
+        <div class="memory-card">
+          <h4>Profile Fact</h4>
+          <p>Operator: Ayaan Raza. System: AMD Ryzen 7 5700U with 8 GB RAM.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel 7: Smart Home & IoT -->
+    <section class="tab-panel" id="tab-smarthome">
+      <h2>Smart Home & IoT Devices</h2>
+      <div class="smarthome-grid" id="smarthomeGrid">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- Panel 8: Security & Audit -->
+    <section class="tab-panel" id="tab-security">
+      <h2>Security & Operational Audit Trail</h2>
+      <div class="audit-log-container" id="auditLogContainer">
+        <!-- Logs dynamically rendered -->
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

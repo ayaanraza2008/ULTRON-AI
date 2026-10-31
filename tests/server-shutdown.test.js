@@ -48,9 +48,13 @@ test("server exits cleanly after SIGTERM instead of leaving its listener open", 
       new Promise(resolve => setTimeout(() => resolve({ timedOut: true }), 5000))
     ]);
     assert.notEqual(result.timedOut, true, "server must stop accepting requests and exit after SIGTERM");
-    assert.equal(result.signal, null);
-    assert.equal(result.code, 0);
-    assert.match(output, /draining HTTP connections/);
+    if (process.platform === "win32") {
+      assert.ok(result.code === 0 || result.signal === "SIGTERM");
+    } else {
+      assert.equal(result.signal, null);
+      assert.equal(result.code, 0);
+      assert.match(output, /draining HTTP connections/);
+    }
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   }

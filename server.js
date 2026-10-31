@@ -14,6 +14,7 @@ import { resolveCactusProvider } from "./integrations/cactus.js";
 import { resolveStrataProvider } from "./integrations/strata.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
+import { createJarvisRouter } from "./jarvis-router.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
@@ -410,6 +411,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     maxRequests: Math.max(1, Number(env.RATE_LIMIT_MAX_REQUESTS) || 30)
   });
   app.use("/api", apiRateLimiter);
+
+  const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+  app.use(express.static(publicDir));
 
 
   // Authenticated OpenAI-compatible proxy for the Browser Use bridge.
@@ -1918,6 +1922,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createJarvisRouter({ env, requireSession }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.

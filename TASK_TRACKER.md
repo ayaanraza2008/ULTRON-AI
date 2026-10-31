@@ -44,3 +44,20 @@
 - [ ] **Task 203 — Queued Task Worker Smoke Verification (Owner: Antigravity):** Run `npm run smoke:worker` with `ULTRON_CONFIRM_WORKER_SMOKE=YES` and a valid test-user UUID.
 - [ ] **Task 204 — Enable Supabase Leaked-Password Protection (Owner: Operator):** Toggle leaked-password protection in Supabase Auth security dashboard to resolve the Security Advisor warning.
 - [ ] **Task 205 — Living Core Interface & PWA Sync (Owner: Antigravity):** Validate PWA client interaction against `https://ultron-ai-core.onrender.com` APIs.
+
+---
+
+## 4. JARVIS × ULTRON Transformation Sprint (100% Feature Matrix)
+
+| Phase | Description | Owner | Status | Artifacts & Test Evidence |
+|---|---|---|---|---|
+| **Phase 1** | Baseline Audit & Capabilities Assessment | Antigravity | **VERIFIED** | `docs/JARVIS_ULTRON_BASELINE.md` mapping all 16 capability groups & hardware budgets |
+| **Phase 2** | Core AI Brain & Router Engine | Antigravity | **VERIFIED** | `core/brain-router.js` (CPU/cloud tiering, Hindi/Hinglish, hallucination scoring); `tests/brain-router.test.js` (4/4 passed) |
+| **Phase 3** | Autonomous Multi-Agent Matrix (12 Agents) | Antigravity | **VERIFIED** | `agents/catalog.js`, `agents/orchestrator.js` (checkpoints, resume, delegation, emergency stop); `tests/agents-orchestrator.test.js` (5/5 passed) |
+| **Phase 4** | JARVIS Voice & Vision Engine | Antigravity | **VERIFIED** | `voice/voice-engine.js` (wake words, VAD, profiles), `vision/vision-engine.js` (OCR redaction, UI elements); `tests/voice-vision.test.js` (5/5 passed) |
+| **Phase 5** | Computer Control & Multi-Device Hub | Antigravity | **VERIFIED** | `system/computer-control.js` (telemetry, sandboxed files, allowlist), `integrations/device-hub.js` (PIN pairing, push); `tests/computer-device.test.js` (4/4 passed) |
+| **Phase 6** | Sandboxed Execution & Self-Improvement | Antigravity | **VERIFIED** | `tools/sandbox/coding-sandbox.js` (256MB cap, 10s timeout), `self-improvement/engine.js` (mistake tracking, invariant guards), `integrations/smart-home.js`, `integrations/productivity.js`; `tests/advanced-intelligence.test.js` (4/4 passed) |
+| **Phase 7** | Multi-Tier Autonomy & Hardware Guard | Antigravity | **VERIFIED** | `autonomy-policy.js` (6 tiers: Level 0 to Level 5; AMD Ryzen 7 / 8GB RAM < 85% headroom check); `tests/autonomy-levels.test.js` (3/3 passed), `tests/autonomy-policy.test.js` (31/31 passed) |
+| **Phase 8** | Unified JARVIS Cyber-HUD Dashboard | Antigravity | **VERIFIED** | `jarvis-router.js` mounted at `/api/jarvis/*`, `public/index.html`, `public/style.css`, `public/app.js` (reactor, telemetry, agent matrix, speech, sandbox) |
+| **Phase 9** | Full Verification Suite & Acceptance Matrix | Antigravity | **VERIFIED** | 25/25 new tests pass, zero regressions, `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md` updated, `package.json` check updated |
+| **Phase 10**| Deployment Readiness & Verification Report | Antigravity | **VERIFIED** | Clean branch `agent/antigravity/jarvis-ultron-transformation-20261031` ready for PR |
