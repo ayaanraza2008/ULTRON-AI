@@ -393,3 +393,26 @@ test("spoken prompts skip unnecessary pre-search and use a smaller conversationa
   assert.ok(app.includes('source !== "voice" || explicitResearchIntent'));
   assert.ok(app.includes('history.slice(streamVoiceReply ? -8 : -18)'));
 });
+
+
+test("JARVIS task activity exposes a bounded account-scoped employee task form and persisted status/result paths", () => {
+  assert.ok(app.includes('apiRequest("/api/jarvis/agents/tasks")'));
+  assert.ok(app.includes('apiRequest("/api/jarvis/agents/task"'));
+  assert.ok(app.includes('apiRequest("/api/jarvis/agents/tasks/" + encodeURIComponent(taskId))'));
+  assert.ok(app.includes("jarvis-task-goal"));
+  assert.ok(app.includes('["chief-of-staff", "Chief of Staff"]'));
+  assert.ok(app.includes('["plan", "Plan"]'));
+  assert.ok(app.includes('["report", "Report"]'));
+  assert.ok(app.includes("QUEUE EMPLOYEE TASK"));
+  assert.ok(app.includes("queued is not completed"));
+  assert.ok(app.includes("will not publish, send messages, spend money"));
+  assert.ok(app.includes("VIEW RESULT"));
+});
+
+test("JARVIS task form uses bounded text, required validation and same-origin authenticated API requests", () => {
+  assert.ok(app.includes("goal.maxLength = 2000"));
+  assert.ok(app.includes("goal.minLength = 2"));
+  assert.ok(app.includes("goal.required = true"));
+  assert.match(app, /credentials: "same-origin"/);
+  assert.match(app, /cache: "no-store"/);
+});
