@@ -9,7 +9,8 @@ const sourceFiles = [
   "../server.js",
   "../worker.js",
   "../features.js",
-  "../agent-runtime.js"
+  "../agent-runtime.js",
+  "../scripts/model-vision-smoke.mjs"
 ];
 
 test("OpenRouter request metadata uses the active ULTRON Core interface origin", async () => {
