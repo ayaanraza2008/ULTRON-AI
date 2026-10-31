@@ -894,7 +894,6 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
           },
           body: JSON.stringify({
             text,
-            language: "en",
             reference_id: fish.voiceModelId,
             format: "mp3",
             latency: "balanced",
