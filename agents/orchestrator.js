@@ -209,6 +209,7 @@ export class AgentOrchestrator {
       task.status = "COMPLETED";
       task.finishedAt = new Date().toISOString();
       this.recordAudit(task.primaryAgent, "TASK_COMPLETED", { taskId });
+      this.saveCheckpoint(taskId);
     }
 
     return task;

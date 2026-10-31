@@ -102,8 +102,10 @@ export class JarvisVoiceEngine {
       .replace(/```[\s\S]*?```/g, "Code block omitted for speech.")
       // Remove inline code
       .replace(/`([^`]+)`/g, "$1")
-      // Remove links
+      // Remove markdown links
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      // Remove raw URLs
+      .replace(/https?:\/\/[^\s]+/g, "")
       // Remove bold/italics
       .replace(/[*_~#]/g, "")
       // Remove excess whitespace
