@@ -403,7 +403,7 @@ test("JARVIS task activity exposes a bounded account-scoped employee task form a
   assert.ok(app.includes('["chief-of-staff", "Chief of Staff"]'));
   assert.ok(app.includes('["plan", "Plan"]'));
   assert.ok(app.includes('["report", "Report"]'));
-  assert.ok(app.includes("QUEUED EMPLOYEE TASK"));
+  assert.ok(app.includes("QUEUE EMPLOYEE TASK"));
   assert.ok(app.includes("queued is not completed"));
   assert.ok(app.includes("will not publish, send messages, spend money"));
   assert.ok(app.includes("VIEW RESULT"));
