@@ -104,7 +104,17 @@ test("consequential click is inspected and held until an exact owner approval", 
     const click = calls.find(call => call.action.action === "click");
     assert.ok(click);
     assert.equal(click.action.confirmExternalAction, true);
-    assert.deepEqual(click.action.approvalFingerprint, inspection());
+    assert.deepEqual(click.action.approvalFingerprint, {
+      origin: "https://checkout.example.com",
+      pageUrl: "https://checkout.example.com/order/confirm",
+      selector: "button#pay-now",
+      label: "Pay now",
+      tag: "button",
+      type: "submit",
+      formActionOrigin: "https://checkout.example.com",
+      highImpact: true,
+      crossOriginForm: false
+    });
 
     const countAfterSuccess = calls.length;
     const replay = await fetch(base + "/api/agent/run", {
