@@ -37,6 +37,7 @@ import { imageStudioEngine } from "./media/image-studio-engine.js";
 import { autonomousProductionOrchestrator } from "./media/autonomous-production-orchestrator.js";
 import { createDshGodRouter } from "./integrations/dsh-god/management-api.js";
 import { JarvisCapabilityBenchmark } from "./benchmarks/jarvis-capability-benchmark.js";
+import { JarvisUltronCapabilityComparator } from "./benchmarks/jarvis-ultron-comparator.js";
 
 
 
@@ -102,6 +103,26 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       res.status(500).json({
         error: {
           code: "BENCHMARK_EVALUATION_FAILED",
+          message: err.message
+        }
+      });
+    }
+  });
+
+  // --- JARVIS + ULTRON Capability Comparator ---
+  router.get("/jarvis/comparator", requireOwner, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const comparator = new JarvisUltronCapabilityComparator();
+      const evaluation = await comparator.evaluate();
+      res.json({
+        status: "ok",
+        evaluation
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: {
+          code: "COMPARATOR_EVALUATION_FAILED",
           message: err.message
         }
       });

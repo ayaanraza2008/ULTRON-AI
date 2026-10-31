@@ -235,7 +235,10 @@ const FILES_TO_CHECK = [
   "tests/emotional-intelligence-e2e.test.js",
   "benchmarks/jarvis-capability-benchmark.js",
   "tests/jarvis-capability-benchmark.test.js",
-  "scripts/run-jarvis-benchmark.mjs"
+  "scripts/run-jarvis-benchmark.mjs",
+  "benchmarks/jarvis-ultron-comparator.js",
+  "tests/jarvis-ultron-comparator.test.js",
+  "scripts/run-jarvis-ultron-comparator.mjs"
 ];
 
 let checked = 0;

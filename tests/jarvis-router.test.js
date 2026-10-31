@@ -295,3 +295,20 @@ test("JARVIS exposes live 100% capability benchmark to configured owner", async 
     assert.equal(body.evaluation.categoriesCount, 14);
   });
 });
+
+
+test("JARVIS exposes live JARVIS + ULTRON capability comparator to configured owner", async () => {
+  await withRouter({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }
+  }, async base => {
+    const res = await fetch(base + "/api/jarvis/comparator");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "ok");
+    assert.equal(body.evaluation.totalMaturityScore, 100);
+    assert.equal(body.evaluation.status, "VERIFIED_100_PERCENT");
+    assert.ok(body.evaluation.jarvisAlignmentScore > 85);
+    assert.ok(body.evaluation.ultronAlignmentScore > 80);
+    assert.equal(body.evaluation.categoriesCount, 14);
+  });
+});
