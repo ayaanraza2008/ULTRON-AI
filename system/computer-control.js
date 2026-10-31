@@ -48,6 +48,7 @@ export class WindowsComputerControl {
     this.sandboxBase = options.sandboxBase || path.join(this.userHome, "Documents", "UltronWorkspace");
     this.emergencyStop = false;
     this.actionHistory = [];
+    this._inMemoryClipboard = "";
   }
 
   async initialize() {
@@ -265,6 +266,7 @@ export class WindowsComputerControl {
   async setClipboardText(text) {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
     const sanitized = String(text || "");
+    this._inMemoryClipboard = sanitized;
     if (process.platform !== "win32") {
       this.recordAction("SET_CLIPBOARD", "simulated", "mock_success");
       return { success: true, byteLength: Buffer.byteLength(sanitized), simulated: true };
@@ -276,8 +278,8 @@ export class WindowsComputerControl {
       this.recordAction("SET_CLIPBOARD", "windows_clipboard", "success");
       return { success: true, byteLength: Buffer.byteLength(sanitized) };
     } catch (err) {
-      this.recordAction("SET_CLIPBOARD", "windows_clipboard", "failed");
-      throw new Error(`Failed to set clipboard: ${err.message}`);
+      this.recordAction("SET_CLIPBOARD", "in_memory_fallback", "success");
+      return { success: true, byteLength: Buffer.byteLength(sanitized), fallback: true };
     }
   }
 
@@ -287,15 +289,16 @@ export class WindowsComputerControl {
   async getClipboardText() {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
     if (process.platform !== "win32") {
-      return { text: "mock_clipboard_content", simulated: true };
+      this.recordAction("GET_CLIPBOARD", "simulated", "mock_success");
+      return { text: this._inMemoryClipboard || "mock_clipboard_content", simulated: true };
     }
     try {
       const { stdout } = await execAsync('powershell -NoProfile -Command "Get-Clipboard"', { timeout: 3000 });
       this.recordAction("GET_CLIPBOARD", "windows_clipboard", "success");
-      return { text: stdout ? stdout.trim() : "" };
+      return { text: stdout ? stdout.trim() : (this._inMemoryClipboard || "") };
     } catch (err) {
-      this.recordAction("GET_CLIPBOARD", "windows_clipboard", "failed");
-      return { text: "", error: err.message };
+      this.recordAction("GET_CLIPBOARD", "in_memory_fallback", "success");
+      return { text: this._inMemoryClipboard || "", fallback: true };
     }
   }
 }

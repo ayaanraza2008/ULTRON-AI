@@ -80,14 +80,21 @@ export const APPROVED_SOFTWARE_PACKAGES = {
   "ffmpeg": "Gyan.FFmpeg"
 };
 
-// Sensitive OS system paths protected from write/delete
+// Sensitive OS system paths protected from write/delete across Windows and POSIX
 const PROTECTED_SYSTEM_PATHS = [
-  "c:\\windows",
-  "c:\\windows\\system32",
-  "c:\\program files",
-  "c:\\program files (x86)",
-  "c:\\boot",
-  "c:\\recovery"
+  "c:/windows",
+  "c:/windows/system32",
+  "c:/program files",
+  "c:/program files (x86)",
+  "c:/boot",
+  "c:/recovery",
+  "/etc",
+  "/boot",
+  "/sys",
+  "/proc",
+  "/bin",
+  "/sbin",
+  "/usr"
 ];
 
 export class SystemControlAgent {
@@ -159,9 +166,18 @@ export class SystemControlAgent {
       throw new Error("OPERATION_HALTED: Emergency stop is actively engaged.");
     }
 
-    const resolved = path.resolve(String(targetPath || "")).toLowerCase();
+    const rawStr = String(targetPath || "").trim();
+    const normalizedRaw = rawStr.replace(/\\/g, "/").toLowerCase();
+    const normalizedResolved = path.resolve(rawStr).replace(/\\/g, "/").toLowerCase();
+
     for (const protectedPath of PROTECTED_SYSTEM_PATHS) {
-      if (resolved === protectedPath || resolved.startsWith(protectedPath + "\\")) {
+      const p = protectedPath.toLowerCase();
+      if (
+        normalizedRaw === p ||
+        normalizedRaw.startsWith(p + "/") ||
+        normalizedResolved === p ||
+        normalizedResolved.startsWith(p + "/")
+      ) {
         throw new Error(`ACCESS_DENIED: Modifying or accessing protected system directory '${targetPath}' is strictly prohibited.`);
       }
     }
@@ -170,7 +186,7 @@ export class SystemControlAgent {
       throw new Error(`PERMISSION_DENIED: Agent lacks ${requiredPerm} permission.`);
     }
 
-    return resolved;
+    return normalizedResolved;
   }
 
   /**
