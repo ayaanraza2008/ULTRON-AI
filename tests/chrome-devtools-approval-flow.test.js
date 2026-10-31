@@ -69,7 +69,7 @@ test("consequential click is inspected and held until an exact owner approval", 
   const fetchImpl = bridgeFetch({ calls });
   const challenge = await runChromeDevToolsAction({
     env, fetchImpl, userId: owner,
-    input: { action: "click", selector: "button#pay-now", confirmExternalAction: true }
+    input: { action: "click", selector: "button#pay-now" }
   });
   assert.equal(challenge.state, "approval_required");
   assert.equal(challenge.approvalRequired, true);
