@@ -4,14 +4,14 @@ import express from "express";
 import { createServer } from "node:http";
 import { createJarvisRouter } from "../jarvis-router.js";
 
-async function withRouter({ env = {}, userId = "owner-user" } = {}, run) {
+async function withRouter({ env = {}, userId = "owner-user", supabaseRest, privilegedSupabaseRest, logger = { warn() {} } } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, _res, next) => {
     req.supabaseUser = { id: userId };
     next();
   };
   app.use(express.json());
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser }));
+  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest, logger }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -132,7 +132,9 @@ test("JARVIS queues allowlisted plan work through the durable Supabase worker an
     ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
     ULTRON_EMPLOYEES_ENABLED: "true",
     SUPABASE_SERVICE_ROLE_KEY: "synthetic-service-role-key",
-    OPENROUTER_API_KEY: "synthetic-openrouter-key"
+    OPENROUTER_API_KEY: "synthetic-openrouter-key",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free"
   };
 
   await withRouter({ env, supabaseRest, privilegedSupabaseRest }, async base => {
