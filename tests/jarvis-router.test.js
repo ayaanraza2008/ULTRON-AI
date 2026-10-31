@@ -63,7 +63,7 @@ test("configured owner can read JARVIS status without misreporting the hosted OS
     assert.equal(response.status, 200);
     assert.equal(body.telemetry.platform, process.platform);
     assert.equal(body.telemetry.architecture, process.arch);
-    assert.equal(body.telemetry.executionEnvironment, "hosted_or_local_runtime");
+    assert.equal(body.telemetry.executionEnvironment, "server_process");
   });
 });
 
