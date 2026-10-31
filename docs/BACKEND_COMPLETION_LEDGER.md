@@ -1,9 +1,24 @@
 # ULTRON AI Backend-Only Completion Ledger
 
-Last reviewed: 2026-10-25  
-Scope: backend, intelligence/runtime, integrations, security, tests, deployment verification. Frontend work is explicitly frozen.
+Last reviewed: 2026-10-31  
+Scope: backend, intelligence/runtime, integrations, security, tests and deployment verification; frontend status is tracked separately in the acceptance matrix.
 
 This ledger distinguishes repository code from live, end-to-end proof. A module or environment variable being present is not proof that its external service works.
+
+## Latest verified checkpoint (2026-10-31)
+
+- Repository: `ayaanraza2008/ULTRON-AI`; `main` head `e608485b609e7d8f51d93dd4d033e636efd44975`.
+- Main CI run [41173106830](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41173106830) passed `npm run check`, `npm test`, Python Browser Use/Harness2/Model Lab checks, dependency advisory reporting and pinned World Intelligence build.
+- Merged PR #426 adds owner-scoped Hermes native Runs submission/polling/stop support; feature remains disabled by default until a secured endpoint and credentials are configured.
+- Merged PR #424 hardens Harness2 CLI output limits, output-flood termination, benchmark validation, resume recovery and symlink-safe atomic writes.
+- In the `Ultron core` Render workspace, `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` report live at `e608485`. Production-revision health/config/exact-revision workflow [41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) passed for the preceding commit `145ac4e`; get a fresh exact-revision check for `e608485`. Do not trigger manual deployments on services with auto-deploy enabled.
+- Separate `ultron-core-interface` remains deployed on its feature branch at `68b042641bc1e4a0ab56953df36637402c47df86`; account-safe browser-to-API, voice and physical-device E2E remain open.
+- Supabase `ULTRON-AI` is `ACTIVE_HEALTHY`; core user-data tables have RLS, `anon` has no public table grants, and the private document bucket/migration are present. The Auth Security Advisor still reports leaked-password protection disabled.
+- No real provider inference, two-account RLS E2E, worker task completion, Hermes live execution, Windows/Android physical pairing, or isolated coding sandbox was proven in this checkpoint.
+
+## Historical ledger snapshots
+
+The earlier implementation and workflow notes below are retained as historical evidence. Their repository SHAs, pipeline-quota status, and phase labels are snapshots from their stated dates; the latest verified state is the checkpoint above.
 
 ## Verified repository and workflow state
 
@@ -124,3 +139,4 @@ The requested 99.99% milestone is a planning target, not a mathematically proven
 - Model-generated `consentBasis` is ignored even if fabricated.
 - Added parser regression tests for own-voice and speaker-permission approvals, vague claims, explicit denial, contradictory revocation, leading prose, phrase extension, and missing input.
 - Source/test/docs are on `fix/voice-clone-exact-user-consent`; full CI pending. No VoiceStudio profile was created and no audio was uploaded to a provider.
+
