@@ -168,7 +168,17 @@
             <button class="btn" id="launchCalcBtn">Launch Calculator</button>
             <button class="btn" id="launchExplorerBtn">Open Workspace Folder</button>
           </div>
-          <h4>Approved Quick Queries</h4>
+          <h4>Hardware & Session Controls</h4>
+          <div class="btn-group">
+            <button class="btn" id="lockPcBtn">🔒 Lock Workstation</button>
+            <button class="btn" id="captureScreenBtn">📸 Capture Screen</button>
+            <button class="btn" id="volDownBtn">🔉 Vol -</button>
+            <button class="btn" id="volUpBtn">🔊 Vol +</button>
+            <button class="btn" id="volMuteBtn">🔇 Mute</button>
+          </div>
+          <div class="battery-status-bar" id="batteryStatusBar" style="margin-top:10px; font-size:13px; color:var(--text-dim);">
+            <span>⚡ Battery: <strong id="batteryPercentLabel">Checking...</strong></span>
+          </div>
           <div class="btn-group">
             <button class="btn" id="runGitStatusBtn">Git Status</button>
             <button class="btn" id="runNodeVerBtn">Node Version</button>

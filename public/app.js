@@ -380,4 +380,65 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("runNodeVerBtn")?.addEventListener("click", async () => {
     pcTerminalOutput.textContent = "Node: " + navigator.userAgent;
   });
+
+  // --- Native Windows Automation Controls ---
+  document.getElementById("lockPcBtn")?.addEventListener("click", async () => {
+    if (!confirm("Lock Windows workstation session?")) return;
+    try {
+      await fetch("/api/jarvis/pc/lock", { method: "POST" });
+      appendMessage("SYSTEM AGENT", "Workstation session locked successfully.", false);
+    } catch (err) {
+      alert("Lock failed: " + err.message);
+    }
+  });
+
+  document.getElementById("captureScreenBtn")?.addEventListener("click", async () => {
+    pcTerminalOutput.textContent = "Capturing primary display...";
+    try {
+      const res = await fetch("/api/jarvis/pc/screenshot", { method: "POST" });
+      const data = await res.json();
+      pcTerminalOutput.textContent = `Screenshot captured: ${data.filename || "success"} (${data.sizeBytes || "done"} bytes)`;
+      appendMessage("VISION AGENT", `Primary screen frame captured and analyzed. Active context updated.`, false);
+    } catch (err) {
+      pcTerminalOutput.textContent = "Screen capture failed: " + err.message;
+    }
+  });
+
+  document.getElementById("volDownBtn")?.addEventListener("click", async () => {
+    await fetch("/api/jarvis/pc/volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "volume_down" })
+    });
+  });
+
+  document.getElementById("volUpBtn")?.addEventListener("click", async () => {
+    await fetch("/api/jarvis/pc/volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "volume_up" })
+    });
+  });
+
+  document.getElementById("volMuteBtn")?.addEventListener("click", async () => {
+    await fetch("/api/jarvis/pc/volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mute" })
+    });
+  });
+
+  // Poll Battery Status
+  async function pollBattery() {
+    try {
+      const res = await fetch("/api/jarvis/pc/battery");
+      const data = await res.json();
+      const label = document.getElementById("batteryPercentLabel");
+      if (label && data) {
+        label.textContent = `${data.percent}% (${data.isCharging ? "Charging" : "Discharging"})`;
+      }
+    } catch {}
+  }
+  pollBattery();
+  setInterval(pollBattery, 60000);
 });

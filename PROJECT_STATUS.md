@@ -96,4 +96,8 @@ Implemented on feature branch `agent/antigravity/jarvis-ultron-transformation-20
 - **Smart Home & Productivity Suite (`integrations/smart-home.js`, `integrations/productivity.js`):** Deny-by-default actuation, ambient scenes, reminders, events, and daily briefing synthesis.
 - **6-Level Autonomy Policy (`autonomy-policy.js`):** Levels 0-5 enforcement with AMD Ryzen 7 / 8 GB RAM memory pressure guard (< 85% headroom check).
 - **Unified Cyber-HUD Dashboard (`jarvis-router.js`, `public/`):** Express `/api/jarvis/*` router and cybernetic HUD interface with animated reactor core, telemetry charts, agent matrix, speech controls, and emergency stop.
-- **Deterministic Test Coverage:** 25/25 new tests pass across 6 dedicated test suites; zero regressions in existing 42 server and autonomy tests.
+- **Native Windows Automation (`system/windows-automation.js`):** WMI battery telemetry, volume adjustment, display screen capture, and session lock.
+- **Offline Windows SAPI Speech Daemon (`voice/windows-speech-daemon.js`):** Zero-latency, zero-cloud speech synthesis directly through Windows speakers with grammar intent parsing.
+- **Proactive Assistant Daemon (`system/proactive-daemon.js`):** 24/7 background loop monitoring battery, RAM pressure alerts, and morning briefings.
+- **Continuous Screen Observer (`vision/screen-observer.js`):** Active window context detection, OCR credential scrubbing, and developer activity classification.
+- **Deterministic Test Coverage:** 34/34 new tests pass across 10 dedicated JARVIS suites; 706 repository tests passing with zero failures.

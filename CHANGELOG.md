@@ -18,7 +18,12 @@ All notable changes to the ULTRON AI ecosystem and multi-agent development infra
   - Implemented smart home hub (`integrations/smart-home.js`) and personal productivity suite (`integrations/productivity.js`).
   - Upgraded autonomy policy (`autonomy-policy.js`) with 6-level autonomy hierarchy (Levels 0-5) and AMD Ryzen 7 / 8 GB RAM memory pressure guard.
   - Mounted `/api/jarvis/*` router (`jarvis-router.js`) and created cyber-HUD dashboard (`public/index.html`, `public/style.css`, `public/app.js`) with animated core reactor, system telemetry, agent status, voice input, and emergency stop.
-  - Added 6 comprehensive test suites (`tests/brain-router.test.js`, `tests/agents-orchestrator.test.js`, `tests/voice-vision.test.js`, `tests/computer-device.test.js`, `tests/advanced-intelligence.test.js`, `tests/autonomy-levels.test.js`) with 25/25 passing tests.
+  - Added 10 comprehensive test suites with 34/34 passing tests across the JARVIS subsystem (706 passing tests across the entire repository).
+  - Implemented native Windows automation & hardware controller (`system/windows-automation.js`) with battery WMI telemetry, volume adjust/mute, screen capture, and session locking.
+  - Implemented 100% offline Windows SAPI speech & voice daemon (`voice/windows-speech-daemon.js`) with spoken text sanitization and offline intent grammar recognition.
+  - Implemented real-time proactive assistant daemon (`system/proactive-daemon.js`) providing battery low warnings, memory pressure throttling alerts, and daily morning briefings.
+  - Implemented continuous screen observer (`vision/screen-observer.js`) for active window context extraction and visual developer activity classification.
+  - Upgraded Cyber-HUD with battery status indicators, screen capture buttons, volume controls, and session lock actions.
 - **Multi-Agent Development Triad Integration:**
   - Connected **Google Antigravity**, **Claude Code**, and **OpenAI Codex** as coordinated engineering agents.
   - Created shared engineering memory system:

@@ -13,8 +13,12 @@ import { JarvisVoiceEngine } from "./voice/voice-engine.js";
 import { JarvisVisionEngine } from "./vision/vision-engine.js";
 import { WindowsComputerControl } from "./system/computer-control.js";
 import { ProductivitySuite } from "./integrations/productivity.js";
-import { AUTONOMY_LEVELS } from "./autonomy-policy.js";
+import { AUTONOMY_LEVELS, canExecuteAutonomously } from "./autonomy-policy.js";
 import { hasEmployeeModelProvider } from "./features.js";
+import { windowsAutomation } from "./system/windows-automation.js";
+import { windowsSpeechDaemon } from "./voice/windows-speech-daemon.js";
+import { proactiveDaemon } from "./system/proactive-daemon.js";
+import { screenObserver } from "./vision/screen-observer.js";
 
 const EMPLOYEE_ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const EMPLOYEE_MODES = new Set(["plan", "draft", "review", "report"]);
@@ -391,6 +395,94 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   // --- Audit Trail ---
   router.get("/jarvis/audit", requireOwner, (_req, res) => {
     res.json({ logs: orchestrator.getAuditLogs() });
+  });
+
+  // --- Windows Native Speech & Voice Daemon ---
+  router.post("/jarvis/voice/speak", requireSession, express.json(), async (req, res) => {
+    const { text, rate, volume } = req.body || {};
+    const result = await windowsSpeechDaemon.speak(text, { rate, volume });
+    res.json(result);
+  });
+
+  router.post("/jarvis/voice/offline-intent", requireSession, express.json(), (req, res) => {
+    const { utterance } = req.body || {};
+    const match = windowsSpeechDaemon.matchOfflineIntent(utterance);
+    res.json(match);
+  });
+
+  // --- Windows Automation & Hardware Control ---
+  router.get("/jarvis/pc/battery", requireSession, async (_req, res) => {
+    const battery = await windowsAutomation.getBatteryStatus();
+    res.json(battery);
+  });
+
+  router.post("/jarvis/pc/volume", requireSession, express.json(), async (req, res) => {
+    const { action, value } = req.body || {};
+    try {
+      const result = await windowsAutomation.setSystemVolume(action, value);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/pc/lock", requireSession, async (_req, res) => {
+    try {
+      const result = await windowsAutomation.lockWorkstation();
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/pc/screenshot", requireSession, async (_req, res) => {
+    try {
+      const capture = await windowsAutomation.captureScreen();
+      res.json(capture);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/pc/active-window", requireSession, async (_req, res) => {
+    const win = await windowsAutomation.getActiveWindowTitle();
+    res.json(win);
+  });
+
+  // --- Proactive Daemon ---
+  router.get("/jarvis/proactive/status", requireSession, (_req, res) => {
+    res.json({
+      status: proactiveDaemon.getStatus(),
+      recentAlerts: proactiveDaemon.getRecentAlerts()
+    });
+  });
+
+  router.post("/jarvis/proactive/tick", requireSession, async (_req, res) => {
+    const result = await proactiveDaemon.tick();
+    res.json(result);
+  });
+
+  router.post("/jarvis/proactive/toggle", requireSession, express.json(), (req, res) => {
+    const { running, enableSpokenAlerts } = req.body || {};
+    if (typeof enableSpokenAlerts === "boolean") {
+      proactiveDaemon.enableSpokenAlerts = enableSpokenAlerts;
+    }
+    if (running) {
+      proactiveDaemon.start();
+    } else {
+      proactiveDaemon.stop();
+    }
+    res.json(proactiveDaemon.getStatus());
+  });
+
+  // --- Screen Observer & Visual Intelligence ---
+  router.get("/jarvis/screen/inspect", requireSession, async (_req, res) => {
+    try {
+      const inspection = await screenObserver.inspectCurrentScreen();
+      res.json(inspection);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
   });
 
   return router;
