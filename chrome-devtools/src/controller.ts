@@ -295,8 +295,8 @@ export class ChromeController {
         return { state: "completed", action: input.action, selector: input.selector, valueReturned: false };
       }
 
-      const current = new URL(page.url());
-      const localPage = isLoopbackHost(current.hostname);
+      const currentUrl = new URL(page.url());
+      const localPage = isLoopbackHost(currentUrl.hostname);
       const highImpact = /(?:submit|send|publish|post|pay|purchase|buy|checkout|delete|remove|book|reserve|confirm|cancel|sign out|log out|accept terms|place order)/i.test(details.text) ||
         details.type === "submit" || details.tag === "form";
       let formActionOrigin = "";
@@ -321,12 +321,33 @@ export class ChromeController {
           requiresConfirmation
         };
       }
-      if (requiresConfirmation && !(input.confirmExternalAction === true && this.env.CHROME_ALLOW_EXTERNAL_ACTIONS === "true")) {
-        throw new ChromeActionError(
-          "EXTERNAL_ACTION_CONFIRMATION_REQUIRED",
-          "This click looks like a submission or consequential action on an external site. ULTRON must issue a one-time action approval, and CHROME_ALLOW_EXTERNAL_ACTIONS=true must be enabled on the local bridge.",
-          403
-        );
+      if (requiresConfirmation) {
+        if (!(input.confirmExternalAction === true && this.env.CHROME_ALLOW_EXTERNAL_ACTIONS === "true")) {
+          throw new ChromeActionError(
+            "EXTERNAL_ACTION_CONFIRMATION_REQUIRED",
+            "This click looks like a submission or consequential action on an external site. ULTRON must issue a one-time action approval, and CHROME_ALLOW_EXTERNAL_ACTIONS=true must be enabled on the local bridge.",
+            403
+          );
+        }
+        const approved = input.approvalFingerprint;
+        const current = {
+          origin: currentUrl.origin,
+          pageUrl: safeDisplayUrl(page.url()),
+          selector: input.selector,
+          label: details.text,
+          tag: details.tag,
+          type: details.type,
+          formActionOrigin: formActionOrigin && formActionOrigin !== "[invalid]" ? formActionOrigin : "",
+          highImpact,
+          crossOriginForm
+        };
+        if (!approved || JSON.stringify(approved) !== JSON.stringify(current)) {
+          throw new ChromeActionError(
+            "CHROME_APPROVAL_TARGET_CHANGED",
+            "The current browser page or target element no longer matches the exact action the user approved. No click was performed.",
+            409
+          );
+        }
       }
       await locator.click({ timeout: 5000 });
       return { state: "completed", action: input.action, selector: input.selector, title: (await page.title()).slice(0, 300), url: safeDisplayUrl(page.url()) };
