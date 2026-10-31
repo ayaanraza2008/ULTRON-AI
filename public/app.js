@@ -668,4 +668,176 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // ==========================================
+  // --- MODULE 1 & 9: SYSTEM CONTROL HANDLERS ---
+  // ==========================================
+  window.launchApp = async (app) => {
+    try {
+      const res = await fetch("/api/jarvis/system/apps/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app })
+      });
+      const data = await res.json();
+      appendMessage("SYSTEM AGENT", `Launched application: ${data.app || app}`, false);
+    } catch (err) {
+      appendMessage("SYSTEM AGENT", `Failed to launch ${app}: ${err.message}`, false);
+    }
+  };
+
+  document.getElementById("takeScreenshotBtn")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("screenshotStatus");
+    if (statusEl) statusEl.textContent = "Capturing...";
+    try {
+      const res = await fetch("/api/jarvis/system/screenshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scrubCredentials: true })
+      });
+      const data = await res.json();
+      if (statusEl) statusEl.textContent = `Captured: ${data.path ? data.path.split(/\\|\//).pop() : "Saved"}`;
+      appendMessage("SYSTEM AGENT", `Screenshot saved: ${data.path}`, false);
+    } catch (err) {
+      if (statusEl) statusEl.textContent = "Failed";
+    }
+  });
+
+  document.getElementById("refreshDrivesBtn")?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/system/drives");
+      const data = await res.json();
+      const listEl = document.getElementById("uiDrivesList");
+      if (listEl && data.drives) {
+        listEl.innerHTML = data.drives.map(d => `
+          <div style="background: rgba(0, 243, 255, 0.05); padding: 8px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.2); margin-bottom: 6px;">
+            <strong>${d.letter} [${d.name}]</strong> - ${d.type} (${d.freeGB} GB Free of ${d.totalGB} GB)
+            <div style="background: #1a202c; height: 6px; border-radius: 3px; margin-top: 4px; overflow: hidden;">
+              <div style="background: var(--cyan-accent); width: ${100 - d.percentFree}%; height: 100%;"></div>
+            </div>
+          </div>
+        `).join("");
+      }
+    } catch {}
+  });
+
+  document.getElementById("organizeFolderBtn")?.addEventListener("click", async () => {
+    const input = document.getElementById("organizeTargetInput");
+    const targetDir = input?.value.trim() || "Downloads";
+    const resultEl = document.getElementById("organizeResult");
+    if (resultEl) resultEl.textContent = "Organizing with backup...";
+    try {
+      const res = await fetch("/api/jarvis/system/files/organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceDir: targetDir })
+      });
+      const data = await res.json();
+      if (resultEl) resultEl.textContent = `Organized ${data.movedCount || 0} files. Backup: ${data.backupId || "Created"}`;
+      appendMessage("SYSTEM AGENT", `Folder organized. Backup snapshot: ${data.backupId}`, false);
+    } catch (err) {
+      if (resultEl) resultEl.textContent = `Error: ${err.message}`;
+    }
+  });
+
+  // ==========================================
+  // --- MODULE 3, 4, 5: MEDIA & PRODUCTION ---
+  // ==========================================
+  window.setProductionPrompt = (text) => {
+    const input = document.getElementById("autoProdPromptInput");
+    if (input) input.value = text;
+  };
+
+  document.getElementById("startAutoProdBtn")?.addEventListener("click", async () => {
+    const input = document.getElementById("autoProdPromptInput");
+    const prompt = input?.value.trim();
+    if (!prompt) return;
+
+    const progBox = document.getElementById("prodProgressContainer");
+    const stageLabel = document.getElementById("prodStageLabel");
+    const percentLabel = document.getElementById("prodPercentLabel");
+    const bar = document.getElementById("prodProgressBar");
+    const detailEl = document.getElementById("prodExportDetail");
+
+    if (progBox) progBox.style.display = "block";
+    if (stageLabel) stageLabel.textContent = "Stage: ANALYZING MEDIA & CONCEPT";
+    if (percentLabel) percentLabel.textContent = "25%";
+    if (bar) bar.style.width = "25%";
+    if (detailEl) detailEl.textContent = "Searching local drives for candidate clips...";
+
+    try {
+      const res = await fetch("/api/jarvis/media/production/autonomous", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await res.json();
+
+      if (bar) bar.style.width = "100%";
+      if (percentLabel) percentLabel.textContent = "100%";
+      if (stageLabel) stageLabel.textContent = "Stage: EXPORT COMPLETED";
+      if (detailEl) {
+        detailEl.innerHTML = `
+          <strong style="color: #48bb78;">Production Successful!</strong><br/>
+          <strong>Preset:</strong> ${data.preset} (${data.durationSeconds}s)<br/>
+          <strong>Export Location:</strong> <code style="color: var(--cyan-accent);">${data.videoExportPath}</code><br/>
+          <strong>Concept:</strong> <em>"${data.concept}"</em>
+        `;
+      }
+      appendMessage("AUTONOMOUS PRODUCTION", `Video production complete! Exported to: ${data.videoExportPath}`, false);
+    } catch (err) {
+      if (stageLabel) stageLabel.textContent = "Stage: FAILED";
+      if (detailEl) detailEl.textContent = `Error: ${err.message}`;
+    }
+  });
+
+  document.getElementById("searchMediaBtn")?.addEventListener("click", async () => {
+    const input = document.getElementById("mediaSearchInput");
+    const q = encodeURIComponent(input?.value.trim() || "");
+    const listEl = document.getElementById("mediaResultsList");
+    if (listEl) listEl.innerHTML = "<div>Searching media catalog...</div>";
+    try {
+      const res = await fetch(`/api/jarvis/media/search?q=${q}`);
+      const data = await res.json();
+      if (listEl && data.results) {
+        if (data.results.length === 0) {
+          listEl.innerHTML = '<div style="color: #a0aec0;">No media files matching search found.</div>';
+        } else {
+          listEl.innerHTML = data.results.map(r => `
+            <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+              <span><strong>${r.name}</strong> (${r.mediaType.toUpperCase()})</span>
+              <span style="color: #a0aec0;">${r.sizeMB || 0} MB</span>
+            </div>
+          `).join("");
+        }
+      }
+    } catch (err) {
+      if (listEl) listEl.innerHTML = `<div>Error searching media: ${err.message}</div>`;
+    }
+  });
+
+  document.getElementById("generateThumbBtn")?.addEventListener("click", async () => {
+    const title = document.getElementById("thumbTitleInput")?.value.trim() || "ULTRON PRODUCTION";
+    const subtitle = document.getElementById("thumbSubInput")?.value.trim() || "AUTONOMOUS SYSTEM CONTROL";
+    const preset = document.getElementById("thumbPresetSelect")?.value || "CYBERPUNK";
+    const area = document.getElementById("thumbPreviewArea");
+    if (area) area.innerHTML = "<div>Rendering graphic composition...</div>";
+
+    try {
+      const res = await fetch("/api/jarvis/media/image/thumbnail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, subtitle, preset })
+      });
+      const data = await res.json();
+      if (area) {
+        area.innerHTML = `
+          <div style="color: #48bb78; font-size: 12px; margin-bottom: 6px;">Thumbnail Exported: ${data.filename}</div>
+          <div style="font-size: 11px; color: #a0aec0;">Path: ${data.outputPath}</div>
+        `;
+      }
+    } catch (err) {
+      if (area) area.innerHTML = `<div>Error: ${err.message}</div>`;
+    }
+  });
+
 });

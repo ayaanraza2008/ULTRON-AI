@@ -30,6 +30,11 @@ import { telephonyBrain } from "./telephony/telephony-brain.js";
 import { windowsDesktopAgent } from "./system/windows-desktop-agent.js";
 import { multiDeviceManager } from "./integrations/multi-device-manager.js";
 import { remoteTaskOrchestrator } from "./system/remote-task-orchestrator.js";
+import { systemControlAgent } from "./system/system-control-agent.js";
+import { mediaDiscoveryEngine } from "./media/media-discovery-engine.js";
+import { videoEditingEngine } from "./media/video-editing-engine.js";
+import { imageStudioEngine } from "./media/image-studio-engine.js";
+import { autonomousProductionOrchestrator } from "./media/autonomous-production-orchestrator.js";
 
 
 
@@ -836,6 +841,184 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     req.on("close", () => {
       clearInterval(timer);
     });
+  });
+
+  // ==========================================
+  // --- MODULE 1 & 8: COMPLETE SYSTEM CONTROL ---
+  // ==========================================
+  router.get("/jarvis/system/drives", requireOwner, async (_req, res) => {
+    try {
+      const drives = await systemControlAgent.listDrives();
+      res.json({ success: true, drives });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/system/performance", requireOwner, async (_req, res) => {
+    try {
+      const perf = await systemControlAgent.getSystemPerformance();
+      res.json({ success: true, performance: perf });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/system/files/search", requireOwner, express.json(), async (req, res) => {
+    try {
+      const results = await systemControlAgent.searchFiles(req.body || {});
+      res.json({ success: true, results });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/system/files/organize", requireOwner, express.json(), async (req, res) => {
+    try {
+      const outcome = await systemControlAgent.organizeFolder(req.body || {});
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/system/files/restore", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { backupId, targetDir } = req.body || {};
+      const outcome = await systemControlAgent.restoreBackup(backupId, targetDir);
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/system/apps/launch", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { app, args } = req.body || {};
+      const outcome = await systemControlAgent.launchApp(app, args);
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/system/apps/close", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { app, force } = req.body || {};
+      const outcome = await systemControlAgent.closeApp(app, force);
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/system/command", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { command } = req.body || {};
+      const outcome = await systemControlAgent.executeApprovedCommand(command);
+      res.json(outcome);
+    } catch (err) {
+      res.status(403).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/system/screenshot", requireOwner, express.json(), async (req, res) => {
+    try {
+      const outcome = await systemControlAgent.captureScreen(req.body || {});
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  // ==========================================
+  // --- MODULE 2, 3, 4, 5: MEDIA & PRODUCTION ---
+  // ==========================================
+  router.post("/jarvis/media/discover", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { targetDir, options } = req.body || {};
+      const outcome = await mediaDiscoveryEngine.indexDirectory(targetDir, options);
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/media/library", requireOwner, (_req, res) => {
+    const items = Array.from(mediaDiscoveryEngine.catalog.values());
+    const duplicates = mediaDiscoveryEngine.findDuplicates();
+    res.json({
+      success: true,
+      totalCount: items.length,
+      duplicatesCount: duplicates.length,
+      items: items.slice(0, 100),
+      duplicates
+    });
+  });
+
+  router.get("/jarvis/media/search", requireOwner, (req, res) => {
+    const q = req.query.q || "";
+    const results = mediaDiscoveryEngine.searchMedia(q);
+    res.json({ success: true, count: results.length, results });
+  });
+
+  router.get("/jarvis/media/cloud-status", requireOwner, (_req, res) => {
+    res.json(mediaDiscoveryEngine.getCloudStorageStatus());
+  });
+
+  router.post("/jarvis/media/video/timeline", requireOwner, express.json(), (req, res) => {
+    const timeline = videoEditingEngine.buildTimeline(req.body || {});
+    res.json({ success: true, timeline });
+  });
+
+  router.post("/jarvis/media/video/render", requireOwner, express.json(), async (req, res) => {
+    try {
+      const timeline = req.body?.timeline || videoEditingEngine.buildTimeline(req.body || {});
+      const outcome = await videoEditingEngine.renderVideo(timeline);
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/media/video/render-status/:id", requireOwner, (req, res) => {
+    const status = videoEditingEngine.getRenderStatus(req.params.id);
+    if (!status) return res.status(404).json({ error: { message: "RENDER_NOT_FOUND" } });
+    res.json({ success: true, status });
+  });
+
+  router.post("/jarvis/media/video/render-cancel/:id", requireOwner, (req, res) => {
+    const outcome = videoEditingEngine.cancelRender(req.params.id);
+    res.json(outcome);
+  });
+
+  router.post("/jarvis/media/image/thumbnail", requireOwner, express.json(), async (req, res) => {
+    try {
+      const outcome = await imageStudioEngine.exportThumbnail(req.body || {});
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/media/image/enhance-prompt", requireOwner, express.json(), (req, res) => {
+    const { prompt, style } = req.body || {};
+    const enhanced = imageStudioEngine.enhancePrompt(prompt, style);
+    res.json({ success: true, prompt, enhanced });
+  });
+
+  router.post("/jarvis/media/production/autonomous", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { prompt } = req.body || {};
+      const outcome = await autonomousProductionOrchestrator.produceContent(prompt);
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/media/production/history", requireOwner, (_req, res) => {
+    res.json({ success: true, history: autonomousProductionOrchestrator.getHistory() });
   });
 
   return router;

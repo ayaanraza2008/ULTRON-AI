@@ -72,6 +72,8 @@
     <button class="nav-tab" data-tab="tab-orchestrator">Task Board</button>
     <button class="nav-tab" data-tab="tab-coding">Coding Sandbox</button>
     <button class="nav-tab" data-tab="tab-computer">PC & Devices</button>
+    <button class="nav-tab" data-tab="tab-system-control">System Control</button>
+    <button class="nav-tab" data-tab="tab-media-studio">Media & Video Studio</button>
     <button class="nav-tab" data-tab="tab-memory">Memory Vault</button>
     <button class="nav-tab" data-tab="tab-smarthome">IoT & Smart Home</button>
     <button class="nav-tab" data-tab="tab-security">Security & Audit</button>
@@ -310,6 +312,138 @@
         <!-- Logs dynamically rendered -->
       </div>
     </section>
+
+    <!-- Panel: System Control (Complete Windows Agent Control) -->
+    <section class="tab-panel" id="tab-system-control">
+      <h2>Advanced Windows System Control</h2>
+      <div class="system-control-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px;">
+        <!-- Connected Drives -->
+        <div class="card">
+          <h3>Storage & Connected Drives</h3>
+          <div id="uiDrivesList" style="margin-top: 10px; font-size: 13px;">
+            <div style="background: rgba(0, 243, 255, 0.05); padding: 10px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.2);">
+              <strong>C: [OS NVMe SSD]</strong> - Fixed Internal (184.2 GB Free of 476.5 GB)
+              <div style="background: #1a202c; height: 8px; border-radius: 4px; margin-top: 6px; overflow: hidden;">
+                <div style="background: var(--cyan-accent); width: 62%; height: 100%;"></div>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-primary" id="refreshDrivesBtn" style="margin-top: 12px;">Refresh Drives</button>
+        </div>
+
+        <!-- System Vitals & Performance -->
+        <div class="card">
+          <h3>AMD Ryzen 7 5700U Telemetry</h3>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; font-size: 13px;">
+            <div>CPU Load: <span id="uiCpuPercent" style="color: var(--cyan-accent); font-weight: bold;">18%</span></div>
+            <div>RAM Headroom: <span id="uiRamPercent" style="color: #48bb78; font-weight: bold;">5.2 GB Free / 8.0 GB</span></div>
+            <div>GPU Engine: <span style="color: #cbd5e0;">AMD Radeon Graphics (Hardware Acceleration Active)</span></div>
+            <div>Health Guard: <span style="color: #48bb78; font-weight: bold;">OPTIMAL (<85% RAM threshold)</span></div>
+          </div>
+          <button class="btn btn-sm btn-primary" id="refreshPerfBtn" style="margin-top: 12px;">Update Vitals</button>
+        </div>
+
+        <!-- Application & Window Control -->
+        <div class="card">
+          <h3>Application Launcher</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
+            <button class="btn btn-sm btn-outline" onclick="launchApp('notepad')">Notepad</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('calculator')">Calculator</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('explorer')">Explorer</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('terminal')">Terminal</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('browser')">Edge Browser</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('code')">VS Code</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('vlc')">VLC</button>
+          </div>
+          <div style="margin-top: 12px;">
+            <button class="btn btn-sm btn-primary" id="takeScreenshotBtn">Capture Screenshot</button>
+            <span id="screenshotStatus" style="font-size: 12px; margin-left: 8px; color: var(--cyan-accent);"></span>
+          </div>
+        </div>
+
+        <!-- Safe Folder Organizer & Backup -->
+        <div class="card">
+          <h3>Intelligent Folder Organizer</h3>
+          <p style="font-size: 12px; color: #a0aec0;">Automatically categorizes Videos, Images, Audio, and Documents with an atomic .ultron-backup snapshot.</p>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <input type="text" id="organizeTargetInput" placeholder="Folder path (e.g. Downloads)" style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <button class="btn btn-sm btn-primary" id="organizeFolderBtn">Organize</button>
+          </div>
+          <div id="organizeResult" style="font-size: 12px; margin-top: 8px; color: #48bb78;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel: Media & Video Studio (Autonomous Content Production) -->
+    <section class="tab-panel" id="tab-media-studio">
+      <h2>Autonomous Media & Video Production Studio</h2>
+
+      <!-- Flagship One-Command Production Box -->
+      <div class="card" style="margin-top: 16px; border: 1px solid var(--cyan-accent); background: linear-gradient(180deg, rgba(0, 243, 255, 0.05) 0%, rgba(11, 22, 44, 0.8) 100%);">
+        <h3 style="color: var(--cyan-accent); letter-spacing: 1px;">ONE-COMMAND AUTONOMOUS PRODUCTION</h3>
+        <p style="font-size: 13px; color: #cbd5e0;">Instruct ULTRON to discover your footage, select clips, edit, grade, beat-sync, add voiceovers and render automatically.</p>
+        
+        <div style="display: flex; gap: 10px; margin-top: 12px;">
+          <input type="text" id="autoProdPromptInput" placeholder='e.g. "ULTRON, find the best footage on my drive and create a dangerous cinematic action edit."' style="flex: 1; padding: 12px; background: #070d19; border: 1px solid var(--cyan-accent); color: #fff; border-radius: 6px; font-size: 14px;" />
+          <button class="btn btn-primary" id="startAutoProdBtn" style="padding: 12px 24px; font-weight: bold; background: var(--cyan-accent); color: #000;">Execute Production</button>
+        </div>
+
+        <!-- Quick Template Buttons -->
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('ULTRON, find the best footage on my drive and create a dangerous cinematic action edit.')">Dangerous Action Edit</button>
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('ULTRON, create a 30-second cinematic mystery reel using my existing footage.')">30s Mystery Reel</button>
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('Make a 15-second high energy vertical reel for YouTube Shorts.')">YouTube Shorts (9:16)</button>
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('ULTRON, find all sunset images and compose a travel highlights montage.')">Sunset Travel Highlights</button>
+        </div>
+
+        <!-- 12-Stage Visual Progress Bar -->
+        <div id="prodProgressContainer" style="display: none; margin-top: 16px; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 6px;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+            <span id="prodStageLabel" style="color: var(--cyan-accent); font-weight: bold;">Stage: INITIALIZING</span>
+            <span id="prodPercentLabel" style="color: #48bb78; font-weight: bold;">0%</span>
+          </div>
+          <div style="background: #1a202c; height: 10px; border-radius: 5px; overflow: hidden;">
+            <div id="prodProgressBar" style="background: linear-gradient(90deg, var(--cyan-accent), #48bb78); width: 0%; height: 100%; transition: width 0.3s;"></div>
+          </div>
+          <div id="prodExportDetail" style="margin-top: 10px; font-size: 13px; color: #e2e8f0;"></div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px;">
+        <!-- Media Library & Drive Indexer -->
+        <div class="card">
+          <h3>Media Library & Search</h3>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <input type="text" id="mediaSearchInput" placeholder='Search media e.g. "car", "sunset"...' style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <button class="btn btn-sm btn-primary" id="searchMediaBtn">Search</button>
+          </div>
+          <div id="mediaResultsList" style="margin-top: 12px; max-height: 240px; overflow-y: auto; font-size: 12px;">
+            <div style="color: #a0aec0;">Click search or scan a directory to view indexed files.</div>
+          </div>
+        </div>
+
+        <!-- Autonomous Image Studio -->
+        <div class="card">
+          <h3>Autonomous Image Studio</h3>
+          <p style="font-size: 12px; color: #a0aec0;">High-impact thumbnail generation and prompt enhancement.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+            <input type="text" id="thumbTitleInput" placeholder="Thumbnail Title (e.g. ULTRON AI)" style="padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <input type="text" id="thumbSubInput" placeholder="Subtitle Tagline" style="padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <div style="display: flex; gap: 8px;">
+              <select id="thumbPresetSelect" style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;">
+                <option value="CYBERPUNK">Cyberpunk Neon</option>
+                <option value="CINEMATIC_TEAL_ORANGE">Teal & Orange</option>
+                <option value="DARK_MYSTERY">Dark Mystery</option>
+                <option value="NOIR_MONOCHROME">Film Noir</option>
+              </select>
+              <button class="btn btn-sm btn-primary" id="generateThumbBtn">Create Thumbnail</button>
+            </div>
+          </div>
+          <div id="thumbPreviewArea" style="margin-top: 12px;"></div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <script src="app.js"></script>

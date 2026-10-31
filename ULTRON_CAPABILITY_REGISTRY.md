@@ -492,3 +492,31 @@ Status Key:
 - **Level 9 (Security & Performance):** Non-bypassable caller allowlist, 3-attempt DTMF PIN lockout, 30s task deduplication, no plain secrets logged
 - **Level 10 (Deployment):** Render `Ultron core` workspace compatible
 - **Status:** `LIVE_VERIFIED`
+
+---
+
+## CATEGORY V: AUTONOMOUS SYSTEM CONTROL & INTELLIGENT MEDIA CREATION
+- **Level 1 (Major):** Complete Windows Computer Control, File & Media Discovery, Autonomous Video Editor, Image Studio, One-Command Production
+- **Level 2 (Subsystem):** system/system-control-agent.js, media/media-discovery-engine.js, media/video-editing-engine.js, media/image-studio-engine.js, media/autonomous-production-orchestrator.js
+- **Level 3 (Module):** Windows CIM System Agent + FFmpeg Single-Pass Render Pipeline + Cyber-HUD Media Studio
+- **Level 4 (Component):**
+  - Connected Drive Discovery: Discovers fixed, removable USB, and network drives with capacity and usage telemetry.
+  - Permission-Gated File Search: Search by name, extension, date, and content pattern with strict boundary enforcement.
+  - Safe Folder Organizer: Automatically categorizes media into Videos, Images, Audio, and Documents with atomic .ultron-backup snapshots and restore capabilities.
+  - Application & Process Lifecycle: Launch and terminate allowlisted desktop applications (Notepad, Calculator, Explorer, Terminal, Edge Browser, VS Code, VLC).
+  - Hardware Vitals Telemetry: Real-time CPU load, RAM headroom (<85% health guard), and GPU hardware acceleration monitoring.
+  - Non-Destructive Terminal & Software Installer: Allowlisted CLI commands and winget software installation.
+  - Screen Capture: Full desktop screenshot capture with credential redaction.
+  - Intelligent Media Discovery: Fast indexing, SHA-256 duplicate detection, metadata extraction (width, height, FPS, codecs), scene and object tagging.
+  - Autonomous Video Editor: 6 cinematic editing presets (Cinematic, Dark Mystery, Action, Reels/Shorts 9:16, Gaming, Travel), rhythmic beat grid synchronization, compliant SRT & WebVTT subtitle generation, color grading filters, and audio ducking.
+  - Hardware-Aware FFmpeg Compilation: Thread-constrained -threads 4 single-pass rendering optimized for AMD Ryzen 7 5700U with 8 GB RAM.
+  - Autonomous Image Studio: Prompt enrichment, high-impact SVG thumbnail graphic design with glowing borders and badges, color LUT presets (Cyberpunk, Teal & Orange, Dark Mystery, Noir), and background removal masking.
+  - One-Command Autonomous Production: End-to-end 12-step autonomous workflow (*'ULTRON, find the best footage on my drive and create a dangerous cinematic action edit'* -> parse -> search -> select -> concept -> timeline -> beat-sync -> render -> export -> interactive preview).
+  - Voice Commands: Voice control recognition for media commands (*'search my drive'*, *'create a cinematic edit'*, *'stop rendering'*, *'open the final video'*).
+- **Level 5 (Configuration):** UltronWorkspace/exports, ALLOWED_APPS, APPROVED_TERMINAL_COMMANDS, mounted on jarvis-router.js
+- **Level 6 (Automated Test):** 	ests/system-control-agent.test.js (6/6 PASS), 	ests/media-discovery-engine.test.js (4/4 PASS), 	ests/video-editing-engine.test.js (6/6 PASS), 	ests/image-studio-engine.test.js (4/4 PASS), 	ests/autonomous-production.test.js (2/2 PASS)
+- **Level 7 (Integration Test):** 	ests/media-system-routes.test.js (4/4 PASS)
+- **Level 8 (Live Verification):** Mounted on /api/jarvis/system/* and /api/jarvis/media/*
+- **Level 9 (Security & Performance):** System paths protected (C:\Windows, C:\Program Files fail closed with ACCESS_DENIED), emergency stop non-bypassable, FFmpeg threads bounded to 4
+- **Level 10 (Deployment):** Render Ultron core workspace compatible
+- **Status:** LIVE_VERIFIED

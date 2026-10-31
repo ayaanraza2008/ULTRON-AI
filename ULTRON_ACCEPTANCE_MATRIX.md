@@ -71,13 +71,23 @@ A capability is complete **only** when all 10 acceptance conditions are satisfie
 | **U. Orchestrator** | Remote Deduplication | Suppresses duplicate telephony commands within 30s idempotency window. | `node --test tests/remote-task-orchestrator.test.js` | **PASS** |
 | **U. Vision** | Gesture Recognition | Recognizes pinch gesture (<0.08 distance), open palm, and two-hand core scaling. | `node --test tests/gesture-recognizer.test.js` | **PASS** |
 | **U. Full E2E** | Video Flow 12 Criteria | Complete end-to-end phone call, screen unlock, 3-mobile unlock, media play, tests. | `node --test tests/telephony-multidevice-e2e.test.js` | **PASS** |
+| **V. System Control** | Drive Discovery & Vitals | Discovers connected drives and queries CPU, RAM, GPU telemetry. | `node --test tests/system-control-agent.test.js` | **PASS** |
+| **V. System Control** | Folder Organizer & Backup | Categorizes media files and creates atomic .ultron-backup snapshots. | `node --test tests/system-control-agent.test.js` | **PASS** |
+| **V. System Control** | Protected Path Security | Protected system paths fail closed (ACCESS_DENIED) and emergency stop halts actions. | `node --test tests/system-control-agent.test.js` | **PASS** |
+| **V. Media Discovery** | Format Classification | Recognizes images, videos, audio, and documents across all required formats. | `node --test tests/media-discovery-engine.test.js` | **PASS** |
+| **V. Media Discovery** | Natural Language Search | Scores media by relevance to natural queries and identifies duplicates by hash. | `node --test tests/media-discovery-engine.test.js` | **PASS** |
+| **V. Video Editor** | Beat Grid & Subtitles | Generates rhythmic beat markers from BPM and compliant SRT/VTT subtitles. | `node --test tests/video-editing-engine.test.js` | **PASS** |
+| **V. Video Editor** | Hardware-Aware FFmpeg | Compiles single-pass -threads 4 FFmpeg command bounded for AMD Ryzen 7 5700U. | `node --test tests/video-editing-engine.test.js` | **PASS** |
+| **V. Image Studio** | Thumbnail & Prompt Studio | Generates high-impact SVG thumbnails with neon borders and enhances AI prompts. | `node --test tests/image-studio-engine.test.js` | **PASS** |
+| **V. Production** | 12-Step Autonomous Core | One-command autonomous production creates concept, timeline, and renders export. | `node --test tests/autonomous-production.test.js` | **PASS** |
+| **V. REST Router** | Control Plane Endpoints | Gated REST endpoints for system control, media discovery, and rendering. | `node --test tests/media-system-routes.test.js` | **PASS** |
 
 ---
 
 ## CURRENT AUDIT SUMMARY
 
-- **Total Criteria Defined:** 51
-- **Criteria Passing with Evidence:** 51 (100%)
+- **Total Criteria Defined:** 61
+- **Criteria Passing with Evidence:** 61 (100%)
 - **Criteria Failing:** 0
 - **Criteria Blocked by Physical Hardware:** Real-world physical robot hardware units (actuator motion verified via software HAL & kinematic simulation; actual hardware units subject to physical pairing when available).
 - **Reporting Completeness:** 101% (Zero concealed items, full traceability).
