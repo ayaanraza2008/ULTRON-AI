@@ -1,0 +1,56 @@
+name: ULTRON Live AI Provider Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_text_smoke:
+        description: 'Run the synthetic OpenRouter text completion challenge'
+        required: true
+        type: choice
+        default: 'NO'
+        options:
+          - 'NO'
+          - 'YES'
+      run_vision_smoke:
+        description: 'Run the synthetic image-understanding challenge using a free vision route'
+        required: true
+        type: choice
+        default: 'NO'
+        options:
+          - 'NO'
+          - 'YES'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ultron-live-ai-provider-acceptance
+  cancel-in-progress: false
+
+jobs:
+  provider-smoke:
+    if: github.ref == 'refs/heads/main' && (inputs.run_text_smoke == 'YES' || inputs.run_vision_smoke == 'YES')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify live text inference with the free-model router
+        if: inputs.run_text_smoke == 'YES'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.ULTRON_OPENROUTER_API_KEY }}
+          OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+          OPENROUTER_DEFAULT_MODEL: openrouter/free
+        run: node scripts/model-provider-smoke.mjs
+      - name: Verify live image understanding with a free vision route
+        if: inputs.run_vision_smoke == 'YES'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.ULTRON_OPENROUTER_API_KEY }}
+          OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+          ULTRON_VISION_MODELS: openrouter/free
+          ULTRON_CONFIRM_VISION_SMOKE: ${{ inputs.run_vision_smoke }}
+        run: node scripts/model-vision-smoke.mjs

@@ -201,7 +201,7 @@ export async function runVisionProviderSmoke({
           Authorization: "Bearer " + configuration.apiKey,
           Accept: "application/json",
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com",
+          "HTTP-Referer": "https://ultron-core-interface.onrender.com",
           "X-Title": "ULTRON AI Vision Smoke Test"
         },
         body: JSON.stringify({
