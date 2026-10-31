@@ -103,7 +103,13 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     res.json({
       agents: list,
       currentAutonomyLevel: orchestrator.getAutonomyLevel(),
-      emergencyStopActive: orchestrator.isHalted()
+      emergencyStopActive: orchestrator.isHalted(),
+      taskExecution: {
+        backend: "durable_supabase_worker",
+        supportedRoles: Array.from(EMPLOYEE_ROLES),
+        supportedModes: Array.from(EMPLOYEE_MODES),
+        note: "The 12-agent catalogue is capability metadata. The durable task endpoint currently executes supported AI Employee plan/draft/review/report roles; it does not dispatch arbitrary per-agent tool steps."
+      }
     });
   });
 
