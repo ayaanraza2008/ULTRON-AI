@@ -166,3 +166,35 @@ test("Device Hub: cryptographically signed command queueing, polling, and comple
   const pollEmpty = hub.pollPendingCommands(deviceId, token);
   assert.equal(pollEmpty.commands.length, 0);
 });
+
+test("Computer Control: launchApprovedApp verifies allowlist and emergency stop", async () => {
+  const ctrl = new WindowsComputerControl();
+
+  // Deny unknown application
+  await assert.rejects(async () => {
+    await ctrl.launchApprovedApp("malicious_worm");
+  }, /not in the approved launch allowlist/);
+
+  // Under emergency stop, even allowlisted app is blocked
+  ctrl.setEmergencyStop(true);
+  await assert.rejects(async () => {
+    await ctrl.launchApprovedApp("notepad");
+  }, /halted under Emergency Stop/);
+});
+
+test("Computer Control: clipboard read/write handles text safely and audits operations", async () => {
+  const ctrl = new WindowsComputerControl();
+  const testText = "ULTRON-AUTOMATION-TEST-" + Date.now();
+
+  const writeRes = await ctrl.setClipboardText(testText);
+  assert.equal(writeRes.success, true);
+  assert.ok(writeRes.byteLength > 0);
+
+  const readRes = await ctrl.getClipboardText();
+  assert.equal(typeof readRes.text, "string");
+
+  // Verify action audit history
+  const history = ctrl.getActionHistory();
+  assert.ok(history.some(h => h.action === "SET_CLIPBOARD"));
+  assert.ok(history.some(h => h.action === "GET_CLIPBOARD"));
+});

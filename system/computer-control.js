@@ -252,4 +252,50 @@ export class WindowsComputerControl {
   getActionHistory(limit = 50) {
     return this.actionHistory.slice(-limit);
   }
+/**
+   * Alias for launchApplication for standard tool calling interfaces.
+   */
+  async launchApprovedApp(appKey) {
+    return this.launchApplication(appKey);
+  }
+
+  /**
+   * Safe Clipboard Access: Write text to system clipboard.
+   */
+  async setClipboardText(text) {
+    if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
+    const sanitized = String(text || "");
+    if (process.platform !== "win32") {
+      this.recordAction("SET_CLIPBOARD", "simulated", "mock_success");
+      return { success: true, byteLength: Buffer.byteLength(sanitized), simulated: true };
+    }
+    try {
+      const escaped = sanitized.replace(/'/g, "''");
+      const psCommand = `powershell -NoProfile -Command "Set-Clipboard -Value '${escaped}'"`;
+      await execAsync(psCommand, { timeout: 3000 });
+      this.recordAction("SET_CLIPBOARD", "windows_clipboard", "success");
+      return { success: true, byteLength: Buffer.byteLength(sanitized) };
+    } catch (err) {
+      this.recordAction("SET_CLIPBOARD", "windows_clipboard", "failed");
+      throw new Error(`Failed to set clipboard: ${err.message}`);
+    }
+  }
+
+  /**
+   * Safe Clipboard Access: Read text from system clipboard.
+   */
+  async getClipboardText() {
+    if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
+    if (process.platform !== "win32") {
+      return { text: "mock_clipboard_content", simulated: true };
+    }
+    try {
+      const { stdout } = await execAsync('powershell -NoProfile -Command "Get-Clipboard"', { timeout: 3000 });
+      this.recordAction("GET_CLIPBOARD", "windows_clipboard", "success");
+      return { text: stdout ? stdout.trim() : "" };
+    } catch (err) {
+      this.recordAction("GET_CLIPBOARD", "windows_clipboard", "failed");
+      return { text: "", error: err.message };
+    }
+  }
 }
