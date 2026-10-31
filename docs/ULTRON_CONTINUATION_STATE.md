@@ -5,13 +5,25 @@ Updated: 2026-10-31 UTC
 ## Current repository state
 
 - Project: `ayaanraza2008/ULTRON-AI`; preserve the existing ULTRON architecture and history.
-- Default branch: `main`; current head: `e608485b609e7d8f51d93dd4d033e636efd44975`.
-- PR #425 updated the evidence checkpoint; PR #426 merged owner-scoped Hermes native Runs support as `145ac4e648b0ce4bd7805e3420d4ddc92345b665`; PR #424 merged Harness2 executor hardening as current head `e608485b609e7d8f51d93dd4d033e636efd44975`.
-- Main CI run [41173106830](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41173106830) passed `npm run check`, `npm test`, Python Browser Use/Harness2/Model Lab checks, dependency advisory reporting, and the pinned World Intelligence build.
-- All Render calls were restricted to the **Ultron core** workspace. Render reports `ultron-ai-core`, `ultron-rea-gateway`, and `ultron-browser-use-core` live at `e608485`.
-- Production-revision health/config/exact-revision workflow [41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) passed for prior commit `145ac4e`; it has not yet been rerun for `e608485`. Do not report that earlier check as proof for the later commit.
+- Default branch: `main`; current head verified in GitHub and Render: `92158d843e29c123f81e4c7a61cd88f462c2b58c`. The JARVIS review branch is separate; do not treat its commits as deployed.
+- PR #426 merged owner-scoped Hermes native Runs support as `145ac4e648b0ce4bd7805e3420d4ddc92345b665`; PR #424 merged Harness2 executor hardening. The actual current `main` head is `92158d843e29c123f81e4c7a61cd88f462c2b58c`; those earlier SHAs are retained as historical merge references.
+- Current `main` source CI run [41173509393](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41173509393) passed. Separately, JARVIS review-branch head `55c1d98c5dd42f7bde829d20febdd027e7d2c4cd` passed [CI run 41187642415](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41187642415): `npm run check`, 709 passed / 0 failed / 1 skipped, and the pinned World Intelligence build. This is branch CI only, not a production deployment.
+- All Render calls were restricted to the **Ultron core** workspace. Render reports `ultron-ai-core`, `ultron-rea-gateway`, and `ultron-browser-use-core` live at `main` commit `92158d8`. The separate `ultron-core-interface` remains on its PWA branch.
+- Production-revision health/config/exact-revision workflow [41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) passed only for prior commit `145ac4e`; no fresh exact-revision production check for `92158d8` has been confirmed. Do not report the earlier run as proof for the current deployment.
 - Separate `ultron-core-interface` service remains live on `feature/ultron-live-core-interface-20261029` at `68b042641bc1e4a0ab56953df36637402c47df86`. It is an installable PWA shell; authenticated chat, voice and physical-device E2E remain unverified.
 - Render log retrieval returned 503 and direct public-host resolution was unavailable in this execution environment. Render deployment status and GitHub CI are available evidence, but they do not prove every external integration works.
+
+
+## Resumed engineering update (2026-10-31)
+
+- JARVIS × ULTRON review is tracked by [PR #431](https://github.com/ayaanraza2008/ULTRON-AI/pull/431), which remains open against `main`. [PR #432](https://github.com/ayaanraza2008/ULTRON-AI/pull/432) was squash-merged into the PR #431 feature branch, not into `main`.
+- The hardening requires Supabase authentication plus the configured owner UUID, removes the pass-through auth default, disables normal Node child-process execution in both the HTTP route and helper, blocks placeholder “executed” task results, disables mock device/smart-home endpoints, labels reminders as process-memory-only, corrects server telemetry, and fixes a path-prefix traversal bug.
+- The JARVIS feature branch CI at `55c1d98c5dd42f7bde829d20febdd027e7d2c4cd` passed run `41187642415` with 709 passing tests, 0 failing, 1 skipped, and the pinned World Intelligence build. Android and Windows artifact builds for this exact SHA were still running at the checkpoint. Previous successful builds for the wake companions exist at earlier branch SHAs; those are compile/artifact evidence, not physical-device E2E.
+- Both Windows and Android wake companions now open `https://ultron-core-interface.onrender.com/` instead of the retired `ultron-ai-zvd7` host. Regression coverage checks their target origin. The Windows companion is a wake-word launcher, not a Windows command-execution bridge; the Android companion is a local wake notifier, not full remote-phone control.
+- Backend OpenRouter request metadata and the World Intelligence frame-ancestor setting in the feature-branch Blueprint now use the current Core interface origin. This does not modify Render's live environment or deploy any service.
+- [PR #433](https://github.com/ayaanraza2008/ULTRON-AI/pull/433) adds PWA proxy tests for same-origin session cookie forwarding, cookie-domain rewriting, pinned World Intelligence routing, and fail-closed paths. Its CI run `41187366080` passed. It remains open against the PWA feature branch; do not merge/deploy it implicitly.
+- [PR #434](https://github.com/ayaanraza2008/ULTRON-AI/pull/434) adds a manual live worker acceptance workflow. It requires the repository secrets `ULTRON_SMOKE_SUPABASE_SERVICE_ROLE_KEY` and `ULTRON_SMOKE_USER_ID`, plus an explicit manual YES. CI run `41187572722` passed. The live worker task has not yet been executed by that workflow.
+- No production deployment, Render environment update, Supabase Auth setting change, schema change, or user-data mutation was performed in this resumed session.
 
 ## Merged engineering improvements
 
@@ -58,7 +70,7 @@ Updated: 2026-10-31 UTC
 
 ## Next actions
 
-- Prioritize the real provider + two-account Auth/RLS + worker task acceptance tests using dedicated test identities.
+- Prioritize live provider inference and two-account Auth/RLS E2E. For worker completion, add the two dedicated GitHub Actions secrets documented in PR #434 and dispatch its plan-only smoke workflow; never use a personal account or expose secrets in chat.
 - Enable Supabase leaked-password protection through the project owner's Auth settings and confirm the Security Advisor clears.
 - Then complete speech/vision, Hermes local-agent pairing, physical-device checks, and isolated sandbox work.
 - Keep Render operations restricted to the **Ultron core** workspace. Do not silently change secrets, plans, Auth settings, paid quotas or consequential integrations.
