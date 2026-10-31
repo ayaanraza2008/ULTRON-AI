@@ -949,7 +949,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         env,
         fetchImpl,
         userId: req.supabaseUser?.id,
-        input: buildChromeDevToolsActionInput(args)
+        input: buildChromeDevToolsActionInput(args),
+        forceApproval: requestBody.forceChromeApproval === true
       });
     }
     if (name === "check_code_sandbox") {
@@ -1744,7 +1745,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name) && call?._ultronDeterministicFallback !== true) {
             result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated tool is outside the task router's allowed tool set; no action was executed." } };
           } else {
-            result = await executeTool(name, args, { ...(req.body || {}), prompt: userText }, req);
+            result = await executeTool(name, args, { ...(req.body || {}), prompt: userText, forceChromeApproval: dispatchRisk.requiresConfirmation }, req);
           }
         } catch (error) { logger.warn?.("Agent tool execution failed", { tool: bounded(name, 80), code: bounded(error?.code, 80) || "TOOL_FAILED", errorName: bounded(error?.name, 40) || "Error", ...(error?.name === "ReferenceError" ? { referenceError: bounded(error.message, 120) } : {}) }); result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
         used.push({ name, ok: !result?.error, result });
@@ -1797,7 +1798,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
               } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name)) {
                 result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated follow-up tool is outside the task router's allowed tool set; no action was executed." } };
               } else {
-                result = await executeTool(name, args, { ...(req.body || {}), prompt: userText }, req);
+                result = await executeTool(name, args, { ...(req.body || {}), prompt: userText, forceChromeApproval: dispatchRisk.requiresConfirmation }, req);
               }
             } catch (error) { logger.warn?.("Agent tool execution failed", { tool: bounded(name, 80), code: bounded(error?.code, 80) || "TOOL_FAILED", errorName: bounded(error?.name, 40) || "Error", ...(error?.name === "ReferenceError" ? { referenceError: bounded(error.message, 120) } : {}) }); result = { error: { code: error.code || "TOOL_FAILED", message: error.status ? error.message : "The tool could not complete the request." } }; }
             used.push({ name, ok: !result?.error, result });
