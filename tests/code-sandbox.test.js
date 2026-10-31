@@ -51,6 +51,7 @@ function fakeSpawn({ stdout = "", stderr = "", exitCode = 0 } = {}) {
     get source() { return capturedSource; },
     get args() { return capturedArgs; },
     get options() { return capturedOptions; },
+    get killArgs() { return killArgs; },
     get killed() { return killed; }
   };
 }
