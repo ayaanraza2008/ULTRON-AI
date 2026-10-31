@@ -240,7 +240,8 @@ export async function approveChromeDevToolsAction({
     action: {
       action: "click",
       selector: consumed.fingerprint.selector,
-      confirmExternalAction: true
+      confirmExternalAction: true,
+      approvalFingerprint: consumed.fingerprint
     }
   });
 }
