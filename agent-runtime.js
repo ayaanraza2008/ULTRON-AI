@@ -819,7 +819,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           : tools;
         const response = await fetchImpl(provider.baseUrl + "/chat/completions", {
           method: "POST",
-          headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
+          headers: { ...(provider.apiKey ? { Authorization: "Bearer " + provider.apiKey } : {}), "Content-Type": "application/json", Accept: "application/json", ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-core-interface.onrender.com", "X-Title": "ULTRON Automatic Tool Router" } : {}) },
           redirect: "error",
           body: JSON.stringify({ model: provider.model, messages, ...(useTools ? { tools: selectedTools, tool_choice: "auto" } : {}), temperature: 0.2, max_tokens: 1800 }),
           signal: AbortSignal.any([createTimeoutSignal(45000), totalTimeoutSignal])

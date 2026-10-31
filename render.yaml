@@ -164,7 +164,7 @@ services:
       - key: PUPPETEER_SKIP_DOWNLOAD
         value: "1"
       - key: GEV_EMBED_FRAME_ANCESTORS
-        value: https://ultron-ai-zvd7.onrender.com
+        value: https://ultron-core-interface.onrender.com
 
   # Additional existing globe services are retained for backward compatibility.
   # Restrict their automatic rebuilds to the actual bridge inputs so API/test/doc

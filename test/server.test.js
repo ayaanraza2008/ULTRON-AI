@@ -1021,3 +1021,15 @@ test("chat dispatcher rejects private HTTPS alternate providers before sending c
     assert.equal(providerCalls, 0);
   });
 });
+
+
+test("JARVIS control routes require Supabase owner identity, not only the legacy app password session", async () => {
+  await withServer(createApp({ env, logger: { warn() {}, error() {} } }), async base => {
+    const cookie = await login(base);
+    const response = await fetch(base + "/api/jarvis/telemetry", {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, "SUPABASE_AUTH_REQUIRED");
+  });
+});

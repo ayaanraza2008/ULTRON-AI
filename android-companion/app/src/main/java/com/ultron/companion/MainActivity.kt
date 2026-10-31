@@ -116,6 +116,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_PERMISSIONS = 4701
-        private const val ASSISTANT_URL = "https://ultron-ai-zvd7.onrender.com/"
+        private const val ASSISTANT_URL = "https://ultron-core-interface.onrender.com/"
     }
 }

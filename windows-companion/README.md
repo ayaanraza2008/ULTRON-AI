@@ -11,7 +11,7 @@ dotnet restore .\windows-companion\Ultron.Companion.csproj
 dotnet publish .\windows-companion\Ultron.Companion.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o .\artifacts\ultron-windows-companion
 ```
 
-The GitHub Actions workflow builds this project on Windows and uploads a downloadable ULTRON.Companion.exe artifact.
+The GitHub Actions workflow builds this project on Windows and uploads a downloadable ULTRON.Companion.exe artifact. The Open ULTRON action opens the current ULTRON Core interface at `https://ultron-core-interface.onrender.com/`.
 
 ## Use
 

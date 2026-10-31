@@ -372,7 +372,7 @@ async function requestFeatureCompletion({ env, fetchImpl, messages, temperature,
           "Content-Type": "application/json",
           Accept: "application/json",
           ...(provider.name === "openrouter"
-            ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": title }
+            ? { "HTTP-Referer": "https://ultron-core-interface.onrender.com", "X-Title": title }
             : {})
         },
         body: JSON.stringify({ model: provider.model, messages, temperature, max_tokens: maxTokens }),

@@ -239,6 +239,6 @@ class WakeWordService : Service() {
         private const val STOP_REQUEST_CODE = 3103
         private const val OPEN_REQUEST_CODE = 3104
         private const val WAKE_COOLDOWN_MS = 8_000L
-        private const val ASSISTANT_URL = "https://ultron-ai-zvd7.onrender.com/"
+        private const val ASSISTANT_URL = "https://ultron-core-interface.onrender.com/"
     }
 }

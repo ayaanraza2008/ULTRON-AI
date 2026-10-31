@@ -91,3 +91,81 @@ export function buildAutonomyPlan(input) {
   ];
   return { task, risk, steps, executionMode: risk.requiresConfirmation ? "guarded" : "autonomous_safe_steps_only" };
 }
+
+/**
+ * JARVIS × ULTRON 6-Tier Autonomy Classification
+ * Level 0: Manual — Read/respond only.
+ * Level 1: Assisted — Suggest plans and actions.
+ * Level 2: Supervised — Execute approved tasks only.
+ * Level 3: Conditional — Auto-run pre-approved safe workflows (routine research, formatting, sandboxed file ops).
+ * Level 4: High Autonomy — Plan, delegate across 12 agents, evaluate and recover from failures within permission boundaries.
+ * Level 5: Continuous Operation — Background worker polling, scheduled routines, proactive alerts, self-healing.
+ */
+export const AUTONOMY_LEVELS = {
+  0: { level: 0, name: "Manual", description: "ULTRON only responds to direct queries. Zero tool execution." },
+  1: { level: 1, name: "Assisted", description: "ULTRON suggests action plans. Requires confirmation for all tools." },
+  2: { level: 2, name: "Supervised", description: "ULTRON executes human-approved tasks step-by-step." },
+  3: { level: 3, name: "Conditional", description: "ULTRON autonomously runs allowlisted routine research and drafts." },
+  4: { level: 4, name: "High Autonomy", description: "ULTRON plans, delegates across 12 agents, and auto-recovers from transient errors." },
+  5: { level: 5, name: "Continuous", description: "Persistent background monitoring, scheduled tasks, and autonomous self-healing." }
+};
+
+export function canExecuteAutonomously(actionCategory, currentAutonomyLevel = 2) {
+  const level = typeof currentAutonomyLevel === "number" ? currentAutonomyLevel : 2;
+
+  // Invariant: Destructive or production infrastructure actions NEVER run without confirmation
+  if (actionCategory === "destructive" || actionCategory === "production_deployment") {
+    return { allowed: false, reason: "Strict security invariant: Destructive and production changes require explicit operator confirmation." };
+  }
+
+  // Level 0: No tool execution
+  if (level === 0) {
+    return { allowed: false, reason: "Autonomy Level 0 (Manual): Tool execution is disabled." };
+  }
+
+  // Level 1: Assisted only
+  if (level === 1) {
+    return { allowed: false, reason: "Autonomy Level 1 (Assisted): Actions require operator approval." };
+  }
+
+  // Level 2: Supervised — requires human approval for non-routine actions
+  if (level === 2) {
+    const isRoutine = actionCategory === "routine" || actionCategory === "read_only";
+    return {
+      allowed: isRoutine,
+      reason: isRoutine ? "Permitted under Supervised autonomy" : "Operator approval required for this action."
+    };
+  }
+
+  // Level 3: Conditional — allows routine and safe internal sandboxed actions
+  if (level === 3) {
+    const isSafe = ["routine", "read_only", "sandbox_code", "research_query"].includes(actionCategory);
+    return {
+      allowed: isSafe,
+      reason: isSafe ? "Permitted under Conditional autonomy" : "External effect requires operator confirmation."
+    };
+  }
+
+  // Level 4 & 5: High / Continuous autonomy within non-destructive bounds
+  const isEligible = !["destructive", "production_deployment", "unbounded_financial"].includes(actionCategory);
+  return {
+    allowed: isEligible,
+    reason: isEligible ? `Permitted under Autonomy Level ${level}` : "Consequential action requires explicit operator approval."
+  };
+}
+
+/**
+ * Hardware Resource Headroom Guard (Ryzen 7 5700U with 8 GB RAM)
+ * Signals whether background or model tasks should be throttled or deferred.
+ */
+export function checkHardwareHeadroom(telemetry = {}) {
+  const memUsedPercent = telemetry.memory?.usedPercent ?? 0;
+  const isUnderPressure = memUsedPercent > 85.0;
+
+  return {
+    safeToExecute: !isUnderPressure,
+    memoryUsedPercent: memUsedPercent,
+    warning: isUnderPressure ? "Hardware memory pressure detected (>85% RAM). Heavy tasks must be throttled or deferred." : null,
+    maxConcurrentAllowed: isUnderPressure ? 1 : 4
+  };
+}
