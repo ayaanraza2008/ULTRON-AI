@@ -22,6 +22,6 @@ test("OpenRouter request metadata uses the active ULTRON Core interface origin",
 
 test("Render blueprint embeds World Intelligence under the active ULTRON Core interface origin", async () => {
   const blueprint = await readFile(new URL("../render.yaml", import.meta.url), "utf8");
-  assert.match(blueprint, /GEV_EMBED_FRAME_ANCESTORS[\\s\\S]{0,180}https:\\/\\/ultron-core-interface\\.onrender\\.com/);
+  assert.ok(blueprint.includes("      - key: GEV_EMBED_FRAME_ANCESTORS\\n        value: " + activeInterfaceOrigin));
   assert.ok(!blueprint.includes(retiredOrigin));
 });
