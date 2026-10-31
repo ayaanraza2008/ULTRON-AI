@@ -322,7 +322,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
             Authorization: "Bearer " + provider.apiKey,
             "Content-Type": "application/json",
             Accept: "application/json",
-            ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-ai-zvd7.onrender.com", "X-Title": "ULTRON Scheduled AI Employee" } : {})
+            ...(provider.name === "openrouter" ? { "HTTP-Referer": "https://ultron-core-interface.onrender.com", "X-Title": "ULTRON Scheduled AI Employee" } : {})
           },
           redirect: "error",
           body: JSON.stringify({
