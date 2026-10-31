@@ -78,7 +78,7 @@ export class WindowsComputerControl {
 
   /**
    * System Telemetry: CPU, RAM, OS, and Architecture
-   * Specifically tuned for AMD Ryzen 7 5700U / 8GB RAM monitoring.
+   * Reports the operating system running this process; it is not telemetry from a paired user device.
    */
   getSystemTelemetry() {
     const totalMem = os.totalmem();
@@ -91,11 +91,13 @@ export class WindowsComputerControl {
     const memoryPressure = ramUsagePercent > 85.0;
 
     return {
-      platform: "windows",
+      platform: process.platform,
+      architecture: process.arch,
+      executionEnvironment: "server_process",
       osType: os.type(),
       osRelease: os.release(),
       hostname: os.hostname(),
-      cpuModel: cpus[0]?.model || "AMD Ryzen 7 5700U with Radeon Graphics",
+      cpuModel: cpus[0]?.model || "Unknown runtime CPU",
       cpuCores: cpus.length,
       memory: {
         totalBytes: totalMem,
@@ -138,9 +140,11 @@ export class WindowsComputerControl {
    * Strictly prevents path traversal outside safe designated directories.
    */
   resolveSafePath(relativePath) {
+    const root = path.resolve(this.sandboxBase);
     const safeRel = String(relativePath || "").replace(/^[\\/]+/, "");
-    const resolved = path.resolve(this.sandboxBase, safeRel);
-    if (!resolved.startsWith(this.sandboxBase)) {
+    const resolved = path.resolve(root, safeRel);
+    const relative = path.relative(root, resolved);
+    if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
       throw new Error("Path traversal violation: Access outside Ultron workspace is forbidden.");
     }
     return resolved;

@@ -5,16 +5,20 @@ import { SelfImprovementEngine } from "../self-improvement/engine.js";
 import { SmartHomeHub } from "../integrations/smart-home.js";
 import { ProductivitySuite } from "../integrations/productivity.js";
 
-test("Coding Sandbox: executes isolated code and captures output", async () => {
+test("Coding Sandbox: fails closed until a verified OS-level isolation runtime is configured", async () => {
   const sandbox = new CodingSandbox({ timeoutMs: 3000 });
-  await sandbox.initialize();
+  const readiness = await sandbox.initialize();
 
-  const code = "console.log('SANDBOX_CALCULATION_RESULT:', 21 * 2);";
-  const result = await sandbox.executeJavaScript(code);
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.enabled, false);
+  assert.equal(readiness.code, "CODE_SANDBOX_DISABLED");
 
-  assert.equal(result.success, true);
-  assert.equal(result.exitCode, 0);
-  assert.ok(result.stdout.includes("SANDBOX_CALCULATION_RESULT: 42"));
+  const result = await sandbox.executeJavaScript("console.log('must never execute')");
+  assert.equal(result.success, false);
+  assert.equal(result.executed, false);
+  assert.equal(result.errorCode, "CODE_SANDBOX_DISABLED");
+  assert.match(result.error, /no verified OS-level isolation runtime/);
+  assert.deepEqual(sandbox.getExecutionHistory(), []);
 });
 
 test("Self-Improvement: records failure analysis and guards protected files", () => {
