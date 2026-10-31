@@ -828,3 +828,66 @@ select {
   box-shadow: 0 0 30px rgba(129, 140, 248, 0.75), 0 0 50px rgba(192, 132, 252, 0.5);
   animation: pulse-breathing 3s infinite ease-in-out;
 }
+
+
+/* ==========================================
+   ULTRON EYES — Camera & Live Vision Styles
+   ========================================== */
+.eyes-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eyes-status-pill {
+  transition: all 0.3s ease;
+}
+
+.eyes-status-pill.active {
+  background: rgba(0, 240, 255, 0.15) !important;
+  border-color: rgba(0, 240, 255, 0.5) !important;
+  color: #00f0ff !important;
+}
+
+.eyes-status-pill.active .status-dot {
+  background: #00f0ff !important;
+  box-shadow: 0 0 10px #00f0ff;
+  animation: pulse-energy 1s infinite;
+}
+
+.eyes-status-pill.paused {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  color: #f59e0b !important;
+}
+
+.eyes-status-pill.standby {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border-color: rgba(148, 163, 184, 0.2) !important;
+  color: #94a3b8 !important;
+}
+
+.eyes-quick-chip {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  color: #f1f5f9;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.eyes-quick-chip:hover {
+  background: rgba(0, 240, 255, 0.2);
+  border-color: #00f0ff;
+  color: #00f0ff;
+  transform: translateY(-1px);
+}
+
+.eyes-object-chip {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}

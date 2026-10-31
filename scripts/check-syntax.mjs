@@ -257,7 +257,11 @@ const FILES_TO_CHECK = [
   "tests/ultron-guardian.test.js",
   "intelligence/human-interface.js",
   "tests/human-interface.test.js",
-  "tests/jarvis-nextgen-routes.test.js"
+  "tests/jarvis-nextgen-routes.test.js",
+  "vision/ultron-eyes-manager.js",
+  "public/ultron-eyes.js",
+  "tests/ultron-eyes.test.js",
+  "tests/ultron-eyes-routes.test.js"
 ];
 
 let checked = 0;

@@ -166,19 +166,33 @@ export const JARVIS_BENCHMARK_SPEC = [
     id: "vision_multimodal",
     name: "Vision and multimodal intelligence",
     weight: 6,
-    subsystems: ["vision/vision-engine.js", "vision/screen-observer.js", "vision/gesture-recognizer.js"],
+    subsystems: [
+      "vision/vision-engine.js",
+      "vision/screen-observer.js",
+      "vision/gesture-recognizer.js",
+      "vision/ultron-vision.js",
+      "vision/ultron-eyes-manager.js",
+      "public/ultron-eyes.js"
+    ],
     acceptanceCriteria: [
       "Multimodal screenshot and image analysis with automated credential scrubbers (JWT, API keys)",
       "Multi-monitor screen observer daemon with visual change detection",
       "Document parsing and text extraction for PDF and DOCX files",
-      "Web camera pinch and two-hand distance gesture recognition for holographic core scaling"
+      "Web camera pinch and two-hand distance gesture recognition for holographic core scaling",
+      "ULTRON EYES native live camera sensory subsystem with default camera preselection, device switching, and bounded sampling",
+      "Human-like visual perception pipeline (object classification & 2D localization, multi-frame tracking, scene understanding, privacy-preserving activity perception, OCR, change detection, and spatial approximations)",
+      "Visual reasoning Q&A engine connected to ULTRON CORE, separating direct observations from model inferences with uncertainty scoring and consequential action approval gates",
+      "Session-based visual memory with explicit purge controls and zero permanent camera archiving without authorization"
     ],
     testFiles: [
       "tests/voice-vision.test.js",
       "tests/screen-observer.test.js",
-      "tests/gesture-recognizer.test.js"
+      "tests/gesture-recognizer.test.js",
+      "tests/ultron-vision.test.js",
+      "tests/ultron-eyes.test.js",
+      "tests/ultron-eyes-routes.test.js"
     ],
-    knownLimitations: "Optical gesture recognition requires user-granted webcam permissions; runs purely on client browser."
+    knownLimitations: "Live camera capture requires explicit user consent and platform permission; runs with CPU-bounded 1-5 FPS adaptive sampling to protect 8GB RAM."
   },
   {
     id: "agent_orchestration",

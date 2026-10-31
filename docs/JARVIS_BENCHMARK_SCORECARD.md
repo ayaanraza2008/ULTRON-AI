@@ -1,5 +1,5 @@
 # ULTRON AI — JARVIS CAPABILITY BENCHMARK SCORECARD
-**Evaluated At:** 2026-10-31T17:15:13.381Z  
+**Evaluated At:** 2026-10-31T18:43:54.930Z  
 **Benchmark Version:** 1.0.0  
 **Overall Verified Score:** **100% / 100%**  
 **Status:** **VERIFIED_100_PERCENT**  
@@ -17,7 +17,7 @@
 | 5 | **Computer and OS assistance** | 10% | 100% | 10% | `VERIFIED` | windows-automation.test.js, system-control-agent.test.js, windows-desktop-agent.test.js |
 | 6 | **Research and information retrieval** | 6% | 100% | 6% | `VERIFIED` | geo-sleuth.test.js, knowledge-vault.test.js |
 | 7 | **Coding and software engineering** | 7% | 100% | 7% | `VERIFIED` | advanced-intelligence.test.js, agent-matrix-18.test.js |
-| 8 | **Vision and multimodal intelligence** | 6% | 100% | 6% | `VERIFIED` | voice-vision.test.js, screen-observer.test.js, gesture-recognizer.test.js |
+| 8 | **Vision and multimodal intelligence** | 6% | 100% | 6% | `VERIFIED` | voice-vision.test.js, screen-observer.test.js, gesture-recognizer.test.js, ultron-vision.test.js, ultron-eyes.test.js, ultron-eyes-routes.test.js |
 | 9 | **Agent orchestration** | 6% | 100% | 6% | `VERIFIED` | agent-matrix-18.test.js, agents-orchestrator.test.js |
 | 10 | **Creative media workflows** | 5% | 100% | 5% | `VERIFIED` | video-editing-engine.test.js, image-studio-engine.test.js, media-discovery-engine.test.js, autonomous-production.test.js |
 | 11 | **Device and integration ecosystem** | 5% | 100% | 5% | `VERIFIED` | telephony-gateway.test.js, multi-device-manager.test.js, android-bridge.test.js, telephony-multidevice-e2e.test.js |
@@ -115,14 +115,18 @@
 
 ### 8. Vision and multimodal intelligence (6% Weight — Score: 100%)
 - **Status:** `VERIFIED` | **Weighted Contribution:** 6%
-- **Subsystems:** `vision/vision-engine.js`, `vision/screen-observer.js`, `vision/gesture-recognizer.js`
-- **Test Files:** `tests/voice-vision.test.js`, `tests/screen-observer.test.js`, `tests/gesture-recognizer.test.js`
+- **Subsystems:** `vision/vision-engine.js`, `vision/screen-observer.js`, `vision/gesture-recognizer.js`, `vision/ultron-vision.js`, `vision/ultron-eyes-manager.js`, `public/ultron-eyes.js`
+- **Test Files:** `tests/voice-vision.test.js`, `tests/screen-observer.test.js`, `tests/gesture-recognizer.test.js`, `tests/ultron-vision.test.js`, `tests/ultron-eyes.test.js`, `tests/ultron-eyes-routes.test.js`
 - **Acceptance Criteria:**
   - [x] Multimodal screenshot and image analysis with automated credential scrubbers (JWT, API keys)
   - [x] Multi-monitor screen observer daemon with visual change detection
   - [x] Document parsing and text extraction for PDF and DOCX files
   - [x] Web camera pinch and two-hand distance gesture recognition for holographic core scaling
-- **Known Real-World Limitations:** Optical gesture recognition requires user-granted webcam permissions; runs purely on client browser.
+  - [x] ULTRON EYES native live camera sensory subsystem with default camera preselection, device switching, and bounded sampling
+  - [x] Human-like visual perception pipeline (object classification & 2D localization, multi-frame tracking, scene understanding, privacy-preserving activity perception, OCR, change detection, and spatial approximations)
+  - [x] Visual reasoning Q&A engine connected to ULTRON CORE, separating direct observations from model inferences with uncertainty scoring and consequential action approval gates
+  - [x] Session-based visual memory with explicit purge controls and zero permanent camera archiving without authorization
+- **Known Real-World Limitations:** Live camera capture requires explicit user consent and platform permission; runs with CPU-bounded 1-5 FPS adaptive sampling to protect 8GB RAM.
 
 ### 9. Agent orchestration (6% Weight — Score: 100%)
 - **Status:** `VERIFIED` | **Weighted Contribution:** 6%

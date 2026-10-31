@@ -63,6 +63,10 @@
       <span class="telemetry-label">AGENTS:</span>
       <span class="telemetry-value" id="agentCountLabel">12 Online</span>
     </div>
+    <div id="eyesHeaderTelemetryPill" class="eyes-status-pill active" style="display: none; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.4); font-size: 11px; font-weight: 600; color: #00f0ff;">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #00f0ff; display: inline-block; animation: pulse-energy 1s infinite;"></span>
+      <span>EYES ACTIVE</span>
+    </div>
   </section>
 
   <!-- Navigation Tabs -->
@@ -79,6 +83,7 @@
     <button class="nav-tab" data-tab="tab-smarthome">IoT & Smart Home</button>
     <button class="nav-tab" data-tab="tab-hei">Emotional Intelligence</button>
     <button class="nav-tab" data-tab="tab-security">Security & Audit</button>
+    <button class="nav-tab" data-tab="tab-eyes">👁️ ULTRON Eyes</button>
   </nav>
 
   <!-- Tab Content Panels -->
@@ -675,9 +680,127 @@
         </div>
       </div>
     </section>
+  
+    <!-- Panel: ULTRON Eyes (Vision Sensory System) -->
+    <section class="tab-panel" id="tab-eyes">
+      <div class="eyes-container">
+        <!-- Control Toolbar -->
+        <div class="card" style="margin-bottom: 16px;">
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <label for="eyesCameraSelect" style="font-size: 12px; color: var(--text-muted); font-weight: bold;">CAMERA:</label>
+                <select id="eyesCameraSelect" style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px;">
+                  <option value="cam-default-0">Integrated HD Webcam (Default)</option>
+                </select>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <label for="eyesFpsSelect" style="font-size: 12px; color: var(--text-muted); font-weight: bold;">SAMPLING:</label>
+                <select id="eyesFpsSelect" style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px;">
+                  <option value="1">1 FPS (Ultra-Light / Low RAM)</option>
+                  <option value="2" selected>2 FPS (Balanced Default)</option>
+                  <option value="3">3 FPS (Responsive)</option>
+                  <option value="5">5 FPS (High Precision)</option>
+                </select>
+              </div>
+
+              <div id="eyesStatusPill" class="eyes-status-pill standby" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); font-size: 11px; font-weight: 600; color: #94a3b8;">
+                <span class="status-dot gray" style="width: 8px; height: 8px; border-radius: 50%; background: #64748b; display: inline-block;"></span>
+                <span>VISION STANDBY</span>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-primary" id="eyesStartBtn">👁️ Start Live Vision</button>
+              <button class="btn" id="eyesPauseBtn" disabled>⏸️ Pause</button>
+              <button class="btn" id="eyesResumeBtn" disabled>▶️ Resume</button>
+              <button class="btn btn-danger" id="eyesStopBtn" disabled>⏹️ Stop Camera</button>
+              <button class="btn btn-warning" id="eyesClearMemBtn">🗑️ Clear Memory</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Vision Grid -->
+        <div style="display: grid; grid-template-columns: minmax(320px, 1.2fr) minmax(320px, 1fr); gap: 16px;">
+          <!-- Left Column: Video Viewport & Overlays -->
+          <div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--cyan-accent); box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);">
+              <video id="eyesVideoElement" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; display: block;"></video>
+              <canvas id="eyesOverlayCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+              
+              <!-- HUD Corner Overlays -->
+              <div style="position: absolute; top: 10px; left: 10px; font-size: 10px; font-family: monospace; color: var(--cyan-accent); background: rgba(10, 13, 20, 0.7); padding: 2px 6px; border-radius: 3px; border: 1px solid rgba(0, 240, 255, 0.4);">
+                ULTRON EYES // FEED ACTIVE
+              </div>
+            </div>
+
+            <!-- Privacy Guarantee Banner -->
+            <div style="font-size: 11px; color: #94a3b8; background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 6px; border: 1px solid #1e293b; line-height: 1.4;">
+              🛡️ <strong>Privacy & Security Protocol:</strong> Live camera streaming operates exclusively upon explicit user authorization. Video feeds and biometric facial representations are processed in bounded session memory with ZERO permanent background archiving without explicit consent.
+            </div>
+          </div>
+
+          <!-- Right Column: Perception Panels & Q&A -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Panel 1: Detected Objects -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: var(--cyan-accent); letter-spacing: 1px;">DETECTED OBJECTS & 2D LOCALIZATION</h4>
+              <div id="eyesObjectsList" style="min-height: 40px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                <span class="text-muted" style="font-size: 12px;">Awaiting camera stream...</span>
+              </div>
+            </div>
+
+            <!-- Panel 2: Scene & Environment -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #10b981; letter-spacing: 1px;">SCENE UNDERSTANDING & ENVIRONMENTAL CHANGES</h4>
+              <div id="eyesSceneDescription" style="font-size: 12px; color: var(--text-main); min-height: 30px;">
+                Scene analysis standby.
+              </div>
+            </div>
+
+            <!-- Panel 3: Visible Text OCR -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #38bdf8; letter-spacing: 1px;">VISIBLE TEXT & DOCUMENT OCR</h4>
+              <div id="eyesOcrText" style="min-height: 24px; font-size: 12px;">
+                No text in current frame.
+              </div>
+            </div>
+
+            <!-- Panel 4: Human Activity -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #c084fc; letter-spacing: 1px;">HUMAN ACTIVITY & POSTURE PERCEPTION</h4>
+              <div id="eyesHumanActivity" style="min-height: 24px; font-size: 12px;">
+                Monitoring field of view.
+              </div>
+            </div>
+
+            <!-- Panel 5: Visual Q&A Console -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #ff6b00; letter-spacing: 1px;">VISUAL DECISION-MAKING & REASONING CONSOLE</h4>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="ULTRON, mere saamne kya hai?">👁️ Mere Saamne Kya Hai?</button>
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="Camera se dekho aur mujhe scene samjhao.">🔍 Scene Samjhao</button>
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="Is screen par kya likha hai?">📄 Read Screen Text</button>
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="Is device me koi visible problem hai?">🛠️ Check Device Issues</button>
+              </div>
+
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="eyesQueryInput" placeholder="Ask ULTRON about what the camera sees..." style="flex: 1; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 12px; border-radius: 4px; font-size: 13px;" />
+                <button class="btn btn-primary" id="eyesQueryBtn">Ask EYES</button>
+              </div>
+
+              <div id="eyesQueryResult" style="margin-top: 10px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <script type="module" src="voice-activation.js"></script>
   <script src="app.js"></script>
+  <script src="ultron-eyes.js"></script>
 </body>
 </html>

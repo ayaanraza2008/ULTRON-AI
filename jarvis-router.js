@@ -4,6 +4,7 @@ import { genesisEngine } from "./genesis/genesis-engine.js";
 import { forgeEngine } from "./forge/forge-engine.js";
 import { RobotDigitalTwin, simToRealGate } from "./robotics/robot-digital-twin.js";
 import { ultronVision } from "./vision/ultron-vision.js";
+import { ultronEyesManager, SESSION_STATES } from "./vision/ultron-eyes-manager.js";
 import { nexusOrchestrator } from "./nexus/nexus-orchestrator.js";
 import { ultronGuardian } from "./security/ultron-guardian.js";
 import { humanInterface } from "./intelligence/human-interface.js";
@@ -1256,6 +1257,154 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       res.json(outcome);
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  // ==========================================
+  // ULTRON EYES — Native Vision Sensory System
+  // ==========================================
+  router.get("/jarvis/eyes/devices", requireOwner, (_req, res) => {
+    try {
+      const devices = ultronEyesManager.getAvailableDevices();
+      const defaultCamera = ultronEyesManager.getDefaultCamera();
+      res.json({ success: true, devices, defaultCamera });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/devices/default", requireOwner, express.json(), (req, res) => {
+    try {
+      const { deviceId } = req.body || {};
+      const updated = ultronEyesManager.setDefaultCamera(deviceId);
+      res.json({ success: true, defaultCamera: updated });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/eyes/session/status", requireOwner, (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const status = ultronEyesManager.getSessionStatus(userId);
+      res.json({ success: true, ...status });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/session/start", requireOwner, express.json(), (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const { deviceId, fps, resolution, consent, userConsent } = req.body || {};
+      const result = ultronEyesManager.startSession({
+        userId,
+        deviceId,
+        fps,
+        resolution,
+        consent: consent ?? userConsent
+      });
+      res.json(result);
+    } catch (err) {
+      const isPermissionDenied = err.message && err.message.includes("PERMISSION_DENIED");
+      res.status(isPermissionDenied ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/session/pause", requireOwner, (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const result = ultronEyesManager.pauseSession(userId);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/session/resume", requireOwner, (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const result = ultronEyesManager.resumeSession(userId);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/session/stop", requireOwner, (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const result = ultronEyesManager.stopSession(userId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/frame", requireOwner, express.json({ limit: "10mb" }), async (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const { frameData, dataUrl, deviceId, timestamp } = req.body || {};
+      const observation = await ultronEyesManager.processFrame({
+        userId,
+        frameData: frameData || dataUrl,
+        deviceId,
+        timestamp
+      });
+      res.json({ success: true, observation });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/query", requireOwner, express.json({ limit: "10mb" }), async (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const { query, prompt, frameData, dataUrl, consent, userConsent } = req.body || {};
+      const outcome = await ultronEyesManager.queryVisualContext({
+        userId,
+        query: query || prompt,
+        frameData: frameData || dataUrl,
+        userConsent: consent ?? userConsent
+      });
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/eyes/memory", requireOwner, (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const memory = ultronEyesManager.getVisualMemory(userId);
+      res.json({ success: true, memory });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/memory/clear", requireOwner, (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const result = ultronEyesManager.clearVisualMemory(userId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/snapshot", requireOwner, express.json(), (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const { note, consent, userConsent } = req.body || {};
+      const snapshot = ultronEyesManager.captureSnapshot({
+        userId,
+        note,
+        userConsent: consent ?? userConsent ?? true
+      });
+      res.json({ success: true, snapshot });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
     }
   });
 
