@@ -1,96 +1,71 @@
 # CLAUDE.md — Claude Code Engineering Guidelines
+## PROJECT CODENAME: ULTRON ETERNAL
+### ONE BRAIN • COMPLETE AUTONOMY • CONTINUOUS EVOLUTION • 101% ACCOUNTABILITY
 
+> **Permanent Single Source of Truth:** Read [`ULTRON_MASTER_CHARTER.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_MASTER_CHARTER.md) and [`ULTRON_CHECKPOINT.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_CHECKPOINT.md).  
 > **Project:** ULTRON AI (`ayaanraza2008/ULTRON-AI`)  
-> **Role:** Engineering Agent (Complex Implementation, Backend APIs, Security Auditing, Refactoring)  
-> **Ecosystem:** GitHub × Supabase (`opdjfhwepmcprbqojpat`) × Render (`ULTRON CORE`)
+> **Render Destination:** Workspace **`Ultron core`** (`https://ultron-ai-core.onrender.com`)  
+> **Database:** Supabase project `opdjfhwepmcprbqojpat` (Region: `ap-south-1`, Mumbai)  
+> **Host Hardware Profile:** AMD Ryzen 7 5700U (8C/16T), 8 GB RAM, Windows OS, pure CPU execution  
+> **Permanent Voice:** Kokoro-82M ONNX `am_onyx` (0.95x speed, 200 Hz chest resonance)  
 
 ---
 
-## 1. System Architecture & Context
+## 1. THE 12 IMMUTABLE LAWS (MANDATORY FOR ALL AGENTS)
 
-ULTRON AI is an API-first assistant runtime designed for resilient multi-provider intelligence, durable persistence, and safe autonomous task execution.
-
-- **Backend Runtime:** Node.js (v20+ ES Modules), Express, native `node:test` runner.
-- **Hosted API:** `https://ultron-ai-core.onrender.com` (Render service in `ULTRON CORE` workspace).
-- **Frontend Interface:** Dedicated PWA shell hosted at `https://ultron-core-interface.onrender.com` (branch `feature/ultron-live-core-interface-20261029`). The core backend does **not** serve static UI at root.
-- **Database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`.
-- **Primary AI Provider:** OpenRouter API (`https://openrouter.ai/api/v1`) using `openrouter/free` models with automatic fallback.
-- **Worker System:** Background worker (`worker.js`) executing allowlisted research, AI Employee drafting, and report generation with explicit permission gates.
-- **Security Guardrails:** DNS-pinned HTTP transport (`network-safety.js`), strict Row Level Security (RLS) on all tables, and zero credential leakage.
-
----
-
-## 2. Core Code Modules
-
-- [`server.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/server.js): Main HTTP API dispatcher, route definitions, authentication middleware, error handling, health checks.
-- [`agent-runtime.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/agent-runtime.js): Autonomous agent execution engine, tool invocation loops, context management, memory injection.
-- [`worker.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/worker.js): Polled asynchronous task worker handling queued background jobs with exponential backoff.
-- [`network-safety.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/network-safety.js): DNS-rebinding protection, IP-pinned fetch, SSRF defenses, URL sanitization.
-- [`autonomy-policy.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/autonomy-policy.js): Classification and gating for autonomous vs. confirmation-required actions.
-- [`features.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/features.js): Capability flags, provider fallbacks, model routing registry.
-- [`employee-catalog.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/employee-catalog.js): Role definitions for specialized AI Employees (e.g. Researcher, Data Analyst, Drafter).
-- [`cognitive-memory.js`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/cognitive-memory.js): Memory recall, document provenance, conversation summary handling.
-- [`render.yaml`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/render.yaml): Render Blueprint declaration for all services in `ULTRON CORE`.
+1. **Continue From Actual State:** Never assume previous work; inspect `git status` and `ULTRON_CHECKPOINT.md`.
+2. **Never Restart From Scratch:** Upgrade the existing repository; never rebuild from zero.
+3. **Never Replace Architecture With Demos:** No mock-only replacements or disconnected demos in production code.
+4. **Preserve User Data & History:** Never flush databases or wipe user memory without approval.
+5. **Reuse Existing Implementations:** Build on top of existing modules (`agent-runtime.js`, `brain-router.js`, `orchestrator.js`, `kokoro-engine.js`, `robot-controller.js`, `connection-controller.js`, etc.).
+6. **Strict Project Isolation:** Never touch PHANTOM, NOX, VAULTAR or unrelated projects.
+7. **Strict Render Destination:** Never deploy to any workspace other than **`Ultron core`**.
+8. **Zero Secret Leakage:** Never commit or hardcode credentials in source code.
+9. **No Mock-Only Shortcuts:** Production engines must run real logic.
+10. **Maintain Backward Compatibility:** Keep existing API routes and database schemas functional.
+11. **Approval for Destructive Actions:** Financial, external messaging, and physical actions require operator authorization.
+12. **Verification Before Completion:** Every change requires passing test evidence (`npm test`) and syntax validation (`npm run check`).
 
 ---
 
-## 3. Database & Supabase Schema
+## 2. MASTER SHORTCUT COMMAND PROTOCOL
 
-All tables enforce Row Level Security (RLS) and restrict access to `auth.uid() = user_id`:
-
-- `conversations`: User chat sessions with archived timestamp.
-- `messages`: Message history (system, user, assistant, tool) linked to conversations.
-- `user_preferences`: Language, voice, memory toggles, custom settings per user.
-- `memory_items`: User-approved knowledge vault (`preference`, `project_fact`, `profile_note`, `document_reference`).
-- `agent_tasks`: Queued/running/completed/blocked background task queue with input/result payloads.
-- `audit_events`: Security and action audit ledger for all sensitive operations.
-- `documents`: Binary document metadata linked to private storage bucket `ultron-private-documents` (5 MiB limit, UUID paths).
+When the user gives these shortcut instructions, execute the corresponding protocol:
+- **`ULTRON STATUS`**: Run a fresh, 10-section 101% audit of the entire project adhering to Section 6 of the Master Directive.
+- **`CONTINUE ULTRON`**: Read `ULTRON_CHECKPOINT.md`, select the next priority task, implement it, test it, and update the checkpoint.
+- **`FIX ULTRON`**: Investigate and repair actual errors or failing tests; verify with regression tests.
+- **`VERIFY ULTRON`**: Execute a fresh evidence-based audit (`npm run check`, `npm test`, endpoint health).
+- **`ULTRON COMPLETE`**: Audit all criteria in `ULTRON_ACCEPTANCE_MATRIX.md` and report verified completion status.
 
 ---
 
-## 4. Claude Code Development Commands
-
-When working with Claude Code in this repository:
+## 3. CORE VERIFICATION COMMANDS
 
 ```bash
-# Verify syntax and lint across the entire project
+# 1. Full codebase syntax integrity check (153/153 files)
 npm run check
 
-# Run targeted core tests
-node --test test/server.test.js
+# 2. Complete test suite execution (800 tests)
+npm test
 
-# Run health, readiness, and security tests
-node --test tests/server-health.test.js tests/runtime-readiness.test.js tests/network-safety.test.js
-
-# Run auth diagnostics against Supabase (read-only)
-npm run diagnose:auth
+# 3. Targeted test execution
+node --test tests/robotics-hal.test.js
+node --test tests/offline-online-modes.test.js
+node --test tests/knowledge-vault.test.js
+node --test tests/cyber-intel.test.js
+node --test tests/geo-intel.test.js
+node --test tests/singularity-routes.test.js
 ```
 
 ---
 
-## 5. Engineering Standards & Acceptance Criteria
+## 4. ARCHITECTURAL REFERENCES
 
-1. **Test-First Methodology:** Every bug fix or feature addition must include a deterministic unit test.
-2. **Never Mock as Proof of Live Connection:** Clearly state when tests use mocks versus real live infrastructure.
-3. **No Unsafe Dependencies:** ULTRON uses lightweight, secure dependencies. Keep external packages to a minimum.
-4. **Isolated Branching:** Always create a dedicated branch before editing:
-   ```bash
-   git checkout -b agent/claude/<feature-or-fix-description>
-   ```
-5. **No Force Pushing & No Auto-Deploying:** Do not push directly to `main`. Create PRs for review.
-6. **Environment Secrets:** Never output, log, or commit secret keys.
-
----
-
-## 6. MCP Server Connectivity for Claude Code
-
-Claude Code connects to the ecosystem via `.mcp.json` or CLI configuration:
-
-- **GitHub:** `claude mcp add github -- cmd.exe /c npx -y @modelcontextprotocol/server-github`
-- **Supabase:** `claude mcp add --transport http supabase https://mcp.supabase.com/mcp`
-- **Render:** `claude mcp add --transport http render https://mcp.render.com/mcp -H "Authorization: Bearer <RENDER_API_KEY>"`
-
-Inspect active servers with:
-```bash
-claude mcp list
-```
+- **Charter & Laws:** [`ULTRON_MASTER_CHARTER.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_MASTER_CHARTER.md)
+- **Capability Registry:** [`ULTRON_CAPABILITY_REGISTRY.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_CAPABILITY_REGISTRY.md)
+- **Acceptance Matrix:** [`ULTRON_ACCEPTANCE_MATRIX.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_ACCEPTANCE_MATRIX.md)
+- **Status Audit:** [`ULTRON_STATUS.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_STATUS.md)
+- **Blockers & Dependencies:** [`ULTRON_BLOCKERS.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_BLOCKERS.md)
+- **Changelog:** [`ULTRON_CHANGELOG.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_CHANGELOG.md)
+- **Resumable Checkpoint:** [`ULTRON_CHECKPOINT.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_CHECKPOINT.md)
+- **System Architecture:** [`ULTRON_ARCHITECTURE.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_ARCHITECTURE.md)
