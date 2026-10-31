@@ -42,7 +42,7 @@ Updated: 2026-10-31 UTC (PR #430 feature checkpoint)
 - Dedicated `ULTRON-AI` project is `ACTIVE_HEALTHY` in `ap-south-1`.
 - Core account data tables have RLS enabled; `anon` has zero table-level grants on the public schema checked.
 - Private document bucket `ultron-private-documents` is not public and has a 5 MiB object cap; owner-scoped storage policies and private-document migration history are present.
-- Security Advisor reports **Leaked Password Protection disabled**. This requires the project owner to enable the Auth setting in Supabase; the current connected tools do not expose that setting. No database data or Auth settings were changed during this audit.
+- Security Advisor reports **Leaked Password Protection disabled**. The Supabase organization `Ayaan` is on the Free plan; current Supabase documentation says built-in leaked-password protection is available on Pro and above. Enabling it therefore requires the owner to explicitly approve a paid plan upgrade, which has not been requested or made. No database data, plan or Auth settings were changed.
 
 ## Remaining acceptance gates
 
