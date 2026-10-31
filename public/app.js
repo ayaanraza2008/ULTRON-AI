@@ -1754,25 +1754,203 @@
       return;
     }
     if (name === "tasks") {
-      drawerHeading("Task activity", "View task records returned by the ULTRON backend. A queue is not proof that a task has completed.");
-      drawerCard("Task service", "Loading your account-scoped task list…", "CHECKING", "warning");
+      drawerHeading("Task activity", "Create a bounded AI Employee plan, draft, review or report. The queue is account-scoped; queued is not completed.");
+      const form = document.createElement("form");
+      form.className = "jarvis-task-form";
+      form.setAttribute("aria-label", "Create a JARVIS employee task");
+
+      const addField = (labelText, control) => {
+        const field = document.createElement("div");
+        field.className = "drawer-field";
+        const label = document.createElement("label");
+        label.textContent = labelText;
+        label.htmlFor = control.id;
+        field.append(label, control);
+        form.appendChild(field);
+      };
+
+      const goal = document.createElement("textarea");
+      goal.id = "jarvis-task-goal";
+      goal.name = "goal";
+      goal.rows = 4;
+      goal.minLength = 2;
+      goal.maxLength = 2000;
+      goal.required = true;
+      goal.placeholder = "Example: Research current AI agent safety and prepare a report.";
+      goal.setAttribute("aria-describedby", "jarvis-task-safety-note");
+      addField("TASK GOAL · 2–2000 CHARACTERS", goal);
+
+      const role = document.createElement("select");
+      role.id = "jarvis-task-role";
+      role.name = "role";
+      [
+        ["chief-of-staff", "Chief of Staff"],
+        ["web-dev", "Web Developer"],
+        ["seo-aeo", "SEO / AEO"],
+        ["gtm-engineer", "GTM Engineer"],
+        ["social-media", "Social Media"],
+        ["ad-manager", "Ad Manager"],
+        ["sales", "Sales"],
+        ["customer-satisfaction", "Customer Satisfaction"]
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        role.appendChild(option);
+      });
+      addField("EMPLOYEE ROLE", role);
+
+      const modeSelect = document.createElement("select");
+      modeSelect.id = "jarvis-task-mode";
+      modeSelect.name = "mode";
+      [
+        ["plan", "Plan"],
+        ["draft", "Draft"],
+        ["review", "Review"],
+        ["report", "Report"]
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        modeSelect.appendChild(option);
+      });
+      addField("OUTPUT MODE", modeSelect);
+
+      const safetyNote = document.createElement("p");
+      safetyNote.id = "jarvis-task-safety-note";
+      safetyNote.className = "drawer-note";
+      safetyNote.textContent = "ULTRON produces a plan, draft, review or report only. It will not publish, send messages, spend money, change external systems, control devices or execute code from this task.";
+      form.appendChild(safetyNote);
+
+      const submit = document.createElement("button");
+      submit.type = "submit";
+      submit.className = "drawer-action";
+      submit.textContent = "QUEUE EMPLOYEE TASK";
+      form.appendChild(submit);
+
+      const submitStatus = document.createElement("p");
+      submitStatus.className = "drawer-view-description";
+      submitStatus.setAttribute("role", "status");
+      submitStatus.setAttribute("aria-live", "polite");
+      form.appendChild(submitStatus);
+      ui.drawerContent.appendChild(form);
+
+      const queue = document.createElement("div");
+      queue.className = "drawer-status-list";
+      queue.setAttribute("aria-label", "JARVIS task queue");
+      ui.drawerContent.appendChild(queue);
+
+      const appendQueueCard = (title, description, status, stateKind = "ready", taskId = "") => {
+        const card = document.createElement("article");
+        card.className = "drawer-status-card";
+        const heading = document.createElement("strong");
+        heading.textContent = title;
+        const paragraph = document.createElement("p");
+        paragraph.textContent = description;
+        card.append(heading, paragraph);
+        if (status) {
+          const chip = document.createElement("span");
+          chip.className = "drawer-status-chip" + (stateKind === "warning" ? " warning" : stateKind === "error" ? " error" : "");
+          chip.textContent = status;
+          card.appendChild(chip);
+        }
+        if (taskId) {
+          const view = document.createElement("button");
+          view.type = "button";
+          view.className = "drawer-action secondary";
+          view.textContent = "VIEW RESULT";
+          view.addEventListener("click", async () => {
+            view.disabled = true;
+            try {
+              const detail = await apiRequest("/api/jarvis/agents/tasks/" + encodeURIComponent(taskId));
+              const task = detail?.task || {};
+              const result = task.result;
+              const answer = typeof result === "string" ? result
+                : typeof result?.answer === "string" ? result.answer
+                : typeof result?.report?.answer === "string" ? result.report.answer
+                : typeof result?.report === "string" ? result.report
+                : typeof result === "object" && result ? JSON.stringify(result, null, 2) : task.error_code || "No result has been persisted yet.";
+              appendQueueCard("TASK RESULT · " + String(task.title || taskId).slice(0, 80), String(answer).slice(0, 1800), String(task.status || "UNKNOWN"), /fail|error|cancel/i.test(String(task.status || "")) ? "error" : "ready");
+            } catch (error) {
+              submitStatus.textContent = "Task result unavailable: " + error.message;
+            } finally {
+              view.disabled = false;
+            }
+          });
+          card.appendChild(view);
+        }
+        queue.appendChild(card);
+        return card;
+      };
+
+      const refreshQueue = async () => {
+        queue.replaceChildren();
+        appendQueueCard("JARVIS employee queue", "Checking saved tasks for this account…", "CHECKING", "warning");
+        try {
+          const payload = await apiRequest("/api/jarvis/agents/tasks");
+          queue.replaceChildren();
+          const tasks = Array.isArray(payload?.tasks) ? payload.tasks : [];
+          if (!tasks.length) appendQueueCard("No JARVIS tasks", "This account has no visible JARVIS employee tasks.", "EMPTY", "warning");
+          for (const task of tasks.slice(0, 12)) {
+            const state = String(task.status || "UNKNOWN");
+            const errorText = task.error_code ? " · " + String(task.error_code).slice(0, 80) : "";
+            appendQueueCard(
+              String(task.title || "JARVIS task").slice(0, 120),
+              "Task ID: " + String(task.id || "").slice(0, 36) + errorText,
+              state,
+              /fail|error/i.test(state) ? "error" : /queued|pending|running|waiting/i.test(state) ? "warning" : "ready",
+              task.id
+            );
+          }
+        } catch (error) {
+          queue.replaceChildren();
+          appendQueueCard("JARVIS queue unavailable", error.message, error.code || "REQUEST FAILED", "error");
+          if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        }
+      };
+
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (submit.disabled) return;
+        if (!form.reportValidity()) return;
+        submit.disabled = true;
+        submitStatus.textContent = "Submitting to the account-scoped worker queue…";
+        try {
+          const result = await apiRequest("/api/jarvis/agents/task", {
+            method: "POST",
+            body: { goal: goal.value.trim(), role: role.value, mode: modeSelect.value }
+          });
+          submitStatus.textContent = result?.execution?.notice || "Task accepted by the ULTRON worker queue.";
+          goal.value = "";
+          await refreshQueue();
+        } catch (error) {
+          submitStatus.textContent = error.message + (error.code ? " (" + error.code + ")" : "");
+          if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+        } finally {
+          submit.disabled = false;
+        }
+      });
+
+      const refresh = drawerButton("REFRESH JARVIS TASK STATUS", () => { void refreshQueue(); }, true);
+      refresh.disabled = false;
+      void refreshQueue();
+
       try {
         const payload = await apiRequest("/api/tasks");
-        ui.drawerContent.replaceChildren();
-        drawerHeading("Task activity", "Task information returned by the backend.");
         const tasks = Array.isArray(payload) ? payload : Array.isArray(payload?.tasks) ? payload.tasks : Array.isArray(payload?.items) ? payload.items : [];
-        if (!tasks.length) drawerCard("No tasks returned", "The service returned no visible task records, or this account has no saved tasks.", "EMPTY", "warning");
-        for (const task of tasks.slice(0, 12)) {
-          drawerCard(String(task.title || task.name || task.type || "Task").slice(0, 120),
-            String(task.description || task.goal || task.status || "Task returned by the backend.").slice(0, 320),
-            String(task.status || "status unavailable").slice(0, 40),
-            /fail|error|cancel/i.test(String(task.status || "")) ? "error" : /queued|pending|running/i.test(String(task.status || "")) ? "warning" : "ready");
+        if (tasks.length) {
+          appendQueueCard("OTHER ACCOUNT TASKS", tasks.length + " existing task record(s) returned by the general task service.", "ACCOUNT TASKS");
+          for (const task of tasks.slice(0, 8)) {
+            appendQueueCard(
+              String(task.title || task.name || task.type || "Task").slice(0, 120),
+              String(task.description || task.goal || task.status || "Task returned by the backend.").slice(0, 320),
+              String(task.status || "status unavailable").slice(0, 40),
+              /fail|error|cancel/i.test(String(task.status || "")) ? "error" : /queued|pending|running/i.test(String(task.status || "")) ? "warning" : "ready"
+            );
+          }
         }
-      } catch (error) {
-        ui.drawerContent.replaceChildren();
-        drawerHeading("Task activity", "The real task endpoint could not return this account's queue.");
-        drawerCard("Task list unavailable", error.message, error.code || "REQUEST FAILED", "error");
-        if (error.status === 401) drawerButton("SIGN IN", () => setAuthVisible(true));
+      } catch {
+        // Keep the dedicated JARVIS queue visible when the generic task service is unavailable.
       }
       return;
     }
