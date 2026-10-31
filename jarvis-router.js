@@ -398,25 +398,25 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   });
 
   // --- Windows Native Speech & Voice Daemon ---
-  router.post("/jarvis/voice/speak", requireSession, express.json(), async (req, res) => {
+  router.post("/jarvis/voice/speak", requireOwner, express.json(), async (req, res) => {
     const { text, rate, volume } = req.body || {};
     const result = await windowsSpeechDaemon.speak(text, { rate, volume });
     res.json(result);
   });
 
-  router.post("/jarvis/voice/offline-intent", requireSession, express.json(), (req, res) => {
+  router.post("/jarvis/voice/offline-intent", requireOwner, express.json(), (req, res) => {
     const { utterance } = req.body || {};
     const match = windowsSpeechDaemon.matchOfflineIntent(utterance);
     res.json(match);
   });
 
   // --- Windows Automation & Hardware Control ---
-  router.get("/jarvis/pc/battery", requireSession, async (_req, res) => {
+  router.get("/jarvis/pc/battery", requireOwner, async (_req, res) => {
     const battery = await windowsAutomation.getBatteryStatus();
     res.json(battery);
   });
 
-  router.post("/jarvis/pc/volume", requireSession, express.json(), async (req, res) => {
+  router.post("/jarvis/pc/volume", requireOwner, express.json(), async (req, res) => {
     const { action, value } = req.body || {};
     try {
       const result = await windowsAutomation.setSystemVolume(action, value);
@@ -426,7 +426,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     }
   });
 
-  router.post("/jarvis/pc/lock", requireSession, async (_req, res) => {
+  router.post("/jarvis/pc/lock", requireOwner, async (_req, res) => {
     try {
       const result = await windowsAutomation.lockWorkstation();
       res.json(result);
@@ -435,7 +435,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     }
   });
 
-  router.post("/jarvis/pc/screenshot", requireSession, async (_req, res) => {
+  router.post("/jarvis/pc/screenshot", requireOwner, async (_req, res) => {
     try {
       const capture = await windowsAutomation.captureScreen();
       res.json(capture);
@@ -444,25 +444,25 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     }
   });
 
-  router.get("/jarvis/pc/active-window", requireSession, async (_req, res) => {
+  router.get("/jarvis/pc/active-window", requireOwner, async (_req, res) => {
     const win = await windowsAutomation.getActiveWindowTitle();
     res.json(win);
   });
 
   // --- Proactive Daemon ---
-  router.get("/jarvis/proactive/status", requireSession, (_req, res) => {
+  router.get("/jarvis/proactive/status", requireOwner, (_req, res) => {
     res.json({
       status: proactiveDaemon.getStatus(),
       recentAlerts: proactiveDaemon.getRecentAlerts()
     });
   });
 
-  router.post("/jarvis/proactive/tick", requireSession, async (_req, res) => {
+  router.post("/jarvis/proactive/tick", requireOwner, async (_req, res) => {
     const result = await proactiveDaemon.tick();
     res.json(result);
   });
 
-  router.post("/jarvis/proactive/toggle", requireSession, express.json(), (req, res) => {
+  router.post("/jarvis/proactive/toggle", requireOwner, express.json(), (req, res) => {
     const { running, enableSpokenAlerts } = req.body || {};
     if (typeof enableSpokenAlerts === "boolean") {
       proactiveDaemon.enableSpokenAlerts = enableSpokenAlerts;
@@ -476,7 +476,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   });
 
   // --- Screen Observer & Visual Intelligence ---
-  router.get("/jarvis/screen/inspect", requireSession, async (_req, res) => {
+  router.get("/jarvis/screen/inspect", requireOwner, async (_req, res) => {
     try {
       const inspection = await screenObserver.inspectCurrentScreen();
       res.json(inspection);
