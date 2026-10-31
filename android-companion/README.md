@@ -1,6 +1,6 @@
 # ULTRON Android Wake Companion
 
-This Android companion listens for “Ultron” only after the user explicitly starts it. It requests microphone and notification permission, uses Android's on-device speech recognizer only, and shows a persistent notification with a Stop control. A detected wake word creates a notification; the user taps it to open the hosted ULTRON assistant.
+This Android companion opens the current ULTRON Core interface at `https://ultron-core-interface.onrender.com/` and listens for “Ultron” only after the user explicitly starts it. It requests microphone and notification permission, uses Android's on-device speech recognizer only, and shows a persistent notification with a Stop control. A detected wake word creates a notification; the user taps it to open the hosted ULTRON assistant.
 
 ## Build
 
