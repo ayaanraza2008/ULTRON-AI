@@ -258,13 +258,13 @@ export function validateChromeActionInput(value: unknown): ChromeActionInput {
       throw new ChromeActionError("INVALID_APPROVAL_FINGERPRINT", "Approval fingerprint flags are invalid.");
     }
     output.approvalFingerprint = {
-      origin: item.origin,
-      pageUrl: item.pageUrl,
-      selector: item.selector,
-      label: item.label,
-      tag: item.tag,
-      type: item.type,
-      formActionOrigin: item.formActionOrigin,
+      origin: item.origin as string,
+      pageUrl: item.pageUrl as string,
+      selector: item.selector as string,
+      label: item.label as string,
+      tag: item.tag as string,
+      type: item.type as string,
+      formActionOrigin: item.formActionOrigin as string,
       highImpact: item.highImpact,
       crossOriginForm: item.crossOriginForm
     };
