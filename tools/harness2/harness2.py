@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Harness2: local, resumable agent-harness benchmark and refinement tool."""
 from __future__ import annotations
-import argparse, concurrent.futures, datetime as dt, json, os, re, shutil, subprocess, sys, tempfile, uuid
+import argparse, concurrent.futures, datetime as dt, json, os, re, shutil, signal, subprocess, sys, tempfile, threading, uuid
 from pathlib import Path
 
 VERSION = "0.1.0"
@@ -11,12 +11,31 @@ MAX_TEXT, MAX_OUTPUT = 100_000, 1_000_000
 
 class Harness2Error(Exception): pass
 
+def atomic_write_text(path, value, boundary=None):
+    """Atomically write UTF-8 text without following attacker-planted temp symlinks."""
+    path = Path(path)
+    if path.is_symlink(): raise Harness2Error("Managed files may not be symlinks")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink(): raise Harness2Error("Managed file parent may not be a symlink")
+    parent = path.parent.resolve()
+    if boundary is not None and not parent.is_relative_to(Path(boundary).resolve()):
+        raise Harness2Error("Managed file path may not escape its workspace")
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=parent)
+    temporary_path = Path(temporary)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if path.is_symlink(): raise Harness2Error("Managed files may not be symlinks")
+        os.replace(temporary_path, path)
+    finally:
+        try: temporary_path.unlink(missing_ok=True)
+        except OSError: pass
+
 def atomic_json(path, value):
     if path.is_symlink(): raise Harness2Error("Managed JSON files may not be symlinks")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(path, json.dumps(value, indent=2, ensure_ascii=False) + "\n")
 
 def read_json(path):
     if path.is_symlink(): raise Harness2Error("Managed JSON files may not be symlinks")
@@ -64,26 +83,45 @@ def apply_updates(harness, updates, allowed):
         if path.is_symlink() or not path.resolve().is_relative_to(harness.resolve()): raise Harness2Error("Unsafe component path")
         prepared.append((path, value))
     for path, value in prepared:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(value, encoding="utf-8")
-        os.replace(tmp, path)
+        atomic_write_text(path, value, boundary=harness)
     return list(updates)
 
 def load_benchmark(name, custom=None):
     path = Path(custom).expanduser().resolve() if custom else Path(__file__).parent / "benchmarks" / f"{name}.json"
     data = read_json(path)
     tasks = data.get("tasks") if isinstance(data, dict) else None
-    if not isinstance(tasks, list) or not tasks: raise Harness2Error("Benchmark needs a non-empty tasks list")
+    if not isinstance(tasks, list) or not tasks or len(tasks) > 200:
+        raise Harness2Error("Benchmark needs 1-200 tasks")
     seen = set()
+    allowed_task_fields = {"id", "title", "prompt", "criteria"}
+    allowed_criteria = {"all_contains", "any_contains", "forbidden_contains", "min_chars"}
     for task in tasks:
-        if not isinstance(task, dict) or not isinstance(task.get("id"), str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", task["id"]) or task["id"] in seen or not isinstance(task.get("prompt"), str) or not task["prompt"].strip(): raise Harness2Error("Invalid or duplicate benchmark task")
-        seen.add(task["id"])
+        if not isinstance(task, dict) or set(task) - allowed_task_fields:
+            raise Harness2Error("Invalid benchmark task fields")
+        task_id, prompt = task.get("id"), task.get("prompt")
+        if (not isinstance(task_id, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", task_id)
+                or task_id in seen or not isinstance(prompt, str)
+                or not prompt.strip() or len(prompt) > MAX_TEXT or "\\x00" in prompt):
+            raise Harness2Error("Invalid or duplicate benchmark task")
+        title = task.get("title", task_id)
+        if not isinstance(title, str) or len(title) > 200 or "\\x00" in title:
+            raise Harness2Error("Invalid benchmark task title")
+        seen.add(task_id)
         criteria = task.get("criteria", {})
-        if not isinstance(criteria, dict): raise Harness2Error("Task criteria must be an object")
-        for key in ("all_contains","any_contains","forbidden_contains"):
-            if key in criteria and (not isinstance(criteria[key], list) or not all(isinstance(x,str) for x in criteria[key])): raise Harness2Error(f"Invalid {key}")
-        if "min_chars" in criteria and (not isinstance(criteria["min_chars"], int) or isinstance(criteria["min_chars"], bool) or not 0 <= criteria["min_chars"] <= MAX_TEXT): raise Harness2Error("Invalid min_chars")
+        if not isinstance(criteria, dict) or set(criteria) - allowed_criteria:
+            raise Harness2Error("Task criteria contain unsupported fields")
+        for key in ("all_contains", "any_contains", "forbidden_contains"):
+            if key in criteria:
+                values = criteria[key]
+                if (not isinstance(values, list) or len(values) > 100
+                        or not all(isinstance(value, str) and value.strip()
+                                   and len(value) <= 512 and "\\x00" not in value for value in values)):
+                    raise Harness2Error(f"Invalid {key}")
+        if "min_chars" in criteria and (
+                not isinstance(criteria["min_chars"], int)
+                or isinstance(criteria["min_chars"], bool)
+                or not 0 <= criteria["min_chars"] <= MAX_TEXT):
+            raise Harness2Error("Invalid min_chars")
     return data
 
 def judge(answer, criteria):
@@ -97,11 +135,26 @@ def judge(answer, criteria):
     return {"score":passed/len(checks),"checks":checks}
 
 def score(benchmark, answers):
-    by_id = {x["task_id"]:x for x in answers}
+    if not isinstance(answers, list):
+        raise Harness2Error("Saved benchmark answers must be a list")
+    expected_ids = {task["id"] for task in benchmark["tasks"]}
+    by_id = {}
+    for item in answers:
+        if not isinstance(item, dict) or not isinstance(item.get("task_id"), str):
+            raise Harness2Error("Saved benchmark answer has an invalid task ID")
+        task_id = item["task_id"]
+        if task_id not in expected_ids:
+            raise Harness2Error(f"Saved benchmark answer references unknown task: {task_id}")
+        if task_id in by_id:
+            raise Harness2Error(f"Duplicate saved benchmark answer: {task_id}")
+        answer = item.get("answer", "")
+        if not isinstance(answer, str) or len(answer) > MAX_TEXT or "\\x00" in answer:
+            answer = ""
+        by_id[task_id] = answer
     tasks = []
     for task in benchmark["tasks"]:
-        answer = by_id.get(task["id"],{}).get("answer","")
-        result = judge(answer if isinstance(answer,str) else "", task.get("criteria",{}))
+        answer = by_id.get(task["id"], "")
+        result = judge(answer, task.get("criteria", {}))
         tasks.append({"task_id":task["id"],"title":task.get("title",task["id"]),"answer":answer,**result})
     return {"score":sum(x["score"] for x in tasks)/len(tasks),"tasks":tasks}
 
@@ -130,6 +183,80 @@ def parse_object(text):
     if not isinstance(value,dict): raise Harness2Error("Executor response must be an object")
     return value
 
+def run_bounded(command, *, cwd, timeout, env=None, input_text=None):
+    """Run a CLI while draining both pipes and enforcing memory-bounded output."""
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=False,
+        start_new_session=(os.name != "nt"),
+        creationflags=(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0),
+    )
+    captured = {"stdout": bytearray(), "stderr": bytearray()}
+    limits = {"stdout": MAX_OUTPUT, "stderr": 64_000}
+    overflow = []
+    def stop_process():
+        try:
+            if os.name != "nt":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except (ProcessLookupError, PermissionError, OSError):
+            try: process.kill()
+            except OSError: pass
+    def drain(name, stream):
+        total = 0
+        while True:
+            chunk = stream.read(65_536)
+            if not chunk: break
+            remaining = limits[name] - len(captured[name])
+            if remaining > 0: captured[name].extend(chunk[:remaining])
+            total += len(chunk)
+            if total > limits[name] and name not in overflow:
+                overflow.append(name)
+                stop_process()
+    readers = [
+        threading.Thread(target=drain, args=("stdout", process.stdout), daemon=True),
+        threading.Thread(target=drain, args=("stderr", process.stderr), daemon=True),
+    ]
+    for thread in readers: thread.start()
+    writer = None
+    if input_text is not None:
+        def write_input():
+            try:
+                process.stdin.write(input_text.encode("utf-8"))
+                process.stdin.flush()
+            except (BrokenPipeError, OSError):
+                pass
+            finally:
+                try: process.stdin.close()
+                except OSError: pass
+        writer = threading.Thread(target=write_input, daemon=True)
+        writer.start()
+    timed_out = False
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        stop_process()
+        process.wait()
+    if writer is not None: writer.join(timeout=2)
+    for thread in readers: thread.join(timeout=5)
+    for stream in (process.stdout, process.stderr):
+        try: stream.close()
+        except OSError: pass
+    if timed_out: raise subprocess.TimeoutExpired(command, timeout)
+    if overflow: raise Harness2Error(f"CLI {overflow[0]} exceeded its output limit; process was terminated")
+    return subprocess.CompletedProcess(
+        command, process.returncode,
+        captured["stdout"].decode("utf-8", errors="replace"),
+        captured["stderr"].decode("utf-8", errors="replace"),
+    )
+
 class Executor:
     def __init__(self,name,model,timeout): self.name,self.model,self.timeout = name,model,timeout
     def ask(self,prompt):
@@ -139,17 +266,17 @@ class Executor:
                 cmd = ["codex","exec","--json","--cd",str(cwd),"--sandbox","read-only","--ask-for-approval","never","--ephemeral","--ignore-user-config","--ignore-rules","--skip-git-repo-check"]
                 if self.model: cmd += ["--model",self.model]
                 cmd.append("-")
-                proc = subprocess.run(cmd,input=prompt[:MAX_TEXT],cwd=cwd,capture_output=True,text=True,timeout=self.timeout,shell=False)
+                proc = run_bounded(cmd,input_text=prompt[:MAX_TEXT],cwd=cwd,timeout=self.timeout)
             else:
                 config = cwd / "opencode.json"
-                config.write_text(json.dumps({"$schema":"https://opencode.ai/config.json","default_agent":"harness2-readonly","subagent_depth":0,"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow","edit":"deny","write":"deny","bash":"deny","task":"deny","webfetch":"deny","websearch":"deny","lsp":"deny","skill":"deny"}}),encoding="utf-8")
+                config.write_text(json.dumps({"$schema":"https://opencode.ai/config.json","default_agent":"harness2-readonly","subagent_depth":0,"permission":{"*":"deny"}}),encoding="utf-8")
                 agents = cwd / "agents"; agents.mkdir()
-                (agents / "harness2-readonly.md").write_text("---\ndescription: Read-only Harness2 evaluator\nmode: primary\npermission:\n  \"*\": deny\n  read: allow\n  glob: allow\n  grep: allow\n  list: allow\n---\nDo not execute tools or write files.\n",encoding="utf-8")
+                (agents / "harness2-readonly.md").write_text("---\ndescription: No-tool Harness2 evaluator\nmode: primary\npermission:\n  \"*\": deny\n---\nDo not use tools, access files, or write files. Answer only from the supplied prompt.\n",encoding="utf-8")
                 env = os.environ.copy(); env.update({"OPENCODE_CONFIG":str(config),"OPENCODE_CONFIG_DIR":str(cwd),"OPENCODE_DISABLE_DEFAULT_PLUGINS":"1","OPENCODE_DISABLE_MODELS_FETCH":"1","OPENCODE_DISABLE_LSP_DOWNLOAD":"1","OPENCODE_DISABLE_EXTERNAL_SKILLS":"1","OPENCODE_DISABLE_CLAUDE_CODE":"1","OPENCODE_DISABLE_CLAUDE_CODE_PROMPT":"1","OPENCODE_DISABLE_CLAUDE_CODE_SKILLS":"1"})
                 cmd = ["opencode","--pure","run","--agent","harness2-readonly","--format","json","--dir",str(cwd)]
                 if self.model: cmd += ["--model",self.model]
                 cmd.append(prompt[:MAX_TEXT])
-                proc = subprocess.run(cmd,cwd=cwd,env=env,capture_output=True,text=True,timeout=self.timeout,shell=False)
+                proc = run_bounded(cmd,cwd=cwd,env=env,timeout=self.timeout)
             if proc.returncode: raise Harness2Error(f"{self.name} CLI failed: {(proc.stderr or '')[-2000:]}")
             return parse_jsonl(proc.stdout,self.name)
     def solve(self,task,components):
@@ -215,7 +342,7 @@ def report(root):
     if state["executor"] == "demo": lines += ["","Demo uses deterministic fixtures; it is not a model-quality benchmark."]
     path = root/"report.md"
     if path.is_symlink(): raise Harness2Error("Report path may not be a symlink")
-    path.write_text("\n".join(lines)+"\n",encoding="utf-8"); return path
+    atomic_write_text(path, "\n".join(lines)+"\n", boundary=root); return path
 
 def judge_run(root):
     state = read_json(root/"run.json")
