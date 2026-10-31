@@ -54,6 +54,21 @@ test("JARVIS routes reject authenticated users other than the configured owner",
   });
 });
 
+test("JARVIS API distinguishes the 12-agent capability catalogue from executable worker roles", async () => {
+  await withRouter({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }
+  }, async base => {
+    const response = await fetch(base + "/api/jarvis/agents");
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.agents.length, 12);
+    assert.equal(body.taskExecution.backend, "durable_supabase_worker");
+    assert.ok(body.taskExecution.supportedRoles.includes("chief-of-staff"));
+    assert.ok(body.taskExecution.supportedModes.includes("plan"));
+    assert.match(body.taskExecution.note, /does not dispatch arbitrary per-agent tool steps/);
+  });
+});
+
 test("configured owner can read JARVIS status without misreporting the hosted OS as Windows", async () => {
   await withRouter({
     env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }
