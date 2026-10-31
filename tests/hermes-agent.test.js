@@ -171,6 +171,11 @@ test("Hermes delegated tasks reject empty/oversized prompts before networking", 
 
 
 test("Hermes rejects IP literals, private, metadata, and loopback HTTPS endpoints", () => {
+  const localIpv6 = resolveHermesAgentProvider(configuredEnv({
+    HERMES_AGENT_BASE_URL: "http://[::1]:8642/v1",
+    HERMES_AGENT_API_KEY: "local-key"
+  }), ownerId);
+  assert.equal(localIpv6?.baseUrl, "http://[::1]:8642/v1");
   for (const url of [
     "https://192.168.1.10/v1",
     "https://10.1.2.3/v1",
