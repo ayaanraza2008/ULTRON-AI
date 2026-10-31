@@ -24,6 +24,17 @@ export interface ChromeActionInput {
   limit?: number;
   durationMs?: number;
   confirmExternalAction?: boolean;
+  approvalFingerprint?: {
+    origin: string;
+    pageUrl: string;
+    selector: string;
+    label: string;
+    tag: string;
+    type: string;
+    formActionOrigin: string;
+    highImpact: boolean;
+    crossOriginForm: boolean;
+  };
 }
 
 export class ChromeActionError extends Error {
@@ -231,6 +242,36 @@ export function validateChromeActionInput(value: unknown): ChromeActionInput {
     throw new ChromeActionError("INVALID_CONFIRMATION", "confirmExternalAction must be a boolean.");
   }
   output.confirmExternalAction = source.confirmExternalAction === true;
+
+  if (source.approvalFingerprint !== undefined) {
+    const item = source.approvalFingerprint;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ChromeActionError("INVALID_APPROVAL_FINGERPRINT", "Approval fingerprint must be an object.");
+    }
+    const stringFields = ["origin", "pageUrl", "selector", "label", "tag", "type", "formActionOrigin"] as const;
+    for (const field of stringFields) {
+      if (typeof item[field] !== "string" || item[field].length > (field === "pageUrl" ? 1000 : field === "selector" ? 600 : 300)) {
+        throw new ChromeActionError("INVALID_APPROVAL_FINGERPRINT", "Approval fingerprint fields are invalid.");
+      }
+    }
+    if (typeof item.highImpact !== "boolean" || typeof item.crossOriginForm !== "boolean") {
+      throw new ChromeActionError("INVALID_APPROVAL_FINGERPRINT", "Approval fingerprint flags are invalid.");
+    }
+    output.approvalFingerprint = {
+      origin: item.origin,
+      pageUrl: item.pageUrl,
+      selector: item.selector,
+      label: item.label,
+      tag: item.tag,
+      type: item.type,
+      formActionOrigin: item.formActionOrigin,
+      highImpact: item.highImpact,
+      crossOriginForm: item.crossOriginForm
+    };
+  }
+  if (action === "click" && output.confirmExternalAction && !output.approvalFingerprint) {
+    throw new ChromeActionError("APPROVAL_FINGERPRINT_REQUIRED", "A one-time exact-target approval fingerprint is required for a consequential click.", 403);
+  }
 
   if (action === "navigate" && !output.url) {
     throw new ChromeActionError("URL_REQUIRED", "navigate requires a url.");
