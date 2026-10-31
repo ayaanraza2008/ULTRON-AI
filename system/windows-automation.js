@@ -216,6 +216,60 @@ $title.ToString()
       return { title: "Unknown" };
     }
   }
+
+  /**
+   * Gracefully terminate an approved local desktop application.
+   */
+  async closeApprovedApp(appName) {
+    if (this.emergencyStop) throw new Error("Computer automation halted under Emergency Stop.");
+
+    const ALLOWED_CLOSABLE = {
+      notepad: "notepad",
+      calculator: "CalculatorApp",
+      browser: "msedge"
+    };
+
+    const targetProcess = ALLOWED_CLOSABLE[appName.toLowerCase().trim()];
+    if (!targetProcess) {
+      throw new Error(`App '${appName}' is not in the approved closable allowlist. Allowed: ${Object.keys(ALLOWED_CLOSABLE).join(", ")}`);
+    }
+
+    if (process.platform !== "win32") {
+      this.recordEvent("CLOSE_APP", appName, "mock_success");
+      return { success: true, app: appName, processName: targetProcess, simulated: true };
+    }
+
+    try {
+      const psScript = `powershell -NoProfile -Command "Get-Process -Name ${targetProcess} -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; exit 0"`;
+      await execAsync(psScript, { timeout: 3000 });
+      this.recordEvent("CLOSE_APP", appName, "success");
+      return { success: true, app: appName, processName: targetProcess };
+    } catch (err) {
+      this.recordEvent("CLOSE_APP", appName, "failed");
+      throw new Error(`Failed to terminate ${appName}: ${err.message}`);
+    }
+  }
+
+  /**
+   * Gathers comprehensive local PC vitals (battery, foreground window, memory load).
+   */
+  async getSystemVitals() {
+    const battery = await this.getBatteryStatus();
+    const activeWindow = await this.getActiveWindowTitle();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const ramUsagePercent = Number((((totalMem - freeMem) / totalMem) * 100).toFixed(1));
+
+    return {
+      telemetrySource: "windows_pc",
+      platform: process.platform,
+      activeWindow: activeWindow.title,
+      battery,
+      ramUsagePercent,
+      memoryHeadroomSafe: ramUsagePercent <= 85.0,
+      timestamp: new Date().toISOString()
+    };
+  }
 }
 
 export const windowsAutomation = new WindowsAutomation();

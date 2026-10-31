@@ -55,10 +55,71 @@ export const VOICE_PROFILES = {
   }
 };
 
+
+export const VOICE_PERSONALITY_MODES = {
+  NORMAL: {
+    id: "NORMAL",
+    name: "Normal (Calm & Intelligent)",
+    rate: 0.95,
+    pitch: 0.85,
+    prefix: "",
+    style: "calm_intelligent_deep"
+  },
+  COMMAND: {
+    id: "COMMAND",
+    name: "Command (Firm & Authoritative)",
+    rate: 0.98,
+    pitch: 0.80,
+    prefix: "Acknowledged. ",
+    style: "firm_authoritative"
+  },
+  ALERT: {
+    id: "ALERT",
+    name: "Alert (Serious & Urgent)",
+    rate: 1.05,
+    pitch: 0.92,
+    prefix: "Alert. ",
+    style: "serious_urgent_clear"
+  },
+  RESEARCH: {
+    id: "RESEARCH",
+    name: "Research (Measured & Articulate)",
+    rate: 0.92,
+    pitch: 0.86,
+    prefix: "",
+    style: "measured_articulate"
+  },
+  SUCCESS: {
+    id: "SUCCESS",
+    name: "Success (Controlled Confidence)",
+    rate: 0.96,
+    pitch: 0.84,
+    prefix: "",
+    style: "controlled_confidence"
+  },
+  ERROR: {
+    id: "ERROR",
+    name: "Error (Composed & Direct)",
+    rate: 0.94,
+    pitch: 0.82,
+    prefix: "Notice: ",
+    style: "composed_direct"
+  },
+  "WAKE-UP": {
+    id: "WAKE-UP",
+    name: "Wake-Up (Online & Ready)",
+    rate: 0.98,
+    pitch: 0.85,
+    prefix: "Online, sir. ",
+    style: "short_wake_acknowledgment"
+  }
+};
+
 export class JarvisVoiceEngine {
   constructor(options = {}) {
     this.activeProfile = options.profile || VOICE_PROFILES.ultron_command;
     this.kokoroEngine = kokoroEngine;
+    this.personalityMode = options.personalityMode || "NORMAL";
     this.mode = options.mode || "push_to_talk"; // "push_to_talk" | "wake_word_continuous" | "idle"
     this.isListening = false;
     this.isSpeaking = false;
@@ -88,6 +149,19 @@ export class JarvisVoiceEngine {
       return { success: true, mode: this.mode };
     }
     return { success: false, error: "INVALID_MODE" };
+  }
+
+  setPersonalityMode(modeName) {
+    const key = String(modeName || "").toUpperCase();
+    if (VOICE_PERSONALITY_MODES[key]) {
+      this.personalityMode = key;
+      return { success: true, mode: VOICE_PERSONALITY_MODES[key] };
+    }
+    return { success: false, error: "INVALID_PERSONALITY_MODE", allowed: Object.keys(VOICE_PERSONALITY_MODES) };
+  }
+
+  getPersonalityMode() {
+    return VOICE_PERSONALITY_MODES[this.personalityMode] || VOICE_PERSONALITY_MODES.NORMAL;
   }
 
   /**
@@ -251,27 +325,35 @@ export class JarvisVoiceEngine {
     if (!sanitized) {
       return { prepared: false, segments: [], profile: this.activeProfile };
     }
-    const sentences = sanitized
+    const modeConfig = this.getPersonalityMode();
+    const effectivePrefix = options.omitPrefix ? "" : (modeConfig.prefix || "");
+    const fullText = (effectivePrefix + sanitized).trim();
+
+    const sentences = fullText
       .split(/(?<=[.?!])\s+/)
       .map(s => s.trim())
       .filter(Boolean);
 
     return {
       prepared: true,
-      text: sanitized,
-      segments: sentences.length > 0 ? sentences : [sanitized],
+      text: fullText,
+      segments: sentences.length > 0 ? sentences : [fullText],
       profile: this.activeProfile,
-      rate: options.rate ?? this.activeProfile.rate,
-      pitch: options.pitch ?? this.activeProfile.pitch
+      personalityMode: modeConfig.id,
+      rate: options.rate ?? modeConfig.rate ?? this.activeProfile.rate,
+      pitch: options.pitch ?? modeConfig.pitch ?? this.activeProfile.pitch
     };
   }
 /**
    * Synthesize speech using Kokoro-82M am_onyx voice with resonance tuning.
    */
   async speakKokoro(text, options = {}) {
+    const modeConfig = this.getPersonalityMode();
     const sanitized = this.formatSpokenUpdate(text, this.language);
+    const effectivePrefix = options.omitPrefix ? "" : (modeConfig.prefix || "");
+    const fullSpoken = (effectivePrefix + sanitized).trim();
     const voice = options.voice || this.activeProfile.voiceId || "am_onyx";
-    const speed = typeof options.speed === "number" ? options.speed : (this.activeProfile.rate || 0.95);
-    return kokoroEngine.synthesize(sanitized, { voice, speed, play: Boolean(options.play) });
+    const speed = typeof options.speed === "number" ? options.speed : (options.rate ?? modeConfig.rate ?? this.activeProfile.rate ?? 0.95);
+    return kokoroEngine.synthesize(fullSpoken, { voice, speed, play: Boolean(options.play) });
   }
 }

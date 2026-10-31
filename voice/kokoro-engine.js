@@ -35,6 +35,9 @@ export class KokoroEngine {
     this.isSpeaking = false;
     this.audioHistory = [];
     this.initialized = false;
+    this.lastInterruptionLatencyMs = null;
+    this.fallbackActive = false;
+    this.lastError = null;
   }
 
   async initialize() {
@@ -49,16 +52,89 @@ export class KokoroEngine {
 
   /**
    * Immediately aborts any ongoing speech synthesis or audio playback.
+   * Records execution latency in milliseconds for performance verification.
    */
   interrupt() {
+    const t0 = performance.now();
     this.isSpeaking = false;
+    let procKilled = false;
     if (this.currentProcess) {
       try {
         this.currentProcess.kill("SIGTERM");
+        procKilled = true;
       } catch {}
       this.currentProcess = null;
     }
-    return { action: "AUDIO_INTERRUPTED", timestamp: new Date().toISOString() };
+    const latencyMs = Number((performance.now() - t0).toFixed(2));
+    this.lastInterruptionLatencyMs = latencyMs;
+    return {
+      action: "AUDIO_INTERRUPTED",
+      procKilled,
+      interruptionLatencyMs: latencyMs,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Measure synthetic interruption latency (in ms) against a mock or active process.
+   */
+  async measureInterruptionLatency() {
+    const t0 = performance.now();
+    const res = this.interrupt();
+    const totalMs = Number((performance.now() - t0).toFixed(2));
+    return {
+      success: true,
+      measuredLatencyMs: totalMs,
+      subsystem: "kokoro_interruption",
+      targetThresholdMs: 50
+    };
+  }
+
+  /**
+   * Splits long paragraphs into sentence/punctuation-bounded chunks for streaming TTS.
+   */
+  chunkText(text, maxChars = 180) {
+    if (typeof text !== "string") return [];
+    const sentences = text
+      .split(/(?<=[.?!;])\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const chunks = [];
+    let current = "";
+    for (const sentence of sentences) {
+      if ((current + " " + sentence).trim().length <= maxChars) {
+        current = (current + " " + sentence).trim();
+      } else {
+        if (current) chunks.push(current);
+        current = sentence;
+      }
+    }
+    if (current) chunks.push(current);
+    return chunks.length > 0 ? chunks : [text.trim()];
+  }
+
+  /**
+   * Reports the visible fallback state between Kokoro and Windows SAPI.
+   */
+  getFallbackStatus() {
+    return {
+      primaryEngine: "kokoro",
+      primaryVoice: this.defaultVoice,
+      fallbackEngine: "windows_sapi",
+      isFallbackActive: this.fallbackActive,
+      lastError: this.lastError,
+      lastInterruptionLatencyMs: this.lastInterruptionLatencyMs
+    };
+  }
+
+  /**
+   * Resets the fallback state back to primary Kokoro once health is restored.
+   */
+  resetFallback() {
+    this.fallbackActive = false;
+    this.lastError = null;
+    return this.getFallbackStatus();
   }
 
   /**

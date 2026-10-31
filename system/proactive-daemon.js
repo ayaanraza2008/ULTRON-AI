@@ -28,6 +28,7 @@ export class ProactiveDaemon {
     this.lastBatteryWarningAt = 0;
     this.lastMemoryWarningAt = 0;
     this.morningBriefingDelivered = false;
+    this.isLoadShedding = false;
     this.alerts = [];
   }
 
@@ -66,12 +67,15 @@ export class ProactiveDaemon {
       const freeMem = os.freemem();
       const ramPercent = ((totalMem - freeMem) / totalMem) * 100;
       if (ramPercent > 85.0) {
+        this.isLoadShedding = true;
         if (now - this.lastMemoryWarningAt > 10 * 60 * 1000) { // Throttle 10 min
           this.lastMemoryWarningAt = now;
           const msg = `System memory pressure elevated at ${ramPercent.toFixed(1)} percent. Background tasks throttled.`;
           alerts.push({ type: "MEMORY_PRESSURE", message: msg, severity: "warning", timestamp: new Date().toISOString() });
           if (this.enableSpokenAlerts) await windowsSpeechDaemon.speak(msg);
         }
+      } else if (ramPercent <= 80.0) {
+        this.isLoadShedding = false;
       }
 
       // 3. Morning Briefing Check (Between 7 AM and 11 AM)
@@ -106,6 +110,7 @@ export class ProactiveDaemon {
       intervalMs: this.intervalMs,
       enableSpokenAlerts: this.enableSpokenAlerts,
       morningBriefingDelivered: this.morningBriefingDelivered,
+      isLoadShedding: this.isLoadShedding,
       totalAlertsCount: this.alerts.length
     };
   }

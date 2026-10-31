@@ -65,3 +65,29 @@ test("WindowsAutomation: lockWorkstation halts under Emergency Stop and executes
     assert.equal(res.locked, true);
   }
 });
+
+test("WindowsAutomation: closeApprovedApp enforces allowlist and rejects unapproved processes", async () => {
+  const automation = new WindowsAutomation();
+
+  // Rejects unapproved app
+  await assert.rejects(
+    async () => automation.closeApprovedApp("unauthorized_app.exe"),
+    /not in the approved closable allowlist/
+  );
+
+  // Accepts allowlisted app
+  const res = await automation.closeApprovedApp("notepad");
+  assert.equal(res.success, true);
+  assert.equal(res.app, "notepad");
+});
+
+test("WindowsAutomation: getSystemVitals provides holistic client machine telemetry", async () => {
+  const automation = new WindowsAutomation();
+  const vitals = await automation.getSystemVitals();
+
+  assert.equal(vitals.telemetrySource, "windows_pc");
+  assert.equal(typeof vitals.activeWindow, "string");
+  assert.equal(typeof vitals.ramUsagePercent, "number");
+  assert.equal(typeof vitals.memoryHeadroomSafe, "boolean");
+  assert.ok(vitals.battery);
+});

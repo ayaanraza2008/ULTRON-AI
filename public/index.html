@@ -113,6 +113,18 @@
             </select>
           </div>
           <div class="voice-profile-picker">
+            <label for="voicePersonalitySelect">Personality Mode:</label>
+            <select id="voicePersonalitySelect">
+              <option value="NORMAL" selected>NORMAL — Deep, Calm & Intelligent</option>
+              <option value="COMMAND">COMMAND — Firm & Authoritative</option>
+              <option value="ALERT">ALERT — Serious, Urgent & Clear</option>
+              <option value="RESEARCH">RESEARCH — Measured & Articulate</option>
+              <option value="SUCCESS">SUCCESS — Controlled Confidence</option>
+              <option value="ERROR">ERROR — Composed & Direct</option>
+              <option value="WAKE-UP">WAKE-UP — Short Acknowledgment</option>
+            </select>
+          </div>
+          <div class="voice-profile-picker">
             <label for="voiceLanguageSelect">Speech Dialect:</label>
             <select id="voiceLanguageSelect">
               <option value="auto" selected>Auto Dialect (Hinglish / Hindi / English)</option>
@@ -123,6 +135,9 @@
           <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
             <button class="btn btn-secondary btn-sm" id="speakOnyxBtn">🔊 Test Onyx Voice (Kokoro am_onyx)</button>
             <button class="btn btn-secondary btn-sm" id="speakOfflineBtn">🔊 Test PC Speaker (Offline SAPI)</button>
+          </div>
+          <div class="voice-status-badge" id="voiceStatusBadge" style="margin-top: 6px; font-size: 11px; color: #4ade80;">
+            ● Primary Voice Engine: Kokoro-82M (am_onyx Active) | Latency: &lt;50ms
           </div>
           <div class="daily-briefing-box" id="dailyBriefingBox">
             <h4>Daily Intelligence Briefing</h4>

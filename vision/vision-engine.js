@@ -9,8 +9,13 @@
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB max to protect 8GB RAM
 const SENSITIVE_TEXT_PATTERNS = [
   /\b[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\b/g, // JWT
-  /\b(ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{36,}\b/g, // GitHub tokens
-  /\bsk-[A-Za-z0-9]{32,}\b/g, // OpenAI/OpenRouter keys
+  /\b(ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{20,}\b/g, // GitHub tokens
+  /\bsk-[A-Za-z0-9_-]{24,}\b/g, // OpenAI/OpenRouter/Anthropic keys
+  /\bsb_secret_[A-Za-z0-9_.-]{20,}\b/g, // Supabase secret keys
+  /\bAKIA[0-9A-Z]{16}\b/g, // AWS Access Key ID
+  /\b(?:Bearer\s+)[A-Za-z0-9_.-]{20,}\b/gi, // Bearer tokens
+  /-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:RSA\s+)?PRIVATE\s+KEY-----/gi, // Private keys
+  /[?&;](?:password|passwd|pwd|secret|api_key|token)=[^&\s]+/gi, // Query string credentials
   /\b(?:\d{4}[ -]?){3}\d{4}\b/g // Credit cards
 ];
 

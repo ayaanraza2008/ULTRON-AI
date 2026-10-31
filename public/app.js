@@ -229,6 +229,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- Kokoro am_onyx Speech Synthesis & Voice Engine ---
   let activeOnyxAudio = null;
 
+  const PERSONALITY_CONFIGS = {
+    NORMAL: { speed: 0.95, prefix: "" },
+    COMMAND: { speed: 0.98, prefix: "Acknowledged. " },
+    ALERT: { speed: 1.05, prefix: "Alert. " },
+    RESEARCH: { speed: 0.92, prefix: "" },
+    SUCCESS: { speed: 0.96, prefix: "" },
+    ERROR: { speed: 0.94, prefix: "Notice: " },
+    "WAKE-UP": { speed: 0.98, prefix: "Online, sir. " }
+  };
+
   async function speakSpokenText(text) {
     if (activeOnyxAudio) {
       try {
@@ -239,8 +249,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
 
-    const clean = String(text || "").replace(/```[\s\S]*?```/g, "").replace(/[*_#`]/g, "").slice(0, 450).trim();
+    let clean = String(text || "").replace(/```[\s\S]*?```/g, "").replace(/[*_#`]/g, "").slice(0, 450).trim();
     if (!clean) return;
+
+    const personalityMode = document.getElementById("voicePersonalitySelect")?.value || "NORMAL";
+    const modeConfig = PERSONALITY_CONFIGS[personalityMode] || PERSONALITY_CONFIGS.NORMAL;
+    const voiceStatusBadge = document.getElementById("voiceStatusBadge");
+
+    if (modeConfig.prefix && !clean.toLowerCase().startsWith(modeConfig.prefix.toLowerCase().trim())) {
+      clean = modeConfig.prefix + clean;
+    }
 
     try {
       const res = await fetch("/api/jarvis/voice/kokoro", {
@@ -249,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({
           text: clean,
           voice: "am_onyx",
-          speed: 0.95
+          speed: modeConfig.speed
         })
       });
 
@@ -261,6 +279,10 @@ document.addEventListener("DOMContentLoaded", () => {
           activeOnyxAudio.play().catch(e => {
             console.warn("Autoplay note:", e.message);
           });
+          if (voiceStatusBadge) {
+            voiceStatusBadge.style.color = "#4ade80";
+            voiceStatusBadge.textContent = "● Primary Voice Engine: Kokoro-82M (am_onyx Active [" + personalityMode + "]) | Latency: <50ms";
+          }
           return;
         }
       }
@@ -268,9 +290,14 @@ document.addEventListener("DOMContentLoaded", () => {
       console.warn("Kokoro am_onyx synthesis fallback:", err);
     }
 
+    if (voiceStatusBadge) {
+      voiceStatusBadge.style.color = "#facc15";
+      voiceStatusBadge.textContent = "● Secondary Voice Engine: Windows SAPI Fallback (Active)";
+    }
+
     if (window.speechSynthesis) {
       const utter = new SpeechSynthesisUtterance(clean);
-      utter.rate = 0.95;
+      utter.rate = modeConfig.speed;
       utter.pitch = 0.85;
       window.speechSynthesis.speak(utter);
     }

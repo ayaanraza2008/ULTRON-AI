@@ -201,12 +201,16 @@ export class AgentOrchestrator {
           task.error = `Step '${step.id}' failed after ${step.attempts} attempts: ${err.message}`;
           task.finishedAt = new Date().toISOString();
           this.recordAudit(step.agentId, "STEP_FAILED", { taskId, stepId: step.id, error: err.message });
+          const classification = this.classifyFailure(err);
           this.deadLetterQueue.push({
             taskId: task.id,
             taskTitle: task.title,
             failedStepId: step.id,
             agentId: step.agentId,
             error: err.message,
+            category: classification.category,
+            retryable: classification.retryable,
+            idempotencyKey: `${task.id}:${step.id}:${step.attempts}`,
             timestamp: new Date().toISOString()
           });
           if (this.deadLetterQueue.length > 100) this.deadLetterQueue.shift();
@@ -453,10 +457,100 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Classify task failure into structured root-cause categories.
+   */
+  classifyFailure(error) {
+    const msg = String(error?.message || error || "").toLowerCase();
+    if (msg.includes("timeout") || msg.includes("etimedout") || msg.includes("esockettimedout")) {
+      return { category: "TIMEOUT", retryable: true };
+    }
+    if (msg.includes("rate limit") || msg.includes("429") || msg.includes("too many requests")) {
+      return { category: "RATE_LIMIT", retryable: true };
+    }
+    if (msg.includes("network") || msg.includes("econnrefused") || msg.includes("econnreset") || msg.includes("fetch failed")) {
+      return { category: "TRANSIENT_NETWORK", retryable: true };
+    }
+    if (msg.includes("permission") || msg.includes("unauthorized") || msg.includes("forbidden") || msg.includes("403") || msg.includes("401")) {
+      return { category: "PERMISSION_DENIED", retryable: false };
+    }
+    if (msg.includes("invalid") || msg.includes("validation") || msg.includes("malformed") || msg.includes("schema")) {
+      return { category: "VALIDATION_ERROR", retryable: false };
+    }
+    return { category: "FATAL_CRASH", retryable: false };
+  }
+
+  /**
    * Returns current tasks in the Dead Letter Queue.
    */
   getDeadLetterQueue() {
     return [...this.deadLetterQueue];
+  }
+
+  /**
+   * Computes telemetry stats for Dead Letter Queue contents.
+   */
+  getDLQStats() {
+    const stats = {
+      total: this.deadLetterQueue.length,
+      retryable: 0,
+      nonRetryable: 0,
+      categories: {}
+    };
+    for (const item of this.deadLetterQueue) {
+      if (item.retryable) stats.retryable += 1;
+      else stats.nonRetryable += 1;
+      stats.categories[item.category] = (stats.categories[item.category] || 0) + 1;
+    }
+    return stats;
+  }
+
+  /**
+   * Purges Dead Letter Queue items, optionally filtering by category.
+   */
+  purgeDLQ(categoryFilter = null) {
+    if (categoryFilter) {
+      const before = this.deadLetterQueue.length;
+      this.deadLetterQueue = this.deadLetterQueue.filter(item => item.category !== categoryFilter);
+      return { purged: before - this.deadLetterQueue.length, remaining: this.deadLetterQueue.length };
+    }
+    const purged = this.deadLetterQueue.length;
+    this.deadLetterQueue = [];
+    return { purged, remaining: 0 };
+  }
+
+  /**
+   * Upfront dependency cycle detection using Kahn's algorithm.
+   */
+  detectDAGCycle(nodes = []) {
+    const inDegree = new Map();
+    const adj = new Map();
+    for (const node of nodes) {
+      inDegree.set(node.id, 0);
+      adj.set(node.id, []);
+    }
+    for (const node of nodes) {
+      const deps = Array.isArray(node.dependsOn) ? node.dependsOn : [];
+      for (const depId of deps) {
+        if (adj.has(depId)) {
+          adj.get(depId).push(node.id);
+          inDegree.set(node.id, (inDegree.get(node.id) || 0) + 1);
+        }
+      }
+    }
+    const queue = [];
+    for (const [id, deg] of inDegree.entries()) {
+      if (deg === 0) queue.push(id);
+    }
+    let count = 0;
+    while (queue.length > 0) {
+      const u = queue.shift();
+      count++;
+      for (const v of adj.get(u) || []) {
+        inDegree.set(v, inDegree.get(v) - 1);
+        if (inDegree.get(v) === 0) queue.push(v);
+      }
+    }
+    return count !== nodes.length;
   }
 
   /**
@@ -497,6 +591,19 @@ export class AgentOrchestrator {
     }
 
     const taskId = id || "dag-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+    if (this.detectDAGCycle(nodes)) {
+      const failedTask = {
+        id: taskId,
+        title: title || "DAG Task",
+        status: "FAILED",
+        type: "DAG",
+        totalNodes: nodes.length,
+        error: "DAG deadlock or unresolvable dependency cycle detected.",
+        finishedAt: new Date().toISOString()
+      };
+      this.activeTasks.set(taskId, failedTask);
+      return failedTask;
+    }
     const nodeMap = new Map();
     const artifacts = {};
 
@@ -558,6 +665,15 @@ export class AgentOrchestrator {
         } catch (err) {
           node.status = "FAILED";
           node.error = err.message;
+          for (const pendingNode of nodeMap.values()) {
+            if (pendingNode.status === "PENDING") {
+              pendingNode.status = "CANCELLED";
+              pendingNode.error = `Cancelled due to upstream failure in node '${node.id}'`;
+            }
+          }
+          task.status = "FAILED";
+          task.error = `DAG step '${node.id}' failed: ${err.message}`;
+          task.finishedAt = new Date().toISOString();
           throw err;
         }
       }));
