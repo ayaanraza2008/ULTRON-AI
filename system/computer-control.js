@@ -78,7 +78,7 @@ export class WindowsComputerControl {
 
   /**
    * System Telemetry: CPU, RAM, OS, and Architecture
-   * Specifically tuned for AMD Ryzen 7 5700U / 8GB RAM monitoring.
+   * Reports the operating system running this process; it is not telemetry from a paired user device.
    */
   getSystemTelemetry() {
     const totalMem = os.totalmem();
@@ -93,7 +93,7 @@ export class WindowsComputerControl {
     return {
       platform: process.platform,
       architecture: process.arch,
-      executionEnvironment: "hosted_or_local_runtime",
+      executionEnvironment: "server_process",
       osType: os.type(),
       osRelease: os.release(),
       hostname: os.hostname(),
