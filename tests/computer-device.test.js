@@ -46,6 +46,33 @@ test("Computer Control: sandboxed file operations prevent path traversal", async
   try { await fs.rm(testDir, { recursive: true, force: true }); } catch {}
 });
 
+test("Computer Control: symbolic-link traversal is denied for reads, writes, and listings", async t => {
+  const root = path.join(os.tmpdir(), "ultron-symlink-root-" + Date.now());
+  const outside = path.join(os.tmpdir(), "ultron-symlink-outside-" + Date.now());
+  const ctrl = new WindowsComputerControl({ sandboxBase: root });
+  await ctrl.initialize();
+  await fs.mkdir(outside, { recursive: true });
+  await fs.writeFile(path.join(outside, "secret.txt"), "outside-secret", "utf8");
+  const linkType = process.platform === "win32" ? "junction" : "dir";
+  try {
+    await fs.symlink(outside, path.join(root, "linked"), linkType);
+  } catch (error) {
+    await fs.rm(root, { recursive: true, force: true });
+    await fs.rm(outside, { recursive: true, force: true });
+    t.skip("The test runner does not permit creating directory symlinks: " + error.code);
+    return;
+  }
+
+  await assert.rejects(() => ctrl.readFile("linked/secret.txt"), /Symbolic-link traversal violation|ELOOP/);
+  await assert.rejects(() => ctrl.writeFile("linked/pwned.txt", "must-not-write"), /Symbolic-link traversal violation|ELOOP/);
+  await assert.rejects(() => ctrl.listFiles("linked"), /Symbolic-link traversal violation|ELOOP/);
+  assert.equal(await fs.readFile(path.join(outside, "secret.txt"), "utf8"), "outside-secret");
+  await assert.rejects(() => fs.readFile(path.join(outside, "pwned.txt"), "utf8"), { code: "ENOENT" });
+
+  await fs.rm(root, { recursive: true, force: true });
+  await fs.rm(outside, { recursive: true, force: true });
+});
+
 test("Computer Control: command allowlist permits safe commands and blocks arbitrary commands", async () => {
   const ctrl = new WindowsComputerControl();
 
