@@ -238,7 +238,26 @@ const FILES_TO_CHECK = [
   "scripts/run-jarvis-benchmark.mjs",
   "benchmarks/jarvis-ultron-comparator.js",
   "tests/jarvis-ultron-comparator.test.js",
-  "scripts/run-jarvis-ultron-comparator.mjs"
+  "scripts/run-jarvis-ultron-comparator.mjs",
+  "core/ultron-core.js",
+  "tests/ultron-core.test.js",
+  "autonomy/ultron-autonomy.js",
+  "tests/ultron-autonomy.test.js",
+  "genesis/genesis-engine.js",
+  "tests/genesis-engine.test.js",
+  "forge/forge-engine.js",
+  "tests/forge-engine.test.js",
+  "robotics/robot-digital-twin.js",
+  "tests/robotics-twin-sim.test.js",
+  "vision/ultron-vision.js",
+  "tests/ultron-vision.test.js",
+  "nexus/nexus-orchestrator.js",
+  "tests/nexus-orchestrator.test.js",
+  "security/ultron-guardian.js",
+  "tests/ultron-guardian.test.js",
+  "intelligence/human-interface.js",
+  "tests/human-interface.test.js",
+  "tests/jarvis-nextgen-routes.test.js"
 ];
 
 let checked = 0;

@@ -1,3 +1,12 @@
+import { ultronCore } from "./core/ultron-core.js";
+import { ultronAutonomy } from "./autonomy/ultron-autonomy.js";
+import { genesisEngine } from "./genesis/genesis-engine.js";
+import { forgeEngine } from "./forge/forge-engine.js";
+import { RobotDigitalTwin, simToRealGate } from "./robotics/robot-digital-twin.js";
+import { ultronVision } from "./vision/ultron-vision.js";
+import { nexusOrchestrator } from "./nexus/nexus-orchestrator.js";
+import { ultronGuardian } from "./security/ultron-guardian.js";
+import { humanInterface } from "./intelligence/human-interface.js";
 /**
  * ULTRON AI — JARVIS × ULTRON Integration Router
  *
@@ -1101,6 +1110,154 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   const dshRouter = createDshGodRouter();
   router.use("/integrations/dsh-god", requireOwner, dshRouter);
   router.use("/jarvis/integrations/dsh-god", requireOwner, dshRouter);
+
+
+  // =========================================================================
+  // NEXT-GENERATION AUTONOMOUS INTELLIGENCE UPGRADE ROUTES (9 SYSTEMS)
+  // =========================================================================
+
+  router.get("/jarvis/nextgen/status", requireOwner, (_req, res) => {
+    res.json({
+      success: true,
+      subsystems: {
+        ultronCore: { status: "ACTIVE", version: "2.0.0" },
+        ultronAutonomy: { status: "ACTIVE", version: "2.0.0" },
+        ultronGenesis: { status: "ACTIVE", version: "2.0.0" },
+        ultronForge: { status: "ACTIVE", version: "2.0.0" },
+        ultronRobotics: { status: "ACTIVE", version: "2.0.0" },
+        ultronVision: { status: "ACTIVE", version: "2.0.0" },
+        ultronNexus: { status: "ACTIVE", version: "2.0.0" },
+        ultronGuardian: { status: "ACTIVE", version: "2.0.0" },
+        humanInterface: { status: "ACTIVE", version: "2.0.0" }
+      },
+      hardwareBounds: "AMD Ryzen 7 5700U · 8GB RAM · Pure CPU",
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  router.post("/jarvis/nextgen/core/inference", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { prompt, preferredProvider } = req.body || {};
+      const outcome = await ultronCore.orchestrateInference(prompt, { preferredProvider });
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/autonomy/plan", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { goal, autoRun } = req.body || {};
+      const plan = ultronAutonomy.decomposeGoal(goal);
+      if (autoRun) {
+        const runRes = await ultronAutonomy.runPlan(plan.id);
+        return res.json(runRes);
+      }
+      res.json({ success: true, plan });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/autonomy/approve", requireOwner, express.json(), (req, res) => {
+    try {
+      const { taskId, token, approved } = req.body || {};
+      const outcome = ultronAutonomy.submitApproval(taskId, token, approved);
+      res.json({ success: true, outcome });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/genesis/generate", requireOwner, express.json(), (req, res) => {
+    try {
+      const { type, spec } = req.body || {};
+      let artifact;
+      if (type === "APP") artifact = genesisEngine.generateApplication(spec);
+      else if (type === "3D_SIMULATION") artifact = genesisEngine.generate3DEnvironment(spec);
+      else artifact = genesisEngine.generateAgentCapability(spec);
+      const validation = genesisEngine.validateArtifact(artifact.id);
+      res.json({ success: true, artifact, validation });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/forge/security-scan", requireOwner, express.json(), (req, res) => {
+    try {
+      const { code } = req.body || {};
+      const secReport = forgeEngine.analyzeSecurity(code);
+      res.json(secReport);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/robotics/sim-step", requireOwner, express.json(), (req, res) => {
+    try {
+      const { command, dt, obstacles } = req.body || {};
+      const twin = new RobotDigitalTwin();
+      const stepRes = twin.step(command, dt, obstacles);
+      const lidar = twin.scanLidar(obstacles);
+      res.json({ success: true, stepRes, lidar });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/robotics/sim-to-real", requireOwner, express.json(), (req, res) => {
+    try {
+      const { robotId, trajectory } = req.body || {};
+      const passport = simToRealGate.issueDeploymentPassport(robotId, trajectory);
+      res.json(passport);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/vision/analyze", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { imageData, prompt, objAsset } = req.body || {};
+      if (objAsset) {
+        const mesh = ultronVision.process3DAsset(objAsset, "obj");
+        return res.json({ success: true, mesh });
+      }
+      const understanding = await ultronVision.understandImage(imageData, prompt);
+      const objects = ultronVision.detectObjects(imageData);
+      res.json({ success: true, understanding, objects });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/nexus/collaborate", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { goal } = req.body || {};
+      const result = await nexusOrchestrator.executeCollaborativeMission(goal);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/guardian/verify-audit", requireOwner, (req, res) => {
+    try {
+      const integrity = ultronGuardian.verifyAuditIntegrity();
+      res.json(integrity);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/nextgen/human/interact", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { userId, utterance } = req.body || {};
+      const outcome = await humanInterface.processInteraction(userId || "anonymous", utterance);
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
 
   return router;
 }
