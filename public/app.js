@@ -1187,7 +1187,7 @@
     stopRecognition();
     stopFallbackRecognition({ transcribe: false });
     if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
-    showToast(nextMode === "auto" ? "Voice recognition set to AUTO: Hindi + English." : nextMode === "hi-IN" ? "Voice recognition set to Hindi." : "Voice recognition set to English (India).");
+    showToast(nextMode === "auto" ? "AUTO selected: server-side STT detects Hindi + English when configured; browser fallback uses English (India)." : nextMode === "hi-IN" ? "Voice recognition set to Hindi." : "Voice recognition set to English (India).");
     void showDrawerView("voice-quality");
   }
 
