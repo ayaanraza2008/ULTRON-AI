@@ -7,14 +7,25 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 
 ## Latest verified checkpoint (2026-10-31)
 
-- Repository: `ayaanraza2008/ULTRON-AI`; `main` head `e608485b609e7d8f51d93dd4d033e636efd44975`.
-- Main CI run [41173106830](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41173106830) passed `npm run check`, `npm test`, Python Browser Use/Harness2/Model Lab checks, dependency advisory reporting and pinned World Intelligence build.
+- Repository: `ayaanraza2008/ULTRON-AI`; current `main` head `92158d843e29c123f81e4c7a61cd88f462c2b58c`. The latest JARVIS feature branch is separate and not deployed.
+- Current `main` CI run [41173509393](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41173509393) passed. JARVIS review branch `55c1d98` passed [run 41187642415](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41187642415): `npm run check`, 709 passing / 0 failing / 1 skipped, and pinned World Intelligence build. This is branch CI, not deployment evidence.
 - Merged PR #426 adds owner-scoped Hermes native Runs submission/polling/stop support; feature remains disabled by default until a secured endpoint and credentials are configured.
 - Merged PR #424 hardens Harness2 CLI output limits, output-flood termination, benchmark validation, resume recovery and symlink-safe atomic writes.
-- In the `Ultron core` Render workspace, `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` report live at `e608485`. Production-revision health/config/exact-revision workflow [41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) passed for the preceding commit `145ac4e`; get a fresh exact-revision check for `e608485`. Do not trigger manual deployments on services with auto-deploy enabled.
+- In the `Ultron core` Render workspace, `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` report live at `main` commit `92158d8`. Production-revision workflow [41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) passed only for preceding commit `145ac4e`; a fresh exact-revision check for `92158d8` remains open. Do not trigger manual deployments on services with auto-deploy enabled.
 - Separate `ultron-core-interface` remains deployed on its feature branch at `68b042641bc1e4a0ab56953df36637402c47df86`; account-safe browser-to-API, voice and physical-device E2E remain open.
 - Supabase `ULTRON-AI` is `ACTIVE_HEALTHY`; core user-data tables have RLS, `anon` has no public table grants, and the private document bucket/migration are present. The Auth Security Advisor still reports leaked-password protection disabled.
 - No real provider inference, two-account RLS E2E, worker task completion, Hermes live execution, Windows/Android physical pairing, or isolated coding sandbox was proven in this checkpoint.
+
+
+## JARVIS × ULTRON and interface acceptance update (2026-10-31)
+
+- PR #431 remains open against main at feature head `55c1d98c5dd42f7bde829d20febdd027e7d2c4cd`. PR #432's security hardening is merged into PR #431's feature branch only.
+- JARVIS feature branch CI `41187642415` passed: syntax check, 709 tests passed, 0 failed, 1 skipped, pinned World Intelligence build passed. Android/Windows target-build jobs for this latest head were still running; previous revisions of both wake companion jobs built successfully.
+- Device wake companion targets now use `https://ultron-core-interface.onrender.com/`; provider request metadata and the feature-branch World Intelligence embed allowlist no longer use the retired `ultron-ai-zvd7` origin. These branch changes have not been deployed.
+- PWA interface PR #433 passed CI run `41187366080` and adds session-cookie proxy, fixed-origin world-intelligence proxy and fail-closed route regression tests. It remains open against the interface feature branch.
+- Worker acceptance PR #434 passed CI run `41187572722`; it adds an explicitly manual, plan-only smoke workflow requiring dedicated GitHub secrets. No live task has been run yet.
+- Live worker process startup is visible in Render logs, but the task table had no rows at the last read-only count. Real completion remains unverified.
+- Physical Windows/Android installation, live model text/vision, two-account auth/RLS, voice/STT/TTS, Hermes execution, PC/phone control, containerized code execution and live smart-home actions are still open gates.
 
 ## Historical ledger snapshots
 
