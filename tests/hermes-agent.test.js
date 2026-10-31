@@ -230,6 +230,43 @@ test("Hermes delegates through the native Runs API and polls a completed executi
   assert.equal(requests.length, 2);
 });
 
+test("Hermes never replays an ambiguous native Runs submission through chat completions", async (t) => {
+  let calls = [];
+  const cases = [
+    {
+      name: "HTTP 500 after submission",
+      fetchImpl: async (url) => {
+        calls.push(url);
+        return new Response(JSON.stringify({ error: "upstream failure" }), { status: 500 });
+      }
+    },
+    {
+      name: "network failure during submission",
+      fetchImpl: async (url) => {
+        calls.push(url);
+        throw new Error("connection dropped after request");
+      }
+    }
+  ];
+
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      calls = [];
+      const result = await runHermesAgentTask({
+        env: configuredEnv(),
+        userId: ownerId,
+        task: "Run one bounded task without duplicate execution.",
+        fetchImpl: scenario.fetchImpl
+      });
+      assert.notEqual(result.state, "completed");
+      assert.equal(calls.filter(url => url.endsWith("/chat/completions")).length, 0);
+      assert.equal(calls.filter(url => url.endsWith("/runs")).length, 1);
+    });
+  }
+
+  function unused() {}
+});
+
 test("Hermes does not auto-approve native runs waiting for approval", async () => {
   const requests = [];
   const result = await runHermesAgentTask({
