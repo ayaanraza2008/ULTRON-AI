@@ -88,4 +88,4 @@ For a local ULTRON backend on the same computer, set the URL to `http://127.0.0.
 
 ## Limitations
 
-The HTTP bridge is a local companion, not a hosted browser. Configuration readiness alone does not prove Chrome is reachable. Performance traces are short diagnostic samples; use Chrome DevTools manually for full timeline inspection and repeat the trace under representative load. Remote live-browser access remains unverified until the bridge, gateway, and exact ULTRON owner account are configured and tested end to end.
+The HTTP bridge is a local companion, not a hosted browser. Configuration readiness alone does not prove Chrome is reachable. The approval challenge is stored in process memory and is currently suitable only for a single backend instance; use a shared atomic store before scaling the backend horizontally. Performance traces are short diagnostic samples; use Chrome DevTools manually for full timeline inspection and repeat the trace under representative load. Remote live-browser access remains unverified until the bridge, gateway, and exact ULTRON owner account are configured and tested end to end.
