@@ -19,8 +19,8 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 
 ## JARVIS × ULTRON and interface acceptance update (2026-10-31)
 
-- PR #431 remains open against main at feature head `55c1d98c5dd42f7bde829d20febdd027e7d2c4cd`. PR #432's security hardening is merged into PR #431's feature branch only.
-- JARVIS feature branch CI `41187642415` passed: syntax check, 709 tests passed, 0 failed, 1 skipped, pinned World Intelligence build passed. Android/Windows target-build jobs for this latest head were still running; previous revisions of both wake companion jobs built successfully.
+- PR #431 remains open against main at feature head `f6d8c18ac2d97717f56c60d7add31847ca724701`. PR #432's security hardening is merged into PR #431's feature branch only.
+- JARVIS feature branch CI `41188047166` passed: syntax check, 709 tests passed, 0 failed, 1 skipped, pinned World Intelligence build passed. Android/Windows target-build jobs for this latest head were still running; both companion artifacts had already succeeded on the earlier `21f847cf` head.
 - Device wake companion targets now use `https://ultron-core-interface.onrender.com/`; provider request metadata and the feature-branch World Intelligence embed allowlist no longer use the retired `ultron-ai-zvd7` origin. These branch changes have not been deployed.
 - PWA interface PR #433 passed CI run `41187366080` and adds session-cookie proxy, fixed-origin world-intelligence proxy and fail-closed route regression tests. It remains open against the interface feature branch.
 - Worker acceptance PR #434 passed CI run `41187572722`; it adds an explicitly manual, plan-only smoke workflow requiring dedicated GitHub secrets. No live task has been run yet.
