@@ -44,6 +44,36 @@ function readInput(input) {
     if (typeof input.confirmExternalAction !== "boolean") throw Object.assign(new Error("Invalid confirmation flag."), { code: "CHROME_CONFIRMATION_INVALID", status: 400 });
     allowed.confirmExternalAction = input.confirmExternalAction;
   }
+  if (input.approvalFingerprint !== undefined) {
+    const item = input.approvalFingerprint;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw Object.assign(new Error("Invalid approval fingerprint."), { code: "CHROME_APPROVAL_FINGERPRINT_INVALID", status: 400 });
+    }
+    const fields = ["origin", "pageUrl", "selector", "label", "tag", "type", "formActionOrigin"];
+    for (const field of fields) {
+      const max = field === "pageUrl" ? 1000 : field === "selector" ? 600 : 300;
+      if (typeof item[field] !== "string" || item[field].length > max) {
+        throw Object.assign(new Error("Invalid approval fingerprint."), { code: "CHROME_APPROVAL_FINGERPRINT_INVALID", status: 400 });
+      }
+    }
+    if (typeof item.highImpact !== "boolean" || typeof item.crossOriginForm !== "boolean") {
+      throw Object.assign(new Error("Invalid approval fingerprint."), { code: "CHROME_APPROVAL_FINGERPRINT_INVALID", status: 400 });
+    }
+    allowed.approvalFingerprint = {
+      origin: item.origin,
+      pageUrl: item.pageUrl,
+      selector: item.selector,
+      label: item.label,
+      tag: item.tag,
+      type: item.type,
+      formActionOrigin: item.formActionOrigin,
+      highImpact: item.highImpact,
+      crossOriginForm: item.crossOriginForm
+    };
+  }
+  if (allowed.action === "click" && allowed.confirmExternalAction === true && !allowed.approvalFingerprint) {
+    throw Object.assign(new Error("A one-time exact-target approval fingerprint is required."), { code: "CHROME_APPROVAL_FINGERPRINT_REQUIRED", status: 403 });
+  }
   if (allowed.action === "navigate" && !allowed.url) throw Object.assign(new Error("Navigation requires a URL."), { code: "CHROME_URL_REQUIRED", status: 400 });
   if (["click", "inspect_click", "fill"].includes(allowed.action) && !allowed.selector) throw Object.assign(new Error("Click/fill requires a selector."), { code: "CHROME_SELECTOR_REQUIRED", status: 400 });
   if (allowed.action === "fill" && allowed.text === undefined) throw Object.assign(new Error("Fill requires text."), { code: "CHROME_TEXT_REQUIRED", status: 400 });
