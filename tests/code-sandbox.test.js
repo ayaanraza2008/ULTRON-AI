@@ -31,7 +31,7 @@ function fakeSpawn({ stdout = "", stderr = "", exitCode = 0 } = {}) {
     const child = new EventEmitter();
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
-    child.stdin = { end(value) {
+    child.stdin = { on() { return this; }, end(value) {
       capturedSource = value;
       queueMicrotask(() => {
         if (stdout) child.stdout.emit("data", Buffer.from(stdout));
