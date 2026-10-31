@@ -11,6 +11,7 @@ export class DeviceHub {
   constructor(options = {}) {
     this.pairedDevices = new Map();
     this.pendingPairings = new Map();
+    this.commandQueue = new Map();
     this.notifications = [];
     this.maxNotifications = 100;
   }
@@ -146,6 +147,121 @@ export class DeviceHub {
 
   unpairDevice(deviceId) {
     const deleted = this.pairedDevices.delete(deviceId);
+    this.commandQueue.delete(deviceId);
     return { success: deleted, deviceId };
+  }
+
+  /**
+   * Cryptographically signs a command payload using the device's auth token as HMAC key.
+   */
+  signPayload(authToken, payload) {
+    const canonical = typeof payload === "string" ? payload : JSON.stringify(payload);
+    return crypto.createHmac("sha256", authToken).update(canonical).digest("hex");
+  }
+
+  /**
+   * Verifies an HMAC-SHA256 signature against the device's auth token.
+   */
+  verifySignature(authToken, payload, signature) {
+    if (!authToken || !signature) return false;
+    try {
+      const expected = this.signPayload(authToken, payload);
+      const expectedBuf = Buffer.from(expected, "hex");
+      const sigBuf = Buffer.from(signature, "hex");
+      if (expectedBuf.length !== sigBuf.length) return false;
+      return crypto.timingSafeEqual(expectedBuf, sigBuf);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Enqueue a signed remote command for a paired companion device.
+   */
+  enqueueCommand(deviceId, action, payload = {}) {
+    const device = this.pairedDevices.get(deviceId);
+    if (!device) {
+      return { success: false, error: "DEVICE_NOT_FOUND" };
+    }
+
+    const commandId = "cmd-" + crypto.randomUUID();
+    const createdAt = Date.now();
+    const expiresAt = createdAt + 5 * 60 * 1000; // 5-minute expiry
+
+    const rawPayload = {
+      id: commandId,
+      deviceId,
+      action: String(action),
+      payload,
+      createdAt,
+      expiresAt
+    };
+
+    const signature = this.signPayload(device.authToken, rawPayload);
+
+    const command = {
+      ...rawPayload,
+      signature,
+      status: "pending",
+      result: null
+    };
+
+    const list = this.commandQueue.get(deviceId) || [];
+    list.push(command);
+    // Retain only latest 50 commands per device
+    if (list.length > 50) list.shift();
+    this.commandQueue.set(deviceId, list);
+
+    return { success: true, command };
+  }
+
+  /**
+   * Companion device polls for pending commands with bearer token authentication.
+   */
+  pollPendingCommands(deviceId, authToken) {
+    const device = this.authenticateDevice(deviceId, authToken);
+    if (!device) {
+      return { success: false, error: "AUTHENTICATION_FAILED", commands: [] };
+    }
+
+    const list = this.commandQueue.get(deviceId) || [];
+    const now = Date.now();
+    const pending = [];
+
+    for (const cmd of list) {
+      if (cmd.status === "pending") {
+        if (now > cmd.expiresAt) {
+          cmd.status = "expired";
+        } else {
+          cmd.status = "dispatched";
+          cmd.dispatchedAt = now;
+          pending.push(cmd);
+        }
+      }
+    }
+
+    return { success: true, commands: pending };
+  }
+
+  /**
+   * Companion device reports task completion with signed result payload.
+   */
+  completeCommand(deviceId, commandId, authToken, result = {}) {
+    const device = this.authenticateDevice(deviceId, authToken);
+    if (!device) {
+      return { success: false, error: "AUTHENTICATION_FAILED" };
+    }
+
+    const list = this.commandQueue.get(deviceId) || [];
+    const cmd = list.find(c => c.id === commandId);
+    if (!cmd) {
+      return { success: false, error: "COMMAND_NOT_FOUND" };
+    }
+
+    cmd.status = result.error ? "failed" : "completed";
+    cmd.result = result;
+    cmd.completedAt = Date.now();
+
+    return { success: true, commandId, status: cmd.status };
   }
 }

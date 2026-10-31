@@ -111,6 +111,17 @@
               <option value="hinglish_conversational">Desi Assistant (Hindi/Hinglish Friendly)</option>
             </select>
           </div>
+          <div class="voice-profile-picker">
+            <label for="voiceLanguageSelect">Speech Dialect:</label>
+            <select id="voiceLanguageSelect">
+              <option value="auto" selected>Auto Dialect (Hinglish / Hindi / English)</option>
+              <option value="hi-IN">Hindi First (Spoken & Clean)</option>
+              <option value="en-IN">Indian English (Refined)</option>
+            </select>
+          </div>
+          <div style="margin-top: 8px;">
+            <button class="btn btn-secondary btn-sm" id="speakOfflineBtn">🔊 Test PC Speaker (Offline SAPI)</button>
+          </div>
           <div class="daily-briefing-box" id="dailyBriefingBox">
             <h4>Daily Intelligence Briefing</h4>
             <p id="dailyBriefingText">Loading briefing...</p>

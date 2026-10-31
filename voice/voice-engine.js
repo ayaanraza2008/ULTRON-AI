@@ -119,6 +119,34 @@ export class JarvisVoiceEngine {
   }
 
   /**
+   * Build an optimized system + user prompt for trilingual spoken conversation.
+   * Guarantees spoken-friendly cadence (no markdown tables, no bullet lists, concise).
+   */
+  buildVoicePrompt(userPrompt, speechLanguageMode = "auto") {
+    let modeDirective = "";
+    if (speechLanguageMode === "hi-IN") {
+      modeDirective = "Respond primarily in spoken Hindi (Devanagari or Roman Hindi depending on the prompt). Keep technical terms (like CPU, RAM, battery, volume) in English. Sound warm and natural.";
+    } else if (speechLanguageMode === "en-IN") {
+      modeDirective = "Respond in clear, confident Indian English with a refined assistant persona. Keep answers crisp and helpful.";
+    } else {
+      modeDirective = "Match the language and dialect of the user prompt naturally. If the user speaks Hinglish, respond in natural conversational Hinglish. If in English, respond in English. If in Hindi, respond in Hindi.";
+    }
+
+    const voiceDirective = [
+      "You are speaking aloud through text-to-speech.",
+      "Do NOT use markdown formatting, asterisks, bullet points, numbered lists, or code blocks.",
+      "Keep responses brief, conversational, and direct (1 to 3 spoken sentences).",
+      modeDirective
+    ].join(" ");
+
+    return {
+      directive: voiceDirective,
+      prompt: String(userPrompt || "").trim(),
+      languageMode: speechLanguageMode
+    };
+  }
+
+  /**
    * Detect voice activity and interruption.
    */
   triggerInterruption() {

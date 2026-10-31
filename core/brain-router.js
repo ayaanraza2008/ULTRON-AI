@@ -114,8 +114,9 @@ export class BrainRouter {
 
   /**
    * Select candidate model provider chain with CPU fallback and circuit breaking.
+   * Supports Groq and Gemini Flash providers when keys are configured or requested.
    */
-  selectProviderChain(taskComplexity) {
+  selectProviderChain(taskComplexity = {}) {
     const primaryCloud = {
       name: "openrouter-primary",
       type: "cloud_free",
@@ -147,7 +148,45 @@ export class BrainRouter {
       circuitOpen: this.isCircuitOpen("ollama-local-cpu")
     };
 
-    const chain = [primaryCloud, secondaryCloud, localCpu].filter(provider => !provider.circuitOpen);
+    const extraProviders = [];
+
+    if (this.env.GROQ_API_KEY) {
+      extraProviders.push({
+        name: "groq-cloud",
+        type: "cloud_ultra_fast",
+        model: taskComplexity.tier === "coding" ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant",
+        baseUrl: this.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+        apiKeyEnv: "GROQ_API_KEY",
+        supportsTools: true,
+        circuitOpen: this.isCircuitOpen("groq-cloud")
+      });
+    }
+
+    if (this.env.GEMINI_API_KEY) {
+      extraProviders.push({
+        name: "gemini-flash",
+        type: "cloud_multimodal",
+        model: "gemini-1.5-flash",
+        baseUrl: this.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai",
+        apiKeyEnv: "GEMINI_API_KEY",
+        supportsTools: true,
+        supportsVision: true,
+        circuitOpen: this.isCircuitOpen("gemini-flash")
+      });
+    }
+
+    let candidates = [];
+    if (taskComplexity.tier === "multimodal" && this.env.GEMINI_API_KEY) {
+      const gemini = extraProviders.find(p => p.name === "gemini-flash");
+      candidates = [gemini, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "gemini-flash"), localCpu];
+    } else if (taskComplexity.preferredProvider === "groq" && this.env.GROQ_API_KEY) {
+      const groq = extraProviders.find(p => p.name === "groq-cloud");
+      candidates = [groq, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "groq-cloud"), localCpu];
+    } else {
+      candidates = [primaryCloud, secondaryCloud, ...extraProviders, localCpu];
+    }
+
+    const chain = candidates.filter(provider => provider && !provider.circuitOpen);
     return chain.length > 0 ? chain : [primaryCloud];
   }
 

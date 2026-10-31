@@ -120,3 +120,49 @@ test("Device Hub: pairing workflow, telemetry, and notifications", () => {
   assert.equal(notif.delivered, true);
   assert.equal(hub.getNotifications().length, 1);
 });
+
+test("Device Hub: cryptographically signed command queueing, polling, and completion", () => {
+  const hub = new DeviceHub();
+
+  const pairing = hub.createPairingCode({ name: "Ayaan Samsung Tab S9", platform: "android" });
+  const verified = hub.verifyPairingCode(pairing.code);
+  const deviceId = verified.deviceId;
+  const token = verified.authToken;
+
+  // Enqueue command
+  const enq = hub.enqueueCommand(deviceId, "trigger_vibrate", { pattern: [100, 200, 100] });
+  assert.equal(enq.success, true);
+  assert.ok(enq.command.id);
+  assert.ok(enq.command.signature);
+
+  // Verify HMAC signature
+  const rawPayload = {
+    id: enq.command.id,
+    deviceId: enq.command.deviceId,
+    action: enq.command.action,
+    payload: enq.command.payload,
+    createdAt: enq.command.createdAt,
+    expiresAt: enq.command.expiresAt
+  };
+  const isSigValid = hub.verifySignature(token, rawPayload, enq.command.signature);
+  assert.equal(isSigValid, true);
+
+  // Tampered payload fails verification
+  const isTamperedValid = hub.verifySignature(token, { ...rawPayload, action: "format_storage" }, enq.command.signature);
+  assert.equal(isTamperedValid, false);
+
+  // Companion device polls for pending commands
+  const poll = hub.pollPendingCommands(deviceId, token);
+  assert.equal(poll.success, true);
+  assert.equal(poll.commands.length, 1);
+  assert.equal(poll.commands[0].action, "trigger_vibrate");
+
+  // Companion completes command
+  const done = hub.completeCommand(deviceId, enq.command.id, token, { executed: true });
+  assert.equal(done.success, true);
+  assert.equal(done.status, "completed");
+
+  // Re-poll shows 0 pending
+  const pollEmpty = hub.pollPendingCommands(deviceId, token);
+  assert.equal(pollEmpty.commands.length, 0);
+});

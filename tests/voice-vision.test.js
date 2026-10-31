@@ -45,6 +45,23 @@ test("Voice Engine: supports voice interruption and profiles", () => {
   assert.equal(engine.interrupted, false);
 });
 
+test("Voice Engine: builds trilingual voice prompts for Hindi, Indian English, and Auto", () => {
+  const engine = new JarvisVoiceEngine();
+
+  const hindiPrompt = engine.buildVoicePrompt("Aaj ka schedule kya hai?", "hi-IN");
+  assert.ok(hindiPrompt.directive.includes("Hindi"));
+  assert.equal(hindiPrompt.languageMode, "hi-IN");
+  assert.equal(hindiPrompt.prompt, "Aaj ka schedule kya hai?");
+
+  const englishPrompt = engine.buildVoicePrompt("What is the current CPU usage?", "en-IN");
+  assert.ok(englishPrompt.directive.includes("Indian English"));
+  assert.equal(englishPrompt.languageMode, "en-IN");
+
+  const autoPrompt = engine.buildVoicePrompt("Battery status check karo", "auto");
+  assert.ok(autoPrompt.directive.includes("Match the language"));
+  assert.ok(autoPrompt.directive.includes("Hinglish"));
+});
+
 test("Vision Engine: validates image byte bounds and formats", () => {
   const engine = new JarvisVisionEngine({ maxBytes: 1024 * 1024 });
 

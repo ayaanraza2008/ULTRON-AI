@@ -244,6 +244,37 @@ document.addEventListener("DOMContentLoaded", () => {
     setCoreState("idle");
   });
 
+  const voiceLanguageSelect = document.getElementById("voiceLanguageSelect");
+  if (voiceLanguageSelect) {
+    voiceLanguageSelect.addEventListener("change", (e) => {
+      const lang = e.target.value;
+      if (recognition) {
+        recognition.lang = lang === "hi-IN" ? "hi-IN" : "en-IN";
+      }
+      appendMessage("VOICE AGENT", `Speech dialect set to ${lang.toUpperCase()}.`, false);
+    });
+  }
+
+  const speakOfflineBtn = document.getElementById("speakOfflineBtn");
+  if (speakOfflineBtn) {
+    speakOfflineBtn.addEventListener("click", async () => {
+      try {
+        speakOfflineBtn.disabled = true;
+        speakOfflineBtn.textContent = "🔊 Speaking...";
+        await fetch("/api/jarvis/voice/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: "All systems nominal, sir. ULTRON AI is fully operational." })
+        });
+      } catch (err) {
+        console.error("Offline speech error:", err);
+      } finally {
+        speakOfflineBtn.disabled = false;
+        speakOfflineBtn.textContent = "🔊 Test PC Speaker (Offline SAPI)";
+      }
+    });
+  }
+
   if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SpeechRec();

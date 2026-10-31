@@ -67,3 +67,19 @@ test("BrainRouter: provider chain with circuit breaking and CPU fallback", () =>
   const newChain = router.selectProviderChain(complexity);
   assert.equal(newChain[0].name, "openrouter-secondary");
 });
+
+test("BrainRouter: prioritizes Groq and Gemini when environment keys are configured", () => {
+  const routerWithGroq = new BrainRouter({
+    env: { GROQ_API_KEY: "gsk_mock_key_123" }
+  });
+  const chainGroq = routerWithGroq.selectProviderChain({ tier: "routine", preferredProvider: "groq" });
+  assert.equal(chainGroq[0].name, "groq-cloud");
+  assert.equal(chainGroq[0].apiKeyEnv, "GROQ_API_KEY");
+
+  const routerWithGemini = new BrainRouter({
+    env: { GEMINI_API_KEY: "AIza_mock_key_123" }
+  });
+  const chainGemini = routerWithGemini.selectProviderChain({ tier: "multimodal" });
+  assert.equal(chainGemini[0].name, "gemini-flash");
+  assert.equal(chainGemini[0].supportsVision, true);
+});
