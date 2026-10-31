@@ -143,8 +143,8 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       return res.status(400).json({ error: { code: "INVALID_JARVIS_EMPLOYEE_TASK", message: "Choose a supported employee role and mode, provide a 2–2000 character goal, and keep context within 4000 characters." } });
     }
 
-    const autonomousWorkflow = /\\b(research|investigate|look into|find sources)\\b/i.test(goal)
-      && /\\b(report|summary|recommendations|brief)\\b/i.test(goal);
+    const autonomousWorkflow = /\b(research|investigate|look into|find sources)\b/i.test(goal)
+      && /\b(report|summary|recommendations|brief)\b/i.test(goal);
     const taskInput = {
       taskType: autonomousWorkflow ? "autonomous" : "employee",
       executionMode: "employee_worker",
