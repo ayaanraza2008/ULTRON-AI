@@ -520,3 +520,29 @@ Status Key:
 - **Level 9 (Security & Performance):** System paths protected (C:\Windows, C:\Program Files fail closed with ACCESS_DENIED), emergency stop non-bypassable, FFmpeg threads bounded to 4
 - **Level 10 (Deployment):** Render Ultron core workspace compatible
 - **Status:** LIVE_VERIFIED
+
+
+---
+
+## CATEGORY W: DSH-GOD MODEL INTELLIGENCE & UNIVERSAL API GATEWAY
+- **Level 1 (Major):** 76-Provider Registry, Free OpenCode & Kilo Lanes, Virtual Combos, RTK Token Optimizer, Local API Gateway, 10 Account Channels
+- **Level 2 (Subsystem):** `integrations/dsh-god/` (19 Modules: config, privacy, registry, gateways, combos, token-optimizer, discovery, router, gateway-manager, channels, monitor, diagnostics)
+- **Level 3 (Module):** DSH-GOD Port (Version 2.7.3, commit `c67271f4`) into Native Pure-JS ES Modules
+- **Level 4 (Component):**
+  - Complete 76-provider registry (`integrations/dsh-god/provider-registry.json`) across apiKey, free, free-tier, local, and oauth categories.
+  - Keyless OpenCode Zen / Free Lane v2 client fingerprint (`opencode/latest/2.0.26/cli`), 48-bit inverted descending hex session IDs, official `read` and `shell` tool schema injections, refusal of `tool_choice: "none"`.
+  - Keyless Kilo AI Free Pool (`https://api.kilo.ai/api/gateway`) filtered by `isFree: true` with persistent third-party logging disclosures.
+  - Virtual Combos (`combo:`) supporting 5 strategies (`fallback`, `round-robin`, `smart`, `usage`, `pace`) with strict capability intersection bounds (context min, false vision if any candidate lacks it).
+  - RTK Token Optimizer: automated tool output compaction (`gitDiff` hunk truncation, `gitStatus` count summaries, `gitLog` bodies omitted, `grep` match caps, directory listing noise stripping, `smartTruncate` 120/60 head/tail), Caveman and Ponytail prompt shaping, cumulative savings accounting.
+  - Universal OpenAI and Anthropic Local Gateway (`127.0.0.1:8080`): constant-time API key verification, `tool_calls[].index` renumbered from 0, suppression of internal fingerprint tools, `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/messages/count_tokens`.
+  - 10 Standalone Account Channels: LobsterAI, Qoder, Qoder China, TRAE, Cline, Loomy, Raccoon, MiniMax Code, ZCode, Gemini Channel.
+  - ULTRON Master Brain Integration: `core/brain-router.js` dynamic candidate traversal incorporates `dsh-god-gateway` with task complexity routing and automatic failover.
+  - Cyber-HUD Control Center UI: Dedicated "Model Intelligence & Gateway" HUD panel with real-time provider browser, combo viewer, test runner, and account channel status cards.
+  - Hardware & Safety: Magpie 68MB binary excluded to protect AMD Ryzen 7 5700U 8 GB RAM boundary; denied channels (`workbuddy`, `codebuddy`, `huaweicloud`) strictly excluded.
+- **Level 5 (Configuration):** `DSH_GATEWAY_PORT`, `DSH_GATEWAY_HOST`, `DSH_ALLOW_LAN`, `DSH_GATEWAY_KEY`, mounted on `/api/integrations/dsh-god/*`
+- **Level 6 (Automated Test):** `tests/dsh-provider-registry.test.js` (6/6 PASS), `tests/dsh-free-gateways.test.js` (5/5 PASS), `tests/dsh-aggregate-providers.test.js` (2/2 PASS), `tests/dsh-combo-router.test.js` (4/4 PASS), `tests/dsh-token-optimizer.test.js` (7/7 PASS), `tests/dsh-gateway-compatibility.test.js` (1/1 PASS), `tests/dsh-account-channels.test.js` (2/2 PASS), `tests/dsh-usage-diagnostics.test.js` (2/2 PASS), `tests/dsh-brain-integration.test.js` (3/3 PASS)
+- **Level 7 (Integration Test):** `tests/dsh-facade-routes.test.js` (1/1 PASS - All 8 management endpoints verified)
+- **Level 8 (Live Verification):** Mounted on `/api/integrations/dsh-god/*` and gateway port `8080`
+- **Level 9 (Security & Performance):** Automated credential redaction in all traces, constant-time bearer validation, loopback default, privacy disclosures on free egress
+- **Level 10 (Deployment):** Render `Ultron core` workspace compatible
+- **Status:** `LIVE_VERIFIED`

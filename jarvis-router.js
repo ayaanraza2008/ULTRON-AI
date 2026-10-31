@@ -35,6 +35,7 @@ import { mediaDiscoveryEngine } from "./media/media-discovery-engine.js";
 import { videoEditingEngine } from "./media/video-editing-engine.js";
 import { imageStudioEngine } from "./media/image-studio-engine.js";
 import { autonomousProductionOrchestrator } from "./media/autonomous-production-orchestrator.js";
+import { createDshGodRouter } from "./integrations/dsh-god/management-api.js";
 
 
 
@@ -1020,6 +1021,11 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   router.get("/jarvis/media/production/history", requireOwner, (_req, res) => {
     res.json({ success: true, history: autonomousProductionOrchestrator.getHistory() });
   });
+
+  // DSH-GOD Complete Capability Integration Routes
+  const dshRouter = createDshGodRouter();
+  router.use("/integrations/dsh-god", requireOwner, dshRouter);
+  router.use("/jarvis/integrations/dsh-god", requireOwner, dshRouter);
 
   return router;
 }

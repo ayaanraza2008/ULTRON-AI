@@ -81,13 +81,23 @@ A capability is complete **only** when all 10 acceptance conditions are satisfie
 | **V. Image Studio** | Thumbnail & Prompt Studio | Generates high-impact SVG thumbnails with neon borders and enhances AI prompts. | `node --test tests/image-studio-engine.test.js` | **PASS** |
 | **V. Production** | 12-Step Autonomous Core | One-command autonomous production creates concept, timeline, and renders export. | `node --test tests/autonomous-production.test.js` | **PASS** |
 | **V. REST Router** | Control Plane Endpoints | Gated REST endpoints for system control, media discovery, and rendering. | `node --test tests/media-system-routes.test.js` | **PASS** |
+| **W. DSH Registry** | 76-Provider Directory | Complete catalog of 76 providers loaded, filtered, with denied channels excluded. | `node --test tests/dsh-provider-registry.test.js` | **PASS** |
+| **W. DSH Free Lanes** | OpenCode v2 & Kilo Gate | v2 fingerprint, descending hex session ID, Kilo free pool, and privacy redaction. | `node --test tests/dsh-free-gateways.test.js` | **PASS** |
+| **W. DSH Multi-Wire** | Aggregate Dispatcher | Dispatches across openai-chat, openai-responses, anthropic-messages wire formats. | `node --test tests/dsh-aggregate-providers.test.js` | **PASS** |
+| **W. DSH Combos** | Virtual Combo Router | 5 strategies (fallback, round-robin, smart, usage, pace) with capacity intersection. | `node --test tests/dsh-combo-router.test.js` | **PASS** |
+| **W. DSH Token Saver** | RTK Compactor & Metrics | Compaction of git diff/status/log, noise stripping, smart truncate, savings ledger. | `node --test tests/dsh-token-optimizer.test.js` | **PASS** |
+| **W. DSH Gateway** | Universal HTTP Gateway | Local listener serving /v1/models, /v1/chat/completions, /v1/messages, /health. | `node --test tests/dsh-gateway-compatibility.test.js` | **PASS** |
+| **W. DSH Channels** | 10 Account Channels | Audit registry & adapters for LobsterAI, Qoder, TRAE, Cline, Loomy, Raccoon, etc. | `node --test tests/dsh-account-channels.test.js` | **PASS** |
+| **W. DSH Diagnostics** | Usage & Error Classifier | TTFT tracking, turn latency aggregation, and failure code classification. | `node --test tests/dsh-usage-diagnostics.test.js` | **PASS** |
+| **W. DSH Brain** | Master Brain Failover | BrainRouter provider chain traversal incorporates dsh-god-gateway with fallback. | `node --test tests/dsh-brain-integration.test.js` | **PASS** |
+| **W. DSH Facade** | Management REST API | Gated REST endpoints for status, providers, combos, catalog, usage, and channels. | `node --test tests/dsh-facade-routes.test.js` | **PASS** |
 
 ---
 
 ## CURRENT AUDIT SUMMARY
 
-- **Total Criteria Defined:** 61
-- **Criteria Passing with Evidence:** 61 (100%)
+- **Total Criteria Defined:** 71
+- **Criteria Passing with Evidence:** 71 (100%)
 - **Criteria Failing:** 0
 - **Criteria Blocked by Physical Hardware:** Real-world physical robot hardware units (actuator motion verified via software HAL & kinematic simulation; actual hardware units subject to physical pairing when available).
 - **Reporting Completeness:** 101% (Zero concealed items, full traceability).

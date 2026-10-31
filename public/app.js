@@ -840,4 +840,159 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+
+  // --- DSH-GOD Model Intelligence & Gateway UI Controller ---
+  async function loadDshStatus() {
+    try {
+      const res = await fetch("/api/integrations/dsh-god/status");
+      if (!res.ok) return;
+      const data = await res.json();
+      
+      const provEl = document.getElementById("dshTotalProviders");
+      if (provEl && data.providers) provEl.textContent = `${data.providers.totalProviders} Providers`;
+      
+      const modEl = document.getElementById("dshTotalModels");
+      if (modEl && data.providers) modEl.textContent = `${data.providers.totalModels} Models (${data.providers.enabledCount} Enabled)`;
+
+      const savEl = document.getElementById("dshSavedBytes");
+      if (savEl && data.tokenSavings) savEl.textContent = `${data.tokenSavings.savedBytes} B`;
+
+      const pctEl = document.getElementById("dshSavedPercent");
+      if (pctEl && data.tokenSavings) pctEl.textContent = `${data.tokenSavings.savedPercent}% Compaction (${data.tokenSavings.calls} requests)`;
+
+      const gwEl = document.getElementById("dshGatewayStatus");
+      if (gwEl && data.gateway) gwEl.textContent = `${data.gateway.host}:${data.gateway.port} (${data.gateway.isRunning ? "RUNNING" : "STOPPED"})`;
+    } catch (err) {
+      console.warn("Could not fetch DSH-GOD status:", err.message);
+    }
+  }
+
+  async function loadDshProviders(category = "", search = "") {
+    const listEl = document.getElementById("dshProvidersList");
+    if (!listEl) return;
+    try {
+      const q = new URLSearchParams();
+      if (category) q.set("category", category);
+      if (search) q.set("search", search);
+      const res = await fetch(`/api/integrations/dsh-god/providers?${q.toString()}`);
+      const data = await res.json();
+      if (data.providers) {
+        listEl.innerHTML = data.providers.slice(0, 50).map(p => `
+          <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong>${p.name}</strong> <span style="color: #a0aec0; font-size: 11px;">(${p.id})</span>
+              <div style="color: #718096; font-size: 11px;">${p.models?.length || 0} models | ${p.category} | ${p.format}</div>
+            </div>
+            <div>
+              <span style="font-size: 11px; padding: 2px 6px; border-radius: 3px; background: ${p.enabled ? '#22543d' : '#742a2a'};color: ${p.enabled ? '#9ae6b4' : '#feb2b2'};">
+                ${p.enabled ? "Active" : "Disabled"}
+              </span>
+            </div>
+          </div>
+        `).join("");
+      }
+    } catch (err) {
+      listEl.innerHTML = `<div style="color: #e53e3e;">Error loading providers: ${err.message}</div>`;
+    }
+  }
+
+  async function loadDshCombos() {
+    const listEl = document.getElementById("dshCombosList");
+    if (!listEl) return;
+    try {
+      const res = await fetch("/api/integrations/dsh-god/combos");
+      const data = await res.json();
+      if (data.combos) {
+        listEl.innerHTML = data.combos.map(c => `
+          <div style="background: rgba(255,255,255,0.03); padding: 6px; border-radius: 4px; margin-bottom: 4px;">
+            <div style="display: flex; justify-content: space-between;">
+              <strong style="color: #63b3ed;">${c.name}</strong>
+              <span style="font-size: 11px; color: #a0aec0;">${c.strategy.toUpperCase()}</span>
+            </div>
+            <div style="font-size: 11px; color: #cbd5e0; margin-top: 2px;">${c.models.join(" → ")}</div>
+          </div>
+        `).join("");
+      }
+    } catch (err) {
+      listEl.innerHTML = `<div>Error loading combos: ${err.message}</div>`;
+    }
+  }
+
+  async function loadDshChannels() {
+    const listEl = document.getElementById("dshChannelsList");
+    if (!listEl) return;
+    try {
+      const res = await fetch("/api/integrations/dsh-god/channels");
+      const data = await res.json();
+      if (data.report?.channels) {
+        listEl.innerHTML = data.report.channels.map(ch => `
+          <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; border-left: 3px solid #4299e1;">
+            <div style="font-weight: bold; color: #fff;">${ch.name}</div>
+            <div style="font-size: 11px; color: #a0aec0;">Auth: ${ch.authType} | ${ch.status}</div>
+            <div style="font-size: 11px; color: #48bb78; margin-top: 2px;">Profile: ${ch.hardwareProfile}</div>
+          </div>
+        `).join("");
+      }
+    } catch (err) {
+      listEl.innerHTML = `<div>Error loading channels: ${err.message}</div>`;
+    }
+  }
+
+  // Bind DSH Event Listeners
+  document.getElementById("refreshDshStatusBtn")?.addEventListener("click", () => {
+    loadDshStatus();
+    loadDshProviders();
+    loadDshCombos();
+    loadDshChannels();
+  });
+
+  document.getElementById("dshSearchProvidersBtn")?.addEventListener("click", () => {
+    const cat = document.getElementById("dshCategoryFilter")?.value || "";
+    const search = document.getElementById("dshProviderSearchInput")?.value.trim() || "";
+    loadDshProviders(cat, search);
+  });
+
+  document.getElementById("dshRunInferenceBtn")?.addEventListener("click", async () => {
+    const model = document.getElementById("dshTestModelSelect")?.value || "combo:fast-free";
+    const prompt = document.getElementById("dshPromptInput")?.value.trim() || "Respond with: ULTRON DSH-GOD Active.";
+    const outEl = document.getElementById("dshInferenceOutput");
+    if (outEl) outEl.innerHTML = "<div>Routing turn through DSH-GOD engine...</div>";
+
+    try {
+      const started = performance.now();
+      const res = await fetch("/api/integrations/dsh-god/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      const data = await res.json();
+      const latency = Math.round(performance.now() - started);
+      if (outEl) {
+        if (data.ok && data.result) {
+          const content = data.result.choices?.[0]?.message?.content || JSON.stringify(data.result);
+          outEl.innerHTML = `
+            <div style="color: #48bb78; font-size: 11px; margin-bottom: 4px;">✓ Inference Executed in ${latency}ms (Model: ${data.result.model || model})</div>
+            <div style="color: #fff; font-family: monospace; white-space: pre-wrap;">${content}</div>
+          `;
+          loadDshStatus(); // update savings and usage
+        } else {
+          outEl.innerHTML = `<div style="color: #e53e3e;">Inference Failed: ${data.error || "Unknown error"}</div>`;
+        }
+      }
+    } catch (err) {
+      if (outEl) outEl.innerHTML = `<div style="color: #e53e3e;">Error executing inference: ${err.message}</div>`;
+    }
+  });
+
+  // Initial load when tab clicked
+  document.querySelector('[data-tab="tab-model-intelligence"]')?.addEventListener("click", () => {
+    loadDshStatus();
+    loadDshProviders();
+    loadDshCombos();
+    loadDshChannels();
+  });
+
 });

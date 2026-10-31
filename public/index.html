@@ -74,6 +74,7 @@
     <button class="nav-tab" data-tab="tab-computer">PC & Devices</button>
     <button class="nav-tab" data-tab="tab-system-control">System Control</button>
     <button class="nav-tab" data-tab="tab-media-studio">Media & Video Studio</button>
+    <button class="nav-tab" data-tab="tab-model-intelligence">Model Intelligence & Gateway</button>
     <button class="nav-tab" data-tab="tab-memory">Memory Vault</button>
     <button class="nav-tab" data-tab="tab-smarthome">IoT & Smart Home</button>
     <button class="nav-tab" data-tab="tab-security">Security & Audit</button>
@@ -440,6 +441,100 @@
             </div>
           </div>
           <div id="thumbPreviewArea" style="margin-top: 12px;"></div>
+        </div>
+      </div>
+    </section>
+
+      <!-- Panel: Model Intelligence & Gateway (DSH-GOD Deep Capability Integration) -->
+    <section class="tab-panel" id="tab-model-intelligence">
+      <div class="panel-header-actions">
+        <h2>DSH-GOD Model Intelligence & Universal Gateway</h2>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-sm btn-primary" id="refreshDshStatusBtn">Refresh Status</button>
+          <button class="btn btn-sm btn-secondary" id="toggleDshGatewayBtn">Start/Stop Gateway</button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div class="grid grid-4" style="margin-top: 15px;">
+        <div class="card stat-card">
+          <div class="stat-label">Providers Registry</div>
+          <div class="stat-value" id="dshTotalProviders">76 Providers</div>
+          <div class="stat-desc" id="dshTotalModels">1,200+ Models Available</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">RTK Token Savings</div>
+          <div class="stat-value" id="dshSavedBytes">0 B</div>
+          <div class="stat-desc" id="dshSavedPercent">0% Compaction Reduction</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Universal Gateway</div>
+          <div class="stat-value" id="dshGatewayStatus">127.0.0.1:8080</div>
+          <div class="stat-desc">OpenAI & Anthropic Wire</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Free Inference Lanes</div>
+          <div class="stat-value" style="color: #48bb78;">OpenCode & Kilo</div>
+          <div class="stat-desc">Keyless Free Routing Active</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top: 20px;">
+        <!-- Provider & Catalog Explorer -->
+        <div class="card">
+          <h3>76-Provider Catalog & Management</h3>
+          <p style="font-size: 12px; color: #a0aec0;">Configure API keys, custom base URLs, and enable/disable upstream channels.</p>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <input type="text" id="dshProviderSearchInput" placeholder="Search providers or models..." style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <select id="dshCategoryFilter" style="padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;">
+              <option value="">All Categories</option>
+              <option value="apikey">API Key</option>
+              <option value="free">Free</option>
+              <option value="free-tier">Free Tier</option>
+              <option value="local">Local</option>
+              <option value="oauth">OAuth</option>
+            </select>
+            <button class="btn btn-sm btn-primary" id="dshSearchProvidersBtn">Filter</button>
+          </div>
+          <div id="dshProvidersList" style="margin-top: 12px; max-height: 280px; overflow-y: auto; font-size: 12px;">
+            <div style="color: #a0aec0;">Click Refresh or Filter to load provider registry.</div>
+          </div>
+        </div>
+
+        <!-- Virtual Combo Chains & Testing -->
+        <div class="card">
+          <h3>Virtual Combo Chains & Execution</h3>
+          <p style="font-size: 12px; color: #a0aec0;">Fault-tolerant chains with fallback, round-robin, smart, and capacity intersection.</p>
+          <div id="dshCombosList" style="margin-top: 10px; max-height: 160px; overflow-y: auto; font-size: 12px;">
+            <div style="color: #a0aec0;">Loading virtual combo models...</div>
+          </div>
+
+          <h4 style="margin-top: 15px; margin-bottom: 6px; font-size: 13px;">Execute Inference Turn</h4>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; gap: 8px;">
+              <select id="dshTestModelSelect" style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;">
+                <option value="combo:fast-free">combo:fast-free (Fallback Chain)</option>
+                <option value="combo:smart-code">combo:smart-code (Smart Code)</option>
+                <option value="combo:balanced-general">combo:balanced-general (Round-Robin)</option>
+                <option value="opencode:deepseek-chat">opencode:deepseek-chat (Keyless)</option>
+                <option value="kilo:free-qwen">kilo:free-qwen (Keyless Free Pool)</option>
+              </select>
+              <button class="btn btn-sm btn-primary" id="dshRunInferenceBtn">Run Test</button>
+            </div>
+            <textarea id="dshPromptInput" rows="2" placeholder="Enter prompt to execute through DSH-GOD engine..." style="width: 100%; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px; font-family: monospace;"></textarea>
+          </div>
+          <div id="dshInferenceOutput" style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 12px; max-height: 140px; overflow-y: auto;">
+            <div style="color: #a0aec0;">Telemetry and model output will appear here.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Channels & Health Row -->
+      <div class="card" style="margin-top: 20px;">
+        <h3>10 Standalone Account Channels Status</h3>
+        <p style="font-size: 12px; color: #a0aec0;">Audit status and memory profiles for LobsterAI, Qoder, TRAE, Cline, Loomy, Raccoon, MiniMax, ZCode, Gemini.</p>
+        <div id="dshChannelsList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 12px;">
+          <div style="color: #a0aec0;">Loading account channel matrices...</div>
         </div>
       </div>
     </section>

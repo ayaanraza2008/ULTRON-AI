@@ -6,6 +6,8 @@
  * and hardware-aware CPU/cloud provider failover.
  */
 
+import { executeInference as executeDshInference } from "../integrations/dsh-god/inference-router.js";
+
 const COMPLEXITY_PATTERNS = {
   coding: /\b(function|class|const|let|var|def|import|export|refactor|debug|syntax|bug|error|test|git|repo|code|script|api|algorithm|database|sql|endpoint|stack trace|null pointer|undefined)\b/i,
   multimodal: /\b(image|picture|photo|screenshot|camera|webcam|diagram|visual|screen|ui|ocr|look at this|inspect this image)\b/i,
@@ -175,6 +177,17 @@ export class BrainRouter {
       });
     }
 
+        const dshProvider = {
+      name: "dsh-god-gateway",
+      type: "dsh_god_inference",
+      model: taskComplexity.tier === "coding" ? "combo:smart-code" : "combo:fast-free",
+      baseUrl: this.env.DSH_GATEWAY_URL || "http://127.0.0.1:8080/v1",
+      apiKeyEnv: null,
+      supportsTools: true,
+      circuitOpen: this.isCircuitOpen("dsh-god-gateway")
+    };
+    extraProviders.push(dshProvider);
+
     let candidates = [];
     if (taskComplexity.tier === "multimodal" && this.env.GEMINI_API_KEY) {
       const gemini = extraProviders.find(p => p.name === "gemini-flash");
@@ -182,6 +195,8 @@ export class BrainRouter {
     } else if (taskComplexity.preferredProvider === "groq" && this.env.GROQ_API_KEY) {
       const groq = extraProviders.find(p => p.name === "groq-cloud");
       candidates = [groq, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "groq-cloud"), localCpu];
+    } else if (taskComplexity.preferredProvider === "dsh" || taskComplexity.preferredProvider === "dsh-god") {
+      candidates = [dshProvider, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "dsh-god-gateway"), localCpu];
     } else {
       candidates = [primaryCloud, secondaryCloud, ...extraProviders, localCpu];
     }
@@ -253,6 +268,37 @@ export class BrainRouter {
 
     for (const provider of chain) {
       if (this.isCircuitOpen(provider.name)) continue;
+
+      if (provider.type === "dsh_god_inference") {
+        const startTime = Date.now();
+        try {
+          const res = await executeDshInference({
+            model: provider.model,
+            messages: conversation,
+            stream: false
+          });
+          const content = res.choices?.[0]?.message?.content || "";
+          const latencyMs = Date.now() - startTime;
+          this.recordAttempt(provider.name, true, latencyMs);
+          const confidence = this.evaluateConfidence(content);
+          return {
+            success: true,
+            content,
+            provider: provider.name,
+            model: provider.model,
+            latencyMs,
+            language,
+            complexityTier: complexity.tier,
+            confidence,
+            fallbackCount: chain.indexOf(provider)
+          };
+        } catch (dshErr) {
+          const latencyMs = Date.now() - startTime;
+          this.recordAttempt(provider.name, false, latencyMs);
+          lastError = dshErr;
+          continue;
+        }
+      }
 
       const apiKey = provider.apiKeyEnv ? this.env[provider.apiKeyEnv] : null;
       if (provider.apiKeyEnv && (!apiKey || !String(apiKey).trim())) {
