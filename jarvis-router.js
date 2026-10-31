@@ -14,8 +14,12 @@ import { JarvisVisionEngine } from "./vision/vision-engine.js";
 import { WindowsComputerControl } from "./system/computer-control.js";
 import { ProductivitySuite } from "./integrations/productivity.js";
 import { AUTONOMY_LEVELS } from "./autonomy-policy.js";
+import { hasEmployeeModelProvider } from "./features.js";
 
-export function createJarvisRouter({ env = process.env, requireSupabaseUser } = {}) {
+const EMPLOYEE_ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
+const EMPLOYEE_MODES = new Set(["plan", "draft", "review", "report"]);
+
+export function createJarvisRouter({ env = process.env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console } = {}) {
   if (typeof requireSupabaseUser !== "function") {
     throw new TypeError("createJarvisRouter requires the authenticated Supabase user middleware.");
   }
@@ -103,45 +107,170 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser } = 
     });
   });
 
-  router.post("/jarvis/agents/task", requireOwner, express.json(), (_req, res) => {
-    res.status(503).json({
-      error: {
-        code: "JARVIS_TASK_EXECUTOR_UNAVAILABLE",
-        message: "The experimental in-memory orchestrator has no real tool executor. Use the authenticated durable task worker until a real JARVIS executor is integrated."
+  router.post("/jarvis/agents/task", requireOwner, express.json(), async (req, res) => {
+    if (orchestrator.isHalted()) {
+      return res.status(409).json({ error: { code: "JARVIS_EMERGENCY_STOP_ACTIVE", message: "JARVIS task creation is blocked by the local emergency stop." } });
+    }
+    if (env.ULTRON_EMPLOYEES_ENABLED !== "true" || !env.SUPABASE_SERVICE_ROLE_KEY || !hasEmployeeModelProvider(env)) {
+      return res.status(503).json({
+        error: {
+          code: "JARVIS_WORKER_NOT_READY",
+          message: "The durable worker, server-side Supabase key, and at least one supported server-side model provider must be configured before JARVIS can queue background work."
+        }
+      });
+    }
+    if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) {
+      return res.status(503).json({ error: { code: "JARVIS_TASK_STORAGE_UNAVAILABLE", message: "Authenticated durable task storage is unavailable." } });
+    }
+
+    const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+    const allowedFields = new Set(["goal", "role", "mode", "context"]);
+    if (Object.keys(body).some(key => !allowedFields.has(key))) {
+      return res.status(400).json({ error: { code: "JARVIS_TASK_FIELDS_NOT_ALLOWED", message: "Only goal, role, mode, and context are accepted. Arbitrary steps, tools, and executor arguments are not supported." } });
+    }
+
+    const goal = typeof body.goal === "string" ? body.goal.trim() : "";
+    const role = typeof body.role === "string" ? body.role.trim() : "chief-of-staff";
+    const mode = typeof body.mode === "string" ? body.mode.trim() : "plan";
+    const context = typeof body.context === "string" ? body.context.trim() : "";
+    if (goal.length < 2 || goal.length > 2000 || context.length > 4000 || !EMPLOYEE_ROLES.has(role) || !EMPLOYEE_MODES.has(mode)) {
+      return res.status(400).json({ error: { code: "INVALID_JARVIS_EMPLOYEE_TASK", message: "Choose a supported employee role and mode, provide a 2–2000 character goal, and keep context within 4000 characters." } });
+    }
+
+    const autonomousWorkflow = /\\b(research|investigate|look into|find sources)\\b/i.test(goal)
+      && /\\b(report|summary|recommendations|brief)\\b/i.test(goal);
+    const taskInput = {
+      taskType: autonomousWorkflow ? "autonomous" : "employee",
+      executionMode: "employee_worker",
+      role,
+      goal,
+      context,
+      mode: autonomousWorkflow ? "report" : mode,
+      requiresApproval: false,
+      approved: true,
+      createdBy: "jarvis_router"
+    };
+
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,status,created_at", {
+        user_id: req.supabaseUser.id,
+        title: goal.slice(0, 240),
+        input: taskInput,
+        status: "QUEUED"
+      });
+      if (!Array.isArray(rows) || !rows[0]?.id) {
+        return res.status(502).json({ error: { code: "JARVIS_TASK_CREATE_FAILED", message: "The durable task queue did not return a task ID." } });
       }
-    });
+
+      let auditRecorded = true;
+      try {
+        if (typeof privilegedSupabaseRest !== "function") throw new Error("Privileged audit storage is unavailable.");
+        await privilegedSupabaseRest(req, "audit_events", "POST", "", {
+          user_id: req.supabaseUser.id,
+          action: "jarvis.task_queued",
+          target_type: "agent_task",
+          target_id: rows[0].id,
+          outcome: "allowed",
+          metadata: { role, mode: autonomousWorkflow ? "autonomous_report" : mode, taskType: taskInput.taskType, executionMode: "employee_worker" }
+        }, "return=minimal");
+      } catch (error) {
+        auditRecorded = false;
+        logger.warn?.("JARVIS task audit write failed", { name: error?.name || "Error" });
+      }
+
+      return res.status(202).json({
+        success: true,
+        task: rows[0],
+        auditRecorded,
+        execution: {
+          backend: "durable_supabase_worker",
+          type: autonomousWorkflow ? "bounded_research_to_report" : "ai_employee_draft_only",
+          notice: "The task is queued, not completed. The worker must process it before a result is available. This endpoint does not publish, spend, contact people, change external systems, control devices, or execute code."
+        }
+      });
+    } catch (error) {
+      logger.warn?.("JARVIS durable task enqueue failed", { name: error?.name || "Error" });
+      return res.status(503).json({ error: { code: "JARVIS_TASK_STORAGE_FAILED", message: "The durable task queue could not accept this task." } });
+    }
   });
 
-  router.get("/jarvis/agents/tasks/:id", requireOwner, (req, res) => {
-    const task = orchestrator.getTask(req.params.id);
-    if (!task) return res.status(404).json({ error: { message: "Task not found" } });
-    const checkpoint = orchestrator.getCheckpoint(req.params.id);
-    res.json({ task, checkpoint });
+  router.get("/jarvis/agents/tasks/:id", requireOwner, async (req, res) => {
+    if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) {
+      return res.status(503).json({ error: { code: "JARVIS_TASK_STORAGE_UNAVAILABLE", message: "Authenticated durable task storage is unavailable." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "GET",
+        "?select=id,title,status,result,error_code,created_at,updated_at,finished_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id)
+        + "&id=eq." + encodeURIComponent(req.params.id) + "&limit=1");
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ error: { message: "Task not found" } });
+      return res.json({ task: rows[0], executionBackend: "durable_supabase_worker" });
+    } catch (error) {
+      logger.warn?.("JARVIS task lookup failed", { name: error?.name || "Error" });
+      return res.status(503).json({ error: { code: "JARVIS_TASK_LOOKUP_FAILED", message: "The durable task could not be read." } });
+    }
   });
 
-  router.get("/jarvis/agents/tasks", requireOwner, (_req, res) => {
-    res.json({ tasks: orchestrator.listTasks() });
+  router.get("/jarvis/agents/tasks", requireOwner, async (req, res) => {
+    if (typeof supabaseRest !== "function" || !req.supabaseUser?.id) {
+      return res.status(503).json({ error: { code: "JARVIS_TASK_STORAGE_UNAVAILABLE", message: "Authenticated durable task storage is unavailable." } });
+    }
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "GET",
+        "?select=id,title,status,error_code,created_at,updated_at,finished_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id)
+        + "&order=created_at.desc&limit=25");
+      return res.json({ tasks: Array.isArray(rows) ? rows : [], executionBackend: "durable_supabase_worker" });
+    } catch (error) {
+      logger.warn?.("JARVIS task list failed", { name: error?.name || "Error" });
+      return res.status(503).json({ error: { code: "JARVIS_TASK_LIST_FAILED", message: "Durable tasks could not be listed." } });
+    }
   });
 
   // --- Emergency Stop / Global Kill Switch ---
-  router.post("/jarvis/emergency/stop", requireOwner, express.json(), (req, res) => {
-    const reason = req.body?.reason || "Emergency kill switch invoked via console";
+  router.post("/jarvis/emergency/stop", requireOwner, express.json(), async (req, res) => {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 200) : "Emergency kill switch invoked via console";
     const result = orchestrator.emergencyStop(reason);
     computer.setEmergencyStop(true);
-    res.json({ success: true, halted: true, result });
+    if (typeof supabaseRest !== "function") {
+      return res.status(503).json({
+        success: false,
+        halted: true,
+        scope: "this_server_process_only",
+        error: { code: "JARVIS_DURABLE_CANCEL_UNAVAILABLE", message: "The local JARVIS API is halted, but durable worker tasks could not be cancelled because authenticated task storage is unavailable." }
+      });
+    }
+    try {
+      const cancelled = await supabaseRest(req, "agent_tasks", "PATCH",
+        "?user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&status=in.(QUEUED,RUNNING,WAITING_FOR_PERMISSION)&select=id,status",
+        { status: "CANCELLED" });
+      return res.json({
+        success: true,
+        halted: true,
+        scope: "authenticated_account_tasks_and_this_server_process",
+        cancelledTaskIds: Array.isArray(cancelled) ? cancelled.map(task => task.id).filter(Boolean) : [],
+        result
+      });
+    } catch (error) {
+      logger.warn?.("JARVIS emergency task cancellation failed", { name: error?.name || "Error" });
+      return res.status(503).json({
+        success: false,
+        halted: true,
+        scope: "this_server_process_only",
+        error: { code: "JARVIS_DURABLE_CANCEL_FAILED", message: "The local JARVIS API is halted, but durable worker task cancellation failed. Check task status before resuming." }
+      });
+    }
   });
 
   router.post("/jarvis/emergency/reset", requireOwner, (_req, res) => {
     orchestrator.resetEmergencyStop();
     computer.setEmergencyStop(false);
-    res.json({ success: true, halted: false });
+    res.json({ success: true, halted: false, scope: "this_server_process_only" });
   });
 
   router.post("/jarvis/autonomy/level", requireOwner, express.json(), (req, res) => {
     const level = Number(req.body?.level);
     const success = orchestrator.setAutonomyLevel(level);
     if (!success) return res.status(400).json({ error: { message: "Invalid autonomy level (0-5 required)." } });
-    res.json({ success: true, autonomyLevel: orchestrator.getAutonomyLevel(), config: AUTONOMY_LEVELS[level] });
+    res.json({ success: true, autonomyLevel: orchestrator.getAutonomyLevel(), scope: "this_server_process_only", config: AUTONOMY_LEVELS[level] });
   });
 
   // --- Coding Sandbox ---
