@@ -2,59 +2,64 @@
 
 Updated: 2026-10-31 UTC
 
-## Repository state
+## Current repository state
 
-- Project: `ayaanraza2008/ULTRON-AI`; preserve existing ULTRON architecture/history.
-- Main includes PR #419 Geo-Sleuth reverse-image consent hardening at `33a9df4e64075ca4483f26c47a3eea6f1cc20505`, followed by evidence documentation commits.
-- PR #413 OpenSEO paid-credit consent and PR #414 Chrome DevTools model self-approval protections are merged; pre/post-merge CI passed.
-- PR #419 Geo-Sleuth consent: pre-merge run `41119660470` passed (662 passed, 0 failed, 1 skipped); post-merge runs `41119784359` (tests + World Intelligence build) and `41119785946` (read-only production revision verification) passed. No deployment occurred.
-- Current follow-on branch: `fix/voice-clone-exact-user-consent`. Source/test changes are being prepared; full CI pending.
-- No Render deployment, production environment change, paid resource use, external image lookup, browser action, physical device action, or VoiceStudio profile creation was performed.
+- Project: `ayaanraza2008/ULTRON-AI`; preserve the existing ULTRON architecture and history.
+- Default branch: `main`; current head: `e608485b609e7d8f51d93dd4d033e636efd44975`.
+- PR #425 updated the evidence checkpoint; PR #426 merged owner-scoped Hermes native Runs support as `145ac4e648b0ce4bd7805e3420d4ddc92345b665`; PR #424 merged Harness2 executor hardening as current head `e608485b609e7d8f51d93dd4d033e636efd44975`.
+- Main CI run [41173106830](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41173106830) passed `npm run check`, `npm test`, Python Browser Use/Harness2/Model Lab checks, dependency advisory reporting, and the pinned World Intelligence build.
+- All Render calls were restricted to the **Ultron core** workspace. Render reports `ultron-ai-core`, `ultron-rea-gateway`, and `ultron-browser-use-core` live at `e608485`.
+- Production-revision health/config/exact-revision workflow [41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) passed for prior commit `145ac4e`; it has not yet been rerun for `e608485`. Do not report that earlier check as proof for the later commit.
+- Separate `ultron-core-interface` service remains live on `feature/ultron-live-core-interface-20261029` at `68b042641bc1e4a0ab56953df36637402c47df86`. It is an installable PWA shell; authenticated chat, voice and physical-device E2E remain unverified.
+- Render log retrieval returned 503 and direct public-host resolution was unavailable in this execution environment. Render deployment status and GitHub CI are available evidence, but they do not prove every external integration works.
 
-## Merged security improvements
+## Merged engineering improvements
 
-### OpenSEO paid credits — PR #413
-- Spend authorization is derived only from the current authenticated user's prompt and bounded credit ceiling; model-supplied approval flags/ceilings are ignored.
-- Requests above the user's cap are blocked before upstream MCP access. CI and post-merge CI passed. Live upstream billing/quota remains unverified; no credits were spent.
+### Hermes native Runs — PR #426
 
-### Chrome DevTools self-approval — PR #414
-- Removed `confirmExternalAction` from the model-visible Chrome DevTools schema.
-- Agent dispatch always forces confirmation false; autonomy gate blocks consequential clicks before local bridge access.
-- CI and post-merge CI passed. Task-bound approval token flow and physical browser validation remain unimplemented; consequential clicks stay blocked.
+- Added owner-scoped native Runs submission, status polling, bounded cooperative stop handling, session-key hashing, and a redacted read-only smoke command.
+- Corrected bracketed IPv6 host normalization; tests reject public IP-literal endpoints while preserving trusted local loopback and prevent fallback replay after an ambiguous/failed run submission.
+- CI passed on the exact PR head before merge; merged as `145ac4e`.
+- Hermes remains **disabled by default**. A secured reachable Hermes endpoint, credentials, owner UUID and a live smoke test are still required. A cloud service cannot reach the user's PC `localhost`; local PC automation requires an installed companion and authenticated network ingress.
 
-### Geo-Sleuth reverse-image sharing — PR #419
-- Removed model-visible `includeReverseSearch`.
-- Consent derives only from exact canonical phrase at the start of the current user message. Ordinary mention, denial, contradictory suffix, phrase extension, missing input and model flags do not grant consent.
-- Pre-merge and post-merge CI passed (662 passed, 0 failed, 1 skipped); dependency audits and pinned World Intelligence build passed.
-- Reverse-image sharing remains off by default; no external image search was made. Geolocation accuracy and live provider behavior remain unverified.
+### Harness2 executor hardening — PR #424
 
-## Current follow-on: VoiceStudio voice-clone consent provenance
+- Bounded captured CLI stdout to 1 MB and stderr to 64 KB while draining pipes; output floods terminate the child process and timeouts remain bounded.
+- OpenCode tool permission is deny-by-default; Codex is read-only/ephemeral. Benchmark/answer schemas are strictly validated, atomic writes avoid planted temporary symlinks, and resume recovers a saved candidate after interruption.
+- Merged as current `main` head `e608485`; the Harness2 tests passed in CI run `41173106830`.
+- Real OpenCode/Codex use still requires locally installed CLIs and local authentication. The deterministic no-credential demo is not model-quality evidence or general autonomous execution.
 
-- Removed model-visible `consentBasis` from the clone tool schema and automatic route arguments.
-- Server derives basis only from exact opening attestation:
-  - `I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile.`
-  - `I confirm I have the speaker's permission and I approve you to clone the attached audio into a VoiceStudio profile.`
-- Vague statements, negations, revocation, leading prose, phrase extensions and missing input must not authorize cloning.
-- Regression tests added; full CI pending. No profile was created or audio sent to VoiceStudio.
+### Existing safety improvements retained
 
-## Remaining global acceptance gates
+- OpenSEO spend authority comes from the authenticated user's current prompt and bounded credit cap, not model-supplied approval fields.
+- Chrome DevTools model self-approval is blocked. Consequential external clicks remain disabled until task-bound user approval exists.
+- Geo-Sleuth reverse-image sharing is opt-in from an exact current-user attestation; model-generated flags do not authorize external image sharing.
+- Voice cloning derives consent from an exact current-user attestation. Source regression tests passed in current main CI; live VoiceStudio profile creation remains unverified.
 
-See `docs/ULTRON_100_PERCENT_ACCEPTANCE_MATRIX.md`, `docs/BACKEND_COMPLETION_LEDGER.md`, and `docs/BLOCKERS.md`. External gates include:
-- Live OpenRouter text/vision inference.
-- Supabase Auth/recovery and two-account RLS isolation E2E.
-- Real queued task execution with controlled user, worker and provider.
-- Memory preference, expiry, deletion and account isolation.
-- Live STT/TTS/vision provider calls and quality checks.
-- Physical Windows companion pairing, allowlisted actions and emergency-stop validation.
-- Hardened sandbox execution for generated code.
-- Live browser/Chrome connection and task-bound approval before consequential clicks.
-- Geo-Sleuth full candidate geometry, external evidence and location verification.
-- Per-integration credentials, licensing, hardware, quota and reachability checks.
-- Render build-minute recovery and deployed-revision verification. Do not deploy or change production without authorization.
+## Supabase read-only audit (2026-10-31)
+
+- Dedicated `ULTRON-AI` project is `ACTIVE_HEALTHY` in `ap-south-1`.
+- Core account data tables have RLS enabled; `anon` has zero table-level grants on the public schema checked.
+- Private document bucket `ultron-private-documents` is not public and has a 5 MiB object cap; owner-scoped storage policies and private-document migration history are present.
+- Security Advisor reports **Leaked Password Protection disabled**. This requires the project owner to enable the Auth setting in Supabase; the current connected tools do not expose that setting. No database data or Auth settings were changed during this audit.
+
+## Remaining acceptance gates
+
+1. Live OpenRouter-compatible text and vision inference using authorized provider credentials; test model compatibility and fallback.
+2. Supabase signup/sign-in, recovery email/reset and two-account conversation/message/memory isolation E2E. Enable leaked-password protection first.
+3. Controlled queued task execution through a real worker, provider response, persisted result, retry/cancel and audit trail.
+4. Memory preference-off, recall, expiry, deletion and cross-account isolation with dedicated test users.
+5. Real Hindi/English STT/TTS and vision calls; verify audio quality, consent, latency and provider failure handling.
+6. Install and pair Android/Windows companions on real devices; validate wake/stop, sleep/reboot, authentication, allowlisted actions and emergency-stop behavior. Full PC control is not yet implemented.
+7. Configure and smoke-test Hermes only after a secured endpoint and owner scope are available. Keep arbitrary shell and consequential actions gated.
+8. Build an isolated coding sandbox with CPU/memory/time, filesystem/network restrictions, auditing and explicit approvals before executing generated code.
+9. Run an approved outbound DNS-pinned transport check and browser/device E2E. Keep consequential browser actions disabled until task-bound approval tokens exist.
+10. Validate each upstream integration's credentials, licenses, hardware, quotas and real behavior. Do not spend paid credits without an explicit user cap.
 
 ## Next actions
 
-1. Run full CI for `fix/voice-clone-exact-user-consent`; fix failures before merge.
-2. Verify that model-generated consent basis cannot create a voice profile.
-3. Merge only the exact CI-green head; verify post-merge CI.
-4. Continue the next security-first, locally testable blocker; keep production/deployment untouched.
+- Prioritize the real provider + two-account Auth/RLS + worker task acceptance tests using dedicated test identities.
+- Enable Supabase leaked-password protection through the project owner's Auth settings and confirm the Security Advisor clears.
+- Then complete speech/vision, Hermes local-agent pairing, physical-device checks, and isolated sandbox work.
+- Keep Render operations restricted to the **Ultron core** workspace. Do not silently change secrets, plans, Auth settings, paid quotas or consequential integrations.
+- Update this checkpoint and the acceptance matrix only from exact commit, workflow, deployment and end-to-end evidence. Do not publish an aggregate completion percentage where the external gates are not measured.

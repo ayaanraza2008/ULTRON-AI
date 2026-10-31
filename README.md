@@ -5,7 +5,7 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-core.onrender.com. The `Ultron core` Render workspace reports the `main` revision `70748b91da5ae06c6688647eda49248cae04baff` live; production-revision workflow `41132849731` verified health, required configuration and exact commit. This is not a real model-inference or user-data E2E test.
+- **Hosted API service:** https://ultron-ai-core.onrender.com. Render reports `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` live at `main` commit `e608485b609e7d8f51d93dd4d033e636efd44975` in the `Ultron core` workspace. Main CI run `41173106830` passed. Production-revision workflow `41172839283` verified health, required configuration and exact revision for the preceding commit `145ac4e648b0ce4bd7805e3420d4ddc92345b665`; a fresh exact-revision health check for `e608485` remains open. This is not a real model-inference or user-data E2E test.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
