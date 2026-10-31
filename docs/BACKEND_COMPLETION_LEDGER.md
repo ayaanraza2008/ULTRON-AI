@@ -7,14 +7,14 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 
 ## Latest verified checkpoint (2026-10-31)
 
-- Repository: `ayaanraza2008/ULTRON-AI`; current `main` head `92158d843e29c123f81e4c7a61cd88f462c2b58c`. The latest JARVIS feature branch is separate and not deployed.
-- Current `main` CI run [41173509393](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41173509393) passed. JARVIS review branch `55c1d98` passed [run 41187642415](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41187642415): `npm run check`, 709 passing / 0 failing / 1 skipped, and pinned World Intelligence build. This is branch CI, not deployment evidence.
+- Repository: `ayaanraza2008/ULTRON-AI`; current `main` head `a9dd9dd772214d60acdd0acdfc9112c50d206836`. The latest JARVIS feature branch is separate and not deployed.
+- Current `main` CI run [41187893581](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41187893581) passed. JARVIS review branch `f6d8c18` passed [run 41188047166](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41188047166): `npm run check`, 709 passing / 0 failing / 1 skipped, and pinned World Intelligence build. This is branch CI, not deployment evidence.
 - Merged PR #426 adds owner-scoped Hermes native Runs submission/polling/stop support; feature remains disabled by default until a secured endpoint and credentials are configured.
 - Merged PR #424 hardens Harness2 CLI output limits, output-flood termination, benchmark validation, resume recovery and symlink-safe atomic writes.
-- In the `Ultron core` Render workspace, `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` report live at `main` commit `92158d8`. Production-revision workflow [41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) passed only for preceding commit `145ac4e`; a fresh exact-revision check for `92158d8` remains open. Do not trigger manual deployments on services with auto-deploy enabled.
+- In the `Ultron core` Render workspace, `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` report live at `main` commit `a9dd9dd`. Merging PR #434 unexpectedly triggered deploy `dep-dbir30jncjis73cte3ug`; the commit contains only a GitHub Actions workflow and its documentation, with no application-runtime, migration or environment change. The build and new process startup succeeded. Production-revision workflow [41172839283] passed only for preceding commit `145ac4e`; no exact-revision health check for `a9dd9dd` is confirmed. Do not manually redeploy or roll back.
 - Separate `ultron-core-interface` remains deployed on its feature branch at `68b042641bc1e4a0ab56953df36637402c47df86`; account-safe browser-to-API, voice and physical-device E2E remain open.
 - Supabase `ULTRON-AI` is `ACTIVE_HEALTHY`; core user-data tables have RLS, `anon` has no public table grants, and the private document bucket/migration are present. The Auth Security Advisor still reports leaked-password protection disabled.
-- No real provider inference, two-account RLS E2E, worker task completion, Hermes live execution, Windows/Android physical pairing, or isolated coding sandbox was proven in this checkpoint.
+- No real provider inference, two-account RLS E2E, worker task completion, Hermes live execution, Windows/Android physical pairing, or isolated coding sandbox was proven in this checkpoint. The worker-acceptance workflow is merged, but its required dedicated test-user/service-role secrets are not configured or verified and the workflow has not been dispatched.
 
 
 ## JARVIS × ULTRON and interface acceptance update (2026-10-31)
@@ -26,6 +26,14 @@ This ledger distinguishes repository code from live, end-to-end proof. A module 
 - Worker acceptance PR #434 passed CI run `41187572722`; it adds an explicitly manual, plan-only smoke workflow requiring dedicated GitHub secrets. No live task has been run yet.
 - Live worker process startup is visible in Render logs, but the task table had no rows at the last read-only count. Real completion remains unverified.
 - Physical Windows/Android installation, live model text/vision, two-account auth/RLS, voice/STT/TTS, Hermes execution, PC/phone control, containerized code execution and live smart-home actions are still open gates.
+
+
+## Production deployment correction (2026-10-31)
+
+- PR #434 was intended to add only `.github/workflows/worker-live-acceptance.yml` and `docs/WORKER_LIVE_ACCEPTANCE.md`; it merged to main as `a9dd9dd772214d60acdd0acdfc9112c50d206836`.
+- Render's `ultron-ai-core` service auto-deployed that commit despite the non-runtime file scope. Deployment `dep-dbir30jncjis73cte3ug` completed to `live` at 09:15:30 UTC. The build reported 0 npm vulnerabilities; app logs reported the ULTRON worker started and API listening.
+- No backend application JavaScript, migration, Render environment setting, Supabase Auth setting, schema or user-data contents were changed by PR #434. Nevertheless, this was a production deployment and must be recorded as such. The Render connector available here has no cancel-deploy action; no rollback was attempted.
+- PR #431 JARVIS remains open against main and is not deployed. PR #433 interface-proxy tests remain open against the interface feature branch.
 
 ## Historical ledger snapshots
 
