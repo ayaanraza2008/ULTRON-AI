@@ -11,11 +11,12 @@
 import os from "node:os";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { constants as fsConstants } from "node:fs";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Allowed launch applications
 const ALLOWLISTED_APPS = {
@@ -127,7 +128,9 @@ export class WindowsComputerControl {
     }
 
     try {
-      exec(`start ${executable}`);
+      const shellCmd = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : executable;
+      const shellArgs = process.platform === "win32" ? ["/d", "/c", "start", "", executable] : [];
+      await execFileAsync(shellCmd, shellArgs);
       this.recordAction("LAUNCH_APP", executable, "success");
       return { success: true, app: normalized, executable, status: "launched" };
     } catch (err) {

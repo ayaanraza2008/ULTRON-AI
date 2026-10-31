@@ -12,6 +12,7 @@
  */
 
 import os from "node:os";
+import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { exec } from "node:child_process";
@@ -45,7 +46,7 @@ export class WindowsDesktopAgent {
     const hub = deviceHub || this.deviceHub;
     if (!hub) {
       this.registered = true;
-      this.authToken = "local_desktop_token_" + Date.now();
+      this.authToken = "dtk_" + crypto.randomUUID();
       return { success: true, deviceId: this.deviceId, localOnly: true };
     }
 

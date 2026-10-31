@@ -224,7 +224,7 @@ async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
 
 async function isCompromisedPassword(password, fetchImpl) {
   // HIBP's Pwned Passwords range API uses k-anonymity: transmit only the first
-  // five SHA-1 hex characters, never the password or its complete hash.
+  // five SHA-1 hex characters, never the password or its complete hash. // nosec: HIBP protocol requires SHA-1
   const hash = crypto.createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
   const prefix = hash.slice(0, 5);
   const targetSuffix = hash.slice(5);

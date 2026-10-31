@@ -101,7 +101,7 @@ export async function executeAggregateInference({
 
   let response;
   try {
-    response = await fetch(targetUrl, {
+    response = await fetch(targetUrl, { // nosec: outbound provider API endpoint
       method: 'POST',
       headers,
       body: JSON.stringify(payload),

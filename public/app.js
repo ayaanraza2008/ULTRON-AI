@@ -176,7 +176,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function appendMessage(sender, text, isUser = false) {
     const msg = document.createElement("div");
     msg.className = `message ${isUser ? "user" : "system"}`;
-    msg.innerHTML = `<span class="sender">${sender}:</span><span class="text">${text}</span>`;
+    const senderSpan = document.createElement("span");
+    senderSpan.className = "sender";
+    senderSpan.textContent = `${sender}: `;
+    const textSpan = document.createElement("span");
+    textSpan.className = "text";
+    textSpan.textContent = text;
+    msg.appendChild(senderSpan);
+    msg.appendChild(textSpan);
     chatViewport.appendChild(msg);
     chatViewport.scrollTop = chatViewport.scrollHeight;
   }

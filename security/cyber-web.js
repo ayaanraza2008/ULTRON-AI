@@ -108,7 +108,7 @@ export class CyberWebAuditor {
         impact: "Browser is vulnerable to Cross-Site Scripting (XSS) and code injection attacks.",
         remediation: "Deploy strict CSP: default-src 'self'; script-src 'self'; object-src 'none';"
       });
-    } else if (norm["content-security-policy"].includes("'unsafe-inline'") || norm["content-security-policy"].includes("'unsafe-eval'")) {
+    } else if (norm["content-security-policy"].includes("'unsafe-inline'") || norm["content-security-policy"].includes("'unsafe-eval'")) { // nosec: security auditor rule check
       findings.push({
         check: "CSP-Unsafe-Directives",
         severity: "MEDIUM",

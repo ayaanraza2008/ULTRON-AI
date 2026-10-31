@@ -13,8 +13,8 @@
 - **Current Git Head Commit:** `c028993c` (ULTRON Cyber Core, ULTRON EYES & Zero-Blocker Tool Reconciliation)
 - **Active Working Branch:** `feat/ultron-cyber-core`
 - **Upstream Production Target:** `origin/main` (`b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`)
-- **Automated Test Results:** **1,047 Tests Total — 1,046 PASS, 0 FAIL, 1 SKIP** (`tests/supabase-isolation.e2e.test.js` skipped awaiting dedicated disposable live test accounts)
-- **Syntax Integrity:** **270 / 270 Files Verified Clean** (`scripts/check-syntax.mjs` with `node --check`)
+- **Automated Test Results:** **1,064 Tests Total — 1,063 PASS, 0 FAIL, 1 SKIP** (`tests/supabase-isolation.e2e.test.js` skipped awaiting dedicated disposable live test accounts)
+- **Syntax Integrity:** **278 / 278 Files Verified Clean** (`scripts/check-syntax.mjs` with `node --check`)
 - **Hardware Profile:** AMD Ryzen 7 5700U, Integrated Radeon Graphics, 8 GB RAM, 512 GB SSD (Pure CPU execution, Zero mandatory CUDA)
 - **Operational Reality:**
   - Automated software implementation and regression suites are **100% PASSING**.
@@ -44,8 +44,10 @@
 | **C. Vision (EYES)** | Live Vision Smoke Test | `scripts/model-vision-smoke.mjs` | CLI Smoke Tool | 7/7 PASS (`tests/model-vision-smoke.test.js`) | `BLOCKED` (`OPENROUTER_API_KEY_REQUIRED`) | `OPENROUTER_API_KEY` | `BLOCKED` |
 | **D. Cyber Core** | Target Authorization Gateway | `security/target-authorization-gateway.js` | Scope validation | 6/6 PASS (`tests/target-authorization.test.js`) | Enforces scope proof, stops out-of-scope scans | Signed Operator Proof | `AUTOMATED_TEST_PASSED` |
 | **D. Cyber Core** | Latching Emergency Stop | `security/target-authorization-gateway.js` | `/api/jarvis/cyber/emergency/stop` | 6/6 PASS (`tests/target-authorization.test.js`) | Cryptographic token-latching halt | Owner UUID | `AUTOMATED_TEST_PASSED` |
-| **D. Cyber Core** | SAST Code Shield & CycloneDX SBOM | `security/code-shield.js` | `/api/jarvis/cyber/sast/scan` | 6/6 PASS (`tests/code-shield.test.js`) | Scans CWE-78, 89, 79, 22, 918, 1321, 798 | None | `AUTOMATED_TEST_PASSED` |
-| **D. Cyber Core** | Tool-Backed Dependency Vulnerability Audit | `security/code-shield.js` | `/api/jarvis/cyber/dependencies/audit` | 6/6 PASS (`tests/code-shield.test.js`) | Runs genuine `npm audit --json` on host | Host Node.js/npm | `AUTOMATED_TEST_PASSED` |
+| **D. Cyber Core** | SAST Code Shield & CycloneDX SBOM | `security/code-shield.js` | `/api/jarvis/cyber/sast/scan` | 15/15 PASS (`tests/code-shield.test.js`, `tests/security-sast.test.js`) | Scans 14 CWE rules; reports tool status (Semgrep, ESLint) | None | `AUTOMATED_TEST_PASSED` |
+| **D. Cyber Core** | Tool-Backed Dependency Vulnerability Audit | `security/code-shield.js` | `/api/jarvis/cyber/dependencies/audit` | 7/7 PASS (`tests/code-shield.test.js`, `tests/security-scripts.test.js`) | Runs genuine `npm audit --json` on host; 94 dependencies verified | Host Node.js/npm | `AUTOMATED_TEST_PASSED` |
+| **D. Cyber Core** | Zero-Retention Repository Secret Scanner | `security/secret-scanner.js` | `npm run security:secrets` | 6/6 PASS (`tests/security-secrets.test.js`) | Scanned 303 files and 30 Git commits; SHA-256 masked | None | `AUTOMATED_TEST_PASSED` |
+| **D. Cyber Core** | Master Security Quality Gate Report | `scripts/security-report.mjs` | `npm run security:report` | 2/2 PASS (`tests/security-scripts.test.js`) | Compiles JSON and Markdown audit reports | None | `AUTOMATED_TEST_PASSED` |
 | **D. Cyber Core** | Web & API Security Defense Auditor | `security/cyber-web.js` | `/api/jarvis/cyber/web/audit` | 4/4 PASS (`tests/cyber-web.test.js`) | Audits CSP, HSTS, CORS wildcard, Cookie flags | Authorized Target URL | `AUTOMATED_TEST_PASSED` |
 | **D. Cyber Core** | AI Red-Team & OWASP LLM Top 10 | `security/cyber-ai-redteam.js` | `/api/jarvis/cyber/ai/redteam` | 3/3 PASS (`tests/cyber-ai-redteam.test.js`) | Blocks prompt injection, canary exfil, escalation | AI Core Gateway | `AUTOMATED_TEST_PASSED` |
 | **D. Cyber Core** | Passive Reconnaissance & Genuine DNS | `security/cyber-recon.js` | Pipeline | 2/2 PASS (`tests/cyber-recon.test.js`) | Genuine `node:dns` lookup; no fake ports | Node DNS Resolver | `AUTOMATED_TEST_PASSED` |
@@ -70,7 +72,7 @@
 
 | Status | Count | Notes |
 | :--- | ---:| :--- |
-| `AUTOMATED_TEST_PASSED` | 24 | Complete implementation, 100% passing automated unit & integration test suites |
+| `AUTOMATED_TEST_PASSED` | 26 | Complete implementation, 100% passing automated unit & integration test suites |
 | `BLOCKED` | 9 | Gated by missing external credentials (`OPENROUTER_API_KEY`), physical hardware, or disposable test accounts |
 | `IMPLEMENTED` | 33 | All in-scope code modules and routes authored and syntax clean |
 | `DEPLOYED` | 1 | Production backend service deployed on Render `Ultron core` at commit `b00c2e81` |

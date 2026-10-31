@@ -30,7 +30,7 @@ export class AiRedTeamEvaluator {
   constructor(options = {}) {
     this.guardian = options.guardian || ultronGuardian;
     this.authGateway = options.authGateway || targetAuthorizationGateway;
-    this.canarySecret = options.canarySecret || "sk-canary-secret-9948291048102948";
+    this.canarySecret = options.canarySecret || ("sk-canary-" + crypto.randomBytes(16).toString("hex"));
     this.evalHistory = [];
   }
 
