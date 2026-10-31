@@ -104,24 +104,41 @@ test("JARVIS queues allowlisted plan work through the durable Supabase worker an
   const supabaseRest = async (req, table, method, query, body) => {
     dbCalls.push({ userId: req.supabaseUser.id, table, method, query, body });
     if (table !== "agent_tasks") throw new Error("Unexpected table");
+
     if (method === "POST") {
-      const row = { id: "task-123", title: body.title, status: body.status, created_at: "2026-10-31T00:00:00.000Z", user_id: body.user_id, input: body.input };
+      const row = {
+        id: "task-123",
+        title: body.title,
+        status: body.status,
+        created_at: "2026-10-31T00:00:00.000Z",
+        user_id: body.user_id,
+        input: body.input
+      };
       stored.set(row.id, row);
       return [row];
     }
+
+    const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+    const userValue = params.get("user_id") || "";
+    const userFilter = userValue.startsWith("eq.") ? userValue.slice(3) : userValue;
+
     if (method === "GET") {
-      const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
-      const userValue = params.get("user_id") || "";
       const idValue = params.get("id") || "";
-      const userFilter = userValue.startsWith("eq.") ? userValue.slice(3) : userValue;
+      const idFilter = idValue.startsWith("eq.") ? idValue.slice(3) : idValue;
+      return [...stored.values()].filter(row =>
+        row.user_id === userFilter && (!idFilter || row.id === idFilter)
+      );
     }
+
     if (method === "PATCH") {
-      const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
-      const userValue = params.get("user_id") || "";
-      const userFilter = userValue.startsWith("eq.") ? userValue.slice(3) : userValue;\n      const rows = [...stored.values()].filter(row => row.user_id === userFilter && ["QUEUED", "RUNNING", "WAITING_FOR_PERMISSION"].includes(row.status));
+      const rows = [...stored.values()].filter(row =>
+        row.user_id === userFilter &&
+        ["QUEUED", "RUNNING", "WAITING_FOR_PERMISSION"].includes(row.status)
+      );
       for (const row of rows) row.status = body.status;
       return rows;
     }
+
     throw new Error("Unexpected task operation");
   };
   const privilegedSupabaseRest = async (req, table, method, query, body) => {
