@@ -113,3 +113,81 @@ test("Agent Orchestrator: emergency stop halts tasks and rejects new work", asyn
   orchestrator.resetEmergencyStop();
   assert.equal(orchestrator.isHalted(), false);
 });
+
+test("Agent Orchestrator: executeAgentAction routes across specialized agents", async () => {
+  const orchestrator = new AgentOrchestrator();
+
+  const coreRes = await orchestrator.executeAgentAction("ultron-core", "synthesize", {});
+  assert.equal(coreRes.agent, "ultron-core");
+
+  const researchRes = await orchestrator.executeAgentAction("research-agent", "search", { query: "Quantum AI" });
+  assert.equal(researchRes.agent, "research-agent");
+  assert.ok(researchRes.sourcesCount > 0);
+
+  const secRes = await orchestrator.executeAgentAction("security-agent", "audit", {});
+  assert.equal(secRes.safe, true);
+
+  const sysRes = await orchestrator.executeAgentAction("system-agent", "telemetry", {});
+  assert.equal(sysRes.hardwareNominal, true);
+});
+
+test("Agent Orchestrator: Dead Letter Queue (DLQ) captures failed tasks and supports recovery", async () => {
+  const orchestrator = new AgentOrchestrator();
+
+  const task = orchestrator.createTask({
+    title: "Faulty External Network Sync",
+    targetAgentId: "system-agent",
+    steps: [{ id: "step-flaky", action: "sync_remote" }]
+  });
+  task.maxRetries = 2;
+
+  // Execute with persistent error to force DLQ capture
+  await orchestrator.resumeTask(task.id, async () => {
+    throw new Error("Simulated upstream gateway timeout 504");
+  });
+
+  assert.equal(task.status, "FAILED");
+  const dlq = orchestrator.getDeadLetterQueue();
+  assert.equal(dlq.length, 1);
+  assert.equal(dlq[0].taskId, task.id);
+  assert.equal(dlq[0].failedStepId, "step-flaky");
+
+  // Recover task from DLQ with fixed executor
+  const recovered = await orchestrator.retryFromDeadLetterQueue(task.id, async (step) => {
+    return { status: "recovered", output: "Gateway connection restored." };
+  });
+
+  assert.equal(recovered.status, "COMPLETED");
+  assert.equal(orchestrator.getDeadLetterQueue().length, 0);
+  assert.equal(recovered.artifacts["step-flaky"].status, "recovered");
+});
+
+test("Agent Orchestrator: executes DAG tasks with topological dependency resolution", async () => {
+  const orchestrator = new AgentOrchestrator();
+
+  // DAG Structure:
+  // Node A (research) -> Node B (coding) \
+  //                      Node C (security) -> Node D (planning/synthesis)
+  const dagNodes = [
+    { id: "node-a", agentId: "research-agent", action: "gather_specs", dependsOn: [] },
+    { id: "node-b", agentId: "coding-agent", action: "generate_code", dependsOn: ["node-a"] },
+    { id: "node-c", agentId: "security-agent", action: "scan_vulnerabilities", dependsOn: ["node-a"] },
+    { id: "node-d", agentId: "ultron-core", action: "final_approval", dependsOn: ["node-b", "node-c"] }
+  ];
+
+  const executionLog = [];
+  const dagResult = await orchestrator.executeDAG({
+    title: "Automated Software Deployment Pipeline",
+    nodes: dagNodes
+  }, async (node, artifacts) => {
+    executionLog.push(node.id);
+    return { node: node.id, status: "success", timestamp: Date.now() };
+  });
+
+  assert.equal(dagResult.status, "COMPLETED");
+  assert.equal(executionLog[0], "node-a");
+  assert.ok(executionLog.indexOf("node-b") > 0);
+  assert.ok(executionLog.indexOf("node-c") > 0);
+  assert.equal(executionLog[executionLog.length - 1], "node-d");
+  assert.equal(Object.keys(dagResult.artifacts).length, 4);
+});
