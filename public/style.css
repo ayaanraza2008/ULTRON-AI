@@ -802,3 +802,29 @@ select {
   background: #00f0ff !important;
   box-shadow: 0 0 8px #00f0ff;
 }
+
+
+/* Living Energy Core — Emotional Intelligence Reactions */
+#reactorCore.state-emotional_calm .core-glow {
+  background: linear-gradient(135deg, #00f0ff, #facc15);
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.7), 0 0 45px rgba(250, 204, 21, 0.4);
+  animation: pulse-breathing 4s infinite ease-in-out;
+}
+
+#reactorCore.state-emotional_supportive .core-glow {
+  background: linear-gradient(135deg, #fbbf24, #f43f5e);
+  box-shadow: 0 0 30px rgba(251, 191, 36, 0.8), 0 0 55px rgba(244, 63, 94, 0.5);
+  animation: pulse-breathing 3.5s infinite ease-in-out;
+}
+
+#reactorCore.state-emotional_excited .core-glow {
+  background: linear-gradient(135deg, #facc15, #00f0ff);
+  box-shadow: 0 0 35px #facc15, 0 0 65px rgba(0, 240, 255, 0.9);
+  animation: pulse-energy 0.8s infinite alternate ease-in-out;
+}
+
+#reactorCore.state-emotional_thoughtful .core-glow {
+  background: linear-gradient(135deg, #818cf8, #c084fc);
+  box-shadow: 0 0 30px rgba(129, 140, 248, 0.75), 0 0 50px rgba(192, 132, 252, 0.5);
+  animation: pulse-breathing 3s infinite ease-in-out;
+}

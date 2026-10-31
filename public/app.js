@@ -239,7 +239,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "WAKE-UP": { speed: 0.98, prefix: "Online, sir. " }
   };
 
-  async function speakSpokenText(text) {
+  async function speakSpokenText(text, vocalOverride = null) {
     if (activeOnyxAudio) {
       try {
         activeOnyxAudio.pause();
@@ -267,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({
           text: clean,
           voice: "am_onyx",
-          speed: modeConfig.speed
+          speed: effectiveSpeed
         })
       });
 
@@ -1074,6 +1074,82 @@ document.addEventListener("DOMContentLoaded", () => {
       vac.system.continuousConversationEnabled = timeout > 0;
       vac.system.conversationTimeoutMs = timeout;
       vac.savePreferences();
+    });
+  }
+
+
+  // --- Human Emotional Intelligence (HEI) UI Wiring ---
+  const heiMasterToggle = document.getElementById("heiMasterToggle");
+  const heiStyleSelect = document.getElementById("heiStyleSelect");
+  const heiEmpathySlider = document.getElementById("heiEmpathySlider");
+  const heiEmpathyVal = document.getElementById("heiEmpathyVal");
+  const heiConfidenceSlider = document.getElementById("heiConfidenceSlider");
+  const heiConfidenceVal = document.getElementById("heiConfidenceVal");
+  const heiClearContextBtn = document.getElementById("heiClearContextBtn");
+  const heiDeleteMemoryBtn = document.getElementById("heiDeleteMemoryBtn");
+
+  if (heiMasterToggle) {
+    heiMasterToggle.addEventListener("change", async (e) => {
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ heiEnabled: e.target.checked })
+      });
+    });
+  }
+
+  if (heiStyleSelect) {
+    heiStyleSelect.addEventListener("change", async (e) => {
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredStyle: e.target.value })
+      });
+    });
+  }
+
+  if (heiEmpathySlider) {
+    heiEmpathySlider.addEventListener("input", async (e) => {
+      if (heiEmpathyVal) heiEmpathyVal.textContent = Number(e.target.value).toFixed(2);
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empathyLevel: Number(e.target.value) })
+      });
+    });
+  }
+
+  if (heiConfidenceSlider) {
+    heiConfidenceSlider.addEventListener("input", async (e) => {
+      if (heiConfidenceVal) heiConfidenceVal.textContent = Number(e.target.value).toFixed(2);
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confidenceThreshold: Number(e.target.value) })
+      });
+    });
+  }
+
+  if (heiClearContextBtn) {
+    heiClearContextBtn.addEventListener("click", async () => {
+      try {
+        await fetch("/api/jarvis/hei/clear-context", { method: "POST" });
+        alert("Active emotional conversation context cleared.");
+      } catch (err) {
+        console.error("Clear context error:", err);
+      }
+    });
+  }
+
+  if (heiDeleteMemoryBtn) {
+    heiDeleteMemoryBtn.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to delete all saved emotional preferences and reset to defaults?")) return;
+      try {
+        await fetch("/api/jarvis/hei/delete-memory", { method: "POST" });
+        alert("Emotional memory reset to factory defaults.");
+      } catch (err) {
+        console.error("Delete memory error:", err);
+      }
     });
   }
 

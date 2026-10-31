@@ -4,6 +4,28 @@
 
 ---
 
+## LATEST UPDATES (VOICE ACTIVATION & HUMAN EMOTIONAL INTELLIGENCE)
+
+15. **JARVIS Always-On Voice Activation & Finger-Snap Wake System:**
+    - Pure Web Audio low-latency acoustic snap detector computing RMS, crest factor (>3.8), impulsive attack rise (<10ms), decay bounding (<50ms), and 2.5kHz-8kHz high-band spectral dominance, rejecting claps, typing, and ambient noise with debounce lock.
+    - 12-state state machine (`DISABLED`, `INITIALIZING`, `WAKE_MONITORING`, `ACTIVATING`, `LISTENING`, `TRANSCRIBING`, `THINKING`, `EXECUTING`, `SPEAKING`, `RETURNING_TO_READY`, `ERROR`, `SLEEPING`).
+    - Dual wake activation: voice wake phrase ("ULTRON", "Hey ULTRON", "ULTRON, listen", "ULTRON, wake up") + finger snap.
+    - Web Audio synthesized cyber chime (880Hz to 1320Hz dual-tone sine ramp).
+    - Natural continuous conversation mode with 10s configurable re-arming timeout.
+    - Real-time speech interruption on user speech or finger snap while speaking.
+    - Full Living Energy Core visual state integration (`WAKE_MONITORING` standby breathing, `SNAP_DETECTED` golden ripple, `WAKE_DETECTED` orbital ring acceleration, `LISTENING` purple-white core with audio reactivity, `SLEEPING` dimmed ambient glow).
+    - Test suites: `tests/snap-detector.test.js` (7/7 PASS), `tests/voice-activation-system.test.js` (8/8 PASS), `tests/voice-activation-e2e.test.js` (15/15 PASS - 30/30 PASS).
+
+16. **Advanced Human Emotional Intelligence (HEI) & Adaptive Personality Engine:**
+    - Complete A–Z 51-emotion human psychology taxonomy (`intelligence/hei/emotion-taxonomy.js`) covering Admiration, Adoration, Anger, Anxiety, Apathy, Awe, Awkwardness, Boredom, Bitterness, Calmness, Compassion, Contempt, Craving, Disgust, Disappointment, Embarrassment, Envy, Excitement, Fear, Frustration, Gratitude, Grief, Guilt, Happiness, Hope, Horror, Interest, Isolation, Joy, Jealousy, Kindness, Loneliness, Love, Melancholy, Nostalgia, Overwhelmed, Pride, Pity, Regret, Relief, Resentment, Sadness, Satisfaction, Schadenfreude, Surprise, Triumph, Unease, Vulnerability, Wonder, Yearning, Zeal.
+    - Deep multi-signal contextual analysis (`intelligence/hei/emotion-analyzer.js`): explicit feeling statement prioritization (2.5x weight), sentence structure and punctuation, sarcasm/irony detection, hesitation and uncertainty analysis, mixed and complex emotion recognition (15 canonical combinations), multi-turn emotional trajectory tracking (IMPROVING/WORSENING/STABLE/VOLATILE), and ethical crisis/safety detection.
+    - Adaptive Personality Engine (`intelligence/hei/adaptive-personality-engine.js`): concrete response policies for Anger, Frustration, Sadness, Anxiety, Excitement, Overwhelmed, Grief, Loneliness, Pride, Calm; dynamic vocal parameter modulation for Kokoro `am_onyx` (speed 0.85–1.05, personality modes `EMPATHY`, `COMFORT`, `COMMAND`, `ALERT`, `SUCCESS`, `NORMAL`); Living Energy Core emotional feedback (`EMOTIONAL_CALM`, `EMOTIONAL_SUPPORTIVE`, `EMOTIONAL_EXCITED`, `EMOTIONAL_THOUGHTFUL`).
+    - Privacy & personalization manager (`intelligence/hei/emotional-memory-manager.js`): user-approved communication preferences, zero unsolicited psychiatric profiling, one-click context clearing and factory reset memory deletion.
+    - Full system integration into `core/brain-router.js` (`classifyComplexity`), `jarvis-router.js` (/jarvis/hei/* endpoints), `server.js` (/api/chat system prompt injection), and frontend Control Center HUD with dedicated HEI panel, settings, and live telemetry badge.
+    - Test suites: `tests/emotion-taxonomy.test.js` (3/3 PASS), `tests/emotion-analyzer.test.js` (7/7 PASS), `tests/adaptive-personality.test.js` (4/4 PASS), `tests/emotional-intelligence-e2e.test.js` (6/6 PASS - 20/20 PASS).
+
+---
+
 ## 1. RESUMABLE STATE METADATA
 
 - **Timestamp:** 2026-10-31T20:45:00+05:30

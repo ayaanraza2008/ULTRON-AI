@@ -26,6 +26,10 @@ export const CORE_STATES = {
   TASK_COMPLETED: "TASK_COMPLETED",
   ERROR: "ERROR",
   SLEEPING: "SLEEPING",
+  EMOTIONAL_CALM: "EMOTIONAL_CALM",
+  EMOTIONAL_SUPPORTIVE: "EMOTIONAL_SUPPORTIVE",
+  EMOTIONAL_EXCITED: "EMOTIONAL_EXCITED",
+  EMOTIONAL_THOUGHTFUL: "EMOTIONAL_THOUGHTFUL",
   OFFLINE: "OFFLINE"
 };
 
@@ -38,6 +42,17 @@ export class EnergyCoreController {
     this.coreScale = 1.0;
     this.cameraStream = null;
     this.gestureActive = false;
+  }
+
+  setEmotionalVisualState(emotionalState = "CALM") {
+    const map = {
+      CALM: CORE_STATES.EMOTIONAL_CALM,
+      SUPPORTIVE: CORE_STATES.EMOTIONAL_SUPPORTIVE,
+      EXCITED: CORE_STATES.EMOTIONAL_EXCITED,
+      THOUGHTFUL: CORE_STATES.EMOTIONAL_THOUGHTFUL
+    };
+    const targetState = map[String(emotionalState).toUpperCase()] || CORE_STATES.EMOTIONAL_CALM;
+    this.setVisualState(targetState, `EMOTIONAL ADAPTATION (${emotionalState})`);
   }
 
   setVisualState(state, detailText = "") {

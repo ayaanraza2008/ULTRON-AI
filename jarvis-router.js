@@ -110,8 +110,41 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       prompt: prompt.slice(0, 100),
       complexity,
       language,
-      providerChain: chain.map(p => ({ name: p.name, model: p.model, type: p.type }))
+      providerChain: chain.map(p => ({ name: p.name, model: p.model, type: p.type })),
+      emotionalIntelligence: complexity.emotionalIntelligence || null
     });
+  });
+
+  // --- Human Emotional Intelligence (HEI) Control Routes ---
+  router.get("/jarvis/hei/status", requireOwner, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(brain.hei.getStatus());
+  });
+
+  router.post("/jarvis/hei/analyze", requireOwner, express.json(), (req, res) => {
+    const text = typeof req.body?.text === "string" ? req.body.text : "";
+    const result = brain.hei.processUtterance(text, req.body || {});
+    res.json(result);
+  });
+
+  router.get("/jarvis/hei/preferences", requireOwner, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ preferences: brain.hei.getPreferences() });
+  });
+
+  router.post("/jarvis/hei/preferences", requireOwner, express.json(), (req, res) => {
+    const updated = brain.hei.updatePreferences(req.body || {});
+    res.json({ ok: true, preferences: updated });
+  });
+
+  router.post("/jarvis/hei/clear-context", requireOwner, (_req, res) => {
+    const result = brain.hei.clearContext();
+    res.json({ ok: true, ...result });
+  });
+
+  router.post("/jarvis/hei/delete-memory", requireOwner, (_req, res) => {
+    const result = brain.hei.deleteMemory();
+    res.json({ ok: true, ...result });
   });
 
   router.get("/jarvis/brain/health", requireOwner, (_req, res) => {

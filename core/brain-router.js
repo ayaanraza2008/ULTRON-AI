@@ -1,3 +1,4 @@
+import { ultronHEI } from "../intelligence/hei/index.js";
 /**
  * ULTRON AI — Advanced Brain Router & Intelligence Engine
  *
@@ -35,6 +36,7 @@ export class BrainRouter {
     this.providerStats = new Map();
     this.offlineMode = false;
     this.circuitBreakers = new Map();
+    this.hei = options.hei || ultronHEI;
   }
 
   /**
@@ -45,19 +47,28 @@ export class BrainRouter {
     const text = typeof prompt === "string" ? prompt : "";
     const hasMedia = Boolean(context.hasMedia || context.imageUrl || context.screenshot);
 
+    let tierResult;
     if (hasMedia || COMPLEXITY_PATTERNS.multimodal.test(text)) {
-      return { tier: "multimodal", modelClass: "vision", recommendedModel: "nvidia/nemotron-3.5-super-vl:free", priority: 1 };
+      tierResult = { tier: "multimodal", modelClass: "vision", recommendedModel: "nvidia/nemotron-3.5-super-vl:free", priority: 1 };
+    } else if (COMPLEXITY_PATTERNS.coding.test(text)) {
+      tierResult = { tier: "coding", modelClass: "reasoning_code", recommendedModel: "cohere/north-mini-code:free", priority: 2 };
+    } else if (COMPLEXITY_PATTERNS.complex.test(text)) {
+      tierResult = { tier: "complex", modelClass: "strategic_reasoning", recommendedModel: "openrouter/free", priority: 3 };
+    } else if (COMPLEXITY_PATTERNS.analytical.test(text)) {
+      tierResult = { tier: "analytical", modelClass: "balanced_chat", recommendedModel: "nvidia/nemotron-3.5-lightning:free", priority: 4 };
+    } else {
+      tierResult = { tier: "routine", modelClass: "fast_lightweight", recommendedModel: "openrouter/free", priority: 5 };
     }
-    if (COMPLEXITY_PATTERNS.coding.test(text)) {
-      return { tier: "coding", modelClass: "reasoning_code", recommendedModel: "cohere/north-mini-code:free", priority: 2 };
-    }
-    if (COMPLEXITY_PATTERNS.complex.test(text)) {
-      return { tier: "complex", modelClass: "strategic_reasoning", recommendedModel: "openrouter/free", priority: 3 };
-    }
-    if (COMPLEXITY_PATTERNS.analytical.test(text)) {
-      return { tier: "analytical", modelClass: "balanced_chat", recommendedModel: "nvidia/nemotron-3.5-lightning:free", priority: 4 };
-    }
-    return { tier: "routine", modelClass: "fast_lightweight", recommendedModel: "openrouter/free", priority: 5 };
+
+    const heiResult = this.hei.processUtterance(text, context);
+    tierResult.emotionalIntelligence = {
+      assessment: heiResult.assessment,
+      directive: heiResult.systemDirective,
+      vocalSettings: heiResult.vocalSettings,
+      coreVisualState: heiResult.coreVisualState
+    };
+
+    return tierResult;
   }
 
   /**

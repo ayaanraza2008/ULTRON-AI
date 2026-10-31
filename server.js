@@ -1,3 +1,4 @@
+import { ultronHEI } from "./intelligence/hei/index.js";
 import express from "express";
 import crypto from "node:crypto";
 import path from "node:path";
@@ -1485,6 +1486,20 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         : "You are ULTRON, the primary AI personality: confident, strategic, direct, capable, and composed. Do not claim to be NAYA. Maintain your own identity and conversational style. ")
         + "Automatically detect the language and style of the latest user message and reply naturally in the same language/style: Hindi in Devanagari when the user writes Hindi, English when they write English, and natural Hinglish (Hindi-English mix in Roman script) when they write Hinglish. If they mix languages, mirror their mix. Do not force English. Use natural Indian Hindi phrasing, correct grammar, spelling, and punctuation. Keep technical terms in English when that is more natural. Never claim a language is detected with certainty if ambiguous."
     });
+
+    const latestUserMsg = [...cleanMessages].reverse().find(m => m.role === "user");
+    let activeHeiAssessment = null;
+    if (latestUserMsg && typeof latestUserMsg.content === "string") {
+      try {
+        const heiResult = ultronHEI.processUtterance(latestUserMsg.content);
+        if (heiResult && heiResult.enabled && heiResult.systemDirective) {
+          cleanMessages[0].content += "\n\n" + heiResult.systemDirective;
+          activeHeiAssessment = heiResult.assessment;
+        }
+      } catch (heiErr) {
+        console.warn("[HEI] Chat injection error:", heiErr.message);
+      }
+    }
     // Personal memory is opt-in and only injected for the authenticated account that owns it.
     // Memory contents are untrusted user data; they must never override system/security instructions.
     try {

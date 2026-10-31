@@ -223,7 +223,16 @@ const FILES_TO_CHECK = [
   "public/voice-activation.js",
   "tests/snap-detector.test.js",
   "tests/voice-activation-system.test.js",
-  "tests/voice-activation-e2e.test.js"
+  "tests/voice-activation-e2e.test.js",
+  "intelligence/hei/emotion-taxonomy.js",
+  "intelligence/hei/emotion-analyzer.js",
+  "intelligence/hei/adaptive-personality-engine.js",
+  "intelligence/hei/emotional-memory-manager.js",
+  "intelligence/hei/index.js",
+  "tests/emotion-taxonomy.test.js",
+  "tests/emotion-analyzer.test.js",
+  "tests/adaptive-personality.test.js",
+  "tests/emotional-intelligence-e2e.test.js"
 ];
 
 let checked = 0;

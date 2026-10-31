@@ -112,6 +112,22 @@ export const VOICE_PERSONALITY_MODES = {
     pitch: 0.85,
     prefix: "Online, sir. ",
     style: "short_wake_acknowledgment"
+  },
+  EMPATHY: {
+    id: "EMPATHY",
+    name: "Empathy (Gentle, Attentive & Patient)",
+    rate: 0.90,
+    pitch: 0.85,
+    prefix: "",
+    style: "gentle_attentive_patient"
+  },
+  COMFORT: {
+    id: "COMFORT",
+    name: "Comfort (Deep, Soothing & Warm)",
+    rate: 0.86,
+    pitch: 0.82,
+    prefix: "",
+    style: "deep_soothing_warm"
   }
 };
 
