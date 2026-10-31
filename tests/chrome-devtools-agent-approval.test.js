@@ -44,11 +44,28 @@ test("Chrome dispatch discards model-authored confirmation and always forces fal
 
 test("model cannot self-approve a consequential Chrome click", async () => {
   let providerCalls = 0;
-  let bridgeCalls = 0;
+  const bridgeCalls = [];
   const agent = await startAgent(async (url, options = {}) => {
     if (url === "https://chrome-bridge.example.com/action") {
-      bridgeCalls += 1;
-      throw new Error("The autonomy approval gate must block before contacting the local bridge.");
+      const action = JSON.parse(options.body);
+      bridgeCalls.push(action);
+      assert.equal(action.action, "inspect_click", "the bridge may inspect but must not click before approval");
+      return new Response(JSON.stringify({
+        ok: true,
+        result: {
+          action: "inspect_click",
+          origin: "https://example.com",
+          url: "https://example.com/checkout",
+          selector: "button#continue",
+          label: "Continue",
+          tag: "button",
+          type: "button",
+          formActionOrigin: "https://example.com",
+          highImpact: false,
+          crossOriginForm: false,
+          requiresConfirmation: false
+        }
+      }), { status: 200, headers: { "content-type": "application/json" } });
     }
 
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
@@ -85,8 +102,9 @@ test("model cannot self-approve a consequential Chrome click", async () => {
     const toolMessages = body.messages.filter(message => message.role === "tool");
     assert.equal(toolMessages.length, 1);
     const result = JSON.parse(toolMessages[0].content);
-    assert.equal(result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(result.state, "approval_required");
     assert.equal(result.approvalRequired, true);
+    assert.match(result.approvalPhrase, /^I approve ULTRON Chrome action [0-9a-f-]{36}$/i);
     return new Response(JSON.stringify({
       choices: [{
         message: {
@@ -101,16 +119,18 @@ test("model cannot self-approve a consequential Chrome click", async () => {
     const response = await fetch(agent.base + "/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Click the Continue button on the browser page." })
+      body: JSON.stringify({ prompt: "Purchase this item by clicking the Continue button on the browser page." })
     });
     assert.equal(response.status, 200);
     const responseBody = await response.json();
     assert.equal(responseBody.toolResults.length, 1);
     assert.equal(responseBody.toolResults[0].name, "chrome_devtools");
-    assert.equal(responseBody.toolResults[0].ok, false);
-    assert.equal(responseBody.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(responseBody.toolResults[0].ok, true);
+    assert.equal(responseBody.toolResults[0].result.state, "approval_required");
     assert.equal(responseBody.toolResults[0].result.approvalRequired, true);
-    assert.equal(bridgeCalls, 0, "no Chrome bridge request may occur before task-specific user approval");
+    assert.match(responseBody.toolResults[0].result.approvalPhrase, /^I approve ULTRON Chrome action [0-9a-f-]{36}$/i);
+    assert.equal(bridgeCalls.length, 1, "only a read-only inspection may occur before approval");
+    assert.equal(bridgeCalls[0].action, "inspect_click");
     assert.equal(providerCalls, 2);
     assert.match(responseBody.content, /no action was performed/i);
   } finally {

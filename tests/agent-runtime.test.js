@@ -2264,7 +2264,9 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 59, "the compound route should expose the current complete allowlist, including OpenSEO");
+    assert.ok(compoundTools.includes("check_code_sandbox"));
+    assert.ok(compoundTools.includes("run_sandboxed_python"));
+    assert.equal(compoundTools.length, 61, "the compound route should expose the current complete allowlist, including OpenSEO and sandbox tools");
   });
 });
 

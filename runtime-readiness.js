@@ -1,5 +1,6 @@
 import { safeServiceBase } from "./network-safety.js";
 import { getStrataReadiness } from "./integrations/strata.js";
+import { getCodeSandboxReadiness } from "./integrations/code-sandbox.js";
 
 const truthy = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -27,6 +28,7 @@ export function buildRuntimeReadiness({
   const desktopConfigured = secureServiceUrl(env.ULTRON_DESKTOP_AGENT_URL) && truthy(env.ULTRON_DESKTOP_AGENT_TOKEN) && truthy(env.ULTRON_INTEGRATION_OWNER_USER_ID);
   const localModelConfigured = secureServiceUrl(env.OLLAMA_BASE_URL);
   const strataReadiness = getStrataReadiness(env);
+  const codeSandboxReadiness = getCodeSandboxReadiness(env);
   const memoryConfigured = supabaseConfigured || (secureServiceUrl(env.AGENTMEMORY_URL) && truthy(env.AGENTMEMORY_SECRET));
   const tavilyConfigured = truthy(env.TAVILY_API_KEY);
   const premiumTtsConfigured = secureServiceUrl(env.TTS_API_BASE_URL) && truthy(env.TTS_API_KEY);
@@ -90,8 +92,9 @@ export function buildRuntimeReadiness({
       ["STRATA_BASE_URL", "STRATA_MODEL"], strataReadiness.note),
     component("premium_speech", "Premium speech adapters", premiumTtsConfigured && premiumSttConfigured ? "configured_unverified" : "optional",
       ["TTS_API_BASE_URL", "TTS_API_KEY", "STT_API_BASE_URL", "STT_API_KEY"], "Browser-native speech can remain the fallback; configured provider URLs do not prove speech quality or reachability."),
-    component("safe_code_execution", "Isolated code execution", "not_available",
-      [], "ULTRON does not claim to run arbitrary user code in an isolated sandbox; coding assistance is limited to supported plan, draft, and review workflows.")
+    component("safe_code_execution", "Restricted Python code execution",
+      !codeSandboxReadiness.enabled ? "not_available" : codeSandboxReadiness.configured ? "configured_unverified" : "blocked",
+      codeSandboxReadiness.requiredEnv, codeSandboxReadiness.note)
   ];
 
   // A deliberately unsupported optional capability is disclosed in the component list,

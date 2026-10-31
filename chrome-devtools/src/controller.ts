@@ -266,7 +266,7 @@ export class ChromeController {
         imageBase64: buffer.toString("base64")
       };
     }
-    if (input.action === "click" || input.action === "fill") {
+    if (input.action === "click" || input.action === "inspect_click" || input.action === "fill") {
       const locator = page.locator(input.selector as string);
       const count = await locator.count();
       if (count !== 1) {
@@ -275,7 +275,7 @@ export class ChromeController {
       const details = await locator.evaluate((element) => {
         const node = element as HTMLElement;
         const inputNode = element as HTMLInputElement;
-        const text = String(node.innerText || node.getAttribute("aria-label") || node.getAttribute("title") || "").slice(0, 300);
+        const text = String(node.innerText || node.getAttribute("aria-label") || node.getAttribute("title") || "").slice(0, 240);
         return {
           tag: node.tagName.toLowerCase(),
           type: String(inputNode.type || "").toLowerCase(),
@@ -295,19 +295,57 @@ export class ChromeController {
         return { state: "completed", action: input.action, selector: input.selector, valueReturned: false };
       }
 
-      const current = new URL(page.url());
-      const localPage = isLoopbackHost(current.hostname);
+      const currentUrl = new URL(page.url());
+      const localPage = isLoopbackHost(currentUrl.hostname);
       const highImpact = /(?:submit|send|publish|post|pay|purchase|buy|checkout|delete|remove|book|reserve|confirm|cancel|sign out|log out|accept terms|place order)/i.test(details.text) ||
         details.type === "submit" || details.tag === "form";
-      const crossOriginForm = Boolean(details.formAction) && (() => {
-        try { return new URL(details.formAction).origin !== current.origin; } catch { return true; }
-      })();
-      if ((highImpact || crossOriginForm) && !localPage) {
+      let formActionOrigin = "";
+      if (details.formAction) {
+        try { formActionOrigin = new URL(details.formAction).origin; } catch { formActionOrigin = "[invalid]"; }
+      }
+      const crossOriginForm = Boolean(details.formAction) && formActionOrigin !== currentUrl.origin;
+      const requiresConfirmation = input.confirmExternalAction === true || ((highImpact || crossOriginForm) && !localPage);
+      if (input.action === "inspect_click") {
+        return {
+          state: "inspection",
+          action: "inspect_click",
+          origin: currentUrl.origin,
+          url: safeDisplayUrl(page.url()),
+          selector: input.selector,
+          label: details.text,
+          tag: details.tag,
+          type: details.type,
+          formActionOrigin: formActionOrigin && formActionOrigin !== "[invalid]" ? formActionOrigin : "",
+          highImpact,
+          crossOriginForm,
+          requiresConfirmation
+        };
+      }
+      if (requiresConfirmation) {
         if (!(input.confirmExternalAction === true && this.env.CHROME_ALLOW_EXTERNAL_ACTIONS === "true")) {
           throw new ChromeActionError(
             "EXTERNAL_ACTION_CONFIRMATION_REQUIRED",
-            "This click looks like a submission or consequential action on an external site. It is blocked unless the explicit browser confirmation flag and CHROME_ALLOW_EXTERNAL_ACTIONS=true are both set.",
+            "This click looks like a submission or consequential action on an external site. ULTRON must issue a one-time action approval, and CHROME_ALLOW_EXTERNAL_ACTIONS=true must be enabled on the local bridge.",
             403
+          );
+        }
+        const approved = input.approvalFingerprint;
+        const current = {
+          origin: currentUrl.origin,
+          pageUrl: safeDisplayUrl(page.url()),
+          selector: input.selector,
+          label: details.text,
+          tag: details.tag,
+          type: details.type,
+          formActionOrigin: formActionOrigin && formActionOrigin !== "[invalid]" ? formActionOrigin : "",
+          highImpact,
+          crossOriginForm
+        };
+        if (!approved || JSON.stringify(approved) !== JSON.stringify(current)) {
+          throw new ChromeActionError(
+            "CHROME_APPROVAL_TARGET_CHANGED",
+            "The current browser page or target element no longer matches the exact action the user approved. No click was performed.",
+            409
           );
         }
       }

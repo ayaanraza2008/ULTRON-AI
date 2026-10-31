@@ -17,7 +17,7 @@ const CATEGORY_TOOLS = Object.freeze({
     "rea_inspect_model_artifact", "rea_inspect_managed_artifact", "rea_inspect_apk_signature",
     "rea_inspect_android_package", "rea_search_guidance", "rea_list_guided_workflows"
   ],
-  coding: ["coding_assist", "check_repository_capabilities", "check_openviking", "openviking_find_context", "openviking_read_context"],
+  coding: ["coding_assist", "check_code_sandbox", "run_sandboxed_python", "check_repository_capabilities", "check_openviking", "openviking_find_context", "openviking_read_context"],
   memory: ["check_openviking", "openviking_find_context", "openviking_read_context"],
   integrations: [
     "check_integrations", "check_cactus", "check_desktop_companion",
@@ -65,7 +65,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
   ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
   ["productivity", /\b(?:chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
-  ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
+  ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task|run (?:this |the )?(?:python )?(?:code|snippet)|execute (?:this |the )?(?:python )?code|run python)\b/i],
   ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|we (?:decided|agreed|chose)|decision noted|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
   ["open_seo", /\b(?:open\s*seo|openseo)\b/i],
   ["research", /\b(?:research|look up|search the web|search online|latest (?:news|information|release)|find sources|fact check|current information)\b/i],
