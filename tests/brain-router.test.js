@@ -83,3 +83,49 @@ test("BrainRouter: prioritizes Groq and Gemini when environment keys are configu
   assert.equal(chainGemini[0].name, "gemini-flash");
   assert.equal(chainGemini[0].supportsVision, true);
 });
+
+test("BrainRouter: executeInference executes successfully and handles provider failover", async () => {
+  const router = new BrainRouter({
+    env: { OPENROUTER_API_KEY: "mock_test_key" }
+  });
+
+  // Successful call
+  const mockFetchSuccess = async (url, options) => {
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "Node.js 24 has first-class ES module and test runner support." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const res = await router.executeInference({
+    prompt: "Tell me about Node.js 24",
+    fetchImpl: mockFetchSuccess
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.provider, "openrouter-primary");
+  assert.ok(res.content.includes("Node.js 24"));
+  assert.ok(res.confidence.confidence >= 0.8);
+  assert.equal(res.fallbackCount, 0);
+
+  // Failover call: primary fails with 500, secondary succeeds
+  let callCount = 0;
+  const mockFetchFailover = async (url, options) => {
+    callCount += 1;
+    if (callCount === 1) {
+      return new Response("Internal Server Error", { status: 500 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "Fallback secondary response achieved." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const failoverRes = await router.executeInference({
+    prompt: "Simple failover test",
+    fetchImpl: mockFetchFailover
+  });
+
+  assert.equal(failoverRes.success, true);
+  assert.equal(failoverRes.provider, "openrouter-secondary");
+  assert.equal(failoverRes.fallbackCount, 1);
+  assert.ok(failoverRes.content.includes("Fallback secondary response"));
+});

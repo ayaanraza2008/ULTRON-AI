@@ -233,4 +233,92 @@ export class BrainRouter {
     }
     return summary;
   }
+
+  /**
+   * Executes inference through the candidate provider chain with automatic fallback,
+   * circuit breaker tripping, latency recording, and hallucination scoring.
+   */
+  async executeInference({ prompt, messages = null, context = {}, preferredProvider = null, fetchImpl = fetch } = {}) {
+    const rawPrompt = typeof prompt === "string" ? prompt : "";
+    const conversation = Array.isArray(messages) && messages.length > 0
+      ? messages
+      : [{ role: "user", content: rawPrompt }];
+
+    const complexity = this.classifyComplexity(rawPrompt, context);
+    if (preferredProvider) complexity.preferredProvider = preferredProvider;
+    const language = this.detectLanguage(rawPrompt);
+    const chain = this.selectProviderChain(complexity);
+
+    let lastError = null;
+
+    for (const provider of chain) {
+      if (this.isCircuitOpen(provider.name)) continue;
+
+      const apiKey = provider.apiKeyEnv ? this.env[provider.apiKeyEnv] : null;
+      if (provider.apiKeyEnv && (!apiKey || !String(apiKey).trim())) {
+        continue;
+      }
+
+      const startTime = Date.now();
+      try {
+        const headers = {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        };
+        if (apiKey) {
+          headers["Authorization"] = "Bearer " + apiKey.trim();
+        }
+
+        const endpoint = provider.baseUrl.replace(/\/+$/, "") + "/chat/completions";
+        const timeoutMs = provider.type === "local_cpu" ? 30_000 : 15_000;
+
+        const response = await fetchImpl(endpoint, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: provider.model,
+            messages: conversation,
+            stream: false
+          }),
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Provider ${provider.name} returned HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || "";
+        const latencyMs = Date.now() - startTime;
+        this.recordAttempt(provider.name, true, latencyMs);
+
+        const confidence = this.evaluateConfidence(content);
+
+        return {
+          success: true,
+          content,
+          provider: provider.name,
+          model: provider.model,
+          latencyMs,
+          language,
+          complexityTier: complexity.tier,
+          confidence,
+          fallbackCount: chain.indexOf(provider)
+        };
+      } catch (err) {
+        const latencyMs = Date.now() - startTime;
+        this.recordAttempt(provider.name, false, latencyMs);
+        lastError = err;
+      }
+    }
+
+    return {
+      success: false,
+      content: null,
+      error: lastError ? lastError.message : "ALL_PROVIDERS_UNAVAILABLE",
+      language,
+      complexityTier: complexity.tier,
+      chainAttempted: chain.map(p => p.name)
+    };
+  }
 }
