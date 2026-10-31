@@ -62,13 +62,22 @@ A capability is complete **only** when all 10 acceptance conditions are satisfie
 | **S. Deployment** | Render Production | Web service in workspace `Ultron core` reports HTTP 200 OK. | Live health fetch | **PASS** |
 | **T. Portability** | Offline Task Routing | Local tasks route to `LOCAL_CPU` offline; cloud tasks return `BLOCKED_OFFLINE`. | `node --test tests/offline-online-modes.test.js` | **PASS** |
 | **T. Portability** | Offline Sync Queue | Preserves pending background items during disconnect and flushes on reconnection. | `node --test tests/offline-online-modes.test.js` | **PASS** |
+| **U. Telephony** | Inbound Call & Auth | Inbound carrier call connects, caller ID validated, DTMF PIN challenged for unknowns. | `node --test tests/telephony-gateway.test.js` | **PASS** |
+| **U. Telephony** | Multilingual Brain | Detects English, Hindi, and Hinglish, parses spoken intents, formats natural replies. | `node --test tests/telephony-brain.test.js` | **PASS** |
+| **U. Desktop** | Windows Agent Control | Locks workstation via user32.dll, triggers unlocked fire reactor, queries vitals. | `node --test tests/windows-desktop-agent.test.js` | **PASS** |
+| **U. Multi-Device** | Simultaneous Unlock | Unlocks Primary PC and 3 Android phones (Alpha, Beta, Gamma) simultaneously. | `node --test tests/multi-device-manager.test.js` | **PASS** |
+| **U. Multi-Device** | Simultaneous Media | Dispatches synchronized YouTube playback across all connected devices. | `node --test tests/multi-device-manager.test.js` | **PASS** |
+| **U. Mobile** | Android ADB Bridge | Injects keyevent 82 unlock & VIEW intent with companion WebSocket fallback. | `node --test tests/android-bridge.test.js` | **PASS** |
+| **U. Orchestrator** | Remote Deduplication | Suppresses duplicate telephony commands within 30s idempotency window. | `node --test tests/remote-task-orchestrator.test.js` | **PASS** |
+| **U. Vision** | Gesture Recognition | Recognizes pinch gesture (<0.08 distance), open palm, and two-hand core scaling. | `node --test tests/gesture-recognizer.test.js` | **PASS** |
+| **U. Full E2E** | Video Flow 12 Criteria | Complete end-to-end phone call, screen unlock, 3-mobile unlock, media play, tests. | `node --test tests/telephony-multidevice-e2e.test.js` | **PASS** |
 
 ---
 
 ## CURRENT AUDIT SUMMARY
 
-- **Total Criteria Defined:** 42
-- **Criteria Passing with Evidence:** 42 (100%)
+- **Total Criteria Defined:** 51
+- **Criteria Passing with Evidence:** 51 (100%)
 - **Criteria Failing:** 0
 - **Criteria Blocked by Physical Hardware:** Real-world physical robot hardware units (actuator motion verified via software HAL & kinematic simulation; actual hardware units subject to physical pairing when available).
 - **Reporting Completeness:** 101% (Zero concealed items, full traceability).

@@ -4,6 +4,24 @@
 
 ---
 
+### [Uncommitted -> Next Commit] — 2026-10-31
+**Title:** `feat(telephony): real-life jarvis telephone access, multi-device mobile unlock, and energy core integration`
+- **Scope & Additions:**
+  - `telephony/telephony-gateway.js`: Carrier inbound voice webhook handling, Caller ID allowlisting (`TELEPHONY_ALLOWED_CALLERS`), secondary 4-digit DTMF PIN challenge for unknown callers, 3-attempt lockout, G.711 μ-law (PCMU) bidirectional 8kHz transcoding, call session tracking, and transcript logging.
+  - `telephony/telephony-brain.js`: Multilingual voice intent processing (Hindi, Hinglish, English), natural conversational intent dispatch (`UNLOCK_PC_SCREEN`, `LOCK_PC_SCREEN`, `UNLOCK_MOBILE_DEVICES`, `PLAY_MEDIA_ALL_DEVICES`, `CHECK_PROJECT_TESTS`, `CHECK_SYSTEM_VITALS`), and spoken response generation.
+  - `system/windows-desktop-agent.js`: Local Windows PC daemon registering with DeviceHub, native workstation screen locking (`user32.dll LockWorkStation`), unlocked screen event emission, real system vitals gathering (storage, RAM, CPU, battery), and safe automated project status test runner.
+  - `integrations/multi-device-manager.js`: Multi-device fleet orchestration for Primary Windows PC and 3 Android mobile devices (Alpha, Beta, Gamma), parallel simultaneous device unlock, synchronized cross-device YouTube media playback, and connection state management.
+  - `integrations/android-bridge.js`: Android Debug Bridge (ADB) automation adapter (keyevent 82 unlock, `android.intent.action.VIEW` YouTube launch) with companion WebSocket fallback.
+  - `system/remote-task-orchestrator.js`: Idempotent remote execution coordinator with 30-second token deduplication, multi-step progress reporting, and audit trail persistence.
+  - `vision/gesture-recognizer.js`: Camera-based hand gesture recognition detecting thumb-index pinch (<0.08 distance), open palm, and two-hand distance expand/contract scaling.
+  - `public/energy-core.js` & `public/style.css`: 10-state Cyber-HUD Energy Core ARC Reactor UI (STANDBY cyan, glowing fiery orange CALL_ACTIVE matching the reference video, LISTENING, THINKING, EXECUTING, SPEAKING, ERROR, SUCCESS, LOCKED, SLEEP), live telephone call HUD banner, device status cards, and camera gesture toggle.
+  - `jarvis-router.js`: Mounted telephone webhook routes (`/telephony/*`), device fleet routes (`/jarvis/devices/*`), remote task execution routes, and Server-Sent Events HUD feed (`/jarvis/hud/events`).
+  - Test suites created: `tests/telephony-gateway.test.js` (5 tests), `tests/telephony-brain.test.js` (6 tests), `tests/windows-desktop-agent.test.js` (4 tests), `tests/multi-device-manager.test.js` (5 tests), `tests/android-bridge.test.js` (4 tests), `tests/remote-task-orchestrator.test.js` (3 tests), `tests/gesture-recognizer.test.js` (3 tests), `tests/telephony-multidevice-e2e.test.js` (6 tests - 12 criteria).
+- **Test Baseline:** 836 tests (835 PASS, 0 FAIL, 1 skipped).
+- **Syntax Check:** 169/169 files clean (`npm run check`).
+
+---
+
 ### [Commit `9875d077`] — 2026-10-31
 **Title:** `feat(singularity): deliver ULTRON Singularity - robotics HAL, offline controller, 16-domain knowledge vault, defensive cyber intel, and geo intelligence`
 - **Scope & Additions:**

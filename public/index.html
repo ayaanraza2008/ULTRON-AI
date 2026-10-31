@@ -82,6 +82,23 @@
     <!-- Panel 1: Console & Voice -->
     <section class="tab-panel active" id="tab-console">
       <div class="console-grid">
+        <!-- Telephony Live Call HUD Banner -->
+        <div class="telephony-call-hud" id="telephonyCallHud">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #ff6b00; animation: pulse-energy 0.8s infinite;"></span>
+              <strong style="color: #ff6b00; letter-spacing: 1px;">TELEPHONY VOICE CALL ACTIVE</strong>
+              <span id="callNumberBadge" style="font-size: 12px; color: var(--cyan-accent); font-family: monospace;">Caller: +91 (Verified Owner)</span>
+            </div>
+            <div>
+              <button class="btn btn-sm btn-danger" id="hangupCallBtn">End Call</button>
+            </div>
+          </div>
+          <div style="margin-top: 8px; font-size: 13px; color: #e2e8f0;">
+            <span>Live Transcription: </span><em id="callLiveTranscript">"ULTRON is online. Ready for command."</em>
+          </div>
+        </div>
+
         <div class="chat-viewport" id="chatViewport">
           <div class="message system">
             <span class="sender">ULTRON CORE:</span>
@@ -189,6 +206,41 @@
     <!-- Panel 5: PC & Devices -->
     <section class="tab-panel" id="tab-computer">
       <div class="devices-grid">
+        <div class="card" style="grid-column: 1 / -1;">
+          <h3>Multi-Device Ecosystem (Synchronized Control)</h3>
+          <p class="section-desc">Simultaneous control across PC and multiple mobile devices as demonstrated in the reference video.</p>
+          <div class="btn-group" style="margin-bottom: 12px; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="unlockAllMobileBtn">🔓 Unlock All 3 Mobile Devices</button>
+            <button class="btn btn-accent" id="playSongAllDevicesBtn">🎵 Play Favorite Song Across All Devices</button>
+            <button class="btn" id="lockAllMobileBtn">🔒 Lock All Mobile Devices</button>
+            <button class="btn" id="unlockPcBtn">💻 Unlock PC Screen</button>
+            <button class="btn" id="simulateCallBtn">📞 Simulate Inbound Call</button>
+            <button class="btn" id="toggleGestureBtn">✋ Enable Hand Gesture Control</button>
+          </div>
+          <div class="device-card-grid" id="deviceFleetGrid">
+            <div class="device-card" id="card-pc">
+              <strong>Primary Windows PC</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="pcLockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">AMD Ryzen 7 5700U • Host Node</div>
+            </div>
+            <div class="device-card" id="card-phone-1">
+              <strong>Android Phone Alpha</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="phone1LockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">Primary Mobile • Battery: 92%</div>
+            </div>
+            <div class="device-card" id="card-phone-2">
+              <strong>Android Phone Beta</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="phone2LockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">Second Mobile • Battery: 84%</div>
+            </div>
+            <div class="device-card" id="card-phone-3">
+              <strong>Android Phone Gamma</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="phone3LockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">Third Mobile • Battery: 78%</div>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <h3>Windows PC Control</h3>
           <div class="btn-group">

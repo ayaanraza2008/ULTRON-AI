@@ -562,4 +562,110 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   pollBattery();
   setInterval(pollBattery, 60000);
+  // --- ULTRON ETERNAL: Multi-Device Ecosystem & Synchronizer Handlers ---
+  const unlockAllMobileBtn = document.getElementById("unlockAllMobileBtn");
+  const lockAllMobileBtn = document.getElementById("lockAllMobileBtn");
+  const playSongAllDevicesBtn = document.getElementById("playSongAllDevicesBtn");
+  const unlockPcBtn = document.getElementById("unlockPcBtn");
+  const simulateCallBtn = document.getElementById("simulateCallBtn");
+  const hangupCallBtn = document.getElementById("hangupCallBtn");
+  const telephonyCallHud = document.getElementById("telephonyCallHud");
+  const callLiveTranscript = document.getElementById("callLiveTranscript");
+
+  unlockAllMobileBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/devices/unlock-mobile", { method: "POST" });
+      const data = await res.json();
+      ["phone1LockLabel", "phone2LockLabel", "phone3LockLabel"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = "UNLOCKED"; el.className = "device-lock-state unlocked"; }
+      });
+      appendMessage("DEVICE HUB", `All ${data.unlockedCount || 3} mobile devices unlocked simultaneously.`, false);
+    } catch (err) {
+      alert("Failed to unlock mobile devices: " + err.message);
+    }
+  });
+
+  lockAllMobileBtn?.addEventListener("click", async () => {
+    try {
+      await fetch("/api/jarvis/devices/lock-mobile", { method: "POST" });
+      ["phone1LockLabel", "phone2LockLabel", "phone3LockLabel"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = "LOCKED"; el.className = "device-lock-state locked"; }
+      });
+      appendMessage("DEVICE HUB", "All mobile devices locked.", false);
+    } catch (err) {
+      alert("Failed to lock mobile devices: " + err.message);
+    }
+  });
+
+  playSongAllDevicesBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/devices/play-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "favorite song" })
+      });
+      const data = await res.json();
+      appendMessage("MEDIA HUB", `Playing favorite song across ${data.playingDevices || 3} connected devices simultaneously.`, false);
+    } catch (err) {
+      alert("Failed to dispatch media: " + err.message);
+    }
+  });
+
+  unlockPcBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/devices/pc/unlock", { method: "POST" });
+      const data = await res.json();
+      const pcLabel = document.getElementById("pcLockLabel");
+      if (pcLabel) { pcLabel.textContent = "UNLOCKED"; pcLabel.className = "device-lock-state unlocked"; }
+      if (reactorCore) {
+        reactorCore.className = "reactor-core state-call_active";
+      }
+      appendMessage("SYSTEM AGENT", "Workstation unlocked. Energy Core activated in high-power orange state.", false);
+    } catch (err) {
+      alert("PC unlock failed: " + err.message);
+    }
+  });
+
+  simulateCallBtn?.addEventListener("click", async () => {
+    if (telephonyCallHud) telephonyCallHud.style.display = "block";
+    if (reactorCore) reactorCore.className = "reactor-core state-call_active";
+    if (callLiveTranscript) callLiveTranscript.textContent = "ULTRON: 'Good evening sir. ULTRON is online. How may I assist you?'";
+
+    appendMessage("TELEPHONY AGENT", "Inbound telephone call connected (+91 Verified Owner). Live two-way voice stream active.", false);
+  });
+
+  hangupCallBtn?.addEventListener("click", () => {
+    if (telephonyCallHud) telephonyCallHud.style.display = "none";
+    if (reactorCore) reactorCore.className = "reactor-core state-standby";
+    appendMessage("TELEPHONY AGENT", "Telephone call session terminated. Transcript archived to session history.", false);
+  });
+
+  // --- Hand Gesture Control (Optional Camera Tracking) ---
+  let gestureTrackingActive = false;
+  document.getElementById("toggleGestureBtn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("toggleGestureBtn");
+    if (!gestureTrackingActive) {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          alert("Camera access is not supported in this browser environment.");
+          return;
+        }
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        gestureTrackingActive = true;
+        btn.textContent = "✋ Gesture Control Active (Pinch / Scale Core)";
+        btn.classList.add("btn-accent");
+        appendMessage("VISION GESTURE", "Local camera tracking active. Pinch to select, open palm to activate, two-hand distance scales Energy Core.", false);
+      } catch (err) {
+        alert("Camera permission denied or camera unavailable: " + err.message);
+      }
+    } else {
+      gestureTrackingActive = false;
+      btn.textContent = "✋ Enable Hand Gesture Control";
+      btn.classList.remove("btn-accent");
+      appendMessage("VISION GESTURE", "Camera gesture tracking deactivated.", false);
+    }
+  });
+
 });

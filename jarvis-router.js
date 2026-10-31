@@ -25,6 +25,12 @@ import { connectionController } from "./system/connection-controller.js";
 import { knowledgeEngine } from "./knowledge/knowledge-engine.js";
 import { cyberSecurityIntel } from "./security/cyber-intel.js";
 import { geoIntelligence } from "./system/geo-intel.js";
+import { telephonyGateway, CALLER_AUTH_STATUS } from "./telephony/telephony-gateway.js";
+import { telephonyBrain } from "./telephony/telephony-brain.js";
+import { windowsDesktopAgent } from "./system/windows-desktop-agent.js";
+import { multiDeviceManager } from "./integrations/multi-device-manager.js";
+import { remoteTaskOrchestrator } from "./system/remote-task-orchestrator.js";
+
 
 
 const EMPLOYEE_ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
@@ -66,6 +72,14 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   const vision = new JarvisVisionEngine();
   const computer = new WindowsComputerControl();
   const productivity = new ProductivitySuite();
+  // Wire Telephony and Multi-Device Ecosystem
+  telephonyBrain.windowsDesktopAgent = windowsDesktopAgent;
+  telephonyBrain.multiDeviceManager = multiDeviceManager;
+  telephonyBrain.remoteTaskOrchestrator = remoteTaskOrchestrator;
+  remoteTaskOrchestrator.windowsDesktopAgent = windowsDesktopAgent;
+  remoteTaskOrchestrator.multiDeviceManager = multiDeviceManager;
+  remoteTaskOrchestrator.telephonyGateway = telephonyGateway;
+
 
   // --- System & Hardware Telemetry ---
   router.get("/jarvis/telemetry", requireOwner, (_req, res) => {
@@ -660,6 +674,168 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   router.get("/jarvis/geo/audit-logs", requireOwner, (req, res) => {
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
     res.json({ auditLogs: geoIntelligence.getAuditLogs(limit) });
+  });
+
+  
+  // --- Telephone Access & Telephony Gateway (Jarvis Calling) ---
+  router.post("/telephony/incoming-call", express.urlencoded({ extended: true }), express.json(), (req, res) => {
+    const from = req.body.From || req.body.from || req.body.caller || "";
+    const to = req.body.To || req.body.to || "";
+    const callSid = req.body.CallSid || req.body.callSid || req.body.callId;
+
+    const callResult = telephonyGateway.handleIncomingCall({ callSid, from, to });
+    res.setHeader("Content-Type", "text/xml");
+    res.send(callResult.twiml);
+  });
+
+  router.post("/telephony/process-speech", express.urlencoded({ extended: true }), express.json(), async (req, res) => {
+    const callId = req.query.callId || req.body.callId || req.body.CallSid;
+    const speechResult = req.body.SpeechResult || req.body.speechResult || req.body.text || "";
+    const call = telephonyGateway.getCall(callId);
+
+    if (!call) {
+      res.setHeader("Content-Type", "text/xml");
+      return res.send(telephonyGateway.generateSpeechResponseTwiML(callId, "Call session expired.", true));
+    }
+
+    telephonyGateway.recordCallerSpeech(callId, speechResult);
+
+    const outcome = await telephonyBrain.processCallerUtterance({
+      callId,
+      callerNumber: call.from,
+      isOwner: call.isOwner,
+      speechText: speechResult,
+      multiDeviceManager,
+      windowsDesktopAgent
+    });
+
+    telephonyGateway.recordAssistantSpeech(callId, outcome.spokenResponse);
+
+    res.setHeader("Content-Type", "text/xml");
+    res.send(telephonyGateway.generateSpeechResponseTwiML(callId, outcome.spokenResponse, Boolean(outcome.hangup)));
+  });
+
+  router.post("/telephony/verify-pin", express.urlencoded({ extended: true }), express.json(), (req, res) => {
+    const callId = req.query.callId || req.body.callId || req.body.CallSid;
+    const digits = req.body.Digits || req.body.digits || req.body.pin || "";
+
+    const pinResult = telephonyGateway.verifyCallPin(callId, digits);
+    res.setHeader("Content-Type", "text/xml");
+
+    if (pinResult.authorized) {
+      res.send(telephonyGateway.generateConnectedTwiML(callId, "Security PIN accepted. Good evening sir, ULTRON is online. How may I assist you?"));
+    } else if (pinResult.hangup) {
+      res.send(telephonyGateway.generateSpeechResponseTwiML(callId, "Maximum authorization attempts exceeded. Terminating call.", true));
+    } else {
+      res.send(telephonyGateway.generatePinChallengeTwiML(callId));
+    }
+  });
+
+  router.post("/telephony/timeout-prompt", express.urlencoded({ extended: true }), (req, res) => {
+    const callId = req.query.callId || req.body.callId;
+    res.setHeader("Content-Type", "text/xml");
+    res.send(telephonyGateway.generateSpeechResponseTwiML(callId, "I did not detect any speech. Are you still there, sir?"));
+  });
+
+  router.post("/telephony/status-callback", express.urlencoded({ extended: true }), express.json(), (req, res) => {
+    const callId = req.body.CallSid || req.body.callId;
+    const callStatus = req.body.CallStatus || req.body.callStatus;
+    if (callStatus === "completed" || callStatus === "canceled") {
+      telephonyGateway.endCall(callId, callStatus);
+    }
+    res.json({ success: true, callId, callStatus });
+  });
+
+  router.get("/jarvis/telephony/calls", requireOwner, (_req, res) => {
+    res.json({
+      activeCalls: telephonyGateway.getActiveCalls(),
+      recentHistory: telephonyGateway.getCallHistory(20)
+    });
+  });
+
+  // --- Multi-Device Remote Control & Synchronizer ---
+  router.get("/jarvis/devices/fleet", requireOwner, (_req, res) => {
+    res.json({
+      devices: multiDeviceManager.listDevices(),
+      commandHistory: multiDeviceManager.commandHistory
+    });
+  });
+
+  router.post("/jarvis/devices/unlock-mobile", requireOwner, async (_req, res) => {
+    const result = await multiDeviceManager.unlockMobileDevices();
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/lock-mobile", requireOwner, async (_req, res) => {
+    const result = await multiDeviceManager.lockMobileDevices();
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/play-media", requireOwner, express.json(), async (req, res) => {
+    const { mediaUrl, query } = req.body || {};
+    const result = await multiDeviceManager.playMediaAcrossDevices({ mediaUrl, query });
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/pc/unlock", requireOwner, async (_req, res) => {
+    const result = await windowsDesktopAgent.unlockScreen();
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/pc/lock", requireOwner, async (_req, res) => {
+    const result = await windowsDesktopAgent.lockScreen();
+    res.json(result);
+  });
+
+  router.get("/jarvis/devices/pc/vitals", requireOwner, async (_req, res) => {
+    const vitals = await windowsDesktopAgent.getSystemVitals();
+    res.json(vitals);
+  });
+
+  router.post("/jarvis/devices/remote-task", requireOwner, express.json(), async (req, res) => {
+    const { action, payload, idempotencyKey } = req.body || {};
+    const outcome = await remoteTaskOrchestrator.executeRemoteTask({
+      callerId: "owner_console",
+      isOwner: true,
+      action,
+      payload,
+      idempotencyKey
+    });
+    res.json(outcome);
+  });
+
+  router.get("/jarvis/devices/remote-task/history", requireOwner, (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
+    res.json({ history: remoteTaskOrchestrator.getTaskHistory(limit) });
+  });
+
+  // --- Live Cyber-HUD Event Stream (Server-Sent Events) ---
+  router.get("/jarvis/hud/events", requireOwner, (req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    });
+
+    const sendEvent = (eventData) => {
+      res.write("data: " + JSON.stringify(eventData) + "\n\n");
+    };
+
+    // Initial state event
+    sendEvent({
+      type: "CORE_STATE_CHANGE",
+      state: windowsDesktopAgent.screenState === "SYSTEM_LOCKED" ? "STANDBY" : "CALL_ACTIVE",
+      detail: "HUD Connected",
+      devices: multiDeviceManager.listDevices().length
+    });
+
+    const timer = setInterval(() => {
+      sendEvent({ type: "HEARTBEAT", timestamp: Date.now() });
+    }, 25000);
+
+    req.on("close", () => {
+      clearInterval(timer);
+    });
   });
 
   return router;

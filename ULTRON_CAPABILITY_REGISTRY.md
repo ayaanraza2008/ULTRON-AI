@@ -460,3 +460,35 @@ Status Key:
 - **Level 9 (Security & Performance):** Zero cloud network traffic attempted in OFFLINE mode; sync queue stored in memory
 - **Level 10 (Deployment):** Render `Ultron core` + offline portable node
 - **Status:** `LIVE_VERIFIED`
+
+---
+
+## CATEGORY U: TELEPHONY, REMOTE VOICE ACCESS & MULTI-DEVICE ORCHESTRATION
+- **Level 1 (Major):** Cellular Telephone Call Interface, Multi-Language Voice Control & Multi-Device Fleet Synchronization
+- **Level 2 (Subsystem):** `telephony/telephony-gateway.js`, `telephony/telephony-brain.js`, `system/windows-desktop-agent.js`, `integrations/multi-device-manager.js`, `integrations/android-bridge.js`, `system/remote-task-orchestrator.js`, `vision/gesture-recognizer.js`, `public/energy-core.js`
+- **Level 3 (Module):** Twilio/Carrier Inbound Voice Gateway + Android ADB Bridge + Cyber-HUD ARC Reactor
+- **Level 4 (Component):**
+  - Carrier inbound voice webhook handling (`/telephony/incoming-call`, `/telephony/process-speech`, `/telephony/verify-pin`)
+  - Caller ID allowlisting (`TELEPHONY_ALLOWED_CALLERS`) + DTMF 4-digit PIN security challenge for unverified callers (3-attempt lockout)
+  - Full G.711 μ-law (PCMU) bidirectional audio transcoding (8kHz mono linear PCM)
+  - Multilingual voice detection and processing (Hindi, Hinglish, English) with natural tone synthesis matching Kokoro `am_onyx`
+  - Spoken conversational intent classification:
+    - PC screen unlock (`UNLOCK_PC_SCREEN`) / lock (`LOCK_PC_SCREEN`)
+    - Multi-device mobile unlock (`UNLOCK_MOBILE_DEVICES`)
+    - Cross-device media playback (`PLAY_MEDIA_ALL_DEVICES` on YouTube)
+    - Remote diagnostic check (`CHECK_PROJECT_TESTS`)
+    - System vitals query (`CHECK_SYSTEM_VITALS`)
+    - Conversational queries (`GENERAL_CONVERSATION`)
+  - Windows Desktop Agent (`system/windows-desktop-agent.js`): Native Windows LockWorkStation, screen unlock signaling, real storage/RAM/CPU/battery metrics, safe automated test execution
+  - Multi-Device Ecosystem (`integrations/multi-device-manager.js`): Fleet management for Primary PC + 3 Android phones (Alpha, Beta, Gamma), simultaneous unlock, simultaneous media streaming, connect/disconnect lifecycle tracking
+  - Android ADB Automation Bridge (`integrations/android-bridge.js`): ADB shell keyevent 82 screen unlock, YouTube intent launch, with companion WebSocket fallback
+  - Remote Task Orchestration (`system/remote-task-orchestrator.js`): 30s idempotency token deduplication, multi-step progress reporting, audit trail
+  - Optional Hand Gesture Recognizer (`vision/gesture-recognizer.js`): Web camera pinch detection (thumb-to-index Euclidean distance < 0.08), open palm, two-hand distance expand/contract scaling of holographic core
+  - Cyber-HUD Energy Core (`public/energy-core.js`, `public/style.css`, `public/app.js`): 10 visual Energy Core states (STANDBY cyan, glowing fiery orange CALL_ACTIVE matching reference video, LISTENING, THINKING, EXECUTING, SPEAKING, ERROR, SUCCESS, LOCKED, SLEEP), live telephone call HUD banner, device status cards, and camera gesture toggle
+- **Level 5 (Configuration):** `TELEPHONY_ALLOWED_CALLERS`, `TELEPHONY_SECURITY_PIN`, `TELEPHONY_TWILIO_AUTH_TOKEN`, `telephony` endpoints mounted on `jarvis-router.js`
+- **Level 6 (Automated Test):** `tests/telephony-gateway.test.js` (5/5 PASS), `tests/telephony-brain.test.js` (6/6 PASS), `tests/windows-desktop-agent.test.js` (4/4 PASS), `tests/multi-device-manager.test.js` (5/5 PASS), `tests/android-bridge.test.js` (4/4 PASS), `tests/remote-task-orchestrator.test.js` (3/3 PASS), `tests/gesture-recognizer.test.js` (3/3 PASS)
+- **Level 7 (Integration Test):** `tests/telephony-multidevice-e2e.test.js` (6/6 PASS - All 12 acceptance criteria verified end-to-end)
+- **Level 8 (Live Verification):** Mounted on `/telephony/*` and `/api/jarvis/devices/*` endpoints on ULTRON CORE runtime
+- **Level 9 (Security & Performance):** Non-bypassable caller allowlist, 3-attempt DTMF PIN lockout, 30s task deduplication, no plain secrets logged
+- **Level 10 (Deployment):** Render `Ultron core` workspace compatible
+- **Status:** `LIVE_VERIFIED`
