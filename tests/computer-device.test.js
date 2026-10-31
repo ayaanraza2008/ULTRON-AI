@@ -12,7 +12,7 @@ test("Computer Control: system telemetry reports CPU and RAM bounds", () => {
 
   assert.equal(telemetry.platform, process.platform);
   assert.equal(telemetry.architecture, process.arch);
-  assert.equal(telemetry.executionEnvironment, "hosted_or_local_runtime");
+  assert.equal(telemetry.executionEnvironment, "server_process");
   assert.ok(telemetry.cpuCores >= 1);
   assert.ok(telemetry.memory.totalBytes > 0);
   assert.ok(telemetry.memory.usedPercent >= 0 && telemetry.memory.usedPercent <= 100);
