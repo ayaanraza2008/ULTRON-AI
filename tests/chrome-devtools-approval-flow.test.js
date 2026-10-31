@@ -131,6 +131,40 @@ test("consequential click is inspected and held until an exact owner approval", 
   }
 });
 
+
+test("request-level high-impact intent still requires approval when the target label looks harmless", async () => {
+  const calls = [];
+  const lowRiskInspection = inspection({
+    label: "Continue",
+    type: "button",
+    highImpact: false,
+    crossOriginForm: false,
+    requiresConfirmation: false
+  });
+  const challenge = await runChromeDevToolsAction({
+    env,
+    userId: owner,
+    fetchImpl: bridgeFetch({ calls, inspectionValue: lowRiskInspection }),
+    input: { action: "click", selector: "button#continue" },
+    forceApproval: true
+  });
+  assert.equal(challenge.state, "approval_required");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].action.action, "inspect_click");
+
+  const result = await approveChromeDevToolsAction({
+    env,
+    userId: owner,
+    approvalId: challenge.approvalId,
+    fetchImpl: bridgeFetch({ calls, inspectionValue: lowRiskInspection })
+  });
+  assert.equal(result.state, "completed");
+  const click = calls.find(call => call.action.action === "click");
+  assert.ok(click);
+  assert.equal(click.action.confirmExternalAction, true);
+  assert.equal(click.action.approvalFingerprint.highImpact, false);
+});
+
 test("approval is owner-bound and a changed page or element invalidates the challenge", async () => {
   const calls = [];
   const challenge = await runChromeDevToolsAction({
