@@ -217,7 +217,13 @@ const FILES_TO_CHECK = [
   "tests/dsh-account-channels.test.js",
   "tests/dsh-usage-diagnostics.test.js",
   "tests/dsh-brain-integration.test.js",
-  "tests/dsh-facade-routes.test.js"
+  "tests/dsh-facade-routes.test.js",
+  "voice/snap-detector.js",
+  "voice/voice-activation-system.js",
+  "public/voice-activation.js",
+  "tests/snap-detector.test.js",
+  "tests/voice-activation-system.test.js",
+  "tests/voice-activation-e2e.test.js"
 ];
 
 let checked = 0;

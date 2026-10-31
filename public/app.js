@@ -276,6 +276,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.dataUrl) {
           activeOnyxAudio = new Audio(data.dataUrl);
           activeOnyxAudio.playbackRate = 1.0;
+          activeOnyxAudio.addEventListener("play", () => {
+            window.voiceActivationController?.system?.notifySpeakingStarted();
+          });
+          activeOnyxAudio.addEventListener("ended", () => {
+            window.voiceActivationController?.system?.notifySpeakingEnded();
+          });
           activeOnyxAudio.play().catch(e => {
             console.warn("Autoplay note:", e.message);
           });
@@ -299,6 +305,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const utter = new SpeechSynthesisUtterance(clean);
       utter.rate = modeConfig.speed;
       utter.pitch = 0.85;
+      utter.onstart = () => window.voiceActivationController?.system?.notifySpeakingStarted();
+      utter.onend = () => window.voiceActivationController?.system?.notifySpeakingEnded();
       window.speechSynthesis.speak(utter);
     }
   }
@@ -312,6 +320,7 @@ document.addEventListener("DOMContentLoaded", () => {
       activeOnyxAudio = null;
     }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
+    window.voiceActivationController?.system?.transitionTo("WAKE_MONITORING", { reason: "User stopped audio" });
     try {
       await fetch("/api/jarvis/voice/interrupt", { method: "POST" });
     } catch {}
@@ -994,5 +1003,78 @@ document.addEventListener("DOMContentLoaded", () => {
     loadDshCombos();
     loadDshChannels();
   });
+
+
+  // --- Always-On Hands-Free Voice Activation HUD Wiring ---
+  const toggleAlwaysOnWakeBtn = document.getElementById("toggleAlwaysOnWakeBtn");
+  const toggleSnapActivationBtn = document.getElementById("toggleSnapActivationBtn");
+  const emergencyMicMuteBtn = document.getElementById("emergencyMicMuteBtn");
+  const snapSensitivitySelect = document.getElementById("snapSensitivitySelect");
+  const convoTimeoutSelect = document.getElementById("convoTimeoutSelect");
+
+  if (toggleAlwaysOnWakeBtn) {
+    toggleAlwaysOnWakeBtn.addEventListener("click", async () => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      if (vac.system.getState() === "DISABLED") {
+        const res = await vac.start();
+        if (res.ok) {
+          toggleAlwaysOnWakeBtn.textContent = "⚡ Wake Word: ULTRON [ON]";
+          toggleAlwaysOnWakeBtn.classList.add("btn-accent");
+        }
+      } else {
+        vac.stop();
+        toggleAlwaysOnWakeBtn.textContent = "⚡ Wake Word: ULTRON [OFF]";
+        toggleAlwaysOnWakeBtn.classList.remove("btn-accent");
+      }
+    });
+  }
+
+  if (toggleSnapActivationBtn) {
+    toggleSnapActivationBtn.addEventListener("click", () => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      vac.snapEnabled = !vac.snapEnabled;
+      vac.system.snapActivationEnabled = vac.snapEnabled;
+      vac.savePreferences();
+      toggleSnapActivationBtn.textContent = vac.snapEnabled ? "🫰 Snap Wake [ON]" : "🫰 Snap Wake [OFF]";
+      if (vac.snapEnabled) toggleSnapActivationBtn.classList.add("btn-accent");
+      else toggleSnapActivationBtn.classList.remove("btn-accent");
+    });
+  }
+
+  if (emergencyMicMuteBtn) {
+    emergencyMicMuteBtn.addEventListener("click", () => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      const muted = vac.toggleMute();
+      emergencyMicMuteBtn.textContent = muted ? "🔊 Unmute Mic" : "🔇 Mute Mic";
+      if (muted) emergencyMicMuteBtn.classList.add("btn-danger");
+      else emergencyMicMuteBtn.classList.remove("btn-danger");
+    });
+  }
+
+  if (snapSensitivitySelect) {
+    snapSensitivitySelect.addEventListener("change", (e) => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      vac.snapSensitivity = e.target.value;
+      vac.system.snapDetector.setSensitivity(e.target.value);
+      vac.savePreferences();
+    });
+  }
+
+  if (convoTimeoutSelect) {
+    convoTimeoutSelect.addEventListener("change", (e) => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      const timeout = Number(e.target.value);
+      vac.conversationTimeoutMs = timeout;
+      vac.continuousEnabled = timeout > 0;
+      vac.system.continuousConversationEnabled = timeout > 0;
+      vac.system.conversationTimeoutMs = timeout;
+      vac.savePreferences();
+    });
+  }
 
 });

@@ -16,21 +16,25 @@ export const CORE_STATES = {
   STANDBY: "STANDBY",
   CALL_CONNECTING: "CALL_CONNECTING",
   CALL_ACTIVE: "CALL_ACTIVE",
+  WAKE_MONITORING: "WAKE_MONITORING",
+  SNAP_DETECTED: "SNAP_DETECTED",
+  WAKE_DETECTED: "WAKE_DETECTED",
   LISTENING: "LISTENING",
   THINKING: "THINKING",
   EXECUTING: "EXECUTING",
   SPEAKING: "SPEAKING",
   TASK_COMPLETED: "TASK_COMPLETED",
   ERROR: "ERROR",
+  SLEEPING: "SLEEPING",
   OFFLINE: "OFFLINE"
 };
 
 export class EnergyCoreController {
   constructor() {
     this.currentState = CORE_STATES.STANDBY;
-    this.coreElement = document.getElementById("reactorCore");
-    this.statusTextElement = document.getElementById("coreStatusText");
-    this.statusPill = document.getElementById("coreStatusPill");
+    this.coreElement = typeof document !== "undefined" ? document.getElementById("reactorCore") : null;
+    this.statusTextElement = typeof document !== "undefined" ? document.getElementById("coreStatusText") : null;
+    this.statusPill = typeof document !== "undefined" ? document.getElementById("coreStatusPill") : null;
     this.coreScale = 1.0;
     this.cameraStream = null;
     this.gestureActive = false;
@@ -69,6 +73,26 @@ export class EnergyCoreController {
     if (this.coreElement) {
       this.coreElement.style.transform = "scale(1.0)";
     }
+  }
+
+  setAudioReactivity(normalizedLevel = 0) {
+    if (!this.coreElement) return;
+    const clamped = Math.max(0, Math.min(1.0, Number(normalizedLevel) || 0));
+    const dynamicScale = this.coreScale * (1.0 + clamped * 0.35);
+    const glowSpread = 20 + Math.round(clamped * 40);
+    this.coreElement.style.transform = `scale(${dynamicScale.toFixed(3)})`;
+    const glowEl = this.coreElement.querySelector(".core-glow");
+    if (glowEl) {
+      glowEl.style.boxShadow = `0 0 ${glowSpread}px var(--core-current-glow, #a855f7)`;
+    }
+  }
+
+  triggerActivationRipple(color = "#eab308") {
+    if (!this.coreElement) return;
+    this.coreElement.classList.add("core-ripple-active");
+    setTimeout(() => {
+      this.coreElement?.classList.remove("core-ripple-active");
+    }, 600);
   }
 
   /**
@@ -126,3 +150,9 @@ export class EnergyCoreController {
 }
 
 export const energyCore = new EnergyCoreController();
+
+if (typeof window !== "undefined") {
+  window.energyCore = energyCore;
+  window.CORE_STATES = CORE_STATES;
+  window.EnergyCoreController = EnergyCoreController;
+}

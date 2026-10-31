@@ -592,11 +592,69 @@ select {
   animation: pulse-energy 0.8s ease-in-out infinite;
 }
 
-/* 4. LISTENING: Reactive bright cyan */
-#reactorCore.state-listening .core-glow {
+/* 3b. WAKE_MONITORING: Cyan-blue and subtle golden standby breathing */
+#reactorCore.state-wake_monitoring .core-ring.outer {
+  border-top-color: #00f0ff;
+  border-bottom-color: #eab308;
+  animation: spin 3s linear infinite;
+}
+#reactorCore.state-wake_monitoring .core-glow {
   background: #00f0ff;
-  box-shadow: 0 0 30px #00f0ff;
-  animation: pulse-listening 0.5s ease-in-out infinite;
+  box-shadow: 0 0 20px #00f0ff, 0 0 35px rgba(234, 179, 8, 0.4);
+  animation: pulse-breathing 2s ease-in-out infinite;
+}
+
+/* 3c. SNAP_DETECTED: Golden-cyan activation ripple */
+#reactorCore.state-snap_detected .core-ring.outer {
+  border-top-color: #facc15;
+  border-bottom-color: #00f0ff;
+  animation: spin 0.4s linear infinite;
+}
+#reactorCore.state-snap_detected .core-glow {
+  background: #fef08a;
+  box-shadow: 0 0 50px #eab308, 0 0 80px #00f0ff;
+  animation: ripple-activation 0.5s ease-out;
+}
+
+/* 3d. WAKE_DETECTED: Accelerated orbital rings and purple-white center */
+#reactorCore.state-wake_detected .core-ring.outer {
+  border-top-color: #c084fc;
+  border-bottom-color: #ffffff;
+  animation: spin 0.5s linear infinite;
+}
+#reactorCore.state-wake_detected .core-glow {
+  background: #ffffff;
+  box-shadow: 0 0 45px #a855f7, 0 0 75px #ffffff;
+}
+
+/* 4. LISTENING: Purple-white active core (microphone reactive) */
+#reactorCore.state-listening .core-ring.outer {
+  border-top-color: #c084fc;
+  border-bottom-color: #818cf8;
+  animation: spin 1s linear infinite;
+}
+#reactorCore.state-listening .core-ring.inner {
+  border-left-color: #ffffff;
+  border-right-color: #a855f7;
+  animation: spin-reverse 0.7s linear infinite;
+}
+#reactorCore.state-listening .core-glow {
+  background: #f8fafc;
+  box-shadow: 0 0 35px #a855f7, 0 0 70px rgba(129, 140, 248, 0.8);
+  animation: pulse-listening-purple 0.6s ease-in-out infinite alternate;
+}
+
+/* 4b. SLEEPING: Dimmed ambient cyan ring with slow breathing */
+#reactorCore.state-sleeping .core-ring.outer {
+  border-top-color: #1e293b;
+  border-bottom-color: #0284c7;
+  animation: spin 6s linear infinite;
+}
+#reactorCore.state-sleeping .core-glow {
+  background: #0369a1;
+  box-shadow: 0 0 10px #0284c7;
+  opacity: 0.6;
+  animation: pulse-sleep 3s ease-in-out infinite;
 }
 
 /* 5. THINKING: Expanding particle field / purple rings */
@@ -652,6 +710,27 @@ select {
   50% { opacity: 1; }
 }
 
+@keyframes ripple-activation {
+  0% { transform: scale(0.85); box-shadow: 0 0 15px #facc15; }
+  50% { transform: scale(1.35); box-shadow: 0 0 65px #facc15, 0 0 90px #00f0ff; }
+  100% { transform: scale(1.0); }
+}
+
+@keyframes pulse-listening-purple {
+  0% { transform: scale(0.96); box-shadow: 0 0 30px #a855f7, 0 0 50px rgba(248, 250, 252, 0.7); }
+  100% { transform: scale(1.15); box-shadow: 0 0 45px #c084fc, 0 0 75px rgba(248, 250, 252, 0.95); }
+}
+
+@keyframes pulse-breathing {
+  0%, 100% { transform: scale(0.97); opacity: 0.85; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+@keyframes pulse-sleep {
+  0%, 100% { transform: scale(0.92); opacity: 0.4; }
+  50% { transform: scale(1.0); opacity: 0.7; }
+}
+
 /* Telephony & Multi-Device HUD */
 .telephony-call-hud {
   display: none;
@@ -683,4 +762,43 @@ select {
   color: #ff6b00;
   font-weight: 700;
   text-shadow: 0 0 8px #ff6b00;
+}
+
+
+/* Voice Activation & Mic HUD */
+.mic-status-pill.active {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+  color: #4ade80 !important;
+}
+.mic-status-pill.active #micActiveDot {
+  background: #22c55e !important;
+  box-shadow: 0 0 8px #22c55e;
+}
+.mic-status-pill.muted {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  color: #f87171 !important;
+}
+.mic-status-pill.muted #micActiveDot {
+  background: #ef4444 !important;
+  box-shadow: 0 0 8px #ef4444;
+}
+.mic-status-pill.listening {
+  background: rgba(168, 85, 247, 0.2) !important;
+  border-color: rgba(168, 85, 247, 0.6) !important;
+  color: #c084fc !important;
+}
+.mic-status-pill.listening #micActiveDot {
+  background: #a855f7 !important;
+  box-shadow: 0 0 10px #c084fc;
+}
+.mic-status-pill.wake_monitoring {
+  background: rgba(0, 240, 255, 0.15) !important;
+  border-color: rgba(0, 240, 255, 0.4) !important;
+  color: #00f0ff !important;
+}
+.mic-status-pill.wake_monitoring #micActiveDot {
+  background: #00f0ff !important;
+  box-shadow: 0 0 8px #00f0ff;
 }
