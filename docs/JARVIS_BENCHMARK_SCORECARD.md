@@ -1,5 +1,5 @@
 # ULTRON AI — JARVIS CAPABILITY BENCHMARK SCORECARD
-**Evaluated At:** 2026-10-31T18:43:54.930Z  
+**Evaluated At:** 2026-10-31T18:55:27.893Z  
 **Benchmark Version:** 1.0.0  
 **Overall Verified Score:** **100% / 100%**  
 **Status:** **VERIFIED_100_PERCENT**  
@@ -22,7 +22,7 @@
 | 10 | **Creative media workflows** | 5% | 100% | 5% | `VERIFIED` | video-editing-engine.test.js, image-studio-engine.test.js, media-discovery-engine.test.js, autonomous-production.test.js |
 | 11 | **Device and integration ecosystem** | 5% | 100% | 5% | `VERIFIED` | telephony-gateway.test.js, multi-device-manager.test.js, android-bridge.test.js, telephony-multidevice-e2e.test.js |
 | 12 | **Automation and scheduling** | 5% | 100% | 5% | `VERIFIED` | productivity-services.test.js, proactive-daemon.test.js, worker.test.js |
-| 13 | **Security and permissions** | 7% | 100% | 7% | `VERIFIED` | network-safety.test.js, cyber-intel.test.js, auth-isolation-unit.test.js, server-health.test.js |
+| 13 | **Security and permissions** | 7% | 100% | 7% | `VERIFIED` | network-safety.test.js, cyber-intel.test.js, auth-isolation-unit.test.js, server-health.test.js, target-authorization.test.js, code-shield.test.js, cyber-web.test.js, cyber-ai-redteam.test.js, cyber-core.test.js, cyber-routes.test.js |
 | 14 | **Reliability and self-monitoring** | 5% | 100% | 5% | `VERIFIED` | offline-online-modes.test.js, robotics-hal.test.js, runtime-readiness.test.js, server-shutdown.test.js |
 
 **TOTAL WEIGHTED SCORE:** **100%** (Target: 100%)
@@ -175,15 +175,20 @@
 
 ### 13. Security and permissions (7% Weight — Score: 100%)
 - **Status:** `VERIFIED` | **Weighted Contribution:** 7%
-- **Subsystems:** `network-safety.js`, `security/cyber-intel.js`, `server.js`
-- **Test Files:** `tests/network-safety.test.js`, `tests/cyber-intel.test.js`, `tests/auth-isolation-unit.test.js`, `tests/server-health.test.js`
+- **Subsystems:** `network-safety.js`, `security/cyber-intel.js`, `security/ultron-guardian.js`, `security/target-authorization-gateway.js`, `security/code-shield.js`, `security/cyber-web.js`, `security/cyber-ai-redteam.js`, `security/cyber-recon.js`, `security/cyber-scanner.js`, `security/cyber-incident.js`, `security/cyber-reporter.js`, `security/cyber-core.js`, `public/cyber-dashboard.js`, `server.js`
+- **Test Files:** `tests/network-safety.test.js`, `tests/cyber-intel.test.js`, `tests/auth-isolation-unit.test.js`, `tests/server-health.test.js`, `tests/target-authorization.test.js`, `tests/code-shield.test.js`, `tests/cyber-web.test.js`, `tests/cyber-ai-redteam.test.js`, `tests/cyber-core.test.js`, `tests/cyber-routes.test.js`
 - **Acceptance Criteria:**
   - [x] Supabase JWT session validation and owner UUID gate on all JARVIS control routes
   - [x] Strict target scope enforcement restricting defensive security scans to localhost/approved targets
   - [x] DNS-pinned network safety fetch preventing SSRF and DNS rebinding attacks
   - [x] HMAC-SHA256 signature verification on remote companion commands with replay defense
   - [x] Zero plain secrets in repository code, logs, or git revision history
-- **Known Real-World Limitations:** Public cloud egress blocked in OFFLINE mode; private IP ranges (RFC 1918/4193) strictly barred from outbound fetching.
+  - [x] Target Authorization Gateway requiring proof of ownership and emergency stop cessation controls
+  - [x] 13-specialist cybersecurity agent network coordinating Recon, Scanning, Web, Code SAST, AI Red-Team, and Incident Response
+  - [x] Code Shield static security testing (SAST) detecting CWE-78, CWE-89, CWE-79, CWE-22, CWE-918, CWE-798, and CycloneDX SBOM generation
+  - [x] Web & API security assessment engine auditing CSP, HSTS, CORS, cookie flags, and JWT algorithm vulnerabilities
+  - [x] AI Red-Team security suite validating prompt injection resistance, tool privilege barriers, and canary secret protection
+- **Known Real-World Limitations:** Public cloud egress blocked in OFFLINE mode; private IP ranges (RFC 1918/4193) strictly barred from outbound fetching; scans restricted to authorized scopes.
 
 ### 14. Reliability and self-monitoring (5% Weight — Score: 100%)
 - **Status:** `VERIFIED` | **Weighted Contribution:** 5%

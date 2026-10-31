@@ -5,6 +5,12 @@ import { forgeEngine } from "./forge/forge-engine.js";
 import { RobotDigitalTwin, simToRealGate } from "./robotics/robot-digital-twin.js";
 import { ultronVision } from "./vision/ultron-vision.js";
 import { ultronEyesManager, SESSION_STATES } from "./vision/ultron-eyes-manager.js";
+import { ultronCyberCore, CYBER_AGENTS } from "./security/cyber-core.js";
+import { targetAuthorizationGateway, PERMITTED_ACTIVITIES, TARGET_TYPES } from "./security/target-authorization-gateway.js";
+import { codeShield } from "./security/code-shield.js";
+import { cyberWebAuditor } from "./security/cyber-web.js";
+import { aiRedTeamEvaluator } from "./security/cyber-ai-redteam.js";
+import { cyberIncidentAssistant } from "./security/cyber-incident.js";
 import { nexusOrchestrator } from "./nexus/nexus-orchestrator.js";
 import { ultronGuardian } from "./security/ultron-guardian.js";
 import { humanInterface } from "./intelligence/human-interface.js";
@@ -1405,6 +1411,128 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       res.json({ success: true, snapshot });
     } catch (err) {
       res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  // ==========================================
+  // ULTRON CYBER CORE — Ethical Hacking & Cybersecurity
+  // ==========================================
+  router.get("/jarvis/cyber/status", requireOwner, (_req, res) => {
+    try {
+      const agents = ultronCyberCore.getAgentsStatus();
+      const scopes = targetAuthorizationGateway.listScopes();
+      res.json({
+        success: true,
+        emergencyStopEngaged: targetAuthorizationGateway.emergencyStopEngaged,
+        agentsCount: agents.length,
+        agents,
+        activeScopesCount: scopes.filter(s => s.isActive).length,
+        scopes
+      });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/cyber/scopes", requireOwner, (_req, res) => {
+    try {
+      const scopes = targetAuthorizationGateway.listScopes();
+      res.json({ success: true, scopes });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/scopes/register", requireOwner, express.json(), (req, res) => {
+    try {
+      const scopeRecord = targetAuthorizationGateway.registerScope(req.body);
+      res.json({ success: true, scope: scopeRecord });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/scopes/revoke", requireOwner, express.json(), (req, res) => {
+    try {
+      const { scopeId, reason } = req.body || {};
+      const result = targetAuthorizationGateway.revokeScope(scopeId, reason);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/mission/run", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { target, options } = req.body || {};
+      const result = await ultronCyberCore.executeComprehensiveMission(target, options);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      const isAuthError = err.message && (err.message.includes("TARGET_OUT_OF_SCOPE") || err.message.includes("AUTHORIZATION_DENIED"));
+      res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/sast/scan", requireOwner, express.json(), (req, res) => {
+    try {
+      const { sourceCode, target } = req.body || {};
+      const result = codeShield.scanSourceCode(sourceCode, { target });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      const isAuthError = err.message && err.message.includes("TARGET_OUT_OF_SCOPE");
+      res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/web/audit", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { targetUrl, headers, cookies, jwtToken, corsHeaders } = req.body || {};
+      const result = await cyberWebAuditor.auditEndpoint(targetUrl, { headers, cookies, jwtToken, corsHeaders });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      const isAuthError = err.message && err.message.includes("TARGET_OUT_OF_SCOPE");
+      res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/ai/redteam", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { target } = req.body || {};
+      const result = await aiRedTeamEvaluator.runRedTeamSuite({ target });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      const isAuthError = err.message && err.message.includes("TARGET_OUT_OF_SCOPE");
+      res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/incident/investigate", requireOwner, express.json(), (req, res) => {
+    try {
+      const result = cyberIncidentAssistant.investigateIncident(req.body);
+      res.json({ success: true, incident: result });
+    } catch (err) {
+      const isAuthError = err.message && err.message.includes("TARGET_OUT_OF_SCOPE");
+      res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/emergency/stop", requireOwner, express.json(), (req, res) => {
+    try {
+      const { reason } = req.body || {};
+      const outcome = targetAuthorizationGateway.engageEmergencyStop(reason);
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/emergency/resume", requireOwner, express.json(), (req, res) => {
+    try {
+      const { operatorKey } = req.body || {};
+      const outcome = targetAuthorizationGateway.disengageEmergencyStop(operatorKey);
+      res.json(outcome);
+    } catch (err) {
+      res.status(403).json({ error: { message: err.message } });
     }
   });
 

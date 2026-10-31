@@ -84,6 +84,7 @@
     <button class="nav-tab" data-tab="tab-hei">Emotional Intelligence</button>
     <button class="nav-tab" data-tab="tab-security">Security & Audit</button>
     <button class="nav-tab" data-tab="tab-eyes">👁️ ULTRON Eyes</button>
+    <button class="nav-tab" data-tab="tab-cyber">🛡️ Cyber Core</button>
   </nav>
 
   <!-- Tab Content Panels -->
@@ -797,10 +798,104 @@
       </div>
     </section>
 
+  
+    <!-- Panel: ULTRON Cyber Core (Ethical Hacking & Cybersecurity) -->
+    <section class="tab-panel" id="tab-cyber">
+      <div class="cyber-container" style="display: flex; flex-direction: column; gap: 16px;">
+        <!-- Top Control Bar -->
+        <div class="card" style="padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h3 style="margin: 0; color: #00f0ff; letter-spacing: 1px;">ULTRON CYBER CORE COMMAND</h3>
+              <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.4); color: #00f0ff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                13 SPECIALIST CYBER AGENTS ARMED
+              </span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-danger" id="cyberEmergencyStopBtn">🛑 Engage Cyber Emergency Stop</button>
+              <button class="btn btn-sm btn-primary" id="cyberEmergencyResumeBtn">▶️ Resume Operations</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3-Column Grid -->
+        <div style="display: grid; grid-template-columns: minmax(280px, 1fr) minmax(340px, 1.4fr) minmax(300px, 1.2fr); gap: 16px;">
+          <!-- Left Column: 13 Cyber Agents & Authorized Scope Registry -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #00f0ff; letter-spacing: 1px;">13-SPECIALIST CYBER AGENT FLEET</h4>
+              <div id="cyberAgentsList" style="display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto;">
+                <span class="text-muted" style="font-size: 11px;">Loading Cyber Agents...</span>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="margin: 0; font-size: 12px; color: #10b981; letter-spacing: 1px;">AUTHORIZED TARGET SCOPES</h4>
+                <button class="btn btn-sm" id="cyberRegisterScopeBtn" style="font-size: 10px; padding: 2px 6px;">+ Add Scope</button>
+              </div>
+              <div id="cyberScopesList" style="max-height: 220px; overflow-y: auto;">
+                <span class="text-muted" style="font-size: 11px;">Loading Scopes...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Middle Column: Mission Execution Console -->
+          <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <h4 style="margin: 0; font-size: 12px; color: #ff6b00; letter-spacing: 1px;">AUTONOMOUS SECURITY ASSESSMENT MISSION</h4>
+            <div style="font-size: 11px; color: #94a3b8;">
+              Executes coordinated workflow: <strong>RECON → SCAN → WEB/API → SAST → AI RED-TEAM → REPORT</strong>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="cyberTargetInput" value="localhost" placeholder="Enter authorized target (e.g. localhost, myapp.test)" style="flex: 1; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 12px; border-radius: 4px; font-size: 13px;" />
+              <button class="btn btn-primary" id="cyberRunMissionBtn">🚀 Run Mission</button>
+            </div>
+
+            <div id="cyberMissionResult" style="min-height: 250px; flex: 1;">
+              <div style="border: 1px dashed #1e293b; padding: 20px; text-align: center; color: #64748b; font-size: 12px; border-radius: 4px;">
+                Enter target and click 'Run Mission' to execute authorized multi-agent assessment.
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Specialized Tools (SAST, Web, AI Red-Team) -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Tool 1: Code Shield SAST -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 12px; color: #38bdf8; letter-spacing: 1px;">CODE SHIELD (SAST & SECRETS)</h4>
+              <textarea id="cyberSastInput" placeholder="Paste source code snippet to scan for CWE vulnerabilities..." style="width: 100%; height: 60px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: #38bdf8; font-family: monospace; font-size: 11px; padding: 6px; border-radius: 4px;"></textarea>
+              <button class="btn btn-sm btn-primary" id="cyberSastBtn" style="margin-top: 6px; width: 100%;">Scan Code</button>
+              <div id="cyberSastResult" style="margin-top: 6px; font-size: 11px;"></div>
+            </div>
+
+            <!-- Tool 2: Web & API Audit -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 12px; color: #c084fc; letter-spacing: 1px;">WEB & API DEFENSE AUDITOR</h4>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="cyberWebInput" value="http://localhost:3000" style="flex: 1; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 4px 8px; font-size: 11px; border-radius: 4px;" />
+                <button class="btn btn-sm btn-primary" id="cyberWebBtn">Audit</button>
+              </div>
+              <div id="cyberWebResult" style="margin-top: 6px; font-size: 11px;"></div>
+            </div>
+
+            <!-- Tool 3: AI Red-Team -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 12px; color: #ec4899; letter-spacing: 1px;">AI RED-TEAM EVALUATOR</h4>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">Tests Prompt Injection, Tool Escalation & Canary Leaks.</div>
+              <button class="btn btn-sm btn-primary" id="cyberAiRedTeamBtn" style="width: 100%;">Evaluate AI Defenses</button>
+              <div id="cyberAiRedTeamResult" style="margin-top: 6px; font-size: 11px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <script type="module" src="voice-activation.js"></script>
   <script src="app.js"></script>
   <script src="ultron-eyes.js"></script>
+  <script src="cyber-dashboard.js"></script>
 </body>
 </html>

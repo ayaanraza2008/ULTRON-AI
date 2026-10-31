@@ -261,7 +261,23 @@ const FILES_TO_CHECK = [
   "vision/ultron-eyes-manager.js",
   "public/ultron-eyes.js",
   "tests/ultron-eyes.test.js",
-  "tests/ultron-eyes-routes.test.js"
+  "tests/ultron-eyes-routes.test.js",
+  "security/target-authorization-gateway.js",
+  "security/code-shield.js",
+  "security/cyber-web.js",
+  "security/cyber-ai-redteam.js",
+  "security/cyber-recon.js",
+  "security/cyber-scanner.js",
+  "security/cyber-incident.js",
+  "security/cyber-reporter.js",
+  "security/cyber-core.js",
+  "public/cyber-dashboard.js",
+  "tests/target-authorization.test.js",
+  "tests/code-shield.test.js",
+  "tests/cyber-web.test.js",
+  "tests/cyber-ai-redteam.test.js",
+  "tests/cyber-core.test.js",
+  "tests/cyber-routes.test.js"
 ];
 
 let checked = 0;
