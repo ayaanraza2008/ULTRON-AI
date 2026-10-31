@@ -22,7 +22,7 @@ npm run build
 npm test
 ```
 
-The included security checks cover URL schemes and host/IP policy, private-address rejection, inline URL redaction, CDP endpoint restrictions, and bounded tool inputs.
+The included security checks cover URL schemes and host/IP policy, private-address rejection, inline URL redaction, CDP endpoint restrictions, bounded tool inputs, and strict one-use approval fingerprints. The approval path is still subject to CI and physical local-browser verification.
 
 The project uses `playwright-core`; it does not silently download a browser. Use an installed Chromium/Chrome binary and launch it with a dedicated automation profile. For example on Windows, close that dedicated profile first, then start Chrome with flags equivalent to:
 
@@ -81,7 +81,7 @@ For a local ULTRON backend on the same computer, set the URL to `http://127.0.0.
 
 - Only HTTP(S) navigation is accepted. Localhost is allowed for development; remote destinations must use HTTPS. Direct IP literals, metadata hostnames, internal suffixes, and single-label hostnames are blocked.
 - Routed browser requests use a bounded DNS lookup and are rejected if any resolved address is non-public. This is defense in depth, not DNS pinning: use an operating-system firewall or pinned egress proxy for hostile DNS/rebinding environments.
-- Clicking high-impact controls or external form submissions requires both the per-call `confirmExternalAction: true` flag and the explicit server-side `CHROME_ALLOW_EXTERNAL_ACTIONS=true` setting. Local loopback development apps may be tested normally.
+- Clicking high-impact controls or external form submissions uses a task-specific, one-use approval flow. ULTRON first performs a read-only inspection and shows the exact page origin, selector, visible label and form destination with a 90-second approval phrase. The authenticated owner must send that exact phrase as their entire next message. The backend re-inspects the page, consumes the approval before dispatch, and the bridge compares the full target fingerprint immediately before clicking. The local bridge must also set `CHROME_ALLOW_EXTERNAL_ACTIONS=true`; the default remains false. Model-generated arguments cannot grant consent. Local loopback development apps may be tested normally.
 - Password, token, one-time-code, and payment fields cannot be filled. The service never returns field values.
 - The service does not execute JavaScript supplied by the model, read local files, launch shell commands, upload files, bypass sign-in controls, solve CAPTCHAs, or perform stealth automation.
 - Keep the browser profile separate and disposable. An attached browser can access the web sessions and development resources available to that profile.
