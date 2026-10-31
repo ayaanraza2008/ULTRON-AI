@@ -379,6 +379,69 @@ export class AgentOrchestrator {
           optimizationsProposed: 0
         };
 
+      case "jarvis-assistant":
+        return {
+          agent: "jarvis-assistant",
+          action,
+          response: "At your service, sir. All parameters are within optimal operational bounds.",
+          briefingPrepared: true,
+          timestamp: new Date().toISOString()
+        };
+
+      case "software-engineering-agent":
+        return {
+          agent: "software-engineering-agent",
+          action,
+          architectureValid: true,
+          diffPrepared: true,
+          filesAudited: 9
+        };
+
+      case "browser-agent":
+        return {
+          agent: "browser-agent",
+          action,
+          navigated: true,
+          domParsed: true,
+          elementsCount: 15
+        };
+
+      case "android-agent":
+        return {
+          agent: "android-agent",
+          action,
+          paired: true,
+          notificationSent: true,
+          deviceSync: "active"
+        };
+
+      case "document-agent":
+        return {
+          agent: "document-agent",
+          action,
+          documentsParsed: 1,
+          citationsFound: 2,
+          summary: "Document knowledge extracted and indexed."
+        };
+
+      case "system-monitoring-agent":
+        return {
+          agent: "system-monitoring-agent",
+          action,
+          headroomNominal: true,
+          ramUsagePercent: 45.2,
+          memoryAlert: false
+        };
+
+      case "integration-agent":
+        return {
+          agent: "integration-agent",
+          action,
+          bridgesActive: 5,
+          mcpServersReady: true,
+          openRouterProxy: "online"
+        };
+
       default:
         return {
           agent: agentId,

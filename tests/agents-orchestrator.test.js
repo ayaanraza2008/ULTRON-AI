@@ -3,24 +3,31 @@ import assert from "node:assert/strict";
 import { ULTRON_AGENT_CATALOG, getAgentById, listAvailableAgents } from "../agents/catalog.js";
 import { AgentOrchestrator } from "../agents/orchestrator.js";
 
-test("Agent Catalog: contains all 12 specialized agents", () => {
-  assert.equal(ULTRON_AGENT_CATALOG.length, 12);
+test("Agent Catalog: contains all 18 specialized agents", () => {
+  assert.equal(ULTRON_AGENT_CATALOG.length, 18);
 
   const expectedIds = [
     "ultron-core",
+    "jarvis-assistant",
     "research-agent",
     "coding-agent",
+    "software-engineering-agent",
     "security-agent",
+    "browser-agent",
     "system-agent",
-    "memory-agent",
+    "android-agent",
     "voice-agent",
     "vision-agent",
+    "memory-agent",
     "automation-agent",
+    "document-agent",
+    "self-improvement-agent",
+    "system-monitoring-agent",
     "planning-agent",
-    "execution-agent",
-    "self-improvement-agent"
+    "integration-agent"
   ];
 
+  assert.ok(getAgentById("execution-agent"), "execution-agent alias must resolve");
   for (const id of expectedIds) {
     const agent = getAgentById(id);
     assert.ok(agent, `Agent ${id} must exist in catalog`);

@@ -112,7 +112,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
         backend: "durable_supabase_worker",
         supportedRoles: Array.from(EMPLOYEE_ROLES),
         supportedModes: Array.from(EMPLOYEE_MODES),
-        note: "The 12-agent catalogue is capability metadata. The durable task endpoint currently executes supported AI Employee plan/draft/review/report roles; it does not dispatch arbitrary per-agent tool steps."
+        note: "The 18-agent catalogue is capability metadata. The durable task endpoint currently executes supported AI Employee plan/draft/review/report roles; it does not dispatch arbitrary per-agent tool steps."
       }
     });
   });
