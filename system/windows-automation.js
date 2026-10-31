@@ -92,7 +92,7 @@ export class WindowsAutomation {
 
     if (process.platform !== "win32") {
       this.recordEvent("VOLUME", `${action}`, "mock_success");
-      return { success: true, action, simulated: true };
+      return { success: true, action, value, simulated: true };
     }
 
     try {
