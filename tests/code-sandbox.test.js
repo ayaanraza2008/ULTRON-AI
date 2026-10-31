@@ -19,10 +19,15 @@ function fakeSpawn({ stdout = "", stderr = "", exitCode = 0 } = {}) {
   let capturedSource = "";
   let capturedArgs;
   let capturedOptions;
+  let killArgs = null;
   let killed = false;
   const spawnImpl = (command, args, options) => {
-    capturedArgs = args;
-    capturedOptions = options;
+    if (args[0] === "run") {
+      capturedArgs = args;
+      capturedOptions = options;
+    } else if (args[0] === "kill") {
+      killArgs = args;
+    }
     const child = new EventEmitter();
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
@@ -75,6 +80,8 @@ test("sandbox runs bounded Python source with fixed no-network, no-mount contain
   assert.ok(fake.args.includes("--cpus=0.5"));
   assert.ok(fake.args.includes("--user=65532:65532"));
   assert.ok(fake.args.includes("--pull=never"));
+  assert.ok(fake.args.includes("--name"));
+  assert.ok(fake.args.some(value => String(value).startsWith("ultron-sandbox-")));
   assert.equal(fake.args.some(value => String(value).includes("must-not-reach-container")), false);
   assert.equal(fake.options.env.OPENROUTER_API_KEY, undefined);
   assert.equal(fake.options.env.SUPABASE_SERVICE_ROLE_KEY, undefined);
@@ -99,6 +106,8 @@ test("sandbox kills a process that floods its bounded output", async () => {
   const result = await runSandboxedPython({ env, code: "print('x')", spawnImpl: fake.spawnImpl });
   assert.equal(result.code, "CODE_SANDBOX_OUTPUT_LIMIT");
   assert.equal(fake.killed, true);
+  assert.equal(fake.killArgs && fake.killArgs[0], "kill");
+  assert.match((fake.killArgs && fake.killArgs[1]) || "", /^ultron-sandbox-/);
 });
 
 test("sandbox reports a missing Docker executable without leaking environment", async () => {
