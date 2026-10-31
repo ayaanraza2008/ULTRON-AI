@@ -33,7 +33,7 @@ function normalizePageUrl(value) {
 
 export function normalizeChromeApprovalInspection(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) ||
-      value.action !== "inspect_click" || value.requiresConfirmation !== true) return null;
+      value.action !== "inspect_click") return null;
   const origin = normalizeOrigin(value.origin);
   const pageUrl = normalizePageUrl(value.url);
   const selector = cleanText(value.selector, 600);
