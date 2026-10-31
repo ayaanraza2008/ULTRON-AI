@@ -503,9 +503,9 @@ const SAFE_PREPARATION_TOOLS = new Set([
  * Canonical form: "I approve spending up to 120 OpenSEO credits for this lookup."
  */
 /**
- * Build the narrow Chrome DevTools dispatch payload. Approval is deliberately
- * not sourced from model arguments; a task-bound user approval flow is not yet
- * implemented, so consequential external clicks must remain blocked.
+ * Build the narrow Chrome DevTools dispatch payload. Model arguments cannot
+ * authorize consequential clicks; only the separate owner-bound one-use
+ * approval phrase is accepted by the authenticated route.
  */
 export function buildChromeDevToolsActionInput(args = {}) {
   const source = args && typeof args === "object" && !Array.isArray(args) ? args : {};
@@ -1739,7 +1739,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
           const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
-          if (dispatchRisk.requiresConfirmation) {
+          if (dispatchRisk.requiresConfirmation && name !== "chrome_devtools") {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
           } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name) && call?._ultronDeterministicFallback !== true) {
             result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated tool is outside the task router's allowed tool set; no action was executed." } };
@@ -1792,7 +1792,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
             let result;
             try {
               const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
-          if (dispatchRisk.requiresConfirmation) {
+          if (dispatchRisk.requiresConfirmation && name !== "chrome_devtools") {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
               } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name)) {
                 result = { error: { code: "TASK_ROUTER_TOOL_NOT_ALLOWED", message: "This model-generated follow-up tool is outside the task router's allowed tool set; no action was executed." } };
