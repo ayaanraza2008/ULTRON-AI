@@ -82,22 +82,148 @@ test("JARVIS does not expose normal Node child-process execution as a sandbox", 
   });
 });
 
-test("JARVIS refuses fake task completion until a real tool executor is connected", async () => {
+test("JARVIS queues allowlisted plan work through the durable Supabase worker and cancels account tasks on emergency stop", async () => {
+  const stored = new Map();
+  const dbCalls = [];
+  const auditCalls = [];
+  const supabaseRest = async (req, table, method, query, body) => {
+    dbCalls.push({ userId: req.supabaseUser.id, table, method, query, body });
+    if (table !== "agent_tasks") throw new Error("Unexpected table");
+    if (method === "POST") {
+      const row = { id: "task-123", title: body.title, status: body.status, created_at: "2026-10-31T00:00:00.000Z", user_id: body.user_id, input: body.input };
+      stored.set(row.id, row);
+      return [row];
+    }
+    if (method === "GET") {
+      const params = new URLSearchParams(query.replace(/^\\?/, ""));
+      const userFilter = params.get("user_id")?.replace(/^eq\\./, "");
+      const idFilter = params.get("id")?.replace(/^eq\\./, "");
+      return [...stored.values()].filter(row => row.user_id === userFilter && (!idFilter || row.id === idFilter));
+    }
+    if (method === "PATCH") {
+      const params = new URLSearchParams(query.replace(/^\\?/, ""));
+      const userFilter = params.get("user_id")?.replace(/^eq\\./, "");
+      const rows = [...stored.values()].filter(row => row.user_id === userFilter && ["QUEUED", "RUNNING", "WAITING_FOR_PERMISSION"].includes(row.status));
+      for (const row of rows) row.status = body.status;
+      return rows;
+    }
+    throw new Error("Unexpected task operation");
+  };
+  const privilegedSupabaseRest = async (req, table, method, query, body) => {
+    auditCalls.push({ userId: req.supabaseUser.id, table, method, body });
+    return [];
+  };
+  const env = {
+    ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+    ULTRON_EMPLOYEES_ENABLED: "true",
+    SUPABASE_SERVICE_ROLE_KEY: "synthetic-service-role-key",
+    OPENROUTER_API_KEY: "synthetic-openrouter-key"
+  };
+
+  await withRouter({ env, supabaseRest, privilegedSupabaseRest }, async base => {
+    const response = await fetch(base + "/api/jarvis/agents/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: "Research current AI agent safety and prepare a report", role: "chief-of-staff", mode: "report", context: "Synthetic queue test" })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 202);
+    assert.equal(payload.success, true);
+    assert.equal(payload.task.status, "QUEUED");
+    assert.equal(payload.execution.backend, "durable_supabase_worker");
+    assert.equal(payload.execution.type, "bounded_research_to_report");
+    assert.equal(payload.auditRecorded, true);
+    assert.equal(dbCalls[0].userId, "owner-user");
+    assert.equal(dbCalls[0].body.user_id, "owner-user");
+    assert.equal(dbCalls[0].body.status, "QUEUED");
+    assert.equal(dbCalls[0].body.input.taskType, "autonomous");
+    assert.equal(dbCalls[0].body.input.requiresApproval, false);
+    assert.equal(dbCalls[0].body.input.executionMode, "employee_worker");
+    assert.equal("steps" in dbCalls[0].body.input, false);
+    assert.equal(auditCalls[0].table, "audit_events");
+    assert.equal(auditCalls[0].body.target_id, "task-123");
+
+    const list = await fetch(base + "/api/jarvis/agents/tasks");
+    const listed = await list.json();
+    assert.equal(list.status, 200);
+    assert.equal(listed.executionBackend, "durable_supabase_worker");
+    assert.equal(listed.tasks.length, 1);
+    assert.equal(listed.tasks[0].id, "task-123");
+
+    const item = await fetch(base + "/api/jarvis/agents/tasks/task-123");
+    const itemBody = await item.json();
+    assert.equal(item.status, 200);
+    assert.equal(itemBody.task.id, "task-123");
+
+    const stop = await fetch(base + "/api/jarvis/emergency/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "synthetic test stop" })
+    });
+    const stopped = await stop.json();
+    assert.equal(stop.status, 200);
+    assert.equal(stopped.halted, true);
+    assert.deepEqual(stopped.cancelledTaskIds, ["task-123"]);
+    assert.equal(stored.get("task-123").status, "CANCELLED");
+    const cancelCall = dbCalls.find(call => call.method === "PATCH");
+    assert.deepEqual(cancelCall.body, { status: "CANCELLED" });
+    assert.ok(cancelCall.query.includes("status=in.(QUEUED,RUNNING,WAITING_FOR_PERMISSION)"));
+
+    const blocked = await fetch(base + "/api/jarvis/agents/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: "Another draft" })
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal((await blocked.json()).error.code, "JARVIS_EMERGENCY_STOP_ACTIVE");
+
+    const reset = await fetch(base + "/api/jarvis/emergency/reset", { method: "POST" });
+    assert.equal(reset.status, 200);
+    assert.equal((await reset.json()).scope, "this_server_process_only");
+  });
+});
+
+test("JARVIS refuses to queue tasks when the worker/provider configuration is incomplete", async () => {
+  let writes = 0;
   await withRouter({
-    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" },
+    supabaseRest: async () => { writes += 1; return []; }
   }, async base => {
     const response = await fetch(base + "/api/jarvis/agents/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: "Do not pretend to execute",
-        targetAgentId: "ultron-core",
-        steps: [{ id: "step-1", action: "unsafe_placeholder" }]
-      })
+      body: JSON.stringify({ goal: "Prepare a test plan" })
     });
-    const body = await response.json();
     assert.equal(response.status, 503);
-    assert.equal(body.error.code, "JARVIS_TASK_EXECUTOR_UNAVAILABLE");
+    assert.equal((await response.json()).error.code, "JARVIS_WORKER_NOT_READY");
+    assert.equal(writes, 0);
+  });
+});
+
+test("JARVIS rejects arbitrary steps, tools, and unsupported employee roles", async () => {
+  const supabaseRest = async () => { throw new Error("Should not reach storage"); };
+  const env = {
+    ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+    ULTRON_EMPLOYEES_ENABLED: "true",
+    SUPABASE_SERVICE_ROLE_KEY: "synthetic-service-role-key",
+    OPENROUTER_API_KEY: "synthetic-openrouter-key"
+  };
+  await withRouter({ env, supabaseRest }, async base => {
+    const arbitrary = await fetch(base + "/api/jarvis/agents/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: "Run arbitrary command", steps: [{ action: "rm -rf" }] })
+    });
+    assert.equal(arbitrary.status, 400);
+    assert.equal((await arbitrary.json()).error.code, "JARVIS_TASK_FIELDS_NOT_ALLOWED");
+
+    const invalidRole = await fetch(base + "/api/jarvis/agents/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: "Prepare a plan", role: "system-agent" })
+    });
+    assert.equal(invalidRole.status, 400);
+    assert.equal((await invalidRole.json()).error.code, "INVALID_JARVIS_EMPLOYEE_TASK");
   });
 });
 
