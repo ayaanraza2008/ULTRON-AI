@@ -17,6 +17,7 @@ import { AUTONOMY_LEVELS, canExecuteAutonomously } from "./autonomy-policy.js";
 import { hasEmployeeModelProvider } from "./features.js";
 import { windowsAutomation } from "./system/windows-automation.js";
 import { windowsSpeechDaemon } from "./voice/windows-speech-daemon.js";
+import { kokoroEngine } from "./voice/kokoro-engine.js";
 import { proactiveDaemon } from "./system/proactive-daemon.js";
 import { screenObserver } from "./vision/screen-observer.js";
 
@@ -408,6 +409,22 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     const { utterance } = req.body || {};
     const match = windowsSpeechDaemon.matchOfflineIntent(utterance);
     res.json(match);
+  });
+
+  // --- Kokoro am_onyx Speech Synthesis ---
+  router.post("/jarvis/voice/kokoro", requireOwner, express.json(), async (req, res) => {
+    const { text, voice, speed, play } = req.body || {};
+    try {
+      const result = await kokoroEngine.synthesize(text, { voice, speed, play });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/voice/interrupt", requireOwner, (_req, res) => {
+    const result = kokoroEngine.interrupt();
+    res.json(result);
   });
 
   // --- Windows Automation & Hardware Control ---

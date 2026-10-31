@@ -7,30 +7,49 @@
  * and offline browser/local speech fallback.
  */
 
+import { kokoroEngine } from "./kokoro-engine.js";
+
 export const SUPPORTED_WAKE_WORDS = ["ultron", "jarvis"];
 
 export const VOICE_PROFILES = {
+  ultron_onyx: {
+    id: "ultron_onyx",
+    name: "ULTRON Onyx (Kokoro am_onyx - Deep/Authoritative)",
+    engine: "kokoro",
+    voiceId: "am_onyx",
+    pitch: 0.85,
+    rate: 0.95,
+    lang: "en-US",
+    style: "deep_dark_authoritative_futuristic"
+  },
+  ultron_command: {
+    id: "ultron_command",
+    alias: "ultron_onyx",
+    name: "ULTRON Command (Kokoro am_onyx - Deep/Authoritative)",
+    engine: "kokoro",
+    voiceId: "am_onyx",
+    pitch: 0.85,
+    rate: 0.95,
+    lang: "en-US",
+    style: "deep_dark_authoritative_futuristic"
+  },
   jarvis_prime: {
     id: "jarvis_prime",
     name: "JARVIS Prime (British/Refined)",
+    engine: "kokoro",
+    voiceId: "bm_lewis",
     pitch: 0.95,
     rate: 1.05,
     lang: "en-GB",
     style: "sophisticated_concise"
   },
-  ultron_command: {
-    id: "ultron_command",
-    name: "ULTRON Command (Deep/Authoritative)",
-    pitch: 0.82,
-    rate: 0.98,
-    lang: "en-IN",
-    style: "strategic_command"
-  },
   hinglish_conversational: {
     id: "hinglish_conversational",
     name: "Desi Assistant (Hindi/Hinglish Friendly)",
-    pitch: 1.0,
-    rate: 1.02,
+    engine: "kokoro",
+    voiceId: "am_onyx",
+    pitch: 0.95,
+    rate: 0.95,
     lang: "hi-IN",
     style: "friendly_natural"
   }
@@ -39,6 +58,7 @@ export const VOICE_PROFILES = {
 export class JarvisVoiceEngine {
   constructor(options = {}) {
     this.activeProfile = options.profile || VOICE_PROFILES.ultron_command;
+    this.kokoroEngine = kokoroEngine;
     this.mode = options.mode || "push_to_talk"; // "push_to_talk" | "wake_word_continuous" | "idle"
     this.isListening = false;
     this.isSpeaking = false;
@@ -244,5 +264,14 @@ export class JarvisVoiceEngine {
       rate: options.rate ?? this.activeProfile.rate,
       pitch: options.pitch ?? this.activeProfile.pitch
     };
+  }
+/**
+   * Synthesize speech using Kokoro-82M am_onyx voice with resonance tuning.
+   */
+  async speakKokoro(text, options = {}) {
+    const sanitized = this.formatSpokenUpdate(text, this.language);
+    const voice = options.voice || this.activeProfile.voiceId || "am_onyx";
+    const speed = typeof options.speed === "number" ? options.speed : (this.activeProfile.rate || 0.95);
+    return kokoroEngine.synthesize(sanitized, { voice, speed, play: Boolean(options.play) });
   }
 }

@@ -106,7 +106,8 @@
           <div class="voice-profile-picker">
             <label for="voiceProfileSelect">Voice Profile:</label>
             <select id="voiceProfileSelect">
-              <option value="ultron_command" selected>ULTRON Command (Deep/Authoritative)</option>
+              <option value="ultron_onyx" selected>ULTRON Onyx (Kokoro am_onyx - Deep & Authoritative)</option>
+              <option value="ultron_command">ULTRON Command (Deep Strategic)</option>
               <option value="jarvis_prime">JARVIS Prime (British/Refined)</option>
               <option value="hinglish_conversational">Desi Assistant (Hindi/Hinglish Friendly)</option>
             </select>
@@ -119,7 +120,8 @@
               <option value="en-IN">Indian English (Refined)</option>
             </select>
           </div>
-          <div style="margin-top: 8px;">
+          <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" id="speakOnyxBtn">🔊 Test Onyx Voice (Kokoro am_onyx)</button>
             <button class="btn btn-secondary btn-sm" id="speakOfflineBtn">🔊 Test PC Speaker (Offline SAPI)</button>
           </div>
           <div class="daily-briefing-box" id="dailyBriefingBox">

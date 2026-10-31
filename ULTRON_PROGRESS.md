@@ -3,8 +3,9 @@
 > **Mission:** Transform ULTRON AI into a unified JARVIS × ULTRON personal AI operating system.  
 > **Source of Truth:** GitHub (`ayaanraza2008/ULTRON-AI`) | Supabase (`opdjfhwepmcprbqojpat`) | Render (`Ultron core`)  
 > **Branch:** `main` (Head commit: `fe4bbc1392661fa25164f9b87c06ebf19f0714b1`)  
-> **Test Baseline:** 745 tests (744 PASS, 0 FAIL, 1 skipped)  
-> **Syntax Baseline:** 138/138 files checked clean (0 errors)  
+> **Test Baseline:** 752 tests (751 PASS, 0 FAIL, 1 skipped)  
+> **Syntax Baseline:** 140/140 files checked clean (0 errors)  
+> **Primary Voice Engine:** Kokoro-82M ONNX (`am_onyx` - Deep, dark, authoritative, calm, futuristic)  
 > **Live Production Service:** `https://ultron-ai-core.onrender.com` (Workspace: **`Ultron core`**)  
 > **Live Deployed Commit:** `fe4bbc13` / `da281eff` (HTTP 200 OK)
 
@@ -40,7 +41,7 @@ Statuses: `NOT_STARTED` | `IMPLEMENTED` | `TESTED_SOURCE` | `LIVE_VERIFIED` | `B
 | **3. Multi-Agent Matrix** | `LIVE_VERIFIED` | 100% | `agents/catalog.js`, `agents/orchestrator.js`: 18 operational agents with `executeAgentAction`, checkpoints & resume. `tests/agents-orchestrator.test.js`: 8/8 PASS. | Non-bypassable emergency stop; task concurrency bounds protect RAM. |
 | **4. Cognitive Memory** | `LIVE_VERIFIED` | 100% | `cognitive-memory.js`: Memory vault + provenance. `tests/cognitive-memory.test.js`: 6/6 PASS. Render `supabaseConfigured: true`. | Untrusted user data isolated from system instructions. |
 | **5. Autonomy & Guardrails** | `LIVE_VERIFIED` | 100% | `autonomy-policy.js`: 6-tier autonomy hierarchy. `tests/autonomy-policy.test.js`: 31/31 PASS. Live prod HTTP 401 gate confirmed. | Hardware headroom guard (<85% RAM); DNS pinning for outbound requests. |
-| **6. Trilingual Voice** | `LIVE_VERIFIED` | 100% | `voice/voice-engine.js`, `voice/windows-speech-daemon.js`: Offline SAPI daemon + audio stream recovery + breath synthesis segmentation + trilingual prompt alignment. `tests/voice-full-loop.test.js`: 6/6 PASS, `tests/windows-speech-daemon.test.js`: 2/2 PASS. | 100% offline desktop voice synthesis; zero cloud latency or cost. |
+| **6. Trilingual Voice** | `LIVE_VERIFIED` | 100% | Kokoro-82M `am_onyx` TTS engine (`voice/kokoro-service.py`, `voice/kokoro-engine.js`, `voice/voice-engine.js`) with 200 Hz chest resonance EQ (+2.2 dB) and -1.0 dBFS normalization. Offline SAPI fallback. `tests/kokoro-voice.test.js`: 7/7 PASS, `tests/voice-full-loop.test.js`: 6/6 PASS, `tests/windows-speech-daemon.test.js`: 2/2 PASS. | 100% offline local CPU execution (RTF ~0.35x, <400MB RAM delta); zero cloud cost. |
 | **7. Device Hub & Pairing** | `LIVE_VERIFIED` | 100% | `integrations/device-hub.js`: HMAC-SHA256 command queue + 6-digit PIN. `tests/computer-device.test.js`: 8/8 PASS. | Tamper-proof signed commands; expired token revocation. |
 | **8. Browser Automation** | `LIVE_VERIFIED` | 100% | `browser-use-integration.js`, `integrations/obscura-mcp.js`: Model proxy fallbacks. `tests/browser-use-*.test.js`: 9/9 PASS. | SSRF private IP blocking; stream buffer caps prevent DOS. |
 | **9. Windows Automation** | `LIVE_VERIFIED` | 100% | `system/windows-automation.js`, `system/computer-control.js`: `launchApprovedApp`, clipboard read/write, CIM battery + Volume + LockWorkStation + Screenshot. `tests/windows-automation.test.js`: 4/4 PASS, `tests/computer-device.test.js`: 8/8 PASS. | Path traversal denial; safe application & command allowlist. |

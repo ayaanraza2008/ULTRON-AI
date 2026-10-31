@@ -226,23 +226,86 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") handleUserSend();
   });
 
-  // --- Speech Recognition & Synthesis ---
-  function speakSpokenText(text) {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+  // --- Kokoro am_onyx Speech Synthesis & Voice Engine ---
+  let activeOnyxAudio = null;
 
-    // Clean text for speech
-    const clean = text.replace(/```[\s\S]*?```/g, "").replace(/[*_#`]/g, "").slice(0, 300);
-    const utter = new SpeechSynthesisUtterance(clean);
-    utter.rate = 1.05;
-    utter.pitch = 0.9;
-    window.speechSynthesis.speak(utter);
+  async function speakSpokenText(text) {
+    if (activeOnyxAudio) {
+      try {
+        activeOnyxAudio.pause();
+        activeOnyxAudio.currentTime = 0;
+      } catch {}
+      activeOnyxAudio = null;
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+    const clean = String(text || "").replace(/```[\s\S]*?```/g, "").replace(/[*_#`]/g, "").slice(0, 450).trim();
+    if (!clean) return;
+
+    try {
+      const res = await fetch("/api/jarvis/voice/kokoro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: clean,
+          voice: "am_onyx",
+          speed: 0.95
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.dataUrl) {
+          activeOnyxAudio = new Audio(data.dataUrl);
+          activeOnyxAudio.playbackRate = 1.0;
+          activeOnyxAudio.play().catch(e => {
+            console.warn("Autoplay note:", e.message);
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Kokoro am_onyx synthesis fallback:", err);
+    }
+
+    if (window.speechSynthesis) {
+      const utter = new SpeechSynthesisUtterance(clean);
+      utter.rate = 0.95;
+      utter.pitch = 0.85;
+      window.speechSynthesis.speak(utter);
+    }
   }
 
-  stopAudioBtn.addEventListener("click", () => {
+  stopAudioBtn.addEventListener("click", async () => {
+    if (activeOnyxAudio) {
+      try {
+        activeOnyxAudio.pause();
+        activeOnyxAudio.currentTime = 0;
+      } catch {}
+      activeOnyxAudio = null;
+    }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
+    try {
+      await fetch("/api/jarvis/voice/interrupt", { method: "POST" });
+    } catch {}
     setCoreState("idle");
   });
+
+  const speakOnyxBtn = document.getElementById("speakOnyxBtn");
+  if (speakOnyxBtn) {
+    speakOnyxBtn.addEventListener("click", async () => {
+      try {
+        speakOnyxBtn.disabled = true;
+        speakOnyxBtn.textContent = "🔊 Synthesizing...";
+        await speakSpokenText("Systems online. I am ULTRON. All core processes are operational. Awaiting your command.");
+      } catch (err) {
+        console.error("Onyx test error:", err);
+      } finally {
+        speakOnyxBtn.disabled = false;
+        speakOnyxBtn.textContent = "🔊 Test Onyx Voice (Kokoro am_onyx)";
+      }
+    });
+  }
 
   const voiceLanguageSelect = document.getElementById("voiceLanguageSelect");
   if (voiceLanguageSelect) {
