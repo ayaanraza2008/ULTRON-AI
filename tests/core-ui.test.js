@@ -393,3 +393,98 @@ test("spoken prompts skip unnecessary pre-search and use a smaller conversationa
   assert.ok(app.includes('source !== "voice" || explicitResearchIntent'));
   assert.ok(app.includes('history.slice(streamVoiceReply ? -8 : -18)'));
 });
+
+test("same-origin session requests forward cookies and normalized origin headers to ULTRON Core", async t => {
+  let calls = 0;
+  const proxy = createUltronCoreProxy({
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(String(url), "https://ultron-ai-core.onrender.com/api/session");
+      assert.equal(init.method, "POST");
+      assert.equal(init.headers.get("origin"), "https://ultron-ai-core.onrender.com");
+      assert.equal(init.headers.get("referer"), "https://ultron-ai-core.onrender.com/");
+      assert.equal(init.headers.get("cookie"), "ultron_sb_access=old-token");
+      assert.equal(init.headers.get("content-type"), "application/json");
+      assert.deepEqual(JSON.parse(Buffer.from(init.body).toString("utf8")), { action: "refresh" });
+
+      const headers = new Headers({ "Content-Type": "application/json; charset=utf-8" });
+      headers.append("Set-Cookie", "ultron_sb_access=new-token; Domain=ultron-ai-core.onrender.com; Path=/; Secure; HttpOnly; SameSite=Lax");
+      headers.append("Set-Cookie", "ultron_sb_refresh=new-refresh; Domain=ultron-ai-core.onrender.com; Path=/; Secure; HttpOnly; SameSite=Lax");
+      return new Response(JSON.stringify({ authenticated: true }), { status: 200, headers });
+    },
+    logger: { warn() {} }
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once("error", reject);
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
+
+  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/session", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: "ultron_sb_access=old-token",
+      Origin: "http://127.0.0.1",
+      Referer: "http://127.0.0.1/"
+    },
+    body: JSON.stringify({ action: "refresh" })
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { authenticated: true });
+  const cookies = response.headers.getSetCookie();
+  assert.equal(cookies.length, 2);
+  assert.ok(cookies.some(value => value.startsWith("ultron_sb_access=new-token;")));
+  assert.ok(cookies.some(value => value.startsWith("ultron_sb_refresh=new-refresh;")));
+  assert.ok(cookies.every(value => !/;\\s*Domain=/i.test(value)));
+  assert.equal(calls, 1);
+});
+
+test("same-origin world-intelligence requests are forwarded only to the fixed Core backend", async t => {
+  let seenUrl = "";
+  const proxy = createUltronCoreProxy({
+    fetchImpl: async url => {
+      seenUrl = String(url);
+      return new Response("world-intelligence-proxy-ok", {
+        status: 200,
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      });
+    },
+    logger: { warn() {} }
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once("error", reject);
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
+
+  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/world-intelligence/?view=globe");
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "world-intelligence-proxy-ok");
+  assert.equal(seenUrl, "https://ultron-ai-core.onrender.com/world-intelligence/?view=globe");
+});
+
+test("proxy rejects unsupported methods and unknown routes without calling the backend", async t => {
+  let calls = 0;
+  const proxy = createUltronCoreProxy({
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response("unexpected", { status: 200 });
+    },
+    logger: { warn() {} }
+  });
+  await new Promise((resolve, reject) => {
+    proxy.once("error", reject);
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
+
+  const base = "http://127.0.0.1:" + proxy.address().port;
+  const unsupported = await fetch(base + "/api/health", { method: "OPTIONS" });
+  assert.equal(unsupported.status, 405);
+  assert.match(unsupported.headers.get("allow") || "", /GET/);
+
+  const unknown = await fetch(base + "/admin");
+  assert.equal(unknown.status, 404);
+  assert.equal(calls, 0);
+});
