@@ -43,7 +43,7 @@ export function getCodeSandboxReadiness(env = process.env) {
 
 function dockerArgs(image, timeoutMs, containerName) {
   return [
-    "run", "--rm", "--interactive",
+    "run", "--rm", "--interactive", "--name", containerName, "--stop-timeout=1",
     "--network=none",
     "--read-only",
     "--cap-drop=ALL",
