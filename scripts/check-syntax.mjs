@@ -277,7 +277,9 @@ const FILES_TO_CHECK = [
   "tests/cyber-web.test.js",
   "tests/cyber-ai-redteam.test.js",
   "tests/cyber-core.test.js",
-  "tests/cyber-routes.test.js"
+  "tests/cyber-routes.test.js",
+  "tests/cyber-recon.test.js",
+  "tests/cyber-scanner.test.js"
 ];
 
 let checked = 0;

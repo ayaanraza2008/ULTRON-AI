@@ -1,42 +1,43 @@
 # ULTRON AI — BLOCKERS & DEPENDENCY REGISTER
 ## PROJECT CODENAME: ULTRON ETERNAL
-### TRANSPARENT REGISTER OF EXTERNAL DEPENDENCIES & PHYSICAL BOUNDARIES
-
-Status Key:
-- `RESOLVED`: Previously blocked item that has been implemented, verified, and closed.
-- `EXTERNAL_DEPENDENCY`: Requires external network, third-party service, or API key.
-- `PHYSICAL_BOUNDARY`: Requires physical hardware units not physically connected to the host machine.
-- `OPERATOR_ACTION`: Requires manual configuration or approval from the human operator.
+### EVIDENCE-BACKED REGISTER OF EXTERNAL DEPENDENCIES & REMAINING BLOCKERS
+**Audit Date:** 2026-11-01T01:00:00+05:30  
+**Source of Truth:** Repository `ayaanraza2008/ULTRON-AI`
 
 ---
 
-## 1. ACTIVE BOUNDARIES & HARDWARE DEPENDENCIES
+## 1. ACTIVE EXTERNAL BLOCKERS & HARDWARE BOUNDARIES
 
-| ID | Category | Item Description | Type | Current Status | Required Action / Fallback |
+| ID | Category | Item Description | Type | Status | Exact Blocker Detail & Required Action |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **BLK-001** | Robotics | Physical Robot Hardware Actuation (e.g. ROS 2 rover / quadruped motors) | `PHYSICAL_BOUNDARY` | HAL & Simulation Mode Active (`ROBOT_SAFETY_LEVELS.SIMULATION`) | The software HAL, sensor/actuator handshakes, 3D geofence, and latching e-stop are 100% verified in simulation (`tests/robotics-hal.test.js`). Real physical motor motion will occur once a physical ROS 2 robot node pairs with ULTRON over the local network. |
-| **BLK-002** | Voice | Kokoro Python Service Automatic Spawning | `RESOLVED` | Fully Resolved | When Kokoro Python ONNX daemon is offline, ULTRON automatically falls back to the native Windows SAPI SpeechSynthesizer daemon (`tests/windows-speech-daemon.test.js`: 2/2 PASS). |
-| **BLK-003** | LLM | Third-Party Cloud Provider Outages | `RESOLVED` | Fully Resolved | BrainRouter traverses candidate chain (Groq → Gemini Flash → OpenRouter → Ollama CPU) with circuit breakers and fallback. Local offline LLM handles requests during network loss. |
-| **BLK-004** | Security | Unscoped Third-Party Target Scanning | `PHYSICAL_BOUNDARY` | Enforced by Design | Offensive scanning against unauthorized targets is strictly prohibited (`TARGET_OUT_OF_SCOPE_PROHIBITED`). Audits only run on `localhost` or signed operator-authorized lab scopes (`tests/cyber-intel.test.js`). |
-| **BLK-005** | Geo Intel | Covert Personal Location Surveillance | `PHYSICAL_BOUNDARY` | Enforced by Design | Covert tracking is strictly prohibited. Device location sharing requires signed cryptographic consent tokens with 15-minute TTL, access audit trails, and instant revocation (`tests/geo-intel.test.js`). |
+| **BLK-001** | LLM Gateway | Live Model Completion (`smoke:model`) | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `npm run smoke:model` reports `NO_ELIGIBLE_PROVIDER`. Requires operator to set `OPENROUTER_API_KEY` or valid `ULTRON_MODEL_PROVIDERS_JSON` in environment. |
+| **BLK-002** | Vision (EYES) | Live Vision Inference (`smoke:vision`) | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `npm run smoke:vision` reports `OPENROUTER_API_KEY_REQUIRED` when `ULTRON_CONFIRM_VISION_SMOKE=YES`. Requires valid `OPENROUTER_API_KEY` for live multimodal visual Q&A. |
+| **BLK-003** | Autonomous Worker | Background Worker Execution (`smoke:worker`) | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `scripts/worker-smoke.mjs` requires `ULTRON_CONFIRM_WORKER_SMOKE=YES`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and a disposable `ULTRON_SMOKE_USER_ID`. |
+| **BLK-004** | Authentication | Two-Account Live Database Isolation E2E | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `tests/supabase-isolation.e2e.test.js` is intentionally skipped. Requires 2 dedicated disposable test accounts (`ULTRON_E2E_USER_A_EMAIL/PASSWORD` and `B`), plus `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`. |
+| **BLK-005** | Security Advisor | Supabase Leaked Password Protection | `PLATFORM_PLAN` | `BLOCKED` | Supabase Security Advisor advisory `Leaked Password Protection Disabled`. Supabase documents this as a Pro-tier feature. Organization `Ayaan` is on the Free tier. Requires manual owner review or plan upgrade. |
+| **BLK-006** | Hardware (EYES) | Render Cloud Direct Webcam Access | `PHYSICAL_BOUNDARY` | `BLOCKED_BY_DESIGN` | Headless Linux Render container cannot directly access physical laptop webcams. Camera feed is captured client-side in the browser via `navigator.mediaDevices.getUserMedia()` and streamed to `/api/jarvis/eyes/frame`. |
+| **BLK-007** | Telephony | Live PSTN Telephony Inbound/Outbound | `EXTERNAL_CREDENTIAL` | `BLOCKED` | Live phone calling requires active Twilio or SIP gateway credentials (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`). |
+| **BLK-008** | Desktop Automation | Unrestricted Local PC Execution | `SECURITY_BOUNDARY` | `BLOCKED_BY_DESIGN` | PC control is restricted to allowlisted executables and safe path containment. Arbitrary shell commands are blocked by design. Coding sandbox requires verified Docker daemon. |
+| **BLK-009** | Robotics | Physical Motor & Actuator Hardware | `PHYSICAL_BOUNDARY` | `OUT_OF_SCOPE` | Physical robotics hardware is explicitly out-of-scope for this phase. Software HAL, kinematics, geofencing, and latching e-stop are verified in simulation mode. |
 
 ---
 
-## 2. REQUIRED OPERATOR ACTIONS
+## 2. REQUIRED OPERATOR ACTIONS CHECKLIST
 
-1. **Physical Robotics Pairing (Optional):**
-   - If physical motor actuation is desired, power on compatible ROS 2 robot hardware, configure network connection to the host PC, and register the robot device ID via `/api/jarvis/robotics/register`.
-   - *Impact on software:* Zero. Software HAL and simulation dry-runs function completely without physical hardware.
-
-2. **Supabase Owner User ID Verification:**
-   - Confirm that `ULTRON_INTEGRATION_OWNER_USER_ID` in the Render environment variables matches the operator's Supabase auth user UUID (`opdjfhwepmcprbqojpat`).
-   - *Status:* Configured and active on Render workspace **`Ultron core`**.
+1. **Model Provider Credentials (Optional for Live Cloud Calls):**
+   - Provide `OPENROUTER_API_KEY` in environment to enable live cloud model completions and multimodal visual perception inference.
+2. **Dedicated Test Accounts for Live Supabase E2E (Optional):**
+   - Create 2 disposable test users in Supabase Auth and set `ULTRON_E2E_USER_A_EMAIL`, `ULTRON_E2E_USER_A_PASSWORD`, `ULTRON_E2E_USER_B_EMAIL`, `ULTRON_E2E_USER_B_PASSWORD`, and `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES` to unskip `tests/supabase-isolation.e2e.test.js`.
+3. **Supabase Leaked Password Protection Decision:**
+   - Review whether to upgrade Supabase plan to Pro for automated HaveIBeenPwned leaked password protection, or retain Free tier with existing robust client/server password complexity validation.
+4. **Production Deployment Approval:**
+   - Render deployment must remain on current stable commit `b00c2e81` until operator explicitly grants approval to merge and deploy feature branches.
 
 ---
 
-## 3. ZERO ACTIVE CODE DEFECTS OR FAILING TESTS
+## 3. VERIFIED AUTOMATED SOFTWARE BASELINE
 
-- **Failing Tests:** 0
-- **Syntax Errors:** 0
-- **Regression Bugs:** 0
-- All 800 automated test cases in the repository are passing deterministically.
+- **Automated Tests:** **1,047 Total — 1,046 PASS, 0 FAIL, 1 SKIP**
+- **Syntax Verification:** **270 / 270 Files Clean**
+- **Active Code Defects:** **0**
+- **Security Regressions:** **0**

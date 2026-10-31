@@ -28,7 +28,7 @@ export class CyberVulnerabilityScanner {
     const authRecord = this.authGateway.assertAuthorization(cleanTarget, PERMITTED_ACTIVITIES.VULNERABILITY_SCAN);
 
     const findings = [];
-    const openPorts = options.openPorts || [80, 443, 3000];
+    const openPorts = options.openPorts || [];
     const headers = options.headers || {};
     const config = options.config || {};
 
@@ -36,7 +36,6 @@ export class CyberVulnerabilityScanner {
     if (openPorts.includes(21)) {
       findings.push({
         id: "VULN-FTP-01",
-        cve: "CVE-2023-XXXX",
         cwe: "CWE-319",
         title: "Cleartext FTP Service Detected",
         severity: "HIGH",
@@ -52,7 +51,6 @@ export class CyberVulnerabilityScanner {
     if (openPorts.includes(23)) {
       findings.push({
         id: "VULN-TELNET-01",
-        cve: "CVE-2022-XXXX",
         cwe: "CWE-319",
         title: "Legacy Telnet Service Exposed",
         severity: "CRITICAL",

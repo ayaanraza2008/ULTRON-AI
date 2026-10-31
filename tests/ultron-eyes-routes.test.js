@@ -175,3 +175,29 @@ test("ULTRON EYES Routes: Real-time frame processing, OCR, Visual Q&A and Memory
     await fetch(base + "/api/jarvis/eyes/session/stop", { method: "POST" });
   });
 });
+
+test("ULTRON EYES Routes: Sync browser client camera devices", async () => {
+  await withEyesRouter({}, async base => {
+    const syncRes = await fetch(base + "/api/jarvis/eyes/devices/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        devices: [
+          { deviceId: "cam-real-webcam-1", label: "FaceTime HD Camera", facingMode: "user" },
+          { deviceId: "cam-real-usb-2", label: "USB Capture Card", facingMode: "environment" }
+        ]
+      })
+    });
+    const syncBody = await syncRes.json();
+
+    assert.equal(syncRes.status, 200);
+    assert.equal(syncBody.success, true);
+    assert.equal(syncBody.count, 2);
+
+    // Verify GET /devices now lists the synced real devices
+    const getRes = await fetch(base + "/api/jarvis/eyes/devices");
+    const getBody = await getRes.json();
+    assert.equal(getRes.status, 200);
+    assert.ok(getBody.devices.some(d => d.id === "cam-real-webcam-1"));
+  });
+});

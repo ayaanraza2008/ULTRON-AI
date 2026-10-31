@@ -53,7 +53,7 @@ export class TargetAuthorizationGateway {
       scopeId: "scope-local-default",
       organization: "ULTRON Development & Security Lab",
       owner: "System Administrator",
-      targets: ["localhost", "127.0.0.1", "::1", "local.test"],
+      targets: ["localhost", "127.0.0.1", "::1", "local.test", "memory://", process.cwd().toLowerCase()],
       targetType: TARGET_TYPES.LOCAL_LAB,
       permittedActivities: Object.values(PERMITTED_ACTIVITIES),
       excludedEndpoints: ["/api/emergency/stop"],

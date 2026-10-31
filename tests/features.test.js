@@ -491,7 +491,7 @@ test("premium speech endpoints fail clearly when no provider is configured", asy
   });
 });
 
-test("Fish Audio synthesis defaults to the bilingual male voice and keeps its key server-side", async () => {
+test("Fish Audio synthesis leaves language selection to the multilingual TTS model and keeps its key server-side", async () => {
   const calls = [];
   const env = {
     FISH_API_KEY: "synthetic-fish-secret"
@@ -515,7 +515,7 @@ test("Fish Audio synthesis defaults to the bilingual male voice and keeps its ke
     assert.equal(options.headers.model, "s2.1-pro-free");
     const body = JSON.parse(options.body);
     assert.equal(body.text, "Hello ULTRON");
-    assert.equal(body.language, "en");
+    assert.equal(Object.hasOwn(body, "language"), false);
     assert.equal(body.reference_id, "db9ad6eb7fb84294b2046cf05ef64718");
     assert.equal(body.format, "mp3");
     assert.equal(body.latency, "balanced");
@@ -525,6 +525,32 @@ test("Fish Audio synthesis defaults to the bilingual male voice and keeps its ke
     return new Response(Buffer.from("fake-fish-mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
   }});
   assert.equal(calls.length, 1);
+});
+
+test("Fish Audio synthesis does not force English when the text is Hindi or code-switched", async () => {
+  const samples = [
+    "नमस्ते ULTRON, मेरी मदद करो।",
+    "Hello ULTRON, आज मौसम कैसा है?"
+  ];
+  const seen = [];
+  await withServer({ FISH_API_KEY: "synthetic-fish-secret" }, async base => {
+    for (const text of samples) {
+      const response = await fetch(base + "/api/speech/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      assert.equal(response.status, 200);
+      await response.arrayBuffer();
+    }
+  }, { fetchImpl: async (_url, options = {}) => {
+    const body = JSON.parse(options.body);
+    seen.push(body);
+    assert.equal(Object.hasOwn(body, "language"), false);
+    return new Response(Buffer.from("fake-fish-mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
+  }});
+  assert.equal(seen.length, samples.length);
+  assert.deepEqual(seen.map(item => item.text), samples);
 });
 
 test("Fish Audio transcription sends recorded audio as multipart audio and returns detected language", async () => {

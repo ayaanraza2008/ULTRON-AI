@@ -38,8 +38,8 @@ export class CyberReconEngine {
     // 2. DNS & Asset Resolution
     const dnsSummary = await this._analyzeDns(cleanTarget);
 
-    // 3. Attack Surface Mapping
-    const attackSurface = this._mapAttackSurface(cleanTarget, options.openPorts || [80, 443, 3000]);
+    // 3. Attack Surface Mapping (Passively identifies explicitly authorized services)
+    const attackSurface = this._mapAttackSurface(cleanTarget, options.openPorts || []);
 
     // 4. TLS & Certificate Check
     const tlsStatus = this._evaluateTls(cleanTarget, options.tlsCert);
@@ -86,19 +86,23 @@ export class CyberReconEngine {
   }
 
   async _analyzeDns(target) {
+    const hostname = target.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+    if (!hostname) return { hostname: target, status: "INVALID_HOSTNAME", ip: null };
     try {
-      const hostname = target.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+      const res = await dnsLookup(hostname);
       return {
         hostname,
         status: "RESOLVED",
-        ip: "127.0.0.1",
-        recordTypes: ["A", "AAAA", "TXT"]
+        ip: res.address,
+        family: res.family === 6 ? "IPv6" : "IPv4",
+        recordTypes: ["A", "AAAA"]
       };
     } catch (err) {
       return {
-        hostname: target,
+        hostname,
         status: "UNRESOLVED",
-        error: err.message
+        error: err.code || err.message,
+        ip: null
       };
     }
   }

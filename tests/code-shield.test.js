@@ -75,3 +75,14 @@ test("Code Shield: Proposes safe non-destructive remediation patch", () => {
   assert.ok(proposal.proposedPatch.includes("parameterized"));
   assert.equal(proposal.status, "PROPOSED");
 });
+
+test("Code Shield: Real tool-backed npm audit dependency vulnerability analysis", async () => {
+  const shield = new CodeShield();
+  const report = await shield.auditDependencies(process.cwd());
+
+  assert.equal(report.tool, "npm audit");
+  assert.ok(report.status === "COMPLETED" || report.status === "TOOL_UNAVAILABLE");
+  assert.equal(typeof report.vulnerabilitiesCount, "number");
+  assert.ok(Array.isArray(report.findings));
+  assert.ok(typeof report.isSecure === "boolean");
+});

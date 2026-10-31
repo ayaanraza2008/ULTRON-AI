@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
 
@@ -268,7 +270,7 @@ export async function runVisionProviderSmoke({
   }, now);
 }
 
-if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const result = await runVisionProviderSmoke();
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   if (result.status !== "passed") process.exitCode = 1;

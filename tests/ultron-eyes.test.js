@@ -233,3 +233,55 @@ test("ULTRON EYES: Resource bounds — rejects invalid or oversized frame payloa
     /Cannot process frame/
   );
 });
+
+test("ULTRON EYES: Client device synchronization via syncClientDevices", () => {
+  const manager = new UltronEyesManager();
+  const clientSynced = manager.syncClientDevices("user-live-01", [
+    { deviceId: "webcam-live-id-123", label: "Integrated Camera (04f2:b6d9)", facingMode: "user" },
+    { deviceId: "usb-camera-id-456", label: "Logitech BRIO 4K (USB)", facingMode: "environment" }
+  ]);
+
+  assert.equal(clientSynced.length, 2);
+  assert.equal(clientSynced[0].id, "webcam-live-id-123");
+  assert.equal(clientSynced[0].name, "Integrated Camera (04f2:b6d9)");
+  assert.equal(clientSynced[0].isDefault, true);
+
+  const available = manager.getAvailableDevices("user-live-01");
+  assert.equal(available.length, 2);
+  assert.equal(available[0].id, "webcam-live-id-123");
+});
+
+test("ULTRON EYES: Production mode without provider fails closed with BLOCKED_NO_VISION_PROVIDER and never fabricates objects", async () => {
+  // Ensure no mock mode and no provider
+  const savedKey = process.env.OPENROUTER_API_KEY;
+  const savedModels = process.env.ULTRON_VISION_MODELS;
+  delete process.env.OPENROUTER_API_KEY;
+  delete process.env.ULTRON_VISION_MODELS;
+
+  try {
+    const manager = new UltronEyesManager({ mockMode: false });
+    assert.equal(manager.isVisionProviderConfigured(), false);
+
+    manager.startSession({ userId: "live-owner", userConsent: true });
+    const obs = await manager.processFrame({ userId: "live-owner", frameData: TEST_FRAME_DATA_URL });
+
+    assert.equal(obs.inferenceStatus, "BLOCKED_NO_VISION_PROVIDER");
+    assert.equal(obs.providerConfigured, false);
+    assert.deepEqual(obs.objects, []);
+    assert.equal(obs.confidence, 0);
+    assert.ok(obs.scene.includes("blocked"));
+
+    // Query in blocked state returns honest error, never fake objects
+    const queryRes = await manager.queryVisualContext({
+      userId: "live-owner",
+      query: "What is on my desk?"
+    });
+
+    assert.equal(queryRes.success, false);
+    assert.equal(queryRes.error, "BLOCKED_NO_VISION_PROVIDER");
+    assert.ok(queryRes.message.includes("OPENROUTER_API_KEY"));
+  } finally {
+    if (savedKey) process.env.OPENROUTER_API_KEY = savedKey;
+    if (savedModels) process.env.ULTRON_VISION_MODELS = savedModels;
+  }
+});

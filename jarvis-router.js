@@ -1269,13 +1269,25 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   // ==========================================
   // ULTRON EYES — Native Vision Sensory System
   // ==========================================
-  router.get("/jarvis/eyes/devices", requireOwner, (_req, res) => {
+  router.get("/jarvis/eyes/devices", requireOwner, (req, res) => {
     try {
-      const devices = ultronEyesManager.getAvailableDevices();
+      const userId = req.supabaseUser?.id || "default-user";
+      const devices = ultronEyesManager.getAvailableDevices(userId);
       const defaultCamera = ultronEyesManager.getDefaultCamera();
       res.json({ success: true, devices, defaultCamera });
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/eyes/devices/sync", requireOwner, express.json(), (req, res) => {
+    try {
+      const userId = req.supabaseUser?.id || "default-user";
+      const { devices } = req.body || {};
+      const synced = ultronEyesManager.syncClientDevices(userId, devices);
+      res.json({ success: true, count: synced.length, devices: synced });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
     }
   });
 
@@ -1469,6 +1481,17 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       res.json({ success: true, ...result });
     } catch (err) {
       const isAuthError = err.message && (err.message.includes("TARGET_OUT_OF_SCOPE") || err.message.includes("AUTHORIZATION_DENIED"));
+      res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/cyber/dependencies/audit", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { targetDir } = req.body || {};
+      const result = await codeShield.auditDependencies(targetDir || process.cwd());
+      res.json({ success: true, ...result });
+    } catch (err) {
+      const isAuthError = err.message && err.message.includes("TARGET_OUT_OF_SCOPE");
       res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
     }
   });

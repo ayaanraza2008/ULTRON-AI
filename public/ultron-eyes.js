@@ -134,16 +134,31 @@ class UltronEyesClient {
         try {
           const mediaDevs = await navigator.mediaDevices.enumerateDevices();
           const videoDevs = mediaDevs.filter(d => d.kind === "videoinput");
-          if (videoDevs.length > 0 && this.cameraSelect) {
-            videoDevs.forEach((vd, idx) => {
-              const exists = Array.from(this.cameraSelect.options).some(o => o.value === vd.deviceId);
-              if (!exists) {
-                const opt = document.createElement("option");
-                opt.value = vd.deviceId || `cam-local-${idx}`;
-                opt.textContent = `Local: ${vd.label || `Camera ${idx + 1}`}`;
-                this.cameraSelect.appendChild(opt);
-              }
-            });
+          if (videoDevs.length > 0) {
+            if (this.cameraSelect) {
+              videoDevs.forEach((vd, idx) => {
+                const exists = Array.from(this.cameraSelect.options).some(o => o.value === vd.deviceId);
+                if (!exists) {
+                  const opt = document.createElement("option");
+                  opt.value = vd.deviceId || `cam-local-${idx}`;
+                  opt.textContent = `Local: ${vd.label || `Camera ${idx + 1}`}`;
+                  this.cameraSelect.appendChild(opt);
+                }
+              });
+            }
+
+            // Sync genuine browser hardware to backend
+            fetch("/api/jarvis/eyes/devices/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                devices: videoDevs.map((vd, idx) => ({
+                  deviceId: vd.deviceId || `browser-cam-${idx}`,
+                  label: vd.label || `Webcam ${idx + 1}`,
+                  facingMode: "user"
+                }))
+              })
+            }).catch(() => {});
           }
         } catch (_) {}
       }
