@@ -232,7 +232,10 @@ const FILES_TO_CHECK = [
   "tests/emotion-taxonomy.test.js",
   "tests/emotion-analyzer.test.js",
   "tests/adaptive-personality.test.js",
-  "tests/emotional-intelligence-e2e.test.js"
+  "tests/emotional-intelligence-e2e.test.js",
+  "benchmarks/jarvis-capability-benchmark.js",
+  "tests/jarvis-capability-benchmark.test.js",
+  "scripts/run-jarvis-benchmark.mjs"
 ];
 
 let checked = 0;

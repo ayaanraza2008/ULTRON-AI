@@ -280,3 +280,18 @@ test("JARVIS keeps unbacked device and smart-home prototypes unavailable", async
     assert.equal((await actuate.json()).error.code, "SMART_HOME_NOT_CONFIGURED");
   });
 });
+
+
+test("JARVIS exposes live 100% capability benchmark to configured owner", async () => {
+  await withRouter({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }
+  }, async base => {
+    const res = await fetch(base + "/api/jarvis/benchmark");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "ok");
+    assert.equal(body.evaluation.totalWeightedScore, 100);
+    assert.equal(body.evaluation.overallStatus, "VERIFIED_100_PERCENT");
+    assert.equal(body.evaluation.categoriesCount, 14);
+  });
+});

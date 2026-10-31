@@ -36,6 +36,7 @@ import { videoEditingEngine } from "./media/video-editing-engine.js";
 import { imageStudioEngine } from "./media/image-studio-engine.js";
 import { autonomousProductionOrchestrator } from "./media/autonomous-production-orchestrator.js";
 import { createDshGodRouter } from "./integrations/dsh-god/management-api.js";
+import { JarvisCapabilityBenchmark } from "./benchmarks/jarvis-capability-benchmark.js";
 
 
 
@@ -86,6 +87,26 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   remoteTaskOrchestrator.multiDeviceManager = multiDeviceManager;
   remoteTaskOrchestrator.telephonyGateway = telephonyGateway;
 
+
+  // --- JARVIS Capability Benchmark ---
+  router.get("/jarvis/benchmark", requireOwner, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const benchmark = new JarvisCapabilityBenchmark();
+      const evaluation = await benchmark.evaluate();
+      res.json({
+        status: "ok",
+        evaluation
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: {
+          code: "BENCHMARK_EVALUATION_FAILED",
+          message: err.message
+        }
+      });
+    }
+  });
 
   // --- System & Hardware Telemetry ---
   router.get("/jarvis/telemetry", requireOwner, (_req, res) => {
