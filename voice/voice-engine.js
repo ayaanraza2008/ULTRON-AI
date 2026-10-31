@@ -46,6 +46,8 @@ export class JarvisVoiceEngine {
     this.voiceHistory = [];
     this.language = options.language || "en-IN";
     this.wakeWordCallback = null;
+    this.streamErrors = [];
+    this.recoveryAttempts = 0;
   }
 
   setProfile(profileId) {
@@ -177,5 +179,70 @@ export class JarvisVoiceEngine {
 
   getVoiceHistory(limit = 20) {
     return this.voiceHistory.slice(-limit);
+  }
+/**
+   * Handles audio stream errors, records diagnostics, and halts listening safely.
+   */
+  handleAudioStreamError(error) {
+    const errRecord = {
+      timestamp: new Date().toISOString(),
+      message: error?.message || String(error),
+      code: error?.code || "STREAM_ERROR"
+    };
+    this.streamErrors.push(errRecord);
+    if (this.streamErrors.length > 20) this.streamErrors.shift();
+    this.isListening = false;
+    return {
+      handled: true,
+      error: errRecord,
+      action: "AUDIO_STREAM_HALTED"
+    };
+  }
+
+  /**
+   * Resets and recovers the listening daemon after audio crashes or device disconnects.
+   */
+  recoverListeningDaemon(options = {}) {
+    const maxRetries = options.maxRetries ?? 3;
+    if (this.recoveryAttempts >= maxRetries) {
+      return {
+        recovered: false,
+        error: "MAX_RECOVERY_ATTEMPTS_EXCEEDED",
+        attempts: this.recoveryAttempts
+      };
+    }
+    this.recoveryAttempts += 1;
+    this.interrupted = false;
+    this.isSpeaking = false;
+    this.isListening = true;
+    return {
+      recovered: true,
+      attempts: this.recoveryAttempts,
+      mode: this.mode,
+      activeProfile: this.activeProfile.id
+    };
+  }
+
+  /**
+   * Prepares speech plan with natural sentence segmentation for TTS engines.
+   */
+  synthesizeSpeechPlan(text, options = {}) {
+    const sanitized = this.formatSpokenUpdate(text, this.language);
+    if (!sanitized) {
+      return { prepared: false, segments: [], profile: this.activeProfile };
+    }
+    const sentences = sanitized
+      .split(/(?<=[.?!])\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    return {
+      prepared: true,
+      text: sanitized,
+      segments: sentences.length > 0 ? sentences : [sanitized],
+      profile: this.activeProfile,
+      rate: options.rate ?? this.activeProfile.rate,
+      pitch: options.pitch ?? this.activeProfile.pitch
+    };
   }
 }
