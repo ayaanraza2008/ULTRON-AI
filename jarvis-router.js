@@ -20,6 +20,12 @@ import { windowsSpeechDaemon } from "./voice/windows-speech-daemon.js";
 import { kokoroEngine } from "./voice/kokoro-engine.js";
 import { proactiveDaemon } from "./system/proactive-daemon.js";
 import { screenObserver } from "./vision/screen-observer.js";
+import { robotController } from "./robotics/robot-controller.js";
+import { connectionController } from "./system/connection-controller.js";
+import { knowledgeEngine } from "./knowledge/knowledge-engine.js";
+import { cyberSecurityIntel } from "./security/cyber-intel.js";
+import { geoIntelligence } from "./system/geo-intel.js";
+
 
 const EMPLOYEE_ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const EMPLOYEE_MODES = new Set(["plan", "draft", "review", "report"]);
@@ -500,6 +506,160 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
     }
+  });
+
+  
+  // --- Robotics & HAL (Singularity) ---
+  router.post("/jarvis/robotics/register", requireOwner, express.json(), (req, res) => {
+    const result = robotController.registerRobot(req.body || {});
+    res.json(result);
+  });
+
+  router.post("/jarvis/robotics/motion", requireOwner, express.json(), (req, res) => {
+    const { robotId, command } = req.body || {};
+    const result = robotController.dispatchMotionCommand(robotId, command || {});
+    if (!result.permitted) {
+      return res.status(403).json(result);
+    }
+    res.json(result);
+  });
+
+  router.post("/jarvis/robotics/emergency-stop", requireOwner, express.json(), (req, res) => {
+    const reason = req.body?.reason || "Operator emergency stop triggered";
+    const result = robotController.triggerEmergencyStop(reason);
+    res.json(result);
+  });
+
+  router.post("/jarvis/robotics/clear-emergency-stop", requireOwner, express.json(), (req, res) => {
+    const token = req.body?.resetToken;
+    const result = robotController.clearEmergencyStop(token);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  });
+
+  router.get("/jarvis/robotics/status", requireOwner, (_req, res) => {
+    res.json(robotController.getFleetStatus());
+  });
+
+  router.post("/jarvis/robotics/export-brain", requireOwner, express.json(), (req, res) => {
+    const exported = robotController.exportBrainPackage(req.body || {});
+    res.json({ success: true, package: exported });
+  });
+
+  router.post("/jarvis/robotics/import-brain", requireOwner, express.json(), (req, res) => {
+    const result = robotController.importBrainPackage(req.body?.package, req.body?.targetDevice);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  });
+
+  // --- True Offline & Online Connection Controller (Singularity) ---
+  router.get("/jarvis/connection/status", requireOwner, (_req, res) => {
+    res.json(connectionController.getStatus());
+  });
+
+  router.post("/jarvis/connection/mode", requireOwner, express.json(), (req, res) => {
+    const { mode } = req.body || {};
+    const result = connectionController.setForcedMode(mode);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  });
+
+  router.post("/jarvis/connection/evaluate-route", requireOwner, express.json(), (req, res) => {
+    const { taskType, options } = req.body || {};
+    const routing = connectionController.evaluateTaskRouting(taskType, options);
+    res.json(routing);
+  });
+
+  router.post("/jarvis/connection/sync-flush", requireOwner, (_req, res) => {
+    const flushed = connectionController.flushSyncQueue();
+    res.json(flushed);
+  });
+
+  // --- Multi-Domain Knowledge Vault (Singularity) ---
+  router.post("/jarvis/knowledge/index", requireOwner, express.json(), (req, res) => {
+    const entry = req.body || {};
+    const result = knowledgeEngine.indexEntry(entry);
+    res.json(result);
+  });
+
+  router.get("/jarvis/knowledge/query", requireOwner, (req, res) => {
+    const query = String(req.query.q || "");
+    const domain = req.query.domain ? String(req.query.domain) : null;
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 10;
+    const results = knowledgeEngine.query(query, { domain, limit });
+    res.json({ query, resultsCount: results.length, results });
+  });
+
+  router.get("/jarvis/knowledge/stats", requireOwner, (_req, res) => {
+    res.json(knowledgeEngine.getDomainStats());
+  });
+
+  // --- Defensive Cybersecurity Intelligence (Singularity) ---
+  router.post("/jarvis/security/audit", requireOwner, express.json(), (req, res) => {
+    const assessment = cyberSecurityIntel.performDefensiveAssessment(req.body || {});
+    if (!assessment.success) {
+      return res.status(403).json(assessment);
+    }
+    res.json(assessment);
+  });
+
+  router.post("/jarvis/security/authorize-scope", requireOwner, express.json(), (req, res) => {
+    const { target, record } = req.body || {};
+    const result = cyberSecurityIntel.authorizeTargetScope(target, record);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  });
+
+  router.get("/jarvis/security/history", requireOwner, (_req, res) => {
+    res.json({ history: cyberSecurityIntel.auditHistory });
+  });
+
+  // --- Privacy-Gated Geographic Intelligence (Singularity) ---
+  router.post("/jarvis/geo/distance", requireOwner, express.json(), (req, res) => {
+    const { lat1, lon1, lat2, lon2 } = req.body || {};
+    const distKm = geoIntelligence.calculateDistanceKm(lat1, lon1, lat2, lon2);
+    const bearing = geoIntelligence.calculateBearing(lat1, lon1, lat2, lon2);
+    res.json({ distanceKm: distKm, distanceMiles: Number((distKm * 0.621371).toFixed(2)), bearing });
+  });
+
+  router.post("/jarvis/geo/route", requireOwner, express.json(), (req, res) => {
+    const { origin, destination, waypoints, mode } = req.body || {};
+    const route = geoIntelligence.estimateRoute(origin, destination, waypoints, mode);
+    res.json(route);
+  });
+
+  router.post("/jarvis/geo/consent", requireOwner, express.json(), (req, res) => {
+    const { deviceId, consentDurationMinutes } = req.body || {};
+    const result = geoIntelligence.createLocationConsentToken(ownerUserId, deviceId, consentDurationMinutes);
+    res.json(result);
+  });
+
+  router.post("/jarvis/geo/verify-location", requireOwner, express.json(), (req, res) => {
+    const { token, coords } = req.body || {};
+    const verified = geoIntelligence.verifyLocationSharing(token, coords);
+    if (!verified.permitted) {
+      return res.status(403).json(verified);
+    }
+    res.json(verified);
+  });
+
+  router.post("/jarvis/geo/revoke", requireOwner, express.json(), (req, res) => {
+    const { token } = req.body || {};
+    const result = geoIntelligence.revokeLocationSharing(token);
+    res.json(result);
+  });
+
+  router.get("/jarvis/geo/audit-logs", requireOwner, (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
+    res.json({ auditLogs: geoIntelligence.getAuditLogs(limit) });
   });
 
   return router;
