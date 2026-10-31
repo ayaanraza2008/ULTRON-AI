@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "generatedAt": "2026-10-31T20:12:13.949Z",
+    "generatedAt": "2026-10-31T20:21:03.497Z",
     "targetRepository": "C:\\Users\\Ali Raza Zaidi\\.gemini\\antigravity\\scratch\\ULTRON-AI",
-    "elapsedSeconds": 6.41,
+    "elapsedSeconds": 2.89,
     "summary": {
       "confirmedVulnerabilitiesCount": 22,
       "potentialRisksCount": 0,
@@ -49,7 +49,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-f0a82135",
+        "findingId": "vuln-501ea406",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -65,7 +65,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-24fbda97",
+        "findingId": "vuln-f8b98700",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -81,7 +81,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-919e3fce",
+        "findingId": "vuln-96148764",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -97,7 +97,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-63d81533",
+        "findingId": "vuln-30ece485",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -113,7 +113,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-e3854229",
+        "findingId": "vuln-303cf27b",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -129,7 +129,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-255296d5",
+        "findingId": "vuln-d945e8d7",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -145,7 +145,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-4becd885",
+        "findingId": "vuln-7877fe38",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -161,7 +161,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-a5e0ccdd",
+        "findingId": "vuln-7d25fde2",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -177,7 +177,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-8b738a4c",
+        "findingId": "vuln-126692ff",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -193,7 +193,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-cdbddbba",
+        "findingId": "vuln-c666888d",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -209,7 +209,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-f361e5ab",
+        "findingId": "vuln-5c063ac0",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -225,7 +225,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-ff35b991",
+        "findingId": "vuln-246c7922",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -241,7 +241,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-46d02f6c",
+        "findingId": "vuln-5637e804",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -257,7 +257,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-532041bf",
+        "findingId": "vuln-74f7df28",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -273,7 +273,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-e1aa82d3",
+        "findingId": "vuln-3108f753",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -289,7 +289,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-a0cb38dc",
+        "findingId": "vuln-21d5ffd5",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -305,7 +305,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-1aaee815",
+        "findingId": "vuln-8ee0f314",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -321,7 +321,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-32e28628",
+        "findingId": "vuln-b7df5a33",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -337,7 +337,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-93402197",
+        "findingId": "vuln-df7c67b8",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -353,7 +353,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-8862ab9c",
+        "findingId": "vuln-299e5455",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -369,7 +369,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-b714a400",
+        "findingId": "vuln-012c59b1",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
@@ -385,7 +385,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-5b377336",
+        "findingId": "vuln-268dc329",
         "ruleId": "SAST-CWE-79",
         "cwe": "CWE-79",
         "title": "Cross-Site Scripting (XSS)",
