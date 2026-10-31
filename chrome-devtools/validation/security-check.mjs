@@ -45,6 +45,8 @@ test("debug output redacts inline data/blob URLs", () => {
 
 test("action validation bounds selectors, inputs, limits and trace durations", () => {
   assert.deepEqual(validateChromeActionInput({ action: "navigate", url: "https://example.com" }).action, "navigate");
+  assert.equal(validateChromeActionInput({ action: "inspect_click", selector: "button#pay" }).action, "inspect_click");
+  assert.throws(() => validateChromeActionInput({ action: "click", selector: "button#pay", confirmExternalAction: true }));
   assert.equal(validateChromeActionInput({ action: "performance_trace" }).durationMs, 3000);
   assert.throws(() => validateChromeActionInput({ action: "click", selector: " " }));
   assert.throws(() => validateChromeActionInput({ action: "fill", selector: "input", text: "x".repeat(5001) }));
