@@ -39,6 +39,11 @@ jobs:
           npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: npm test
+      - name: Verify local Chrome DevTools bridge approval controls
+        working-directory: chrome-devtools
+        run: |
+          npm install --ignore-scripts --no-package-lock
+          npm test
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
