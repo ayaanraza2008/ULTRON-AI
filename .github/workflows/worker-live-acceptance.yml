@@ -1,0 +1,40 @@
+name: ULTRON Live Worker Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Create one disposable plan-only task for the dedicated ULTRON smoke-test user'
+        required: true
+        type: choice
+        default: 'NO'
+        options:
+          - 'NO'
+          - 'YES'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ultron-live-worker-acceptance
+  cancel-in-progress: false
+
+jobs:
+  worker-smoke:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'YES'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run bounded live worker acceptance check
+        env:
+          ULTRON_CONFIRM_WORKER_SMOKE: ${{ inputs.confirm }}
+          SUPABASE_URL: https://opdjfhwepmcprbqojpat.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ULTRON_SMOKE_SUPABASE_SERVICE_ROLE_KEY }}
+          ULTRON_SMOKE_USER_ID: ${{ secrets.ULTRON_SMOKE_USER_ID }}
+        run: node scripts/worker-smoke.mjs
