@@ -240,7 +240,9 @@ test("JARVIS rejects arbitrary steps, tools, and unsupported employee roles", as
     ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
     ULTRON_EMPLOYEES_ENABLED: "true",
     SUPABASE_SERVICE_ROLE_KEY: "synthetic-service-role-key",
-    OPENROUTER_API_KEY: "synthetic-openrouter-key"
+    OPENROUTER_API_KEY: "synthetic-openrouter-key",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free"
   };
   await withRouter({ env, supabaseRest }, async base => {
     const arbitrary = await fetch(base + "/api/jarvis/agents/task", {
