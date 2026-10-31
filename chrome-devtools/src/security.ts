@@ -5,6 +5,7 @@ export const CHROME_ACTIONS = [
   "status",
   "navigate",
   "click",
+  "inspect_click",
   "fill",
   "screenshot",
   "page_snapshot",
@@ -234,7 +235,7 @@ export function validateChromeActionInput(value: unknown): ChromeActionInput {
   if (action === "navigate" && !output.url) {
     throw new ChromeActionError("URL_REQUIRED", "navigate requires a url.");
   }
-  if ((action === "click" || action === "fill") && !output.selector) {
+  if ((action === "click" || action === "inspect_click" || action === "fill") && !output.selector) {
     throw new ChromeActionError("SELECTOR_REQUIRED", action + " requires a selector.");
   }
   if (action === "fill" && output.text === undefined) {
