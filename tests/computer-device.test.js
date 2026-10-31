@@ -10,7 +10,9 @@ test("Computer Control: system telemetry reports CPU and RAM bounds", () => {
   const ctrl = new WindowsComputerControl();
   const telemetry = ctrl.getSystemTelemetry();
 
-  assert.equal(telemetry.platform, "windows");
+  assert.equal(telemetry.platform, process.platform);
+  assert.equal(telemetry.architecture, process.arch);
+  assert.equal(telemetry.executionEnvironment, "hosted_or_local_runtime");
   assert.ok(telemetry.cpuCores >= 1);
   assert.ok(telemetry.memory.totalBytes > 0);
   assert.ok(telemetry.memory.usedPercent >= 0 && telemetry.memory.usedPercent <= 100);
@@ -33,6 +35,11 @@ test("Computer Control: sandboxed file operations prevent path traversal", async
   // Path traversal attempt MUST fail closed
   await assert.rejects(async () => {
     await ctrl.readFile("../../../Windows/System32/drivers/etc/hosts");
+  }, /Path traversal violation/);
+
+  // A sibling whose name shares the sandbox prefix must also be rejected.
+  assert.throws(() => {
+    ctrl.resolveSafePath("../" + path.basename(testDir) + "-outside/secret.txt");
   }, /Path traversal violation/);
 
   // Clean up
