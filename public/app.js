@@ -1564,8 +1564,13 @@
       updateTaskPanel("Request received. ULTRON is generating the response.", "GENERATING RESPONSE", sources);
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
+      const voiceLanguageInstruction = speechLanguageMode === "hi-IN"
+        ? "Reply in natural Hindi using Devanagari script. Keep common technical terms and product names in English when that is clearer."
+        : speechLanguageMode === "en-IN"
+          ? "Reply in clear, natural English."
+          : "Detect the language and script from the user's transcript. Reply in the same language and script: Hindi in Devanagari, English in English, and code-switched Hindi-English as natural Hinglish. Mirror the user's mix and never force English or translate unless asked.";
       const voicePrompt = streamVoiceReply
-        ? "Understand the user's request whether they speak Hindi, English, or Hinglish. ALWAYS reply in clear, natural English, regardless of the input language. Do not reply in Hindi or Hinglish. For voice, answer in one short, complete English sentence (ideally 8–18 words); use a second sentence only when essential. Start with the answer. No greeting, filler, markdown, bullets, stage directions, or pronunciation spellings. Use natural grammar, contractions, and punctuation for smooth spoken delivery.\n\nUser request: " + outgoingPrompt
+        ? "Understand the user's request whether they speak Hindi, English, or Hinglish. " + voiceLanguageInstruction + " For voice, answer in one short, complete sentence (ideally 8–18 words); use a second sentence only when essential. Start with the answer. No greeting, filler, markdown, bullets, stage directions, or pronunciation spellings. Use natural grammar and punctuation for smooth spoken delivery.\n\nUser request: " + outgoingPrompt
         : outgoingPrompt;
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
