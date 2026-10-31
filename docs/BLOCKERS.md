@@ -44,11 +44,11 @@ The security branch adds a transport that resolves public hostnames, rejects any
 - Consequential external clicks remain blocked until a task-bound user approval flow can display the exact host, selector/action and intended effect, then issue a one-time authenticated approval bound to that operation.
 
 
-## Chrome DevTools consequential action approval (updated 2026-10-31)
+## Chrome DevTools consequential action approval (PR #430, 2026-10-31)
 
 - Model-generated `confirmExternalAction` has been removed from the agent tool schema and cannot be supplied by model tool arguments. Agent dispatch always forces false, and the autonomy policy blocks consequential clicks before local bridge access.
 - Source and agent-level regression tests passed in full CI run 41116829247. This does not prove a live Chrome bridge or physical browser workflow.
-- A task-bound approval-token flow is still missing; keep consequential browser clicks blocked until the user can review and approve the exact host, selector, action and effect.
+- PR #430 adds a task-bound, owner-only, one-use approval phrase and exact target revalidation. The flow is not merged or live-verified; keep the local bridge gate off until CI and a real local browser E2E pass. The in-memory challenge store also requires a single backend instance; horizontal scaling needs a shared atomic store before enabling.
 
 
 ## Geo-Sleuth reverse-image sharing consent
