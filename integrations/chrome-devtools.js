@@ -1,7 +1,12 @@
 import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
+import {
+  createChromeActionApproval,
+  getChromeActionApproval,
+  consumeChromeActionApproval
+} from "./chrome-action-approvals.js";
 
 const CHROME_ACTIONS = new Set([
-  "status", "navigate", "click", "fill", "screenshot", "page_snapshot",
+  "status", "navigate", "click", "inspect_click", "fill", "screenshot", "page_snapshot",
   "console_logs", "network_requests", "performance_trace"
 ]);
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -40,7 +45,7 @@ function readInput(input) {
     allowed.confirmExternalAction = input.confirmExternalAction;
   }
   if (allowed.action === "navigate" && !allowed.url) throw Object.assign(new Error("Navigation requires a URL."), { code: "CHROME_URL_REQUIRED", status: 400 });
-  if (["click", "fill"].includes(allowed.action) && !allowed.selector) throw Object.assign(new Error("Click/fill requires a selector."), { code: "CHROME_SELECTOR_REQUIRED", status: 400 });
+  if (["click", "inspect_click", "fill"].includes(allowed.action) && !allowed.selector) throw Object.assign(new Error("Click/fill requires a selector."), { code: "CHROME_SELECTOR_REQUIRED", status: 400 });
   if (allowed.action === "fill" && allowed.text === undefined) throw Object.assign(new Error("Fill requires text."), { code: "CHROME_TEXT_REQUIRED", status: 400 });
   return allowed;
 }
@@ -73,43 +78,7 @@ async function readResponseTextLimited(response, maxBytes = MAX_RESPONSE_BYTES) 
   }
 }
 
-export function getChromeDevToolsReadiness(env = process.env, userId = "") {
-  const baseUrl = safeServiceBase(env.ULTRON_CHROME_DEVTOOLS_URL);
-  const token = bounded(env.ULTRON_CHROME_DEVTOOLS_TOKEN, 500);
-  const expectedOwner = bounded(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
-  const configured = Boolean(baseUrl && token.length >= 32 && expectedOwner);
-  const ownerAuthorized = Boolean(expectedOwner && userId && expectedOwner === userId);
-  const state = !configured ? "blocked" : !ownerAuthorized ? "owner_only" : "configured_unverified";
-  return {
-    configured,
-    ownerAuthorized,
-    state,
-    requiredEnv: ["ULTRON_CHROME_DEVTOOLS_URL", "ULTRON_CHROME_DEVTOOLS_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
-    note: configured
-      ? (ownerAuthorized
-          ? "Bridge URL, token and owner guard are configured; live Chrome connectivity has not yet been verified."
-          : "Chrome DevTools bridge is restricted to the configured ULTRON owner.")
-      : "Requires an authenticated local Chrome DevTools HTTP bridge, a random token of at least 32 characters, and the exact owner UUID. A hosted backend cannot reach a developer PC's localhost."
-  };
-}
-
-export async function runChromeDevToolsAction({
-  env = process.env,
-  fetchImpl = safePinnedFetch,
-  userId = "",
-  input
-} = {}) {
-  const readiness = getChromeDevToolsReadiness(env, userId);
-  if (!readiness.configured) {
-    return { state: "blocked", execution: "not_started", code: "CHROME_DEVTOOLS_NOT_CONFIGURED", blocker: readiness.note };
-  }
-  if (!readiness.ownerAuthorized) {
-    return { state: "blocked", execution: "not_started", code: "CHROME_DEVTOOLS_OWNER_ONLY", blocker: readiness.note };
-  }
-
-  const action = readInput(input);
-  const baseUrl = safeServiceBase(env.ULTRON_CHROME_DEVTOOLS_URL);
-  const token = bounded(env.ULTRON_CHROME_DEVTOOLS_TOKEN, 500);
+async function requestBridgeAction({ baseUrl, token, action, fetchImpl }) {
   const timeout = action.action === "performance_trace" ? 25000 : 15000;
   let response;
   try {
@@ -141,13 +110,137 @@ export async function runChromeDevToolsAction({
     return { state: "failed", execution: "chrome_devtools", error: { code: bounded(error?.code || "CHROME_RESPONSE_INVALID", 80), message: "Chrome DevTools returned an invalid or oversized response." } };
   }
   if (!response.ok || body.ok !== true) {
-    const message = bounded(body?.error?.message || "Chrome DevTools action failed.", 500);
     return {
       state: "failed",
       execution: "chrome_devtools",
       status: response.status,
-      error: { code: bounded(body?.error?.code || "CHROME_ACTION_FAILED", 80), message }
+      error: { code: bounded(body?.error?.code || "CHROME_ACTION_FAILED", 80), message: bounded(body?.error?.message || "Chrome DevTools action failed.", 500) }
     };
   }
   return { state: "completed", execution: "chrome_devtools", action: action.action, result: body.result };
+}
+
+function readinessForOwner(env, userId) {
+  const baseUrl = safeServiceBase(env.ULTRON_CHROME_DEVTOOLS_URL);
+  const token = bounded(env.ULTRON_CHROME_DEVTOOLS_TOKEN, 500);
+  const expectedOwner = bounded(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
+  const configured = Boolean(baseUrl && token.length >= 32 && expectedOwner);
+  const ownerAuthorized = Boolean(expectedOwner && userId && expectedOwner === userId);
+  return {
+    configured,
+    ownerAuthorized,
+    state: !configured ? "blocked" : !ownerAuthorized ? "owner_only" : "configured_unverified",
+    requiredEnv: ["ULTRON_CHROME_DEVTOOLS_URL", "ULTRON_CHROME_DEVTOOLS_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+    note: configured
+      ? (ownerAuthorized
+          ? "Bridge URL, token and owner guard are configured; live Chrome connectivity has not yet been verified."
+          : "Chrome DevTools bridge is restricted to the configured ULTRON owner.")
+      : "Requires an authenticated local Chrome DevTools HTTP bridge, a random token of at least 32 characters, and the exact owner UUID. A hosted backend cannot reach a developer PC's localhost."
+  };
+}
+
+export function getChromeDevToolsReadiness(env = process.env, userId = "") {
+  return readinessForOwner(env, userId);
+}
+
+export async function runChromeDevToolsAction({
+  env = process.env,
+  fetchImpl = safePinnedFetch,
+  userId = "",
+  input
+} = {}) {
+  const readiness = readinessForOwner(env, userId);
+  if (!readiness.configured) {
+    return { state: "blocked", execution: "not_started", code: "CHROME_DEVTOOLS_NOT_CONFIGURED", blocker: readiness.note };
+  }
+  if (!readiness.ownerAuthorized) {
+    return { state: "blocked", execution: "not_started", code: "CHROME_DEVTOOLS_OWNER_ONLY", blocker: readiness.note };
+  }
+
+  const action = readInput(input);
+  // Model-generated confirmation is never accepted. Consequential clicks first
+  // go through an inspect-only request and receive a short-lived user challenge.
+  if (action.action === "click" && action.confirmExternalAction === true) {
+    return { state: "blocked", execution: "not_started", code: "MODEL_CONFIRMATION_REJECTED", message: "Model arguments cannot authorize a consequential browser click." };
+  }
+
+  const baseUrl = safeServiceBase(env.ULTRON_CHROME_DEVTOOLS_URL);
+  const token = bounded(env.ULTRON_CHROME_DEVTOOLS_TOKEN, 500);
+
+  if (action.action === "click") {
+    const inspection = await requestBridgeAction({
+      baseUrl, token, fetchImpl,
+      action: { action: "inspect_click", selector: action.selector }
+    });
+    if (inspection.state !== "completed") return inspection;
+    if (inspection.result?.requiresConfirmation === true) {
+      const challenge = createChromeActionApproval({ userId, inspection: inspection.result });
+      if (!challenge.ok) {
+        return { state: "failed", execution: "not_started", code: challenge.code, message: "ULTRON could not create a safe browser approval challenge." };
+      }
+      return {
+        state: "approval_required",
+        execution: "not_started",
+        approvalRequired: true,
+        approvalId: challenge.id,
+        approvalPhrase: challenge.approvalPhrase,
+        expiresAt: challenge.expiresAt,
+        summary: challenge.summary,
+        message: "No click was performed. Review the exact page, element and action, then send the approval phrase as your entire next message. The approval expires in 90 seconds."
+      };
+    }
+  }
+  return requestBridgeAction({ baseUrl, token, action, fetchImpl });
+}
+
+export async function approveChromeDevToolsAction({
+  env = process.env,
+  fetchImpl = safePinnedFetch,
+  userId = "",
+  approvalId
+} = {}) {
+  const readiness = readinessForOwner(env, userId);
+  if (!readiness.configured) return { state: "blocked", execution: "not_started", code: "CHROME_DEVTOOLS_NOT_CONFIGURED", blocker: readiness.note };
+  if (!readiness.ownerAuthorized) return { state: "blocked", execution: "not_started", code: "CHROME_DEVTOOLS_OWNER_ONLY", blocker: readiness.note };
+
+  const pending = getChromeActionApproval({ approvalId, userId });
+  if (!pending.ok) {
+    return {
+      state: "blocked",
+      execution: "not_started",
+      code: pending.code,
+      message: pending.code === "CHROME_APPROVAL_EXPIRED"
+        ? "The browser approval expired. Repeat the browser request to create a fresh challenge."
+        : "No matching pending browser approval exists for this account."
+    };
+  }
+
+  const baseUrl = safeServiceBase(env.ULTRON_CHROME_DEVTOOLS_URL);
+  const token = bounded(env.ULTRON_CHROME_DEVTOOLS_TOKEN, 500);
+  const inspection = await requestBridgeAction({
+    baseUrl, token, fetchImpl,
+    action: { action: "inspect_click", selector: pending.fingerprint.selector }
+  });
+  if (inspection.state !== "completed") return inspection;
+  const consumed = consumeChromeActionApproval({
+    approvalId: pending.id,
+    userId,
+    inspection: inspection.result
+  });
+  if (!consumed.ok) {
+    return {
+      state: "blocked",
+      execution: "not_started",
+      code: consumed.code,
+      message: "The page or target element changed after the approval challenge was shown. No click was performed; request a new challenge."
+    };
+  }
+  return requestBridgeAction({
+    baseUrl, token, fetchImpl,
+    action: {
+      action: "click",
+      selector: consumed.fingerprint.selector,
+      confirmExternalAction: true
+    }
+  });
 }
