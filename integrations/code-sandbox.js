@@ -129,8 +129,14 @@ export async function runSandboxedPython({
             LANG: "C.UTF-8"
           }
         });
-      } catch {
-        finish({ state: "failed", execution: "docker", code: "DOCKER_START_FAILED", message: "The Docker sandbox process could not start." });
+      } catch (error) {
+        const missing = error?.code === "ENOENT";
+        finish({
+          state: "failed",
+          execution: "docker",
+          code: missing ? "DOCKER_NOT_INSTALLED" : "DOCKER_START_FAILED",
+          message: missing ? "Docker CLI is not installed on this host." : "The Docker sandbox process could not start."
+        });
         return;
       }
       timer = setTimeout(() => {
