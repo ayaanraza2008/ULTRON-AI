@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 const IMAGE_PATTERN = /^python:3\.12-slim@sha256:[a-f0-9]{64}$/i;
 const MAX_CODE_CHARS = 20_000;
@@ -40,7 +41,7 @@ export function getCodeSandboxReadiness(env = process.env) {
   };
 }
 
-function dockerArgs(image, timeoutMs) {
+function dockerArgs(image, timeoutMs, containerName) {
   return [
     "run", "--rm", "--interactive",
     "--network=none",
@@ -89,6 +90,7 @@ export async function runSandboxedPython({
   try {
     return await new Promise(resolve => {
       let child;
+      const containerName = "ultron-sandbox-" + randomUUID();
       let settled = false;
       let timedOut = false;
       let outputExceeded = false;
@@ -104,10 +106,22 @@ export async function runSandboxedPython({
         resolve(result);
       };
       const kill = () => {
+        // Killing the Docker CLI alone can orphan a running container. Ask the
+        // daemon to stop this uniquely named container, then terminate the CLI.
+        try {
+          spawnImpl("docker", ["kill", containerName], {
+            stdio: "ignore",
+            windowsHide: true,
+            env: {
+              PATH: typeof process.env.PATH === "string" ? process.env.PATH : "",
+              LANG: "C.UTF-8"
+            }
+          });
+        } catch {}
         try { child?.kill("SIGKILL"); } catch {}
       };
       try {
-        child = spawnImpl("docker", dockerArgs(env.ULTRON_CODE_SANDBOX_IMAGE.trim(), timeout), {
+        child = spawnImpl("docker", dockerArgs(env.ULTRON_CODE_SANDBOX_IMAGE.trim(), timeout, containerName), {
           stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
           env: {
