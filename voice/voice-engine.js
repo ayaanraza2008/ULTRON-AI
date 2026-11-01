@@ -381,7 +381,14 @@ export class JarvisVoiceEngine {
     const fullSpoken = (effectivePrefix + sanitized).trim();
     const voice = options.voice || this.activeProfile.voiceId || "am_onyx";
     const speed = typeof options.speed === "number" ? options.speed : (options.rate ?? modeConfig.rate ?? this.activeProfile.rate ?? 0.95);
-    return kokoroEngine.synthesize(fullSpoken, { voice, speed, play: Boolean(options.play) });
+    const result = await kokoroEngine.synthesize(fullSpoken, { voice, speed, play: Boolean(options.play) });
+    if (result.speechAvailable !== true || result.audioKind !== "speech") {
+      const error = new Error("Kokoro runtime unavailable: fallback audio is a diagnostic tone, not speech.");
+      error.code = "KOKORO_SPEECH_UNAVAILABLE";
+      error.audioKind = result.audioKind || "unknown";
+      throw error;
+    }
+    return result;
   }
   processAudioFrame(micBuffer, playbackReferenceBuffer = null) {
     let cleanAudio = micBuffer;
