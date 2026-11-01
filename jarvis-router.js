@@ -1852,8 +1852,22 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
 
   router.post("/jarvis/evolution/challenge", requireOwner, express.json(), (req, res) => {
     try {
-      const { targetFile, modificationDigest } = req.body || {};
-      const ownerUserId = req.supabaseUser?.id || "operator";
+      const { targetFile, newContent } = req.body || {};
+      if (typeof newContent !== "string") {
+        return res.status(400).json({
+          error: { code: "APPROVED_CONTENT_REQUIRED", message: "Supply the exact proposed newContent so the server can bind approval to its SHA-256 digest." }
+        });
+      }
+      if (Buffer.byteLength(newContent, "utf8") > 1024 * 1024) {
+        return res.status(413).json({
+          error: { code: "APPROVED_CONTENT_TOO_LARGE", message: "The proposed content exceeds the 1 MiB approval limit." }
+        });
+      }
+      const ownerUserId = req.supabaseUser?.id;
+      if (!ownerUserId) {
+        return res.status(401).json({ error: { code: "OWNER_SESSION_REQUIRED", message: "An authenticated owner session is required." } });
+      }
+      const modificationDigest = crypto.createHash("sha256").update(newContent, "utf8").digest("hex");
       const challenge = operatorAuthorizationService.createChallenge({ ownerUserId, targetFile, modificationDigest });
       res.json({ success: true, challenge });
     } catch (err) {
@@ -1891,8 +1905,22 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
           });
         }
 
-        const ownerUserId = req.supabaseUser?.id || "operator";
-        const modificationDigest = modificationSpec?.modificationDigest || (modificationSpec?.content ? crypto.createHash("sha256").update(modificationSpec.content).digest("hex") : "");
+        const ownerUserId = req.supabaseUser?.id;
+        if (!ownerUserId || typeof modificationSpec?.newContent !== "string") {
+          return res.status(400).json({
+            error: {
+              code: "APPROVED_CONTENT_REQUIRED",
+              message: "Restricted changes require the exact newContent that was shown in the owner approval preview."
+            }
+          });
+        }
+        if (Buffer.byteLength(modificationSpec.newContent, "utf8") > 1024 * 1024) {
+          return res.status(413).json({
+            error: { code: "APPROVED_CONTENT_TOO_LARGE", message: "The proposed content exceeds the 1 MiB approval limit." }
+          });
+        }
+        // Never trust a client-supplied digest: hash the exact bytes the engine will write.
+        const modificationDigest = crypto.createHash("sha256").update(modificationSpec.newContent, "utf8").digest("hex");
         const authResult = operatorAuthorizationService.verifyAndConsume({
           ownerUserId,
           targetFile,

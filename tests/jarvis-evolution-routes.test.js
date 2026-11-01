@@ -134,37 +134,63 @@ test("JARVIS Voice & HUD Routes: POST /api/jarvis/voice/process-command and HUD 
 });
 
 
-test("JARVIS Self-Evolution Routes: POST /api/jarvis/evolution/challenge creates challenge and apply consumes it", async () => {
+test("JARVIS Self-Evolution Routes: approval is bound to exact newContent and cannot authorize a modified payload", async () => {
   await withRouter({}, async base => {
-    // 1. Create Challenge
+    const approvedContent = "services: []\\n";
     const challengeRes = await fetch(base + "/api/jarvis/evolution/challenge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         targetFile: "render.yaml",
-        modificationDigest: "a1b2c3d4e5f6"
+        newContent: approvedContent,
+        modificationDigest: "attacker-controlled-digest-is-ignored"
       })
     });
     const challengeBody = await challengeRes.json();
     assert.equal(challengeRes.status, 200);
     assert.equal(challengeBody.success, true);
     assert.ok(challengeBody.challenge.approvalToken);
+    const expectedDigest = crypto.createHash("sha256").update(approvedContent, "utf8").digest("hex");
+    assert.equal(challengeBody.challenge.modificationDigest, expectedDigest);
 
-    const token = challengeBody.challenge.approvalToken;
+    // A missing preview is not allowed to create an approval.
+    const missingContent = await fetch(base + "/api/jarvis/evolution/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetFile: "render.yaml", modificationDigest: expectedDigest })
+    });
+    assert.equal(missingContent.status, 400);
+    assert.equal((await missingContent.json()).error.code, "APPROVED_CONTENT_REQUIRED");
 
-    // 2. Reject immutable system file (e.g. .env)
+    // A token for content A must not authorize payload B, even when the client repeats the old digest.
+    const tamperedRes = await fetch(base + "/api/jarvis/evolution/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        planItemId: "plan-tampered-content",
+        modificationSpec: {
+          targetFile: "render.yaml",
+          newContent: "services:\\n  - type: web\\n    name: attacker-payload\\n",
+          modificationDigest: expectedDigest
+        },
+        approvalToken: challengeBody.challenge.approvalToken
+      })
+    });
+    assert.equal(tamperedRes.status, 403);
+    assert.equal((await tamperedRes.json()).error.code, "INVALID_SIGNATURE");
+
+    // Immutable paths remain blocked before any write attempt.
     const immRes = await fetch(base + "/api/jarvis/evolution/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         planItemId: "plan-imm",
         modificationSpec: { targetFile: ".env", newContent: "SECRET=bad" },
-        approvalToken: token
+        approvalToken: challengeBody.challenge.approvalToken
       })
     });
-    const immBody = await immRes.json();
     assert.equal(immRes.status, 403);
-    assert.equal(immBody.error.code, "IMMUTABLE_SYSTEM_PATH_REJECTED");
+    assert.equal((await immRes.json()).error.code, "IMMUTABLE_SYSTEM_PATH_REJECTED");
   });
 });
 
