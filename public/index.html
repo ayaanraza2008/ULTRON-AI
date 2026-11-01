@@ -86,6 +86,7 @@
     <button class="nav-tab" data-tab="tab-security">Security & Audit</button>
     <button class="nav-tab" data-tab="tab-eyes">👁️ ULTRON Eyes</button>
     <button class="nav-tab" data-tab="tab-cyber">🛡️ Cyber Core</button>
+    <button class="nav-tab" data-tab="tab-sentinel">🛰️ SENTINEL</button>
   </nav>
 
   <!-- Tab Content Panels -->
@@ -892,12 +893,119 @@
       </div>
     </section>
 
+  
+    <!-- Panel: ULTRON SENTINEL (Autonomous Cybersecurity & Network Intelligence) -->
+    <section class="tab-panel" id="tab-sentinel">
+      <div class="sentinel-container" style="display: flex; flex-direction: column; gap: 14px;">
+        <!-- Top Command Bar -->
+        <div class="card" style="padding: 12px; background: rgba(13, 17, 23, 0.95); border: 1px solid #1e293b;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h3 style="margin: 0; color: #c084fc; letter-spacing: 1.5px; font-size: 14px;">🛰️ ULTRON SENTINEL DIVISION</h3>
+              <span id="sentinelStatusBadge" style="font-size: 11px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #10b981; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                ONLINE_DEFENSIVE
+              </span>
+              <span style="font-size: 10px; color: #94a3b8; background: #0f172a; padding: 2px 6px; border-radius: 3px; border: 1px solid #1e293b;">
+                ₹0-FIRST • PURE CPU (0 CUDA)
+              </span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-danger" id="sentinelEmergencyHaltBtn">🛑 Emergency Halt</button>
+            </div>
+          </div>
+          <div id="sentinelHwTelemetry" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, 0.08);">
+            <!-- Hardware Telemetry Populated Dynamically -->
+          </div>
+        </div>
+
+        <!-- Scan Target & Control Toolbar -->
+        <div class="card" style="padding: 10px; background: rgba(15, 23, 42, 0.85); border: 1px solid #1e293b;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="sentinelTargetInput" value="localhost" placeholder="Target host or IP (e.g. localhost, 127.0.0.1)" style="flex: 1; min-width: 200px; background: #070913; border: 1px solid #334155; color: #fff; padding: 7px 12px; border-radius: 4px; font-size: 12px; font-family: monospace;" />
+            <button class="btn btn-primary btn-sm" id="sentinelStartScanBtn">▶ Start Safe Scan</button>
+            <button class="btn btn-secondary btn-sm" id="sentinelPauseBtn">⏸ Pause</button>
+            <button class="btn btn-secondary btn-sm" id="sentinelResumeBtn">⏯ Resume</button>
+            <button class="btn btn-secondary btn-sm" id="sentinelStopBtn">⏹ Stop</button>
+            <button class="btn btn-primary btn-sm" id="sentinelReportBtn" style="background: #7c3aed; border-color: #6d28d9;">📋 Generate Report</button>
+          </div>
+        </div>
+
+        <!-- 3-Column Sentinel Operations Grid -->
+        <div style="display: grid; grid-template-columns: minmax(240px, 1fr) minmax(340px, 1.4fr) minmax(300px, 1.2fr); gap: 14px;">
+          <!-- Left Column: 7-Phase Workflow & Active Scopes -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 11px; color: #c084fc; letter-spacing: 1px;">7-PHASE AUTONOMOUS LOOP</h4>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div id="sentinel-phase-discover" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">1. DISCOVER — Host/Subnet Reachability</div>
+                <div id="sentinel-phase-inventory" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">2. INVENTORY — Safe TCP Port Probes</div>
+                <div id="sentinel-phase-analyze" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">3. ANALYZE — Banner & Fingerprint Match</div>
+                <div id="sentinel-phase-identify_risks" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">4. IDENTIFY RISKS — CVSS v3.1 Scoring</div>
+                <div id="sentinel-phase-prioritize" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">5. PRIORITIZE — Impact Ranking</div>
+                <div id="sentinel-phase-recommend" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">6. RECOMMEND — Concrete Patch Advice</div>
+                <div id="sentinel-phase-report" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">7. REPORT — Audit Trail & Synthesis</div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 11px; color: #10b981; letter-spacing: 1px;">AUTHORIZATION & STATUS</h4>
+              <div style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+                <div><span style="color: #64748b;">Active Scopes:</span> <strong id="sentinelScopesCount" style="color: #10b981;">1 Authorized</strong></div>
+                <div><span style="color: #64748b;">Active Vulns:</span> <strong id="sentinelActiveVulnsCount" style="color: #f97316;">0 Open</strong></div>
+                <div><span style="color: #64748b;">Policy:</span> <span style="color: #94a3b8;">Defensive & Non-Destructive</span></div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px; flex: 1;">
+              <h4 style="margin: 0 0 6px 0; font-size: 11px; color: #38bdf8; letter-spacing: 1px;">ACTIVITY LOG & RATIONALE</h4>
+              <div id="sentinelActivityLog" style="max-height: 220px; overflow-y: auto; font-family: monospace; font-size: 10px; color: #94a3b8;">
+                Ready. Click 'Start Safe Scan' to initiate assessment.
+              </div>
+            </div>
+          </div>
+
+          <!-- Middle Column: Topology Graph & Discovered Assets -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 11px; color: #c084fc; letter-spacing: 1px;">NETWORK TOPOLOGY GRAPH</h4>
+              <div id="sentinelTopologyContainer" style="min-height: 220px; display: flex; align-items: center; justify-content: center; background: #070913; border: 1px solid #1e293b; border-radius: 4px;">
+                <span style="color: #64748b; font-size: 11px;">Topology renders upon scan execution.</span>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px; flex: 1;">
+              <h4 style="margin: 0 0 8px 0; font-size: 11px; color: #38bdf8; letter-spacing: 1px;">DISCOVERED ASSETS & OPEN PORTS</h4>
+              <div id="sentinelAssetsContainer" style="max-height: 240px; overflow-y: auto;">
+                <span style="color: #64748b; font-size: 11px;">No assets discovered yet.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Security Findings & CVE Remediation -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="card" style="padding: 12px; flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="margin: 0; font-size: 11px; color: #f43f5e; letter-spacing: 1px;">FINDINGS & CVE CORRELATION</h4>
+                <span style="font-size: 9px; color: #94a3b8;">CVSS v3.1 Precision</span>
+              </div>
+              <div id="sentinelFindingsContainer" style="max-height: 480px; overflow-y: auto;">
+                <div style="border: 1px dashed #1e293b; padding: 20px; text-align: center; color: #64748b; font-size: 11px; border-radius: 4px;">
+                  Findings and CVE remediations will populate after analysis.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <script type="module" src="voice-activation.js"></script>
   <script src="app.js"></script>
   <script src="ultron-eyes.js"></script>
   <script src="cyber-dashboard.js"></script>
+  <script src="sentinel-dashboard.js"></script>
   <script type="module" src="floating-core.js"></script>
 </body>
 </html>

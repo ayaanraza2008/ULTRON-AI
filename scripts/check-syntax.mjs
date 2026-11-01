@@ -313,7 +313,17 @@ const FILES_TO_CHECK = [
   "intelligence/content-provenance.js",
   "voice/neural-speech-adapters.js",
   "tests/new-ecosystem-integrations.test.js",
-  "tests/durable-device-hub.test.js"
+  "tests/durable-device-hub.test.js",
+  "security/sentinel/sentinel-types.js",
+  "security/sentinel/cve-database.js",
+  "security/sentinel/hardware-adapter.js",
+  "security/sentinel/network-discovery.js",
+  "security/sentinel/sentinel-memory.js",
+  "security/sentinel/sentinel-agent.js",
+  "security/sentinel/sentinel-monitor.js",
+  "security/sentinel/ultron-sentinel.js",
+  "public/sentinel-dashboard.js",
+  "tests/ultron-sentinel.test.js"
 ];
 
 let checked = 0;

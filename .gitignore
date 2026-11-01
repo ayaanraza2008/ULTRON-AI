@@ -13,3 +13,5 @@ models/
 .harness2/
 __pycache__/
 *.py[cod]
+
+sentinel-memory.json

@@ -21,6 +21,8 @@ import { aiRedTeamEvaluator } from "./security/cyber-ai-redteam.js";
 import { cyberIncidentAssistant } from "./security/cyber-incident.js";
 import { nexusOrchestrator } from "./nexus/nexus-orchestrator.js";
 import { ultronGuardian } from "./security/ultron-guardian.js";
+import { ultronSentinel } from "./security/sentinel/ultron-sentinel.js";
+import { hardwareAdapter } from "./security/sentinel/hardware-adapter.js";
 import { humanInterface } from "./intelligence/human-interface.js";
 import { ultronSelfEvolutionEngine } from "./self-improvement/self-evolution-engine.js";
 import crypto from "node:crypto";
@@ -1827,6 +1829,158 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     try {
       const { operatorKey } = req.body || {};
       const outcome = targetAuthorizationGateway.disengageEmergencyStop(operatorKey);
+      res.json(outcome);
+    } catch (err) {
+      res.status(403).json({ error: { message: err.message } });
+    }
+  });
+
+  // ==========================================
+  // ULTRON SENTINEL — Autonomous Cybersecurity & Network Intelligence Division
+  // ==========================================
+  router.get("/jarvis/sentinel/status", requireOwner, (_req, res) => {
+    try {
+      res.json({ success: true, ...ultronSentinel.getStatus() });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/sentinel/hardware", requireOwner, (_req, res) => {
+    try {
+      res.json({ success: true, profile: hardwareAdapter.getHardwareProfile(), health: hardwareAdapter.checkProcessHealth() });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/sentinel/scope", requireOwner, (_req, res) => {
+    try {
+      const scopes = targetAuthorizationGateway.listScopes();
+      res.json({ success: true, scopes, emergencyStop: targetAuthorizationGateway.emergencyStopEngaged });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/scan/start", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { target, options } = req.body || {};
+      const scanContext = await ultronSentinel.startScan(target, options);
+      res.json({ success: true, scan: scanContext });
+    } catch (err) {
+      const isAuthError = err.message && (err.message.includes("TARGET_OUT_OF_SCOPE") || err.message.includes("AUTHORIZATION_DENIED"));
+      res.status(isAuthError ? 403 : 400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/scan/pause", requireOwner, express.json(), (req, res) => {
+    try {
+      const { scanId } = req.body || {};
+      const outcome = ultronSentinel.pauseScan(scanId);
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/scan/resume", requireOwner, express.json(), (req, res) => {
+    try {
+      const { scanId } = req.body || {};
+      const outcome = ultronSentinel.resumeScan(scanId);
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/scan/stop", requireOwner, express.json(), (req, res) => {
+    try {
+      const { scanId } = req.body || {};
+      const outcome = ultronSentinel.stopScan(scanId);
+      res.json(outcome);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/sentinel/findings", requireOwner, (req, res) => {
+    try {
+      const findings = ultronSentinel.getFindings(req.query || {});
+      res.json({ success: true, count: findings.length, findings });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/sentinel/history", requireOwner, (_req, res) => {
+    try {
+      res.json({ success: true, ...ultronSentinel.getHistory() });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/report", requireOwner, express.json(), (req, res) => {
+    try {
+      const { scanId, format = "markdown" } = req.body || {};
+      const report = ultronSentinel.generateReport(scanId, format);
+      res.json({ success: true, report });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/sentinel/cve", requireOwner, (req, res) => {
+    try {
+      const results = ultronSentinel.searchCveDatabase(req.query.q);
+      res.json({ success: true, count: results.length, cves: results });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/monitor/start", requireOwner, express.json(), (req, res) => {
+    try {
+      const { targets, intervalMs } = req.body || {};
+      const result = ultronSentinel.monitor.start(targets, intervalMs);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/monitor/stop", requireOwner, (_req, res) => {
+    try {
+      const result = ultronSentinel.monitor.stop();
+      res.json({ success: true, ...result });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/sentinel/monitor/status", requireOwner, (_req, res) => {
+    try {
+      res.json({ success: true, monitor: ultronSentinel.monitor.getStatus() });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/emergency/stop", requireOwner, express.json(), (req, res) => {
+    try {
+      const { reason } = req.body || {};
+      const outcome = ultronSentinel.emergencyStop(reason);
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/sentinel/emergency/resume", requireOwner, express.json(), (req, res) => {
+    try {
+      const { operatorKey } = req.body || {};
+      const outcome = ultronSentinel.emergencyResume(operatorKey);
       res.json(outcome);
     } catch (err) {
       res.status(403).json({ error: { message: err.message } });
