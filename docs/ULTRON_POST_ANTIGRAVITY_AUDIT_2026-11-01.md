@@ -15,6 +15,6 @@ Use the current independent audit and scorecard instead:
 
 Current branch CI at implementation checkpoint `3336a99b492014c661a54f9b315400bbb81c6b45` reported 1,250 Node tests: 1,249 passed, 0 failed, 1 skipped; syntax 318/318; ULTRON runtime audit 0 reported vulnerabilities; configured repository security gate 0 findings. The skipped test remains live two-account Supabase isolation.
 
-The current overall engineering readiness estimate is **64%**, not 100%. PR #441 is open and unmerged. Production remains on the separate `main`/Render revisions. See the linked current audit for actual remaining provider, database, device, frontend/backend, Render Blueprint, and third-party dependency blockers.
+The current overall engineering readiness estimate is **63%**, not 100%. PR #441 is open and unmerged. Production remains on the separate `main`/Render revisions. See the linked current audit for actual remaining provider, database, device, frontend/backend, Render Blueprint, and third-party dependency blockers.
 
 No merge, production deployment, production secret change, paid plan upgrade or live Supabase migration was performed.
