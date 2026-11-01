@@ -3,8 +3,8 @@
 **Repository:** `ayaanraza2008/ULTRON-AI`  
 **Working branch:** `feat/ultron-cyber-core`  
 **Pull request:** [#440](https://github.com/ayaanraza2008/ULTRON-AI/pull/440)  
-**Audited evidence head before the final Kokoro fix:** `6cb3b1c44de0d4435c02c6beaead7e11dfd3fa96`  
-**Additional Kokoro fail-closed code head:** `9baeab9b018eefabde5d60a8c6c49bebe9dfce8c` (CI verified)  
+**Code-bearing CI-verified head:** `9baeab9b018eefabde5d60a8c6c49bebe9dfce8c`    
+**Latest audit-document commit:** `2fcc0b6486e5d9c59e70b9b584a7b0e00d86beb7`  
 **Production base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
 
 > This report supersedes historical ULTRON completion percentages that described software checklists as 100% operational. A green CI run is not proof of live cloud inference, physical-device control, production deployment, or real-world autonomy.
@@ -24,8 +24,8 @@ The Antigravity development branch is materially ahead of production and is in g
 | Live Supabase two-account isolation | SKIPPED by explicit credential/write gate |
 
 Latest run references:
-- [ULTRON CI run 41313870636](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41313317987)
-- [Windows companion run 41313870641](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41313318075)
+- [ULTRON CI run 41313870636](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41313870636)
+- [Windows companion run 41313870641](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41313870641)
 
 The test pass ratio is 99.915% (1,181 / 1,182); the single skipped test is not counted as a pass. The CI workflows themselves completed successfully.
 
@@ -62,7 +62,7 @@ Latest CI after these changes passed. Security scan results are from ULTRON's na
 The feature branch is **not production**.
 
 - PR #440 remains open and unmerged.
-- The PR branch is 42 commits ahead of `main` and 0 behind at the time of this audit.
+- The PR branch is 52 commits ahead of `main` and 0 behind at the time of this audit.
 - Render backend `ultron-ai-core` is live on `main`, commit `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`.
 - Render frontend `ultron-core-interface` is live from its separate frontend branch at commit `68b042641bc1e4a0ab56953df36637402c47df86`.
 - The current feature branch is not deployed to either service.
