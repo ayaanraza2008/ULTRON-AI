@@ -65,7 +65,7 @@ The PR #441 feature branch now loads the ES-module gesture engine correctly, exp
 | Automated CI | **99.9%** (1,249/1,250 passed; one skipped) |
 | Live operational verification | **40%** |
 | Production release readiness | **20%** |
-| **Overall readiness** | **64%** |
+| **Overall readiness** | **63%** |
 
 Weighted formula: 30% code, 20% CI, 30% live operations, 20% release readiness. This is an engineering estimate, not a claim of unrestricted autonomy or fictional JARVIS parity.
 
