@@ -26,6 +26,14 @@ describe("ULTRON AI — Real-Time Hand Gesture Control for Living Energy Core", 
       assert.equal(manager.isActive(), false);
     });
 
+    test("fails closed without browser hand-landmark inference instead of inventing a hand", async () => {
+      const service = new HandTrackingService();
+      const initialized = await service.initialize();
+      assert.equal(initialized, false);
+      assert.equal(service.mode, "UNAVAILABLE");
+      assert.deepEqual(service._detectHandsCVFallback(), []);
+    });
+
     test("Emits state changes via onStatusChange callback", () => {
       const states = [];
       const manager = new CameraPermissionManager({
