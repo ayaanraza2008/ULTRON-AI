@@ -303,7 +303,16 @@ const FILES_TO_CHECK = [
   "tests/jarvis-evolution-routes.test.js",
   "public/floating-core.js",
   "tests/floating-core.test.js",
-  "tests/voice-audio-processing.test.js"
+  "tests/voice-audio-processing.test.js",
+  "integrations/free-llm-registry.js",
+  "agents/agency-agents-matrix.js",
+  "tools/diagram-design.js",
+  "security/cybersecurity-skills.js",
+  "integrations/immich.js",
+  "integrations/public-apis-directory.js",
+  "intelligence/content-provenance.js",
+  "voice/neural-speech-adapters.js",
+  "tests/new-ecosystem-integrations.test.js"
 ];
 
 let checked = 0;
