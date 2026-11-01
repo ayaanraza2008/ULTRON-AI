@@ -199,6 +199,23 @@ test("JARVIS Self-Evolution Routes: approval is bound to exact newContent and ca
   });
 });
 
+test("JARVIS Multi-Device Hub: pairing fails closed without durable encrypted storage", async () => {
+  const deviceHub = new DeviceHub({ env: {} });
+  await withRouter({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user", ULTRON_DEVICE_PAIRING_ENABLED: "true" },
+    deviceHub
+  }, async base => {
+    const response = await fetch(base + "/api/jarvis/devices/pair/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceName: "Unconfigured companion", platform: "windows" })
+    });
+    const body = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(body.error.code, "DEVICE_PAIRING_NOT_CONFIGURED");
+  });
+});
+
 test("JARVIS Multi-Device Hub: full pairing lifecycle and x-device-token authorization", async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-router-device-hub-"));
   const deviceHub = new DeviceHub({
