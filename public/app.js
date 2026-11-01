@@ -1175,11 +1175,11 @@
         const payload = await apiRequest("/api/capabilities");
         const rawSpeech = payload?.providers?.speech && typeof payload.providers.speech === "object"
           ? payload.providers.speech : {};
-        const fishOnlyProvider = rawSpeech.provider === "fish-audio" || rawSpeech.fishAudioConfigured === true;
+        const legacyRemoteProvider = rawSpeech.provider === "fish-audio";
         speechCapabilities = {
           ...rawSpeech,
           premiumTtsConfigured: false,
-          premiumSttConfigured: Boolean(rawSpeech.premiumSttConfigured && !fishOnlyProvider)
+          premiumSttConfigured: Boolean(rawSpeech.premiumSttConfigured && !legacyRemoteProvider)
         };
       } catch {
         speechCapabilities = {};
@@ -1864,17 +1864,17 @@
     }
     if (name === "voice-quality") {
       await ensureSpeechCapabilities();
-      drawerHeading("Voice quality & pronunciation", "ULTRON uses a deep Indian male server voice for natural Hindi-English speech. Auto recognition uses server transcription when configured; browser language selection is available as a fallback.");
-      drawerCard("server synthesis",
+      drawerHeading("Voice quality & pronunciation", "ULTRON prefers the deep male Kokoro am_onyx voice when genuine local synthesis is available, and automatically falls back to the voices installed in your browser.");
+      drawerCard("Kokoro am_onyx synthesis",
         "ULTRON attempts genuine Kokoro am_onyx speech when the backend model and runtime are installed. Missing models and diagnostic tones are rejected; installed browser voices remain the fallback.",
         "KOKORO → BROWSER FALLBACK",
         "warning");
-      drawerCard("server recognition",
-        "Server-side transcription is available only when a supported non-Fish provider is configured; otherwise ULTRON uses browser speech recognition.",
+      drawerCard("Speech recognition",
+        "A compatible server transcription provider may be used when configured; otherwise ULTRON uses browser speech recognition or the Windows companion.",
         speechCapabilities.premiumSttConfigured ? "SERVER STT · UNVERIFIED" : "BROWSER ONLY",
         speechCapabilities.premiumSttConfigured ? "ready" : "warning");
-      drawerCard("Voice reference", "am_onyx · deep male · Hindi-English", "SERVER VOICE VOICE");
-      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with server transcription." : "Auto detection needs server-side server transcription; browser fallback currently uses English (India).") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
+      drawerCard("Voice reference", "am_onyx · deep, calm, authoritative male · English and Hindi browser fallback", "KOKORO / BROWSER");
+      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with server transcription." : "Automatic browser recognition uses English (India). Select Hindi when your browser has a Hindi speech recognizer installed.") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
       drawerButton("AUTO · HINDI + ENGLISH", () => setSpeechLanguageMode("auto"), speechLanguageMode !== "auto");
       drawerButton("HINDI · hi-IN", () => setSpeechLanguageMode("hi-IN"), speechLanguageMode !== "hi-IN");
       drawerButton("ENGLISH · en-IN", () => setSpeechLanguageMode("en-IN"), speechLanguageMode !== "en-IN");
