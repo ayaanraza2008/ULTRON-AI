@@ -74,7 +74,15 @@ import { JarvisUltronCapabilityComparator } from "./benchmarks/jarvis-ultron-com
 const EMPLOYEE_ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const EMPLOYEE_MODES = new Set(["plan", "draft", "review", "report"]);
 
-export function createJarvisRouter({ env = process.env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest = supabaseRest, logger = console, deviceHub: deviceHubInstance = deviceHub } = {}) {
+export function createJarvisRouter({
+  env = process.env,
+  requireSupabaseUser,
+  supabaseRest,
+  privilegedSupabaseRest = supabaseRest,
+  logger = console,
+  deviceHub: deviceHubInstance = deviceHub,
+  authenticateDeviceToken = null
+} = {}) {
   if (typeof requireSupabaseUser !== "function") {
     throw new TypeError("createJarvisRouter requires the authenticated Supabase user middleware.");
   }
@@ -103,18 +111,41 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     }
   ];
 
-  const authenticateOwnerOrDevice = (req, res, next) => {
+  const authenticateOwnerOrDevice = async (req, res, next) => {
     const deviceToken = req.headers["x-device-token"];
     if (deviceToken && typeof deviceToken === "string") {
-      const pairedDevice = deviceHubInstance.findDeviceByToken(deviceToken);
-      if (pairedDevice || (env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN)) {
-        req.device = pairedDevice || { id: "companion-device", name: "Paired Companion", authToken: deviceToken };
+      try {
+        const pairedDevice = typeof authenticateDeviceToken === "function"
+          ? await authenticateDeviceToken(deviceToken)
+          : null;
+        if (pairedDevice) {
+          req.device = pairedDevice;
+          return next();
+        }
+      } catch (error) {
+        logger.warn?.("Paired-device authentication failed", { name: error?.name || "Error" });
+      }
+
+      // The legacy process-local DeviceHub is deliberately disabled in production.
+      // Use the persistent Supabase token-hash registry for newly paired devices.
+      if (env.NODE_ENV !== "production" && env.ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH === "true") {
+        const legacyDevice = deviceHubInstance.findDeviceByToken(deviceToken);
+        if (legacyDevice) {
+          req.device = legacyDevice;
+          return next();
+        }
+      }
+
+      // A single static desktop token is retained only as an explicit legacy
+      // migration path. New devices must use the per-device stored token hash.
+      if (env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN) {
+        req.device = { id: "legacy-companion-device", name: "Legacy Companion", authToken: deviceToken };
         return next();
       }
       return res.status(401).json({
         error: {
           code: "INVALID_DEVICE_TOKEN",
-          message: "The provided x-device-token is invalid or unauthenticated."
+          message: "The provided x-device-token is invalid, expired, or revoked. Re-pair this companion."
         }
       });
     }
