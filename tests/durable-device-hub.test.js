@@ -10,7 +10,7 @@ test("Durable DeviceHub: Complete lifecycle, restart recovery, token hashing, an
   const storePath = path.join(tmpDir, "paired-devices.json");
 
   await t.test("pairing, single-use claim, and token hashing", () => {
-    const hub = new DeviceHub({ durableStoragePath: storePath });
+    const hub = new DeviceHub({ durableStoragePath: storePath, env: { ULTRON_DEVICE_SIGNING_SECRET: "unit-test-device-signing-secret-at-least-32-chars" } });
 
     // Step 1: Create pairing code
     const pairing = hub.createPairingCode({ name: "Windows Companion PC", platform: "windows" });
@@ -43,7 +43,7 @@ test("Durable DeviceHub: Complete lifecycle, restart recovery, token hashing, an
 
   await t.test("restart recovery: second DeviceHub instance reloads paired device without plaintext token on disk", () => {
     // Instantiate brand new DeviceHub instance pointing to same file (simulating server restart)
-    const hubRestarted = new DeviceHub({ durableStoragePath: storePath });
+    const hubRestarted = new DeviceHub({ durableStoragePath: storePath, env: { ULTRON_DEVICE_SIGNING_SECRET: "unit-test-device-signing-secret-at-least-32-chars" } });
 
     const devices = hubRestarted.listPairedDevices("owner-uuid-1234");
     assert.equal(devices.length, 1);
@@ -69,7 +69,7 @@ test("Durable DeviceHub: Complete lifecycle, restart recovery, token hashing, an
   });
 
   await t.test("cryptographic command signing and verification across server restart", () => {
-    const hub = new DeviceHub({ durableStoragePath: storePath });
+    const hub = new DeviceHub({ durableStoragePath: storePath, env: { ULTRON_DEVICE_SIGNING_SECRET: "unit-test-device-signing-secret-at-least-32-chars" } });
     const devices = hub.listPairedDevices();
     const deviceId = devices[0].id;
     const devRecord = hub.pairedDevices.get(deviceId);
@@ -99,7 +99,7 @@ test("Durable DeviceHub: Complete lifecycle, restart recovery, token hashing, an
   });
 
   await t.test("token rotation and device revocation", () => {
-    const hub = new DeviceHub({ durableStoragePath: storePath });
+    const hub = new DeviceHub({ durableStoragePath: storePath, env: { ULTRON_DEVICE_SIGNING_SECRET: "unit-test-device-signing-secret-at-least-32-chars" } });
     const devices = hub.listPairedDevices();
     const deviceId = devices[0].id;
     const oldToken = hub.pairedDevices.get(deviceId).authToken;
@@ -127,4 +127,39 @@ test("Durable DeviceHub: Complete lifecycle, restart recovery, token hashing, an
 
   // Cleanup
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+});
+
+test("DeviceHub refuses durable persistence without a dedicated encryption secret", () => {
+  const tmpDir = path.join(os.tmpdir(), "ultron-devicehub-no-secret-" + Date.now());
+  const storePath = path.join(tmpDir, "paired-devices.json");
+  const hub = new DeviceHub({
+    durableStoragePath: storePath,
+    env: { SUPABASE_SERVICE_ROLE_KEY: "service-role-key-must-not-be-reused-for-device-encryption" }
+  });
+
+  assert.equal(hub.isPersistent, false);
+  assert.equal(hub.persistenceError, "ULTRON_DEVICE_SIGNING_SECRET_REQUIRED_MIN_32_CHARS");
+  assert.equal(hub.saveToDisk(), false);
+  assert.equal(fs.existsSync(storePath), false);
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+});
+
+test("DeviceHub direct verification binds the authenticated owner", () => {
+  const hub = new DeviceHub({ env: {} });
+  const pairing = hub.createPairingCode({ name: "Owner A device", platform: "windows" });
+  const verified = hub.verifyPairingCode(pairing.code, null, "owner-a");
+  assert.equal(verified.success, true);
+  assert.equal(hub.listPairedDevices("owner-a").length, 1);
+  assert.equal(hub.listPairedDevices("owner-b").length, 0);
+});
+
+test("paired-device migration does not expose unapproved short pairing codes to authenticated clients", () => {
+  const sql = fs.readFileSync(
+    new URL("../supabase/migrations/20261101180000_durable_paired_devices.sql", import.meta.url),
+    "utf8"
+  );
+  assert.match(sql, /revoke\s+all\s+on\s+table\s+public\.pending_device_pairings\s+from\s+anon\s*,\s*authenticated/i);
+  assert.match(sql, /grant\s+all\s+on\s+table\s+public\.pending_device_pairings\s+to\s+service_role/i);
+  assert.doesNotMatch(sql, /approved\s*=\s*false/i);
+  assert.match(sql, /revoke\s+insert\s*,\s*update\s*,\s*delete\s+on\s+table\s+public\.paired_devices\s+from\s+anon\s*,\s*authenticated/i);
 });
