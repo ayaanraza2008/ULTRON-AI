@@ -224,7 +224,8 @@ export class HandTrackingService {
   async start(existingStream = null) {
     if (this.isTracking) return;
     await this.permissionManager.requestCamera(undefined, existingStream);
-    if (!this.landmarker && this.mode === "AUTO") {
+    if (!this.landmarker && (this.mode === "AUTO" || this.mode === "UNAVAILABLE")) {
+      // Allow an operator-initiated retry after a transient CDN/model failure.
       await this.initialize();
     }
     if (!this.landmarker || this.mode !== "MEDIAPIPE") {
