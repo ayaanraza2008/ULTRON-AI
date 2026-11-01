@@ -13,15 +13,14 @@
 - **Base Production SHA:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
 - **Active Development Branch:** `feat/ultron-cyber-core`
 - **PR Reference:** `https://github.com/ayaanraza2008/ULTRON-AI/pull/440`
-- **Automated Test Results:** **1,128 Tests Total — 1,127 PASS, 0 FAIL, 1 SKIP** (`tests/supabase-isolation.e2e.test.js` skipped awaiting dedicated disposable live test accounts; 0 CI test failures across all test suites)
-- **Syntax Integrity:** **294 / 294 Files Verified Clean** (`scripts/check-syntax.mjs` with `node --check`)
+- **Automated Test Results:** **1,162 Tests Total — 1,161 PASS, 0 FAIL, 1 SKIP (verified on dd66ece1; corrective vision patch 1ef0eb5 awaits CI)** (`tests/supabase-isolation.e2e.test.js` skipped awaiting dedicated disposable live test accounts; 0 CI test failures across all test suites)
+- **Syntax Integrity:** **303 / 303 Files Verified Clean (verified on dd66ece1)** (`scripts/check-syntax.mjs` with `node --check`)
 - **Repository Defensive Security Quality Gate:**
-  - **SAST Code Shield:** Scanned 167 files (51,488 lines) across 14 CWE rules — **0 Findings, PASSED**.
-  - **SCA Dependency Audit:** Genuine `npm audit --json` across 94 dependencies — **0 Vulnerabilities, PASSED**.
-  - **Zero-Retention Secret Scanner:** Scanned 322 files and 30 Git commits — **0 Secrets, PASSED**.
-  - **Quality Gate Outcome:** **100% PASSED**.
+  - **Local security report snapshot:** Native SAST scanned 177 files / 53,654 lines; `npm audit` scanned 94 dependencies; native secret scanning covered 334 files / 30 Git commits, with zero findings in that snapshot.
+  - **Tool limitations:** Semgrep, ESLint security plugins, Trivy/OSV and Gitleaks were unavailable; native fallback rules were used.
+  - **CI scope:** Latest retrieved GitHub workflow verified syntax and automated tests but did not run the complete `npm run security:report` command. Do not treat the local snapshot as an independent zero-risk certification.
 - **Hardware Profile:** AMD Ryzen 7 5700U with Radeon Graphics, 16 Cores, 7 GB RAM, 512 GB SSD (Pure CPU execution, Zero mandatory CUDA).
-- **Host Companion:** Live verified on local Windows 11 host `PC-LENOVO` (Build 26100) via `node scripts/check-windows-companion.mjs` (All 5/5 diagnostics passed; WDA_EXCLUDEFROMCAPTURE 0x11 active).
+- **Host Companion:** Repository documentation records a 5/5 local Windows diagnostic run; current GitHub CI verifies compilation and publishing, not physical-device microphone, pairing or full desktop-control behaviour.
 
 ---
 
@@ -98,3 +97,11 @@
   2. Live Camera Multimodal Inference: Requires `OPENROUTER_API_KEY`
   3. Background Worker Loopback Queue: Requires `SUPABASE_SERVICE_ROLE_KEY`
   4. Live Two-Account RLS Database Test: Skipped by design awaiting disposable test accounts
+
+
+## 2026-11-01 corrective audit note
+
+- The previous CI baseline was 1,162 tests (1,161 pass, 0 fail, 1 skipped) and 303/303 syntax checks on commit `dd66ece1dd8901ed77436866ea06752ecb19260f`.
+- Vision corrections are now on this branch at `1ef0eb57bb30fb5e0b42040a8c68934b382bc65d`; the previous totals are not verification of that patch until its CI completes.
+- Vision inference stays blocked until a callable inference runner is connected. API-key presence and model identifiers alone are not proof of inference.
+- Supabase Security Advisor still reports leaked-password protection disabled; application-side breached-password screening is an additional mitigation only.

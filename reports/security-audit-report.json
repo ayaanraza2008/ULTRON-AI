@@ -1,7 +1,7 @@
 {
   "metadata": {
     "generatedAt": "2026-11-01T10:59:53.550Z",
-    "targetRepository": "C:\\Users\\Ali Raza Zaidi\\.gemini\\antigravity\\scratch\\ULTRON-AI",
+    "targetRepository": "REDACTED_LOCAL_REPOSITORY_PATH",
     "elapsedSeconds": 4.89,
     "summary": {
       "confirmedVulnerabilitiesCount": 0,
@@ -9,7 +9,8 @@
       "informationalFindingsCount": 0,
       "skippedToolsCount": 4,
       "isQualityGatePassed": true
-    }
+    },
+    "note": "Local absolute workstation paths are redacted before publication."
   },
   "metrics": {
     "sast": {
