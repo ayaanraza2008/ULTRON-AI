@@ -1,4 +1,4 @@
-# ULTRON AI — FINAL MASTER COMPLETION REPORT
+> **Correction / superseded scorecard (2026-11-01):** This document is a historical engineering snapshot, not the current release decision. Its `100%` production-readiness line is withdrawn: PR #440 is still unmerged, production Render services still run older branch revisions, live model/vision/worker and two-account Supabase E2E checks remain blocked, and Supabase leaked-password protection is still disabled. Use `docs/ULTRON_POST_ANTIGRAVITY_AUDIT_2026-11-01.md` as the current evidence-backed report.\n\n# ULTRON AI — FINAL MASTER COMPLETION REPORT
 ## JARVIS × ULTRON | FULL-SYSTEM ENGINEERING, AUTONOMY, SECURITY & READINESS
 **Evaluation Timestamp:** 2026-11-01T12:35:00+05:30  
 **Target Repository:** `ayaanraza2008/ULTRON-AI`  
@@ -67,6 +67,6 @@ Each subsystem is evaluated according to strict measurable acceptance criteria a
 
 ## 3. COMPREHENSIVE SCORE SUMMARY
 
-- **Software Completion Score:** **100.0%** (All 18 subsystems fully authored, documented, syntax clean, and unit/integration tested).
-- **Operational Verification Score:** **89.5%** (Live verified on local host hardware across voice synthesis, SAPI fallback, SAST, SCA, Secret Scanner, Windows Companion, and Robotics simulation; remaining blocked items are strictly external credentials and physical hardware boundaries).
-- **Production Deployment Readiness:** **100.0%** (Codebase is 100% green, passing CI, merge conflict free, with zero regressions).
+- **Software Completion Score:** Historical self-reported checklist coverage only; it is not an independent live-acceptance score and must not be interpreted as 100% operational completion.
+- **Operational Verification Score:** The historical 89.5% value is not recalculated against current external services. Current blocked items include live provider/vision inference, live worker execution, two-account RLS, device persistence on the deployed host, physical Windows voice/control, and the active Supabase platform warning.
+- **Production Deployment Readiness:** **NOT READY**. The feature PR is unmerged and has not been deployed; current production services remain on older revisions. A green feature-branch CI run is not production verification.
