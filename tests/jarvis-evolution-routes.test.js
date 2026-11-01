@@ -19,7 +19,10 @@ async function withRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-use
     return res.status(401).json({ error: { message: "Unauthorized" } });
   };
   app.use(express.json());
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, deviceHub }));
+  app.use("/api", createJarvisRouter({
+    env, requireSupabaseUser, deviceHub,
+    authenticateDeviceToken: async token => deviceHub?.findDeviceByToken(token) || null
+  }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
