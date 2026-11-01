@@ -46,10 +46,14 @@ create table if not exists public.pending_device_pairings (
   approved_by uuid references auth.users(id) on delete cascade,
   device_id uuid,
   token_hash text,
+  token_prefix text,
   encrypted_token text,
   created_at timestamptz not null default now(),
   expires_at timestamptz not null default (now() + interval '5 minutes')
 );
+
+alter table public.pending_device_pairings
+  add column if not exists token_prefix text;
 
 create index if not exists pending_pairings_expiry_idx
   on public.pending_device_pairings (expires_at);
@@ -74,6 +78,7 @@ returns table (
   device_name text,
   platform text,
   token_hash text,
+  token_prefix text,
   encrypted_token text
 )
 language plpgsql
@@ -95,6 +100,7 @@ begin
      and approved_by is not null
      and device_id is not null
      and token_hash is not null
+     and token_prefix is not null
      and encrypted_token is not null
      and expires_at > now()
    for update;
@@ -112,7 +118,7 @@ begin
     pairing.device_name,
     pairing.platform,
     pairing.token_hash,
-    left('ultron_dev_' || pairing.token_hash, 20),
+    pairing.token_prefix,
     'active',
     '{}'::jsonb,
     now(),
@@ -123,7 +129,7 @@ begin
 
   return query
     select pairing.device_id, pairing.approved_by, pairing.device_name,
-           pairing.platform, pairing.token_hash, pairing.encrypted_token;
+           pairing.platform, pairing.token_hash, pairing.token_prefix, pairing.encrypted_token;
 end;
 $$;
 
