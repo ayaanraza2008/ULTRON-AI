@@ -4,6 +4,9 @@ using System.Speech.Recognition;
 using System.Speech.Synthesis;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
@@ -33,6 +36,8 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly CheckBox _autoStartCheckBox;
+    private readonly TextBox _pairingCodeBox;
+    private readonly Button _pairButton;
     private bool _suppressAutoStartChange;
     private SpeechRecognitionEngine? _recognizer;
     private SpeechRecognitionEngine? _commandRecognizer;
@@ -53,23 +58,24 @@ internal sealed class CompanionContext : ApplicationContext
         _window = new Form
         {
             Text = "ULTRON Wake Companion",
-            Width = 480,
-            Height = 255,
+            Width = 520,
+            Height = 330,
             StartPosition = FormStartPosition.CenterScreen,
-            MinimumSize = new System.Drawing.Size(430, 230)
+            MinimumSize = new System.Drawing.Size(450, 300)
         };
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(16)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 18));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 19));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 23));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 21));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 17));
 
         var title = new Label
         {
@@ -94,6 +100,24 @@ internal sealed class CompanionContext : ApplicationContext
         };
         _autoStartCheckBox.CheckedChanged += (_, _) => HandleAutoStartChanged();
 
+        var pairingPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(0, 4, 0, 0)
+        };
+        _pairingCodeBox = new TextBox
+        {
+            Width = 220,
+            MaxLength = 80,
+            PlaceholderText = "6-digit code or rotated device token"
+        };
+        _pairButton = new Button { Text = "Pair / update token", AutoSize = true };
+        _pairButton.Click += async (_, _) => await PairDeviceAsync();
+        pairingPanel.Controls.Add(_pairingCodeBox);
+        pairingPanel.Controls.Add(_pairButton);
+
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -113,7 +137,8 @@ internal sealed class CompanionContext : ApplicationContext
         layout.Controls.Add(title, 0, 0);
         layout.Controls.Add(_status, 0, 1);
         layout.Controls.Add(buttons, 0, 2);
-        layout.Controls.Add(_autoStartCheckBox, 0, 3);
+        layout.Controls.Add(pairingPanel, 0, 3);
+        layout.Controls.Add(_autoStartCheckBox, 0, 4);
         _window.Controls.Add(layout);
 
         _floatingCore = new FloatingCoreOverlayForm(this);
@@ -559,6 +584,135 @@ internal sealed class CompanionContext : ApplicationContext
         }
     }
 
+    private async Task PairDeviceAsync()
+    {
+        if (_pairButton.Enabled == false) return;
+        var entered = _pairingCodeBox.Text.Trim();
+        if (Regex.IsMatch(entered, @"^ultron_dev_[a-f0-9]{64}$", RegexOptions.IgnoreCase))
+        {
+            try
+            {
+                SaveDeviceToken(entered);
+                _pairingCodeBox.Clear();
+                ShowStatus("Updated the paired device token securely in this Windows user's profile.");
+            }
+            catch
+            {
+                ShowStatus("Could not protect the new device token with Windows user encryption.");
+            }
+            return;
+        }
+
+        if (!Regex.IsMatch(entered, @"^\d{6}$"))
+        {
+            ShowStatus("Enter the six-digit code shown by ULTRON, or paste a newly rotated device token.");
+            return;
+        }
+
+        _pairButton.Enabled = false;
+        _pairButton.Text = "Pairing…";
+        try
+        {
+            var backendUrl = Environment.GetEnvironmentVariable("ULTRON_BACKEND_URL");
+            if (string.IsNullOrWhiteSpace(backendUrl))
+                backendUrl = "https://ultron-ai-core.onrender.com";
+
+            if (!Uri.TryCreate(backendUrl.TrimEnd('/'), UriKind.Absolute, out var backendUri) ||
+                !string.IsNullOrEmpty(backendUri.UserInfo) ||
+                !string.IsNullOrEmpty(backendUri.Query) ||
+                !string.IsNullOrEmpty(backendUri.Fragment) ||
+                !(backendUri.Scheme == Uri.UriSchemeHttps ||
+                  (backendUri.Scheme == Uri.UriSchemeHttp && backendUri.IsLoopback)))
+            {
+                ShowStatus("ULTRON backend URL rejected. Use HTTPS (HTTP is allowed only for localhost development).");
+                return;
+            }
+
+            var requestUrl = new Uri(backendUri, "/api/devices/pairings/claim");
+            var payload = System.Text.Json.JsonSerializer.Serialize(new { code = entered });
+            using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+            using var response = await s_httpClient.SendAsync(request);
+            var responseJson = await response.Content.ReadAsStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(responseJson) ? "{}" : responseJson);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorMessage = doc.RootElement.TryGetProperty("error", out var errorNode) &&
+                    errorNode.TryGetProperty("message", out var messageNode)
+                    ? messageNode.GetString()
+                    : null;
+                ShowStatus(string.IsNullOrWhiteSpace(errorMessage)
+                    ? $"Pairing failed (HTTP {(int)response.StatusCode}). Check the code and backend."
+                    : errorMessage);
+                return;
+            }
+
+            var token = doc.RootElement.TryGetProperty("deviceToken", out var tokenNode) ? tokenNode.GetString() : null;
+            var deviceName = doc.RootElement.TryGetProperty("deviceName", out var nameNode) ? nameNode.GetString() : null;
+            if (string.IsNullOrWhiteSpace(token) || !Regex.IsMatch(token, @"^ultron_dev_[a-f0-9]{64}$", RegexOptions.IgnoreCase))
+            {
+                ShowStatus("ULTRON returned an invalid device token. Pairing was not saved.");
+                return;
+            }
+
+            SaveDeviceToken(token);
+            _pairingCodeBox.Clear();
+            ShowStatus("Paired securely" + (string.IsNullOrWhiteSpace(deviceName) ? "." : " as " + deviceName + ".") + " Token protected with Windows DPAPI.");
+        }
+        catch (TaskCanceledException)
+        {
+            ShowStatus("Device pairing timed out. Request a new code if the current one expired.");
+        }
+        catch
+        {
+            ShowStatus("Device pairing failed. Check the backend connection and try again.");
+        }
+        finally
+        {
+            _pairButton.Enabled = true;
+            _pairButton.Text = "Pair / update token";
+        }
+    }
+
+    private static string DeviceTokenPath()
+    {
+        var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(root, "ULTRON", "device-token.bin");
+    }
+
+    private static void SaveDeviceToken(string token)
+    {
+        var entropy = Encoding.UTF8.GetBytes("ULTRON.WindowsCompanion.DeviceToken.v1");
+        var clear = Encoding.UTF8.GetBytes(token);
+        var protectedBytes = ProtectedData.Protect(clear, entropy, DataProtectionScope.CurrentUser);
+        var path = DeviceTokenPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporaryPath = path + ".tmp";
+        File.WriteAllBytes(temporaryPath, protectedBytes);
+        File.Move(temporaryPath, path, overwrite: true);
+        CryptographicOperations.ZeroMemory(clear);
+        Environment.SetEnvironmentVariable("ULTRON_DEVICE_TOKEN", token);
+    }
+
+    private static string? LoadDeviceToken()
+    {
+        var fromEnvironment = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
+        if (!string.IsNullOrWhiteSpace(fromEnvironment)) return fromEnvironment;
+        try
+        {
+            var path = DeviceTokenPath();
+            if (!File.Exists(path)) return null;
+            var protectedBytes = File.ReadAllBytes(path);
+            var entropy = Encoding.UTF8.GetBytes("ULTRON.WindowsCompanion.DeviceToken.v1");
+            var clear = ProtectedData.Unprotect(protectedBytes, entropy, DataProtectionScope.CurrentUser);
+            try { return Encoding.UTF8.GetString(clear); }
+            finally { CryptographicOperations.ZeroMemory(clear); }
+        }
+        catch { return null; }
+    }
+
     private async Task DispatchVoiceCommandAsync(string commandText, string language)
     {
         try
@@ -584,7 +738,7 @@ internal sealed class CompanionContext : ApplicationContext
                 return;
             }
 
-            var deviceToken = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
+            var deviceToken = LoadDeviceToken();
             if (string.IsNullOrWhiteSpace(deviceToken))
                 deviceToken = Environment.GetEnvironmentVariable("ULTRON_DESKTOP_AGENT_TOKEN");
             if (string.IsNullOrWhiteSpace(deviceToken))
