@@ -491,78 +491,32 @@ test("premium speech endpoints fail clearly when no provider is configured", asy
   });
 });
 
-test("Fish Audio synthesis leaves language selection to the multilingual TTS model and keeps its key server-side", async () => {
-  const calls = [];
-  const env = {
-    ULTRON_ENABLE_FISH_AUDIO: "true",
-    FISH_API_KEY: "synthetic-fish-secret"
-  };
-  await withServer(env, async base => {
-    const response = await fetch(base + "/api/speech/synthesize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: "Hello ULTRON", voice: "alloy" })
-    });
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("content-type"), "audio/mpeg");
-    assert.equal(response.headers.get("x-ultron-speech-provider"), "fish-audio");
-    assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from("fake-fish-mp3"));
-  }, { fetchImpl: async (url, options = {}) => {
-    calls.push({ url, options });
-    assert.equal(url, "https://api.fish.audio/v1/tts");
-    assert.equal(options.method, "POST");
-    assert.equal(options.redirect, "error");
-    assert.equal(options.headers.Authorization, "Bearer synthetic-fish-secret");
-    assert.equal(options.headers.model, "s2.1-pro-free");
-    const body = JSON.parse(options.body);
-    assert.equal(body.text, "Hello ULTRON");
-    assert.equal(Object.hasOwn(body, "language"), false);
-    assert.equal(body.reference_id, "db9ad6eb7fb84294b2046cf05ef64718");
-    assert.equal(body.format, "mp3");
-    assert.equal(body.latency, "balanced");
-    assert.equal(body.normalize, true);
-    assert.deepEqual(body.prosody, { speed: 1, volume: 0, normalize_loudness: true });
-    assert.equal(JSON.stringify(body).includes("synthetic-fish-secret"), false);
-    return new Response(Buffer.from("fake-fish-mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
-  }});
-  assert.equal(calls.length, 1);
-});
-
-test("Fish Audio synthesis does not force English when the text is Hindi or code-switched", async () => {
-  const samples = [
-    "नमस्ते ULTRON, मेरी मदद करो।",
-    "Hello ULTRON, आज मौसम कैसा है?"
-  ];
-  const seen = [];
-  await withServer({ ULTRON_ENABLE_FISH_AUDIO: "true",
-    FISH_API_KEY: "synthetic-fish-secret" }, async base => {
-    for (const text of samples) {
-      const response = await fetch(base + "/api/speech/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text })
-      });
-      assert.equal(response.status, 200);
-      await response.arrayBuffer();
-    }
-  }, { fetchImpl: async (_url, options = {}) => {
-    const body = JSON.parse(options.body);
-    seen.push(body);
-    assert.equal(Object.hasOwn(body, "language"), false);
-    return new Response(Buffer.from("fake-fish-mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
-  }});
-  assert.equal(seen.length, samples.length);
-  assert.deepEqual(seen.map(item => item.text), samples);
-});
-
-test("Fish Audio transcription sends recorded audio as multipart audio and returns detected language", async () => {
-  const calls = [];
+test("retired Fish Audio keys and opt-in flags never activate backend TTS or STT", async () => {
+  let upstreamCalls = 0;
   await withServer({
+    FISH_API_KEY: "synthetic-retired-secret",
     ULTRON_ENABLE_FISH_AUDIO: "true",
-    FISH_API_KEY: "synthetic-fish-secret",
+    FISH_AUDIO_TTS_MODEL: "s2.1-pro-free",
     FISH_AUDIO_STT_MODEL: "transcribe-1"
   }, async base => {
-    const response = await fetch(base + "/api/speech/transcribe", {
+    const capabilitiesResponse = await fetch(base + "/api/capabilities");
+    assert.equal(capabilitiesResponse.status, 200);
+    const capabilities = await capabilitiesResponse.json();
+    assert.equal(capabilities.providers.speech.fishAudioConfigured, false);
+    assert.equal(capabilities.providers.speech.premiumTtsConfigured, false);
+    assert.equal(capabilities.providers.speech.premiumSttConfigured, false);
+    assert.equal(capabilities.providers.speech.provider, "browser-fallback");
+    assert.equal(JSON.stringify(capabilities).includes("synthetic-retired-secret"), false);
+
+    const tts = await fetch(base + "/api/speech/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Hello ULTRON" })
+    });
+    assert.equal(tts.status, 503);
+    assert.equal((await tts.json()).error.code, "TTS_NOT_CONFIGURED");
+
+    const stt = await fetch(base + "/api/speech/transcribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -571,74 +525,15 @@ test("Fish Audio transcription sends recorded audio as multipart audio and retur
         language: "en"
       })
     });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { text: "Hello from Fish Audio", language: "en", provider: "fish-audio" });
-  }, { fetchImpl: async (url, options = {}) => {
-    calls.push({ url, options });
-    assert.equal(url, "https://api.fish.audio/v1/asr");
-    assert.equal(options.method, "POST");
-    assert.equal(options.redirect, "error");
-    assert.equal(options.headers.Authorization, "Bearer synthetic-fish-secret");
-    assert.equal(options.headers.model, "transcribe-1");
-    assert.equal(options.body instanceof FormData, true);
-    const entries = Object.fromEntries([...options.body.entries()].map(([key, value]) => [key, value]));
-    assert.equal(entries.audio instanceof Blob, true);
-    assert.equal(entries.audio.type, "audio/wav");
-    assert.equal(entries.language, "en");
-    assert.equal(entries.ignore_timestamps, "true");
-    assert.equal(Object.hasOwn(entries, "file"), false);
-    return new Response(JSON.stringify({ text: "Hello from Fish Audio", language_code: "en", language: "English", duration: 1, segments: [] }), {
-      status: 200, headers: { "Content-Type": "application/json" }
-    });
-  }});
-  assert.equal(calls.length, 1);
-});
-
-test("legacy Fish Audio credentials stay disabled by default", async () => {
-  await withServer({ FISH_API_KEY: "synthetic-fish-secret" }, async base => {
-    const response = await fetch(base + "/api/capabilities");
-    assert.equal(response.status, 200);
-    const body = await response.json();
-    assert.equal(body.providers.speech.fishAudioConfigured, false);
-    assert.equal(body.providers.speech.premiumTtsConfigured, false);
-    assert.equal(body.providers.speech.premiumSttConfigured, false);
-    assert.equal(body.providers.speech.provider, "browser-fallback");
-    assert.equal(JSON.stringify(body).includes("synthetic-fish-secret"), false);
+    assert.equal(stt.status, 503);
+    assert.equal((await stt.json()).error.code, "STT_NOT_CONFIGURED");
+  }, {
+    fetchImpl: async () => {
+      upstreamCalls += 1;
+      throw new Error("Retired Fish Audio provider must never be contacted.");
+    }
   });
-});
-
-test("Fish Audio synthesis stays disabled when a legacy key exists but explicit opt-in is absent", async () => {
-  let upstreamCalls = 0;
-  await withServer({ FISH_API_KEY: "synthetic-fish-secret" }, async base => {
-    const response = await fetch(base + "/api/speech/synthesize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: "Hello ULTRON" })
-    });
-    assert.equal(response.status, 503);
-    assert.equal((await response.json()).error.code, "TTS_NOT_CONFIGURED");
-  }, { fetchImpl: async () => {
-    upstreamCalls += 1;
-    throw new Error("Fish Audio must not be contacted without explicit opt-in");
-  }});
   assert.equal(upstreamCalls, 0);
-});
-
-test("capabilities report explicitly enabled Fish Audio configuration without exposing its API key", async () => {
-  await withServer({
-    ULTRON_ENABLE_FISH_AUDIO: "true",
-    FISH_API_KEY: "synthetic-fish-secret",
-    FISH_AUDIO_VOICE_MODEL_ID: "db9ad6eb7fb84294b2046cf05ef64718"
-  }, async base => {
-    const response = await fetch(base + "/api/capabilities");
-    assert.equal(response.status, 200);
-    const body = await response.json();
-    assert.equal(body.providers.speech.fishAudioConfigured, true);
-    assert.equal(body.providers.speech.premiumTtsConfigured, true);
-    assert.equal(body.providers.speech.premiumSttConfigured, true);
-    assert.equal(body.providers.speech.provider, "fish-audio");
-    assert.equal(JSON.stringify(body).includes("synthetic-fish-secret"), false);
-  });
 });
 
 test("document extraction rejects malformed DOCX payloads", async () => {
