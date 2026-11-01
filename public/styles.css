@@ -339,6 +339,8 @@ body.composer-open .core-coordinate { opacity: .2; }
 .camera-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
 .camera-buttons button { min-height: 36px; padding: 6px 8px; border: 1px solid rgba(85,169,225,.32); border-radius: 8px; background: rgba(7,20,39,.76); color: #90dfff; cursor: pointer; font: 8px "SFMono-Regular", Consolas, monospace; letter-spacing: .07em; }
 .camera-buttons button:disabled { opacity: .4; cursor: not-allowed; }
+.camera-buttons #gesture-toggle { grid-column: 1 / -1; }
+.camera-buttons #gesture-toggle[aria-pressed="true"] { border-color: rgba(255,70,143,.62); color: #ffc0dc; background: rgba(73,10,42,.48); }
 .camera-buttons .camera-primary { border-color: rgba(255,70,143,.42); color: #ff9ec9; background: rgba(73,10,42,.32); }
 .live-observe-toggle { display: flex; gap: 9px; align-items: flex-start; margin-top: 11px; color: #b7c8e1; cursor: pointer; }
 .live-observe-toggle input { margin: 2px 0 0; accent-color: #ff427d; }
