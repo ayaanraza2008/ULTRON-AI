@@ -42,6 +42,7 @@ test("Android wake companion uses on-device speech with explicit microphone and 
   const activity = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/MainActivity.kt", import.meta.url), "utf8");
   const service = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/WakeWordService.kt", import.meta.url), "utf8");
   const manifest = await readFile(new URL("../android-companion/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  const tokenStore = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/DeviceTokenStore.kt", import.meta.url), "utf8");
 
   assert.ok(activity.includes("SpeechRecognizer.isOnDeviceRecognitionAvailable(this)"));
   assert.ok(activity.includes("Manifest.permission.RECORD_AUDIO"));
@@ -59,7 +60,19 @@ test("Android wake companion uses on-device speech with explicit microphone and 
   assert.ok(manifest.includes('android:usesCleartextTraffic="false"'));
   assert.ok(manifest.includes("android.permission.RECORD_AUDIO"));
   assert.ok(manifest.includes("android.permission.POST_NOTIFICATIONS"));
-  assert.doesNotMatch(manifest, /android\.permission\.INTERNET/);
+  assert.ok(manifest.includes("android.permission.INTERNET"));
+  assert.ok(manifest.includes('android:usesCleartextTraffic="false"'));
+  assert.ok(main.includes("/api/devices/pairings/claim"));
+  assert.ok(main.includes("/api/jarvis/voice/process-command"));
+  assert.ok(main.includes("SpeechRecognizer.createOnDeviceSpeechRecognizer(this)"));
+  assert.ok(main.includes("RecognizerIntent.EXTRA_PREFER_OFFLINE"));
+  assert.ok(main.includes("setRequestProperty(\"x-device-token\", deviceToken)"));
+  assert.ok(main.includes('setOnClickListener { beginVoiceCommand() }'));
+  assert.ok(tokenStore.includes('"AndroidKeyStore"'));
+  assert.ok(tokenStore.includes("AES/GCM/NoPadding"));
+  assert.ok(tokenStore.includes("KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT"));
+  assert.ok(tokenStore.includes("GCMParameterSpec"));
+  assert.doesNotMatch(service, /HttpURLConnection|OkHttpClient|WebSocket|Retrofit/);
   assert.doesNotMatch(service, /HttpURLConnection|OkHttpClient|WebSocket|Retrofit/);
 });
 
@@ -90,4 +103,19 @@ test("Windows companion supports one-time device pairing and DPAPI-protected tok
   assert.ok(source.includes("ultron_dev_[a-f0-9]{64}"));
   assert.ok(project.includes("System.Security.Cryptography.ProtectedData"));
   assert.ok(!source.includes("File.WriteAllText(DeviceTokenPath()"));
+});
+
+test("Android companion only captures a command after an explicit Speak button action", async () => {
+  const main = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/MainActivity.kt", import.meta.url), "utf8");
+  const service = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/WakeWordService.kt", import.meta.url), "utf8");
+  assert.ok(main.includes('setOnClickListener { beginVoiceCommand() }'));
+  assert.ok(main.includes("private fun beginVoiceCommand()"));
+  assert.ok(main.includes("private fun dispatchVoiceCommand(command: String)"));
+  assert.ok(main.includes("DeviceTokenStore.load(this)"));
+  assert.ok(main.includes("DeviceTokenStore.save(this, token)"));
+  assert.ok(main.includes('putExtra("source", "android-companion")') === false);
+  assert.ok(main.includes('.put("source", "android-companion")'));
+  assert.ok(service.includes("SpeechRecognizer.createOnDeviceSpeechRecognizer(this)"));
+  assert.ok(service.includes("getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)"));
+  assert.ok(!service.includes("/api/jarvis/voice/process-command"));
 });
