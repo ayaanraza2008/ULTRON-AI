@@ -302,6 +302,7 @@ export class KokoroEngine {
             speechAvailable: jsonOut.speechAvailable === true && jsonOut.audioKind === "speech",
             audioKind: jsonOut.audioKind || "unknown",
             fallback: Boolean(jsonOut.fallback),
+            fallbackReason: jsonOut.fallbackReason || null,
             timestamp: new Date().toISOString()
           };
 
