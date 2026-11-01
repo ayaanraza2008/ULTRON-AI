@@ -51,12 +51,11 @@ test("CodingSandbox: dynamically probes host Docker daemon without forcing overr
   assert.equal(typeof probe.available, "boolean");
 
   const readiness = await sandbox.initialize();
+  assert.equal(readiness.ready, probe.available);
   if (probe.available) {
-    assert.equal(readiness.ready, true);
     assert.equal(readiness.code, "CODE_SANDBOX_ACTIVE");
     assert.equal(readiness.isolationEngine, "DOCKER_CONTAINER");
   } else {
-    assert.equal(readiness.ready, false);
     assert.equal(readiness.code, "CODE_SANDBOX_DISABLED");
   }
 });

@@ -31,40 +31,50 @@ export class CodingSandbox {
     this.customContainerRunner = options.customContainerRunner || null;
     this.dockerAvailableOverride = typeof options.dockerAvailable === "boolean" ? options.dockerAvailable : null;
     this.dockerVersionOverride = options.dockerVersion || null;
+    this._cachedDockerStatus = null;
   }
 
   /**
    * Probes for a verified Docker daemon runtime on the host.
    */
-  async checkDockerRuntime() {
+  async checkDockerRuntime(forceRefresh = false) {
+    if (!forceRefresh && this._cachedDockerStatus) {
+      return this._cachedDockerStatus;
+    }
+
     if (this.dockerAvailableOverride === false) {
       this.isDockerVerified = false;
-      return { available: false, version: null, reason: "DOCKER_EXPLICITLY_UNAVAILABLE" };
+      this._cachedDockerStatus = { available: false, version: null, reason: "DOCKER_EXPLICITLY_UNAVAILABLE" };
+      return this._cachedDockerStatus;
     }
 
     if (this.dockerAvailableOverride === true) {
       this.isDockerVerified = true;
-      return { available: true, version: this.dockerVersionOverride || "24.0.0-verified" };
+      this._cachedDockerStatus = { available: true, version: this.dockerVersionOverride || "24.0.0-verified" };
+      return this._cachedDockerStatus;
     }
 
     if (this.customContainerRunner) {
       this.isDockerVerified = true;
-      return { available: true, version: "mock-container-runtime" };
+      this._cachedDockerStatus = { available: true, version: "mock-container-runtime" };
+      return this._cachedDockerStatus;
     }
 
     try {
       const { stdout } = await execFileAsync("docker", ["info", "--format", "{{.ServerVersion}}"], {
-        timeout: 3000,
+        timeout: 8000,
         windowsHide: true
       });
       if (stdout && stdout.trim()) {
         this.isDockerVerified = true;
-        return { available: true, version: stdout.trim() };
+        this._cachedDockerStatus = { available: true, version: stdout.trim() };
+        return this._cachedDockerStatus;
       }
     } catch {}
 
     this.isDockerVerified = false;
-    return { available: false, version: null };
+    this._cachedDockerStatus = { available: false, version: null };
+    return this._cachedDockerStatus;
   }
 
   async initialize() {
