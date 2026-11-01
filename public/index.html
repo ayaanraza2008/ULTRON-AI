@@ -92,9 +92,13 @@
     <section id="camera-panel" class="camera-panel" aria-label="ULTRON eyes camera" hidden>
       <div class="camera-topline"><span class="camera-live-dot"></span><span id="camera-status">EYES OFFLINE</span><button id="camera-close" type="button" aria-label="Close camera view">×</button></div>
       <div class="camera-preview"><video id="eye-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder"><span>◎</span><b>CAMERA OFF</b><small>Enable Eyes to request camera permission</small></div><span id="camera-rec-badge" class="camera-rec-badge" hidden>● LIVE</span></div>
-      <div class="camera-buttons"><button id="camera-toggle" type="button" class="camera-primary">ENABLE EYES</button><button id="camera-analyze" type="button" disabled>ANALYZE VIEW</button></div>
+      <div class="camera-buttons">
+        <button id="camera-toggle" type="button" class="camera-primary">ENABLE EYES</button>
+        <button id="camera-analyze" type="button" disabled>ANALYZE VIEW</button>
+        <button id="gesture-toggle" type="button" disabled aria-pressed="false">ENABLE HAND CONTROL</button>
+      </div>
       <label class="live-observe-toggle"><input id="camera-live-observe" type="checkbox" disabled><span><strong>Live observation</strong><small>Analyze one frame every 12 seconds while enabled</small></span></label>
-      <p class="camera-privacy-note">Camera access starts only after you enable it. Frames are sent to the configured vision model only when you analyze or enable live observation; this interface does not store video.</p>
+      <p class="camera-privacy-note">Hand tracking runs locally in this browser after you enable it. The pinned MediaPipe runtime and model are fetched from their listed hosts; gesture camera frames are not uploaded. Separate Eyes analysis sends a selected frame only when you request analysis or enable Live observation. Video is not stored by this interface.</p>
     </section>
     <section class="interaction-dock" aria-label="Choose how to interact with ULTRON">
       <button id="voice-mode" class="mode-card voice-card" type="button" aria-pressed="false">
