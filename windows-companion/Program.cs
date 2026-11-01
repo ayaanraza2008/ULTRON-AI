@@ -43,6 +43,7 @@ internal sealed class CompanionContext : ApplicationContext
     private bool _isDucked = false;
     private readonly object _wakeLock = new();
     private readonly FloatingCoreOverlayForm _floatingCore;
+    private static readonly HttpClient s_httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     public CompanionContext(bool backgroundLaunch = false)
     {
@@ -402,22 +403,78 @@ internal sealed class CompanionContext : ApplicationContext
         }
 
         if (_window.IsDisposed || !_window.IsHandleCreated) return;
-        _window.BeginInvoke((Action)(() =>
+        _window.BeginInvoke((Action)(async () =>
         {
-            _floatingCore?.SetVisualState("EXECUTING");
-            ShowStatus($"{reason} Opening the ULTRON assistant.");
+            _floatingCore?.SetVisualState("LISTENING");
+            ShowStatus($"{reason} Processing voice command...");
             EngageMediaDucking();
             try
             {
                 _tray.BalloonTipTitle = "ULTRON activated";
-                _tray.BalloonTipText = $"{reason} Opening ULTRON in your browser.";
+                _tray.BalloonTipText = $"{reason} Processing voice command.";
                 _tray.BalloonTipIcon = ToolTipIcon.Info;
                 _tray.ShowBalloonTip(2500);
             }
             catch { /* Toast notifications can be disabled by Windows. */ }
-            OpenAssistant();
-            RestoreMediaDucking();
+            await DispatchVoiceCommandAsync("Ultron, status report");
         }));
+    }
+
+    private async Task DispatchVoiceCommandAsync(string commandText)
+    {
+        try
+        {
+            _floatingCore?.SetVisualState("THINKING");
+            ShowStatus("ULTRON thinking...");
+
+            var backendUrl = Environment.GetEnvironmentVariable("ULTRON_BACKEND_URL") ?? "http://127.0.0.1:3000";
+            var requestUrl = $"{backendUrl.TrimEnd('/')}/api/jarvis/voice/process-command";
+
+            var payload = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                command = commandText,
+                language = "en",
+                source = "windows-companion"
+            });
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            var deviceToken = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
+            if (!string.IsNullOrEmpty(deviceToken))
+            {
+                request.Headers.Add("x-device-token", deviceToken);
+            }
+
+            var response = await s_httpClient.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var responseJson = await response.Content.ReadAsStringAsync();
+                using var doc = System.Text.Json.JsonDocument.Parse(responseJson);
+                var textResponse = doc.RootElement.TryGetProperty("textResponse", out var prop) ? prop.GetString() : "Command processed.";
+
+                _floatingCore?.SetVisualState("SPEAKING");
+                ShowStatus($"ULTRON: {textResponse}");
+
+                try
+                {
+                    using var synth = new SpeechSynthesizer();
+                    synth.Speak(textResponse);
+                }
+                catch { /* Speech synthesis fallback */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"ULTRON dispatch error: {ex.Message}");
+        }
+        finally
+        {
+            RestoreMediaDucking();
+            _floatingCore?.SetVisualState("STANDBY");
+        }
     }
 
     private void OpenAssistant()

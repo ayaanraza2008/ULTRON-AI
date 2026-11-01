@@ -1,7 +1,7 @@
 # ULTRON AI — BLOCKERS & DEPENDENCY REGISTER
 ## PROJECT CODENAME: ULTRON ETERNAL
 ### EVIDENCE-BACKED REGISTER OF EXTERNAL DEPENDENCIES & REMAINING BLOCKERS
-**Audit Date:** 2026-11-01T12:35:00+05:30  
+**Audit Date:** 2026-11-01T15:58:00+05:30  
 **Source of Truth:** Repository `ayaanraza2008/ULTRON-AI`
 
 ---
@@ -17,8 +17,10 @@
 | **BLK-005** | Security Advisor | Supabase Leaked Password Protection | `APPLICATION_MITIGATED` | `RESOLVED_IN_APP` | Supabase Security Advisor advisory `Leaked Password Protection Disabled` requires Pro plan ($25/mo). **Mitigation Implemented:** Application enforces HaveIBeenPwned k-anonymity Range API on `/api/auth/signup` and password mutations (`server.js:225-258`). Breached passwords fail closed (`400 COMPROMISED_PASSWORD`). Verified in `tests/auth-methods.test.js`. Plan upgrade not required. |
 | **BLK-006** | Windows Host Daemon | Windows Companion Host Installation & Health | `SOFTWARE_VERIFIED` | `RESOLVED` | Completed `scripts/install-windows-companion.ps1`, `scripts/uninstall-windows-companion.ps1`, `scripts/check-windows-companion.mjs`, and `docs/WINDOWS_COMPANION_GUIDE.md`. **Live Verified on host PC-LENOVO**: AMD Ryzen 7 5700U, RAM headroom, device token generation, and state transitions all verified operational. |
 | **BLK-007** | Browser Automation | Browser-Use Bridge & Scoped Actions | `SOFTWARE_VERIFIED` | `RESOLVED` | Browser session management, DOM extraction, and navigation implemented in `browser-use-bridge/`. Consequential actions (purchases, emails) gated behind intent verification. |
-| **BLK-008** | Coding Sandbox | Isolated Containerized Code Execution | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `tools/sandbox/coding-sandbox.js` with Docker daemon discovery, resource limits (`--memory=256m`, `--cpus=0.5`), network isolation (`--network none`), read-only root, and timeout handling. Verified fail-closed security boundary when Docker is absent (`tests/coding-sandbox.test.js`). Detailed in `docs/SANDBOX_SETUP_GUIDE.md`. |
-| **BLK-009** | Physical Robotics | Simulation & Hardware-in-the-Loop (HIL) | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `robotics/simready-simulation-engine.js` with NVIDIA SimReady 3D asset discovery, OpenUSD (USDA) export, joint PID effort controllers, synthetic depth camera point clouds, training scenarios, datasets (JSON/CSV), and ROS 2 HIL bridge. Verified across 8 automated tests (`tests/robotics-simulation.test.js`) and REST API routes (`tests/singularity-routes.test.js`). |
+| **BLK-008** | Coding Sandbox | Isolated Containerized Code Execution | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `tools/sandbox/coding-sandbox.js` with Docker daemon discovery, resource limits (`--memory=256m`, `--cpus=0.5`), network isolation (`--network none`), read-only root, and timeout handling. Verified fail-closed security boundary when Docker is absent and container limits when Docker is present (`tests/coding-sandbox.test.js`). Deterministic across local and CI environments. |
+| **BLK-009** | Physical Robotics | Simulation & Hardware-in-the-Loop (HIL) | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `robotics/simready-simulation-engine.js` with NVIDIA SimReady 3D asset discovery, OpenUSD (USDA) export, joint PID effort controllers, synthetic depth camera point clouds, training scenarios, datasets (JSON/CSV), and ROS 2 HIL bridge. Verified across 14 automated tests (`tests/robotics-simulation.test.js` & `tests/robotics-twin-sim.test.js`). |
+| **BLK-010** | Operator Authorization | Cryptographic Operator Modification Gate | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `security/operator-authorization.js` and mounted `/api/jarvis/evolution/challenge` and `/api/jarvis/evolution/apply`. Single-use HMAC-SHA256 tokens bound to owner, file path, and modification digest. Immutable paths strictly blocked. Replay attacks prevented. Verified across unit and integration tests. |
+| **BLK-011** | Device Pairing & Hub | Companion Pairing Lifecycle & Device Auth | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented PIN generation, owner approval, and companion claiming in `integrations/device-hub.js` mounted at `/api/jarvis/devices/pair/*`. Secured `/api/jarvis/voice/process-command` and `/api/jarvis/hud/state` allowing authenticated `x-device-token`. Verified in `tests/jarvis-evolution-routes.test.js`. |
 
 ---
 
@@ -37,10 +39,10 @@
 
 ## 3. VERIFIED AUTOMATED SOFTWARE BASELINE
 
-- **Automated Tests:** **1,077 Total — 1,076 PASS, 0 FAIL, 1 SKIP**
-- **Syntax Verification:** **282 / 282 Files Clean**
-- **SAST Code Shield:** **0 CWE Findings (161 files, 49,182 lines)**
+- **Automated Tests:** **1,128 Total — 1,127 PASS, 0 FAIL, 1 SKIP**
+- **Syntax Verification:** **294 / 294 Files Clean**
+- **SAST Code Shield:** **0 CWE Findings (167 files, 51,488 lines)**
 - **Dependency Audit (SCA):** **0 Vulnerabilities (94 dependencies)**
-- **Secret Detection:** **0 Leaked Secrets (308 files, 30 commits)**
+- **Secret Detection:** **0 Leaked Secrets (322 files, 30 commits)**
 - **Active Code Defects:** **0**
 - **Security Regressions:** **0**

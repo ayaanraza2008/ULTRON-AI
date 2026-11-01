@@ -34,7 +34,8 @@ test("Windows wake companion requires microphone consent and performs local wake
   assert.ok(source.includes("Exit"));
   assert.equal((source.match(/Process\.Start\(/g) || []).length, 1);
   assert.ok(source.includes("Process.Start(new ProcessStartInfo(AssistantUrl) { UseShellExecute = true });"));
-  assert.doesNotMatch(source, /HttpClient|HttpWebRequest|WebClient|ClientWebSocket|TcpClient/);
+  assert.ok(source.includes("/api/jarvis/voice/process-command"));
+  assert.doesNotMatch(source, /ClientWebSocket|TcpClient|UdpClient|Socket/);
 });
 
 test("Android wake companion uses on-device speech with explicit microphone and visible Stop controls", async () => {

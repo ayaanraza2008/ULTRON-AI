@@ -75,6 +75,28 @@ export class UltronSelfEvolutionEngine {
   }
 
   /**
+   * Recursively scans repository source files for comprehensive auditing.
+   */
+  scanCodebaseFiles(dirPath, maxFiles = 250, currentFiles = []) {
+    if (!fs.existsSync(dirPath)) return currentFiles;
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (currentFiles.length >= maxFiles) break;
+        const full = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          if (![".git", "node_modules", "dist", "reports", "coverage", ".system_generated", "tmp"].includes(entry.name)) {
+            this.scanCodebaseFiles(full, maxFiles, currentFiles);
+          }
+        } else if (entry.isFile() && (entry.name.endsWith(".js") || entry.name.endsWith(".mjs"))) {
+          currentFiles.push(path.relative(this.rootDir, full).replace(/\\/g, "/"));
+        }
+      }
+    } catch {}
+    return currentFiles;
+  }
+
+  /**
    * Performs comprehensive self-audit across the entire ULTRON AI ecosystem.
    */
   async auditSystem(options = {}) {
@@ -145,24 +167,18 @@ export class UltronSelfEvolutionEngine {
       }
     }
 
-    // 3. Scan for incomplete implementations (TODO/FIXME/STUB)
-    const filesToSample = [
-      "jarvis-router.js",
-      "server.js",
-      "voice/voice-engine.js",
-      "vision/vision-engine.js",
-      "system/windows-capture-affinity.js",
-      "voice/audio-processing-pipeline.js"
-    ];
+    // 3. Scan for incomplete implementations (TODO/FIXME/STUB) across codebase
+    const filesToScan = this.scanCodebaseFiles(this.rootDir, 250);
+    const checkedModules = new Set();
 
-    for (const file of filesToSample) {
+    for (const file of filesToScan) {
       const fullPath = path.join(this.rootDir, file);
       if (fs.existsSync(fullPath)) {
         try {
           const content = fs.readFileSync(fullPath, "utf8");
           const lines = content.split("\n");
           lines.forEach((line, idx) => {
-            if (line.includes("TODO:") || line.includes("FIXME:")) {
+            if (line.includes("TODO:") || line.includes("FIXME:") || line.includes("STUB:")) {
               findings.push({
                 category: WEAKNESS_CATEGORIES.INCOMPLETE_IMPLEMENTATIONS,
                 severity: SEVERITY_LEVELS.P3_LOW,
@@ -174,6 +190,24 @@ export class UltronSelfEvolutionEngine {
               });
             }
           });
+
+          // Check for core modules missing dedicated unit test files
+          const topDir = file.split("/")[0];
+          if (["core", "intelligence", "security", "voice", "vision"].includes(topDir) && file.endsWith(".js")) {
+            const base = path.basename(file, ".js");
+            const testPath = path.join(this.rootDir, "tests", `${base}.test.js`);
+            if (!fs.existsSync(testPath) && !checkedModules.has(base)) {
+              checkedModules.add(base);
+              findings.push({
+                category: WEAKNESS_CATEGORIES.OPPORTUNITIES_FOR_IMPROVEMENT,
+                severity: SEVERITY_LEVELS.P4_OPPORTUNITY,
+                module: file,
+                title: `Unit test suite gap for ${file}`,
+                description: `Dedicated test file tests/${base}.test.js not found for core module.`,
+                recommendation: `Author automated test suite tests/${base}.test.js.`
+              });
+            }
+          }
         } catch {}
       }
     }
@@ -279,6 +313,19 @@ export class UltronSelfEvolutionEngine {
   }
 
   /**
+   * Evaluates if a target module or file path is strictly immutable.
+   */
+  isImmutableTarget(targetPath = "") {
+    const normalized = (targetPath || "").replace(/\\/g, "/");
+    for (const imm of IMMUTABLE_SYSTEM_PATHS) {
+      if (normalized === imm || normalized.startsWith(imm + "/") || normalized.includes("/" + imm + "/") || normalized.includes("/" + imm)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Canonicalizes and validates that target file path is safely confined
    * within the repository root, preventing path traversal and symlink escapes.
    */
@@ -364,6 +411,11 @@ export class UltronSelfEvolutionEngine {
 
     // 1. Canonical path validation & confinement
     const { fullPath, relativePath } = this.canonicalizeAndValidatePath(targetFile);
+
+    // Verify immutable paths (always blocked)
+    if (this.isImmutableTarget(relativePath)) {
+      throw new Error(`SECURITY_VIOLATION: Path '${relativePath}' is strictly immutable and cannot be altered.`);
+    }
 
     // 2. Operator authorization requirement check for restricted areas
     if (this.isRestrictedTarget(relativePath) && !operatorContext.authorized) {
@@ -621,6 +673,17 @@ export class UltronSelfEvolutionEngine {
       return {
         intent: "EVOLVE_CYCLE",
         status: applyResult.success ? "UPGRADE_CYCLE_COMPLETED" : "UPGRADE_CYCLE_ROLLED_BACK",
+        lifecyclePhases: [
+          "AUDIT_COMPLETED",
+          "PLAN_GENERATED",
+          "CANDIDATE_SELECTED",
+          "SNAPSHOT_CAPTURED",
+          "PATCH_STAGED",
+          "SYNTAX_VERIFIED",
+          "SECURITY_VERIFIED",
+          "REGRESSION_VERIFIED",
+          applyResult.success ? "PATCH_PROMOTED" : "PATCH_ROLLED_BACK"
+        ],
         message: applyResult.success
           ? `ULTRON autonomous upgrade cycle completed successfully. System health: ${audit.healthScore}/100. Applied candidate: ${candidate.title}.`
           : `ULTRON upgrade cycle aborted and safely rolled back: ${applyResult.reason}`,

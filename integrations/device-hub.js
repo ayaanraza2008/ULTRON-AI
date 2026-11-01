@@ -76,6 +76,93 @@ export class DeviceHub {
   }
 
   /**
+   * Approve a pending pairing code (owner action).
+   */
+  approvePairingCode(code, ownerUserId = "operator") {
+    const cleanCode = String(code).trim();
+    const entry = this.pendingPairings.get(cleanCode);
+    if (!entry) {
+      return { success: false, error: "INVALID_PAIRING_CODE" };
+    }
+    if (Date.now() > entry.expiresAt) {
+      this.pendingPairings.delete(cleanCode);
+      return { success: false, error: "PAIRING_CODE_EXPIRED" };
+    }
+
+    const deviceId = "dev-" + crypto.randomUUID();
+    const deviceToken = "dev_tok_" + crypto.randomBytes(24).toString("hex");
+
+    const device = {
+      id: deviceId,
+      name: entry.deviceName,
+      platform: entry.platform,
+      authToken: deviceToken,
+      ownerUserId,
+      pairedAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      battery: null,
+      online: true,
+      publicKey: null
+    };
+
+    this.pairedDevices.set(deviceId, device);
+    entry.approved = true;
+    entry.deviceId = deviceId;
+    entry.deviceToken = deviceToken;
+
+    return {
+      success: true,
+      deviceId,
+      deviceToken,
+      deviceName: device.name,
+      platform: device.platform
+    };
+  }
+
+  /**
+   * Claim an approved pairing code (companion device action).
+   */
+  claimPairingCode(code) {
+    const cleanCode = String(code).trim();
+    const entry = this.pendingPairings.get(cleanCode);
+    if (!entry) {
+      return { success: false, error: "INVALID_PAIRING_CODE" };
+    }
+    if (Date.now() > entry.expiresAt) {
+      this.pendingPairings.delete(cleanCode);
+      return { success: false, error: "PAIRING_CODE_EXPIRED" };
+    }
+    if (!entry.approved) {
+      return { success: false, error: "PAIRING_NOT_YET_APPROVED" };
+    }
+
+    const result = {
+      success: true,
+      deviceId: entry.deviceId,
+      deviceToken: entry.deviceToken,
+      deviceName: entry.deviceName,
+      platform: entry.platform
+    };
+
+    this.pendingPairings.delete(cleanCode);
+    return result;
+  }
+
+  /**
+   * Look up a paired device by its token.
+   */
+  findDeviceByToken(token) {
+    if (!token || typeof token !== "string") return null;
+    for (const dev of this.pairedDevices.values()) {
+      if (dev.authToken === token) {
+        dev.lastSeenAt = new Date().toISOString();
+        return dev;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Authenticate a device token.
    */
   authenticateDevice(deviceId, token) {
@@ -265,3 +352,5 @@ export class DeviceHub {
     return { success: true, commandId, status: cmd.status };
   }
 }
+
+export const deviceHub = new DeviceHub();

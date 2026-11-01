@@ -23,6 +23,9 @@ import { nexusOrchestrator } from "./nexus/nexus-orchestrator.js";
 import { ultronGuardian } from "./security/ultron-guardian.js";
 import { humanInterface } from "./intelligence/human-interface.js";
 import { ultronSelfEvolutionEngine } from "./self-improvement/self-evolution-engine.js";
+import crypto from "node:crypto";
+import { operatorAuthorizationService } from "./security/operator-authorization.js";
+import { deviceHub } from "./integrations/device-hub.js";
 /**
  * ULTRON AI — JARVIS × ULTRON Integration Router
  *
@@ -97,6 +100,33 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       return next();
     }
   ];
+
+  const authenticateOwnerOrDevice = (req, res, next) => {
+    const deviceToken = req.headers["x-device-token"];
+    if (deviceToken && typeof deviceToken === "string") {
+      const pairedDevice = deviceHub.findDeviceByToken(deviceToken);
+      if (pairedDevice || (env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN)) {
+        req.device = pairedDevice || { id: "companion-device", name: "Paired Companion", authToken: deviceToken };
+        return next();
+      }
+      return res.status(401).json({
+        error: {
+          code: "INVALID_DEVICE_TOKEN",
+          message: "The provided x-device-token is invalid or unauthenticated."
+        }
+      });
+    }
+
+    let idx = 0;
+    const runMiddleware = () => {
+      if (idx < requireOwner.length) {
+        const mw = requireOwner[idx++];
+        return mw(req, res, runMiddleware);
+      }
+      return next();
+    };
+    runMiddleware();
+  };
 
   const router = express.Router();
   const brain = new BrainRouter({ env });
@@ -453,27 +483,77 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     res.json(result);
   });
 
-  // --- Multi-Device Hub ---
-  router.post("/jarvis/devices/pair/request", requireOwner, (_req, res) => {
-    res.status(503).json({
-      error: {
-        code: "DEVICE_PAIRING_NOT_CONFIGURED",
-        message: "Physical companion pairing is not available until a persistent, authenticated device protocol is connected."
-      }
+  // --- Multi-Device Hub & Companion Pairing ---
+  router.post("/jarvis/devices/pair/request", express.json(), (req, res) => {
+    const isPairingEnabled = env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN);
+    if (!isPairingEnabled) {
+      return res.status(503).json({
+        error: {
+          code: "DEVICE_PAIRING_NOT_CONFIGURED",
+          message: "Physical companion pairing is not available until a persistent, authenticated device protocol is connected."
+        }
+      });
+    }
+    const { deviceName = "Companion Device", platform = "windows" } = req.body || {};
+    const pairing = deviceHub.createPairingCode({ name: deviceName, platform });
+    res.json({
+      success: true,
+      pairingCode: pairing.code,
+      expiresAt: pairing.expiresAt,
+      deviceName: pairing.deviceName
     });
   });
 
-  router.post("/jarvis/devices/pair/verify", requireOwner, (_req, res) => {
-    res.status(503).json({
-      error: {
-        code: "DEVICE_PAIRING_NOT_CONFIGURED",
-        message: "Physical companion pairing is not available until a persistent, authenticated device protocol is connected."
-      }
-    });
+  router.post("/jarvis/devices/pair/approve", requireOwner, express.json(), (req, res) => {
+    const { pairingCode } = req.body || {};
+    if (!pairingCode) {
+      return res.status(400).json({ error: { code: "MISSING_PAIRING_CODE", message: "Pairing code is required." } });
+    }
+    const approved = deviceHub.approvePairingCode(pairingCode, req.supabaseUser?.id);
+    if (!approved.success) {
+      return res.status(400).json({ error: { code: approved.error, message: `Pairing failed: ${approved.error}` } });
+    }
+    res.json(approved);
+  });
+
+  router.post("/jarvis/devices/pair/claim", express.json(), (req, res) => {
+    const { pairingCode } = req.body || {};
+    if (!pairingCode) {
+      return res.status(400).json({ error: { code: "MISSING_PAIRING_CODE", message: "Pairing code is required." } });
+    }
+    const claimed = deviceHub.claimPairingCode(pairingCode);
+    if (!claimed.success) {
+      const status = claimed.error === "PAIRING_NOT_YET_APPROVED" ? 409 : 400;
+      return res.status(status).json({ error: { code: claimed.error, message: `Claim failed: ${claimed.error}` } });
+    }
+    res.json(claimed);
+  });
+
+  router.post("/jarvis/devices/pair/verify", requireOwner, express.json(), (req, res) => {
+    const isPairingEnabled = env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN);
+    if (!isPairingEnabled) {
+      return res.status(503).json({
+        error: {
+          code: "DEVICE_PAIRING_NOT_CONFIGURED",
+          message: "Physical companion pairing is not available until a persistent, authenticated device protocol is connected."
+        }
+      });
+    }
+    const { pairingCode } = req.body || {};
+    const verified = deviceHub.verifyPairingCode(pairingCode);
+    if (!verified.success) {
+      return res.status(400).json({ error: { code: verified.error, message: "Verification failed." } });
+    }
+    res.json(verified);
   });
 
   router.get("/jarvis/devices", requireOwner, (_req, res) => {
-    res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
+    const isPairingEnabled = env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN);
+    if (!isPairingEnabled) {
+      return res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
+    }
+    const devices = deviceHub.listPairedDevices();
+    res.json({ devices, connected: devices.length > 0, status: devices.length > 0 ? "CONFIGURED" : "READY" });
   });
 
   router.post("/jarvis/notifications", requireOwner, (_req, res) => {
@@ -554,7 +634,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   });
 
   // --- Global Voice Command Dispatcher & Autonomous Processor ---
-  router.post("/jarvis/voice/process-command", requireOwner, express.json(), async (req, res) => {
+  router.post("/jarvis/voice/process-command", authenticateOwnerOrDevice, express.json(), async (req, res) => {
     try {
       const { command, language = "en", source = "companion" } = req.body || {};
       const raw = String(command || "").trim();
@@ -1021,14 +1101,14 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     captureProtection: true
   };
 
-  router.get("/jarvis/hud/state", requireOwner, (_req, res) => {
+  router.get("/jarvis/hud/state", authenticateOwnerOrDevice, (_req, res) => {
     res.json({
       success: true,
       hud: currentHudState
     });
   });
 
-  router.post("/jarvis/hud/state", requireOwner, express.json(), (req, res) => {
+  router.post("/jarvis/hud/state", authenticateOwnerOrDevice, express.json(), (req, res) => {
     const { state, activeTask } = req.body || {};
     if (state) currentHudState.state = state;
     if (activeTask !== undefined) currentHudState.activeTask = activeTask;
@@ -1760,21 +1840,61 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     }
   });
 
+  router.post("/jarvis/evolution/challenge", requireOwner, express.json(), (req, res) => {
+    try {
+      const { targetFile, modificationDigest } = req.body || {};
+      const ownerUserId = req.supabaseUser?.id || "operator";
+      const challenge = operatorAuthorizationService.createChallenge({ ownerUserId, targetFile, modificationDigest });
+      res.json({ success: true, challenge });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
   router.post("/jarvis/evolution/apply", requireOwner, express.json(), async (req, res) => {
     try {
-      const { planItemId, modificationSpec, operatorConfirmationToken } = req.body || {};
+      const { planItemId, modificationSpec, approvalToken, operatorConfirmationToken } = req.body || {};
       const targetFile = modificationSpec?.targetFile || "";
+
+      // Reject strictly immutable system paths
+      if (ultronSelfEvolutionEngine.isImmutableTarget(targetFile)) {
+        return res.status(403).json({
+          error: {
+            code: "IMMUTABLE_SYSTEM_PATH_REJECTED",
+            message: `Target path '${targetFile}' is strictly immutable and cannot be modified.`
+          }
+        });
+      }
 
       // Server-side security: Never trust client-supplied operatorContext.authorized!
       const isRestricted = ultronSelfEvolutionEngine.isRestrictedTarget(targetFile);
       let authorized = false;
 
       if (isRestricted) {
-        if (!operatorConfirmationToken || typeof operatorConfirmationToken !== "string" || operatorConfirmationToken.trim().length < 8) {
+        const tokenToVerify = approvalToken || operatorConfirmationToken;
+        if (!tokenToVerify || typeof tokenToVerify !== "string" || tokenToVerify.trim().length < 8) {
           return res.status(403).json({
             error: {
               code: "REQUIRES_OPERATOR_CONFIRMATION_TOKEN",
               message: "Modifying protected system configurations, database schemas, or security policies requires an explicit operator confirmation token."
+            }
+          });
+        }
+
+        const ownerUserId = req.supabaseUser?.id || "operator";
+        const modificationDigest = modificationSpec?.modificationDigest || (modificationSpec?.content ? crypto.createHash("sha256").update(modificationSpec.content).digest("hex") : "");
+        const authResult = operatorAuthorizationService.verifyAndConsume({
+          ownerUserId,
+          targetFile,
+          modificationDigest,
+          approvalToken: tokenToVerify
+        });
+
+        if (!authResult.valid) {
+          return res.status(403).json({
+            error: {
+              code: authResult.code || "REQUIRES_OPERATOR_CONFIRMATION_TOKEN",
+              message: authResult.reason || "Cryptographic operator authorization failed."
             }
           });
         }
@@ -1783,7 +1903,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
 
       const verifiedOperatorContext = {
         authorized,
-        userId: req.supabaseUser?.id,
+        userId: req.supabaseUser?.id || "operator",
         confirmedAt: new Date().toISOString()
       };
 
