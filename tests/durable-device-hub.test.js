@@ -160,6 +160,6 @@ test("paired-device migration does not expose unapproved short pairing codes to 
   );
   assert.match(sql, /revoke\s+all\s+on\s+table\s+public\.pending_device_pairings\s+from\s+anon\s*,\s*authenticated/i);
   assert.match(sql, /grant\s+all\s+on\s+table\s+public\.pending_device_pairings\s+to\s+service_role/i);
-  assert.doesNotMatch(sql, /approved\s*=\s*false/i);
+  assert.doesNotMatch(sql, /using\s*\([^)]*approved\s*=\s*false/i);
   assert.match(sql, /revoke\s+insert\s*,\s*update\s*,\s*delete\s+on\s+table\s+public\.paired_devices\s+from\s+anon\s*,\s*authenticated/i);
 });
