@@ -192,6 +192,8 @@ export class VideoEditingEngine {
     sourceClips = [],
     targetDuration = 30,
     voiceoverText = null,
+    audioSourcePath = null,
+    voiceoverAudioPath = null,
     subtitles = []
   } = {}) {
     const preset = EDITING_PRESETS[presetKey.toUpperCase()] || EDITING_PRESETS.CINEMATIC;
@@ -215,12 +217,14 @@ export class VideoEditingEngine {
           style: preset.musicPace,
           bpm: preset.bpm,
           volume: 0.65,
-          duckingOnVoiceover: 0.25
+          duckingOnVoiceover: 0.25,
+          sourcePath: audioSourcePath || null
         },
-        voiceover: voiceoverText ? {
+        voiceover: (voiceoverText || voiceoverAudioPath) ? {
           text: voiceoverText,
           voice: "am_onyx",
-          volume: 1.0
+          volume: 1.0,
+          sourcePath: voiceoverAudioPath || null
         } : null,
         soundEffects: [
           { type: "whoosh", time: 0.0 },
@@ -296,11 +300,56 @@ export class VideoEditingEngine {
     });
     const videoInputs = clips.map((_, index) => `[v${index}]`).join("");
     filters.push(`${videoInputs}concat=n=${clips.length}:v=1:a=0[outv]`);
-    args.push(
-      "-filter_complex", filters.join(";"), "-map", "[outv]", "-an",
-      "-c:v", "libx264", "-preset", "fast", "-crf", "22", "-threads", "4",
-      "-movflags", "+faststart", "-t", String(Number(timeline.targetDuration)), outputPath
-    );
+
+    const audioInputs = [];
+    let nextInputIdx = clips.length;
+
+    const musicPath = timeline?.audioTracks?.music?.sourcePath || timeline?.audioSourcePath;
+    if (musicPath && typeof musicPath === "string" && musicPath.trim()) {
+      args.push("-ss", "0", "-t", String(Number(timeline.targetDuration)), "-i", musicPath.trim());
+      audioInputs.push({ idx: nextInputIdx++, type: "music", volume: timeline.audioTracks?.music?.volume || 0.65 });
+    }
+
+    const voiceoverPath = timeline?.audioTracks?.voiceover?.sourcePath || timeline?.voiceoverAudioPath;
+    if (voiceoverPath && typeof voiceoverPath === "string" && voiceoverPath.trim()) {
+      args.push("-ss", "0", "-t", String(Number(timeline.targetDuration)), "-i", voiceoverPath.trim());
+      audioInputs.push({ idx: nextInputIdx++, type: "voiceover", volume: timeline.audioTracks?.voiceover?.volume || 1.0 });
+    }
+
+    let mapAudio = false;
+    if (audioInputs.length === 2) {
+      const m = audioInputs.find(a => a.type === "music");
+      const v = audioInputs.find(a => a.type === "voiceover");
+      filters.push(
+        `[${m.idx}:a]volume=0.35,aformat=channel_layouts=stereo:sample_rates=44100[m]`,
+        `[${v.idx}:a]volume=1.0,aformat=channel_layouts=stereo:sample_rates=44100[v]`,
+        `[m][v]amix=inputs=2:duration=first[outa]`
+      );
+      mapAudio = true;
+    } else if (audioInputs.length === 1) {
+      const a = audioInputs[0];
+      filters.push(
+        `[${a.idx}:a]volume=${a.volume},aformat=channel_layouts=stereo:sample_rates=44100[outa]`
+      );
+      mapAudio = true;
+    }
+
+    if (mapAudio) {
+      args.push(
+        "-filter_complex", filters.join(";"),
+        "-map", "[outv]", "-map", "[outa]",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22", "-threads", "4",
+        "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", "-t", String(Number(timeline.targetDuration)), outputPath
+      );
+    } else {
+      args.push(
+        "-filter_complex", filters.join(";"),
+        "-map", "[outv]", "-an",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22", "-threads", "4",
+        "-movflags", "+faststart", "-t", String(Number(timeline.targetDuration)), outputPath
+      );
+    }
     return args;
   }
 
@@ -319,7 +368,7 @@ export class VideoEditingEngine {
       threads: 4,
       crf: 22,
       preset: "fast",
-      audioIncluded: false
+      audioIncluded: Boolean(timeline?.audioTracks?.music?.sourcePath || timeline?.audioTracks?.voiceover?.sourcePath || timeline?.audioSourcePath || timeline?.voiceoverAudioPath)
     };
   }
 
@@ -413,8 +462,11 @@ export class VideoEditingEngine {
       targetDuration: timeline.targetDuration,
       dimensions: `${timeline.dimensions.width}x${timeline.dimensions.height}`,
       aspectRatio: timeline.dimensions.aspectRatio, preset: timeline.preset,
-      renderedWithFFmpeg: true, audioIncluded: false,
-      audioNote: "This export currently contains source video only; audio mixing, sound effects, and voiceover encoding are not implemented."
+      renderedWithFFmpeg: true,
+      audioIncluded: Boolean(timeline?.audioTracks?.music?.sourcePath || timeline?.audioTracks?.voiceover?.sourcePath || timeline?.audioSourcePath || timeline?.voiceoverAudioPath),
+      audioNote: (timeline?.audioTracks?.music?.sourcePath || timeline?.audioTracks?.voiceover?.sourcePath || timeline?.audioSourcePath || timeline?.voiceoverAudioPath)
+        ? "Audio mixing, background music, and voiceover encoded via FFmpeg AAC encoder."
+        : "This export currently contains source video only; no audio track was supplied."
     };
   }
 

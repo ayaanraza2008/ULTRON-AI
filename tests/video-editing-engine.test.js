@@ -154,3 +154,44 @@ test("VideoEditingEngine: refuses to invent source footage when no source clips 
   assert.equal(result.outputPath, null);
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
+
+test("VideoEditingEngine: renders real video with mixed audio track to an MP4 with AAC audio stream", { skip: !HAS_FFMPEG }, async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-video-audio-render-"));
+  const sourcePath = path.join(tmpDir, "source.mp4");
+  const audioPath = path.join(tmpDir, "audio.wav");
+  const engine = new VideoEditingEngine({ workspaceBase: tmpDir });
+  await engine.initialize();
+
+  // Create real test video clip (320x240, 2s)
+  await execFileAsync(FFMPEG_BIN, ["-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=24",
+    "-t", "2", "-pix_fmt", "yuv420p", sourcePath], { timeout: 30000 });
+
+  // Create real test audio clip (440Hz sine wave, 2s)
+  await execFileAsync(FFMPEG_BIN, ["-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+    "-t", "2", audioPath], { timeout: 30000 });
+
+  const timeline = engine.buildTimeline({
+    presetKey: "CINEMATIC",
+    title: "Audio Mixed Render Test",
+    sourceClips: [{ name: "source.mp4", path: sourcePath, duration: 2 }],
+    audioSourcePath: audioPath,
+    targetDuration: 2
+  });
+
+  const result = await engine.renderVideo(timeline);
+  assert.equal(result.success, true);
+  assert.equal(result.renderedWithFFmpeg, true);
+  assert.equal(result.audioIncluded, true);
+
+  const output = await fs.readFile(result.outputPath);
+  assert.ok(output.length > 1024);
+  assert.equal(output.toString("ascii", 4, 8), "ftyp");
+
+  // Verify stream info with ffmpeg
+  const probe = spawnSync(FFMPEG_BIN, ["-i", result.outputPath], { encoding: "utf8" });
+  const probeOutput = (probe.stderr || "") + (probe.stdout || "");
+  assert.ok(probeOutput.includes("Video: h264"), "Output must contain h264 video stream");
+  assert.ok(probeOutput.includes("Audio: aac"), "Output must contain aac audio stream");
+
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});

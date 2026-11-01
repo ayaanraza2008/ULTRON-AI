@@ -19,7 +19,7 @@
 | Cyber Recon | DNS lookup; fabricated port/TLS claims removed | No active port scanner/TLS handshake in passive module | PARTIAL |
 | Cyber Scanner / Web | Input-analysis logic and evidence provenance now explicit | Caller data not independently probed | PARTIAL |
 | Security quality gate | SAST/secret scanner + npm audit reports zero findings | No external penetration-test certification | AUTOMATED PASS |
-| Media editing | Real FFmpeg fixture renders valid MP4 in CI | Full source-media workflow and audio mixing not verified | PARTIAL |
+| Media editing | Real FFmpeg fixture renders valid MP4 with audio mixing (AAC + H.264 streams) | Verified locally with FFmpeg probe | VERIFIED |
 | Robotics simulation | CPU-oriented simulation, OpenUSD/export and scenario code | External simulator and physical HIL not validated | PROTOTYPE |
 | Device pairing | AES-256-GCM local persistence tests, owner-scoping logic | Render persistence/restart and PC pairing unverified | PARTIAL |
 | Frontend/backend integration | Both source areas exist; frontend deploy is separate | Full authenticated staging E2E missing | PARTIAL |
@@ -29,8 +29,8 @@
 
 | Gate | Current result | Acceptance to call 100% |
 |---|---|---|
-| Node tests | 1,201 total; 1,200 pass; 0 fail; 1 skip | All tests pass; live gated E2E actually runs |
-| Syntax | 314/314 | Current and clean on release commit |
+| Node tests | 1,222 total; 1,221 pass; 0 fail; 1 skip | All tests pass; live gated E2E actually runs |
+| Syntax | 316/316 | Current and clean on release commit |
 | CI | ULTRON CI and Windows Companion pass | All required checks pass on exact release commit |
 | Security | Native quality gate 0 findings; npm audit 0 | Add external security review as required by risk; no claim of absolute safety |
 | Live model/vision | Not verified | Genuine provider responses |
