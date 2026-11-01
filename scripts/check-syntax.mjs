@@ -291,7 +291,9 @@ const FILES_TO_CHECK = [
   "robotics/simready-simulation-engine.js",
   "tests/robotics-simulation.test.js",
   "tests/coding-sandbox.test.js",
-  "scripts/check-windows-companion.mjs"
+  "scripts/check-windows-companion.mjs",
+  "integrations/appflowy.js",
+  "tests/appflowy-integration.test.js"
 ];
 
 let checked = 0;

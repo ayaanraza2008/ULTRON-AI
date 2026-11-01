@@ -404,6 +404,13 @@ export class SimulationTrainingProject {
     this.status = "INITIALIZED";
   }
 
+  registerRobot(asset) {
+    if (!asset || typeof asset !== "object") throw new Error("Invalid robot asset");
+    this.selectedAsset = asset;
+    this.jointControllers = (asset.joints || []).map(j => new JointActuatorController(j));
+    return { registered: true, assetId: asset.assetId, name: asset.name };
+  }
+
   loadScenario(scenarioKey = "WAREHOUSE_NAVIGATION") {
     const sc = TRAINING_SCENARIOS[scenarioKey] || TRAINING_SCENARIOS.WAREHOUSE_NAVIGATION;
     this.currentScenario = sc;
@@ -684,6 +691,133 @@ export class HardwareInTheLoopBridge {
     return { success: true, mode: "SIMULATION" };
   }
 }
+
+
+/**
+ * Extended 3D Assets indexed from NVIDIA SimReady Central (HuggingFace)
+ * https://huggingface.co/spaces/nvidia/simready-central
+ */
+export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
+  {
+    assetId: "simready-agv-forklift",
+    name: "Autonomous Pallet Forklift AGV",
+    category: "logistics",
+    source: "nvidia/simready-central",
+    huggingFaceSpace: "https://huggingface.co/spaces/nvidia/simready-central",
+    description: "Industrial autonomous guided vehicle with dual hydraulic forks, 360-degree safety LiDAR, and 1200kg lift capacity.",
+    format: "usd",
+    openUsdVersion: "23.11",
+    dimensionsM: { x: 1.6, y: 1.1, z: 2.1 },
+    massKg: 650.0,
+    centerOfMassM: { x: 0, y: 0.45, z: 0 },
+    simReadyCompliance: {
+      hasVisualMesh: true,
+      hasCollisionMesh: true,
+      hasPhysicsMaterials: true,
+      frictionCoefficient: 0.9,
+      restitution: 0.01
+    },
+    joints: [
+      { name: "drive_wheel", type: "continuous", axis: [0, 1, 0], maxVelocityRps: 12.0, maxTorqueNm: 200.0 },
+      { name: "steer_pivot", type: "revolute", axis: [0, 0, 1], lowerLimitRad: -1.57, upperLimitRad: 1.57, maxVelocityRps: 2.0, maxTorqueNm: 80.0 },
+      { name: "fork_elevator", type: "prismatic", axis: [0, 0, 1], lowerLimitM: 0.05, upperLimitM: 1.8, maxVelocityMps: 0.3, maxForceN: 12000.0 }
+    ],
+    defaultSensors: ["safety_lidar_360", "fork_camera_depth", "wheel_odometry"]
+  },
+  {
+    assetId: "simready-quadruped-spot",
+    name: "Industrial Quadruped Scout v1",
+    category: "robotics",
+    source: "nvidia/simready-central",
+    huggingFaceSpace: "https://huggingface.co/spaces/nvidia/simready-central",
+    description: "12-DOF dynamic quadruped robotic platform for rough terrain inspection, obstacle climbing, and facility patrol.",
+    format: "usd",
+    openUsdVersion: "23.11",
+    dimensionsM: { x: 0.9, y: 0.45, z: 0.6 },
+    massKg: 32.0,
+    centerOfMassM: { x: 0, y: 0.2, z: 0 },
+    simReadyCompliance: {
+      hasVisualMesh: true,
+      hasCollisionMesh: true,
+      hasPhysicsMaterials: true,
+      frictionCoefficient: 0.85,
+      restitution: 0.03
+    },
+    joints: [
+      { name: "fl_hip_yaw", type: "revolute", axis: [0, 0, 1], lowerLimitRad: -0.8, upperLimitRad: 0.8, maxVelocityRps: 15.0, maxTorqueNm: 35.0 },
+      { name: "fl_hip_pitch", type: "revolute", axis: [0, 1, 0], lowerLimitRad: -1.2, upperLimitRad: 1.2, maxVelocityRps: 15.0, maxTorqueNm: 40.0 },
+      { name: "fl_knee", type: "revolute", axis: [0, 1, 0], lowerLimitRad: -2.5, upperLimitRad: -0.5, maxVelocityRps: 18.0, maxTorqueNm: 45.0 }
+    ],
+    defaultSensors: ["body_imu_6axis", "front_stereo_depth", "foot_contact_sensors"]
+  },
+  {
+    assetId: "simready-warehouse-pallet",
+    name: "Standard Euro Pallet (EUR 1)",
+    category: "props",
+    source: "nvidia/simready-central",
+    huggingFaceSpace: "https://huggingface.co/spaces/nvidia/simready-central",
+    description: "Standard industrial wooden pallet with accurate physics collision boundaries and surface friction.",
+    format: "usd",
+    openUsdVersion: "23.11",
+    dimensionsM: { x: 1.2, y: 0.8, z: 0.144 },
+    massKg: 25.0,
+    centerOfMassM: { x: 0, y: 0.07, z: 0 },
+    simReadyCompliance: {
+      hasVisualMesh: true,
+      hasCollisionMesh: true,
+      hasPhysicsMaterials: true,
+      frictionCoefficient: 0.65,
+      restitution: 0.02
+    },
+    joints: [],
+    defaultSensors: []
+  }
+];
+
+export class SimReadyCentralExplorer {
+  constructor(options = {}) {
+    this.catalog = [...SIMREADY_ASSET_CATALOG, ...SIMREADY_CENTRAL_EXTENDED_CATALOG];
+  }
+
+  searchAssets({ query = "", category = null, limit = 10 } = {}) {
+    const q = String(query || "").trim().toLowerCase();
+    const matches = this.catalog.filter(asset => {
+      const matchQuery = !q ||
+        asset.assetId.toLowerCase().includes(q) ||
+        asset.name.toLowerCase().includes(q) ||
+        asset.description.toLowerCase().includes(q);
+      const matchCat = !category || asset.category.toLowerCase() === category.toLowerCase();
+      return matchQuery && matchCat;
+    });
+
+    return {
+      success: true,
+      query: q,
+      categoryFilter: category,
+      totalMatched: matches.length,
+      assets: matches.slice(0, limit)
+    };
+  }
+
+  getAssetDetails(assetId) {
+    const asset = this.catalog.find(a => a.assetId === assetId);
+    if (!asset) {
+      return { success: false, error: "ASSET_NOT_FOUND" };
+    }
+    return { success: true, asset };
+  }
+
+  importAssetToProject(assetId, project = simReadyEngine) {
+    const asset = this.catalog.find(a => a.assetId === assetId);
+    if (!asset) {
+      return { success: false, error: "ASSET_NOT_FOUND" };
+    }
+    const registered = project.registerRobot(asset);
+    return { success: true, importedAssetId: asset.assetId, registeredName: registered.name };
+  }
+}
+
+export const simReadyCentralExplorer = new SimReadyCentralExplorer();
 
 export const simReadyEngine = new SimulationTrainingProject();
 export const playbackEngine = new SimulationPlaybackEngine();

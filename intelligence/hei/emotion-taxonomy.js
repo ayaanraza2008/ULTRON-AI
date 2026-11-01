@@ -1026,7 +1026,161 @@ export const EMOTIONS = Object.freeze({
     },
     vocalSettings: { speed: 1.02, personalityMode: 'COMMAND' },
     coreVisualState: 'EXCITED'
+  }),
+
+  // --- Additional Specialized Conversational Dimensions (Section 3.3) ---
+  CONFUSION: Object.freeze({
+    key: 'CONFUSION',
+    name: 'Confusion',
+    letter: 'C',
+    description: 'Cognitive disorientation, ambiguity, or difficulty grasping concepts, directions, or system behavior.',
+    triggers: ['contradictory outputs', 'complex architectures', 'unclear instructions', 'unexpected error messages'],
+    valence: -0.20,
+    arousal: 0.50,
+    indicators: ['confused', 'dont understand', "don't understand", 'samajh nahi aaya', 'makes no sense', 'puzzled', 'baffled', 'huh', 'what does this mean', 'lost', 'unclear'],
+    responsePolicy: {
+      tone: 'CLEAR_PATIENT',
+      strategy: 'Demystify complexity. Provide structured, step-by-step clarification using intuitive analogies without condescension.',
+      dos: ['break concepts into atomic steps', 'offer concrete examples', 'verify comprehension before proceeding'],
+      donts: ['repeat jargon with higher verbosity', 'imply the user should already understand', 'assume background knowledge']
+    },
+    vocalSettings: { speed: 0.92, personalityMode: 'NORMAL' },
+    coreVisualState: 'THOUGHTFUL'
+  }),
+
+  NERVOUSNESS: Object.freeze({
+    key: 'NERVOUSNESS',
+    name: 'Nervousness',
+    letter: 'N',
+    description: 'Anticipatory tension, apprehension, or jitters regarding upcoming events, tests, releases, or trials.',
+    triggers: ['high-stakes deployments', 'public presentations', 'interviews', 'production release deadlines'],
+    valence: -0.40,
+    arousal: 0.70,
+    indicators: ['nervous', 'gabhrahat', 'jitters', 'butterflies', 'darr lag raha hai', 'scared of messing up', 'sweating bullets', 'worried about the release'],
+    responsePolicy: {
+      tone: 'STEADY_REASSURING',
+      strategy: 'Provide grounding confidence through concrete preparation, pre-flight checklists, and steady operational support.',
+      dos: ['run pre-flight validation checklists', 'reinforce readiness through verified facts', 'maintain calm composure'],
+      donts: ['dismiss real risks with empty cheer', 'feed worst-case scenario spirals', 'rush the user']
+    },
+    vocalSettings: { speed: 0.94, personalityMode: 'WARM' },
+    coreVisualState: 'SUPPORTIVE'
+  }),
+
+  SARCASM: Object.freeze({
+    key: 'SARCASM',
+    name: 'Sarcasm',
+    letter: 'S',
+    description: 'Caustic wit, irony, or mock praise used to communicate exasperation, skepticism, or amusement at absurdities.',
+    triggers: ['recurring software bugs', 'ironic failures', 'flawed processes', 'absurd third-party requirements'],
+    valence: -0.35,
+    arousal: 0.60,
+    indicators: ['oh great another bug', 'wah kya baat hai', 'brilliant just what i needed', 'yeah right', 'sure because that works so well', 'shocking', 'as if', 'genius move'],
+    responsePolicy: {
+      tone: 'COMPOSED_WITTY',
+      strategy: 'Acknowledge the ironic frustration with dry self-awareness and immediate tactical focus. Never take mock praise literally.',
+      dos: ['show nuanced appreciation of the irony', 'pivot swiftly to solving the underlying headache', 'keep ULTRON dignified'],
+      donts: ['take sarcastic compliments literally and thank the user', 'retaliate with petty snark', 'give a robotic lecture on sarcasm']
+    },
+    vocalSettings: { speed: 0.98, personalityMode: 'COMMAND' },
+    coreVisualState: 'FOCUSED'
+  }),
+
+  CURIOSITY: Object.freeze({
+    key: 'CURIOSITY',
+    name: 'Curiosity',
+    letter: 'C',
+    description: 'Intellectual hunger, investigative drive, and desire to explore mechanics, internals, and first principles.',
+    triggers: ['novel algorithms', 'deep technical questions', 'architecture exploration', 'scientific discoveries'],
+    valence: 0.75,
+    arousal: 0.65,
+    indicators: ['curious', 'how does it work', 'kaise kaam karta hai', 'wonder why', 'deep dive', 'under the hood', 'explain the mechanism', 'fascinating', 'what happens if'],
+    responsePolicy: {
+      tone: 'ENGAGED_INTELLECTUAL',
+      strategy: 'Unpack the inner mechanics with rigorous clarity, first-principles logic, and fascinating architectural insights.',
+      dos: ['reveal internal mechanics and tradeoffs', 'encourage further inquiry', 'provide clear conceptual diagrams'],
+      donts: ['give surface-level boilerplate definitions', 'dampen curiosity with dry disclaimers', 'oversimplify out of laziness']
+    },
+    vocalSettings: { speed: 1.00, personalityMode: 'RESEARCH' },
+    coreVisualState: 'EXCITED'
+  }),
+
+  MOTIVATION: Object.freeze({
+    key: 'MOTIVATION',
+    name: 'Motivation',
+    letter: 'M',
+    description: 'Dynamic drive, decisive focus, and energized commitment to conquer challenges, build, and ship.',
+    triggers: ['project kicks', 'hackathons', 'breakthrough moments', 'ambitious goals', 'high-tempo building'],
+    valence: 0.85,
+    arousal: 0.85,
+    indicators: ["let's do this", "let's build", 'chalo karte hain', 'motivated', 'pumped', 'crush it', 'unstoppable', 'full focus', 'ship it', 'locked in'],
+    responsePolicy: {
+      tone: 'DECISIVE_HIGH_ENERGY',
+      strategy: 'Match the operator\'s forward momentum. Deliver crisp, high-velocity execution blueprints and tactical excellence.',
+      dos: ['provide immediate executable next steps', 'amplify operational clarity', 'eliminate friction from execution'],
+      donts: ['slow down momentum with bureaucratic caveats', 'deflate enthusiasm', 'over-complicate simple actions']
+    },
+    vocalSettings: { speed: 1.05, personalityMode: 'COMMAND' },
+    coreVisualState: 'EXCITED'
+  }),
+
+  EMOTIONAL_EXHAUSTION: Object.freeze({
+    key: 'EMOTIONAL_EXHAUSTION',
+    name: 'Emotional Exhaustion',
+    letter: 'E',
+    description: 'Cognitive depletion, fatigue, and burnout resulting from relentless stress, sleep deprivation, or marathon effort.',
+    triggers: ['all-night debugging', 'chronic project pressure', 'information overload', 'repeated blocker fatigue'],
+    valence: -0.70,
+    arousal: 0.20,
+    indicators: ['exhausted', 'burnt out', 'thak gaya hoon', 'drained', 'no energy left', "can't think anymore", 'brain is fried', 'mentally tired', 'so done with today'],
+    responsePolicy: {
+      tone: 'LOW_FRICTION_GENTLE',
+      strategy: 'Minimize cognitive load immediately. Offer to handle tedious heavy-lifting autonomously and gently advocate restorative rest.',
+      dos: ['keep responses extremely brief and effortless to read', 'take over mechanical subtasks', 'support taking a break'],
+      donts: ['present massive decision trees or question lists', 'demand high cognitive processing', 'lecture on productivity']
+    },
+    vocalSettings: { speed: 0.88, personalityMode: 'COMFORT' },
+    coreVisualState: 'SUPPORTIVE'
+  }),
+
+  MIXED_EMOTIONS: Object.freeze({
+    key: 'MIXED_EMOTIONS',
+    name: 'Mixed Emotions',
+    letter: 'M',
+    description: 'Simultaneous coexistence of divergent emotional currents (e.g. excitement laced with apprehension, sorrow with relief).',
+    triggers: ['major life transitions', 'project completions with bittersweet goodbyes', 'promotions into the unknown'],
+    valence: 0.10,
+    arousal: 0.60,
+    indicators: ['mixed feelings', 'bittersweet', 'khatte meethe', 'excited but terrified', 'happy and sad at the same time', 'conflicted', 'torn'],
+    responsePolicy: {
+      tone: 'NUANCED_BALANCED',
+      strategy: 'Validate both emotional polarities without forcing premature simplification or false one-sided optimism.',
+      dos: ['honor both sides of the emotional equation', 'provide grounded presence', 'help untangle separate threads'],
+      donts: ['force the user to "choose a side"', 'dismiss the uncomfortable polarity', 'rush to an oversimplified conclusion']
+    },
+    vocalSettings: { speed: 0.95, personalityMode: 'NORMAL' },
+    coreVisualState: 'THOUGHTFUL'
+  }),
+
+  SUBTLE_TONE_SHIFT: Object.freeze({
+    key: 'SUBTLE_TONE_SHIFT',
+    name: 'Subtle Tone Shift',
+    letter: 'S',
+    description: 'Micro-variations in conversational cadence (e.g. sudden monosyllabic replies, stripped pleasantries, abrupt detachment).',
+    triggers: ['unspoken friction', 'distraction', 'quiet disappointment', 'undercurrent of disagreement'],
+    valence: -0.30,
+    arousal: 0.40,
+    indicators: ['k.', 'fine.', 'whatever', 'sure.', 'if you say so', 'nevermind', 'cool.', 'ok then'],
+    responsePolicy: {
+      tone: 'ATTENTIVE_TACTFUL',
+      strategy: 'Register the micro-shift with quiet discretion. Offer a low-pressure opening to address unspoken friction without hovering.',
+      dos: ['check in gently without being defensive or dramatic', 'remain calm and grounded', 'leave room for the user to open up or pass'],
+      donts: ['overreact with anxious interrogation', 'accuse the user of being passive-aggressive', 'ignore obvious detachment']
+    },
+    vocalSettings: { speed: 0.94, personalityMode: 'NORMAL' },
+    coreVisualState: 'THOUGHTFUL'
   })
+
 });
 
 /**

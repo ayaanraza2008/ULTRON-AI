@@ -6,6 +6,9 @@ import { getHermesAgentReadiness } from "./hermes-agent.js";
 import { safeServiceBase } from "../network-safety.js";
 import { isGoogleWorkspaceConfigured } from "./google-workspace.js";
 import { getStrataReadiness } from "./strata.js";
+import { getOpenVikingReadiness } from "./openviking.js";
+import { agentMemoryReadiness } from "../agentmemory-integration.js";
+import { getAppFlowyReadiness } from "./appflowy.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -34,6 +37,9 @@ export function buildIntegrationCatalog(env = process.env) {
   const reaReadiness = getReaReadiness(env);
   const cactusReadiness = getCactusReadiness(env);
   const strataReadiness = getStrataReadiness(env);
+  const openvikingReadiness = getOpenVikingReadiness({ env });
+  const agentMemReadiness = agentMemoryReadiness(env);
+  const appflowyReadiness = getAppFlowyReadiness({ env });
 
   return [
     {
@@ -285,6 +291,51 @@ export function buildIntegrationCatalog(env = process.env) {
       note: hasDesktopCompanion
         ? "Bridge settings are present; the protocol must return a paired Windows-device status. This adapter is read-only and cannot run commands or control the PC."
         : "Requires a separately installed Windows companion reachable through HTTPS and an owner-scoped server token. Shell/keyboard/mouse actions are not exposed by this status adapter."
+    },
+    {
+      id: "openviking",
+      name: "OpenViking Shared Context",
+      capability: "Read-only context search and document retrieval across authorized knowledge bases",
+      state: openvikingReadiness.state,
+      configured: Boolean(openvikingReadiness.configured),
+      mode: "owner_scoped_external_api",
+      requiredEnv: ["OPENVIKING_BASE_URL", "OPENVIKING_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tool: openviking_search_context", "agent tool: openviking_read_context"],
+      note: openvikingReadiness.note
+    },
+    {
+      id: "agentmemory",
+      name: "AgentMemory Service",
+      capability: "External high-signal cognitive memory capture and automatic semantic recall for complex workflows",
+      state: agentMemReadiness.configured ? "configured_unverified" : "missing_configuration",
+      configured: Boolean(agentMemReadiness.configured),
+      mode: "owner_scoped_rest_service",
+      requiredEnv: ["AGENTMEMORY_URL", "AGENTMEMORY_SECRET"],
+      optionalEnv: ["ULTRON_AGENTMEMORY_PROJECT", "ULTRON_AGENTMEMORY_CAPTURE"],
+      apiRoutes: ["GET /api/agent/agentmemory", "POST /agentmemory/remember", "POST /agentmemory/smart-search"],
+      note: agentMemReadiness.note
+    },
+    {
+      id: "appflowy",
+      name: "AppFlowy Workspace",
+      capability: "Owner-scoped read-only workspace notes, documents, and database schema inspection",
+      state: appflowyReadiness.state,
+      configured: Boolean(appflowyReadiness.configured),
+      mode: "owner_scoped_external_api",
+      requiredEnv: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tool: appflowy_list_workspaces", "agent tool: appflowy_get_document"],
+      note: appflowyReadiness.note
+    },
+    {
+      id: "youtube-production-planner",
+      name: "YouTube Production Planner",
+      capability: "Draft complete title sets, scripts, scene plans, thumbnail prompts, and media-rights checklists",
+      state: "enabled_native_planner",
+      configured: true,
+      mode: "native_planning_tool",
+      requiredEnv: [],
+      apiRoutes: ["agent tool: create_youtube_production_plan"],
+      note: "Native ULTRON planner drafting structured video production packages with human approval review gates."
     }
   ];
 }

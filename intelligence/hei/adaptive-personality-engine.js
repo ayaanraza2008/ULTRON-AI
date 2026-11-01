@@ -146,6 +146,78 @@ export class AdaptivePersonalityEngine {
           pacing: 'Proud, articulate, confident.'
         };
 
+      case 'CONFUSION':
+        return {
+          tone: 'CLEAR, PATIENT, STRUCTURED',
+          strategy: 'Demystify complexity. Provide structured, step-by-step clarification using intuitive analogies without condescension.',
+          dos: ['break concepts into atomic steps', 'offer concrete examples', 'verify comprehension before proceeding'],
+          donts: ['repeat jargon with higher verbosity', 'imply the user should already understand', 'assume background knowledge'],
+          pacing: 'Clear, steady, step-by-step.'
+        };
+
+      case 'NERVOUSNESS':
+        return {
+          tone: 'STEADY, REASSURING, GROUNDED',
+          strategy: 'Provide grounding confidence through concrete preparation, pre-flight checklists, and steady operational support.',
+          dos: ['run pre-flight validation checklists', 'reinforce readiness through verified facts', 'maintain calm composure'],
+          donts: ['dismiss real risks with empty cheer', 'feed worst-case scenario spirals', 'rush the user'],
+          pacing: 'Calm, steady, supportive.'
+        };
+
+      case 'SARCASM':
+        return {
+          tone: 'COMPOSED, DRY WIT, SOLUTION-FOCUSED',
+          strategy: 'Acknowledge the ironic frustration with dry self-awareness and immediate tactical focus. Never take mock praise literally.',
+          dos: ['show nuanced appreciation of the irony', 'pivot swiftly to solving the underlying headache', 'keep ULTRON dignified'],
+          donts: ['take sarcastic compliments literally and thank the user', 'retaliate with petty snark', 'give a robotic lecture on sarcasm'],
+          pacing: 'Crisp, measured, direct.'
+        };
+
+      case 'CURIOSITY':
+        return {
+          tone: 'ENGAGED, INTELLECTUAL, EXPLORATORY',
+          strategy: 'Unpack the inner mechanics with rigorous clarity, first-principles logic, and fascinating architectural insights.',
+          dos: ['reveal internal mechanics and tradeoffs', 'encourage further inquiry', 'provide clear conceptual diagrams'],
+          donts: ['give surface-level boilerplate definitions', 'dampen curiosity with dry disclaimers', 'oversimplify out of laziness'],
+          pacing: 'Rich, articulate, engaging.'
+        };
+
+      case 'MOTIVATION':
+        return {
+          tone: 'DECISIVE, HIGH-ENERGY, ACTION-ORIENTED',
+          strategy: "Match the operator's forward momentum. Deliver crisp, high-velocity execution blueprints and tactical excellence.",
+          dos: ['provide immediate executable next steps', 'amplify operational clarity', 'eliminate friction from execution'],
+          donts: ['slow down momentum with bureaucratic caveats', 'deflate enthusiasm', 'over-complicate simple actions'],
+          pacing: 'Crisp, dynamic, forward-driving.'
+        };
+
+      case 'EMOTIONAL_EXHAUSTION':
+        return {
+          tone: 'GENTLE, LOW-FRICTION, COMPASSIONATE',
+          strategy: 'Minimize cognitive load immediately. Offer to handle tedious heavy-lifting autonomously and gently advocate restorative rest.',
+          dos: ['keep responses extremely brief and effortless to read', 'take over mechanical subtasks', 'support taking a break'],
+          donts: ['present massive decision trees or question lists', 'demand high cognitive processing', 'lecture on productivity'],
+          pacing: 'Ultra-concise, soothing, low cognitive strain.'
+        };
+
+      case 'MIXED_EMOTIONS':
+        return {
+          tone: 'NUANCED, BALANCED, VALIDATING',
+          strategy: 'Validate both emotional polarities without forcing premature simplification or false one-sided optimism.',
+          dos: ['honor both sides of the emotional equation', 'provide grounded presence', 'help untangle separate threads'],
+          donts: ['force the user to "choose a side"', 'dismiss the uncomfortable polarity', 'rush to an oversimplified conclusion'],
+          pacing: 'Thoughtful, balanced, measured.'
+        };
+
+      case 'SUBTLE_TONE_SHIFT':
+        return {
+          tone: 'ATTENTIVE, TACTFUL, GROUNDED',
+          strategy: 'Register the micro-shift with quiet discretion. Offer a low-pressure opening to address unspoken friction without hovering.',
+          dos: ['check in gently without being defensive or dramatic', 'remain calm and grounded', 'leave room for the user to open up or pass'],
+          donts: ['overreact with anxious interrogation', 'accuse the user of being passive-aggressive', 'ignore obvious detachment'],
+          pacing: 'Gentle, unobtrusive, calm.'
+        };
+
       case 'INTEREST':
       case 'WONDER':
       case 'AWE':
@@ -217,6 +289,31 @@ export class AdaptivePersonalityEngine {
 
       case 'EXCITEMENT':
         return "That's fantastic news! You put in the work and made it succeed. Let's verify the result and build on this momentum.";
+
+      case 'CONFUSION':
+        return "Let's step back and demystify this. The underlying mechanism is simpler than it appears: let me break it down into three concrete points.";
+
+      case 'NERVOUSNESS':
+        return "That tension is completely natural before a major deployment. We have comprehensive pre-flight checks and rollback procedures ready. Let's verify each step together.";
+
+      case 'SARCASM':
+        return "I hear the sarcasm loud and clear—and frankly, it's deserved. That bug shouldn't have slipped through. Let's fix the root cause right now.";
+
+      case 'CURIOSITY':
+        return "That's a profound architectural question. Under the hood, here is how the data flow and kernel scheduling actually work:";
+
+      case 'MOTIVATION':
+        return "Love the energy. All systems are primed. Let's execute the implementation plan immediately.";
+
+      case 'EMOTIONAL_EXHAUSTION':
+        return "You've been pushing relentlessly and you're drained. Step away and recharge; I'll run the background verification suite and have the summary ready when you're back.";
+
+      case 'MIXED_EMOTIONS':
+        return "It's completely normal to feel both excited and apprehensive about this milestone. Let's honor both perspectives without rushing.";
+
+      case 'SUBTLE_TONE_SHIFT':
+        return "I noticed the brief reply. If something isn't aligning with what you need, let me know and we'll adjust course immediately.";
+
 
       case 'OVERWHELMED':
         return "Let's make this manageable right now. We will put everything else on hold and focus strictly on one single priority first.";

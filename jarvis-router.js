@@ -8,7 +8,8 @@ import {
   TRAINING_SCENARIOS,
   simReadyEngine,
   playbackEngine,
-  hilBridge
+  hilBridge,
+  simReadyCentralExplorer
 } from "./robotics/simready-simulation-engine.js";
 import { ultronVision } from "./vision/ultron-vision.js";
 import { ultronEyesManager, SESSION_STATES } from "./vision/ultron-eyes-manager.js";
@@ -1268,6 +1269,32 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     const result = hilBridge.handshake(token);
     if (!result.success) return res.status(400).json(result);
     res.json(result);
+  });
+
+  router.get("/jarvis/robotics/simready/central/search", requireOwner, (req, res) => {
+    try {
+      const query = String(req.query?.q || "");
+      const category = req.query?.category ? String(req.query.category) : null;
+      const limit = Number(req.query?.limit) || 10;
+      const results = simReadyCentralExplorer.searchAssets({ query, category, limit });
+      res.json(results);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/robotics/simready/central/import", requireOwner, express.json(), (req, res) => {
+    try {
+      const { assetId } = req.body || {};
+      if (!assetId) {
+        return res.status(400).json({ success: false, error: "MISSING_ASSET_ID" });
+      }
+      const result = simReadyCentralExplorer.importAssetToProject(assetId, simReadyEngine);
+      if (!result.success) return res.status(404).json(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
   });
 
   router.post("/jarvis/nextgen/vision/analyze", requireOwner, express.json(), async (req, res) => {

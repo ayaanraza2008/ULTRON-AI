@@ -11,7 +11,9 @@ import {
   HardwareInTheLoopBridge,
   simReadyEngine,
   playbackEngine,
-  hilBridge
+  hilBridge,
+  simReadyCentralExplorer,
+  SIMREADY_CENTRAL_EXTENDED_CATALOG
 } from "../robotics/simready-simulation-engine.js";
 
 test("RoboticsSim: SIMREADY_ASSET_CATALOG discovers valid 3D robot assets", () => {
@@ -185,4 +187,32 @@ test("RoboticsSim: HardwareInTheLoopBridge performs handshake, formats ROS 2 Twi
   const disc = hil.disconnect();
   assert.equal(disc.mode, "SIMULATION");
   assert.equal(hil.activeMode, "SIMULATION");
+});
+
+test("RoboticsSim: SimReadyCentralExplorer discovers and filters HuggingFace SimReady Central assets", () => {
+  assert.ok(Array.isArray(SIMREADY_CENTRAL_EXTENDED_CATALOG));
+  assert.ok(SIMREADY_CENTRAL_EXTENDED_CATALOG.length >= 3);
+
+  // Search by category
+  const logistics = simReadyCentralExplorer.searchAssets({ category: "logistics" });
+  assert.equal(logistics.success, true);
+  assert.ok(logistics.assets.some(a => a.assetId === "simready-agv-forklift"));
+
+  // Search by keyword
+  const quadruped = simReadyCentralExplorer.searchAssets({ query: "quadruped" });
+  assert.equal(quadruped.success, true);
+  assert.ok(quadruped.assets.some(a => a.assetId === "simready-quadruped-spot"));
+
+  // Details lookup
+  const details = simReadyCentralExplorer.getAssetDetails("simready-agv-forklift");
+  assert.equal(details.success, true);
+  assert.equal(details.asset.source, "nvidia/simready-central");
+  assert.ok(details.asset.huggingFaceSpace.includes("simready-central"));
+});
+
+test("RoboticsSim: SimReadyCentralExplorer imports asset directly into active simulation project", () => {
+  const result = simReadyCentralExplorer.importAssetToProject("simready-agv-forklift");
+  assert.equal(result.success, true);
+  assert.equal(result.importedAssetId, "simready-agv-forklift");
+  assert.equal(result.registeredName, "Autonomous Pallet Forklift AGV");
 });
