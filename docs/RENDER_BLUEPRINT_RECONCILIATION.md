@@ -2,13 +2,13 @@
 **Workspace:** Render — `Ultron core`  
 **Audit Baseline Date:** 2026-11-01  
 **Target Repository:** `ayaanraza2008/ULTRON-AI`  
-**Reference Document:** `docs/FINAL_AUDIT_2026-11-01.md` (Finding 14)  
+**Current independent evidence:** `docs/INDEPENDENT_POST_ANTIGRAVITY_AUDIT_2026-11-01.md`  
 
 ---
 
 ## 1. Executive Summary
 
-Render Blueprint drift was identified between the declarations in `render.yaml` and the live services operating within the `Ultron core` Render workspace. To protect running production instances, **no automatic infrastructure synchronization was executed**. This document outlines the exact mapped services, duplicate eliminations, and non-destructive reconciliation blueprint.
+Render Blueprint drift exists between `render.yaml` and the live services in the `Ultron core` workspace. **The current `render.yaml` is NOT reconciled and is NOT safe to sync.** The mapped service list and YAML below are an operator-review draft only; they have not been validated against service IDs, environment values, network bindings or current dashboard settings. No infrastructure synchronization was executed. Keep every existing service unchanged until a separately reviewed diff is approved.
 
 ---
 
@@ -30,14 +30,13 @@ Render Blueprint drift was identified between the declarations in `render.yaml` 
 
 The following deprecated/paid provider environment declarations in `render.yaml` must be removed or marked explicitly optional:
 
-1. `FISH_API_KEY`: Gated behind `ULTRON_ENABLE_FISH_AUDIO=true`; remove from default production blueprint.
-2. `FISH_AUDIO_VOICE_MODEL_ID`: Legacy default; replaced by local `am_onyx` Kokoro neural voice.
-3. `FISH_AUDIO_TTS_MODEL` & `FISH_AUDIO_STT_MODEL`: Removed from active path.
-4. `TTS_API_BASE_URL` & `TTS_API_KEY`: Kept optional for generic OpenAI-compatible providers.
+1. `FISH_API_KEY` and Fish model variables remain in the candidate `render.yaml`; backend code requires explicit `ULTRON_ENABLE_FISH_AUDIO=true` before activating Fish. Do not assume the live Render value of that flag without checking the dashboard.
+2. Kokoro `am_onyx` is not currently wired as the active frontend speech service; do not describe it as a production replacement until model/runtime and target-PC speech tests pass.
+3. `TTS_API_BASE_URL`, `TTS_API_KEY`, `STT_API_BASE_URL` and `STT_API_KEY` are optional compatibility paths and require an owner-approved provider/cost decision.
 
 ---
 
-## 4. Reconciled `render.yaml` Specification (Ready for Operator Review)
+## 4. Illustrative Reconciliation Draft (NOT READY TO SYNC)
 
 ```yaml
 services:
@@ -109,4 +108,6 @@ services:
 1. Reconcile frontend and backend into the current release branch.
 2. Verify all CI pipelines pass.
 3. Operator reviews the blueprint diff in Render Dashboard.
-4. Manual sync executed only after operator signoff.
+4. Validate every service against its existing Render service ID, branch, region, plan, root directory, health path, env vars, disk, and networking before considering a manual sync.
+5. Do not apply this illustrative YAML as-is: the checked-in `render.yaml` still names the backend `ultron-ai`, names browser use `ultron-browser-use`, omits live `ultron-core-interface` and `ultron-rea-gateway` definitions, and declares duplicate World Intelligence services.
+6. Manual sync executed only after operator signoff.
