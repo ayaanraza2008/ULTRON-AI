@@ -2079,7 +2079,15 @@
                 copy.type = "button";
                 copy.className = "drawer-action secondary";
                 copy.textContent = "COPY NEW TOKEN";
-                copy.addEventListener("click", () => navigator.clipboard?.writeText(result.deviceToken).then(() => showToast("New device token copied."), () => showToast("Copy failed. Keep the token private.")));
+                copy.addEventListener("click", () => {
+                  if (!navigator.clipboard?.writeText) {
+                    showToast("Clipboard access is unavailable. Copy the token from the secure note manually.");
+                    return;
+                  }
+                  navigator.clipboard.writeText(result.deviceToken)
+                    .then(() => showToast("New device token copied."))
+                    .catch(() => showToast("Copy failed. Keep the token private."));
+                });
                 card.appendChild(copy);
               } catch (error) {
                 showToast(error.message || "Could not rotate the device token.");
