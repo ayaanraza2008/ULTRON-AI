@@ -79,9 +79,10 @@ export class CyberReconEngine {
     if (headers["set-cookie"]?.includes("connect.sid")) detected.push("Session: Express.js");
 
     return {
-      serverHeader: serverHeader || "Hidden (Best Practice)",
-      poweredBy: poweredBy || "Hidden (Best Practice)",
-      detectedStack: detected.length > 0 ? detected : ["Hardened / Concealed Headers"]
+      evidenceStatus: detected.length > 0 ? "CALLER_SUPPLIED_HEADERS" : "NOT_PROVIDED",
+      serverHeader: serverHeader || "Not supplied",
+      poweredBy: poweredBy || "Not supplied",
+      detectedStack: detected.length > 0 ? detected : ["No header evidence supplied"]
     };
   }
 

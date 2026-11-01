@@ -124,7 +124,9 @@ export class UltronCyberCore {
 
     // Calculate aggregated metrics
     const maxCvss = allFindings.reduce((max, f) => Math.max(max, f.cvss || f.cvssScore || 0), 0);
-    const overallRisk = maxCvss >= 9.0 ? "CRITICAL" : maxCvss >= 7.0 ? "HIGH" : maxCvss >= 4.0 ? "MEDIUM" : allFindings.length > 0 ? "LOW" : "SECURE";
+    const overallRisk = allFindings.length === 0
+      ? "NOT_ASSESSED"
+      : maxCvss >= 9.0 ? "CRITICAL" : maxCvss >= 7.0 ? "HIGH" : maxCvss >= 4.0 ? "MEDIUM" : "LOW";
 
     // Step 6: CYBER-REMEDIATION (Propose patches for top findings)
     const proposedRemediations = allFindings.slice(0, 5).map(f => this.codeShield.proposeRemediation(f));

@@ -15,11 +15,14 @@ test("Cyber Recon: Passive reconnaissance resolves DNS genuinely on authorized t
   assert.equal(report.dnsSummary.status, "RESOLVED");
   assert.ok(["127.0.0.1", "::1"].includes(report.dnsSummary.ip));
   assert.ok(report.fingerprint.detectedStack.some(s => s.includes("Express")));
+  assert.equal(report.fingerprint.evidenceStatus, "CALLER_SUPPLIED_HEADERS");
   assert.equal(report.attackSurface.exposedEndpointsCount, 0); // No fabricated open ports
   assert.equal(report.attackSurface.status, "NOT_SCANNED");
   assert.equal(report.tlsStatus.status, "NOT_CHECKED");
   assert.equal(report.tlsStatus.certificateStatus, "NOT_VERIFIED");
   assert.equal(report.tlsStatus.tlsVersion, null);
+  assert.equal(report.fingerprint.evidenceStatus, "NOT_PROVIDED");
+  assert.deepEqual(report.fingerprint.detectedStack, ["No header evidence supplied"]);
 });
 
 test("Cyber Recon: Caller-supplied ports and certificates remain explicitly unverified", async () => {

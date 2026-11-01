@@ -35,21 +35,27 @@ export class CyberWebAuditor {
     const authRecord = this.authGateway.assertAuthorization(cleanUrl, PERMITTED_ACTIVITIES.WEB_API_AUDIT);
 
     const findings = [];
-    const headers = options.headers || {};
-    const cookies = options.cookies || [];
-    const jwtToken = options.jwtToken || null;
-    const corsHeaders = options.corsHeaders || {};
+    const headers = options.headers && typeof options.headers === "object" ? options.headers : {};
+    const cookies = Array.isArray(options.cookies) ? options.cookies : [];
+    const jwtToken = typeof options.jwtToken === "string" ? options.jwtToken : null;
+    const corsHeaders = options.corsHeaders && typeof options.corsHeaders === "object" ? options.corsHeaders : {};
+
+    // This analyzer evaluates caller-supplied evidence; it does not fetch targetUrl.
+    // Empty input means no captured response is available, not that controls are absent.
+    const hasHeaderEvidence = Object.keys(headers).length > 0;
+    const hasCookieEvidence = cookies.length > 0;
+    const hasCorsEvidence = Object.keys(corsHeaders).length > 0;
 
     // 2. Security Headers & CSP Audit
-    const headerFindings = this._auditHeaders(headers);
+    const headerFindings = hasHeaderEvidence ? this._auditHeaders(headers) : [];
     findings.push(...headerFindings);
 
     // 3. Cookie Flags Audit
-    const cookieFindings = this._auditCookies(cookies);
+    const cookieFindings = hasCookieEvidence ? this._auditCookies(cookies) : [];
     findings.push(...cookieFindings);
 
     // 4. CORS Configuration Audit
-    const corsFindings = this._auditCors(corsHeaders);
+    const corsFindings = hasCorsEvidence ? this._auditCors(corsHeaders) : [];
     findings.push(...corsFindings);
 
     // 5. JWT Token Audit (if token supplied)
@@ -59,11 +65,19 @@ export class CyberWebAuditor {
     }
 
     // 6. Rate Limiting Presence Verification
-    const rateLimitFindings = this._auditRateLimiting(headers);
+    const rateLimitFindings = hasHeaderEvidence ? this._auditRateLimiting(headers) : [];
     findings.push(...rateLimitFindings);
 
-    const maxCvss = findings.reduce((max, f) => Math.max(max, f.cvssScore || 0), 0);
-    const overallRisk = maxCvss >= 9.0 ? "CRITICAL" : maxCvss >= 7.0 ? "HIGH" : maxCvss >= 4.0 ? "MEDIUM" : findings.length > 0 ? "LOW" : "SECURE";
+    const evidenceProvided = hasHeaderEvidence || hasCookieEvidence || hasCorsEvidence || Boolean(jwtToken);
+    const evidenceFindings = findings.map(f => ({
+      ...f,
+      evidenceSource: "CALLER_SUPPLIED_INPUT",
+      verificationStatus: "NOT_INDEPENDENTLY_VERIFIED"
+    }));
+    const maxCvss = evidenceFindings.reduce((max, f) => Math.max(max, f.cvssScore || 0), 0);
+    const overallRisk = !evidenceProvided
+      ? "NOT_ASSESSED"
+      : maxCvss >= 9.0 ? "CRITICAL" : maxCvss >= 7.0 ? "HIGH" : maxCvss >= 4.0 ? "MEDIUM" : evidenceFindings.length > 0 ? "LOW" : "NO_FINDINGS_IN_SUPPLIED_EVIDENCE";
 
     const report = {
       auditId: "web-audit-" + Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
@@ -71,10 +85,13 @@ export class CyberWebAuditor {
       scopeId: authRecord.scopeId,
       organization: authRecord.organization,
       timestamp: new Date().toISOString(),
-      findingsCount: findings.length,
+      status: evidenceProvided ? "INPUT_ANALYSIS_ONLY" : "NOT_ASSESSED",
+      evidenceMode: "CALLER_SUPPLIED_UNVERIFIED",
+      verificationStatus: "NOT_INDEPENDENTLY_VERIFIED",
+      findingsCount: evidenceFindings.length,
       overallRisk,
       maxCvss,
-      findings
+      findings: evidenceFindings
     };
 
     this.auditHistory.push(report);

@@ -28,9 +28,14 @@ export class CyberVulnerabilityScanner {
     const authRecord = this.authGateway.assertAuthorization(cleanTarget, PERMITTED_ACTIVITIES.VULNERABILITY_SCAN);
 
     const findings = [];
-    const openPorts = options.openPorts || [];
-    const headers = options.headers || {};
-    const config = options.config || {};
+    const openPorts = Array.isArray(options.openPorts) ? options.openPorts : [];
+    const headers = options.headers && typeof options.headers === "object" ? options.headers : {};
+    const config = options.config && typeof options.config === "object" ? options.config : {};
+    const reportedPorts = [...new Set(openPorts.filter(port => Number.isInteger(port) && port >= 1 && port <= 65535))];
+    const evidenceProvided = reportedPorts.length > 0
+      || Object.keys(headers).length > 0
+      || Object.keys(config).length > 0
+      || typeof options.tlsVersion === "string";
 
     // 1. Port & Insecure Service Inspection
     if (openPorts.includes(21)) {
@@ -95,8 +100,17 @@ export class CyberVulnerabilityScanner {
       });
     }
 
-    const maxCvss = findings.reduce((max, f) => Math.max(max, f.cvss), 0);
-    const overallRisk = maxCvss >= 9.0 ? "CRITICAL" : maxCvss >= 7.0 ? "HIGH" : maxCvss >= 4.0 ? "MEDIUM" : findings.length > 0 ? "LOW" : "SECURE";
+    // Inputs are supplied by the caller; no socket or TLS probe is performed here.
+    const evidenceFindings = findings.map(f => ({
+      ...f,
+      confidence: 0.5,
+      evidenceSource: "CALLER_SUPPLIED_OPTIONS",
+      verificationStatus: "NOT_INDEPENDENTLY_VERIFIED"
+    }));
+    const maxCvss = evidenceFindings.reduce((max, f) => Math.max(max, f.cvss), 0);
+    const overallRisk = !evidenceProvided
+      ? "NOT_ASSESSED"
+      : maxCvss >= 9.0 ? "CRITICAL" : maxCvss >= 7.0 ? "HIGH" : maxCvss >= 4.0 ? "MEDIUM" : evidenceFindings.length > 0 ? "LOW" : "NO_FINDINGS_IN_SUPPLIED_EVIDENCE";
 
     const report = {
       scanId: "scan-" + Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
@@ -104,10 +118,14 @@ export class CyberVulnerabilityScanner {
       scopeId: authRecord.scopeId,
       organization: authRecord.organization,
       timestamp: new Date().toISOString(),
-      findingsCount: findings.length,
+      status: evidenceProvided ? "INPUT_ANALYSIS_ONLY" : "NOT_ASSESSED",
+      evidenceMode: "CALLER_SUPPLIED_UNVERIFIED",
+      verificationStatus: "NOT_INDEPENDENTLY_VERIFIED",
+      reportedOpenPorts: reportedPorts,
+      findingsCount: evidenceFindings.length,
       overallRisk,
       maxCvss,
-      findings
+      findings: evidenceFindings
     };
 
     this.scanHistory.push(report);
