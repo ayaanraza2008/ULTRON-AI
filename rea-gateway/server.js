@@ -11,7 +11,7 @@ const REQUEST_HEADERS = ["accept", "content-type", "mcp-session-id", "mcp-protoc
 const RESPONSE_HEADERS = ["content-type", "content-length", "mcp-session-id", "cache-control", "retry-after"];
 
 function validToken(token) {
-  return typeof token === "string" && /^[A-Za-z0-9_-]{32,3000}$/.test(token);
+  return typeof token === "string" && /^[A-Za-z0-9_+/-]{32,3000}={0,2}$/.test(token);
 }
 
 function bearerMatches(header, expectedToken) {
