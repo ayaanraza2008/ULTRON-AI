@@ -625,18 +625,6 @@ export class UltronSelfEvolutionEngine {
         };
       }
 
-      const cycleSteps = [
-        `1. Self-audit completed. Health score: ${audit.healthScore}/100 with ${audit.totalFindings} findings`,
-        `2. Prioritized improvement plan generated with ${plan.itemCount} items`,
-        `3. Selected autonomous candidate: [${candidate.severity}] ${candidate.title}`,
-        "4. Captured isolated pre-modification snapshot with SHA-256 hash",
-        "5. Staged trial modification in atomic temporary buffer",
-        "6. Executed syntax and security review verifications",
-        "7. Verified regression test boundaries",
-        "8. Promoted validated change into permanent ledger",
-        "9. Generated audit and improvement evidence report"
-      ];
-
       // Prepare trial modification spec
       let modificationSpec;
       if (candidate.targetModule && candidate.targetModule.endsWith(".json")) {
@@ -670,23 +658,40 @@ export class UltronSelfEvolutionEngine {
         autonomous: true
       });
 
+      const cycleSteps = [
+        `1. Self-audit completed. Health score: ${audit.healthScore}/100 with ${audit.totalFindings} findings`,
+        `2. Prioritized improvement plan generated with ${plan.itemCount} items`,
+        `3. Selected autonomous candidate: [${candidate.severity}] ${candidate.title}`,
+        "4. Captured pre-change snapshot and SHA-256 baseline.",
+        "5. Staged proposed file content in a temporary file.",
+        "6. Ran built-in forbidden-pattern checks and JavaScript syntax validation where applicable.",
+        applyResult.success
+          ? "7. Atomically replaced the target file after built-in checks passed."
+          : "7. Target change was rejected or rolled back; no promotion reported.",
+        applyResult.success
+          ? "8. Read back the target file and verified its SHA-256 digest."
+          : "8. Rollback/rejection status returned by the file-change engine.",
+        "9. Full project regression tests and independent security scans were NOT run by this command."
+      ];
+
       return {
         intent: "EVOLVE_CYCLE",
         status: applyResult.success ? "UPGRADE_CYCLE_COMPLETED" : "UPGRADE_CYCLE_ROLLED_BACK",
+        completionScope: "BOUNDED_FILE_CHANGE_ONLY",
+        regressionSuiteExecuted: false,
         lifecyclePhases: [
           "AUDIT_COMPLETED",
           "PLAN_GENERATED",
           "CANDIDATE_SELECTED",
-          "SNAPSHOT_CAPTURED",
-          "PATCH_STAGED",
-          "SYNTAX_VERIFIED",
-          "SECURITY_VERIFIED",
-          "REGRESSION_VERIFIED",
+          applyResult.success ? "SNAPSHOT_CAPTURED" : "CHANGE_REJECTED_OR_ROLLED_BACK",
+          applyResult.success ? "BUILT_IN_GUARDS_AND_JS_SYNTAX_CHECKED" : "NO_PROMOTION",
+          applyResult.success ? "CONTENT_HASH_READBACK_VERIFIED" : "ROLLBACK_OR_REJECTION_REPORTED",
+          "FULL_REGRESSION_SUITE_NOT_RUN",
           applyResult.success ? "PATCH_PROMOTED" : "PATCH_ROLLED_BACK"
         ],
         message: applyResult.success
-          ? `ULTRON autonomous upgrade cycle completed successfully. System health: ${audit.healthScore}/100. Applied candidate: ${candidate.title}.`
-          : `ULTRON upgrade cycle aborted and safely rolled back: ${applyResult.reason}`,
+          ? `ULTRON applied a bounded self-improvement change to ${candidate.targetModule || "the selected telemetry target"}. Built-in checks and file hash verification completed; the full project regression suite was not run.`
+          : `ULTRON rejected or rolled back the proposed change: ${applyResult.reason || applyResult.status}. The full project regression suite was not run.`,
         cycleSteps,
         audit,
         planSummary: {

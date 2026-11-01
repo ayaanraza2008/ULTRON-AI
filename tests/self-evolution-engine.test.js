@@ -151,6 +151,11 @@ describe("ULTRON Self-Evolution Engine", () => {
     assert.equal(res3.status, "UPGRADE_CYCLE_COMPLETED");
     assert.ok(Array.isArray(res3.cycleSteps));
     assert.equal(res3.cycleSteps.length, 9);
+    assert.equal(res3.completionScope, "BOUNDED_FILE_CHANGE_ONLY");
+    assert.equal(res3.regressionSuiteExecuted, false);
+    assert.ok(res3.lifecyclePhases.includes("FULL_REGRESSION_SUITE_NOT_RUN"));
+    assert.equal(res3.lifecyclePhases.includes("REGRESSION_VERIFIED"), false);
+    assert.match(res3.cycleSteps[8], /NOT run/i);
   });
 
   test("Rejects path traversal attempts outside repository root", async () => {
