@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import { VideoEditingEngine, EDITING_PRESETS } from "../media/video-editing-engine.js";
+
+const execFileAsync = promisify(execFile);
+const HAS_FFMPEG = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0;
 
 test("VideoEditingEngine: Editing presets configure aspect ratios, color filters and FPS", () => {
   assert.ok(EDITING_PRESETS.CINEMATIC);
@@ -56,6 +61,12 @@ test("VideoEditingEngine: Builds structured Edit Decision List (EDL) timeline", 
   const timeline = engine.buildTimeline({
     presetKey: "ACTION",
     title: "Action Montage Test",
+    sourceClips: [
+      { name: "intro.mp4", path: "fixtures/intro.mp4", duration: 10 },
+      { name: "action.mp4", path: "fixtures/action.mp4", duration: 15 },
+      { name: "climax.mp4", path: "fixtures/climax.mp4", duration: 12 },
+      { name: "outro.mp4", path: "fixtures/outro.mp4", duration: 8 }
+    ],
     targetDuration: 15,
     voiceoverText: "Full power engaged."
   });
@@ -71,7 +82,7 @@ test("VideoEditingEngine: Builds structured Edit Decision List (EDL) timeline", 
 
 test("VideoEditingEngine: Compiles single-pass FFmpeg command bounded for AMD Ryzen 7 5700U", () => {
   const engine = new VideoEditingEngine();
-  const timeline = engine.buildTimeline({ presetKey: "CINEMATIC", targetDuration: 30 });
+  const timeline = engine.buildTimeline({ presetKey: "CINEMATIC", sourceClips: [{ name: "source.mp4", path: "C:\\UltronWorkspace\\source.mp4", duration: 30 }], targetDuration: 30 });
   const compiled = engine.compileFFmpegCommand(timeline, "C:\\UltronWorkspace\\exports\\output.mp4");
 
   assert.equal(compiled.threads, 4, "Must limit FFmpeg threads to 4 to preserve CPU responsiveness");
@@ -81,61 +92,64 @@ test("VideoEditingEngine: Compiles single-pass FFmpeg command bounded for AMD Ry
   assert.ok(compiled.command.includes("-c:v libx264"));
 });
 
-test("VideoEditingEngine: Renders video timeline, outputs manifest JSON, and supports cancellation", async () => {
+test("VideoEditingEngine: renders real source media to a valid MP4 when FFmpeg is available", { skip: !HAS_FFMPEG }, async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-video-render-"));
+  const sourcePath = path.join(tmpDir, "source.mp4");
   const engine = new VideoEditingEngine({ workspaceBase: tmpDir });
   await engine.initialize();
+  await execFileAsync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=24",
+    "-t", "2", "-pix_fmt", "yuv420p", sourcePath], { timeout: 30000 });
 
   const timeline = engine.buildTimeline({
-    presetKey: "CINEMATIC",
-    title: "Mini Test Render",
-    targetDuration: 2
+    presetKey: "CINEMATIC", title: "Mini Test Render",
+    sourceClips: [{ name: "source.mp4", path: sourcePath, duration: 2 }], targetDuration: 2
   });
-
-  let progressTrack = [];
-  const result = await engine.renderVideo(timeline, {
-    onProgress: (p) => progressTrack.push(p.progress)
-  });
-
+  const progressTrack = [];
+  const result = await engine.renderVideo(timeline, { onProgress: p => progressTrack.push(p.progress) });
   assert.equal(result.success, true);
-  assert.equal(typeof result.renderedWithFFmpeg, "boolean");
-  assert.ok(result.renderId);
-  assert.ok(progressTrack.length > 0);
+  assert.equal(result.renderedWithFFmpeg, true);
+  assert.equal(result.audioIncluded, false);
   assert.ok(progressTrack.includes(100));
-
-  // Verify exported files exist
-  const videoExists = await fs.stat(result.outputPath);
-  assert.ok(videoExists.isFile());
-
-  const manifestExists = await fs.stat(result.manifestPath);
-  assert.ok(manifestExists.isFile());
-
-  // Test status query
-  const status = engine.getRenderStatus(result.renderId);
-  assert.equal(status.status, "COMPLETED");
-
+  const output = await fs.readFile(result.outputPath);
+  assert.ok(output.length > 1024);
+  assert.equal(output.toString("ascii", 4, 8), "ftyp");
+  assert.ok((await fs.stat(result.manifestPath)).isFile());
+  assert.equal(engine.getRenderStatus(result.renderId).status, "COMPLETED");
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-test("VideoEditingEngine: distinguishes genuine FFmpeg rendering from preview simulation", async () => {
+test("VideoEditingEngine: fails closed when FFmpeg is unavailable and never creates a fake MP4", async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-no-ffmpeg-"));
+  const sourcePath = path.join(tmpDir, "source.mp4");
+  await fs.writeFile(sourcePath, "test fixture");
   const engine = new VideoEditingEngine({
     workspaceBase: tmpDir,
     ffmpegChecker: async () => { throw new Error("ffmpeg: command not found"); }
   });
   await engine.initialize();
-
   const timeline = engine.buildTimeline({
-    presetKey: "CINEMATIC",
-    title: "No FFmpeg Test",
-    targetDuration: 2
+    presetKey: "CINEMATIC", title: "No FFmpeg Test",
+    sourceClips: [{ name: "source.mp4", path: sourcePath, duration: 2 }], targetDuration: 2
   });
-
   const result = await engine.renderVideo(timeline);
-  assert.equal(result.success, true);
+  assert.equal(result.success, false);
+  assert.equal(result.status, "BLOCKED_FFMPEG_UNAVAILABLE");
   assert.equal(result.renderedWithFFmpeg, false);
-  assert.ok(result.outputPath);
-  assert.ok(result.manifestPath);
+  assert.equal(result.outputPath, null);
+  assert.ok((await fs.stat(result.manifestPath)).isFile());
+  assert.equal(engine.getRenderStatus(result.renderId).status, "BLOCKED_FFMPEG_UNAVAILABLE");
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
 
+test("VideoEditingEngine: refuses to invent source footage when no source clips were supplied", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-no-source-"));
+  const engine = new VideoEditingEngine({ workspaceBase: tmpDir });
+  await engine.initialize();
+  const timeline = engine.buildTimeline({ presetKey: "CINEMATIC", title: "No Source", targetDuration: 2 });
+  assert.equal(timeline.videoClips.length, 0);
+  const result = await engine.renderVideo(timeline);
+  assert.equal(result.success, false);
+  assert.equal(result.status, "BLOCKED_SOURCE_MEDIA_UNAVAILABLE");
+  assert.equal(result.outputPath, null);
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
