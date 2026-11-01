@@ -888,7 +888,7 @@
     return segments.map(segment => ({ ...segment, text: segment.text.trim() })).filter(segment => segment.text);
   }
 
-  function stopFishAudioPlayback() {
+  function stopActiveSpeechAudio() {
     if (finishActiveSpeechAudio) {
       finishActiveSpeechAudio(false);
       return;
@@ -904,28 +904,33 @@
     finishActiveSpeechAudio = null;
   }
 
-  async function requestFishAudioSpeech(text) {
-    const response = await fetch("/api/speech/synthesize", {
+  async function requestKokoroSpeech(text) {
+    const cleanText = String(text || "").trim().slice(0, 4000);
+    if (!cleanText) throw new Error("No text was supplied for speech synthesis.");
+    const result = await apiRequest("/api/jarvis/voice/kokoro", {
       method: "POST",
-      credentials: "same-origin",
-      cache: "no-store",
-      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text: String(text || "").trim().slice(0, 4000) }),
-      ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(60000) } : {})
+      body: { text: cleanText, voice: "am_onyx", speed: 0.95 }
     });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      const details = payload && typeof payload === "object" ? payload.error : null;
-      throw new Error(details && typeof details.message === "string" ? details.message : "Fish Audio synthesis failed (" + response.status + ").");
+    if (result?.speechAvailable !== true || result?.audioKind !== "speech" || result?.fallback === true) {
+      throw new Error("Kokoro speech is not available on this backend. Browser speech will be used instead.");
     }
-    const blob = await response.blob();
-    if (!blob.size || (blob.type && !blob.type.startsWith("audio/"))) throw new Error("Fish Audio returned an empty or invalid audio response.");
-    return blob;
+    const dataUrl = typeof result.dataUrl === "string" ? result.dataUrl : "";
+    const match = /^data:audio\/wav;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+    if (!match || match[1].length > 12 * 1024 * 1024) {
+      throw new Error("Kokoro returned an invalid or oversized audio payload.");
+    }
+    const binary = window.atob(match[1]);
+    if (!binary.length || binary.length > 9 * 1024 * 1024) {
+      throw new Error("Kokoro audio payload exceeded the safety limit.");
+    }
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type: "audio/wav" });
   }
 
-  function playFishAudioBlob(blob, epoch) {
-    if (epoch !== speechEpoch || !blob || !blob.size) return Promise.resolve(false);
-    stopFishAudioPlayback();
+  function playSpeechBlob(blob, epoch) {
+    if (epoch !== speechEpoch || !blob || !blob.size || blob.size > 9 * 1024 * 1024) return Promise.resolve(false);
+    stopActiveSpeechAudio();
     const objectUrl = URL.createObjectURL(blob);
     const player = new window.Audio(objectUrl);
     activeSpeechAudio = player;
@@ -960,20 +965,19 @@
     if (!shouldSpeak) return false;
     speechEpoch += 1;
     const epoch = speechEpoch;
-    stopFishAudioPlayback();
+    stopActiveSpeechAudio();
     try { window.speechSynthesis?.cancel?.(); } catch { /* use a fresh response */ }
     await ensureSpeechCapabilities();
     if (epoch !== speechEpoch) return false;
-    if (speechCapabilities.premiumTtsConfigured) {
-      try {
-        const blob = await requestFishAudioSpeech(text);
-        if (epoch !== speechEpoch) return false;
-        const played = await playFishAudioBlob(blob, epoch);
-        if (played || epoch !== speechEpoch) return played;
-      } catch {
-        if (epoch !== speechEpoch) return false;
-        showToast("Fish Audio voice is unavailable right now. Falling back to your browser's installed voice.", 3000);
-      }
+    try {
+      const blob = await requestKokoroSpeech(text);
+      if (epoch !== speechEpoch) return false;
+      const played = await playSpeechBlob(blob, epoch);
+      if (played || epoch !== speechEpoch) return played;
+    } catch {
+      if (epoch !== speechEpoch) return false;
+      // A missing model/owner route falls back to the installed browser voice.
+      // Diagnostic tones are never passed to the audio player.
     }
     return speakResponseBrowser(text, epoch);
   }
@@ -1028,14 +1032,14 @@
     });
   }
 
-  async function speakStreamingSegment(text, epoch, preferFishAudio) {
+  async function speakStreamingSegment(text, epoch, preferKokoro) {
     const segment = String(text || "").trim();
     if (!segment || epoch !== speechEpoch) return false;
-    if (preferFishAudio) {
+    if (preferKokoro) {
       try {
-        const blob = await requestFishAudioSpeech(segment);
+        const blob = await requestKokoroSpeech(segment);
         if (epoch !== speechEpoch) return false;
-        const played = await playFishAudioBlob(blob, epoch);
+        const played = await playSpeechBlob(blob, epoch);
         if (played || epoch !== speechEpoch) return played;
       } catch {
         if (epoch !== speechEpoch) return false;
@@ -1114,7 +1118,7 @@
       if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
       return;
     }
-    ui.captionText.textContent = "TRANSCRIBING · FISH AUDIO";
+    ui.captionText.textContent = "TRANSCRIBING · SERVER VOICE";
     ui.voiceSubtitle.textContent = "Transcribing your speech…";
     const blob = new Blob(session.chunks, { type: session.recorder.mimeType || "audio/webm" });
     const submitted = await transcribeRecordedAudio(blob);
@@ -1158,7 +1162,7 @@
       return true;
     } catch (error) {
       ui.captionText.textContent = "VOICE TRANSCRIPTION FAILED";
-      showToast(error.message || "Speech recognition failed. Check the Fish Audio connection and try again.", 6500);
+      showToast(error.message || "Speech recognition failed. Check the server connection and try again.", 6500);
       return false;
     }
   }
@@ -1169,8 +1173,14 @@
     speechCapabilitiesPromise = (async () => {
       try {
         const payload = await apiRequest("/api/capabilities");
-        speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
+        const rawSpeech = payload?.providers?.speech && typeof payload.providers.speech === "object"
           ? payload.providers.speech : {};
+        const fishOnlyProvider = rawSpeech.provider === "fish-audio" || rawSpeech.fishAudioConfigured === true;
+        speechCapabilities = {
+          ...rawSpeech,
+          premiumTtsConfigured: false,
+          premiumSttConfigured: Boolean(rawSpeech.premiumSttConfigured && !fishOnlyProvider)
+        };
       } catch {
         speechCapabilities = {};
       } finally {
@@ -1194,7 +1204,7 @@
         releaseMicVisualizer();
         renderMode();
         setCoreState("error");
-        showToast("Browser speech recognition is unavailable, and ULTRON has no server-side transcription provider configured. Configure FISH_API_KEY on the backend.");
+        showToast("Browser speech recognition is unavailable, and ULTRON has no server-side transcription provider configured. Install/enable browser speech recognition or use the Windows companion.");
         return;
       }
       if (typeof window.MediaRecorder !== "function") {
@@ -1247,7 +1257,7 @@
       };
       recorder.start(250);
       setCoreState("listening");
-      ui.voiceSubtitle.textContent = "Listening · Fish Audio transcription";
+      ui.voiceSubtitle.textContent = "Listening · server/browser transcription";
       ui.captionText.textContent = "LISTENING · SPEAK NATURALLY";
       session.monitorTimer = window.setInterval(() => {
         if (fallbackRecorderSession !== session || recorder.state !== "recording") return;
@@ -1491,7 +1501,7 @@
       startRecognition();
     }
     if (voiceActive) {
-      ui.voiceSubtitle.textContent = forceFallbackRecognition ? "Listening · Fish Audio transcription" : "Listening · tap to pause";
+      ui.voiceSubtitle.textContent = forceFallbackRecognition ? "Listening · server transcription" : "Listening · tap to pause";
       ui.captionText.textContent = forceFallbackRecognition ? "LISTENING · SERVER TRANSCRIPTION" : "LISTENING · SPEAK NATURALLY";
     }
   }
@@ -1501,7 +1511,7 @@
     stopRecognition();
     releaseMicVisualizer();
     speechEpoch += 1;
-    stopFishAudioPlayback();
+    stopActiveSpeechAudio();
     try { window.speechSynthesis?.cancel?.(); } catch { /* ignore */ }
     renderMode();
     if (!busy) setCoreState("idle");
@@ -1565,7 +1575,7 @@
     ui.muteToggle.title = mutedInTextMode ? "Allow ULTRON to speak in Text Mode" : "Mute spoken replies in Text Mode";
     if (mutedInTextMode) {
       speechEpoch += 1;
-      stopFishAudioPlayback();
+      stopActiveSpeechAudio();
       try { window.speechSynthesis?.cancel?.(); } catch { /* no active utterance */ }
       if (coreState === "speaking") setCoreState("idle");
     }
@@ -1607,7 +1617,7 @@
     const shouldSpeak = source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
     const streamVoiceReply = source === "voice" && shouldSpeak && attachments.length === 0;
     let streamSpeechEpoch = null;
-    let streamSpeechUsesFish = false;
+    let streamSpeechUsesKokoro = true;
     let streamSpeechFallbackNotified = false;
     let streamSpeechCount = 0;
     let streamSpeechBuffer = "";
@@ -1619,16 +1629,16 @@
       streamSpeechCount += 1;
       // Start synthesis while the previous chunk is playing, then preserve
       // playback order. This removes an extra network round-trip between chunks.
-      const fishAudioBlobPromise = streamSpeechUsesFish
-        ? requestFishAudioSpeech(clean).catch(() => null)
+      const kokoroSpeechPromise = streamSpeechUsesKokoro
+        ? requestKokoroSpeech(clean).catch(() => null)
         : Promise.resolve(null);
       streamSpeechQueue = streamSpeechQueue.then(async () => {
         if (streamSpeechEpoch === null || streamSpeechEpoch !== speechEpoch) return;
         let spoke = false;
-        if (streamSpeechUsesFish) {
-          const blob = await fishAudioBlobPromise;
+        if (streamSpeechUsesKokoro) {
+          const blob = await kokoroSpeechPromise;
           if (blob && streamSpeechEpoch === speechEpoch) {
-            spoke = await playFishAudioBlob(blob, streamSpeechEpoch);
+            spoke = await playSpeechBlob(blob, streamSpeechEpoch);
           }
           if (!spoke && streamSpeechEpoch === speechEpoch) {
             spoke = await speakResponseBrowser(clean, streamSpeechEpoch);
@@ -1638,7 +1648,7 @@
         }
         if (!spoke && streamSpeechEpoch === speechEpoch && !streamSpeechFallbackNotified) {
           streamSpeechFallbackNotified = true;
-          showToast("Voice playback is unavailable. Check your browser audio output and Fish Audio settings.", 4500);
+          showToast("Voice playback is unavailable. Check your browser audio output and server settings.", 4500);
         }
       });
     };
@@ -1652,7 +1662,7 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        // Never cut Fish Audio or browser speech at an arbitrary word count.
+        // Never cut server or browser speech at an arbitrary word count.
         // Sentence-boundary synthesis avoids abrupt timbre/pitch resets between tiny clips.
         // Voice answers are instructed to be one short English sentence, so this
         // normally produces one continuous audio clip while still starting early.
@@ -1698,8 +1708,8 @@
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
         streamSpeechEpoch = ++speechEpoch;
-        streamSpeechUsesFish = Boolean(speechCapabilities.premiumTtsConfigured);
-        stopFishAudioPlayback();
+        streamSpeechUsesKokoro = true;
+        stopActiveSpeechAudio();
         try { window.speechSynthesis?.cancel?.(); } catch { /* no previous speech to stop */ }
       }
       const requestBody = { messages, persona: "ultron", ...(attachments.length ? { attachments } : {}) };
@@ -1854,17 +1864,17 @@
     }
     if (name === "voice-quality") {
       await ensureSpeechCapabilities();
-      drawerHeading("Voice quality & pronunciation", "ULTRON uses a deep Indian male Fish Audio voice for natural Hindi-English speech. Auto recognition uses Fish Audio transcription when configured; browser language selection is available as a fallback.");
-      drawerCard("Fish Audio synthesis",
-        speechCapabilities.premiumTtsConfigured ? "The backend reports a speech output provider. A real response still depends on the key, voice model, and available quota." : "No server-side synthesis is configured; ULTRON will use browser-installed voices.",
-        speechCapabilities.premiumTtsConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER FALLBACK",
-        speechCapabilities.premiumTtsConfigured ? "ready" : "warning");
-      drawerCard("Fish Audio recognition",
-        speechCapabilities.premiumSttConfigured ? "The backend reports a transcription provider for recorded-microphone fallback." : "Server transcription is unavailable; this browser must support its native speech-recognition service.",
-        speechCapabilities.premiumSttConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER ONLY",
+      drawerHeading("Voice quality & pronunciation", "ULTRON uses a deep Indian male server voice for natural Hindi-English speech. Auto recognition uses server transcription when configured; browser language selection is available as a fallback.");
+      drawerCard("server synthesis",
+        "ULTRON attempts genuine Kokoro am_onyx speech when the backend model and runtime are installed. Missing models and diagnostic tones are rejected; installed browser voices remain the fallback.",
+        "KOKORO → BROWSER FALLBACK",
+        "warning");
+      drawerCard("server recognition",
+        "Server-side transcription is available only when a supported non-Fish provider is configured; otherwise ULTRON uses browser speech recognition.",
+        speechCapabilities.premiumSttConfigured ? "SERVER STT · UNVERIFIED" : "BROWSER ONLY",
         speechCapabilities.premiumSttConfigured ? "ready" : "warning");
-      drawerCard("Voice reference", "Kamal · deep Indian male · Hindi-English", "FISH AUDIO VOICE");
-      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with Fish Audio transcription." : "Auto detection needs server-side Fish Audio transcription; browser fallback currently uses English (India).") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
+      drawerCard("Voice reference", "am_onyx · deep male · Hindi-English", "SERVER VOICE VOICE");
+      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with server transcription." : "Auto detection needs server-side server transcription; browser fallback currently uses English (India).") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
       drawerButton("AUTO · HINDI + ENGLISH", () => setSpeechLanguageMode("auto"), speechLanguageMode !== "auto");
       drawerButton("HINDI · hi-IN", () => setSpeechLanguageMode("hi-IN"), speechLanguageMode !== "hi-IN");
       drawerButton("ENGLISH · en-IN", () => setSpeechLanguageMode("en-IN"), speechLanguageMode !== "en-IN");
