@@ -76,3 +76,18 @@ test("Windows companion captures the user's next spoken command instead of sendi
   assert.ok(source.includes("Command capture cancelled"));
   assert.doesNotMatch(source, /DispatchVoiceCommandAsync\("Ultron, status report"/);
 });
+
+test("Windows companion supports one-time device pairing and DPAPI-protected token storage", async () => {
+  const source = await readFile(new URL("../windows-companion/Program.cs", import.meta.url), "utf8");
+  const project = await readFile(new URL("../windows-companion/Ultron.Companion.csproj", import.meta.url), "utf8");
+  assert.ok(source.includes("/api/devices/pairings/claim"));
+  assert.ok(source.includes("private async Task PairDeviceAsync()"));
+  assert.ok(source.includes("ProtectedData.Protect"));
+  assert.ok(source.includes("ProtectedData.Unprotect"));
+  assert.ok(source.includes("DataProtectionScope.CurrentUser"));
+  assert.ok(source.includes("LoadDeviceToken()"));
+  assert.ok(source.includes("SaveDeviceToken(token)"));
+  assert.ok(source.includes("ultron_dev_[a-f0-9]{64}"));
+  assert.ok(project.includes("System.Security.Cryptography.ProtectedData"));
+  assert.ok(!source.includes("File.WriteAllText(DeviceTokenPath()"));
+});
