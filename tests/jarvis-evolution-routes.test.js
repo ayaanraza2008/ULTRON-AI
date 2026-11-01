@@ -1,4 +1,5 @@
 import test from "node:test";
+import crypto from "node:crypto";
 import assert from "node:assert/strict";
 import express from "express";
 import { createServer } from "node:http";
