@@ -16,6 +16,7 @@ import { resolveStrataProvider } from "./integrations/strata.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
 import { createJarvisRouter } from "./jarvis-router.js";
+import { createDevicePairingRouter, verifyPairedDeviceToken } from "./integrations/device-pairing-router.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
@@ -1939,7 +1940,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createDevicePairingRouter({ env, fetchImpl, requireSupabaseUser, logger }));
+  app.use("/api", createJarvisRouter({
+    env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger,
+    authenticateDeviceToken: token => verifyPairedDeviceToken({ token, env, fetchImpl, logger })
+  }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
