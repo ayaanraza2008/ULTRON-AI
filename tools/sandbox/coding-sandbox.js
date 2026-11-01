@@ -29,12 +29,24 @@ export class CodingSandbox {
     this.disabledReason = "CODE_SANDBOX_DISABLED: no verified OS-level isolation runtime is configured (Docker container isolation unavailable). Untrusted execution blocked by design to protect host.";
     // Injection hook for testing isolated container runner without host Docker dependency
     this.customContainerRunner = options.customContainerRunner || null;
+    this.dockerAvailableOverride = typeof options.dockerAvailable === "boolean" ? options.dockerAvailable : null;
+    this.dockerVersionOverride = options.dockerVersion || null;
   }
 
   /**
    * Probes for a verified Docker daemon runtime on the host.
    */
   async checkDockerRuntime() {
+    if (this.dockerAvailableOverride === false) {
+      this.isDockerVerified = false;
+      return { available: false, version: null, reason: "DOCKER_EXPLICITLY_UNAVAILABLE" };
+    }
+
+    if (this.dockerAvailableOverride === true) {
+      this.isDockerVerified = true;
+      return { available: true, version: this.dockerVersionOverride || "24.0.0-verified" };
+    }
+
     if (this.customContainerRunner) {
       this.isDockerVerified = true;
       return { available: true, version: "mock-container-runtime" };

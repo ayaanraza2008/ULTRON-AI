@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Win32;
 using System.Speech.Recognition;
+using System.Speech.Synthesis;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using System.Drawing;
@@ -36,6 +37,10 @@ internal sealed class CompanionContext : ApplicationContext
     private SpeechRecognitionEngine? _recognizer;
     private bool _allowExit;
     private DateTime _lastWakeUtc = DateTime.MinValue;
+    private DateTime _lastSnapUtc = DateTime.MinValue;
+    private int _prevAudioLevel = 0;
+    private uint _savedVolume = 0xFFFFFFFF;
+    private bool _isDucked = false;
     private readonly object _wakeLock = new();
     private readonly FloatingCoreOverlayForm _floatingCore;
 
@@ -283,6 +288,21 @@ internal sealed class CompanionContext : ApplicationContext
             var grammarBuilder = new GrammarBuilder(choices) { Culture = recognizer.RecognizerInfo.Culture };
             recognizer.LoadGrammar(new Grammar(grammarBuilder) { Name = "ULTRON wake word" });
             recognizer.SetInputToDefaultAudioDevice();
+            recognizer.AudioLevelUpdated += (_, e) =>
+            {
+                var level = e.AudioLevel;
+                // Acoustic transient snap detection: rapid energy rise from baseline
+                if (level >= 65 && (level - _prevAudioLevel) >= 35)
+                {
+                    var now = DateTime.UtcNow;
+                    if ((now - _lastSnapUtc).TotalMilliseconds > 1200)
+                    {
+                        _lastSnapUtc = now;
+                        OnSnapDetected();
+                    }
+                }
+                _prevAudioLevel = level;
+            };
             recognizer.SpeechRecognized += (_, e) =>
             {
                 if (e.Result.Confidence < 0.68) return;
@@ -334,7 +354,45 @@ internal sealed class CompanionContext : ApplicationContext
         ShowStatus("Wake word paused. Microphone listener is off.");
     }
 
+    private void EngageMediaDucking()
+    {
+        try
+        {
+            if (!_isDucked)
+            {
+                NativeMethods.waveOutGetVolume(IntPtr.Zero, out _savedVolume);
+                // Attenuate volume to ~20% during voice capture/synthesis
+                NativeMethods.waveOutSetVolume(IntPtr.Zero, 0x33333333);
+                _isDucked = true;
+            }
+        }
+        catch { /* Fallback */ }
+    }
+
+    private void RestoreMediaDucking()
+    {
+        try
+        {
+            if (_isDucked)
+            {
+                NativeMethods.waveOutSetVolume(IntPtr.Zero, _savedVolume);
+                _isDucked = false;
+            }
+        }
+        catch { /* Fallback */ }
+    }
+
     private void OnWakeWordRecognized()
+    {
+        ProcessActivationTrigger("“Ultron” wake word detected.");
+    }
+
+    private void OnSnapDetected()
+    {
+        ProcessActivationTrigger("Acoustic finger-snap detected.");
+    }
+
+    private void ProcessActivationTrigger(string reason)
     {
         lock (_wakeLock)
         {
@@ -347,16 +405,18 @@ internal sealed class CompanionContext : ApplicationContext
         _window.BeginInvoke((Action)(() =>
         {
             _floatingCore?.SetVisualState("EXECUTING");
-            ShowStatus("“Ultron” detected. Opening the ULTRON assistant.");
+            ShowStatus($"{reason} Opening the ULTRON assistant.");
+            EngageMediaDucking();
             try
             {
                 _tray.BalloonTipTitle = "ULTRON activated";
-                _tray.BalloonTipText = "Wake word detected. Opening ULTRON in your browser.";
+                _tray.BalloonTipText = $"{reason} Opening ULTRON in your browser.";
                 _tray.BalloonTipIcon = ToolTipIcon.Info;
                 _tray.ShowBalloonTip(2500);
             }
             catch { /* Toast notifications can be disabled by Windows. */ }
             OpenAssistant();
+            RestoreMediaDucking();
         }));
     }
 
@@ -429,6 +489,12 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    public static extern int waveOutGetVolume(IntPtr hwo, out uint dwVolume);
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    public static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume);
 }
 
 internal sealed class FloatingCoreOverlayForm : Form
@@ -443,6 +509,8 @@ internal sealed class FloatingCoreOverlayForm : Form
     private readonly System.Windows.Forms.Timer _animTimer;
     private float _angle;
     private bool _captureShieldActive;
+
+    public bool IsCaptureShieldActive => _captureShieldActive;
 
     public FloatingCoreOverlayForm(CompanionContext context)
     {

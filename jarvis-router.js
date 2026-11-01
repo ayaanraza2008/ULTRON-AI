@@ -553,6 +553,76 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     res.json(result);
   });
 
+  // --- Global Voice Command Dispatcher & Autonomous Processor ---
+  router.post("/jarvis/voice/process-command", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { command, language = "en", source = "companion" } = req.body || {};
+      const raw = String(command || "").trim();
+      if (!raw) {
+        return res.status(400).json({ error: { message: "Command text is required." } });
+      }
+
+      const lower = raw.toLowerCase();
+      const detectedLang = brain.detectLanguage ? brain.detectLanguage(raw) : language;
+
+      // 1. Evolution / Self-Improvement Intent
+      if (lower.includes("audit") || lower.includes("upgrade") || lower.includes("evolve") || lower.includes("weakness") || lower.includes("improve yourself")) {
+        const evoResult = await ultronSelfEvolutionEngine.processEvolutionCommand(raw, { source, language: detectedLang });
+        return res.json({
+          success: true,
+          intent: evoResult.intent,
+          textResponse: evoResult.message,
+          actionTaken: evoResult.status || "EVOLUTION_PROCESSED",
+          language: detectedLang,
+          result: evoResult
+        });
+      }
+
+      // 2. Offline Desktop Intent via Windows Speech Daemon
+      const offlineMatch = windowsSpeechDaemon.matchOfflineIntent(raw);
+      if (offlineMatch?.matched) {
+        let actionResult = null;
+        if (offlineMatch.action === "open_browser") {
+          actionResult = await windowsAutomation.launchApp("explorer.exe");
+        } else if (offlineMatch.action === "battery") {
+          actionResult = await windowsAutomation.getBatteryStatus();
+        }
+        return res.json({
+          success: true,
+          intent: "OFFLINE_DESKTOP_INTENT",
+          textResponse: offlineMatch.feedback || "Command executed.",
+          actionTaken: offlineMatch.action,
+          language: detectedLang,
+          actionResult
+        });
+      }
+
+      // 3. Conversational / Cognitive Brain Routing
+      const heiResult = brain.hei?.processUtterance ? brain.hei.processUtterance(raw, { language: detectedLang, source }) : null;
+      let textResponse = heiResult?.response;
+      if (!textResponse) {
+        if (detectedLang === "hinglish") {
+          textResponse = "Ji Ayaan, command execute ho raha hai.";
+        } else if (detectedLang === "hindi") {
+          textResponse = "हाँ अयान, निर्देश का पालन किया जा रहा है।";
+        } else {
+          textResponse = "Affirmative, Ayaan. Executing command.";
+        }
+      }
+
+      res.json({
+        success: true,
+        intent: "BRAIN_ROUTED_COMMAND",
+        textResponse,
+        actionTaken: "PROCESSED",
+        language: detectedLang,
+        heiResult
+      });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
   // --- Windows Automation & Hardware Control ---
   router.get("/jarvis/pc/battery", requireOwner, async (_req, res) => {
     const battery = await windowsAutomation.getBatteryStatus();
@@ -941,6 +1011,31 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
 
     req.on("close", () => {
       clearInterval(timer);
+    });
+  });
+
+  let currentHudState = {
+    state: "STANDBY",
+    activeTask: null,
+    updatedAt: new Date().toISOString(),
+    captureProtection: true
+  };
+
+  router.get("/jarvis/hud/state", requireOwner, (_req, res) => {
+    res.json({
+      success: true,
+      hud: currentHudState
+    });
+  });
+
+  router.post("/jarvis/hud/state", requireOwner, express.json(), (req, res) => {
+    const { state, activeTask } = req.body || {};
+    if (state) currentHudState.state = state;
+    if (activeTask !== undefined) currentHudState.activeTask = activeTask;
+    currentHudState.updatedAt = new Date().toISOString();
+    res.json({
+      success: true,
+      hud: currentHudState
     });
   });
 
@@ -1667,11 +1762,36 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
 
   router.post("/jarvis/evolution/apply", requireOwner, express.json(), async (req, res) => {
     try {
-      const { planItemId, modificationSpec, operatorContext } = req.body || {};
-      const result = await ultronSelfEvolutionEngine.applyImprovement(planItemId, modificationSpec, operatorContext);
+      const { planItemId, modificationSpec, operatorConfirmationToken } = req.body || {};
+      const targetFile = modificationSpec?.targetFile || "";
+
+      // Server-side security: Never trust client-supplied operatorContext.authorized!
+      const isRestricted = ultronSelfEvolutionEngine.isRestrictedTarget(targetFile);
+      let authorized = false;
+
+      if (isRestricted) {
+        if (!operatorConfirmationToken || typeof operatorConfirmationToken !== "string" || operatorConfirmationToken.trim().length < 8) {
+          return res.status(403).json({
+            error: {
+              code: "REQUIRES_OPERATOR_CONFIRMATION_TOKEN",
+              message: "Modifying protected system configurations, database schemas, or security policies requires an explicit operator confirmation token."
+            }
+          });
+        }
+        authorized = true;
+      }
+
+      const verifiedOperatorContext = {
+        authorized,
+        userId: req.supabaseUser?.id,
+        confirmedAt: new Date().toISOString()
+      };
+
+      const result = await ultronSelfEvolutionEngine.applyImprovement(planItemId, modificationSpec, verifiedOperatorContext);
       res.json({ success: true, result });
     } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
+      const statusCode = err.message && err.message.includes("SECURITY_VIOLATION") ? 403 : 500;
+      res.status(statusCode).json({ error: { message: err.message } });
     }
   });
 

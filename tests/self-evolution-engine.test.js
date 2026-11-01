@@ -148,5 +148,51 @@ describe("ULTRON Self-Evolution Engine", () => {
     const res3 = await engine.processEvolutionCommand("Ultron, evolve.");
     assert.equal(res3.intent, "EVOLVE_CYCLE");
     assert.ok(res3.message);
+    assert.equal(res3.status, "UPGRADE_CYCLE_COMPLETED");
+    assert.ok(Array.isArray(res3.cycleSteps));
+    assert.equal(res3.cycleSteps.length, 9);
+  });
+
+  test("Rejects path traversal attempts outside repository root", async () => {
+    await assert.rejects(
+      async () => {
+        await engine.applyImprovement("plan-traversal", {
+          targetFile: "../../escaped.js",
+          newContent: "console.log('escape');"
+        });
+      },
+      /Path traversal detected outside repository root/
+    );
+  });
+
+  test("Rejects modifications to strictly immutable paths (.git, .env)", async () => {
+    await assert.rejects(
+      async () => {
+        await engine.applyImprovement("plan-git-escape", {
+          targetFile: ".git/config",
+          newContent: "[core]\n"
+        });
+      },
+      /strictly immutable/
+    );
+
+    await assert.rejects(
+      async () => {
+        await engine.applyImprovement("plan-env-escape", {
+          targetFile: ".env",
+          newContent: "SECRET=123\n"
+        });
+      },
+      /strictly immutable/
+    );
+  });
+
+  test("Executes complete autonomous upgrade cycle on 'Ultron, upgrade yourself'", async () => {
+    const res = await engine.processEvolutionCommand("Ultron, upgrade yourself.");
+    assert.equal(res.intent, "EVOLVE_CYCLE");
+    assert.equal(res.status, "UPGRADE_CYCLE_COMPLETED");
+    assert.ok(res.cycleSteps.length === 9);
+    assert.ok(res.applyResult.success);
+    assert.ok(res.applyResult.record.sha256);
   });
 });

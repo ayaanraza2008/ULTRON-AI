@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { CodingSandbox, SUPPORTED_SANDBOX_LANGUAGES } from "../tools/sandbox/coding-sandbox.js";
 
-test("CodingSandbox: fails closed when Docker is not available on host", async () => {
-  const sandbox = new CodingSandbox({ timeoutMs: 3000 });
+test("CodingSandbox: fails closed deterministically when Docker is not available on host", async () => {
+  const sandbox = new CodingSandbox({ timeoutMs: 3000, dockerAvailable: false });
   const readiness = await sandbox.initialize();
 
   // On host without Docker, must fail closed
@@ -23,6 +23,42 @@ test("CodingSandbox: fails closed when Docker is not available on host", async (
   assert.equal(pyRes.success, false);
   assert.equal(pyRes.executed, false);
   assert.equal(pyRes.errorCode, "CODE_SANDBOX_DISABLED");
+});
+
+test("CodingSandbox: initializes and exposes isolation parameters when Docker is available", async () => {
+  const sandbox = new CodingSandbox({
+    timeoutMs: 3000,
+    memoryLimitMb: 256,
+    cpuLimit: "0.5",
+    dockerAvailable: true,
+    dockerVersion: "24.0.5"
+  });
+  const readiness = await sandbox.initialize();
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.enabled, true);
+  assert.equal(readiness.code, "CODE_SANDBOX_ACTIVE");
+  assert.equal(readiness.isolationEngine, "DOCKER_CONTAINER");
+  assert.equal(readiness.dockerVersion, "24.0.5");
+  assert.equal(readiness.limits.network, "NONE_ISOLATED");
+  assert.equal(readiness.limits.memoryLimitMb, 256);
+  assert.equal(readiness.limits.cpuLimit, "0.5");
+});
+
+test("CodingSandbox: dynamically probes host Docker daemon without forcing override", async () => {
+  const sandbox = new CodingSandbox();
+  const probe = await sandbox.checkDockerRuntime();
+  assert.equal(typeof probe.available, "boolean");
+
+  const readiness = await sandbox.initialize();
+  if (probe.available) {
+    assert.equal(readiness.ready, true);
+    assert.equal(readiness.code, "CODE_SANDBOX_ACTIVE");
+    assert.equal(readiness.isolationEngine, "DOCKER_CONTAINER");
+  } else {
+    assert.equal(readiness.ready, false);
+    assert.equal(readiness.code, "CODE_SANDBOX_DISABLED");
+  }
 });
 
 test("CodingSandbox: rejects unsupported languages before checking container", async () => {
