@@ -2,50 +2,39 @@
 
 **Audit date:** 2026-11-01 (Asia/Kolkata)  
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED  
-**Audited implementation checkpoint:** `3336a99b492014c661a54f9b315400bbb81c6b45`  
-**Production baseline:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
+**Current branch head:** `14edc33ec5ba446280201c3adea10f0144e89980`  
+**Last green code/test checkpoint:** `a3917b6e535147f08343053920c691af008ac0df`  
+**Production base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
 
-**Rule:** Never paste secrets into chat or commit them. Use protected repository/service secrets. Do not buy a paid plan, run production writes, apply database migrations, merge, or deploy without explicit owner approval.
+**Safety rule:** Do not paste secrets into chat or commit them. Do not buy paid plans, write to production data, apply the Supabase migration, sync Render, merge or deploy without explicit owner approval.
 
-| Priority | Area | Verified current truth | What closes it |
+| Priority | Area | Verified current truth | What still closes it |
 |---|---|---|---|
-| P0 | Live text inference | No current genuine live model completion is evidenced. Health/configuration flags are not inference proof. | Run `npm run smoke:model` with an approved free/owner-approved provider credential; retain redacted response evidence. |
-| P0 | Vision / Eyes | Adapter and tests exist; live image-Q&A is not verified. | Run `npm run smoke:vision` with an approved vision provider and a synthetic non-sensitive image. |
-| P0 | Worker execution | Worker logic and deterministic tests pass; real provider execution and Supabase task persistence are unverified. | Execute a bounded disposable-user worker smoke, verify insert/claim/completion/cleanup, and keep secrets in CI/service secret storage. |
-| P0 | Two-user RLS | The live two-account E2E is the one skipped test. Existing RLS inspection is not a substitute. | Use two disposable Auth accounts and the explicit write gate; verify cross-user reads/writes fail and cleanup succeeds. |
-| P0 | Supabase Auth security | Security Advisor reports leaked-password protection disabled. App-side screening does not enable the platform setting. | Review the Supabase Auth setting and plan availability; enable only with owner approval. |
-| P1 | Gesture runtime | PR #441 source path is now wired and automated checks pass. Physical camera/browser MediaPipe load and core response have not been tested on the target PC. | Test explicit camera permission, MediaPipe model load, one/two-hand gestures, stop/retry and CPU fallback on the target browser. |
-| P1 | Kokoro / free speech | UI currently uses browser-installed speech by default. Kokoro adapter is not wired as the active speech service; missing runtime/model produces a diagnostic tone, not speech. | Wire a supported local Kokoro runtime, install verified model/voice files on the target PC, and test intelligible `am_onyx` speech plus interrupt/fallback. |
-| P1 | Fish Audio removal | Backend compatibility code remains but requires explicit `ULTRON_ENABLE_FISH_AUDIO=true`; Fish-labelled frontend compatibility code/copy remains. | Remove the unused Fish UI/client path after the free speech replacement is accepted; verify no Fish requests are made in the default configuration. |
-| P1 | Device pairing | DeviceHub is a local prototype and is not mounted in `server.js` or `integrations/router.js`. New Supabase migration is unapplied. No live owner-authenticated pairing API is proven. | Implement reviewed authenticated routes, rate-limits, expiring/single-use pairing, revocation and durable storage; apply migration only after separate approval and run owner-isolation/restart E2E. |
-| P1 | Durable device storage | Render disk persistence and restart recovery are unverified; local encrypted JSON tests do not prove production durability. | Configure approved persistent storage and a dedicated random `ULTRON_DEVICE_SIGNING_SECRET`; test restart, owner isolation, rotation and revocation. |
-| P1 | Windows companion | .NET x64 build/publish passes CI. Installed daemon, microphone, wake word, language recognition, pairing and harmless PC action round-trip are unverified. | Install the CI artifact on the target Windows PC; test microphone consent, Hindi/English/Hinglish, pairing and allowlisted actions. |
-| P1 | Android companion | Source/policy tests exist; install and live on-device recognition/pairing are unverified. | Build/install on a test Android device and verify permission, foreground notification, stop control and paired safe action. |
-| P1 | Browser automation | Python bridge/policy tests pass; authenticated paired-browser E2E is not evidenced. | Pair a disposable browser session; test navigation/DOM extraction and verify consequential actions remain approval-gated. |
-| P1 | Coding sandbox | Fail-closed tests and Docker isolation options exist; actual Docker runtime isolation on the target host is unverified. | Run harmless resource, filesystem and network boundary tests on a dedicated Docker host. |
-| P1 | Render reconciliation | Live service names/branches differ from candidate `render.yaml`; candidate also contains duplicate World Intelligence service definitions. | Reconcile service IDs/names/branches with the existing Ultron core workspace; review a non-destructive Blueprint diff before any sync. |
-| P1 | Render observability / staging | Deploy metadata exists, but logs/metrics did not give enough evidence for authenticated full-stack acceptance. Backend and frontend run different source revisions. | Align revisions in a staging service, configure readiness/observability, and test sign-in, chat, voice, memory, tasks, files and devices. |
-| P1 | Third-party World Intelligence build | Pinned external God’s Eye source build passes but reports 5 high-severity dependency advisories. ULTRON runtime `npm audit` is clean. | Obtain package-level audit details and a reviewed compatible upstream fix; do not run blind `npm audit fix`. |
-| P1 | Media workflow | FFmpeg fixture-to-MP4 test passes; full user-selected source video/audio workflow is not accepted end-to-end. | Verify a disposable source clip with multiple audio tracks, voiceover, export and H.264/AAC playback in the actual UI. |
-| P2 | Robotics / HIL | CPU-friendly simulation/model export code exists; external physics fidelity and physical robot/HIL are not verified. | Validate exported assets in the intended simulator; test ROS/HIL only in a dedicated, safe lab. |
-| P2 | External integrations | Catalog entries include native, adapter, partial and reference-level maturity. Listing an integration does not prove a live round-trip. | Run a scoped smoke for each integration intended for production and label it by observed maturity/evidence. |
+| P0 | Live text inference | No current genuine live model completion is evidenced. Health/configuration flags are not inference proof. | Run `npm run smoke:model` with an approved provider secret and retain redacted result evidence. |
+| P0 | Vision / Eyes | Vision adapter/tests exist; live image-Q&A is not verified. | Run `npm run smoke:vision` with an approved vision provider and synthetic non-sensitive image. |
+| P0 | Worker execution | Worker logic and deterministic tests pass; live provider execution and Supabase persistence are not verified. | Execute a bounded disposable-user worker smoke; verify insert, claim, completion and cleanup. |
+| P0 | Two-user RLS | The live two-account E2E remains the one skipped test. | Use two disposable Auth accounts and the explicit write gate; test cross-user reads/writes and cleanup. |
+| P0 | Supabase Auth security | Security Advisor reports leaked-password protection disabled. | Review the Supabase Auth setting/plan and enable only with owner approval. |
+| P1 | Device pairing code | Owner create/list/rotate/revoke APIs, one-time claim RPC, token hash verification, Windows DPAPI and Android Keystore storage are implemented and automated-tested in PR #441. | Apply migration `20261101180000_durable_paired_devices.sql` and provision `ULTRON_DEVICE_SIGNING_SECRET` through approved Render/secret-manager workflow; then test live pair/claim/revoke. |
+| P1 | Device storage | Paired-device metadata/token hashes are designed for Supabase; pending credentials are AES-GCM encrypted. Production schema is not installed. | Apply reviewed migration with approval, verify RLS/owner isolation and restart behaviour. |
+| P1 | Kokoro speech | Browser tries Kokoro `am_onyx` only when the backend confirms genuine audio; diagnostic tone is rejected and browser voice is fallback. | Install/verify ONNX runtime and model files on target Windows host or approved server; test intelligible speech, interrupt and fallback. |
+| P1 | Fish Audio retirement | Active frontend calls no Fish endpoint; backend config always disables legacy Fish TTS/STT even if old key/flag exist; candidate Blueprint has no Fish env entries. | Remove any unused legacy provider constants/dead compatibility code in a later safe cleanup only if tests/other clients prove no dependency. |
+| P1 | Windows companion | Pairing UI, DPAPI storage and current per-device authentication are implemented. CI x64 compile/publish passed. | Install artifact on actual Windows PC; test microphone, wake word, language recognition, pairing and harmless approved action round-trip. |
+| P1 | Android companion | Pairing UI, Android Keystore storage and explicit on-device dictation command flow implemented. CI APK build/upload passed. | Install on physical Android device; verify permissions, foreground wake service, Hindi/English recognition, pairing and safe command response. |
+| P1 | Browser automation | Python bridge/policy tests pass; paired browser runtime E2E remains unverified. | Pair a disposable browser session; test navigation/DOM extraction and consequential-action approval gating. |
+| P1 | Coding sandbox | Fail-closed tests and Docker isolation options exist; target-host container isolation is unverified. | Run harmless resource/filesystem/network isolation checks on a dedicated Docker host. |
+| P1 | Render Blueprint | Candidate maps the four live Ultron core services, correct URLs/health routes, shared browser token and generated secrets; no sync has happened. | Owner review and manual Blueprint validation/sync only after PR merge or approved release. |
+| P1 | Render observability/staging | Render log/metrics retrieval did not provide enough evidence for full authenticated E2E; production frontend remains on old branch. | Restore visibility, sync only after approval, and run authenticated staging flows. |
+| P1 | Third-party dependencies | Pinned World Intelligence build passes, but external source dependency install reports five high-severity advisories. ULTRON runtime audit reports zero. | Obtain package-level advisory details and review compatible fixes; never blind-run `npm audit fix`. |
+| P1 | Media workflow | FFmpeg fixture-to-MP4 tests pass; full user-selected source video/audio workflow is not accepted end-to-end. | Test user-provided clips, audio tracks, voiceover and H.264/AAC playback in browser UI. |
+| P2 | Robotics / HIL | CPU-friendly simulation/export source exists; external simulator fidelity and physical HIL are not verified. | Validate exported assets in intended simulator; test ROS/HIL only in a controlled lab. |
+| P2 | External integrations | Registry includes native, adapter, partial and reference-level maturity. | Run scoped live round-trip tests for each integration actually intended for production. |
 
-## Fixes already committed to PR #441
+## Latest automation evidence
 
-- Module-script loading for the ES-module gesture engine.
-- Explicit user-operated hand-control toggle.
-- Reuse of the approved Eyes camera stream and correct stream ownership.
-- Single-pass gesture recognition with a single callback.
-- Correct mapping for two-hand distance and horizontal direction events.
-- Explicit CSP allowlist for the pinned MediaPipe runtime/WASM/model hosts.
-- Removal of fabricated skin-centroid hand landmarks; unavailable inference now fails closed.
-- Regression tests for the above paths.
+- [ULTRON CI run 41339384666](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41339384666): 1,255 tests, 1,254 passed, 0 failed, 1 skipped; syntax 318/318; runtime npm audit 0; configured security gate 0 confirmed findings.
+- [Android Companion run 41339216276](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41339216276): debug APK compile and upload passed.
+- [Windows Companion run 41339216284](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41339216284): x64 compile, standalone publish and upload passed.
+- Current docs-only branch head `14edc33` has a new CI/build cycle in progress.
 
-## Latest automation
-
-- [ULTRON CI run 41336219872](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41336219872): 1,250 Node tests, 1,249 passed, 0 failed, 1 skipped; syntax 318/318; runtime audit 0; configured security gate 0 findings.
-- [Windows Companion run 41336219867](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41336219867): x64 build/publish passed.
-- The skipped Node test is live two-account Supabase isolation.
-- The separate external World Intelligence source build reports 5 high-severity dependency advisories.
-
-A passing unit test is not a live provider response. A Windows build is not a physical microphone test. A device migration file is not an active pairing service. A local storage test is not proof of Render durable storage. A simulation export is not a physically trained robot.
+The skipped test is live two-account Supabase isolation. A passing test is not a live provider response. A compiled companion is not proof of installation or physical microphone behaviour. A migration file is not an applied production schema. A Blueprint file is not a synced deployment.
