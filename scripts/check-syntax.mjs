@@ -293,7 +293,17 @@ const FILES_TO_CHECK = [
   "tests/coding-sandbox.test.js",
   "scripts/check-windows-companion.mjs",
   "integrations/appflowy.js",
-  "tests/appflowy-integration.test.js"
+  "tests/appflowy-integration.test.js",
+  "voice/audio-processing-pipeline.js",
+  "tests/audio-processing-pipeline.test.js",
+  "system/windows-capture-affinity.js",
+  "tests/windows-capture-affinity.test.js",
+  "self-improvement/self-evolution-engine.js",
+  "tests/self-evolution-engine.test.js",
+  "tests/jarvis-evolution-routes.test.js",
+  "public/floating-core.js",
+  "tests/floating-core.test.js",
+  "tests/voice-audio-processing.test.js"
 ];
 
 let checked = 0;

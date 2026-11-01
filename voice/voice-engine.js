@@ -8,6 +8,13 @@
  */
 
 import { kokoroEngine } from "./kokoro-engine.js";
+import {
+  AcousticEchoCanceller,
+  BackgroundAudioClassifier,
+  RealtimeSnapDetector,
+  MediaDuckingController,
+  AUDIO_CLASSES
+} from "./audio-processing-pipeline.js";
 
 export const SUPPORTED_WAKE_WORDS = ["ultron", "jarvis"];
 
@@ -145,6 +152,10 @@ export class JarvisVoiceEngine {
     this.wakeWordCallback = null;
     this.streamErrors = [];
     this.recoveryAttempts = 0;
+    this.echoCanceller = options.echoCanceller || new AcousticEchoCanceller();
+    this.audioClassifier = options.audioClassifier || new BackgroundAudioClassifier();
+    this.snapDetector = options.snapDetector || new RealtimeSnapDetector();
+    this.mediaDucking = options.mediaDucking || new MediaDuckingController();
   }
 
   setProfile(profileId) {
@@ -371,5 +382,28 @@ export class JarvisVoiceEngine {
     const voice = options.voice || this.activeProfile.voiceId || "am_onyx";
     const speed = typeof options.speed === "number" ? options.speed : (options.rate ?? modeConfig.rate ?? this.activeProfile.rate ?? 0.95);
     return kokoroEngine.synthesize(fullSpoken, { voice, speed, play: Boolean(options.play) });
+  }
+  processAudioFrame(micBuffer, playbackReferenceBuffer = null) {
+    let cleanAudio = micBuffer;
+    let erle = 0;
+    if (playbackReferenceBuffer && playbackReferenceBuffer.length > 0) {
+      const aecResult = this.echoCanceller.process(micBuffer, playbackReferenceBuffer);
+      cleanAudio = aecResult.cleanFrame;
+      erle = aecResult.erleDb;
+    }
+    const classification = this.audioClassifier.classify(cleanAudio, playbackReferenceBuffer);
+    const snapResult = this.snapDetector.process(cleanAudio, playbackReferenceBuffer);
+    let duckingEngaged = false;
+    if (snapResult.detected || classification.classification === AUDIO_CLASSES.NEAR_FIELD_VOICE) {
+      this.mediaDucking.duck({ targetVolume: 0.2 });
+      duckingEngaged = true;
+    }
+    return {
+      cleanAudio,
+      erle,
+      classification: classification.classification,
+      snap: snapResult,
+      duckingEngaged
+    };
   }
 }

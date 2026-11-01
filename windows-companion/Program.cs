@@ -2,6 +2,9 @@ using System.Diagnostics;
 using Microsoft.Win32;
 using System.Speech.Recognition;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
+using System.Drawing;
+using System.Drawing.Drawing2D;
 
 namespace Ultron.Companion;
 
@@ -34,6 +37,7 @@ internal sealed class CompanionContext : ApplicationContext
     private bool _allowExit;
     private DateTime _lastWakeUtc = DateTime.MinValue;
     private readonly object _wakeLock = new();
+    private readonly FloatingCoreOverlayForm _floatingCore;
 
     public CompanionContext(bool backgroundLaunch = false)
     {
@@ -103,12 +107,16 @@ internal sealed class CompanionContext : ApplicationContext
         layout.Controls.Add(_autoStartCheckBox, 0, 3);
         _window.Controls.Add(layout);
 
+        _floatingCore = new FloatingCoreOverlayForm(this);
+        _floatingCore.Show();
+
         _startItem = new ToolStripMenuItem("Start wake word", null, (_, _) => StartListening());
         _stopItem = new ToolStripMenuItem("Pause listening", null, (_, _) => StopListening()) { Enabled = false };
         var menu = new ContextMenuStrip();
         menu.Items.Add(_startItem);
         menu.Items.Add(_stopItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Toggle Living Energy Core", null, (_, _) => _floatingCore.ToggleVisibility());
         menu.Items.Add("Open ULTRON", null, (_, _) => OpenAssistant());
         menu.Items.Add("Show window", null, (_, _) => ShowWindow());
         menu.Items.Add(new ToolStripSeparator());
@@ -134,10 +142,7 @@ internal sealed class CompanionContext : ApplicationContext
             if (_window.WindowState == FormWindowState.Minimized) _window.Hide();
         };
 
-        // A background launch is permitted only when the user previously enabled
-        // the visible "Start with Windows and listen" option in this app.
-        // Create the hidden window handle so recognition callbacks can safely marshal
-        // to the UI thread even when the app starts directly into the tray.
+        // Hidden handle creation for recognition callbacks
         _ = _window.Handle;
         var autoListenEnabled = IsAutoStartEnabled();
         if (autoListenEnabled)
@@ -153,12 +158,17 @@ internal sealed class CompanionContext : ApplicationContext
         }
     }
 
+    public void ToggleListeningMode()
+    {
+        if (_recognizer is null) StartListening();
+        else StopListening();
+    }
+
     private void HandleAutoStartChanged()
     {
         if (_suppressAutoStartChange) return;
         if (_autoStartCheckBox.Checked)
         {
-            // Enabling sign-in listening always starts with an explicit consent prompt.
             StartListening();
             if (_recognizer is null)
             {
@@ -292,6 +302,7 @@ internal sealed class CompanionContext : ApplicationContext
             _stopItem.Enabled = true;
             _startButton.Enabled = false;
             _stopButton.Enabled = true;
+            _floatingCore?.SetVisualState("LISTENING");
             ShowStatus("Listening locally for “Ultron”. Use the tray menu to pause or exit.");
         }
         catch (Exception)
@@ -319,6 +330,7 @@ internal sealed class CompanionContext : ApplicationContext
         _stopItem.Enabled = false;
         _startButton.Enabled = true;
         _stopButton.Enabled = false;
+        _floatingCore?.SetVisualState("STANDBY");
         ShowStatus("Wake word paused. Microphone listener is off.");
     }
 
@@ -334,6 +346,7 @@ internal sealed class CompanionContext : ApplicationContext
         if (_window.IsDisposed || !_window.IsHandleCreated) return;
         _window.BeginInvoke((Action)(() =>
         {
+            _floatingCore?.SetVisualState("EXECUTING");
             ShowStatus("“Ultron” detected. Opening the ULTRON assistant.");
             try
             {
@@ -389,6 +402,7 @@ internal sealed class CompanionContext : ApplicationContext
         StopListening();
         _tray.Visible = false;
         _tray.Dispose();
+        _floatingCore?.Dispose();
         _window.Close();
         ExitThread();
     }
@@ -400,7 +414,174 @@ internal sealed class CompanionContext : ApplicationContext
             StopListening();
             _tray.Visible = false;
             _tray.Dispose();
+            _floatingCore?.Dispose();
             _window.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}
+
+internal static class NativeMethods
+{
+    public const uint WDA_NONE = 0x00000000;
+    public const uint WDA_MONITOR = 0x00000001;
+    public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+}
+
+internal sealed class FloatingCoreOverlayForm : Form
+{
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private readonly CompanionContext _context;
+    private readonly int _coreSize = 120;
+    private string _state = "STANDBY";
+    private bool _isDragging;
+    private Point _dragStart;
+    private readonly System.Windows.Forms.Timer _animTimer;
+    private float _angle;
+    private bool _captureShieldActive;
+
+    public FloatingCoreOverlayForm(CompanionContext context)
+    {
+        _context = context;
+        FormBorderStyle = FormBorderStyle.None;
+        StartPosition = FormStartPosition.Manual;
+        ShowInTaskbar = false;
+        TopMost = true;
+        DoubleBuffered = true;
+        Size = new Size(_coreSize, _coreSize);
+        BackColor = Color.FromArgb(10, 15, 29);
+
+        // Position bottom-right with 24px padding
+        var screen = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
+        Location = new Point(screen.Right - _coreSize - 24, screen.Bottom - _coreSize - 24);
+
+        _animTimer = new System.Windows.Forms.Timer { Interval = 33 };
+        _animTimer.Tick += (_, _) =>
+        {
+            _angle = (_angle + 3f) % 360f;
+            Invalidate();
+        };
+        _animTimer.Start();
+
+        MouseDown += OnMouseDown;
+        MouseMove += OnMouseMove;
+        MouseUp += OnMouseUp;
+        MouseDoubleClick += (_, _) => _context.ToggleListeningMode();
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_NOACTIVATE;
+            cp.ExStyle |= WS_EX_TOOLWINDOW;
+            return cp;
+        }
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        try
+        {
+            // Apply Win32 display capture exclusion (WDA_EXCLUDEFROMCAPTURE = 0x11)
+            _captureShieldActive = NativeMethods.SetWindowDisplayAffinity(Handle, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
+        }
+        catch
+        {
+            _captureShieldActive = false;
+        }
+    }
+
+    public void SetVisualState(string state)
+    {
+        _state = state;
+        Invalidate();
+    }
+
+    public void ToggleVisibility()
+    {
+        if (Visible) Hide();
+        else Show();
+    }
+
+    private void OnMouseDown(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+        {
+            _isDragging = true;
+            _dragStart = e.Location;
+        }
+    }
+
+    private void OnMouseMove(object? sender, MouseEventArgs e)
+    {
+        if (_isDragging)
+        {
+            var newX = Location.X + (e.X - _dragStart.X);
+            var newY = Location.Y + (e.Y - _dragStart.Y);
+            var screen = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
+
+            // Screen boundary clamping
+            newX = Math.Max(screen.Left + 8, Math.Min(screen.Right - Width - 8, newX));
+            newY = Math.Max(screen.Top + 8, Math.Min(screen.Bottom - Height - 8, newY));
+            Location = new Point(newX, newY);
+        }
+    }
+
+    private void OnMouseUp(object? sender, MouseEventArgs e)
+    {
+        _isDragging = false;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        var bounds = new Rectangle(6, 6, Width - 12, Height - 12);
+        var stateColor = _state switch
+        {
+            "LISTENING" => Color.FromArgb(255, 179, 0),
+            "THINKING" => Color.FromArgb(138, 43, 226),
+            "SPEAKING" => Color.FromArgb(56, 189, 248),
+            "EXECUTING" => Color.FromArgb(37, 99, 235),
+            "SELF_UPGRADING" => Color.FromArgb(16, 185, 129),
+            "VISION_ACTIVE" => Color.FromArgb(168, 85, 247),
+            "ERROR" => Color.FromArgb(239, 68, 68),
+            "OFFLINE" => Color.FromArgb(100, 116, 139),
+            "MUTED" => Color.FromArgb(245, 158, 11),
+            _ => Color.FromArgb(0, 210, 255)
+        };
+
+        // Outer ring
+        using var penOuter = new Pen(Color.FromArgb(120, stateColor), 2f) { DashStyle = DashStyle.Dash };
+        g.DrawEllipse(penOuter, bounds);
+
+        // Middle rotating ring
+        var midBounds = new Rectangle(bounds.X + 14, bounds.Y + 14, bounds.Width - 28, bounds.Height - 28);
+        using var penMid = new Pen(stateColor, 2f);
+        g.DrawArc(penMid, midBounds, _angle, 120);
+        g.DrawArc(penMid, midBounds, _angle + 180, 120);
+
+        // Core nucleus
+        var nucBounds = new Rectangle(bounds.X + (bounds.Width / 2) - 12, bounds.Y + (bounds.Height / 2) - 12, 24, 24);
+        using var brushCore = new SolidBrush(stateColor);
+        g.FillEllipse(brushCore, nucBounds);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _animTimer.Stop();
+            _animTimer.Dispose();
         }
         base.Dispose(disposing);
     }

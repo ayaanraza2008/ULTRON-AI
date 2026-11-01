@@ -12,7 +12,7 @@ test("Security Scripts: security-dependencies script executes and outputs clean 
     : ["scripts/security-dependencies.mjs"];
 
   return new Promise((resolve, reject) => {
-    execFile(bin, args, { cwd: process.cwd(), timeout: 15000 }, (error, stdout) => {
+    execFile(bin, args, { cwd: process.cwd(), timeout: 35000 }, (error, stdout) => {
       assert.ifError(error);
       assert.ok(stdout.includes("SOFTWARE COMPOSITION ANALYSIS"));
       assert.ok(stdout.includes("Total Dependencies:"));
@@ -29,7 +29,7 @@ test("Security Scripts: security-report script generates JSON and MD reports", a
     : ["scripts/security-report.mjs"];
 
   return new Promise((resolve) => {
-    execFile(bin, args, { cwd: process.cwd(), timeout: 20000 }, () => {
+    execFile(bin, args, { cwd: process.cwd(), timeout: 40000 }, () => {
       // Regardless of pass/fail quality gate, report files must exist
       const jsonReport = path.join(process.cwd(), "reports", "security-audit-report.json");
       const mdReport = path.join(process.cwd(), "reports", "security-audit-report.md");

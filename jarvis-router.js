@@ -22,6 +22,7 @@ import { cyberIncidentAssistant } from "./security/cyber-incident.js";
 import { nexusOrchestrator } from "./nexus/nexus-orchestrator.js";
 import { ultronGuardian } from "./security/ultron-guardian.js";
 import { humanInterface } from "./intelligence/human-interface.js";
+import { ultronSelfEvolutionEngine } from "./self-improvement/self-evolution-engine.js";
 /**
  * ULTRON AI — JARVIS × ULTRON Integration Router
  *
@@ -1631,6 +1632,65 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       res.json(outcome);
     } catch (err) {
       res.status(403).json({ error: { message: err.message } });
+    }
+  });
+
+  // --- ULTRON Self-Evolution Engine Routes ---
+  router.post("/jarvis/evolution/audit", requireOwner, async (_req, res) => {
+    try {
+      const audit = await ultronSelfEvolutionEngine.auditSystem();
+      res.json({ success: true, audit });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/evolution/plan", requireOwner, express.json(), (req, res) => {
+    try {
+      const { audit } = req.body || {};
+      const plan = ultronSelfEvolutionEngine.generateImprovementPlan(audit);
+      res.json({ success: true, plan });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/evolution/command", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { command, context } = req.body || {};
+      const result = await ultronSelfEvolutionEngine.processEvolutionCommand(command, context);
+      res.json({ success: true, result });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/evolution/apply", requireOwner, express.json(), async (req, res) => {
+    try {
+      const { planItemId, modificationSpec, operatorContext } = req.body || {};
+      const result = await ultronSelfEvolutionEngine.applyImprovement(planItemId, modificationSpec, operatorContext);
+      res.json({ success: true, result });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/evolution/rollback", requireOwner, express.json(), (req, res) => {
+    try {
+      const { snapshotId } = req.body || {};
+      const result = ultronSelfEvolutionEngine.rollbackSnapshot(snapshotId);
+      res.json({ success: true, result });
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/evolution/history", requireOwner, (_req, res) => {
+    try {
+      const history = ultronSelfEvolutionEngine.getEvolutionHistory();
+      res.json({ success: true, history });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
     }
   });
 
