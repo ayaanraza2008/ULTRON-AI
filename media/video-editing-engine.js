@@ -12,7 +12,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { exec, execFile } from "node:child_process";
+import { exec, execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
@@ -99,13 +99,31 @@ export const EDITING_PRESETS = {
   }
 };
 
+export function resolveFFmpegBinary() {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  try {
+    if (spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0) return "ffmpeg";
+    if (process.platform === "win32") {
+      const res = spawnSync("where.exe", ["ffmpeg"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      if (res.status === 0 && res.stdout && res.stdout.trim()) {
+        const first = res.stdout.trim().split("\r\n")[0].split("\n")[0].trim();
+        if (first) return first;
+      }
+    }
+  } catch {
+    // Fall back to standard binary name
+  }
+  return "ffmpeg";
+}
+
 export class VideoEditingEngine {
   constructor(options = {}) {
     this.workspaceBase = options.workspaceBase || path.join(os.homedir(), "Documents", "UltronWorkspace");
     this.exportsDir = path.join(this.workspaceBase, "exports");
     this.activeRenders = new Map(); // id -> renderState
-    this.ffmpegChecker = options.ffmpegChecker || (() => execAsync("ffmpeg -version", { timeout: 3000 }));
-    this.ffmpegRunner = options.ffmpegRunner || ((args, options = {}) => execFileAsync("ffmpeg", args, options));
+    const ffmpegBin = resolveFFmpegBinary();
+    this.ffmpegChecker = options.ffmpegChecker || (() => execFileAsync(ffmpegBin, ["-version"], { timeout: 3000 }));
+    this.ffmpegRunner = options.ffmpegRunner || ((args, options = {}) => execFileAsync(ffmpegBin, args, options));
   }
 
   async initialize() {

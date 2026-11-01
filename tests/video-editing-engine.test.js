@@ -5,10 +5,11 @@ import path from "node:path";
 import os from "node:os";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
-import { VideoEditingEngine, EDITING_PRESETS } from "../media/video-editing-engine.js";
+import { VideoEditingEngine, EDITING_PRESETS, resolveFFmpegBinary } from "../media/video-editing-engine.js";
 
 const execFileAsync = promisify(execFile);
-const HAS_FFMPEG = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0;
+const FFMPEG_BIN = resolveFFmpegBinary();
+const HAS_FFMPEG = spawnSync(FFMPEG_BIN, ["-version"], { stdio: "ignore" }).status === 0;
 
 test("VideoEditingEngine: Editing presets configure aspect ratios, color filters and FPS", () => {
   assert.ok(EDITING_PRESETS.CINEMATIC);
@@ -97,7 +98,7 @@ test("VideoEditingEngine: renders real source media to a valid MP4 when FFmpeg i
   const sourcePath = path.join(tmpDir, "source.mp4");
   const engine = new VideoEditingEngine({ workspaceBase: tmpDir });
   await engine.initialize();
-  await execFileAsync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=24",
+  await execFileAsync(FFMPEG_BIN, ["-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=24",
     "-t", "2", "-pix_fmt", "yuv420p", sourcePath], { timeout: 30000 });
 
   const timeline = engine.buildTimeline({
