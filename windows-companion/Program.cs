@@ -35,6 +35,9 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly CheckBox _autoStartCheckBox;
     private bool _suppressAutoStartChange;
     private SpeechRecognitionEngine? _recognizer;
+    private SpeechRecognitionEngine? _commandRecognizer;
+    private bool _commandCaptureActive;
+    private bool _cancelCommandCapture;
     private bool _allowExit;
     private DateTime _lastWakeUtc = DateTime.MinValue;
     private DateTime _lastSnapUtc = DateTime.MinValue;
@@ -339,6 +342,14 @@ internal sealed class CompanionContext : ApplicationContext
 
     private void StopListening()
     {
+        if (_commandCaptureActive)
+        {
+            _cancelCommandCapture = true;
+            try { _commandRecognizer?.RecognizeAsyncCancel(); } catch { /* Capture may already have completed. */ }
+            ShowStatus("Command capture cancelled. Wake-word listening will remain paused.");
+            return;
+        }
+
         var recognizer = _recognizer;
         _recognizer = null;
         if (recognizer is not null)
@@ -398,42 +409,195 @@ internal sealed class CompanionContext : ApplicationContext
         lock (_wakeLock)
         {
             var now = DateTime.UtcNow;
-            if ((now - _lastWakeUtc).TotalSeconds < 8) return;
+            if (_commandCaptureActive || (now - _lastWakeUtc).TotalSeconds < 8) return;
             _lastWakeUtc = now;
         }
 
         if (_window.IsDisposed || !_window.IsHandleCreated) return;
-        _window.BeginInvoke((Action)(async () =>
+        _window.BeginInvoke((Action)(async () => await CaptureAndDispatchVoiceCommandAsync(reason)));
+    }
+
+    private void PauseWakeRecognizerForCapture()
+    {
+        var recognizer = _recognizer;
+        _recognizer = null;
+        if (recognizer is not null)
         {
+            try { recognizer.RecognizeAsyncCancel(); } catch { /* It may already have stopped. */ }
+            try { recognizer.RecognizeAsyncStop(); } catch { /* It may already have stopped. */ }
+            recognizer.Dispose();
+        }
+        _startItem.Enabled = false;
+        _stopItem.Enabled = true;
+        _startButton.Enabled = false;
+        _stopButton.Enabled = true;
+    }
+
+    private (RecognizerInfo? Recognizer, string Language) SelectCommandRecognizer()
+    {
+        var preference = (Environment.GetEnvironmentVariable("ULTRON_VOICE_LANGUAGE") ?? "hinglish").Trim().ToLowerInvariant();
+        var installed = SpeechRecognitionEngine.InstalledRecognizers();
+        if (preference is "hindi" or "hi" or "hi-in")
+        {
+            var hindi = installed.FirstOrDefault(item => item.Culture.Name.Equals("hi-IN", StringComparison.OrdinalIgnoreCase));
+            return (hindi, "hindi");
+        }
+
+        var english = installed
+            .Where(item => item.Culture.TwoLetterISOLanguageName.Equals("en", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.Culture.Name.Equals("en-IN", StringComparison.OrdinalIgnoreCase) ? 0
+                : item.Culture.Name.Equals("en-US", StringComparison.OrdinalIgnoreCase) ? 1
+                : item.Culture.Name.Equals("en-GB", StringComparison.OrdinalIgnoreCase) ? 2 : 3)
+            .FirstOrDefault();
+
+        var language = preference is "english" or "en" or "en-in" ? "en" : "hinglish";
+        return (english, language);
+    }
+
+    private async Task<string?> CaptureNextCommandAsync()
+    {
+        var (recognizerInfo, language) = SelectCommandRecognizer();
+        if (recognizerInfo is null)
+        {
+            ShowStatus(language == "hindi"
+                ? "Hindi speech recognition is not installed. Set ULTRON_VOICE_LANGUAGE to hinglish or install a Hindi recognizer."
+                : "No compatible English speech recognizer is installed. Install en-IN/en-US speech recognition.");
+            return null;
+        }
+
+        using var capture = new SpeechRecognitionEngine(recognizerInfo);
+        capture.LoadGrammar(new DictationGrammar());
+        capture.InitialSilenceTimeout = TimeSpan.FromSeconds(8);
+        capture.BabbleTimeout = TimeSpan.FromSeconds(8);
+        capture.EndSilenceTimeout = TimeSpan.FromSeconds(1);
+        capture.EndSilenceTimeoutAmbiguous = TimeSpan.FromSeconds(1.5);
+        capture.SetInputToDefaultAudioDevice();
+
+        var completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        capture.SpeechRecognized += (_, eventArgs) =>
+        {
+            var text = (eventArgs.Result.Text ?? string.Empty).Trim();
+            if (eventArgs.Result.Confidence >= 0.55 && text.Length > 1)
+                completion.TrySetResult(text);
+        };
+        capture.RecognizeCompleted += (_, eventArgs) =>
+        {
+            if (eventArgs.Error is not null || eventArgs.Cancelled)
+                completion.TrySetResult(null);
+            else
+                completion.TrySetResult(null);
+        };
+
+        _commandRecognizer = capture;
+        System.Media.SystemSounds.Beep.Play();
+        ShowStatus(language == "hindi" ? "Ab apna command boliye..." : "Speak your command now...");
+        _floatingCore?.SetVisualState("LISTENING");
+        capture.RecognizeAsync(RecognizeMode.Single);
+
+        var completed = await Task.WhenAny(completion.Task, Task.Delay(TimeSpan.FromSeconds(12)));
+        if (completed != completion.Task)
+        {
+            try { capture.RecognizeAsyncCancel(); } catch { /* Capture timed out. */ }
+            return null;
+        }
+        return await completion.Task;
+    }
+
+    private async Task CaptureAndDispatchVoiceCommandAsync(string reason)
+    {
+        if (_commandCaptureActive || _allowExit || _window.IsDisposed) return;
+        _commandCaptureActive = true;
+        _cancelCommandCapture = false;
+        var shouldResumeWakeWord = true;
+
+        try
+        {
+            PauseWakeRecognizerForCapture();
             _floatingCore?.SetVisualState("LISTENING");
-            ShowStatus($"{reason} Processing voice command...");
+            ShowStatus($"{reason} ULTRON is ready. Speak your command.");
             EngageMediaDucking();
             try
             {
                 _tray.BalloonTipTitle = "ULTRON activated";
-                _tray.BalloonTipText = $"{reason} Processing voice command.";
+                _tray.BalloonTipText = "Speak your command. Press Pause listening to cancel.";
                 _tray.BalloonTipIcon = ToolTipIcon.Info;
                 _tray.ShowBalloonTip(2500);
             }
             catch { /* Toast notifications can be disabled by Windows. */ }
-            await DispatchVoiceCommandAsync("Ultron, status report");
-        }));
+
+            var commandText = await CaptureNextCommandAsync();
+            if (_cancelCommandCapture) { shouldResumeWakeWord = false; return; }
+            if (string.IsNullOrWhiteSpace(commandText))
+            {
+                ShowStatus("No clear command was recognised. Nothing was sent to ULTRON.");
+                return;
+            }
+
+            var language = SelectCommandRecognizer().Language;
+            await DispatchVoiceCommandAsync(commandText, language);
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Voice capture unavailable: " + ex.GetType().Name);
+        }
+        finally
+        {
+            _commandRecognizer = null;
+            _commandCaptureActive = false;
+            RestoreMediaDucking();
+            _floatingCore?.SetVisualState("STANDBY");
+            if (shouldResumeWakeWord && !_allowExit)
+                StartListening(previouslyConsented: true);
+            else
+            {
+                _startItem.Enabled = true;
+                _stopItem.Enabled = false;
+                _startButton.Enabled = true;
+                _stopButton.Enabled = false;
+                ShowStatus("Wake word paused. Microphone listener is off.");
+            }
+        }
     }
 
-    private async Task DispatchVoiceCommandAsync(string commandText)
+    private async Task DispatchVoiceCommandAsync(string commandText, string language)
     {
         try
         {
-            _floatingCore?.SetVisualState("THINKING");
-            ShowStatus("ULTRON thinking...");
+            if (string.IsNullOrWhiteSpace(commandText) || commandText.Length > 4000)
+            {
+                ShowStatus("Command is empty or exceeds the 4,000-character safety limit.");
+                return;
+            }
 
-            var backendUrl = Environment.GetEnvironmentVariable("ULTRON_BACKEND_URL") ?? "http://127.0.0.1:3000";
-            var requestUrl = $"{backendUrl.TrimEnd('/')}/api/jarvis/voice/process-command";
+            var backendUrl = Environment.GetEnvironmentVariable("ULTRON_BACKEND_URL");
+            if (string.IsNullOrWhiteSpace(backendUrl))
+                backendUrl = "https://ultron-ai-core.onrender.com";
 
+            if (!Uri.TryCreate(backendUrl.TrimEnd('/'), UriKind.Absolute, out var backendUri) ||
+                !string.IsNullOrEmpty(backendUri.UserInfo) ||
+                !string.IsNullOrEmpty(backendUri.Query) ||
+                !string.IsNullOrEmpty(backendUri.Fragment) ||
+                !(backendUri.Scheme == Uri.UriSchemeHttps ||
+                  (backendUri.Scheme == Uri.UriSchemeHttp && backendUri.IsLoopback)))
+            {
+                ShowStatus("ULTRON backend URL rejected. Use HTTPS (HTTP is allowed only for localhost development).");
+                return;
+            }
+
+            var deviceToken = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
+            if (string.IsNullOrWhiteSpace(deviceToken))
+                deviceToken = Environment.GetEnvironmentVariable("ULTRON_DESKTOP_AGENT_TOKEN");
+            if (string.IsNullOrWhiteSpace(deviceToken))
+            {
+                ShowStatus("Pair this Windows companion with ULTRON first. A valid device token is required.");
+                return;
+            }
+
+            var requestUrl = new Uri(backendUri, "/api/jarvis/voice/process-command");
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {
                 command = commandText,
-                language = "en",
+                language,
                 source = "windows-companion"
             });
 
@@ -441,34 +605,40 @@ internal sealed class CompanionContext : ApplicationContext
             {
                 Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json")
             };
+            request.Headers.Add("x-device-token", deviceToken);
 
-            var deviceToken = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
-            if (!string.IsNullOrEmpty(deviceToken))
+            using var response = await s_httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
             {
-                request.Headers.Add("x-device-token", deviceToken);
+                ShowStatus(response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                    ? "Device authentication failed. Re-pair this Windows companion."
+                    : $"ULTRON backend request failed (HTTP {(int)response.StatusCode}).");
+                return;
             }
 
-            var response = await s_httpClient.SendAsync(request);
-            if (response.IsSuccessStatusCode)
+            var responseJson = await response.Content.ReadAsStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(responseJson);
+            var textResponse = doc.RootElement.TryGetProperty("textResponse", out var prop)
+                ? prop.GetString()?.Trim() : null;
+            if (string.IsNullOrWhiteSpace(textResponse))
             {
-                var responseJson = await response.Content.ReadAsStringAsync();
-                using var doc = System.Text.Json.JsonDocument.Parse(responseJson);
-                var textResponse = doc.RootElement.TryGetProperty("textResponse", out var prop) ? prop.GetString() : "Command processed.";
-
-                _floatingCore?.SetVisualState("SPEAKING");
-                ShowStatus($"ULTRON: {textResponse}");
-
-                try
-                {
-                    using var synth = new SpeechSynthesizer();
-                    synth.Speak(textResponse);
-                }
-                catch { /* Speech synthesis fallback */ }
+                ShowStatus("ULTRON returned no spoken response.");
+                return;
             }
+            if (textResponse.Length > 2000) textResponse = textResponse[..2000];
+
+            _floatingCore?.SetVisualState("SPEAKING");
+            ShowStatus($"ULTRON: {textResponse}");
+            try { using var synth = new SpeechSynthesizer(); synth.Speak(textResponse); }
+            catch { /* Speech synthesis fallback */ }
         }
-        catch (Exception ex)
+        catch (TaskCanceledException)
         {
-            ShowStatus($"ULTRON dispatch error: {ex.Message}");
+            ShowStatus("ULTRON request timed out. Your command was not confirmed.");
+        }
+        catch
+        {
+            ShowStatus("ULTRON voice dispatch failed. Check network, pairing and backend availability.");
         }
         finally
         {

@@ -62,3 +62,17 @@ test("Android wake companion uses on-device speech with explicit microphone and 
   assert.doesNotMatch(manifest, /android\.permission\.INTERNET/);
   assert.doesNotMatch(service, /HttpURLConnection|OkHttpClient|WebSocket|Retrofit/);
 });
+
+
+test("Windows companion captures the user's next spoken command instead of sending a hardcoded status prompt", async () => {
+  const source = await readFile(new URL("../windows-companion/Program.cs", import.meta.url), "utf8");
+  assert.ok(source.includes("new DictationGrammar()"));
+  assert.ok(source.includes("CaptureNextCommandAsync()"));
+  assert.ok(source.includes("await DispatchVoiceCommandAsync(commandText, language)"));
+  assert.ok(source.includes("ULTRON_BACKEND_URL"));
+  assert.ok(source.includes("https://ultron-ai-core.onrender.com"));
+  assert.ok(source.includes("ULTRON_DEVICE_TOKEN"));
+  assert.ok(source.includes("x-device-token"));
+  assert.ok(source.includes("Command capture cancelled"));
+  assert.doesNotMatch(source, /DispatchVoiceCommandAsync\("Ultron, status report"/);
+});
