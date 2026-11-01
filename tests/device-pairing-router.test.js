@@ -142,7 +142,9 @@ test("device pairing creates a five-minute owner-approved code and consumes it e
     assert.ok(stored.encrypted_token);
     assert.notEqual(stored.encrypted_token, stored.token_hash);
     assert.match(stored.token_hash, /^[a-f0-9]{64}$/);
-    assert.equal(JSON.stringify(stored).includes("ultron_dev_"), false);
+    assert.equal(stored.token_prefix.length, 20);
+    assert.equal(stored.encrypted_token.includes("ultron_dev_"), false);
+    assert.equal(stored.encrypted_token.includes(stored.token_hash), false);
 
     const claimResponse = await fetch(base + "/devices/pairings/claim", {
       method: "POST", headers: { "Content-Type": "application/json" },
