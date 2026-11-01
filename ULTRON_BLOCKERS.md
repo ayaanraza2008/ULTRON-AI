@@ -1,50 +1,35 @@
-# ULTRON AI — BLOCKERS & DEPENDENCY REGISTER
-## PROJECT CODENAME: ULTRON ETERNAL
-### EVIDENCE-BACKED REGISTER OF EXTERNAL DEPENDENCIES & REMAINING BLOCKERS
-**Audit Date:** 2026-11-01T21:40:00+05:30  
-**Source of Truth:** Repository `ayaanraza2008/ULTRON-AI`  
-**Active Engineering Branch:** `feat/ultron-cyber-core` (Commit `47b6af97`)  
-**Active PR:** [#440](https://github.com/ayaanraza2008/ULTRON-AI/pull/440)  
+# ULTRON AI — Active Blocker & Dependency Register
 
----
+**Audit date:** 2026-11-01  
+**Verified code commit:** `e54103f27f2034ca4e890a24879fbc1cd96018d6`  
+**PR:** [#440](https://github.com/ayaanraza2008/ULTRON-AI/pull/440) — open, unmerged  
+**Rule:** Never paste secrets into chat or commit them. Use a protected environment/secret manager. Do not buy a paid plan or change production state without owner approval.
 
-## 1. ACTIVE EXTERNAL BLOCKERS & RESOLUTION MATRIX
+| Priority | Area | Current truth | What closes it |
+|---|---|---|---|
+| P0 | Live text inference | Automated tests pass, but no current genuine live model response is evidenced. Previous model smoke reported no eligible/working provider. | Configure a free/approved provider securely; run `npm run smoke:model`; retain only redacted status evidence. |
+| P0 | Vision / EYES | Vision adapter fails closed; live smoke previously required `OPENROUTER_API_KEY`. | Configure an eligible vision provider securely; run the real image-Q&A smoke with a synthetic, non-sensitive image. |
+| P0 | Worker execution | Worker implementation/CI tests pass; a live task executed by a provider and persisted to Supabase is not verified. | Use a disposable test identity, secure service credentials, and `ULTRON_CONFIRM_WORKER_SMOKE=YES`; verify insert, claim, completion and cleanup. |
+| P0 | Two-user RLS | One live Supabase isolation test is skipped in CI. | Two disposable Auth users and `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`; verify cross-user read/write denial. |
+| P0 | Supabase leaked-password protection | Prior Security Advisor inspection showed the platform setting disabled. App-side HIBP checks are supplemental and do not enable the platform control. | Review the Auth setting and current plan in Supabase Dashboard; enable only if available/approved. No plan upgrade was made. |
+| P1 | Windows companion | .NET 8 x64 build/publish passes CI. Actual installed daemon, microphone, wake word, language recognition and harmless PC-control round-trip are unverified. | Install the CI artifact on the target Windows PC; pair with a dedicated secret; verify Hindi/English/Hinglish and allowlisted actions. |
+| P1 | Kokoro speech | Kokoro integration and fail-closed diagnostic tone handling exist. This CI run does not prove genuine speech on the target PC. | Verify the real ONNX runtime, model and `am_onyx` voice files on the user's PC; capture a redacted pass/fail and intelligibility result. |
+| P1 | Durable device hub | Encrypted local-file persistence is implemented/tested when explicitly enabled. Render volume persistence and restart recovery are unverified. | Provision durable storage and a dedicated random `ULTRON_DEVICE_SIGNING_SECRET`; verify restart, owner isolation, rotation and revocation. |
+| P1 | Browser automation | Python bridge suites and safe action gates pass CI. Live paired-browser E2E is not evidenced. | Pair a disposable browser session; test navigation/DOM extraction; verify approval gating for consequential actions. |
+| P1 | Coding sandbox | Fail-closed tests and Docker isolation options exist. Actual Docker runtime isolation on the target host is unverified. | Run harmless isolation tests on a host with Docker; verify resource, filesystem and network boundaries. |
+| P1 | Media | Real FFmpeg-generated MP4 fixture passes CI. Full user-selected footage workflow, audio mixing and voiceover remain incomplete/unverified. | Test a disposable user-provided clip, validate the output video/audio streams and export metadata. |
+| P1 | Frontend/backend release | Render backend is on `main`; frontend is on a separate feature branch; this PR is not deployed. No full authenticated staging E2E is evidenced. | Align revisions in staging; run sign-in, chat, voice, memory, tasks, files and device flows end-to-end. |
+| P1 | Render observability | Service records report live, but metrics were empty and log retrieval returned 503; no HTTP health-check path is configured. | Restore log/metrics visibility; define and verify a fast readiness endpoint; exercise real requests and inspect runtime logs. |
+| P2 | Robotics/HIL | CPU-friendly simulation/model export and training scenario code exist. Physical robot/HIL and external simulator fidelity are not verified. | Validate exported assets in the intended USD/robotics simulator; test ROS/HIL only on dedicated hardware in a safe lab. |
+| P2 | External integrations | Register contains native, adapter, partial and reference-level entries. A listed adapter is not proof of a live round-trip. | Verify each intended integration with a real, scoped test and label it by maturity/evidence. |
 
-| ID | Category | Item Description | Type | Status | Exact Resolution & Mitigation Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **BLK-001** | LLM Gateway | Live Model Completion (`smoke:model`) | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `npm run smoke:model` reports `ALL_CONFIGURED_PROVIDERS_FAILED` when credentials are absent or expired. Upgraded runner auto-detects `GROQ_API_KEY`, `GEMINI_API_KEY`, and `CEREBRAS_API_KEY` directly from environment in addition to OpenRouter. |
-| **BLK-002** | Vision (EYES) | Live Vision Inference (`smoke:vision`) | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `npm run smoke:vision` reports `OPENROUTER_API_KEY_REQUIRED` when `ULTRON_CONFIRM_VISION_SMOKE=YES`. Requires valid `OPENROUTER_API_KEY` for live multimodal visual Q&A. |
-| **BLK-003** | Autonomous Worker | Background Worker Execution (`smoke:worker`) | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `scripts/worker-smoke.mjs` requires `ULTRON_CONFIRM_WORKER_SMOKE=YES`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and a disposable `ULTRON_SMOKE_USER_ID`. |
-| **BLK-004** | Authentication | Two-Account Live Database Isolation E2E | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `tests/supabase-isolation.e2e.test.js` is intentionally skipped. Requires 2 dedicated disposable test accounts (`ULTRON_E2E_USER_A_EMAIL/PASSWORD` and `B`), plus `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`. |
-| **BLK-005** | Security Advisor | Supabase Leaked Password Protection | `PLATFORM_SETTING` | `PLATFORM_WARNING_ACTIVE` | Live Supabase Security Advisor still reports `Leaked Password Protection Disabled`. Application-side HaveIBeenPwned k-anonymity checks are implemented in code; the platform toggle requires a paid plan or explicit operator acceptance. |
-| **BLK-006** | Windows Host Daemon | Windows Companion Installation & Physical Voice/Control E2E | `HARDWARE_ENVIRONMENT` | `VERIFIED_BUILD` | Standalone win-x64 executable compiled and uploaded as CI artifact (run 41323846578, 1m16s). Harmless PC diagnostics and CIM/WMI telemetry verified. Physical microphone round-trip requires local companion daemon execution. |
-| **BLK-007** | Browser Automation | Browser-Use Bridge & Scoped Actions | `SOFTWARE_VERIFIED` | `RESOLVED` | Browser session management, DOM extraction, and navigation implemented in `browser-use-bridge/`. Consequential actions gated behind intent verification. |
-| **BLK-008** | Coding Sandbox | Isolated Containerized Code Execution | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `tools/sandbox/coding-sandbox.js` with Docker daemon discovery, resource limits (`--memory=256m`, `--cpus=0.5`), network isolation (`--network none`), read-only root, and timeout handling. Verified fail-closed security boundary when Docker is absent (`tests/coding-sandbox.test.js`). |
-| **BLK-009** | Physical Robotics | Simulation & Hardware-in-the-Loop (HIL) | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `robotics/simready-simulation-engine.js` with NVIDIA SimReady 3D asset discovery, OpenUSD (USDA) export, joint PID effort controllers, synthetic depth camera point clouds, training scenarios, datasets (JSON/CSV), and ROS 2 HIL bridge. Verified across 14 automated tests (`tests/robotics-simulation.test.js` & `tests/robotics-twin-sim.test.js`). |
-| **BLK-010** | Operator Authorization | Cryptographic Operator Modification Gate | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `security/operator-authorization.js` and mounted `/api/jarvis/evolution/challenge` and `/api/jarvis/evolution/apply`. Single-use HMAC-SHA256 tokens bound to owner, file path, and modification digest. Immutable paths strictly blocked. Replay attacks prevented. Verified across unit and integration tests. |
-| **BLK-011** | Device Pairing & Hub | Durable Companion Pairing Lifecycle & Token Provisioning | `SOFTWARE_VERIFIED` | `RESOLVED` | Encrypted local-file persistence (AES-256-GCM), SHA-256 token hashing, rotation/revocation, owner binding and atomic writes are implemented and covered by lifecycle tests (`tests/durable-device-hub.test.js`). Requires `ULTRON_DEVICE_STORE_PATH` and 32+ character `ULTRON_DEVICE_SIGNING_SECRET`. |
-| **BLK-012** | Cybersecurity Division | Autonomous Sentinel Division (Nightcrawler) | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `security/sentinel/` with 7-phase loop (`DISCOVER → INVENTORY → ANALYZE → IDENTIFY RISKS → PRIORITIZE → RECOMMEND → REPORT`), offline CVE/CWE database, network discovery, SVG topology graph, persistent drift memory, and latching emergency halt. Verified across 12 automated tests (`tests/ultron-sentinel.test.js`). |
+## Verified software hardening added in this audit
 
----
+- Recon no longer labels caller-supplied ports as `OPEN` or claims a valid TLS 1.3 certificate without a handshake.
+- Scanner/Web audit findings carry caller-evidence provenance and a not-independently-verified status.
+- Empty scan input is `NOT_ASSESSED`, never `SECURE`.
+- Fish Audio will not activate from a leftover key alone; explicit `ULTRON_ENABLE_FISH_AUDIO=true` is required.
 
-## 2. REQUIRED OPERATOR ACTIONS CHECKLIST
+## Do not call these blockers resolved
 
-1. **Model Provider Credentials (Optional for Live Cloud Calls):**
-   - Provide `OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `GEMINI_API_KEY` in environment to enable live cloud model completions and multimodal visual perception inference.
-2. **Dedicated Test Accounts for Live Supabase E2E (Optional):**
-   - Create 2 disposable test users in Supabase Auth and set `ULTRON_E2E_USER_A_EMAIL`, `ULTRON_E2E_USER_A_PASSWORD`, `ULTRON_E2E_USER_B_EMAIL`, `ULTRON_E2E_USER_B_PASSWORD`, and `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES` to unskip `tests/supabase-isolation.e2e.test.js`.
-3. **Docker Installation for Coding Sandbox Execution (Optional):**
-   - Install Docker Desktop on Windows (`winget install Docker.DockerDesktop`) and pull `node:20-alpine` and `python:3.11-alpine` to enable containerized code execution. Sandbox currently fails closed safely by design.
-4. **Production Deployment Approval:**
-   - Render deployment must remain on current stable commit `b00c2e81` until operator explicitly grants approval to merge PR #440 and trigger production deployment.
-
----
-
-## 3. VERIFIED AUTOMATED SOFTWARE BASELINE (AUDITED PR HEAD)
-
-- **Automated Tests:** **1,195 Total — 1,194 PASS, 0 FAIL, 1 SKIP** on PR head `47b6af97`. The only skipped test is live two-account Supabase isolation; it requires disposable accounts and `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`.
-- **Syntax Verification:** **314 / 314 Files Clean** on PR head `47b6af97`.
-- **Windows Companion:** .NET 8 standalone win-x64 compile/publish and artifact upload passed (CI run `41323846578`, 1m16s).
-- **Media Pipeline:** Native FFmpeg 9.0.2 verified locally (generated 407 KB MP4 in 4.2s) and in CI.
-- **Security Quality Gate:** **0 confirmed vulnerabilities, 0 risks, 0 secrets** (`npm run security:report`).
-- **Sentinel Division:** 12 dedicated automated tests passed (`tests/ultron-sentinel.test.js`).
+A passing unit test is not a live model response. A Windows build is not a physical microphone test. A worker process starting is not proof of task execution. An encrypted local file is not proof of durable Render storage. A simulation model is not a physically trained robot.
