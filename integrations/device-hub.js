@@ -35,8 +35,11 @@ function safeTimingCompare(aHex, bHex) {
 }
 
 function deriveEncryptionKey(masterSecret = "") {
-  const secret = String(masterSecret || process.env.ULTRON_DEVICE_SIGNING_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "ultron-device-master-fallback-key-2026");
-  return crypto.createHash("sha256").update(secret).digest();
+  const secret = String(masterSecret || "").trim();
+  // Persistent token encryption must use a dedicated, high-entropy secret.
+  // Never fall back to a public constant or reuse the Supabase service-role key.
+  if (secret.length < 32) return null;
+  return crypto.createHash("sha256").update("ULTRON_DEVICE_STORE_V1:").update(secret).digest();
 }
 
 function encryptToken(token, masterKey) {
@@ -73,8 +76,17 @@ export class DeviceHub {
 
     const defaultStoreDir = path.resolve(process.cwd(), ".local", "device-hub");
     this.durableStoragePath = options.durableStoragePath || this.env.ULTRON_DEVICE_STORE_PATH || path.join(defaultStoreDir, "paired-devices.json");
-    this.masterKey = deriveEncryptionKey(this.env.ULTRON_DEVICE_SIGNING_SECRET || this.env.SUPABASE_SERVICE_ROLE_KEY);
-    this.isPersistent = Boolean(options.durableStoragePath || this.env.ULTRON_DEVICE_STORE_PATH || options.persistent === true);
+    const persistenceRequested = Boolean(options.durableStoragePath || this.env.ULTRON_DEVICE_STORE_PATH || options.persistent === true);
+    const configuredSecret = options.masterSecret || this.env.ULTRON_DEVICE_SIGNING_SECRET || "";
+    this.masterKey = deriveEncryptionKey(configuredSecret);
+    this.isPersistent = persistenceRequested && Boolean(this.masterKey);
+    this.persistenceError = persistenceRequested && !this.masterKey
+      ? "ULTRON_DEVICE_SIGNING_SECRET_REQUIRED_MIN_32_CHARS"
+      : null;
+
+    // In-memory development pairing may use a process-only random key. It is
+    // deliberately unusable after restart and is never represented as durable.
+    if (!this.masterKey) this.masterKey = crypto.randomBytes(32);
 
     if (this.isPersistent) {
       this.loadFromDisk();
@@ -179,7 +191,7 @@ export class DeviceHub {
   /**
    * Complete device pairing using the pairing code.
    */
-  verifyPairingCode(code, clientPublicKey = null) {
+  verifyPairingCode(code, clientPublicKey = null, ownerUserId = "operator") {
     const cleanCode = String(code).trim();
     const entry = this.pendingPairings.get(cleanCode);
 
@@ -205,7 +217,7 @@ export class DeviceHub {
       tokenHash: tokenDigest,
       tokenPrefix: authToken.slice(0, 15),
       encryptedAuthToken: encrypted,
-      ownerUserId: entry.ownerUserId || "operator",
+      ownerUserId: String(ownerUserId || "operator"),
       status: "active",
       pairedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
