@@ -44,7 +44,7 @@ The skipped test is live two-user Supabase isolation. Green CI does not establis
 | Automated CI | 99.9% |
 | Live operations | 40% |
 | Production release readiness | 20% |
-| **Overall** | **64%** |
+| **Overall** | **63%** |
 
 Formula: 30% code + 20% CI + 30% live operations + 20% release readiness. These figures are engineering estimates and are not a substitute for acceptance evidence.
 
