@@ -287,7 +287,11 @@ const FILES_TO_CHECK = [
   "scripts/security-report.mjs",
   "tests/security-sast.test.js",
   "tests/security-secrets.test.js",
-  "tests/security-scripts.test.js"
+  "tests/security-scripts.test.js",
+  "robotics/simready-simulation-engine.js",
+  "tests/robotics-simulation.test.js",
+  "tests/coding-sandbox.test.js",
+  "scripts/check-windows-companion.mjs"
 ];
 
 let checked = 0;

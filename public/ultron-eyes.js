@@ -432,11 +432,16 @@ class UltronEyesClient {
 
     // 2. Scene Description & Changes
     if (this.sceneContainer) {
-      let changeAlert = "";
+      this.sceneContainer.replaceChildren();
+      const sceneDiv = document.createElement("div");
+      sceneDiv.textContent = obs.scene || "No active scene description.";
+      this.sceneContainer.appendChild(sceneDiv);
       if (obs.changesDetected) {
-        changeAlert = `<div style="margin-top: 6px; font-weight: bold; color: #ff6b00;">⚠️ ${obs.changeSummary}</div>`;
+        const changeAlert = document.createElement("div");
+        changeAlert.style.cssText = "margin-top: 6px; font-weight: bold; color: #ff6b00;";
+        changeAlert.textContent = `⚠️ ${obs.changeSummary || "Changes detected"}`;
+        this.sceneContainer.appendChild(changeAlert);
       }
-      this.sceneContainer.innerHTML = `<div>${obs.scene}</div>${changeAlert}`;
     }
 
     // 3. OCR Text
@@ -475,7 +480,11 @@ class UltronEyesClient {
       const data = await res.json();
       if (!data.success) {
         if (this.queryResultContainer) {
-          this.queryResultContainer.innerHTML = `<div style="color: #ef4444;">${data.message || data.error}</div>`;
+          this.queryResultContainer.replaceChildren();
+          const errDiv = document.createElement("div");
+          errDiv.style.color = "#ef4444";
+          errDiv.textContent = data.message || data.error || "Query failed";
+          this.queryResultContainer.appendChild(errDiv);
         }
         return;
       }
@@ -483,7 +492,11 @@ class UltronEyesClient {
       this._renderQueryResult(data);
     } catch (err) {
       if (this.queryResultContainer) {
-        this.queryResultContainer.innerHTML = `<div style="color: #ef4444;">Query error: ${err.message}</div>`;
+        this.queryResultContainer.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.color = "#ef4444";
+        errDiv.textContent = `Query error: ${err.message}`;
+        this.queryResultContainer.appendChild(errDiv);
       }
     }
   }

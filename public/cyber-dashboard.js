@@ -76,27 +76,58 @@ class UltronCyberDashboard {
 
       // Render Cyber Agents
       if (this.agentsListEl && data.agents) {
-        this.agentsListEl.innerHTML = data.agents.map(a => `
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid #1e293b; border-radius: 4px; font-size: 11px;">
-            <strong style="color: #00f0ff;">${a.name}</strong>
-            <span style="color: #94a3b8;">${a.role}</span>
-            <span style="color: ${a.status.includes('ONLINE') ? '#10b981' : '#ef4444'}; font-weight: bold;">● ${a.status}</span>
-          </div>
-        `).join("");
+        this.agentsListEl.replaceChildren();
+        data.agents.forEach(a => {
+          const item = document.createElement("div");
+          item.style.cssText = "display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid #1e293b; border-radius: 4px; font-size: 11px;";
+          const nameEl = document.createElement("strong");
+          nameEl.style.color = "#00f0ff";
+          nameEl.textContent = a.name;
+          const roleEl = document.createElement("span");
+          roleEl.style.color = "#94a3b8";
+          roleEl.textContent = a.role;
+          const statusEl = document.createElement("span");
+          statusEl.style.color = a.status.includes('ONLINE') ? '#10b981' : '#ef4444';
+          statusEl.style.fontWeight = "bold";
+          statusEl.textContent = `● ${a.status}`;
+          item.appendChild(nameEl);
+          item.appendChild(roleEl);
+          item.appendChild(statusEl);
+          this.agentsListEl.appendChild(item);
+        });
       }
 
       // Render Scopes
       if (this.scopesListEl && data.scopes) {
-        this.scopesListEl.innerHTML = data.scopes.map(s => `
-          <div style="padding: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid #1e293b; border-radius: 4px; font-size: 11px; margin-bottom: 6px;">
-            <div style="display: flex; justify-content: space-between;">
-              <strong style="color: #f1f5f9;">${s.organization}</strong>
-              <span style="color: ${s.isActive ? '#10b981' : '#ef4444'}; font-weight: bold;">${s.isActive ? 'AUTHORIZED' : 'EXPIRED'}</span>
-            </div>
-            <div style="color: #38bdf8; margin: 2px 0;">Targets: ${s.targets.join(', ')}</div>
-            <div style="color: #94a3b8; font-size: 10px;">Valid until: ${new Date(s.validUntil).toLocaleString()} | Proof: ${s.authorizationProof}</div>
-          </div>
-        `).join("");
+        this.scopesListEl.replaceChildren();
+        data.scopes.forEach(s => {
+          const item = document.createElement("div");
+          item.style.cssText = "padding: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid #1e293b; border-radius: 4px; font-size: 11px; margin-bottom: 6px;";
+          const top = document.createElement("div");
+          top.style.cssText = "display: flex; justify-content: space-between;";
+          const orgEl = document.createElement("strong");
+          orgEl.style.color = "#f1f5f9";
+          orgEl.textContent = s.organization;
+          const activeEl = document.createElement("span");
+          activeEl.style.color = s.isActive ? '#10b981' : '#ef4444';
+          activeEl.style.fontWeight = "bold";
+          activeEl.textContent = s.isActive ? 'AUTHORIZED' : 'EXPIRED';
+          top.appendChild(orgEl);
+          top.appendChild(activeEl);
+
+          const targetsEl = document.createElement("div");
+          targetsEl.style.cssText = "color: #38bdf8; margin: 2px 0;";
+          targetsEl.textContent = `Targets: ${(s.targets || []).join(', ')}`;
+
+          const detailsEl = document.createElement("div");
+          detailsEl.style.cssText = "color: #94a3b8; font-size: 10px;";
+          detailsEl.textContent = `Valid until: ${new Date(s.validUntil).toLocaleString()} | Proof: ${s.authorizationProof}`;
+
+          item.appendChild(top);
+          item.appendChild(targetsEl);
+          item.appendChild(detailsEl);
+          this.scopesListEl.appendChild(item);
+        });
       }
     } catch (err) {
       console.warn("[CyberDashboard] Failed to refresh status:", err.message);
@@ -106,7 +137,11 @@ class UltronCyberDashboard {
   async runComprehensiveMission() {
     const target = this.targetInput?.value.trim() || "localhost";
     if (this.missionResultEl) {
-      this.missionResultEl.innerHTML = `<div style="color: #00f0ff; padding: 12px;">🛡️ Running full multi-agent cybersecurity mission against ${target}...</div>`;
+      this.missionResultEl.replaceChildren();
+      const runMsg = document.createElement("div");
+      runMsg.style.cssText = "color: #00f0ff; padding: 12px;";
+      runMsg.textContent = `🛡️ Running full multi-agent cybersecurity mission against ${target}...`;
+      this.missionResultEl.appendChild(runMsg);
     }
 
     try {
@@ -130,7 +165,11 @@ class UltronCyberDashboard {
       this._renderMissionReport(data);
     } catch (err) {
       if (this.missionResultEl) {
-        this.missionResultEl.innerHTML = `<div style="color: #ef4444; padding: 12px;">❌ Error: ${err.message}</div>`;
+        this.missionResultEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.cssText = "color: #ef4444; padding: 12px;";
+        errDiv.textContent = `❌ Error: ${err.message}`;
+        this.missionResultEl.appendChild(errDiv);
       }
     }
   }
@@ -217,7 +256,13 @@ class UltronCyberDashboard {
         </div>
       `;
     } catch (err) {
-      if (this.sastResultEl) this.sastResultEl.innerHTML = `<div style="color: #ef4444;">${err.message}</div>`;
+      if (this.sastResultEl) {
+        this.sastResultEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.color = "#ef4444";
+        errDiv.textContent = err.message;
+        this.sastResultEl.appendChild(errDiv);
+      }
     }
   }
 
@@ -245,7 +290,13 @@ class UltronCyberDashboard {
         </div>
       `;
     } catch (err) {
-      if (this.webResultEl) this.webResultEl.innerHTML = `<div style="color: #ef4444;">${err.message}</div>`;
+      if (this.webResultEl) {
+        this.webResultEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.color = "#ef4444";
+        errDiv.textContent = err.message;
+        this.webResultEl.appendChild(errDiv);
+      }
     }
   }
 
@@ -275,7 +326,13 @@ class UltronCyberDashboard {
         </div>
       `;
     } catch (err) {
-      if (this.aiRedTeamResultEl) this.aiRedTeamResultEl.innerHTML = `<div style="color: #ef4444;">${err.message}</div>`;
+      if (this.aiRedTeamResultEl) {
+        this.aiRedTeamResultEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.color = "#ef4444";
+        errDiv.textContent = err.message;
+        this.aiRedTeamResultEl.appendChild(errDiv);
+      }
     }
   }
 

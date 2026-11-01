@@ -3,6 +3,13 @@ import { ultronAutonomy } from "./autonomy/ultron-autonomy.js";
 import { genesisEngine } from "./genesis/genesis-engine.js";
 import { forgeEngine } from "./forge/forge-engine.js";
 import { RobotDigitalTwin, simToRealGate } from "./robotics/robot-digital-twin.js";
+import {
+  SIMREADY_ASSET_CATALOG,
+  TRAINING_SCENARIOS,
+  simReadyEngine,
+  playbackEngine,
+  hilBridge
+} from "./robotics/simready-simulation-engine.js";
 import { ultronVision } from "./vision/ultron-vision.js";
 import { ultronEyesManager, SESSION_STATES } from "./vision/ultron-eyes-manager.js";
 import { ultronCyberCore, CYBER_AGENTS } from "./security/cyber-core.js";
@@ -1220,6 +1227,47 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     } catch (err) {
       res.status(400).json({ error: { message: err.message } });
     }
+  });
+
+  // --- SimReady & OpenUSD Robotics Simulation (Category Q) ---
+  router.get("/jarvis/robotics/simready/assets", requireOwner, (_req, res) => {
+    res.json({ success: true, count: SIMREADY_ASSET_CATALOG.length, assets: SIMREADY_ASSET_CATALOG });
+  });
+
+  router.get("/jarvis/robotics/simready/scenarios", requireOwner, (_req, res) => {
+    res.json({ success: true, scenarios: Object.values(TRAINING_SCENARIOS) });
+  });
+
+  router.post("/jarvis/robotics/simready/scenario/run", requireOwner, express.json(), (req, res) => {
+    try {
+      const { scenarioKey, maxSteps } = req.body || {};
+      if (scenarioKey) simReadyEngine.loadScenario(scenarioKey);
+      const episode = simReadyEngine.runEpisode(Number(maxSteps) || 40);
+      const evaluation = playbackEngine.evaluateAndPlayback(episode);
+      res.json({ success: true, episode, evaluation });
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.get("/jarvis/robotics/simready/dataset", requireOwner, (req, res) => {
+    try {
+      const format = String(req.query?.format || "json").toLowerCase();
+      if (format === "csv") {
+        res.setHeader("Content-Type", "text/csv");
+        return res.send(simReadyEngine.exportDatasetCSV());
+      }
+      res.json(simReadyEngine.exportDatasetJSON());
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/robotics/simready/hil/handshake", requireOwner, express.json(), (req, res) => {
+    const { token } = req.body || {};
+    const result = hilBridge.handshake(token);
+    if (!result.success) return res.status(400).json(result);
+    res.json(result);
   });
 
   router.post("/jarvis/nextgen/vision/analyze", requireOwner, express.json(), async (req, res) => {

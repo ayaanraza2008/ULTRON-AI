@@ -724,14 +724,24 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       const listEl = document.getElementById("uiDrivesList");
       if (listEl && data.drives) {
-        listEl.innerHTML = data.drives.map(d => `
-          <div style="background: rgba(0, 243, 255, 0.05); padding: 8px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.2); margin-bottom: 6px;">
-            <strong>${d.letter} [${d.name}]</strong> - ${d.type} (${d.freeGB} GB Free of ${d.totalGB} GB)
-            <div style="background: #1a202c; height: 6px; border-radius: 3px; margin-top: 4px; overflow: hidden;">
-              <div style="background: var(--cyan-accent); width: ${100 - d.percentFree}%; height: 100%;"></div>
-            </div>
-          </div>
-        `).join("");
+        listEl.replaceChildren();
+        data.drives.forEach(d => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(0, 243, 255, 0.05); padding: 8px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.2); margin-bottom: 6px;";
+          const strong = document.createElement("strong");
+          strong.textContent = `${d.letter} [${d.name}]`;
+          const text = document.createTextNode(` - ${d.type} (${d.freeGB} GB Free of ${d.totalGB} GB)`);
+          const bar = document.createElement("div");
+          bar.style.cssText = "background: #1a202c; height: 6px; border-radius: 3px; margin-top: 4px; overflow: hidden;";
+          const fill = document.createElement("div");
+          const usedPct = Math.max(0, Math.min(100, 100 - Number(d.percentFree || 0)));
+          fill.style.cssText = `background: var(--cyan-accent); width: ${usedPct}%; height: 100%;`;
+          bar.appendChild(fill);
+          item.appendChild(strong);
+          item.appendChild(text);
+          item.appendChild(bar);
+          listEl.appendChild(item);
+        });
       }
     } catch {}
   });
@@ -810,24 +820,47 @@ document.addEventListener("DOMContentLoaded", () => {
     const input = document.getElementById("mediaSearchInput");
     const q = encodeURIComponent(input?.value.trim() || "");
     const listEl = document.getElementById("mediaResultsList");
-    if (listEl) listEl.innerHTML = "<div>Searching media catalog...</div>";
+    if (listEl) {
+      listEl.replaceChildren();
+      const loading = document.createElement("div");
+      loading.textContent = "Searching media catalog...";
+      listEl.appendChild(loading);
+    }
     try {
       const res = await fetch(`/api/jarvis/media/search?q=${q}`);
       const data = await res.json();
       if (listEl && data.results) {
+        listEl.replaceChildren();
         if (data.results.length === 0) {
-          listEl.innerHTML = '<div style="color: #a0aec0;">No media files matching search found.</div>';
+          const empty = document.createElement("div");
+          empty.style.color = "#a0aec0";
+          empty.textContent = "No media files matching search found.";
+          listEl.appendChild(empty);
         } else {
-          listEl.innerHTML = data.results.map(r => `
-            <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between;">
-              <span><strong>${r.name}</strong> (${r.mediaType.toUpperCase()})</span>
-              <span style="color: #a0aec0;">${r.sizeMB || 0} MB</span>
-            </div>
-          `).join("");
+          data.results.forEach(r => {
+            const item = document.createElement("div");
+            item.style.cssText = "background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between;";
+            const titleSpan = document.createElement("span");
+            const strong = document.createElement("strong");
+            strong.textContent = r.name || "Unnamed";
+            titleSpan.appendChild(strong);
+            titleSpan.appendChild(document.createTextNode(` (${String(r.mediaType || "file").toUpperCase()})`));
+            const sizeSpan = document.createElement("span");
+            sizeSpan.style.color = "#a0aec0";
+            sizeSpan.textContent = `${r.sizeMB || 0} MB`;
+            item.appendChild(titleSpan);
+            item.appendChild(sizeSpan);
+            listEl.appendChild(item);
+          });
         }
       }
     } catch (err) {
-      if (listEl) listEl.innerHTML = `<div>Error searching media: ${err.message}</div>`;
+      if (listEl) {
+        listEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.textContent = `Error searching media: ${err.message}`;
+        listEl.appendChild(errDiv);
+      }
     }
   });
 
@@ -836,7 +869,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const subtitle = document.getElementById("thumbSubInput")?.value.trim() || "AUTONOMOUS SYSTEM CONTROL";
     const preset = document.getElementById("thumbPresetSelect")?.value || "CYBERPUNK";
     const area = document.getElementById("thumbPreviewArea");
-    if (area) area.innerHTML = "<div>Rendering graphic composition...</div>";
+    if (area) {
+      area.replaceChildren();
+      const msg = document.createElement("div");
+      msg.textContent = "Rendering graphic composition...";
+      area.appendChild(msg);
+    }
 
     try {
       const res = await fetch("/api/jarvis/media/image/thumbnail", {
@@ -846,13 +884,23 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (area) {
-        area.innerHTML = `
-          <div style="color: #48bb78; font-size: 12px; margin-bottom: 6px;">Thumbnail Exported: ${data.filename}</div>
-          <div style="font-size: 11px; color: #a0aec0;">Path: ${data.outputPath}</div>
-        `;
+        area.replaceChildren();
+        const div1 = document.createElement("div");
+        div1.style.cssText = "color: #48bb78; font-size: 12px; margin-bottom: 6px;";
+        div1.textContent = `Thumbnail Exported: ${data.filename}`;
+        const div2 = document.createElement("div");
+        div2.style.cssText = "font-size: 11px; color: #a0aec0;";
+        div2.textContent = `Path: ${data.outputPath}`;
+        area.appendChild(div1);
+        area.appendChild(div2);
       }
     } catch (err) {
-      if (area) area.innerHTML = `<div>Error: ${err.message}</div>`;
+      if (area) {
+        area.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.textContent = `Error: ${err.message}`;
+        area.appendChild(errDiv);
+      }
     }
   });
 
@@ -893,22 +941,40 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch(`/api/integrations/dsh-god/providers?${q.toString()}`);
       const data = await res.json();
       if (data.providers) {
-        listEl.innerHTML = data.providers.slice(0, 50).map(p => `
-          <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <strong>${p.name}</strong> <span style="color: #a0aec0; font-size: 11px;">(${p.id})</span>
-              <div style="color: #718096; font-size: 11px;">${p.models?.length || 0} models | ${p.category} | ${p.format}</div>
-            </div>
-            <div>
-              <span style="font-size: 11px; padding: 2px 6px; border-radius: 3px; background: ${p.enabled ? '#22543d' : '#742a2a'};color: ${p.enabled ? '#9ae6b4' : '#feb2b2'};">
-                ${p.enabled ? "Active" : "Disabled"}
-              </span>
-            </div>
-          </div>
-        `).join("");
+        listEl.replaceChildren();
+        data.providers.slice(0, 50).forEach(p => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;";
+          const left = document.createElement("div");
+          const strong = document.createElement("strong");
+          strong.textContent = p.name || p.id;
+          const spanId = document.createElement("span");
+          spanId.style.cssText = "color: #a0aec0; font-size: 11px;";
+          spanId.textContent = ` (${p.id})`;
+          const sub = document.createElement("div");
+          sub.style.cssText = "color: #718096; font-size: 11px;";
+          sub.textContent = `${p.models?.length || 0} models | ${p.category} | ${p.format}`;
+          left.appendChild(strong);
+          left.appendChild(spanId);
+          left.appendChild(sub);
+
+          const right = document.createElement("div");
+          const badge = document.createElement("span");
+          badge.style.cssText = `font-size: 11px; padding: 2px 6px; border-radius: 3px; background: ${p.enabled ? '#22543d' : '#742a2a'};color: ${p.enabled ? '#9ae6b4' : '#feb2b2'};`;
+          badge.textContent = p.enabled ? "Active" : "Disabled";
+          right.appendChild(badge);
+
+          item.appendChild(left);
+          item.appendChild(right);
+          listEl.appendChild(item);
+        });
       }
     } catch (err) {
-      listEl.innerHTML = `<div style="color: #e53e3e;">Error loading providers: ${err.message}</div>`;
+      listEl.replaceChildren();
+      const errDiv = document.createElement("div");
+      errDiv.style.color = "#e53e3e";
+      errDiv.textContent = `Error loading providers: ${err.message}`;
+      listEl.appendChild(errDiv);
     }
   }
 
@@ -919,18 +985,35 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/integrations/dsh-god/combos");
       const data = await res.json();
       if (data.combos) {
-        listEl.innerHTML = data.combos.map(c => `
-          <div style="background: rgba(255,255,255,0.03); padding: 6px; border-radius: 4px; margin-bottom: 4px;">
-            <div style="display: flex; justify-content: space-between;">
-              <strong style="color: #63b3ed;">${c.name}</strong>
-              <span style="font-size: 11px; color: #a0aec0;">${c.strategy.toUpperCase()}</span>
-            </div>
-            <div style="font-size: 11px; color: #cbd5e0; margin-top: 2px;">${c.models.join(" → ")}</div>
-          </div>
-        `).join("");
+        listEl.replaceChildren();
+        data.combos.forEach(c => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(255,255,255,0.03); padding: 6px; border-radius: 4px; margin-bottom: 4px;";
+          const top = document.createElement("div");
+          top.style.cssText = "display: flex; justify-content: space-between;";
+          const nameEl = document.createElement("strong");
+          nameEl.style.color = "#63b3ed";
+          nameEl.textContent = c.name;
+          const strat = document.createElement("span");
+          strat.style.cssText = "font-size: 11px; color: #a0aec0;";
+          strat.textContent = String(c.strategy || "").toUpperCase();
+          top.appendChild(nameEl);
+          top.appendChild(strat);
+
+          const modelsEl = document.createElement("div");
+          modelsEl.style.cssText = "font-size: 11px; color: #cbd5e0; margin-top: 2px;";
+          modelsEl.textContent = (c.models || []).join(" → ");
+
+          item.appendChild(top);
+          item.appendChild(modelsEl);
+          listEl.appendChild(item);
+        });
       }
     } catch (err) {
-      listEl.innerHTML = `<div>Error loading combos: ${err.message}</div>`;
+      listEl.replaceChildren();
+      const errDiv = document.createElement("div");
+      errDiv.textContent = `Error loading combos: ${err.message}`;
+      listEl.appendChild(errDiv);
     }
   }
 
@@ -941,16 +1024,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/integrations/dsh-god/channels");
       const data = await res.json();
       if (data.report?.channels) {
-        listEl.innerHTML = data.report.channels.map(ch => `
-          <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; border-left: 3px solid #4299e1;">
-            <div style="font-weight: bold; color: #fff;">${ch.name}</div>
-            <div style="font-size: 11px; color: #a0aec0;">Auth: ${ch.authType} | ${ch.status}</div>
-            <div style="font-size: 11px; color: #48bb78; margin-top: 2px;">Profile: ${ch.hardwareProfile}</div>
-          </div>
-        `).join("");
+        listEl.replaceChildren();
+        data.report.channels.forEach(ch => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; border-left: 3px solid #4299e1;";
+          const nameEl = document.createElement("div");
+          nameEl.style.cssText = "font-weight: bold; color: #fff;";
+          nameEl.textContent = ch.name;
+          const authEl = document.createElement("div");
+          authEl.style.cssText = "font-size: 11px; color: #a0aec0;";
+          authEl.textContent = `Auth: ${ch.authType} | ${ch.status}`;
+          const profEl = document.createElement("div");
+          profEl.style.cssText = "font-size: 11px; color: #48bb78; margin-top: 2px;";
+          profEl.textContent = `Profile: ${ch.hardwareProfile}`;
+
+          item.appendChild(nameEl);
+          item.appendChild(authEl);
+          item.appendChild(profEl);
+          listEl.appendChild(item);
+        });
       }
     } catch (err) {
-      listEl.innerHTML = `<div>Error loading channels: ${err.message}</div>`;
+      listEl.replaceChildren();
+      const errDiv = document.createElement("div");
+      errDiv.textContent = `Error loading channels: ${err.message}`;
+      listEl.appendChild(errDiv);
     }
   }
 
@@ -972,7 +1070,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const model = document.getElementById("dshTestModelSelect")?.value || "combo:fast-free";
     const prompt = document.getElementById("dshPromptInput")?.value.trim() || "Respond with: ULTRON DSH-GOD Active.";
     const outEl = document.getElementById("dshInferenceOutput");
-    if (outEl) outEl.innerHTML = "<div>Routing turn through DSH-GOD engine...</div>";
+    if (outEl) {
+      outEl.replaceChildren();
+      const runMsg = document.createElement("div");
+      runMsg.textContent = "Routing turn through DSH-GOD engine...";
+      outEl.appendChild(runMsg);
+    }
 
     try {
       const started = performance.now();
@@ -987,19 +1090,33 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       const latency = Math.round(performance.now() - started);
       if (outEl) {
+        outEl.replaceChildren();
         if (data.ok && data.result) {
           const content = data.result.choices?.[0]?.message?.content || JSON.stringify(data.result);
-          outEl.innerHTML = `
-            <div style="color: #48bb78; font-size: 11px; margin-bottom: 4px;">✓ Inference Executed in ${latency}ms (Model: ${data.result.model || model})</div>
-            <div style="color: #fff; font-family: monospace; white-space: pre-wrap;">${content}</div>
-          `;
-          loadDshStatus(); // update savings and usage
+          const metaDiv = document.createElement("div");
+          metaDiv.style.cssText = "color: #48bb78; font-size: 11px; margin-bottom: 4px;";
+          metaDiv.textContent = `✓ Inference Executed in ${latency}ms (Model: ${data.result.model || model})`;
+          const bodyDiv = document.createElement("div");
+          bodyDiv.style.cssText = "color: #fff; font-family: monospace; white-space: pre-wrap;";
+          bodyDiv.textContent = content;
+          outEl.appendChild(metaDiv);
+          outEl.appendChild(bodyDiv);
+          loadDshStatus();
         } else {
-          outEl.innerHTML = `<div style="color: #e53e3e;">Inference Failed: ${data.error || "Unknown error"}</div>`;
+          const failDiv = document.createElement("div");
+          failDiv.style.cssText = "color: #e53e3e;";
+          failDiv.textContent = `Inference Failed: ${data.error || "Unknown error"}`;
+          outEl.appendChild(failDiv);
         }
       }
     } catch (err) {
-      if (outEl) outEl.innerHTML = `<div style="color: #e53e3e;">Error executing inference: ${err.message}</div>`;
+      if (outEl) {
+        outEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.color = "#e53e3e";
+        errDiv.textContent = `Error executing inference: ${err.message}`;
+        outEl.appendChild(errDiv);
+      }
     }
   });
 
