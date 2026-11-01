@@ -47,8 +47,8 @@ test("browser bridge targets the existing backend gateway and shares the backend
   assert.match(bridge, /healthCheckPath:\s*\/health/);
   assert.match(bridge, /ULTRON_MODEL_GATEWAY_BASE_URL/);
   assert.match(bridge, /https:\/\/ultron-ai-core\.onrender\.com\/api\/internal\/browser-use\/v1/);
-  assert.match(bridge, /fromService:\s*\n\s+type:\s*web\s+\n\s+name:\s*ultron-ai-core\s+\n\s+envVarKey:\s*ULTRON_BROWSER_USE_TOKEN/);
-  assert.match(services["ultron-ai-core"], /key:\s*ULTRON_BROWSER_USE_TOKEN\s+\n\s+sync:\s*false/);
+  assert.match(bridge, /fromService:\r?\n[ \t]+type:\s*web\r?\n[ \t]+name:\s*ultron-ai-core\r?\n[ \t]+envVarKey:\s*ULTRON_BROWSER_USE_TOKEN/);
+  assert.match(services["ultron-ai-core"], /key:\s*ULTRON_BROWSER_USE_TOKEN\r?\n[ \t]+sync:\s*false/);
 });
 
 test("REA gateway blueprint satisfies its required runtime, secret and readiness contract", () => {
