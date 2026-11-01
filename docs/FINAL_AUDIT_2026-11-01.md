@@ -1,5 +1,5 @@
 # ULTRON AI — Evidence-Based Audit
-> **Historical baseline only:** This audit records the pre-Antigravity baseline on `main`. It is not the current candidate/release assessment. The latest post-Antigravity audit, including the PR #441 gesture repairs, updated CI counts, and remaining production blockers, is [here](INDEPENDENT_POST_ANTIGRAVITY_AUDIT_2026-11-01.md). Current overall readiness estimate: **64%**; PR #441 remains open/unmerged and production has not been changed.
+> **Historical baseline only:** This audit records the pre-Antigravity baseline on `main`. It is not the current candidate/release assessment. The latest post-Antigravity audit, including the PR #441 gesture repairs, updated CI counts, and remaining production blockers, is [here](INDEPENDENT_POST_ANTIGRAVITY_AUDIT_2026-11-01.md). Current overall readiness estimate: **63%**; PR #441 remains open/unmerged and production has not been changed.
 
 **Audit date:** 2026-11-01 (Asia/Kolkata)  
 **Repository:** `ayaanraza2008/ULTRON-AI`  
