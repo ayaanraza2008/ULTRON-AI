@@ -15,12 +15,12 @@
 | **BLK-003** | Autonomous Worker | Background Worker Execution (`smoke:worker`) | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `scripts/worker-smoke.mjs` requires `ULTRON_CONFIRM_WORKER_SMOKE=YES`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and a disposable `ULTRON_SMOKE_USER_ID`. |
 | **BLK-004** | Authentication | Two-Account Live Database Isolation E2E | `EXTERNAL_CREDENTIAL` | `BLOCKED` | `tests/supabase-isolation.e2e.test.js` is intentionally skipped. Requires 2 dedicated disposable test accounts (`ULTRON_E2E_USER_A_EMAIL/PASSWORD` and `B`), plus `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`. |
 | **BLK-005** | Security Advisor | Supabase Leaked Password Protection | `PLATFORM_SETTING` | `PLATFORM_WARNING_ACTIVE` | Live Supabase Security Advisor still reports `Leaked Password Protection Disabled`. Application-side HaveIBeenPwned k-anonymity checks are additional mitigation for covered signup/password-change paths; they do **not** enable Supabase Auth's platform setting or clear the warning. Keep open until the platform toggle is enabled on an eligible plan or the limitation is explicitly accepted. |
-| **BLK-006** | Windows Host Daemon | Windows Companion Host Installation & Health | `SOFTWARE_VERIFIED` | `RESOLVED` | Completed `scripts/install-windows-companion.ps1`, `scripts/uninstall-windows-companion.ps1`, `scripts/check-windows-companion.mjs`, and `docs/WINDOWS_COMPANION_GUIDE.md`. **Live Verified on host PC-LENOVO**: AMD Ryzen 7 5700U, RAM headroom, device token generation, and state transitions all verified operational. |
+| **BLK-006** | Windows Host Daemon | Windows Companion Installation & Physical Voice/Control E2E | `PARTIALLY_VERIFIED` | `DEVICE_E2E_PENDING` | Install/uninstall scripts and CI build exist; earlier host diagnostics cover vitals and local state transitions. The actual wake-to-dictation patch awaits new Windows CI, and physical microphone capture, a durable paired-device token, remote command dispatch, and authorised PC-action round-trip are not verified. |
 | **BLK-007** | Browser Automation | Browser-Use Bridge & Scoped Actions | `SOFTWARE_VERIFIED` | `RESOLVED` | Browser session management, DOM extraction, and navigation implemented in `browser-use-bridge/`. Consequential actions (purchases, emails) gated behind intent verification. |
 | **BLK-008** | Coding Sandbox | Isolated Containerized Code Execution | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `tools/sandbox/coding-sandbox.js` with Docker daemon discovery, resource limits (`--memory=256m`, `--cpus=0.5`), network isolation (`--network none`), read-only root, and timeout handling. Verified fail-closed security boundary when Docker is absent and container limits when Docker is present (`tests/coding-sandbox.test.js`). Deterministic across local and CI environments. |
 | **BLK-009** | Physical Robotics | Simulation & Hardware-in-the-Loop (HIL) | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `robotics/simready-simulation-engine.js` with NVIDIA SimReady 3D asset discovery, OpenUSD (USDA) export, joint PID effort controllers, synthetic depth camera point clouds, training scenarios, datasets (JSON/CSV), and ROS 2 HIL bridge. Verified across 14 automated tests (`tests/robotics-simulation.test.js` & `tests/robotics-twin-sim.test.js`). |
 | **BLK-010** | Operator Authorization | Cryptographic Operator Modification Gate | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented `security/operator-authorization.js` and mounted `/api/jarvis/evolution/challenge` and `/api/jarvis/evolution/apply`. Single-use HMAC-SHA256 tokens bound to owner, file path, and modification digest. Immutable paths strictly blocked. Replay attacks prevented. Verified across unit and integration tests. |
-| **BLK-011** | Device Pairing & Hub | Companion Pairing Lifecycle & Device Auth | `SOFTWARE_VERIFIED` | `RESOLVED` | Implemented PIN generation, owner approval, and companion claiming in `integrations/device-hub.js` mounted at `/api/jarvis/devices/pair/*`. Secured `/api/jarvis/voice/process-command` and `/api/jarvis/hud/state` allowing authenticated `x-device-token`. Verified in `tests/jarvis-evolution-routes.test.js`. |
+| **BLK-011** | Device Pairing & Hub | Durable Companion Pairing Lifecycle & Token Provisioning | `IN_MEMORY_ONLY` | `BLOCKED` | `DeviceHub` stores pending pairings and device tokens in in-process Maps. Pairing routes are configuration-gated, and in-memory tokens do not survive process restart or scale-out. Unit/route tests do not prove persistent production pairing. Add an owner-scoped durable device registry, single-use pairing claims, token rotation/revocation, secure Windows provisioning, and live E2E before marking resolved. |
 
 ---
 
@@ -37,12 +37,11 @@
 
 ---
 
-## 3. VERIFIED AUTOMATED SOFTWARE BASELINE
+## 3. VERIFIED AUTOMATED SOFTWARE BASELINE (PRE-CORRECTION COMMIT)
 
-- **Automated Tests:** **1,128 Total — 1,127 PASS, 0 FAIL, 1 SKIP**
-- **Syntax Verification:** **294 / 294 Files Clean**
-- **SAST Code Shield:** **0 CWE Findings (167 files, 51,488 lines)**
-- **Dependency Audit (SCA):** **0 Vulnerabilities (94 dependencies)**
-- **Secret Detection:** **0 Leaked Secrets (322 files, 30 commits)**
-- **Active Code Defects:** **0**
-- **Security Regressions:** **0**
+- **Automated Tests:** **1,162 Total — 1,161 PASS, 0 FAIL, 1 SKIP** on commit `dd66ece1dd8901ed77436866ea06752ecb19260f`.
+- **Syntax Verification:** **303 / 303 Files Clean** on the same commit.
+- **Skipped:** live two-account Supabase isolation E2E.
+- **Security snapshot:** prior native report listed zero findings, but external scanners (Semgrep, Trivy/OSV, Gitleaks and ESLint security plugins) were unavailable; not an independent certification.
+- **New vision and Windows voice corrections:** commits after `dd66ece1` are pending their own CI; do not reuse this baseline as their test result.
+- **Live model, vision, worker, two-account RLS, durable device pairing and physical Windows voice/control remain unverified or blocked.

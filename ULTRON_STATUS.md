@@ -63,8 +63,8 @@
 | **G. Self-Evolution** | Cryptographic Operator Authorization | `security/operator-authorization.js` | `/api/jarvis/evolution/challenge` | 4/4 PASS (`tests/operator-authorization.test.js`), 7/7 PASS (`tests/jarvis-evolution-routes.test.js`) | HMAC-SHA256 single-use tokens, timing-safe equality, replay prevention | None (Cryptographic) | `LIVE_VERIFIED` |
 | **H. Desktop & HUD** | Always-On Floating Living Energy Core | `public/floating-core.js`, `public/floating-core.css` | UI HUD Widget | 6/6 PASS (`tests/floating-core.test.js`) | 1:1 aspect ratio, 10 visual states, non-stealing focus | Browser / Companion Window | `LIVE_VERIFIED` |
 | **H. Desktop & HUD** | Windows Display Capture Exclusion | `system/windows-capture-affinity.js` | Win32 API | 5/5 PASS (`tests/windows-capture-affinity.test.js`) | Verified on Windows 11 Build 26100 (`WDA_EXCLUDEFROMCAPTURE = 0x11`) | Win32 DWM Subsystem | `LIVE_VERIFIED` |
-| **H. Desktop & HUD** | Windows Companion Desktop HUD & Voice Dispatch | `windows-companion/Program.cs` | WinForms Overlay | 5/5 PASS (`scripts/check-windows-companion.mjs`), 4/4 PASS (`tests/companion-endpoint.test.js`) | Local wake word + snap detection, media ducking, command dispatch to `/api/jarvis/voice/process-command` | Windows Desktop (.NET 8) | `LIVE_VERIFIED` |
-| **H. Desktop & HUD** | Device Hub Pairing & Device-Token Auth | `integrations/device-hub.js` | `/api/jarvis/devices/pair/*` | 8/8 PASS (`tests/computer-device.test.js`), 7/7 PASS (`tests/jarvis-evolution-routes.test.js`) | PIN request, owner approval, claim, `x-device-token` auth on HUD/voice | Companion Protocol | `LIVE_VERIFIED` |
+| **H. Desktop & HUD** | Windows Companion HUD & Wake-to-Command Capture | `windows-companion/Program.cs` | WinForms Overlay | Earlier source tests + new capture regression test; current .NET build/CI pending | Wake/snap now starts a separate dictation capture and sends the recognised text only; physical microphone, pairing token and backend E2E are not verified | Windows Desktop (.NET 8), installed recognizer, server-issued device token | `IN_PROGRESS` |
+| **H. Desktop & HUD** | Device Hub Pairing & Device-Token Auth | `integrations/device-hub.js` | `/api/jarvis/devices/pair/*` | Unit/route tests only | Pairing endpoints are configuration-gated; `DeviceHub` stores pending pairings and tokens in process memory, not durable storage; production pairing is not verified | Durable device registry, enabled server configuration, owner approval and secure token provisioning | `BLOCKED` |
 | **H. Desktop & HUD** | Coding Sandbox Isolation | `tools/sandbox/coding-sandbox.js` | Sandbox Runner | 6/6 PASS (`tests/coding-sandbox.test.js`), 4/4 PASS (`tests/advanced-intelligence.test.js`) | Deterministic in CI and local Docker environments; memory, CPU, network bounds verified | OS Isolation Runtime | `AUTOMATED_TEST_PASSED` |
 | **I. Robotics** | Kinematic HAL & 3D Geofence | `robotics/robot-controller.js` | `/api/jarvis/robotics/*` | 9/9 PASS (`tests/robotics-hal.test.js`) | Simulation mode active; physical hardware out of scope | Robotics HAL | `AUTOMATED_TEST_PASSED` |
 | **I. Robotics** | SimReady & OpenUSD Simulation Engine | `robotics/simready-simulation-engine.js` | `/api/jarvis/robotics/simready/*` | 14/14 PASS (`tests/robotics-simulation.test.js`) | SimReady 3D assets, USDA export, PID effort, depth cloud, HIL bridge | SimReady Central | `AUTOMATED_TEST_PASSED` |
@@ -77,31 +77,30 @@
 - **`IMPLEMENTED`**: 45 / 45 In-Scope Subsystems (100%)
 - **`UNIT_TESTED`**: 45 / 45 In-Scope Subsystems (100%)
 - **`INTEGRATION_TESTED`**: 45 / 45 In-Scope Subsystems (100%)
-- **`LIVE_VERIFIED`**: 14 Subsystems verified with live execution on host hardware:
-  1. Kokoro-82M ONNX Speech Synthesis (AMD Ryzen 7 5700U CPU execution)
-  2. Windows SAPI Speech Fallback (Windows SAPI Subsystem)
-  3. SAST Code Shield & CycloneDX SBOM (167 files, 0 CWE findings)
-  4. Tool-Backed Dependency Vulnerability Audit (`npm audit`, 94 packages, 0 vulns)
-  5. Zero-Retention Secret Scanner (322 files, 30 commits, 0 secrets)
-  6. Master Security Quality Gate Report (Automated JSON/MD generation)
-  7. Windows Companion Desktop Pairing & Workstation Security Grid (`PC-LENOVO`)
-  8. Windows Display Capture Exclusion (`WDA_EXCLUDEFROMCAPTURE = 0x11` on Win 11 Build 26100)
-  9. Windows Companion Living Core Overlay Form & Voice Dispatcher (`windows-companion/Program.cs`)
-  10. Always-On Floating Living Energy Core UI (1:1 aspect ratio, 10 visual energy states)
-  11. Universal Audio Processing Pipeline (AEC NLMS adaptive filter, Snap detection, Media ducking)
-  12. ULTRON Self-Evolution Engine (Recursive audit, weakness discovery, immutable path security, safe snapshot rollback)
-  13. Cryptographic Operator Authorization Service (Single-use HMAC-SHA256 tokens bound to owner, path, and digest)
-  14. Device Hub Companion Pairing & Claiming Lifecycle (`POST /api/jarvis/devices/pair/*` with `x-device-token`)
+- **`LIVE_VERIFIED` (historical local evidence only)**: 10 subsystems have prior host-level execution evidence documented in this repository; that evidence is not a substitute for a new end-to-end production check:
+  1. Kokoro-82M ONNX Speech Synthesis (reported AMD Ryzen 7 5700U CPU execution)
+  2. Windows SAPI Speech Fallback (reported Windows SAPI execution)
+  3. SAST Code Shield & CycloneDX SBOM (native scanner snapshot)
+  4. Tool-Backed Dependency Vulnerability Audit (`npm audit` snapshot)
+  5. Zero-Retention Secret Scanner (historical 322-file / 30-commit snapshot)
+  6. Master Security Quality Gate Report (local JSON/MD generation)
+  7. Windows Display Capture Exclusion (reported Win 11 Build 26100 / WDA 0x11 check)
+  8. Always-On Floating Living Energy Core UI (browser-rendered states)
+  9. ULTRON Self-Evolution Engine (local audit and rollback tests)
+  10. Cryptographic Operator Authorization (HMAC single-use/replay tests)
+- **Not live-verified:** Windows wake-to-command capture on the physical microphone, persistent device pairing, actual Windows action dispatch, live vision provider inference, cloud model responses, and real background worker execution.
 - **`BLOCKED` (Strict External Requirements)**:
-  1. Live Cloud Model Invocations: Requires paid API keys (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, etc.)
-  2. Live Camera Multimodal Inference: Requires `OPENROUTER_API_KEY`
-  3. Background Worker Loopback Queue: Requires `SUPABASE_SERVICE_ROLE_KEY`
-  4. Live Two-Account RLS Database Test: Skipped by design awaiting disposable test accounts
+  1. Live Cloud Model Invocations: Requires an eligible configured provider key (a free model may be used; no paid call is automatic)
+  2. Live Camera Multimodal Inference: Requires an active, eligible vision provider key and successful real inference
+  3. Background Worker Loopback Queue: Requires `SUPABASE_SERVICE_ROLE_KEY` and a disposable test owner
+  4. Live Two-Account RLS Database Test: Skipped by design awaiting two disposable test accounts
+  5. Persistent Windows device pairing: current DeviceHub state is in-memory and pairing is disabled unless separately configured
+  6. Windows voice E2E: new wake-to-dictation code awaits its own CI and physical-device/microphone verification
 
 
 ## 2026-11-01 corrective audit note
 
 - The previous CI baseline was 1,162 tests (1,161 pass, 0 fail, 1 skipped) and 303/303 syntax checks on commit `dd66ece1dd8901ed77436866ea06752ecb19260f`.
-- Vision corrections are now on this branch at `1ef0eb57bb30fb5e0b42040a8c68934b382bc65d`; the previous totals are not verification of that patch until its CI completes.
-- Vision inference stays blocked until a callable inference runner is connected. API-key presence and model identifiers alone are not proof of inference.
+- Vision corrections are on this branch at `1ef0eb5`, with a free-model OpenRouter adapter added in `9293589`; Windows wake-to-dictation is now added at `4bb0985`. The previous test totals do not verify these newer commits until their own CI completes.
+- Vision inference uses the new free-model OpenRouter adapter, but remains blocked until a valid `OPENROUTER_API_KEY` is configured and the explicit live vision smoke test succeeds. API-key presence alone is not proof of inference.
 - Supabase Security Advisor still reports leaked-password protection disabled; application-side breached-password screening is an additional mitigation only.

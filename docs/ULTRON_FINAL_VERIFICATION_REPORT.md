@@ -4,7 +4,8 @@
 **Repository:** `ayaanraza2008/ULTRON-AI`  
 **Branch:** `feat/ultron-cyber-core`  
 **Previous verified CI head:** `dd66ece1dd8901ed77436866ea06752ecb19260f`  
-**Corrective vision commit:** `1ef0eb57bb30fb5e0b42040a8c68934b382bc65d` (new CI result pending)  
+**Vision corrections:** `1ef0eb5` and `9293589`  
+**Windows wake-to-dictation correction:** `4bb0985456f6cd67bd5d3298930286de3408e0e6` (current CI result pending)  
 **PR:** https://github.com/ayaanraza2008/ULTRON-AI/pull/440
 
 ---
@@ -46,11 +47,18 @@ This is not an independent security certification:
 - Live model inference needs an eligible configured provider credential; the recorded model smoke result was `NO_ELIGIBLE_PROVIDER`.
 - Live image inference needs a callable vision adapter; a key or model identifier alone is not evidence of inference.
 - Worker smoke needs explicit opt-in, server-only Supabase credentials and a disposable test user.
-- Full local Windows voice/computer control needs physical-device testing with microphone permission and secure pairing.
+- Windows companion now contains a wake-to-dictation capture path, but the current Windows build/test result is pending; physical microphone capture and backend dispatch require device verification.
+- DeviceHub currently stores pairing state in process memory and the pairing endpoints are configuration-gated; persistent production pairing is still blocked.
 - Final video rendering needs an available local/hosted renderer such as FFmpeg and adequate resources.
 
-## 5. Evidence policy
+## 5. Corrective code changes on the PR branch
+
+- Vision no longer fabricates image descriptions, object detections or confidence scores when no provider is connected. A free-model-only OpenRouter adapter is wired behind server-side credentials, bounded HTTPS transport and response limits. Live inference remains blocked until a valid provider key is configured and an explicit smoke test succeeds.
+- Windows wake now pauses the wake recognizer, captures the next spoken dictation result with timeout/cancel handling, and sends the actual recognised text to the backend. It defaults to the existing HTTPS Render backend and requires a server-issued device token. This is not yet verified on the physical PC or against a durable paired-device registry.
+- Public security report local workstation path has been redacted; Supabase leaked-password platform warning is still open.
+
+## 6. Evidence policy
 
 A passing unit test proves only the tested code path. A successful CI build does not prove a production deployment. A configured secret does not prove live provider inference. RLS policies do not prove two-account isolation. A Windows installer build does not prove physical-device behaviour.
 
-Do not claim 100% operational completion while live or device verification remains blocked.
+Do not claim 100% operational completion while live or device verification remains blocked. Current PR head is open and unmerged; Render production is still on main.
