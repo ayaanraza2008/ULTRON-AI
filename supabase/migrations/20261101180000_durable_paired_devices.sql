@@ -64,3 +64,68 @@ drop policy if exists pending_pairings_select_owner on public.pending_device_pai
 drop policy if exists pending_pairings_update_owner on public.pending_device_pairings;
 revoke all on table public.pending_device_pairings from anon, authenticated;
 grant all on table public.pending_device_pairings to service_role;
+
+-- Atomic one-time claim: inserts the paired device and consumes the short-lived
+-- code in one transaction. Only the backend service role may call this function.
+create or replace function public.claim_pending_device_pairing(p_code text)
+returns table (
+  device_id uuid,
+  owner_user_id uuid,
+  device_name text,
+  platform text,
+  token_hash text,
+  encrypted_token text
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  pairing public.pending_device_pairings%rowtype;
+begin
+  if p_code is null or p_code !~ '^[0-9]{6}$' then
+    raise exception 'invalid or expired pairing code' using errcode = 'P0001';
+  end if;
+
+  select *
+    into pairing
+    from public.pending_device_pairings
+   where code = p_code
+     and approved = true
+     and approved_by is not null
+     and device_id is not null
+     and token_hash is not null
+     and encrypted_token is not null
+     and expires_at > now()
+   for update;
+
+  if not found then
+    raise exception 'invalid, expired, or already claimed pairing code' using errcode = 'P0001';
+  end if;
+
+  insert into public.paired_devices (
+    id, owner_user_id, device_name, platform, token_hash, token_prefix,
+    status, capabilities, paired_at, last_seen_at
+  ) values (
+    pairing.device_id,
+    pairing.approved_by,
+    pairing.device_name,
+    pairing.platform,
+    pairing.token_hash,
+    left('ultron_dev_' || pairing.token_hash, 20),
+    'active',
+    '{}'::jsonb,
+    now(),
+    now()
+  );
+
+  delete from public.pending_device_pairings where code = pairing.code;
+
+  return query
+    select pairing.device_id, pairing.approved_by, pairing.device_name,
+           pairing.platform, pairing.token_hash, pairing.encrypted_token;
+end;
+$$;
+
+revoke all on function public.claim_pending_device_pairing(text) from public, anon, authenticated;
+grant execute on function public.claim_pending_device_pairing(text) to service_role;
