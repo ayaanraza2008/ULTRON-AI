@@ -62,12 +62,12 @@ test("Android wake companion uses on-device speech with explicit microphone and 
   assert.ok(manifest.includes("android.permission.POST_NOTIFICATIONS"));
   assert.ok(manifest.includes("android.permission.INTERNET"));
   assert.ok(manifest.includes('android:usesCleartextTraffic="false"'));
-  assert.ok(main.includes("/api/devices/pairings/claim"));
-  assert.ok(main.includes("/api/jarvis/voice/process-command"));
-  assert.ok(main.includes("SpeechRecognizer.createOnDeviceSpeechRecognizer(this)"));
-  assert.ok(main.includes("RecognizerIntent.EXTRA_PREFER_OFFLINE"));
-  assert.ok(main.includes("setRequestProperty(\"x-device-token\", deviceToken)"));
-  assert.ok(main.includes('setOnClickListener { beginVoiceCommand() }'));
+  assert.ok(activity.includes("/api/devices/pairings/claim"));
+  assert.ok(activity.includes("/api/jarvis/voice/process-command"));
+  assert.ok(activity.includes("SpeechRecognizer.createOnDeviceSpeechRecognizer(this)"));
+  assert.ok(activity.includes("RecognizerIntent.EXTRA_PREFER_OFFLINE"));
+  assert.ok(activity.includes("setRequestProperty(\"x-device-token\", deviceToken)"));
+  assert.ok(activity.includes('setOnClickListener { beginVoiceCommand() }'));
   assert.ok(tokenStore.includes('"AndroidKeyStore"'));
   assert.ok(tokenStore.includes("AES/GCM/NoPadding"));
   assert.ok(tokenStore.includes("KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT"));
