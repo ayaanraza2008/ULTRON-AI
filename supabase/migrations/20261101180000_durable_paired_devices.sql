@@ -28,16 +28,14 @@ create policy paired_devices_select_own on public.paired_devices
   for select to authenticated
   using (owner_user_id = (select auth.uid()));
 
+-- Authenticated users may inspect only their own device metadata. All
+-- mutations are performed through the owner-authorized backend; never let a
+-- browser client rewrite token hashes or silently reactivate a revoked device.
 drop policy if exists paired_devices_update_own on public.paired_devices;
-create policy paired_devices_update_own on public.paired_devices
-  for update to authenticated
-  using (owner_user_id = (select auth.uid()))
-  with check (owner_user_id = (select auth.uid()));
-
 drop policy if exists paired_devices_delete_own on public.paired_devices;
-create policy paired_devices_delete_own on public.paired_devices
-  for delete to authenticated
-  using (owner_user_id = (select auth.uid()));
+revoke insert, update, delete on table public.paired_devices from anon, authenticated;
+grant select on table public.paired_devices to authenticated;
+grant all on table public.paired_devices to service_role;
 
 -- Pending device pairing codes (short-lived, single-use, 5-minute expiry)
 create table if not exists public.pending_device_pairings (
@@ -58,13 +56,11 @@ create index if not exists pending_pairings_expiry_idx
 
 alter table public.pending_device_pairings enable row level security;
 
+-- Pairing codes are only six digits and pending rows contain encrypted
+-- device credentials. They must never be enumerable or mutable by browser
+-- roles, including while approved=false. The backend uses service_role and
+-- enforces the authenticated owner check before approving a code.
 drop policy if exists pending_pairings_select_owner on public.pending_device_pairings;
-create policy pending_pairings_select_owner on public.pending_device_pairings
-  for select to authenticated
-  using (approved_by = (select auth.uid()) or approved = false);
-
 drop policy if exists pending_pairings_update_owner on public.pending_device_pairings;
-create policy pending_pairings_update_owner on public.pending_device_pairings
-  for update to authenticated
-  using (approved_by = (select auth.uid()) or approved = false)
-  with check (approved_by = (select auth.uid()));
+revoke all on table public.pending_device_pairings from anon, authenticated;
+grant all on table public.pending_device_pairings to service_role;
