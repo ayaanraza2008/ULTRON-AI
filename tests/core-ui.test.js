@@ -408,6 +408,8 @@ test("spoken prompts skip unnecessary pre-search and use a smaller conversationa
 test("hand gesture control is user-activated, shares the Eyes stream, and matches emitted gesture types", () => {
   assert.ok(html.includes('src="/hand-gesture-core.js"'));
   assert.ok(html.includes('id="gesture-toggle"'));
+  assert.match(html, /<script type="module" src="\/hand-gesture-core\.js"><\/script>/);
+  assert.match(html, /<script type="module" src="\/app\.js"><\/script>/);
   assert.ok(proxySource.includes('["/hand-gesture-core.js"'));
   assert.ok(app.includes('gestureToggle: byId("gesture-toggle")'));
   assert.ok(app.includes('ui.gestureToggle.addEventListener("click"'));
