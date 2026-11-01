@@ -1,45 +1,49 @@
 # ULTRON AI — Production Deployment Readiness
 
 **Audit date:** 2026-11-01 (Asia/Kolkata)  
-**Candidate PR:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
-**Audited implementation checkpoint:** `3336a99b492014c661a54f9b315400bbb81c6b45`  
+**Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
+**Current branch head:** `14edc33ec5ba446280201c3adea10f0144e89980`  
+**Last green code/test checkpoint:** `a3917b6e535147f08343053920c691af008ac0df`  
 **Target Render workspace:** **Ultron core**  
-**Decision:** **NO-GO — DO NOT MERGE OR DEPLOY YET**
+**Decision:** **NO-GO — DO NOT MERGE, SYNC OR DEPLOY YET**
 
-## Source and deployment state
+## Production snapshot
 
-| Component | Render branch | Reported live commit | Current status |
-|---|---|---|---|
-| Backend `ultron-ai-core` | `main` | `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281` | Service/deploy metadata reports live; candidate is not deployed |
-| Frontend `ultron-core-interface` | `feature/ultron-live-core-interface-20261029` | `68b042641bc1e4a0ab56953df36637402c47df86` | Service/deploy metadata reports live; separate, stale source branch |
+| Service | Current live source | Candidate Blueprint |
+|---|---|---|
+| `ultron-ai-core` | `main` / `b00c2e8` | Exact service name; health `/api/health` |
+| `ultron-core-interface` | old interface feature branch / `68b04264` | Exact service name; `main` after approved release; health `/` |
+| `ultron-browser-use-core` | `main` | Exact service name; health `/health`; shared token references backend service |
+| `ultron-rea-gateway` | `main` | Exact service name; Node 24.22.1; health `/healthz`; generated REA token |
 
-PR #441 remains open and unmerged. Its frontend gesture fixes therefore are not on the production frontend. Do not merge or deploy based on its title or automated tests alone.
+PR #441 is open and unmerged. Candidate `render.yaml` is reconciled to the four live service names and is not synced. Do not sync before reviewing the resulting Render diff and confirming existing secret/branch settings.
 
 ## Latest CI evidence
 
-- [ULTRON CI run 41336219872](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41336219872): 1,250 Node tests, 1,249 pass, 0 fail, 1 skip; syntax 318/318; ULTRON runtime audit 0; configured repository security gate 0 findings.
-- [Windows Companion run 41336219867](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41336219867): x64 build/publish passed.
-- The one skipped test is the live two-user Supabase isolation test.
-- The external pinned World Intelligence build reports 5 high-severity dependency advisories; it requires a package-level review.
+- [ULTRON CI run 41339384666](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41339384666): 1,255 tests, 1,254 pass, 0 fail, 1 skip; syntax 318/318; ULTRON runtime npm audit 0; configured security gate 0 confirmed findings.
+- [Windows Companion run 41339216284](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41339216284): x64 compile, standalone publish and upload passed.
+- [Android Companion run 41339216276](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41339216276): debug APK compile and upload passed.
+- One skipped test is live two-account Supabase isolation.
+- External pinned World Intelligence dependency build reports five high-severity advisories.
 
-## Release gates still open
+The current docs-only candidate tip has a new CI/build run in progress; the implementation code checkpoint cited above is green.
 
-1. Genuine live text and vision inference with approved provider credentials.
-2. Live disposable-user worker execution and Supabase persistence.
-3. Two-account RLS isolation E2E and resolution/review of the Supabase leaked-password warning.
-4. Physical webcam/MediaPipe test of hand gestures on the target browser/PC.
-5. Actual Kokoro `am_onyx` speech test on target PC; current browser voice is not proof of Kokoro.
-6. Implement and test owner-authenticated durable device-pairing routes; current DeviceHub is not mounted by the server/router and the migration is unapplied.
-7. Windows/Android physical microphone, wake-word, pairing and safe-control E2E.
-8. Live paired-browser E2E and Docker runtime isolation.
-9. Full user-source media workflow and external robotics simulator/HIL validation where applicable.
-10. Reconcile `render.yaml` non-destructively with live service IDs/names. It currently defines mismatched service names and duplicate World Intelligence services.
-11. Restore sufficient Render log/metrics visibility and complete authenticated staging tests across sign-in, chat, voice, memory, tasks, files and device flows.
-12. Review the five high-severity advisories in the separate pinned World Intelligence dependency tree.
-13. Obtain explicit owner approval for merge/deploy and any reviewed database migrations.
+## Remaining release gates
 
-## Cost, data and deployment safety
+1. Genuine live text-model and vision image-Q&A smoke tests.
+2. Live provider-backed worker task with Supabase persistence.
+3. Two-user RLS isolation and owner review/enablement of Supabase leaked-password protection.
+4. Apply the paired-device migration and provision the dedicated generated device signing secret after separate owner approval; perform live pair/claim/rotate/revoke.
+5. Physical Windows and Android install, microphone, language, wake-word and harmless allowlisted action tests.
+6. Install/verify Kokoro ONNX runtime and `am_onyx` model on target host; browser speech remains the fallback until this succeeds.
+7. Live paired-browser test and Docker isolation on target host.
+8. Full user-source media workflow and external robotics simulator/HIL validation.
+9. Restore sufficient Render logs/metrics and pass authenticated staging flows.
+10. Review the five high-severity advisories in the external pinned World Intelligence dependency tree.
+11. Obtain explicit owner approval for PR merge and Render Blueprint sync/deploy.
 
-Keep the free-first configuration. Do not upgrade Render/Supabase, add paid APIs, change production secrets, run production writes, apply migrations, merge or deploy without explicit approval. Do not paste secrets into chat or source control.
+## Cost and data safety
 
-No merge, deployment, plan upgrade, production secret change or Supabase migration was performed during this audit.
+Keep the free-first configuration. Do not upgrade Render/Supabase, add paid APIs, change production secrets, run production writes, apply the Supabase migration, merge or deploy without explicit approval. Do not paste secrets into chat or source control.
+
+No merge, Render sync/deployment, plan upgrade, production secret mutation or Supabase migration was performed.
