@@ -98,6 +98,7 @@ test("VideoEditingEngine: Renders video timeline, outputs manifest JSON, and sup
   });
 
   assert.equal(result.success, true);
+  assert.equal(result.renderedWithFFmpeg, true);
   assert.ok(result.renderId);
   assert.ok(progressTrack.length > 0);
   assert.ok(progressTrack.includes(100));
@@ -112,6 +113,30 @@ test("VideoEditingEngine: Renders video timeline, outputs manifest JSON, and sup
   // Test status query
   const status = engine.getRenderStatus(result.renderId);
   assert.equal(status.status, "COMPLETED");
+
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("VideoEditingEngine: fails closed without generating simulated string buffers when ffmpeg is unavailable", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-no-ffmpeg-"));
+  const engine = new VideoEditingEngine({
+    workspaceBase: tmpDir,
+    ffmpegChecker: async () => { throw new Error("ffmpeg: command not found"); }
+  });
+  await engine.initialize();
+
+  const timeline = engine.buildTimeline({
+    presetKey: "CINEMATIC",
+    title: "No FFmpeg Test",
+    targetDuration: 2
+  });
+
+  const result = await engine.renderVideo(timeline);
+  assert.equal(result.success, false);
+  assert.equal(result.status, "BLOCKED_FFMPEG_UNAVAILABLE");
+  assert.equal(result.renderedWithFFmpeg, false);
+  assert.equal(result.outputPath, null);
+  assert.ok(result.error.includes("FFMPEG_BINARY_UNAVAILABLE"));
 
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
