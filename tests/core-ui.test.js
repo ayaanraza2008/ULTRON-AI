@@ -334,14 +334,15 @@ test("voice output prefers Kokoro then installed male voices and uses language-s
 test("voice quality panel explains the free-first Kokoro and browser fallback path", () => {
   assert.ok(app.includes('if (name === "voice-quality")'));
   assert.ok(app.includes("Kokoro am_onyx synthesis"));
-  assert.ok(app.includes("am_onyx · deep male · Hindi-English"));
+  assert.ok(app.includes("am_onyx · deep, calm, authoritative male"));
   assert.ok(app.includes('drawerButton("HINDI · hi-IN"'));
   assert.ok(app.includes('drawerButton("ENGLISH · en-IN"'));
-  assert.ok(app.includes("requestKokoroSpeech(text)"));
+  assert.ok(app.includes("async function requestKokoroSpeech(text)"));
   assert.ok(app.includes('/api/jarvis/voice/kokoro'));
-  assert.ok(app.includes("Diagnostic tones are never passed to the audio player.") === false);
-  assert.ok(app.includes("premiumSttConfigured: Boolean(rawSpeech.premiumSttConfigured && !fishOnlyProvider)"));
-  assert.doesNotMatch(app, /Kokoro|FishAudio|FISH_AUDIO|requestFishAudioSpeech|playFishAudioBlob|streamSpeechUsesFish/i);
+  assert.ok(app.includes("Diagnostic tones are never passed to the audio player."));
+  assert.ok(app.includes("premiumSttConfigured: Boolean(rawSpeech.premiumSttConfigured && !legacyRemoteProvider)"));
+  assert.doesNotMatch(app, /Fish Audio|FishAudio|FISH_AUDIO|requestFishAudioSpeech|playFishAudioBlob|streamSpeechUsesFish/i);
+  assert.doesNotMatch(app, /\/api\/speech\/synthesize/);
 });
 
 test("free-first voice architecture defaults to Kokoro and browser speech without requiring Kokoro", () => {
