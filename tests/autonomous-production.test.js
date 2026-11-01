@@ -4,7 +4,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { AutonomousProductionOrchestrator } from "../media/autonomous-production-orchestrator.js";
-import { mediaDiscoveryEngine } from "../media/media-discovery-engine.js";
+import { MediaDiscoveryEngine } from "../media/media-discovery-engine.js";
+import { VideoEditingEngine } from "../media/video-editing-engine.js";
+import { ImageStudioEngine } from "../media/image-studio-engine.js";
 
 test("AutonomousProductionOrchestrator: Parses complex natural production prompts", () => {
   const orchestrator = new AutonomousProductionOrchestrator();
@@ -33,15 +35,24 @@ test("AutonomousProductionOrchestrator: Parses complex natural production prompt
   assert.equal(intent3.targetDuration, 15);
 });
 
-test("AutonomousProductionOrchestrator: Executes end-to-end 12-step autonomous production pipeline", async () => {
+test("AutonomousProductionOrchestrator: reports a blocked real render instead of claiming a fake export", async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-auto-prod-"));
 
   // Index a couple sample source files
   await fs.writeFile(path.join(tmpDir, "sample_clip_action.mp4"), "sample-action-bytes");
   await fs.writeFile(path.join(tmpDir, "sample_clip_car.mp4"), "sample-car-bytes");
+  const mediaDiscoveryEngine = new MediaDiscoveryEngine();
   await mediaDiscoveryEngine.indexDirectory(tmpDir);
 
-  const orchestrator = new AutonomousProductionOrchestrator({ workspaceBase: tmpDir });
+  const orchestrator = new AutonomousProductionOrchestrator({
+    workspaceBase: tmpDir,
+    mediaDiscoveryEngine,
+    videoEditingEngine: new VideoEditingEngine({
+      workspaceBase: tmpDir,
+      ffmpegChecker: async () => { throw new Error("ffmpeg disabled for deterministic blocker test"); }
+    }),
+    imageStudioEngine: new ImageStudioEngine({ workspaceBase: tmpDir })
+  });
 
   const progressUpdates = [];
   const result = await orchestrator.produceContent(
@@ -51,11 +62,14 @@ test("AutonomousProductionOrchestrator: Executes end-to-end 12-step autonomous p
     }
   );
 
-  assert.equal(result.success, true);
-  assert.equal(result.status, "COMPLETED");
-  assert.equal(result.stagesCompleted, 12);
+  assert.equal(result.success, false);
+  assert.equal(result.status, "BLOCKED_MEDIA_RENDER");
+  assert.equal(result.videoExportStatus, "BLOCKED_FFMPEG_UNAVAILABLE");
+  assert.equal(result.stagesCompleted, 10);
+  assert.deepEqual(result.stagesBlocked, ["RENDERING_VIDEO", "SAVING_EXPORT"]);
   assert.equal(result.preset, "High-Velocity Action");
-  assert.ok(result.videoExportPath);
+  assert.equal(result.videoExportPath, null);
+  assert.ok(result.videoExportError);
   assert.ok(result.thumbnailPath);
   assert.ok(result.manifestPath);
 
@@ -64,10 +78,9 @@ test("AutonomousProductionOrchestrator: Executes end-to-end 12-step autonomous p
   assert.ok(progressUpdates.some(u => u.stageName === "BUILDING_TIMELINE"));
   assert.ok(progressUpdates.some(u => u.stageName === "COMPLETED"));
 
-  // Verify exported files exist on disk
-  const videoExists = await fs.stat(result.videoExportPath);
-  assert.ok(videoExists.isFile());
-
+  // Verify the package assets exist, but no nonexistent MP4 is advertised.
+  const manifestExists = await fs.stat(result.manifestPath);
+  assert.ok(manifestExists.isFile());
   const thumbExists = await fs.stat(result.thumbnailPath);
   assert.ok(thumbExists.isFile());
 
