@@ -658,30 +658,82 @@ document.addEventListener("DOMContentLoaded", () => {
     appendMessage("TELEPHONY AGENT", "Telephone call session terminated. Transcript archived to session history.", false);
   });
 
-  // --- Hand Gesture Control (Optional Camera Tracking) ---
-  let gestureTrackingActive = false;
-  document.getElementById("toggleGestureBtn")?.addEventListener("click", async () => {
-    const btn = document.getElementById("toggleGestureBtn");
-    if (!gestureTrackingActive) {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          alert("Camera access is not supported in this browser environment.");
-          return;
-        }
-        await navigator.mediaDevices.getUserMedia({ video: true });
-        gestureTrackingActive = true;
-        btn.textContent = "✋ Gesture Control Active (Pinch / Scale Core)";
-        btn.classList.add("btn-accent");
-        appendMessage("VISION GESTURE", "Local camera tracking active. Pinch to select, open palm to activate, two-hand distance scales Energy Core.", false);
-      } catch (err) {
-        alert("Camera permission denied or camera unavailable: " + err.message);
+  // --- Real-Time Hand Gesture Control for Living Energy Core ---
+  const toggleGestureBtn = document.getElementById("toggleGestureBtn");
+  const gestureTelemetryBar = document.getElementById("gestureTelemetryBar");
+  const gestureStatusPill = document.getElementById("gestureStatusPill");
+  const gestureHandsCountBadge = document.getElementById("gestureHandsCountBadge");
+  const gestureActiveActionBadge = document.getElementById("gestureActiveActionBadge");
+  const gestureSensitivitySelect = document.getElementById("gestureSensitivitySelect");
+  const toggleGesturePreviewBtn = document.getElementById("toggleGesturePreviewBtn");
+  const gestureVideoFeed = document.getElementById("gestureVideoFeed");
+
+  const syncGestureUI = ({ state, activeGesture, handsCount }) => {
+    if (gestureStatusPill) gestureStatusPill.textContent = `STATUS: ${state}`;
+    if (gestureHandsCountBadge) gestureHandsCountBadge.textContent = `${handsCount} HAND${handsCount === 1 ? "" : "S"}`;
+    if (gestureActiveActionBadge) gestureActiveActionBadge.textContent = activeGesture;
+
+    const compactBtn = document.getElementById("compactGestureBtn");
+    const isEngaged = window.handGestureCore && window.handGestureCore.isEnabled;
+
+    if (isEngaged) {
+      if (toggleGestureBtn) {
+        toggleGestureBtn.textContent = "✋ Hand Control: ACTIVE";
+        toggleGestureBtn.classList.add("btn-accent");
+      }
+      if (compactBtn) {
+        compactBtn.textContent = "✋ Hand: ACTIVE";
+        compactBtn.classList.add("active");
       }
     } else {
-      gestureTrackingActive = false;
-      btn.textContent = "✋ Enable Hand Gesture Control";
-      btn.classList.remove("btn-accent");
-      appendMessage("VISION GESTURE", "Camera gesture tracking deactivated.", false);
+      if (toggleGestureBtn) {
+        toggleGestureBtn.textContent = "✋ Enable Hand Gesture Control";
+        toggleGestureBtn.classList.remove("btn-accent");
+      }
+      if (compactBtn) {
+        compactBtn.textContent = "✋ Hand Control";
+        compactBtn.classList.remove("active");
+      }
     }
+  };
+
+  if (window.handGestureCore) {
+    window.handGestureCore.stateManager.subscribe(syncGestureUI);
+  }
+
+  toggleGestureBtn?.addEventListener("click", async () => {
+    if (!window.handGestureCore) {
+      alert("Hand Gesture Core module initializing... Please retry in a moment.");
+      return;
+    }
+    if (!window.handGestureCore.isEnabled) {
+      try {
+        toggleGestureBtn.textContent = "✋ Initializing Camera...";
+        await window.handGestureCore.start();
+        if (gestureTelemetryBar) gestureTelemetryBar.style.display = "flex";
+        appendMessage("VISION GESTURE", "Living Energy Core Hand Control engaged. Camera stream processed locally on-device. Gestures: Open Palm (expand), Closed Fist (contract), Index (energy vector), Swirl (vortex), Two Hands (spatial scaling).", false);
+      } catch (err) {
+        toggleGestureBtn.textContent = "✋ Enable Hand Gesture Control";
+        toggleGestureBtn.classList.remove("btn-accent");
+        appendMessage("VISION GESTURE", "Failed to start hand tracking: " + err.message, false);
+      }
+    } else {
+      window.handGestureCore.stop();
+      if (gestureTelemetryBar) gestureTelemetryBar.style.display = "none";
+      if (gestureVideoFeed) gestureVideoFeed.style.display = "none";
+      appendMessage("VISION GESTURE", "Hand gesture control deactivated. Living Energy Core smoothly restored to baseline idle animation.", false);
+    }
+  });
+
+  gestureSensitivitySelect?.addEventListener("change", (e) => {
+    if (window.handGestureCore) {
+      window.handGestureCore.setSensitivity(parseFloat(e.target.value));
+    }
+  });
+
+  toggleGesturePreviewBtn?.addEventListener("click", () => {
+    if (!gestureVideoFeed) return;
+    gestureVideoFeed.style.display = (gestureVideoFeed.style.display === "none" || !gestureVideoFeed.style.display) ? "block" : "none";
   });
 
   // ==========================================

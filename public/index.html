@@ -264,6 +264,22 @@
             <button class="btn" id="simulateCallBtn">📞 Simulate Inbound Call</button>
             <button class="btn" id="toggleGestureBtn">✋ Enable Hand Gesture Control</button>
           </div>
+          <div class="gesture-telemetry-bar" id="gestureTelemetryBar" style="display: none; align-items: center; gap: 10px; margin-top: 8px; margin-bottom: 12px; padding: 8px 12px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 6px; font-size: 12px; flex-wrap: wrap;">
+            <span style="color: #00f0ff; font-weight: bold;">⚡ GESTURE CORE:</span>
+            <span class="status-pill" id="gestureStatusPill" style="padding: 2px 8px; font-size: 11px;">STATUS: STANDBY</span>
+            <span class="badge" id="gestureHandsCountBadge" style="background: rgba(37, 99, 235, 0.3); border: 1px solid #3b82f6; padding: 2px 8px; border-radius: 4px; color: #93c5fd;">0 HANDS</span>
+            <span class="badge" id="gestureActiveActionBadge" style="background: rgba(168, 85, 247, 0.3); border: 1px solid #a855f7; padding: 2px 8px; border-radius: 4px; color: #d8b4fe;">IDLE</span>
+            <label style="color: #94a3b8; font-size: 11px; margin-left: auto;">Sensitivity:
+              <select id="gestureSensitivitySelect" style="background: #1e293b; color: #f8fafc; border: 1px solid #475569; border-radius: 4px; padding: 2px 6px; font-size: 11px;">
+                <option value="0.75">Low</option>
+                <option value="1.0" selected>Normal</option>
+                <option value="1.5">High</option>
+              </select>
+            </label>
+            <button class="btn btn-sm" id="toggleGesturePreviewBtn" style="padding: 2px 8px; font-size: 11px;" title="Toggle Camera Preview Window">👁️ Preview</button>
+          </div>
+          <video id="gestureVideoFeed" playsinline muted style="display: none; position: fixed; bottom: 155px; right: 24px; width: 160px; height: 120px; border-radius: 8px; border: 1px solid #00f0ff; z-index: 999998; object-fit: cover; transform: scaleX(-1); background: #000; box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);"></video>
+
           <div class="device-card-grid" id="deviceFleetGrid">
             <div class="device-card" id="card-pc">
               <strong>Primary Windows PC</strong>
@@ -1002,6 +1018,7 @@
   </main>
 
   <script type="module" src="voice-activation.js"></script>
+  <script type="module" src="hand-gesture-core.js"></script>
   <script src="app.js"></script>
   <script src="ultron-eyes.js"></script>
   <script src="cyber-dashboard.js"></script>

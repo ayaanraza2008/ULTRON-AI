@@ -891,3 +891,31 @@ select {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
+
+
+/* ==========================================================================
+   ULTRON AI — Real-Time Hand Gesture Control for Living Energy Core
+   ========================================================================== */
+.gesture-telemetry-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-mono, monospace);
+  backdrop-filter: blur(8px);
+}
+
+.compact-btn.active {
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.3), rgba(168, 85, 247, 0.3));
+  border-color: #00f0ff;
+  color: #00f0ff;
+  box-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+}
+
+#gestureVideoFeed {
+  transition: opacity 0.2s ease-in-out;
+}

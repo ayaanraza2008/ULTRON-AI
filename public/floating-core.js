@@ -124,6 +124,7 @@ export class FloatingLivingEnergyCore {
         </div>
         <div class="compact-actions-grid">
           <button class="compact-btn" id="compactVoiceBtn">🎤 Toggle Voice</button>
+          <button class="compact-btn" id="compactGestureBtn">✋ Hand Control</button>
           <button class="compact-btn" id="compactMuteBtn">🔇 Mute Audio</button>
           <button class="compact-btn" id="compactAuditBtn">🧬 Audit Myself</button>
           <button class="compact-btn" id="compactVisionBtn">👁️ Vision Scan</button>
@@ -320,6 +321,30 @@ export class FloatingLivingEnergyCore {
     const voiceBtn = document.getElementById("compactVoiceBtn");
     if (voiceBtn) voiceBtn.onclick = () => this.toggleVoice();
 
+    const gestureBtn = document.getElementById("compactGestureBtn");
+    if (gestureBtn) {
+      gestureBtn.onclick = async () => {
+        if (typeof window !== "undefined" && window.handGestureCore) {
+          if (!window.handGestureCore.isEnabled) {
+            try {
+              gestureBtn.textContent = "✋ Initializing...";
+              await window.handGestureCore.start();
+              gestureBtn.textContent = "✋ Hand: ACTIVE";
+              gestureBtn.classList.add("active");
+            } catch (err) {
+              gestureBtn.textContent = "✋ Hand Control";
+              gestureBtn.classList.remove("active");
+              alert("Hand tracking camera error: " + err.message);
+            }
+          } else {
+            window.handGestureCore.stop();
+            gestureBtn.textContent = "✋ Hand Control";
+            gestureBtn.classList.remove("active");
+          }
+        }
+      };
+    }
+
     const muteBtn = document.getElementById("compactMuteBtn");
     if (muteBtn) {
       muteBtn.onclick = () => {
@@ -430,12 +455,34 @@ export class FloatingLivingEnergyCore {
       const colorBase = colors[this.currentState] || colors.STANDBY;
       const speedMultiplier = this.currentState === FLOATING_CORE_STATES.THINKING ? 2.5 : 1.0;
 
-      for (const p of this.particles) {
-        p.angle += p.speed * speedMultiplier;
-        const px = cx + Math.cos(p.angle) * p.radius;
-        const py = cy + Math.sin(p.angle) * p.radius;
+      // Real-Time Hand Gesture Physics Hook (when hand interaction is engaged)
+      if (this.physicsController && this.currentHandMotion) {
+        this.physicsController.applyPhysics(
+          this.particles,
+          this.currentHandMotion,
+          this.currentGestureType,
+          canvas.width,
+          canvas.height,
+          ctx
+        );
+      }
 
-        ctx.fillStyle = `${colorBase}${p.alpha})`;
+      for (const p of this.particles) {
+        if (!this.currentHandMotion) {
+          p.angle += p.speed * speedMultiplier;
+        }
+        const px = (p.dispX !== undefined)
+          ? cx + Math.cos(p.angle) * p.radius + p.dispX
+          : cx + Math.cos(p.angle) * p.radius;
+        const py = (p.dispY !== undefined)
+          ? cy + Math.sin(p.angle) * p.radius + p.dispY
+          : cy + Math.sin(p.angle) * p.radius;
+
+        const alphaVal = this.currentHandMotion
+          ? Math.min(1.0, p.alpha * (this.currentHandMotion.energyIntensity || 1.0))
+          : p.alpha;
+
+        ctx.fillStyle = `${colorBase}${alphaVal.toFixed(2)})`;
         ctx.beginPath();
         ctx.arc(px, py, p.size, 0, Math.PI * 2);
         ctx.fill();
