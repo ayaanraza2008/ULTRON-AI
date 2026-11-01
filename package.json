@@ -24,7 +24,9 @@
     "security:sast": "node scripts/security-sast.mjs",
     "security:dependencies": "node scripts/security-dependencies.mjs",
     "security:secrets": "node scripts/security-secrets.mjs",
-    "security:report": "node scripts/security-report.mjs"
+    "security:report": "node scripts/security-report.mjs",
+    "test:ui": "node --test tests/core-ui.test.js",
+    "start:proxy": "node core-ui-proxy.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",

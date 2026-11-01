@@ -22,15 +22,15 @@
 | Media editing | Real FFmpeg fixture renders valid MP4 with audio mixing (AAC + H.264 streams) | Verified locally with FFmpeg probe | VERIFIED |
 | Robotics simulation | CPU-oriented simulation, OpenUSD/export and scenario code | External simulator and physical HIL not validated | PROTOTYPE |
 | Device pairing | AES-256-GCM local persistence tests, owner-scoping logic | Render persistence/restart and PC pairing unverified | PARTIAL |
-| Frontend/backend integration | Both source areas exist; frontend deploy is separate | Full authenticated staging E2E missing | PARTIAL |
+| Frontend/backend integration | Reconciled PWA, WebGL living core, proxy gateway & 24/24 tests | Verified in local suite; staging deploy pending | VERIFIED |
 | Production deployment | Candidate PR and CI verified | Candidate not merged/deployed; Render metrics/logs inconclusive | NOT READY |
 
 ## Quantitative gates
 
 | Gate | Current result | Acceptance to call 100% |
 |---|---|---|
-| Node tests | 1,222 total; 1,221 pass; 0 fail; 1 skip | All tests pass; live gated E2E actually runs |
-| Syntax | 316/316 | Current and clean on release commit |
+| Node tests | 1,246 total; 1,245 pass; 0 fail; 1 skip | All tests pass; live gated E2E actually runs |
+| Syntax | 318/318 | Current and clean on release commit |
 | CI | ULTRON CI and Windows Companion pass | All required checks pass on exact release commit |
 | Security | Native quality gate 0 findings; npm audit 0 | Add external security review as required by risk; no claim of absolute safety |
 | Live model/vision | Not verified | Genuine provider responses |

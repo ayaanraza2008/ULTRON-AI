@@ -325,7 +325,9 @@ const FILES_TO_CHECK = [
   "public/sentinel-dashboard.js",
   "tests/ultron-sentinel.test.js",
   "public/hand-gesture-core.js",
-  "tests/hand-gesture-core.test.js"
+  "tests/hand-gesture-core.test.js",
+  "core-ui-proxy.mjs",
+  "tests/core-ui.test.js"
 ];
 
 let checked = 0;
