@@ -108,10 +108,29 @@ These percentages are engineering estimates against the software-only acceptance
 
 | Dimension | Estimate | Meaning |
 |---|---:|---|
-| Code/architecture implemented | 90% | Broad feature surface exists; several integrations remain partial or configuration-dependent |
-| Automated quality gates | 99.9% | 1,180 / 1,181 tests pass; one live E2E is intentionally skipped; all latest retrieved CI jobs pass |
-| Live operational verification | 40% | Critical live AI, vision, worker, database isolation and physical-device paths remain unproven |
+| Code/architecture implemented | 90% | Broad feature surface exists; fake video-render success was removed; remaining adapters, audio mixing, durable pairing and hardware integrations still need completion |
+| Automated quality gates | 100% of executed tests | 1,183 / 1,184 tests passed, 0 failed, 1 live Supabase isolation test skipped; syntax 304/304; FFmpeg integration and security quality gate passed |
+| Live operational verification | 40% | Live AI, vision, worker, two-account database isolation and physical-device paths remain unproven |
 | Production release readiness | 20% | PR unmerged; feature not deployed; front/back branch alignment and production E2E not complete |
-| **Overall operational readiness** | **73% (estimate)** | Weighted engineering assessment; deliberately lower than source-code completion because live and release checks matter |
+| **Overall operational readiness** | **73% (estimate)** | Weighted engineering assessment; CI is now green, but real operation and release gates remain open |
 
 **100% acceptance requires all in-scope live checks to pass, all skipped tests to be run, the staging integration to pass, and owner-approved production release verification.** A unit-test result, generated document or status badge alone cannot close a live blocker.
+
+
+## 7. CI update after media-render correction
+
+**Verified PR head:** `7e2d2b9b56595c67d2bb69d91e745b8c47093659`  
+**CI run:** https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41323133858  
+**Windows companion run:** https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41323137687
+
+- Tests: **1,184 total — 1,183 pass, 0 fail, 1 skipped**.
+- Syntax: **304/304 clean**.
+- Real FFmpeg media render test: **executed and passed** after CI installed FFmpeg/ffprobe.
+- Security report: **0 confirmed vulnerabilities, 0 potential risks/warnings, 0 informational findings; quality gate passed**.
+- Dependency audit: **0 vulnerabilities**.
+- Windows companion build/publish: **passed**.
+- The single skipped test is live two-account Supabase isolation, gated until two disposable accounts and explicit test-write confirmation are provided.
+
+Supabase organisation plan was independently checked as **Free**. Current Supabase documentation states leaked-password protection is available on Pro and above: https://supabase.com/docs/guides/auth/password-security. ULTRON's application-side HaveIBeenPwned checks do not remove this platform-level warning. A paid plan upgrade has not been requested or made.
+
+The feature PR remains open and unmerged. Render backend remains on `main` at `b00c2e81`, and the frontend remains on its separate feature branch. No production deploy or live migration was performed.
