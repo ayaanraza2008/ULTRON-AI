@@ -1,64 +1,84 @@
 # ULTRON AI — Final Verification & Evidence Report
-## Evidence snapshot for PR #440
 
+**Audit date:** 2026-11-01  
 **Repository:** `ayaanraza2008/ULTRON-AI`  
 **Branch:** `feat/ultron-cyber-core`  
-**Previous verified CI head:** `dd66ece1dd8901ed77436866ea06752ecb19260f`  
-**Vision corrections:** `1ef0eb5` and `9293589`  
-**Windows wake-to-dictation correction:** `4bb0985456f6cd67bd5d3298930286de3408e0e6` (current CI result pending)  
-**PR:** https://github.com/ayaanraza2008/ULTRON-AI/pull/440
+**Audited head:** `f747736f40b7d60a509b413db397b2a60bf97b17`  
+**Pull request:** https://github.com/ayaanraza2008/ULTRON-AI/pull/440 — OPEN, NOT MERGED  
+**Production:** Render backend remains on `main`; no production deployment was performed.
 
----
+## 1. Automated CI on the audited head
 
-## 1. GitHub Actions — direct job-log evidence before the corrective patch
+- **Tests:** 1,171 total; 1,170 passed; 0 failed; 1 skipped.
+- **Skipped:** live two-account Supabase isolation E2E (`tests/supabase-isolation.e2e.test.js`), which requires two disposable test accounts and explicit write opt-in.
+- **Syntax:** `npm run check` passed; 303/303 files clean.
+- **World Intelligence build:** passed.
+- **Windows companion:** .NET 8 compile and standalone win-x64 publish passed; artifact uploaded.
 
-- **Automated tests:** 1,162 total; 1,161 passed; 0 failed; 1 skipped.
-- **Skipped test:** `tests/supabase-isolation.e2e.test.js`, gated on disposable two-account Supabase credentials and explicit write opt-in.
-- **Syntax check:** `npm run check` passed; `303/303` files verified clean.
-- **Windows companion:** .NET 8 self-contained win-x64 publish and artifact upload succeeded. This proves the CI build, not physical-device microphone, pairing or full computer-control behaviour.
-- **World Intelligence build:** both reported jobs completed successfully.
+Evidence:
+- CI run: https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41305930521
+- second CI run: https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41305934515
+- Windows build: https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41305934410
+- Windows artifact ID: `13083143750`, name `ULTRON-Windows-Wake-Companion`, 67.7 MB, expires 2026-11-15.
 
-Run links:
-- Push CI: https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41300328656
-- PR CI: https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41300332227
-- Windows companion build: https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41300332243
+These checks prove source tests, syntax and Windows compilation—not live provider inference, physical microphone capture, secure pairing persistence or full PC-control E2E.
 
-**Important:** those test totals precede corrective commit `1ef0eb5`; do not claim that the new commit passed until its own workflow completes.
+## 2. Corrective engineering work on this PR branch
 
-## 2. Security report — scope and limitations
+1. **Vision honesty and provider wiring**
+   - Removed fake image descriptions, fixed object detections and invented confidence scores.
+   - Added a server-side OpenRouter vision adapter restricted to free model identifiers, HTTPS OpenRouter host, bounded timeout/response and server-only credentials.
+   - Missing/invalid provider configuration now fails closed; video output explicitly says metadata-only unless real frames are analysed.
+   - 3D geometry parsing no longer claims manifold/topology validity without checking it.
+   - Live vision remains blocked until a valid key is configured and an explicit live image smoke test succeeds.
 
-The committed local snapshot records native SAST over 177 files / 53,654 lines, `npm audit` over 94 dependencies, and native secret scanning over 334 files / 30 Git commits, with zero findings in that snapshot.
+2. **Windows wake-to-command**
+   - Replaced the hardcoded `"Ultron, status report"` dispatch with actual post-wake dictation capture, timeout/cancel handling and real recognised-text dispatch.
+   - Defaults to the existing HTTPS Render backend and requires a device token.
+   - Windows CI compile/publish passes. Physical mic, installed speech recogniser, pairing and command round-trip remain unverified.
 
-This is not an independent security certification:
-- Semgrep, ESLint security plugins, Trivy/OSV and Gitleaks were unavailable; native fallbacks were used.
-- The latest retrieved GitHub CI did not execute the complete `npm run security:report` command.
-- Regex-based native SAST may miss context-dependent and inter-file vulnerabilities.
+3. **Self-evolution approval binding**
+   - Restricted-change challenge endpoint now hashes the exact proposed `newContent` on the server.
+   - Apply endpoint independently recomputes the digest from the exact bytes the file engine will write; client-supplied digest is no longer trusted.
+   - Approval remains bound to authenticated owner, target, HMAC signature, expiry and single-use consumption.
+   - Added a tampered-content regression test.
 
-## 3. Live service and database boundary
+4. **Self-evolution reporting**
+   - Evolution status now reports the bounded file-change scope and explicitly says the full project regression suite and independent security scans are not run by that command.
+   - It no longer emits a false `REGRESSION_VERIFIED` lifecycle phase.
 
-- PR #440 is open and unmerged. Its feature branch is not deployed to Render.
-- Render backend remains on main commit `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`; the separate frontend remains on its earlier feature-branch commit.
-- Supabase reports the ULTRON project active/healthy. Inspected application tables have RLS enabled and owner-scoped policies based on `auth.uid()`.
-- Two-account isolation E2E remains skipped. RLS policy presence does not prove cross-account behaviour.
-- Supabase Security Advisor still reports leaked-password protection disabled. Application-level breached-password screening does not clear that platform warning.
+5. **Reporting hygiene**
+   - Corrected stale test-count claims.
+   - Reclassified in-memory DeviceHub pairing as blocked rather than production-live.
+   - Clarified that application-side breached-password screening is not the same as enabling Supabase Auth's platform protection.
+   - Redacted a local workstation path from the committed security report.
 
-## 4. Functional blockers
+## 3. Live service and database findings
 
-- Live model inference needs an eligible configured provider credential; the recorded model smoke result was `NO_ELIGIBLE_PROVIDER`.
-- Live image inference needs a callable vision adapter; a key or model identifier alone is not evidence of inference.
-- Worker smoke needs explicit opt-in, server-only Supabase credentials and a disposable test user.
-- Windows companion now contains a wake-to-dictation capture path, but the current Windows build/test result is pending; physical microphone capture and backend dispatch require device verification.
-- DeviceHub currently stores pairing state in process memory and the pairing endpoints are configuration-gated; persistent production pairing is still blocked.
-- Final video rendering needs an available local/hosted renderer such as FFmpeg and adequate resources.
+- Render backend service `ultron-ai-core` is configured to deploy from `main`, still at production revision `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`; PR #440 is not deployed.
+- Frontend service `ultron-core-interface` remains on `feature/ultron-live-core-interface-20261029` at its earlier deployed revision. Frontend-to-latest-backend integrated E2E was not verified.
+- Supabase project is `ACTIVE_HEALTHY` in Mumbai. Inspected application tables have RLS enabled and owner-scoped `auth.uid()` policies; the two-account E2E remains skipped.
+- Supabase Security Advisor still reports `Leaked Password Protection Disabled`. Application HIBP checking is an additional control, not a resolution of the platform warning.
 
-## 5. Corrective code changes on the PR branch
+## 4. Remaining blockers (real, not cosmetic)
 
-- Vision no longer fabricates image descriptions, object detections or confidence scores when no provider is connected. A free-model-only OpenRouter adapter is wired behind server-side credentials, bounded HTTPS transport and response limits. Live inference remains blocked until a valid provider key is configured and an explicit smoke test succeeds.
-- Windows wake now pauses the wake recognizer, captures the next spoken dictation result with timeout/cancel handling, and sends the actual recognised text to the backend. It defaults to the existing HTTPS Render backend and requires a server-issued device token. This is not yet verified on the physical PC or against a durable paired-device registry.
-- Public security report local workstation path has been redacted; Supabase leaked-password platform warning is still open.
+| Capability | Current state | What is still required |
+|---|---|---|
+| Cloud text inference | Blocked/unverified | Eligible provider credential and live `smoke:model` |
+| Vision inference | Adapter tested; live blocked | OpenRouter key and successful live image smoke |
+| Background worker | Code and mocked tests | Server-only Supabase credential, disposable test user, live worker smoke |
+| Account isolation | RLS policy structure present | Two disposable accounts and live cross-user denial test |
+| Windows voice | Code and x64 build pass | Physical microphone/recogniser test and backend round-trip |
+| Device pairing | In-memory/config-gated | Durable owner-scoped device registry, token rotation/revocation and live pairing test |
+| PC control | Partial | Authenticated local action bridge and actual allowlisted Windows action E2E |
+| Coding sandbox | Fails closed by design | Container isolation available on execution host and sandbox E2E |
+| Media rendering | Partial | Available FFmpeg/render worker and real output-file verification |
+| Platform password protection | Warning active | Enable Supabase Auth setting on an eligible plan or explicitly accept the warning |
 
-## 6. Evidence policy
+## 5. Security scan caveat
 
-A passing unit test proves only the tested code path. A successful CI build does not prove a production deployment. A configured secret does not prove live provider inference. RLS policies do not prove two-account isolation. A Windows installer build does not prove physical-device behaviour.
+The prior local security snapshot reported zero findings in its native SAST, dependency and secret-scan passes. It is not an independent certification: Semgrep, ESLint security plugins, Trivy/OSV and Gitleaks were unavailable in that snapshot, and the latest CI did not run the complete `npm run security:report` workflow.
 
-Do not claim 100% operational completion while live or device verification remains blocked. Current PR head is open and unmerged; Render production is still on main.
+## 6. Release gate
+
+Do not merge PR #440 or deploy to Render until the owner reviews the PR, external dependencies are deliberately configured, and the remaining live/device gates are accepted. No production database, secret or deployment was changed during this audit.

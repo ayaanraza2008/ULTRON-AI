@@ -13,8 +13,8 @@
 - **Base Production SHA:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
 - **Active Development Branch:** `feat/ultron-cyber-core`
 - **PR Reference:** `https://github.com/ayaanraza2008/ULTRON-AI/pull/440`
-- **Automated Test Results:** **1,162 Tests Total — 1,161 PASS, 0 FAIL, 1 SKIP (verified on dd66ece1; corrective vision patch 1ef0eb5 awaits CI)** (`tests/supabase-isolation.e2e.test.js` skipped awaiting dedicated disposable live test accounts; 0 CI test failures across all test suites)
-- **Syntax Integrity:** **303 / 303 Files Verified Clean (verified on dd66ece1)** (`scripts/check-syntax.mjs` with `node --check`)
+- **Automated Test Results:** **1,171 Tests Total — 1,170 PASS, 0 FAIL, 1 SKIP (verified on audited head f747736f40b7d60a509b413db397b2a60bf97b17)** (`tests/supabase-isolation.e2e.test.js` skipped awaiting dedicated disposable live test accounts; 0 CI test failures across all test suites)
+- **Syntax Integrity:** **303 / 303 Files Verified Clean (verified on audited head f747736f40b7d60a509b413db397b2a60bf97b17)** (`scripts/check-syntax.mjs` with `node --check`)
 - **Repository Defensive Security Quality Gate:**
   - **Local security report snapshot:** Native SAST scanned 177 files / 53,654 lines; `npm audit` scanned 94 dependencies; native secret scanning covered 334 files / 30 Git commits, with zero findings in that snapshot.
   - **Tool limitations:** Semgrep, ESLint security plugins, Trivy/OSV and Gitleaks were unavailable; native fallback rules were used.
@@ -100,7 +100,9 @@
 
 ## 2026-11-01 corrective audit note
 
-- The previous CI baseline was 1,162 tests (1,161 pass, 0 fail, 1 skipped) and 303/303 syntax checks on commit `dd66ece1dd8901ed77436866ea06752ecb19260f`.
-- Vision corrections are on this branch at `1ef0eb5`, with a free-model OpenRouter adapter added in `9293589`; Windows wake-to-dictation is now added at `4bb0985`. The previous test totals do not verify these newer commits until their own CI completes.
-- Vision inference uses the new free-model OpenRouter adapter, but remains blocked until a valid `OPENROUTER_API_KEY` is configured and the explicit live vision smoke test succeeds. API-key presence alone is not proof of inference.
+- Latest audited head: `f747736f40b7d60a509b413db397b2a60bf97b17`; CI: 1,171 tests (1,170 pass, 0 fail, 1 skipped), syntax 303/303, Windows standalone x64 build/publish passed.
+- Exact-content HMAC approval binding and honest self-evolution lifecycle reporting are included on this head.
+- Vision has a free-model OpenRouter adapter; live inference is still blocked until a valid `OPENROUTER_API_KEY` is configured and the explicit live vision smoke test succeeds.
+- Windows dictation source compiles and publishes, but physical microphone, device pairing and PC-control E2E are not verified.
 - Supabase Security Advisor still reports leaked-password protection disabled; application-side breached-password screening is an additional mitigation only.
+- PR #440 remains open and unmerged; Render production remains on `main`.

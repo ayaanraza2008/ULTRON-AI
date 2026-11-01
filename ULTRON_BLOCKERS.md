@@ -37,11 +37,11 @@
 
 ---
 
-## 3. VERIFIED AUTOMATED SOFTWARE BASELINE (PRE-CORRECTION COMMIT)
+## 3. VERIFIED AUTOMATED SOFTWARE BASELINE (AUDITED PR HEAD)
 
-- **Automated Tests:** **1,162 Total — 1,161 PASS, 0 FAIL, 1 SKIP** on commit `dd66ece1dd8901ed77436866ea06752ecb19260f`.
-- **Syntax Verification:** **303 / 303 Files Clean** on the same commit.
+- **Automated Tests:** **1,171 Total — 1,170 PASS, 0 FAIL, 1 SKIP** on audited PR head `f747736f40b7d60a509b413db397b2a60bf97b17`.
+- **Syntax Verification:** **303 / 303 Files Clean** on the same head.
+- **Windows Companion:** .NET 8 standalone win-x64 compile/publish and artifact upload passed.
 - **Skipped:** live two-account Supabase isolation E2E.
 - **Security snapshot:** prior native report listed zero findings, but external scanners (Semgrep, Trivy/OSV, Gitleaks and ESLint security plugins) were unavailable; not an independent certification.
-- **New vision and Windows voice corrections:** commits after `dd66ece1` are pending their own CI; do not reuse this baseline as their test result.
 - **Live model, vision, worker, two-account RLS, durable device pairing and physical Windows voice/control remain unverified or blocked.
