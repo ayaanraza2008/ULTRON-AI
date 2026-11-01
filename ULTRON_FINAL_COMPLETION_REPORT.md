@@ -78,7 +78,7 @@ Weighted estimate: code 30%, automated CI 20%, live operations 30%, release read
 | Automated CI | **99.9%** (1,249/1,250 passed; 1 skipped) |
 | Live operational verification | **40%** |
 | Production release readiness | **20%** |
-| **Overall** | **64%** |
+| **Overall** | **63%** |
 
 This is an engineering estimate, not a certification or a claim that fictional JARVIS/ULTRON capabilities have been replicated. The low overall score is deliberate: successful unit tests cannot substitute for live inference, database isolation, real device tests, and a fully integrated staging release.
 
