@@ -290,7 +290,7 @@ test("ULTRON EYES: Production mode without provider fails closed with BLOCKED_NO
 
 
 test("ULTRON EYES: API key and model name alone never mark synthetic perception as live",async()=>{
- const manager=new UltronEyesManager({mockMode:false,env:{NODE_ENV:"production",OPENROUTER_API_KEY:"configured-but-no-runner",ULTRON_VISION_MODELS:"openrouter/free"}});
+ const manager=new UltronEyesManager({mockMode:false,visionRunner:false,env:{NODE_ENV:"production",OPENROUTER_API_KEY:"configured-but-no-runner",ULTRON_VISION_MODELS:"openrouter/free"}});
  assert.equal(manager.isVisionProviderConfigured(),false);
  manager.startSession({userId:"key-only-owner",userConsent:true});
  const result=await manager.processFrame({userId:"key-only-owner",frameData:TEST_FRAME_DATA_URL});

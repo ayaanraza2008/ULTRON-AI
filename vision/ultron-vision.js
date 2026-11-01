@@ -6,6 +6,7 @@
 import crypto from "node:crypto";
 import { ImageStudioEngine } from "../media/image-studio-engine.js";
 import { VideoEditingEngine } from "../media/video-editing-engine.js";
+import { openRouterVisionMultimodalRunner, openRouterVisionObjectDetector } from "./openrouter-vision-adapter.js";
 
 export const VISION_SUPPORTED_FORMATS=["image/png","image/jpeg","image/webp","image/gif"];
 const DEFAULT_MAX_IMAGE_BYTES=5*1024*1024;
@@ -20,8 +21,10 @@ export class UltronVision{
  constructor(options={}){
   this.imageStudio=options.imageStudio||new ImageStudioEngine();
   this.videoEditor=options.videoEditor||new VideoEditingEngine();
-  this.multimodalRunner=typeof options.multimodalRunner==="function"?options.multimodalRunner:null;
-  this.objectDetector=typeof options.objectDetector==="function"?options.objectDetector:null;
+  this.multimodalRunner=typeof options.multimodalRunner==="function"?options.multimodalRunner:
+    options.multimodalRunner===false?null:openRouterVisionMultimodalRunner;
+  this.objectDetector=typeof options.objectDetector==="function"?options.objectDetector:
+    options.objectDetector===false?null:openRouterVisionObjectDetector;
   this.maxImageBytes=Math.max(65536,Math.min(10*1024*1024,Number(options.maxImageBytes)||DEFAULT_MAX_IMAGE_BYTES));
   this.analysisHistory=[];
  }

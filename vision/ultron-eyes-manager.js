@@ -18,6 +18,7 @@ import { JarvisVisionEngine } from "./vision-engine.js";
 import { UltronVision, ultronVision } from "./ultron-vision.js";
 import { ultronCore } from "../core/ultron-core.js";
 import { ultronGuardian } from "../security/ultron-guardian.js";
+import { openRouterVisionRunner } from "./openrouter-vision-adapter.js";
 
 export const CAMERA_TYPES = {
   LAPTOP_WEBCAM: "laptop_webcam",
@@ -44,7 +45,8 @@ export class UltronEyesManager {
     this.ultronCore = options.ultronCore || ultronCore;
     this.guardian = options.guardian || ultronGuardian;
     this.env = options.env || process.env;
-    this.visionRunner = options.visionRunner || null;
+    this.visionRunner = options.visionRunner === false ? null
+      : typeof options.visionRunner === "function" ? options.visionRunner : openRouterVisionRunner;
     this.mockMode = Boolean(options.mockMode ?? (this.env.NODE_ENV !== "production"));
 
     // User-registered real camera devices: userId -> Map(deviceId -> deviceRecord)
@@ -137,7 +139,8 @@ export class UltronEyesManager {
    */
   isVisionProviderConfigured() {
     // Credentials and model identifiers are not an inference adapter.
-    return typeof this.visionRunner === "function";
+    return typeof this.visionRunner === "function" &&
+      (typeof this.visionRunner.isConfigured !== "function" || this.visionRunner.isConfigured(this.env));
   }
 
   /**
