@@ -59,7 +59,7 @@ class MainActivity : Activity() {
         pairingInput = EditText(this).apply {
             hint = "Six-digit ULTRON code or rotated device token"
             inputType = InputType.TYPE_CLASS_TEXT
-            singleLine = true
+            isSingleLine = true
             filters = arrayOf(android.text.InputFilter.LengthFilter(80))
         }
         val pair = Button(this).apply {
