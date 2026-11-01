@@ -201,3 +201,13 @@ test("ULTRON EYES Routes: Sync browser client camera devices", async () => {
     assert.ok(getBody.devices.some(d => d.id === "cam-real-webcam-1"));
   });
 });
+
+
+test("ULTRON EYES Routes: legacy vision analysis fails closed without a real inference adapter",async()=>{
+ await withEyesRouter({},async base=>{
+  const response=await fetch(base+"/api/jarvis/nextgen/vision/analyze",{method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({imageData:TEST_FRAME_DATA_URL,prompt:"What is visible?"})});
+  const body=await response.json();
+  assert.equal(response.status,503);assert.equal(body.error.code,"VISION_PROVIDER_REQUIRED");assert.equal(body.success,undefined);
+ });
+});

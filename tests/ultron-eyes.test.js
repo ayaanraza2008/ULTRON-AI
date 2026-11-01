@@ -106,6 +106,8 @@ test("ULTRON EYES: Real-time visual perception pipeline (Objects, OCR, Activity,
   });
 
   assert.ok(obs1.observationId.startsWith("obs-"));
+  assert.equal(obs1.inferenceStatus, "TEST_FIXTURE_SYNTHETIC");
+  assert.equal(obs1.providerConfigured, false);
   assert.equal(obs1.frameNumber, 1);
   assert.ok(obs1.objects.length >= 3);
   assert.ok(obs1.objects.some(o => o.label === "laptop_display"));
@@ -284,4 +286,27 @@ test("ULTRON EYES: Production mode without provider fails closed with BLOCKED_NO
     if (savedKey) process.env.OPENROUTER_API_KEY = savedKey;
     if (savedModels) process.env.ULTRON_VISION_MODELS = savedModels;
   }
+});
+
+
+test("ULTRON EYES: API key and model name alone never mark synthetic perception as live",async()=>{
+ const manager=new UltronEyesManager({mockMode:false,env:{NODE_ENV:"production",OPENROUTER_API_KEY:"configured-but-no-runner",ULTRON_VISION_MODELS:"openrouter/free"}});
+ assert.equal(manager.isVisionProviderConfigured(),false);
+ manager.startSession({userId:"key-only-owner",userConsent:true});
+ const result=await manager.processFrame({userId:"key-only-owner",frameData:TEST_FRAME_DATA_URL});
+ assert.equal(result.inferenceStatus,"BLOCKED_NO_VISION_PROVIDER");assert.equal(result.providerConfigured,false);
+ assert.deepEqual(result.objects,[]);assert.equal(result.confidence,0);
+});
+
+test("ULTRON EYES: injected runner is the only path labelled LIVE_INFERENCE",async()=>{
+ const manager=new UltronEyesManager({mockMode:false,env:{NODE_ENV:"production"},visionRunner:async input=>{
+  assert.equal(input.userId,"runner-owner");assert.equal(input.mimeType,"png");
+  return {provider:"test-vision-runner",objects:[{label:"keyboard",box:{xMin:0.1,yMin:0.2,xMax:0.8,yMax:0.7},confidence:0.9}],
+   textAndOcr:{extractedText:"safe visible text",isClear:true},scene:"A keyboard is visible.",confidence:0.9};
+ }});
+ assert.equal(manager.isVisionProviderConfigured(),true);
+ manager.startSession({userId:"runner-owner",userConsent:true});
+ const result=await manager.processFrame({userId:"runner-owner",frameData:TEST_FRAME_DATA_URL});
+ assert.equal(result.inferenceStatus,"LIVE_INFERENCE");assert.deepEqual(result.objects.map(x=>x.label),["keyboard"]);
+ assert.equal(result.textAndOcr.extractedText,"safe visible text");assert.equal(result.scene,"A keyboard is visible.");assert.equal(result.confidence,0.9);
 });

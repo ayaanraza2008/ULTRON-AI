@@ -1480,11 +1480,17 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
         const mesh = ultronVision.process3DAsset(objAsset, "obj");
         return res.json({ success: true, mesh });
       }
-      const understanding = await ultronVision.understandImage(imageData, prompt);
-      const objects = ultronVision.detectObjects(imageData);
+      const [understanding, objects] = await Promise.all([
+        ultronVision.understandImage(imageData, prompt),
+        ultronVision.detectObjects(imageData)
+      ]);
       res.json({ success: true, understanding, objects });
     } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
+      const code = typeof err?.code === "string" ? err.code : "VISION_ANALYSIS_FAILED";
+      const status = code === "VISION_PROVIDER_REQUIRED" ? 503
+        : code === "IMAGE_TOO_LARGE" ? 413
+          : code.startsWith("INVALID_") || code.startsWith("UNSUPPORTED_") ? 400 : 502;
+      res.status(status).json({ error: { code, message: err.message } });
     }
   });
 

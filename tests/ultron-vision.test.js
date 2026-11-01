@@ -1,89 +1,63 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { UltronVision } from "../vision/ultron-vision.js";
+const VALID_PNG_BASE64="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-const VALID_PNG_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-
-test("UltronVision: validates image data URLs and rejects invalid inputs", () => {
-  const vision = new UltronVision();
-
-  // Valid PNG inspection
-  const meta = vision.inspectImageMetadata(VALID_PNG_BASE64);
-  assert.equal(meta.mimeType, "image/png");
-  assert.ok(meta.byteLength > 0);
-
-  // Rejects plain string without data:image scheme
-  assert.throws(() => {
-    vision.inspectImageMetadata("https://example.com/photo.jpg");
-  }, /Expected base64 data URL/);
-
-  // Rejects non-image scheme
-  assert.throws(() => {
-    vision.inspectImageMetadata("data:application/pdf;base64,12345");
-  }, /Expected base64 data URL/);
-
-  // Rejects unsupported image MIME type
-  assert.throws(() => {
-    vision.inspectImageMetadata("data:image/bmp;base64,12345");
-  }, /Unsupported image MIME type/);
+test("UltronVision validates image data URLs and rejects invalid input",()=>{
+ const vision=new UltronVision();
+ const meta=vision.inspectImageMetadata(VALID_PNG_BASE64);
+ assert.equal(meta.mimeType,"image/png");assert.ok(meta.byteLength>0);
+ assert.throws(()=>vision.inspectImageMetadata("https://example.com/photo.jpg"),e=>e.code==="INVALID_IMAGE_ENCODING");
+ assert.throws(()=>vision.inspectImageMetadata("data:application/pdf;base64,12345"),e=>e.code==="INVALID_IMAGE_ENCODING");
+ assert.throws(()=>vision.inspectImageMetadata("data:image/bmp;base64,12345"),e=>e.code==="UNSUPPORTED_IMAGE_FORMAT");
+ assert.throws(()=>vision.inspectImageMetadata("data:image/png;base64,@@@="),e=>e.code==="INVALID_IMAGE_ENCODING");
 });
-
-test("UltronVision: visual reasoning and image understanding output", async () => {
-  const vision = new UltronVision();
-  const result = await vision.understandImage(VALID_PNG_BASE64, "Inspect the user interface layout.");
-
-  assert.ok(result.id.startsWith("vis-"));
-  assert.equal(result.mimeType, "image/png");
-  assert.ok(result.description.includes("Visual reasoning"));
-  assert.ok(result.confidence > 0.9);
+test("UltronVision fails closed when image understanding has no real provider",async()=>{
+ await assert.rejects(new UltronVision().understandImage(VALID_PNG_BASE64,"Inspect this image."),e=>e.code==="VISION_PROVIDER_REQUIRED");
 });
-
-test("UltronVision: object detection returns labeled bounding boxes", () => {
-  const vision = new UltronVision();
-  const detection = vision.detectObjects(VALID_PNG_BASE64);
-
-  assert.equal(detection.objectCount, 2);
-  const screenObj = detection.objects.find(o => o.label === "workstation_screen");
-  assert.ok(screenObj);
-  assert.ok(screenObj.box.xMax > screenObj.box.xMin);
-  assert.ok(screenObj.box.yMax > screenObj.box.yMin);
+test("UltronVision returns provider-supplied analysis without inventing confidence",async()=>{
+ const vision=new UltronVision({multimodalRunner:async(image,prompt,meta)=>{
+  assert.equal(image,VALID_PNG_BASE64);assert.equal(prompt,"What is shown?");assert.equal(meta.mimeType,"image/png");
+  return {description:"The image contains a red square.",model:"test-vision-model"};
+ }});
+ const result=await vision.understandImage(VALID_PNG_BASE64,"What is shown?");
+ assert.equal(result.inferenceStatus,"LIVE_INFERENCE");assert.equal(result.description,"The image contains a red square.");
+ assert.equal(result.result.model,"test-vision-model");assert.equal(Object.hasOwn(result,"confidence"),false);
 });
-
-test("UltronVision: video stream temporal keyframe analysis", () => {
-  const vision = new UltronVision();
-  const analysis = vision.analyzeVideo({ durationSec: 12.0, fps: 30 });
-
-  assert.equal(analysis.durationSec, 12.0);
-  assert.equal(analysis.totalFrames, 360);
-  assert.ok(analysis.keyframeCount >= 4);
-  assert.equal(analysis.keyframes[0].frameNumber, 0);
+test("UltronVision fails closed when object detection has no real provider",async()=>{
+ await assert.rejects(new UltronVision().detectObjects(VALID_PNG_BASE64),e=>e.code==="VISION_PROVIDER_REQUIRED");
 });
-
-test("UltronVision: 3D asset processing parses OBJ vertices and calculates bounding volume", () => {
-  const vision = new UltronVision();
-
-  // Simple 3D cube OBJ representation
-  const sampleObj = `
-v 0.0 0.0 0.0
-v 1.0 0.0 0.0
-v 1.0 1.0 0.0
-v 0.0 1.0 0.0
-v 0.0 0.0 1.0
-v 1.0 0.0 1.0
-v 1.0 1.0 1.0
-v 0.0 1.0 1.0
+test("UltronVision validates provider-returned normalized detections",async()=>{
+ const vision=new UltronVision({objectDetector:async()=>({objects:[
+  {label:"keyboard",confidence:0.87,box:{xMin:0.1,yMin:0.2,xMax:0.9,yMax:0.8}},
+  {label:"invalid-box",confidence:0.99,box:{xMin:0.9,yMin:0.2,xMax:0.1,yMax:0.8}}
+ ]})});
+ const result=await vision.detectObjects(VALID_PNG_BASE64);
+ assert.equal(result.inferenceStatus,"LIVE_INFERENCE");assert.equal(result.objectCount,1);
+ assert.equal(result.objects[0].label,"keyboard");assert.equal(result.objects[0].confidence,0.87);
+});
+test("UltronVision labels video output as metadata-only until real frames are analysed",()=>{
+ const result=new UltronVision().analyzeVideo({durationSec:12,fps:30});
+ assert.equal(result.totalFrames,360);assert.ok(result.keyframeCount>=4);
+ assert.equal(result.keyframeSchedule[0].frameNumber,0);assert.equal(result.analysisStatus,"METADATA_ONLY");
+ assert.equal(result.temporalAnalysisPerformed,false);assert.equal(result.sceneChanges,null);
+});
+test("UltronVision OBJ parsing reports geometry only, not unverified manifold integrity",()=>{
+ const sampleObj=`
+v 0 0 0
+v 1 0 0
+v 1 1 0
+v 0 1 0
+v 0 0 1
+v 1 0 1
+v 1 1 1
+v 0 1 1
 f 1 2 3 4
 f 5 6 7 8
 `;
-
-  const processed = vision.process3DAsset(sampleObj, "obj");
-  assert.equal(processed.format, "obj");
-  assert.equal(processed.vertexCount, 8);
-  assert.equal(processed.faceCount, 2);
-  assert.equal(processed.dimensions.dx, 1.0);
-  assert.equal(processed.dimensions.dy, 1.0);
-  assert.equal(processed.dimensions.dz, 1.0);
-  assert.equal(processed.boundingVolume, 1.0);
-  assert.deepEqual(processed.centerOfMass, { x: 0.5, y: 0.5, z: 0.5 });
-  assert.equal(processed.integrity, "manifold_valid");
+ const result=new UltronVision().process3DAsset(sampleObj,"obj");
+ assert.equal(result.vertexCount,8);assert.equal(result.faceCount,2);
+ assert.equal(result.boundingVolume,1);assert.deepEqual(result.vertexCentroid,{x:0.5,y:0.5,z:0.5});
+ assert.equal(result.integrity,"geometry_parsed_topology_unverified");assert.equal(result.topologyVerified,false);
+ assert.throws(()=>new UltronVision().process3DAsset("mesh","gltf"),e=>e.code==="UNSUPPORTED_3D_FORMAT");
 });

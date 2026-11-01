@@ -136,12 +136,8 @@ export class UltronEyesManager {
    * Check if a live multimodal vision inference provider is configured.
    */
   isVisionProviderConfigured() {
-    if (this.visionRunner) return true;
-    const env = this.env;
-    return Boolean(
-      (typeof env.OPENROUTER_API_KEY === "string" && env.OPENROUTER_API_KEY.trim()) ||
-      (typeof env.ULTRON_VISION_MODELS === "string" && env.ULTRON_VISION_MODELS.trim())
-    );
+    // Credentials and model identifiers are not an inference adapter.
+    return typeof this.visionRunner === "function";
   }
 
   /**
@@ -502,8 +498,61 @@ export class UltronEyesManager {
         changeSummary: "Inference blocked awaiting vision provider credentials.",
         confidence: 0
       };
+    } else if (hasVisionProvider) {
+      // Invoke the configured inference runner on this exact frame. Never substitute fixtures.
+      const providerResult = await this.visionRunner({
+        imageData: frameData, userId, sessionId: session.sessionId,
+        frameNumber: session.framesProcessed, mimeType: validation.format, byteLength: validation.byteLength
+      });
+      if (!providerResult || typeof providerResult !== "object" || Array.isArray(providerResult)) {
+        throw Object.assign(new Error("Vision provider returned an invalid observation."), { code: "INVALID_VISION_PROVIDER_RESPONSE" });
+      }
+      const rawObjects = Array.isArray(providerResult.objects) ? providerResult.objects.slice(0, 100) : [];
+      const detectedObjects = rawObjects.flatMap((item, index) => {
+        const box = item && item.box;
+        const coordinates = [box?.xMin, box?.yMin, box?.xMax, box?.yMax];
+        const validBox = coordinates.every(value => Number.isFinite(value) && value >= 0 && value <= 1) &&
+          box.xMin < box.xMax && box.yMin < box.yMax;
+        const label = typeof item?.label === "string" ? item.label.trim().slice(0, 100) : "";
+        if (!validBox || !label) return [];
+        const confidence = Number.isFinite(item.confidence) && item.confidence >= 0 && item.confidence <= 1 ? item.confidence : undefined;
+        return [{ id: typeof item.id === "string" ? item.id.slice(0, 100) : "provider-object-" + (index + 1),
+          label, ...(typeof item.category === "string" ? { category: item.category.slice(0, 80) } : {}),
+          ...(confidence !== undefined ? { confidence } : {}),
+          box: { xMin: box.xMin, yMin: box.yMin, xMax: box.xMax, yMax: box.yMax } }];
+      });
+      const trackedObjects = this._trackObjectsAcrossFrames(userId, detectedObjects);
+      const rawOcr = typeof providerResult.textAndOcr === "string" ? providerResult.textAndOcr
+        : typeof providerResult.textAndOcr?.extractedText === "string" ? providerResult.textAndOcr.extractedText
+          : typeof providerResult.ocrText === "string" ? providerResult.ocrText : "";
+      const extractedText = this.visionEngine.sanitizeOcrText(rawOcr);
+      const ocr = providerResult.textAndOcr && typeof providerResult.textAndOcr === "object" ? providerResult.textAndOcr : {};
+      const humanActivity = providerResult.humanActivity && typeof providerResult.humanActivity === "object"
+        ? providerResult.humanActivity : { personPresent: null, confidence: null,
+          observableActivity: "No human-activity result was returned by the vision provider.", visiblePosture: "Unknown",
+          privacyAdvisory: "No identity, demographic or emotional inference is made without explicit supported evidence." };
+      const spatialEstimates = Array.isArray(providerResult.spatialEstimates) ? providerResult.spatialEstimates.slice(0, 100) : [];
+      const confidence = Number.isFinite(providerResult.confidence) && providerResult.confidence >= 0 && providerResult.confidence <= 1
+        ? providerResult.confidence : null;
+      observation = {
+        observationId: "obs-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex"),
+        userId, sessionId: session.sessionId, frameNumber: session.framesProcessed,
+        timestamp: new Date().toISOString(), deviceId: session.deviceId,
+        processingTimeMs: Math.round(performance.now() - t0),
+        inferenceStatus: "LIVE_INFERENCE", providerConfigured: true, objects: detectedObjects, trackedObjects, humanActivity,
+        textAndOcr: { extractedText, hasText: Boolean(extractedText), isClear: ocr.isClear === true,
+          qualityScore: Number.isFinite(ocr.qualityScore) ? ocr.qualityScore : null,
+          guidance: typeof ocr.guidance === "string" ? ocr.guidance.slice(0, 500) : "OCR result supplied by configured provider." },
+        spatialEstimates,
+        scene: typeof providerResult.scene === "string" ? providerResult.scene.slice(0, 2000) : "No scene description was returned by the vision provider.",
+        changesDetected: typeof providerResult.changesDetected === "boolean" ? providerResult.changesDetected : null,
+        changeSummary: typeof providerResult.changeSummary === "string" ? providerResult.changeSummary.slice(0, 1000) : "No scene-change result was returned.",
+        confidence, provider: typeof providerResult.provider === "string" ? providerResult.provider.slice(0, 100) : "configured-vision-runner"
+      };
     } else {
-      // 1. OBJECT PERCEPTION: Detect and localize objects
+      // Deterministic fixture-only path for tests and local UI development.
+      // It must never be mistaken for live perception.
+      // 1. OBJECT PERCEPTION: Detect and localize fixture objects
       const detectedObjects = this._detectObjectsFromFrame(frameData, session.framesProcessed);
 
       // 2. MULTI-FRAME OBJECT TRACKING: Associate objects across frames
@@ -530,7 +579,7 @@ export class UltronEyesManager {
         deviceId: session.deviceId,
         processingTimeMs,
         inferenceStatus: isMock ? "TEST_FIXTURE_SYNTHETIC" : "LIVE_INFERENCE",
-        providerConfigured: hasVisionProvider,
+        providerConfigured: false,
         objects: detectedObjects,
         trackedObjects,
         humanActivity,
