@@ -19,6 +19,7 @@
     cameraPlaceholder: byId("camera-placeholder"),
     cameraStatus: byId("camera-status"),
     cameraToggle: byId("camera-toggle"),
+    gestureToggle: byId("gesture-toggle"),
     cameraAnalyze: byId("camera-analyze"),
     cameraLiveObserve: byId("camera-live-observe"),
     cameraRecBadge: byId("camera-rec-badge"),
@@ -291,52 +292,71 @@
     hgc.permissionManager.videoElement = ui.cameraVideo;
     hgc.trackingService.videoElement = ui.cameraVideo;
 
-    // Listen to real-time gesture recognized events
-    const origOnFrame = hgc.trackingService.onFrame;
-    hgc.trackingService.onFrame = (frameData) => {
-      origOnFrame?.(frameData);
-      const gesture = hgc.recognitionEngine.recognize(frameData);
-      if (gesture && gesture.type !== lastGestureType) {
-        lastGestureType = gesture.type;
-        handleRecognizedGesture(gesture);
+    // HandGestureCore owns recognition. Subscribe to its single per-frame result
+    // instead of running the stateful recognizer a second time in the UI.
+    hgc.onGesture = (gesture) => {
+      if (!gesture || !gesture.type) return;
+      const direction = gesture.params?.direction || "";
+      const gestureKey = gesture.type + ":" + direction;
+      const changed = gestureKey !== lastGestureType;
+      if (changed) lastGestureType = gestureKey;
+
+      // Two-hand distance is continuous, so update scale on every frame. Other
+      // gestures are edge-triggered to avoid repeatedly opening the drawer.
+      if (changed || gesture.type === "TWO_HAND_EXPAND_COMPRESS") {
+        handleRecognizedGesture(gesture, changed);
       }
     };
   }
 
-  function handleRecognizedGesture(gesture) {
+  function handleRecognizedGesture(gesture, announce = true) {
     if (!gesture || !gesture.type) return;
     const type = gesture.type;
     switch (type) {
-      case "OPEN_PALM":
-        gestureTargetScale = 1.45;
-        micLevel = Math.max(micLevel, 0.75);
-        showToast("Gesture: OPEN PALM — Radial Energy Expansion", 1800);
+      case "OPEN_PALM": {
+        const requestedScale = Number(gesture.params?.expansion);
+        gestureTargetScale = Number.isFinite(requestedScale)
+          ? Math.min(1.8, Math.max(1.15, requestedScale))
+          : 1.45;
+        if (announce) showToast("Gesture: OPEN PALM — Radial Energy Expansion", 1800);
         break;
+      }
       case "CLOSED_FIST":
-      case "PINCH":
-        gestureTargetScale = 0.55;
-        showToast("Gesture: PINCH / FIST — Gravitational Inward Pull", 1800);
+      case "PINCH": {
+        const requestedScale = Number(gesture.params?.contraction);
+        gestureTargetScale = Number.isFinite(requestedScale)
+          ? Math.max(0.45, Math.min(0.9, requestedScale))
+          : 0.55;
+        if (announce) showToast("Gesture: PINCH / FIST — Gravitational Inward Pull", 1800);
         break;
-      case "TWO_HAND_EXPANSION":
-        gestureTargetScale = Math.min(2.2, (gesture.confidence || 1.0) * 1.6);
-        showToast("Gesture: TWO-HAND EXPANSION — Core Scaling Up", 1800);
+      }
+      case "TWO_HAND_EXPAND_COMPRESS": {
+        const requestedScale = Number(gesture.params?.scaleFactor);
+        if (Number.isFinite(requestedScale)) {
+          gestureTargetScale = Math.min(2.2, Math.max(0.45, requestedScale));
+        }
+        if (announce) {
+          const expanding = Number(gesture.params?.delta) >= 0;
+          showToast(expanding
+            ? "Gesture: TWO HANDS APART — Core Expanding"
+            : "Gesture: TWO HANDS TOGETHER — Core Contracting", 1800);
+        }
         break;
-      case "TWO_HAND_CONTRACTION":
-        gestureTargetScale = Math.max(0.45, (gesture.confidence || 1.0) * 0.7);
-        showToast("Gesture: TWO-HAND CONTRACTION — Core Compressing", 1800);
-        break;
-      case "SWIPE_LEFT":
-        showToast("Gesture: SWIPE LEFT — Navigating View", 1800);
-        showDrawerView("tasks");
-        break;
-      case "SWIPE_RIGHT":
-        showToast("Gesture: SWIPE RIGHT — Closing Drawer", 1800);
-        setDrawerOpen(false);
+      }
+      case "HORIZONTAL_MOTION":
+        if (gesture.params?.direction === "LEFT") {
+          if (announce) showToast("Gesture: SWIPE LEFT — Navigating View", 1800);
+          showDrawerView("tasks");
+        } else if (gesture.params?.direction === "RIGHT") {
+          if (announce) showToast("Gesture: SWIPE RIGHT — Closing Drawer", 1800);
+          setDrawerOpen(false);
+        }
         break;
       case "HAND_REMOVAL":
       case "IDLE":
-      default:
         gestureTargetScale = 1.0;
+        break;
+      default:
         break;
     }
   }
@@ -349,21 +369,37 @@
     if (handGestureActive) {
       window.handGestureCore.stop();
       handGestureActive = false;
+      lastGestureType = "IDLE";
       gestureTargetScale = 1.0;
-      showToast("Hand gesture interaction stopped.");
-    } else {
-      if (!cameraStream) {
-        const ok = await enableCamera();
-        if (!ok) return;
-      }
-      setupHandGestureControl();
-      try {
-        await window.handGestureCore.start();
-        handGestureActive = true;
-        showToast("AI Hand Gesture Control active. Wave an open palm, pinch, or swipe in front of the camera!");
-      } catch (err) {
-        showToast("Failed to initialize gesture camera tracking: " + err.message);
-      }
+      ui.gestureToggle.textContent = "ENABLE HAND CONTROL";
+      ui.gestureToggle.setAttribute("aria-pressed", "false");
+      ui.gestureToggle.disabled = !cameraStream;
+      showToast("Hand gesture interaction stopped. Eyes can remain on.");
+      return;
+    }
+
+    if (!cameraStream) {
+      const ok = await enableCamera();
+      if (!ok) return;
+    }
+
+    setupHandGestureControl();
+    ui.gestureToggle.disabled = true;
+    ui.gestureToggle.textContent = "INITIALIZING HAND CONTROL";
+    try {
+      await window.handGestureCore.start(cameraStream);
+      handGestureActive = true;
+      ui.gestureToggle.disabled = false;
+      ui.gestureToggle.textContent = "STOP HAND CONTROL";
+      ui.gestureToggle.setAttribute("aria-pressed", "true");
+      showToast("Hand control active. Open palm, pinch/fist, two-hand distance, and left/right swipe are enabled locally.", 4200);
+    } catch (err) {
+      handGestureActive = false;
+      lastGestureType = "IDLE";
+      ui.gestureToggle.disabled = !cameraStream;
+      ui.gestureToggle.textContent = "RETRY HAND CONTROL";
+      ui.gestureToggle.setAttribute("aria-pressed", "false");
+      showToast("Hand control unavailable: " + (err?.message || "tracking could not initialize") + ". Eyes camera remains available.", 5200);
     }
   }
 
@@ -2341,6 +2377,7 @@
       ui.cameraToggle.textContent = "STOP EYES";
       ui.cameraAnalyze.disabled = false;
       ui.cameraLiveObserve.disabled = false;
+      ui.gestureToggle.disabled = false;
       ui.cameraPlaceholder.hidden = ui.cameraVideo.readyState >= 2;
       ui.cameraRecBadge.hidden = true;
       setDrawerOpen(false);
@@ -2366,6 +2403,12 @@
   }
 
   function stopCamera(showNotice = true) {
+    if (handGestureActive && window.handGestureCore) {
+      window.handGestureCore.stop();
+      handGestureActive = false;
+      lastGestureType = "IDLE";
+      gestureTargetScale = 1.0;
+    }
     if (cameraLiveTimer) window.clearTimeout(cameraLiveTimer);
     cameraLiveTimer = null;
     ui.cameraLiveObserve.checked = false;
@@ -2380,6 +2423,9 @@
     ui.cameraToggle.textContent = "ENABLE EYES";
     ui.cameraAnalyze.disabled = true;
     ui.cameraLiveObserve.disabled = true;
+    ui.gestureToggle.disabled = true;
+    ui.gestureToggle.textContent = "ENABLE HAND CONTROL";
+    ui.gestureToggle.setAttribute("aria-pressed", "false");
     ui.cameraPlaceholder.hidden = false;
     ui.cameraPlaceholder.querySelector("b").textContent = "CAMERA OFF";
     ui.cameraPlaceholder.querySelector("small").textContent = "Enable Eyes to request camera permission";
@@ -2534,6 +2580,7 @@
     if (cameraStream) stopCamera();
     else void enableCamera();
   });
+  ui.gestureToggle.addEventListener("click", () => { void toggleHandGestureControl(); });
   ui.cameraAnalyze.addEventListener("click", () => { void analyzeCameraFrame(false); });
   ui.cameraClose.addEventListener("click", () => {
     stopCamera();
