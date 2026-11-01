@@ -327,7 +327,8 @@ const FILES_TO_CHECK = [
   "public/hand-gesture-core.js",
   "tests/hand-gesture-core.test.js",
   "core-ui-proxy.mjs",
-  "tests/core-ui.test.js"
+  "tests/core-ui.test.js",
+  "tests/jarvis-device-routes.test.js"
 ];
 
 let checked = 0;

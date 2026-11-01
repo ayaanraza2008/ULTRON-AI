@@ -111,8 +111,18 @@ export function createJarvisRouter({
     }
   ];
 
+  const extractDeviceBearerToken = (req) => {
+    const xToken = req.headers["x-device-token"];
+    if (xToken && typeof xToken === "string" && xToken.trim()) return xToken.trim();
+    const auth = req.headers.authorization;
+    if (auth && typeof auth === "string" && auth.startsWith("Bearer ")) {
+      return auth.slice(7).trim();
+    }
+    return null;
+  };
+
   const authenticateOwnerOrDevice = async (req, res, next) => {
-    const deviceToken = req.headers["x-device-token"];
+    const deviceToken = req.headers["x-device-token"] || (req.headers.authorization && (req.headers.authorization.startsWith("Bearer dev_tok_") || req.headers.authorization.startsWith("Bearer ultron_dev_")) ? req.headers.authorization.slice(7).trim() : null);
     if (deviceToken && typeof deviceToken === "string") {
       try {
         const pairedDevice = typeof authenticateDeviceToken === "function"
@@ -593,13 +603,196 @@ export function createJarvisRouter({
     res.json({ devices, connected: devices.length > 0, status: devices.length > 0 ? "CONFIGURED" : "READY" });
   });
 
-  router.post("/jarvis/notifications", requireOwner, (_req, res) => {
-    res.status(503).json({
-      error: {
-        code: "DEVICE_NOT_CONNECTED",
-        message: "No physical companion notification transport is configured."
-      }
-    });
+  router.post("/jarvis/devices/:id/revoke", requireOwner, (req, res) => {
+    const deviceId = req.params.id;
+    const result = deviceHubInstance.revokeDevice(deviceId, req.supabaseUser?.id);
+    if (!result.success) {
+      const status = result.error === "DEVICE_NOT_FOUND" ? 404 : 403;
+      return res.status(status).json({
+        error: {
+          code: result.error,
+          message: `Device revocation failed: ${result.error}`
+        }
+      });
+    }
+    res.json(result);
+  });
+
+  router.delete("/jarvis/devices/:id", requireOwner, (req, res) => {
+    const deviceId = req.params.id;
+    const device = deviceHubInstance.pairedDevices.get(deviceId);
+    if (!device) {
+      return res.status(404).json({
+        error: {
+          code: "DEVICE_NOT_FOUND",
+          message: "Device not found."
+        }
+      });
+    }
+    if (req.supabaseUser?.id && device.ownerUserId && device.ownerUserId !== req.supabaseUser.id) {
+      return res.status(403).json({
+        error: {
+          code: "ACCESS_DENIED_NOT_DEVICE_OWNER",
+          message: "Access denied: not device owner."
+        }
+      });
+    }
+    const result = deviceHubInstance.unpairDevice(deviceId);
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/:id/rotate-token", requireOwner, (req, res) => {
+    const deviceId = req.params.id;
+    const result = deviceHubInstance.rotateDeviceToken(deviceId, req.supabaseUser?.id);
+    if (!result.success) {
+      const status = result.error === "DEVICE_NOT_FOUND" ? 404 : 403;
+      return res.status(status).json({
+        error: {
+          code: result.error,
+          message: `Token rotation failed: ${result.error}`
+        }
+      });
+    }
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/:id/command", requireOwner, express.json(), (req, res) => {
+    const deviceId = req.params.id;
+    const { action, payload } = req.body || {};
+    if (!action || typeof action !== "string") {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_ACTION",
+          message: "Command action is required and must be a non-empty string."
+        }
+      });
+    }
+    const device = deviceHubInstance.pairedDevices.get(deviceId);
+    if (!device) {
+      return res.status(404).json({
+        error: {
+          code: "DEVICE_NOT_FOUND",
+          message: "Device not found."
+        }
+      });
+    }
+    if (req.supabaseUser?.id && device.ownerUserId && device.ownerUserId !== req.supabaseUser.id) {
+      return res.status(403).json({
+        error: {
+          code: "ACCESS_DENIED_NOT_DEVICE_OWNER",
+          message: "Access denied: not device owner."
+        }
+      });
+    }
+    const result = deviceHubInstance.enqueueCommand(deviceId, action, payload || {});
+    if (!result.success) {
+      return res.status(400).json({
+        error: {
+          code: result.error,
+          message: `Failed to enqueue command: ${result.error}`
+        }
+      });
+    }
+    res.json(result);
+  });
+
+  router.get("/jarvis/devices/:id/commands/pending", (req, res) => {
+    const deviceId = req.params.id;
+    const token = extractDeviceBearerToken(req);
+    if (!token) {
+      return res.status(401).json({
+        error: {
+          code: "DEVICE_TOKEN_REQUIRED",
+          message: "Device bearer token required via x-device-token or Bearer authorization header."
+        }
+      });
+    }
+    const result = deviceHubInstance.pollPendingCommands(deviceId, token);
+    if (!result.success) {
+      return res.status(401).json({
+        error: {
+          code: result.error,
+          message: `Polling failed: ${result.error}`
+        }
+      });
+    }
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/:id/commands/:cmdId/complete", express.json(), (req, res) => {
+    const { id: deviceId, cmdId } = req.params;
+    const token = extractDeviceBearerToken(req);
+    if (!token) {
+      return res.status(401).json({
+        error: {
+          code: "DEVICE_TOKEN_REQUIRED",
+          message: "Device bearer token required via x-device-token or Bearer authorization header."
+        }
+      });
+    }
+    const result = deviceHubInstance.completeCommand(deviceId, cmdId, token, req.body || {});
+    if (!result.success) {
+      const status = result.error === "AUTHENTICATION_FAILED" ? 401 : result.error === "COMMAND_NOT_FOUND" ? 404 : 400;
+      return res.status(status).json({
+        error: {
+          code: result.error,
+          message: `Command completion failed: ${result.error}`
+        }
+      });
+    }
+    res.json(result);
+  });
+
+  router.post("/jarvis/devices/:id/telemetry", express.json(), (req, res) => {
+    const deviceId = req.params.id;
+    const token = extractDeviceBearerToken(req);
+    if (!token) {
+      return res.status(401).json({
+        error: {
+          code: "DEVICE_TOKEN_REQUIRED",
+          message: "Device bearer token required via x-device-token or Bearer authorization header."
+        }
+      });
+    }
+    const device = deviceHubInstance.authenticateDevice(deviceId, token);
+    if (!device) {
+      return res.status(401).json({
+        error: {
+          code: "AUTHENTICATION_FAILED",
+          message: "Device authentication failed."
+        }
+      });
+    }
+    const updated = deviceHubInstance.updateDeviceTelemetry(deviceId, req.body || {});
+    res.json({ success: updated, deviceId });
+  });
+
+  router.post("/jarvis/notifications", requireOwner, express.json(), (req, res) => {
+    const devices = deviceHubInstance.listPairedDevices();
+    if (!devices.length) {
+      return res.status(503).json({
+        error: {
+          code: "DEVICE_NOT_CONNECTED",
+          message: "No physical companion notification transport is configured."
+        }
+      });
+    }
+    const { deviceId, title, body, priority, type } = req.body || {};
+    if (!title || !body) {
+      return res.status(400).json({
+        error: {
+          code: "MISSING_NOTIFICATION_CONTENT",
+          message: "Title and body are required to dispatch a companion notification."
+        }
+      });
+    }
+    const notification = deviceHubInstance.sendNotification({ deviceId, title, body, priority, type });
+    res.json({ success: true, notification });
+  });
+
+  router.get("/jarvis/notifications", requireOwner, (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
+    res.json({ success: true, notifications: deviceHubInstance.getNotifications(limit) });
   });
 
   // --- Smart Home ---
