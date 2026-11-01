@@ -1300,7 +1300,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     try {
       const { prompt } = req.body || {};
       const outcome = await autonomousProductionOrchestrator.produceContent(prompt);
-      res.json(outcome);
+      res.status(outcome.success ? 200 : 424).json(outcome);
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
     }
