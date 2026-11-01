@@ -7,6 +7,7 @@ const normalizeLfs = str => str.replace(/\r\n/g, "\n");
 const html = normalizeLfs(await readFile(new URL("../public/index.html", import.meta.url), "utf8"));
 const css = normalizeLfs(await readFile(new URL("../public/styles.css", import.meta.url), "utf8"));
 const app = normalizeLfs(await readFile(new URL("../public/app.js", import.meta.url), "utf8"));
+const handGestureSource = normalizeLfs(await readFile(new URL("../public/hand-gesture-core.js", import.meta.url), "utf8"));
 const proxySource = normalizeLfs(await readFile(new URL("../core-ui-proxy.mjs", import.meta.url), "utf8"));
 const pwaManifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
 const serviceWorker = normalizeLfs(await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8"));
@@ -40,6 +41,14 @@ test("the service worker caches only the static shell and never caches private A
   assert.ok(serviceWorker.includes("const CACHE_NAME ="));
   assert.match(proxySource, /worker-src 'self'/);
   assert.match(proxySource, /filename === "service-worker\.js" \|\| filename === "manifest\.webmanifest" \? "no-cache"/);
+});
+
+test("the UI proxy permits only the pinned MediaPipe runtime and model asset hosts needed by local hand tracking", () => {
+  assert.match(proxySource, /script-src 'self' https:\/\/cdn\.jsdelivr\.net 'wasm-unsafe-eval'/);
+  assert.match(proxySource, /connect-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/storage\.googleapis\.com/);
+  assert.match(proxySource, /worker-src 'self' blob:/);
+  assert.ok(handGestureSource.includes("@mediapipe/tasks-vision@0.10.14"));
+  assert.ok(handGestureSource.includes("hand_landmarker/float16/1/hand_landmarker.task"));
 });
 
 test("the default screen is a black, minimal living-core interface", () => {
@@ -396,14 +405,22 @@ test("spoken prompts skip unnecessary pre-search and use a smaller conversationa
 });
 
 
-test("hand gesture control is integrated with the Living Energy Core and local video element", () => {
+test("hand gesture control is user-activated, shares the Eyes stream, and matches emitted gesture types", () => {
   assert.ok(html.includes('src="/hand-gesture-core.js"'));
+  assert.ok(html.includes('id="gesture-toggle"'));
   assert.ok(proxySource.includes('["/hand-gesture-core.js"'));
+  assert.ok(app.includes('gestureToggle: byId("gesture-toggle")'));
+  assert.ok(app.includes('ui.gestureToggle.addEventListener("click"'));
   assert.ok(app.includes("function setupHandGestureControl"));
   assert.ok(app.includes("function handleRecognizedGesture"));
   assert.ok(app.includes("function toggleHandGestureControl"));
-  assert.ok(app.includes("gestureTargetScale = 1.45")); // Open palm expansion
-  assert.ok(app.includes("gestureTargetScale = 0.55")); // Pinch/Fist contraction
+  assert.ok(app.includes("await window.handGestureCore.start(cameraStream)"));
+  assert.ok(app.includes('case "TWO_HAND_EXPAND_COMPRESS":'));
+  assert.ok(app.includes('case "HORIZONTAL_MOTION":'));
+  assert.ok(app.includes("gesture.params?.scaleFactor"));
+  assert.ok(handGestureSource.includes("this.onGesture(gestureResult, frameData)"));
+  assert.ok(handGestureSource.includes("requestCamera(undefined, existingStream)"));
+  assert.ok(app.includes("gestureTargetScale = Number.isFinite(requestedScale)"));
 });
 
 test("free-first voice architecture defaults to Kokoro and browser speech without requiring Fish Audio", () => {
