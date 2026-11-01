@@ -43,16 +43,31 @@ describe("ULTRON AI — Real-Time Hand Gesture Control for Living Energy Core", 
       ]);
     });
 
-    test("Stops camera tracks cleanly", () => {
+    test("Stops camera tracks cleanly when the permission manager owns the stream", () => {
       let stopped = false;
       const mockTrack = { stop: () => { stopped = true; } };
       const manager = new CameraPermissionManager();
       manager.stream = { getTracks: () => [mockTrack] };
+      manager.ownsStream = true;
 
       manager.stopCamera();
       assert.equal(stopped, true);
       assert.equal(manager.stream, null);
       assert.equal(manager.status, TRACKING_STATES.DISABLED);
+    });
+
+    test("does not stop or detach an Eyes stream owned by the application", () => {
+      let stopped = false;
+      const stream = { getTracks: () => [{ stop: () => { stopped = true; } }] };
+      const video = { srcObject: stream };
+      const manager = new CameraPermissionManager({ videoElement: video });
+      manager.stream = stream;
+      manager.ownsStream = false;
+
+      manager.stopCamera();
+      assert.equal(stopped, false);
+      assert.equal(video.srcObject, stream);
+      assert.equal(manager.stream, null);
     });
   });
 
@@ -319,6 +334,26 @@ describe("ULTRON AI — Real-Time Hand Gesture Control for Living Energy Core", 
       assert.equal(lastPayload.state, TRACKING_STATES.HAND_DETECTED);
       assert.equal(lastPayload.activeGesture, GESTURE_TYPES.OPEN_PALM);
       assert.equal(lastPayload.handsCount, 1);
+    });
+
+    test("publishes one recognised result to the UI callback per tracking frame", () => {
+      let callbackCount = 0;
+      let receivedType = null;
+      const core = new HandGestureCore({
+        onGesture: (gesture, frame) => {
+          callbackCount += 1;
+          receivedType = gesture.type;
+          assert.equal(frame.handsCount, 1);
+        }
+      });
+      core.isEnabled = true;
+      core.recognitionEngine.recognize = () => ({ type: GESTURE_TYPES.OPEN_PALM, confidence: 1, params: {} });
+      core.interactionController.processGesture = () => {};
+      core.stateManager.update = () => {};
+
+      core._onTrackingFrame({ handsCount: 1, hands: [] });
+      assert.equal(callbackCount, 1);
+      assert.equal(receivedType, GESTURE_TYPES.OPEN_PALM);
     });
 
     test("HandGestureCore instantiates all 8 subsystem components", () => {
