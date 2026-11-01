@@ -3,7 +3,8 @@
 **Repository:** `ayaanraza2008/ULTRON-AI`  
 **Working branch:** `feat/ultron-cyber-core`  
 **Pull request:** [#440](https://github.com/ayaanraza2008/ULTRON-AI/pull/440)  
-**Audited branch head:** `6cb3b1c44de0d4435c02c6beaead7e11dfd3fa96`  
+**Audited evidence head before the final Kokoro fix:** `6cb3b1c44de0d4435c02c6beaead7e11dfd3fa96`  
+**Additional Kokoro fail-closed code head:** `6b067912bef994cc0edfcd557a7abf52188f240a` (fresh CI run pending at report update)  
 **Production base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
 
 > This report supersedes historical ULTRON completion percentages that described software checklists as 100% operational. A green CI run is not proof of live cloud inference, physical-device control, production deployment, or real-world autonomy.
@@ -82,7 +83,7 @@ The Render backend logs showed the task-worker process starting, but that is not
 | P0 | Supabase Auth setting | Live Security Advisor still reports `Leaked Password Protection Disabled` | Enable Supabase Auth leaked-password protection in the project dashboard if available on the current plan, then recheck advisor |
 | P1 | Device pairing in production | Code has opt-in encrypted local-file persistence; new Supabase schema migration is not applied or wired into DeviceHub | Choose durable Render storage or implement/use Supabase-backed adapter; configure dedicated secret securely; apply reviewed migration only after owner approval; test restart and owner isolation |
 | P1 | Windows physical voice/control | CI builds the companion, but no current proof of physical microphone, paired token, live backend dispatch and authorised Windows action round-trip | Install latest artifact on actual PC; pair securely; test wake, Hindi/English/Hinglish recognition and a harmless allowlisted PC action |
-| P1 | Spoken TTS verification | Current Kokoro fallback can generate a valid 180 Hz diagnostic-tone WAV when ONNX/model runtime is unavailable. Existing tests check WAV shape/data URL, not intelligible speech content | Run a live Kokoro model/ONNX smoke on the target PC and assert actual speech output; never count the diagnostic tone as TTS success |
+| P1 | Spoken TTS verification | The code now labels no-model WAV as `diagnostic_tone` / `speechAvailable=false`; `JarvisVoiceEngine` rejects it and `/jarvis/voice/kokoro` returns 503 instead of serving it as speech. Added regression assertions. Actual speech remains unverified in this audit | Install/configure genuine Kokoro ONNX runtime + model/voice files on target PC and run a live speech smoke; verify intelligible output and measured RTF |
 | P1 | Coding sandbox | Unit tests verify fail-closed behaviour and Docker flags, but target-host Docker execution is not proven by latest CI alone | Run harmless isolation tests in a configured Docker environment and inspect host/network boundaries |
 | P1 | Browser and media workflows | Software components/tests exist; real paired-browser workflow and verified rendered output are not demonstrated by this CI evidence | Run permitted browser E2E and produce/inspect a real short FFmpeg output file |
 | P1 | Frontend/backend integration | Separate branches and deployments; current backend feature PR is not connected to live frontend | Integrate frontend changes and run a full authenticated E2E against a staging deployment |
