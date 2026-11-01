@@ -1932,108 +1932,184 @@
       return;
     }
     if (name === "devices") {
-      drawerHeading("PC and mobile devices", "Cloud ULTRON cannot directly operate your personal devices just because this page is open. A paired local companion and explicit scopes are required.");
-      drawerCard("Windows PC", "Checking whether the backend knows about a configured companion…", "CHECKING", "warning");
-      try {
-        const payload = await apiRequest("/api/capabilities");
-        ui.drawerContent.replaceChildren();
-        drawerHeading("PC and mobile devices", "The browser and cloud service have limited access. Device control must be paired, visible, scoped, and revocable.");
-        const desktop = payload?.providers?.desktop || {};
-        drawerCard("Windows PC companion",
-          desktop.localAgentConfigured
-            ? "Companion configuration is present, but this alone does not prove a PC is paired, online, or authorized for actions."
-            : "No configured companion was reported. Install and securely pair a local companion before any PC actions can be enabled.",
-          desktop.localAgentConfigured ? "CONFIGURED · UNVERIFIED" : "NOT PAIRED",
-          desktop.localAgentConfigured ? "warning" : "warning");
-        drawerCard("Mobile companion",
-          "No mobile control companion is connected through this interface yet. Mobile permissions and supported actions must be implemented by a trusted mobile app.",
-          "NOT CONNECTED", "warning");
-        drawerCard("Access boundaries",
-          "The browser cannot bypass operating-system permissions. Sensitive, destructive, external or money-related actions must require a separate confirmation.",
-          "SCOPED ACCESS");
+      ui.drawerContent.replaceChildren();
+      drawerHeading("PC and mobile devices", "Pair a device to this ULTRON account. Each device receives its own revocable token; the code expires after five minutes and is claimable only once.");
 
-        const scopeHeading = document.createElement("h3");
-        scopeHeading.className = "drawer-view-title";
-        scopeHeading.textContent = "Request device permissions";
-        const scopeText = document.createElement("p");
-        scopeText.className = "drawer-view-description";
-        scopeText.textContent = "Select only the capabilities you want a future paired companion to request. These selections are a draft policy—not an active grant.";
-        ui.drawerContent.append(scopeHeading, scopeText);
-        const scopeList = document.createElement("div");
-        scopeList.className = "device-scope-list";
-        const scopes = [
-          ["screen-view", "View screen", "Capture a visible screen only after the companion displays an active indicator."],
-          ["selected-files", "User-selected files", "Read files or folders you explicitly select in the local companion."],
-          ["approved-apps", "Launch approved apps", "Open only apps listed in a user-reviewed allowlist."],
-          ["keyboard-mouse", "Keyboard and mouse", "Perform visible interaction after a per-session confirmation."],
-          ["allowlisted-system", "Allowlisted system actions", "Use reviewed settings and diagnostics; no arbitrary shell commands."],
-          ["mobile-bridge", "Paired mobile actions", "Request only permissions supported by a separately installed mobile companion."]
-        ];
-        for (const scopeInfo of scopes) {
-          const label = document.createElement("label");
-          label.className = "device-scope";
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.value = scopeInfo[0];
-          checkbox.checked = requestedDeviceScopes.has(scopeInfo[0]);
-          checkbox.addEventListener("change", () => {
-            if (checkbox.checked) requestedDeviceScopes.add(scopeInfo[0]);
-            else requestedDeviceScopes.delete(scopeInfo[0]);
-          });
-          const textBox = document.createElement("span");
-          const name = document.createElement("strong");
-          name.textContent = scopeInfo[1];
-          const detail = document.createElement("small");
-          detail.textContent = scopeInfo[2];
-          textBox.append(name, detail);
-          label.append(checkbox, textBox);
-          scopeList.appendChild(label);
+      const form = document.createElement("div");
+      form.className = "device-scope-list";
+      const nameField = document.createElement("label");
+      nameField.className = "drawer-field";
+      const nameLabel = document.createElement("span");
+      nameLabel.textContent = "DEVICE NAME";
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.maxLength = 120;
+      nameInput.placeholder = "e.g. My Windows PC";
+      nameInput.value = "Windows Companion";
+      nameField.append(nameLabel, nameInput);
+
+      const platformField = document.createElement("label");
+      platformField.className = "drawer-field";
+      const platformLabel = document.createElement("span");
+      platformLabel.textContent = "PLATFORM";
+      const platformSelect = document.createElement("select");
+      for (const [value, label] of [["windows", "Windows"], ["android", "Android"], ["linux", "Linux"], ["macos", "macOS"], ["ios", "iOS"]]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        platformSelect.appendChild(option);
+      }
+      platformField.append(platformLabel, platformSelect);
+      form.append(nameField, platformField);
+      ui.drawerContent.appendChild(form);
+
+      const pairingOutput = document.createElement("div");
+      pairingOutput.className = "drawer-note";
+      pairingOutput.hidden = true;
+      ui.drawerContent.appendChild(pairingOutput);
+
+      const createPairingButton = drawerButton("GENERATE ONE-TIME PAIRING CODE", async () => {
+        const deviceName = nameInput.value.trim();
+        const platform = platformSelect.value;
+        if (!deviceName || deviceName.length > 120) {
+          showToast("Enter a device name between 1 and 120 characters.");
+          return;
         }
-        ui.drawerContent.appendChild(scopeList);
-        const manifestOutput = document.createElement("div");
-        manifestOutput.className = "drawer-note";
-        manifestOutput.hidden = true;
-        const makeManifest = document.createElement("button");
-        makeManifest.type = "button";
-        makeManifest.className = "drawer-action";
-        makeManifest.textContent = "PREPARE PERMISSION POLICY";
-        makeManifest.addEventListener("click", () => {
-          if (!requestedDeviceScopes.size) {
-            showToast("Select at least one permission scope first.");
-            return;
-          }
-          const brief = [
-            "ULTRON device permission request",
-            "Device target: user-owned, explicitly paired device",
-            "Requested scopes: " + Array.from(requestedDeviceScopes).join(", "),
-            "Grant status: NOT GRANTED by this web page",
-            "Activation requirements: install a trusted local/mobile companion, pair this account and device, show an obvious active indicator, persist a revocable least-privilege policy, and require confirmation for sensitive actions.",
-            "Disallowed by default: arbitrary shell commands, stealth capture, credential extraction, persistence, and actions outside the user's selected device."
-          ].join("\n");
-          manifestOutput.replaceChildren();
-          const text = document.createElement("pre");
-          text.className = "permission-manifest";
-          text.textContent = brief;
-          manifestOutput.appendChild(text);
+        createPairingButton.disabled = true;
+        createPairingButton.textContent = "CREATING SECURE PAIRING…";
+        try {
+          const result = await apiRequest("/api/devices/pairings", {
+            method: "POST",
+            body: { deviceName, platform }
+          });
+          pairingOutput.replaceChildren();
+          const code = document.createElement("strong");
+          code.textContent = result.pairingCode;
+          code.style.display = "block";
+          code.style.fontSize = "22px";
+          code.style.letterSpacing = ".22em";
+          code.style.color = "#e8f8ff";
+          const expiry = document.createElement("p");
+          expiry.textContent = "Expires: " + new Date(result.expiresAt).toLocaleTimeString();
+          const instruction = document.createElement("p");
+          instruction.textContent = "Enter this code in the installed ULTRON companion. The companion claims it once through the secure pairing endpoint. This code does not grant screen, microphone, file, or system-control permissions.";
           const copy = document.createElement("button");
           copy.type = "button";
           copy.className = "drawer-action secondary";
-          copy.textContent = "COPY PERMISSION POLICY";
+          copy.textContent = "COPY PAIRING CODE";
           copy.addEventListener("click", () => {
             if (navigator.clipboard?.writeText) {
-              navigator.clipboard.writeText(brief).then(() => showToast("Permission policy copied."), () => showToast(brief, 9000));
-            } else showToast(brief, 9000);
+              navigator.clipboard.writeText(result.pairingCode).then(() => showToast("Pairing code copied."), () => showToast("Could not copy the code. Select it manually."));
+            } else showToast("Select the displayed pairing code manually.");
           });
-          manifestOutput.appendChild(copy);
-          manifestOutput.hidden = false;
-        });
-        ui.drawerContent.append(makeManifest, manifestOutput);
-        drawerButton("VIEW INTEGRATIONS", () => { void showDrawerView("apps"); });
-      } catch (error) {
-        ui.drawerContent.replaceChildren();
-        drawerHeading("PC and mobile devices", "The backend capability endpoint could not be read.");
-        drawerCard("Device status unavailable", error.message, error.code || "REQUEST FAILED", "error");
-      }
+          pairingOutput.append(code, expiry, instruction, copy);
+          pairingOutput.hidden = false;
+          showToast("One-time pairing code created. It expires in five minutes.", 4500);
+        } catch (error) {
+          pairingOutput.textContent = error.message || "Device pairing is not available.";
+          pairingOutput.hidden = false;
+          showToast(error.message || "Could not create a device pairing code.", 5000);
+        } finally {
+          createPairingButton.disabled = false;
+          createPairingButton.textContent = "GENERATE ONE-TIME PAIRING CODE";
+        }
+      });
+      createPairingButton.style.marginBottom = "14px";
+
+      drawerHeading("Paired devices", "Only devices registered to your signed-in account appear here. Revoking a device immediately invalidates its token.");
+      const deviceList = document.createElement("div");
+      deviceList.className = "device-scope-list";
+      deviceList.textContent = "Loading your device registry…";
+      ui.drawerContent.appendChild(deviceList);
+
+      const renderDeviceList = async () => {
+        deviceList.replaceChildren();
+        try {
+          const payload = await apiRequest("/api/devices");
+          const devices = Array.isArray(payload?.devices) ? payload.devices : [];
+          if (!devices.length) {
+            const empty = document.createElement("p");
+            empty.className = "drawer-view-description";
+            empty.textContent = "No paired devices yet. Generate a code above to pair your Windows or mobile companion.";
+            deviceList.appendChild(empty);
+            return;
+          }
+          for (const device of devices) {
+            const card = document.createElement("article");
+            card.className = "drawer-status-card";
+            const title = document.createElement("strong");
+            title.textContent = device.device_name || "ULTRON Companion";
+            const detail = document.createElement("p");
+            detail.textContent = String(device.platform || "device").toUpperCase() + " · Last seen " + (device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "not yet connected");
+            const status = document.createElement("span");
+            status.className = "drawer-status-chip" + (device.status === "active" ? "" : " warning");
+            status.textContent = String(device.status || "unknown").toUpperCase();
+            card.append(title, detail, status);
+
+            const rowActions = document.createElement("div");
+            rowActions.style.display = "grid";
+            rowActions.style.gridTemplateColumns = "1fr 1fr";
+            rowActions.style.gap = "7px";
+            rowActions.style.marginTop = "8px";
+
+            const rotate = document.createElement("button");
+            rotate.type = "button";
+            rotate.className = "drawer-action secondary";
+            rotate.textContent = "ROTATE TOKEN";
+            rotate.addEventListener("click", async () => {
+              rotate.disabled = true;
+              try {
+                const result = await apiRequest("/api/devices/" + encodeURIComponent(device.id) + "/rotate-token", { method: "POST", body: {} });
+                showToast("Device token rotated. The companion must be updated with the new token.", 6000);
+                const note = document.createElement("div");
+                note.className = "drawer-note";
+                note.textContent = "New one-time token for " + (device.device_name || "device") + ": " + result.deviceToken;
+                card.appendChild(note);
+                const copy = document.createElement("button");
+                copy.type = "button";
+                copy.className = "drawer-action secondary";
+                copy.textContent = "COPY NEW TOKEN";
+                copy.addEventListener("click", () => navigator.clipboard?.writeText(result.deviceToken).then(() => showToast("New device token copied."), () => showToast("Copy failed. Keep the token private.")));
+                card.appendChild(copy);
+              } catch (error) {
+                showToast(error.message || "Could not rotate the device token.");
+              } finally {
+                rotate.disabled = false;
+              }
+            });
+
+            const revoke = document.createElement("button");
+            revoke.type = "button";
+            revoke.className = "drawer-action secondary";
+            revoke.textContent = "REVOKE DEVICE";
+            revoke.addEventListener("click", async () => {
+              if (!window.confirm("Revoke " + (device.device_name || "this device") + "? Its paired token will stop authenticating.")) return;
+              revoke.disabled = true;
+              try {
+                await apiRequest("/api/devices/" + encodeURIComponent(device.id), { method: "DELETE" });
+                showToast("Device access revoked.");
+                await renderDeviceList();
+              } catch (error) {
+                showToast(error.message || "Could not revoke the device.");
+                revoke.disabled = false;
+              }
+            });
+            rowActions.append(rotate, revoke);
+            card.appendChild(rowActions);
+            deviceList.appendChild(card);
+          }
+        } catch (error) {
+          deviceList.replaceChildren();
+          const message = document.createElement("p");
+          message.className = "drawer-note";
+          message.textContent = error.message || "Device registry is unavailable. Apply the reviewed paired-device migration and configure the dedicated signing secret.";
+          deviceList.appendChild(message);
+        }
+      };
+
+      drawerButton("REFRESH DEVICE LIST", () => { void renderDeviceList(); }, true);
+      await renderDeviceList();
+      drawerButton("VIEW INTEGRATIONS", () => { void showDrawerView("apps"); });
       return;
     }
     if (name === "control") {
