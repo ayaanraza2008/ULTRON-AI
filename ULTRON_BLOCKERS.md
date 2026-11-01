@@ -39,9 +39,9 @@
 
 ## 3. VERIFIED AUTOMATED SOFTWARE BASELINE (AUDITED PR HEAD)
 
-- **Automated Tests:** **1,171 Total — 1,170 PASS, 0 FAIL, 1 SKIP** on audited PR head `f747736f40b7d60a509b413db397b2a60bf97b17`.
-- **Syntax Verification:** **303 / 303 Files Clean** on the same head.
+- **Automated Tests:** **1,184 Total — 1,183 PASS, 0 FAIL, 1 SKIP** on PR head `7e2d2b9b56595c67d2bb69d91e745b8c47093659` (GitHub Actions run 41323133858). The only skipped test is live two-account Supabase isolation; it requires disposable accounts and `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES`.
+- **Syntax Verification:** **304 / 304 Files Clean** on PR head `7e2d2b9b56595c67d2bb69d91e745b8c47093659`.
 - **Windows Companion:** .NET 8 standalone win-x64 compile/publish and artifact upload passed.
-- **Skipped:** live two-account Supabase isolation E2E.
+- **Skipped:** live two-account Supabase isolation E2E only. The FFmpeg integration test now executes in CI with FFmpeg installed and successfully renders/validates a real MP4.
 - **Security snapshot:** prior native report listed zero findings, but external scanners (Semgrep, Trivy/OSV, Gitleaks and ESLint security plugins) were unavailable; not an independent certification.
 - **Live model, vision, worker, two-account RLS, durable device pairing and physical Windows voice/control remain unverified or blocked.
