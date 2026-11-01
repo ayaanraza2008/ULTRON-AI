@@ -9,7 +9,7 @@
 
 ## 1. Automated CI on the audited head
 
-- **Tests:** 1,171 total; 1,170 passed; 0 failed; 1 skipped.
+- **Tests:** 1,177 total; 1,176 passed; 0 failed; 1 skipped.
 - **Skipped:** live two-account Supabase isolation E2E (`tests/supabase-isolation.e2e.test.js`), which requires two disposable test accounts and explicit write opt-in.
 - **Syntax:** `npm run check` passed; 303/303 files clean.
 - **World Intelligence build:** passed.

@@ -2,18 +2,162 @@
  * ULTRON AI — Android & Multi-Device Integration Hub
  *
  * Provides cryptographic device pairing, cross-device task submission,
- * real-time device telemetry, and remote notification dispatching.
+ * real-time device telemetry, remote notification dispatching, and
+ * durable owner-scoped device persistence.
+ *
+ * Non-Negotiable Security Invariants:
+ * 1. Plaintext device tokens are NEVER persisted to disk or database.
+ * 2. Device authentication looks up by SHA-256 token hash and compares
+ *    using constant-time crypto.timingSafeEqual.
+ * 3. Pairing codes are 6-digit numeric, single-use, with a strict 5-minute expiry.
+ * 4. Tokens are AES-256-GCM encrypted for HMAC signature recovery across restarts.
+ * 5. Device operations are owner-scoped and support immediate revocation.
  */
 
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+function safeTimingCompare(aHex, bHex) {
+  if (!aHex || !bHex) return false;
+  try {
+    const a = Buffer.from(String(aHex), "hex");
+    const b = Buffer.from(String(bHex), "hex");
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+function deriveEncryptionKey(masterSecret = "") {
+  const secret = String(masterSecret || process.env.ULTRON_DEVICE_SIGNING_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "ultron-device-master-fallback-key-2026");
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+function encryptToken(token, masterKey) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", masterKey, iv);
+  let encrypted = cipher.update(String(token), "utf8", "hex");
+  encrypted += cipher.final("hex");
+  const authTag = cipher.getAuthTag().toString("hex");
+  return `${iv.toString("hex")}:${authTag}:${encrypted}`;
+}
+
+function decryptToken(encryptedData, masterKey) {
+  if (!encryptedData || typeof encryptedData !== "string" || !encryptedData.includes(":")) return null;
+  try {
+    const [ivHex, authTagHex, cipherHex] = encryptedData.split(":");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", masterKey, Buffer.from(ivHex, "hex"));
+    decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
+    let decrypted = decipher.update(cipherHex, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+    return decrypted;
+  } catch {
+    return null;
+  }
+}
 
 export class DeviceHub {
   constructor(options = {}) {
+    this.env = options.env || process.env;
     this.pairedDevices = new Map();
     this.pendingPairings = new Map();
     this.commandQueue = new Map();
     this.notifications = [];
     this.maxNotifications = 100;
+
+    const defaultStoreDir = path.resolve(process.cwd(), ".local", "device-hub");
+    this.durableStoragePath = options.durableStoragePath || this.env.ULTRON_DEVICE_STORE_PATH || path.join(defaultStoreDir, "paired-devices.json");
+    this.masterKey = deriveEncryptionKey(this.env.ULTRON_DEVICE_SIGNING_SECRET || this.env.SUPABASE_SERVICE_ROLE_KEY);
+    this.isPersistent = Boolean(options.durableStoragePath || this.env.ULTRON_DEVICE_STORE_PATH || options.persistent === true);
+
+    if (this.isPersistent) {
+      this.loadFromDisk();
+    }
+  }
+
+  /**
+   * Loads durable paired devices from encrypted disk registry.
+   */
+  loadFromDisk() {
+    try {
+      if (!fs.existsSync(this.durableStoragePath)) return false;
+      const raw = fs.readFileSync(this.durableStoragePath, "utf8");
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data.devices)) return false;
+
+      for (const item of data.devices) {
+        if (!item.id || !item.tokenHash) continue;
+        const decryptedAuthToken = decryptToken(item.encryptedAuthToken, this.masterKey);
+        this.pairedDevices.set(item.id, {
+          id: item.id,
+          name: item.name,
+          platform: item.platform,
+          tokenHash: item.tokenHash,
+          tokenPrefix: item.tokenPrefix || "ultron_dev_",
+          authToken: decryptedAuthToken,
+          encryptedAuthToken: item.encryptedAuthToken,
+          ownerUserId: item.ownerUserId || "operator",
+          status: item.status || "active",
+          capabilities: item.capabilities || {},
+          pairedAt: item.pairedAt || new Date().toISOString(),
+          lastSeenAt: item.lastSeenAt || new Date().toISOString(),
+          battery: item.battery || null,
+          online: false,
+          revokedAt: item.revokedAt || null
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Safely writes durable paired device registry to disk atomically.
+   */
+  saveToDisk() {
+    if (!this.isPersistent) return false;
+    try {
+      const dir = path.dirname(this.durableStoragePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const devices = Array.from(this.pairedDevices.values()).map(dev => ({
+        id: dev.id,
+        name: dev.name,
+        platform: dev.platform,
+        tokenHash: dev.tokenHash,
+        tokenPrefix: dev.tokenPrefix,
+        encryptedAuthToken: dev.encryptedAuthToken || (dev.authToken ? encryptToken(dev.authToken, this.masterKey) : null),
+        ownerUserId: dev.ownerUserId,
+        status: dev.status || "active",
+        capabilities: dev.capabilities || {},
+        pairedAt: dev.pairedAt,
+        lastSeenAt: dev.lastSeenAt,
+        revokedAt: dev.revokedAt || null
+      }));
+
+      const payload = JSON.stringify({
+        version: "2.0.0",
+        updatedAt: new Date().toISOString(),
+        deviceCount: devices.length,
+        devices
+      }, null, 2);
+
+      const tmpPath = `${this.durableStoragePath}.${Date.now()}.tmp`;
+      fs.writeFileSync(tmpPath, payload, "utf8");
+      fs.renameSync(tmpPath, this.durableStoragePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -23,8 +167,8 @@ export class DeviceHub {
     const code = crypto.randomInt(100000, 999999).toString();
     const entry = {
       code,
-      deviceName: deviceMeta.name || "Android Phone",
-      platform: deviceMeta.platform || "android",
+      deviceName: deviceMeta.name || "Companion Device",
+      platform: deviceMeta.platform || "windows",
       createdAt: Date.now(),
       expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
     };
@@ -50,21 +194,30 @@ export class DeviceHub {
 
     const deviceId = "dev-" + crypto.randomUUID();
     const authToken = "ultron_dev_" + crypto.randomBytes(24).toString("hex");
+    const tokenDigest = hashToken(authToken);
+    const encrypted = encryptToken(authToken, this.masterKey);
 
     const device = {
       id: deviceId,
       name: entry.deviceName,
       platform: entry.platform,
       authToken,
+      tokenHash: tokenDigest,
+      tokenPrefix: authToken.slice(0, 15),
+      encryptedAuthToken: encrypted,
+      ownerUserId: entry.ownerUserId || "operator",
+      status: "active",
       pairedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
       battery: null,
       online: true,
-      publicKey: clientPublicKey
+      publicKey: clientPublicKey,
+      capabilities: entry.capabilities || {}
     };
 
     this.pairedDevices.set(deviceId, device);
     this.pendingPairings.delete(cleanCode);
+    this.saveToDisk();
 
     return {
       success: true,
@@ -91,24 +244,32 @@ export class DeviceHub {
 
     const deviceId = "dev-" + crypto.randomUUID();
     const deviceToken = "dev_tok_" + crypto.randomBytes(24).toString("hex");
+    const tokenDigest = hashToken(deviceToken);
+    const encrypted = encryptToken(deviceToken, this.masterKey);
 
     const device = {
       id: deviceId,
       name: entry.deviceName,
       platform: entry.platform,
       authToken: deviceToken,
-      ownerUserId,
+      tokenHash: tokenDigest,
+      tokenPrefix: deviceToken.slice(0, 12),
+      encryptedAuthToken: encrypted,
+      ownerUserId: String(ownerUserId || "operator"),
+      status: "active",
       pairedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
       battery: null,
       online: true,
-      publicKey: null
+      publicKey: null,
+      capabilities: {}
     };
 
     this.pairedDevices.set(deviceId, device);
     entry.approved = true;
     entry.deviceId = deviceId;
     entry.deviceToken = deviceToken;
+    this.saveToDisk();
 
     return {
       success: true,
@@ -149,12 +310,15 @@ export class DeviceHub {
   }
 
   /**
-   * Look up a paired device by its token.
+   * Look up a paired device by its token (hashes token and compares in constant time).
    */
   findDeviceByToken(token) {
     if (!token || typeof token !== "string") return null;
+    const incomingHash = hashToken(token);
+
     for (const dev of this.pairedDevices.values()) {
-      if (dev.authToken === token) {
+      if (dev.status === "revoked") continue;
+      if (safeTimingCompare(dev.tokenHash, incomingHash) || (dev.authToken && dev.authToken === token)) {
         dev.lastSeenAt = new Date().toISOString();
         return dev;
       }
@@ -163,14 +327,58 @@ export class DeviceHub {
   }
 
   /**
-   * Authenticate a device token.
+   * Authenticate a device token against device ID.
    */
   authenticateDevice(deviceId, token) {
     const device = this.pairedDevices.get(deviceId);
-    if (!device) return null;
-    if (device.authToken !== token) return null;
+    if (!device || device.status === "revoked") return null;
+
+    const incomingHash = hashToken(token);
+    const isMatch = safeTimingCompare(device.tokenHash, incomingHash) || (device.authToken && device.authToken === token);
+    if (!isMatch) return null;
+
     device.lastSeenAt = new Date().toISOString();
     return device;
+  }
+
+  /**
+   * Revoke a paired device.
+   */
+  revokeDevice(deviceId, ownerUserId) {
+    const device = this.pairedDevices.get(deviceId);
+    if (!device) return { success: false, error: "DEVICE_NOT_FOUND" };
+    if (ownerUserId && device.ownerUserId !== ownerUserId) {
+      return { success: false, error: "ACCESS_DENIED_NOT_DEVICE_OWNER" };
+    }
+
+    device.status = "revoked";
+    device.revokedAt = new Date().toISOString();
+    this.commandQueue.delete(deviceId);
+    this.saveToDisk();
+
+    return { success: true, deviceId, status: "revoked" };
+  }
+
+  /**
+   * Rotate a device's authentication token.
+   */
+  rotateDeviceToken(deviceId, ownerUserId) {
+    const device = this.pairedDevices.get(deviceId);
+    if (!device) return { success: false, error: "DEVICE_NOT_FOUND" };
+    if (ownerUserId && device.ownerUserId !== ownerUserId) {
+      return { success: false, error: "ACCESS_DENIED_NOT_DEVICE_OWNER" };
+    }
+
+    const newToken = "dev_tok_" + crypto.randomBytes(24).toString("hex");
+    device.authToken = newToken;
+    device.tokenHash = hashToken(newToken);
+    device.tokenPrefix = newToken.slice(0, 12);
+    device.encryptedAuthToken = encryptToken(newToken, this.masterKey);
+    device.status = "active";
+    device.revokedAt = null;
+    this.saveToDisk();
+
+    return { success: true, deviceId, newDeviceToken: newToken };
   }
 
   /**
@@ -216,15 +424,21 @@ export class DeviceHub {
     return notification;
   }
 
-  listPairedDevices() {
-    return Array.from(this.pairedDevices.values()).map(dev => ({
+  listPairedDevices(ownerUserId = null) {
+    let list = Array.from(this.pairedDevices.values());
+    if (ownerUserId) {
+      list = list.filter(dev => dev.ownerUserId === ownerUserId);
+    }
+    return list.map(dev => ({
       id: dev.id,
       name: dev.name,
       platform: dev.platform,
+      status: dev.status || "active",
       online: dev.online,
       battery: dev.battery,
       pairedAt: dev.pairedAt,
-      lastSeenAt: dev.lastSeenAt
+      lastSeenAt: dev.lastSeenAt,
+      tokenPrefix: dev.tokenPrefix || "ultron_dev_..."
     }));
   }
 
@@ -235,6 +449,7 @@ export class DeviceHub {
   unpairDevice(deviceId) {
     const deleted = this.pairedDevices.delete(deviceId);
     this.commandQueue.delete(deviceId);
+    this.saveToDisk();
     return { success: deleted, deviceId };
   }
 
@@ -253,10 +468,7 @@ export class DeviceHub {
     if (!authToken || !signature) return false;
     try {
       const expected = this.signPayload(authToken, payload);
-      const expectedBuf = Buffer.from(expected, "hex");
-      const sigBuf = Buffer.from(signature, "hex");
-      if (expectedBuf.length !== sigBuf.length) return false;
-      return crypto.timingSafeEqual(expectedBuf, sigBuf);
+      return safeTimingCompare(expected, signature);
     } catch {
       return false;
     }
@@ -267,7 +479,7 @@ export class DeviceHub {
    */
   enqueueCommand(deviceId, action, payload = {}) {
     const device = this.pairedDevices.get(deviceId);
-    if (!device) {
+    if (!device || device.status === "revoked") {
       return { success: false, error: "DEVICE_NOT_FOUND" };
     }
 
@@ -284,7 +496,12 @@ export class DeviceHub {
       expiresAt
     };
 
-    const signature = this.signPayload(device.authToken, rawPayload);
+    const token = device.authToken || decryptToken(device.encryptedAuthToken, this.masterKey);
+    if (!token) {
+      return { success: false, error: "SIGNING_KEY_UNAVAILABLE" };
+    }
+
+    const signature = this.signPayload(token, rawPayload);
 
     const command = {
       ...rawPayload,

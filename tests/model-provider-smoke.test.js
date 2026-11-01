@@ -182,3 +182,28 @@ test("smoke diagnostics identify token-truncated reasoning-only responses withou
   assert.equal(JSON.stringify(report).includes(privateReasoning), false);
   assert.equal(JSON.stringify(report).includes("test-secret"), false);
 });
+
+
+test("smoke check auto-detects Groq and Gemini when environment variables are set", async () => {
+  const seen = [];
+  const report = await runModelProviderSmoke({
+    env: {
+      GROQ_API_KEY: "gsk_test_secret",
+      GEMINI_API_KEY: "gemini_test_secret"
+    },
+    fetchImpl: async (url, options) => {
+      seen.push({ url, auth: options.headers.Authorization });
+      if (url.includes("api.groq.com")) {
+        assert.equal(options.headers.Authorization, "Bearer gsk_test_secret");
+        return success("llama-3.3-70b-versatile");
+      }
+      return new Response("{}", { status: 500 });
+    }
+  });
+
+  assert.equal(report.status, "passed");
+  assert.equal(report.provider, "groq");
+  assert.equal(report.model, "llama-3.3-70b-versatile");
+  assert.equal(report.challengeVerified, true);
+  assert.equal(JSON.stringify(report).includes("gsk_test_secret"), false);
+});

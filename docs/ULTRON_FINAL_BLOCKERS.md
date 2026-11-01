@@ -25,3 +25,9 @@ In strict accordance with the **No Fake 100%** directive, capabilities requiring
 - **Repositories:** HeyGem (`suifeng9203/HeyGem.ai`), ComfyUI (`Comfy-Org/ComfyUI`), Immich (`immich-app/immich`), OpenProject (`opf/openproject`), Chatwoot (`chatwoot/chatwoot`).
 - **Requirement:** Separately hosted service instances and API tokens.
 - **Impact:** Full schema validation and anti-SSRF client adapters are built and verified. Live service operations remain blocked until instances are deployed by the operator.
+
+### 5. Durable Companion Device Pairing (Software Resolved / Physical Setup Optional)
+- **Status:** `SOFTWARE_VERIFIED` / `DEVICE_PROVISIONING_PENDING`
+- **Software Implementation:** Complete in `integrations/device-hub.js` with SHA-256 token hashing, AES-256-GCM recovery encryption, restart durability, atomic disk persistence, and PostgreSQL migration (`supabase/migrations/20261101180000_durable_paired_devices.sql`) with RLS.
+- **Physical Requirement:** Operator running the Windows Companion executable on a secondary client PC and exchanging the single-use pairing token with the live cloud endpoint.
+

@@ -312,7 +312,8 @@ const FILES_TO_CHECK = [
   "integrations/public-apis-directory.js",
   "intelligence/content-provenance.js",
   "voice/neural-speech-adapters.js",
-  "tests/new-ecosystem-integrations.test.js"
+  "tests/new-ecosystem-integrations.test.js",
+  "tests/durable-device-hub.test.js"
 ];
 
 let checked = 0;
