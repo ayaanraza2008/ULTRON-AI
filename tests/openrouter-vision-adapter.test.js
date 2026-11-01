@@ -30,7 +30,7 @@ test("OpenRouter vision adapter sends image only to safe free-model route and pa
  assert.equal(result.provider,"openrouter");
  assert.equal(result.objects[0].label,"keyboard");
  assert.equal(result.outputStatus,"STRUCTURED_MODEL_OUTPUT");
- assert.equal(result.coordinateSemantics,"Model-estimated normalized image coordinates; not calibrated measurement.");
+ assert.equal(result.coordinateSemantics,"Model-estimated normalized image coordinates; not calibrated physical measurements.");
 });
 
 test("OpenRouter vision adapter refuses non-OpenRouter endpoints and paid-only model IDs",()=>{

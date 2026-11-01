@@ -1487,7 +1487,11 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       res.json({ success: true, understanding, objects });
     } catch (err) {
       const code = typeof err?.code === "string" ? err.code : "VISION_ANALYSIS_FAILED";
-      const status = code === "VISION_PROVIDER_REQUIRED" ? 503
+      const unavailableCodes = new Set([
+        "VISION_PROVIDER_REQUIRED", "OPENROUTER_API_KEY_REQUIRED",
+        "NO_ELIGIBLE_FREE_VISION_MODELS", "OPENROUTER_HOST_REQUIRED", "UNSAFE_PROVIDER_URL"
+      ]);
+      const status = unavailableCodes.has(code) ? 503
         : code === "IMAGE_TOO_LARGE" ? 413
           : code.startsWith("INVALID_") || code.startsWith("UNSUPPORTED_") ? 400 : 502;
       res.status(status).json({ error: { code, message: err.message } });

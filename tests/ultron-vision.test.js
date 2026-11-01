@@ -13,7 +13,7 @@ test("UltronVision validates image data URLs and rejects invalid input",()=>{
  assert.throws(()=>vision.inspectImageMetadata("data:image/png;base64,@@@="),e=>e.code==="INVALID_IMAGE_ENCODING");
 });
 test("UltronVision fails closed when image understanding has no real provider",async()=>{
- await assert.rejects(new UltronVision().understandImage(VALID_PNG_BASE64,"Inspect this image."),e=>e.code==="VISION_PROVIDER_REQUIRED");
+ await assert.rejects(new UltronVision({multimodalRunner:false}).understandImage(VALID_PNG_BASE64,"Inspect this image."),e=>e.code==="VISION_PROVIDER_REQUIRED");
 });
 test("UltronVision returns provider-supplied analysis without inventing confidence",async()=>{
  const vision=new UltronVision({multimodalRunner:async(image,prompt,meta)=>{

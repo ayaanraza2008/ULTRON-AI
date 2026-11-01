@@ -3,16 +3,22 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createServer } from "node:http";
 import { createJarvisRouter } from "../jarvis-router.js";
+import { ultronVision } from "../vision/ultron-vision.js";
 
 const TEST_FRAME_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-async function withEyesRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }, userId = "owner-user" } = {}, run) {
+async function withEyesRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }, userId = "owner-user", visionUnavailable = false } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, _res, next) => {
     req.supabaseUser = { id: userId };
     next();
   };
   app.use(express.json());
+  const previousVision = { multimodalRunner: ultronVision.multimodalRunner, objectDetector: ultronVision.objectDetector };
+  if (visionUnavailable) {
+    ultronVision.multimodalRunner = false;
+    ultronVision.objectDetector = false;
+  }
   app.use("/api", createJarvisRouter({ env, requireSupabaseUser }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
@@ -25,6 +31,8 @@ async function withEyesRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner
   } finally {
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    ultronVision.multimodalRunner = previousVision.multimodalRunner;
+    ultronVision.objectDetector = previousVision.objectDetector;
   }
 }
 
@@ -204,7 +212,7 @@ test("ULTRON EYES Routes: Sync browser client camera devices", async () => {
 
 
 test("ULTRON EYES Routes: legacy vision analysis fails closed without a real inference adapter",async()=>{
- await withEyesRouter({},async base=>{
+ await withEyesRouter({visionUnavailable:true},async base=>{
   const response=await fetch(base+"/api/jarvis/nextgen/vision/analyze",{method:"POST",headers:{"Content-Type":"application/json"},
    body:JSON.stringify({imageData:TEST_FRAME_DATA_URL,prompt:"What is visible?"})});
   const body=await response.json();
