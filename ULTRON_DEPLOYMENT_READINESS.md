@@ -1,42 +1,45 @@
 # ULTRON AI — Production Deployment Readiness
 
-**Audit date:** 2026-11-01  
-**Candidate PR:** [#440](https://github.com/ayaanraza2008/ULTRON-AI/pull/440)  
-**Verified code commit:** `e54103f27f2034ca4e890a24879fbc1cd96018d6`  
+**Audit date:** 2026-11-01 (Asia/Kolkata)  
+**Candidate PR:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
+**Audited implementation checkpoint:** `3336a99b492014c661a54f9b315400bbb81c6b45`  
 **Target Render workspace:** **Ultron core**  
-**Decision:** **NO-GO — DO NOT DEPLOY THIS PR YET**
+**Decision:** **NO-GO — DO NOT MERGE OR DEPLOY YET**
 
 ## Source and deployment state
 
 | Component | Render branch | Reported live commit | Current status |
 |---|---|---|---|
-| Backend `ultron-ai-core` | `main` | `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281` | Service/deploy reports live; this PR is not deployed |
-| Frontend `ultron-core-interface` | `feature/ultron-live-core-interface-20261029` | `68b042641bc1e4a0ab56953df36637402c47df86` | Service/deploy reports live; separate frontend revision |
+| Backend `ultron-ai-core` | `main` | `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281` | Service/deploy metadata reports live; candidate is not deployed |
+| Frontend `ultron-core-interface` | `feature/ultron-live-core-interface-20261029` | `68b042641bc1e4a0ab56953df36637402c47df86` | Service/deploy metadata reports live; separate, stale source branch |
 
-Both services are on the Free plan. Automatic deployment is enabled for commits to their configured branches. The backend and frontend are not aligned to the candidate PR revision.
+PR #441 remains open and unmerged. Its frontend gesture fixes therefore are not on the production frontend. Do not merge or deploy based on its title or automated tests alone.
 
-## Observability caveat
+## Latest CI evidence
 
-During this audit:
-- Render service records reported the services as not suspended and the latest deploys as `live`.
-- CPU, memory, request-count and latency queries returned empty data arrays.
-- Render log retrieval returned a Loki 503 (“log retrieval is currently unavailable”).
-- The backend and frontend Render configurations had no configured HTTP health-check path.
-
-Therefore, the deploy records are verified but the live application health, latency and error rate are **not verified**. Do not call this production healthy from deploy status alone.
+- [ULTRON CI run 41336219872](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41336219872): 1,250 Node tests, 1,249 pass, 0 fail, 1 skip; syntax 318/318; ULTRON runtime audit 0; configured repository security gate 0 findings.
+- [Windows Companion run 41336219867](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41336219867): x64 build/publish passed.
+- The one skipped test is the live two-user Supabase isolation test.
+- The external pinned World Intelligence build reports 5 high-severity dependency advisories; it requires a package-level review.
 
 ## Release gates still open
 
-1. Complete genuine model and vision smoke tests with approved provider credentials.
-2. Execute a disposable-user worker task and two-user Supabase isolation E2E.
-3. Resolve or explicitly accept the Supabase leaked-password protection warning.
-4. Verify Kokoro speech, physical Windows microphone/wake-word/control and device pairing on the target PC.
-5. Verify live browser session and Docker runtime isolation.
-6. Complete user-source video + audio export tests.
-7. Align frontend/backend revisions in staging and pass authenticated end-to-end flows.
-8. Restore Render logs/metrics, configure a readiness endpoint, and verify a real request after deploy.
-9. Obtain explicit owner approval for merge/deploy and reviewed database migrations.
+1. Genuine live text and vision inference with approved provider credentials.
+2. Live disposable-user worker execution and Supabase persistence.
+3. Two-account RLS isolation E2E and resolution/review of the Supabase leaked-password warning.
+4. Physical webcam/MediaPipe test of hand gestures on the target browser/PC.
+5. Actual Kokoro `am_onyx` speech test on target PC; current browser voice is not proof of Kokoro.
+6. Implement and test owner-authenticated durable device-pairing routes; current DeviceHub is not mounted by the server/router and the migration is unapplied.
+7. Windows/Android physical microphone, wake-word, pairing and safe-control E2E.
+8. Live paired-browser E2E and Docker runtime isolation.
+9. Full user-source media workflow and external robotics simulator/HIL validation where applicable.
+10. Reconcile `render.yaml` non-destructively with live service IDs/names. It currently defines mismatched service names and duplicate World Intelligence services.
+11. Restore sufficient Render log/metrics visibility and complete authenticated staging tests across sign-in, chat, voice, memory, tasks, files and device flows.
+12. Review the five high-severity advisories in the separate pinned World Intelligence dependency tree.
+13. Obtain explicit owner approval for merge/deploy and any reviewed database migrations.
 
-## Safety / cost policy
+## Cost, data and deployment safety
 
-Do not upgrade Render/Supabase plans, add paid APIs, change production secrets, run production writes or apply migrations without explicit authorization. Do not paste secrets into chat or source control. The current PR is open and unmerged; no deployment was triggered during this audit.
+Keep the free-first configuration. Do not upgrade Render/Supabase, add paid APIs, change production secrets, run production writes, apply migrations, merge or deploy without explicit approval. Do not paste secrets into chat or source control.
+
+No merge, deployment, plan upgrade, production secret change or Supabase migration was performed during this audit.
