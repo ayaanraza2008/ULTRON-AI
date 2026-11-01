@@ -25,7 +25,7 @@ test("UltronVision returns provider-supplied analysis without inventing confiden
  assert.equal(result.result.model,"test-vision-model");assert.equal(Object.hasOwn(result,"confidence"),false);
 });
 test("UltronVision fails closed when object detection has no real provider",async()=>{
- await assert.rejects(new UltronVision().detectObjects(VALID_PNG_BASE64),e=>e.code==="VISION_PROVIDER_REQUIRED");
+ await assert.rejects(new UltronVision({ objectDetector: false }).detectObjects(VALID_PNG_BASE64),e=>e.code==="VISION_PROVIDER_REQUIRED");
 });
 test("UltronVision validates provider-returned normalized detections",async()=>{
  const vision=new UltronVision({objectDetector:async()=>({objects:[
