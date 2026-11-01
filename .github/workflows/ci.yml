@@ -38,6 +38,12 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=high
       - run: npm run check
+      - name: Install FFmpeg for real media-render integration tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          ffmpeg -version
+          ffprobe -version
       - run: npm test
       - name: Run ULTRON repository security quality gate
         run: npm run security:report
