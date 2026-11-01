@@ -140,3 +140,31 @@ test("REA gateway rejects oversized bodies before forwarding them", async () => 
     assert.equal(seen.length, 0);
   }, { maxRequestBytes: 24 });
 });
+
+test("REA gateway accepts Render-generated standard Base64 secrets as bearer tokens", async () => {
+  const generatedSecret = Buffer.alloc(32, 0x5a).toString("base64");
+  assert.match(generatedSecret, /[+/=]/);
+  const upstream = http.createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { ok: true } }));
+  });
+  const upstreamPort = await listen(upstream);
+  const gateway = createGatewayServer({ token: generatedSecret, upstreamPort, isReady: () => true });
+  const gatewayPort = await listen(gateway);
+  try {
+    const response = await fetch("http://127.0.0.1:" + gatewayPort + "/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + generatedSecret,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream"
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { jsonrpc: "2.0", id: 1, result: { ok: true } });
+  } finally {
+    await close(gateway);
+    await close(upstream);
+  }
+});
