@@ -4,9 +4,9 @@
  *
  * Implements passive security reconnaissance and external exposure analysis:
  * - Domain and DNS record resolution
- * - TLS certificate evaluation and cipher inspection
- * - Technology stack fingerprinting
- * - Attack surface mapping
+ * - Technology stack fingerprinting from caller-supplied HTTP headers
+ * - DNS resolution and explicit, unverified asset hints
+ * - No active port scan or TLS handshake is performed by this passive module
  */
 
 import crypto from "node:crypto";
@@ -108,24 +108,36 @@ export class CyberReconEngine {
   }
 
   _mapAttackSurface(target, ports = []) {
+    // Caller-supplied port numbers are hints, not observations. This passive
+    // module does not open sockets or claim that an endpoint is reachable.
+    const reportedPorts = Array.isArray(ports)
+      ? [...new Set(ports.filter(port => Number.isInteger(port) && port >= 1 && port <= 65535))]
+      : [];
+
     return {
       target,
-      exposedEndpointsCount: ports.length,
-      identifiedServices: ports.map(p => ({
-        port: p,
-        service: p === 443 ? "HTTPS" : p === 80 ? "HTTP" : p === 3000 ? "Node.js Application" : "Unknown",
-        state: "OPEN"
+      status: reportedPorts.length ? "UNVERIFIED_INPUT" : "NOT_SCANNED",
+      exposedEndpointsCount: 0,
+      reportedEndpointsCount: reportedPorts.length,
+      identifiedServices: reportedPorts.map(port => ({
+        port,
+        state: "UNVERIFIED",
+        evidenceSource: "CALLER_SUPPLIED"
       }))
     };
   }
 
   _evaluateTls(target, tlsCert = null) {
+    // No TLS handshake or certificate-chain validation is performed here.
+    // Even a caller-supplied object is not proof until a verifier inspects it.
     return {
       target,
-      tlsVersion: "TLSv1.3",
-      cipherSuite: "TLS_AES_256_GCM_SHA384",
-      certificateStatus: "VALID",
-      validUntil: new Date(Date.now() + 90 * 24 * 3600_000).toISOString()
+      status: tlsCert ? "UNVERIFIED_INPUT" : "NOT_CHECKED",
+      tlsVersion: null,
+      cipherSuite: null,
+      certificateStatus: "NOT_VERIFIED",
+      validUntil: null,
+      evidenceProvided: Boolean(tlsCert)
     };
   }
 }

@@ -494,6 +494,7 @@ test("premium speech endpoints fail clearly when no provider is configured", asy
 test("Fish Audio synthesis leaves language selection to the multilingual TTS model and keeps its key server-side", async () => {
   const calls = [];
   const env = {
+    ULTRON_ENABLE_FISH_AUDIO: "true",
     FISH_API_KEY: "synthetic-fish-secret"
   };
   await withServer(env, async base => {
@@ -533,7 +534,8 @@ test("Fish Audio synthesis does not force English when the text is Hindi or code
     "Hello ULTRON, आज मौसम कैसा है?"
   ];
   const seen = [];
-  await withServer({ FISH_API_KEY: "synthetic-fish-secret" }, async base => {
+  await withServer({ ULTRON_ENABLE_FISH_AUDIO: "true",
+    FISH_API_KEY: "synthetic-fish-secret" }, async base => {
     for (const text of samples) {
       const response = await fetch(base + "/api/speech/synthesize", {
         method: "POST",
@@ -556,6 +558,7 @@ test("Fish Audio synthesis does not force English when the text is Hindi or code
 test("Fish Audio transcription sends recorded audio as multipart audio and returns detected language", async () => {
   const calls = [];
   await withServer({
+    ULTRON_ENABLE_FISH_AUDIO: "true",
     FISH_API_KEY: "synthetic-fish-secret",
     FISH_AUDIO_STT_MODEL: "transcribe-1"
   }, async base => {
@@ -591,8 +594,39 @@ test("Fish Audio transcription sends recorded audio as multipart audio and retur
   assert.equal(calls.length, 1);
 });
 
-test("capabilities report Fish Audio speech configuration without exposing its API key", async () => {
+test("legacy Fish Audio credentials stay disabled by default", async () => {
+  await withServer({ FISH_API_KEY: "synthetic-fish-secret" }, async base => {
+    const response = await fetch(base + "/api/capabilities");
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.providers.speech.fishAudioConfigured, false);
+    assert.equal(body.providers.speech.premiumTtsConfigured, false);
+    assert.equal(body.providers.speech.premiumSttConfigured, false);
+    assert.equal(body.providers.speech.provider, "browser-fallback");
+    assert.equal(JSON.stringify(body).includes("synthetic-fish-secret"), false);
+  });
+});
+
+test("Fish Audio synthesis stays disabled when a legacy key exists but explicit opt-in is absent", async () => {
+  let upstreamCalls = 0;
+  await withServer({ FISH_API_KEY: "synthetic-fish-secret" }, async base => {
+    const response = await fetch(base + "/api/speech/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Hello ULTRON" })
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "TTS_NOT_CONFIGURED");
+  }, { fetchImpl: async () => {
+    upstreamCalls += 1;
+    throw new Error("Fish Audio must not be contacted without explicit opt-in");
+  }});
+  assert.equal(upstreamCalls, 0);
+});
+
+test("capabilities report explicitly enabled Fish Audio configuration without exposing its API key", async () => {
   await withServer({
+    ULTRON_ENABLE_FISH_AUDIO: "true",
     FISH_API_KEY: "synthetic-fish-secret",
     FISH_AUDIO_VOICE_MODEL_ID: "db9ad6eb7fb84294b2046cf05ef64718"
   }, async base => {

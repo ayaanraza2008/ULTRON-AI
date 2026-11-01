@@ -32,11 +32,15 @@ const FISH_AUDIO_STT_MODELS = new Set(["transcribe-1", "transcribe-1-pro"]);
 
 function fishAudioConfig(env = {}) {
   const apiKey = boundedString(env.FISH_API_KEY, 2000);
+  const explicitlyEnabled = String(env.ULTRON_ENABLE_FISH_AUDIO || "").trim().toLowerCase() === "true";
   const configuredTtsModel = boundedString(env.FISH_AUDIO_TTS_MODEL, 80);
   const configuredSttModel = boundedString(env.FISH_AUDIO_STT_MODEL, 80);
   return {
-    configured: Boolean(apiKey),
-    apiKey,
+    // Free-first safety: a leftover key never activates a third-party provider.
+    // The operator must deliberately opt in with ULTRON_ENABLE_FISH_AUDIO=true.
+    configured: Boolean(apiKey) && explicitlyEnabled,
+    enabled: explicitlyEnabled,
+    apiKey: explicitlyEnabled ? apiKey : "",
     voiceModelId: boundedString(env.FISH_AUDIO_VOICE_MODEL_ID, 160) || FISH_AUDIO_DEFAULT_VOICE_MODEL_ID,
     ttsModel: FISH_AUDIO_TTS_MODELS.has(configuredTtsModel) ? configuredTtsModel : "s2.1-pro-free",
     sttModel: FISH_AUDIO_STT_MODELS.has(configuredSttModel) ? configuredSttModel : "transcribe-1"
