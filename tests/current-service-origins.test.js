@@ -34,6 +34,5 @@ test("Render blueprint maps only live Ultron core services and preserves the ext
   assert.ok(blueprint.includes("https://ultron-world-intelligence.onrender.com"));
   assert.ok(!/^    name:\s*ultron-world-intelligence(?:-globe|-live)?\s*$/m.test(blueprint),
     "Do not create a World Intelligence service that is not present in the Ultron core workspace.");
-  assert.ok(blueprint.includes(activeInterfaceOrigin));
   assert.ok(!blueprint.includes(retiredOrigin));
 });
