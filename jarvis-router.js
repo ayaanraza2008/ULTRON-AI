@@ -626,6 +626,15 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     const { text, voice, speed, play } = req.body || {};
     try {
       const result = await kokoroEngine.synthesize(text, { voice, speed, play });
+      if (result.speechAvailable !== true || result.audioKind !== "speech") {
+        return res.status(503).json({
+          error: {
+            code: "KOKORO_SPEECH_UNAVAILABLE",
+            message: "Kokoro produced diagnostic fallback audio, not intelligible speech. Configure the local ONNX runtime and model files.",
+            audioKind: result.audioKind || "unknown"
+          }
+        });
+      }
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
