@@ -12,7 +12,7 @@ test("OpenRouter vision adapter requires a server-side key",async()=>{
 
 test("OpenRouter vision adapter sends image only to safe free-model route and parses model result",async()=>{
  let captured;
- const env={OPENROUTER_API_KEY:"test-server-key",OPENROUTER_BASE_URL:"https://openrouter.ai/api/v1",ULTRON_VISION_MODELS:"openrouter/free;paid/model"};
+ const env={OPENROUTER_API_KEY:"test-server-key",OPENROUTER_BASE_URL:"https://openrouter.ai/api/v1",ULTRON_VISION_MODELS:"openrouter/free,paid/model"};
  const adapter=createOpenRouterVisionAdapter({env,fetchImpl:async(url,init)=>{
   captured={url,init};
   return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
