@@ -61,6 +61,7 @@ export class CameraPermissionManager {
   constructor(options = {}) {
     this.videoElement = options.videoElement || null;
     this.stream = null;
+    this.ownsStream = true;
     this.status = TRACKING_STATES.DISABLED;
     this.errorMessage = null;
     this.onStatusChange = options.onStatusChange || null;
@@ -74,8 +75,8 @@ export class CameraPermissionManager {
     }
   }
 
-  async requestCamera(constraints = { video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } } }) {
-    if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  async requestCamera(constraints = { video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } } }, existingStream = null) {
+    if (!existingStream && (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)) {
       this.setStatus(TRACKING_STATES.UNAVAILABLE, "WebRTC getUserMedia not supported in this environment");
       throw new Error("Camera API unavailable");
     }
@@ -83,20 +84,28 @@ export class CameraPermissionManager {
     this.setStatus(TRACKING_STATES.INITIALIZING);
 
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (existingStream) {
+        const videoTracks = typeof existingStream.getVideoTracks === "function"
+          ? existingStream.getVideoTracks()
+          : [];
+        if (videoTracks.length > 0 && videoTracks.every(track => track.readyState === "ended")) {
+          throw new Error("The existing camera stream has ended. Re-enable Eyes and try again.");
+        }
+      }
+
+      // Reuse the operator-approved Eyes stream when one already exists. This
+      // avoids a second getUserMedia session and preserves a single camera LED.
+      this.stream = existingStream || await navigator.mediaDevices.getUserMedia(constraints);
+      this.ownsStream = !existingStream;
 
       if (this.videoElement) {
         this.videoElement.srcObject = this.stream;
         this.videoElement.playsInline = true;
         this.videoElement.muted = true;
         await new Promise((resolve) => {
-          this.videoElement.onloadedmetadata = () => {
-            this.videoElement.play().then(resolve).catch(resolve);
-          };
-          // Fallback if metadata already loaded
-          if (this.videoElement.readyState >= 2) {
-            this.videoElement.play().then(resolve).catch(resolve);
-          }
+          const play = () => this.videoElement.play().then(resolve).catch(resolve);
+          this.videoElement.onloadedmetadata = play;
+          if (this.videoElement.readyState >= 2) play();
         });
       }
 
@@ -113,15 +122,17 @@ export class CameraPermissionManager {
   }
 
   stopCamera() {
-    if (this.stream) {
+    const shouldStopTracks = this.ownsStream;
+    if (this.stream && shouldStopTracks) {
       this.stream.getTracks().forEach(track => {
         try { track.stop(); } catch {}
       });
-      this.stream = null;
     }
-    if (this.videoElement) {
+    this.stream = null;
+    if (this.videoElement && shouldStopTracks) {
       this.videoElement.srcObject = null;
     }
+    this.ownsStream = true;
     this.setStatus(TRACKING_STATES.DISABLED);
   }
 
@@ -138,7 +149,8 @@ export class HandTrackingService {
     this.videoElement = options.videoElement || null;
     this.permissionManager = options.permissionManager || new CameraPermissionManager({ videoElement: this.videoElement });
     this.processor = options.processor || new HandLandmarkProcessor();
-    this.mode = "AUTO"; // "MEDIAPIPE" | "FALLBACK_CV" | "AUTO"
+    this.mode = "AUTO"; // "MEDIAPIPE" | "UNAVAILABLE" | "AUTO"
+    this.initializationError = null;
     this.landmarker = null;
     this.isTracking = false;
     this.rafId = null;
@@ -151,46 +163,51 @@ export class HandTrackingService {
   }
 
   async initialize() {
-    if (typeof window === "undefined") return;
-
-    // Try initializing MediaPipe Tasks-Vision Landmarker dynamically if available
-    try {
-      const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm").catch(() => null);
-      if (vision && vision.HandLandmarker && vision.FilesetResolver) {
-        const wasmFileset = await vision.FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-        );
-        // Try GPU delegate first, fallback to CPU
-        try {
-          this.landmarker = await vision.HandLandmarker.createFromOptions(wasmFileset, {
-            baseOptions: {
-              modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-              delegate: "GPU"
-            },
-            runningMode: "VIDEO",
-            numHands: 2
-          });
-          this.mode = "MEDIAPIPE";
-        } catch {
-          this.landmarker = await vision.HandLandmarker.createFromOptions(wasmFileset, {
-            baseOptions: {
-              modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-              delegate: "CPU"
-            },
-            runningMode: "VIDEO",
-            numHands: 2
-          });
-          this.mode = "MEDIAPIPE";
-        }
-      }
-    } catch {
-      // Offline or network unavailable: engage lightweight CV fallback
-      this.mode = "FALLBACK_CV";
+    if (typeof window === "undefined") {
+      this.mode = "UNAVAILABLE";
+      this.initializationError = "Hand tracking requires a browser environment.";
+      return false;
     }
 
-    if (!this.landmarker) {
-      this.mode = "FALLBACK_CV";
-      this._initFallbackCanvas();
+    // Version-pinned MediaPipe code, WASM and model assets are explicitly
+    // allow-listed by the UI proxy CSP. No camera frames are sent to those hosts.
+    try {
+      const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm");
+      if (!vision?.HandLandmarker || !vision?.FilesetResolver) {
+        throw new Error("The MediaPipe hand-landmark module is incomplete.");
+      }
+      const wasmFileset = await vision.FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+      );
+
+      try {
+        this.landmarker = await vision.HandLandmarker.createFromOptions(wasmFileset, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          numHands: 2
+        });
+      } catch (gpuError) {
+        // Integrated GPUs and browser drivers can differ; retry CPU safely.
+        this.landmarker = await vision.HandLandmarker.createFromOptions(wasmFileset, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "CPU"
+          },
+          runningMode: "VIDEO",
+          numHands: 2
+        });
+      }
+
+      this.mode = "MEDIAPIPE";
+      this.initializationError = null;
+      return true;
+    } catch (error) {
+      this.mode = "UNAVAILABLE";
+      this.initializationError = error?.message || "The MediaPipe hand tracker could not be loaded.";
+      return false;
     }
   }
 
@@ -204,11 +221,16 @@ export class HandTrackingService {
     }
   }
 
-  async start() {
+  async start(existingStream = null) {
     if (this.isTracking) return;
-    await this.permissionManager.requestCamera();
+    await this.permissionManager.requestCamera(undefined, existingStream);
     if (!this.landmarker && this.mode === "AUTO") {
       await this.initialize();
+    }
+    if (!this.landmarker || this.mode !== "MEDIAPIPE") {
+      const message = this.initializationError || "MediaPipe hand tracking is unavailable; no approximate gesture detection will be used.";
+      this.permissionManager.setStatus(TRACKING_STATES.UNAVAILABLE, message);
+      throw new Error(message);
     }
     this.isTracking = true;
     this.lastFrameTime = performance.now();
@@ -258,8 +280,9 @@ export class HandTrackingService {
         // Fallback gracefully on frame drop
       }
     } else {
-      // Resilient On-Device Computer Vision Hand Tracking (Skin/Luminance & Centroid Detection)
-      detectedHands = this._detectHandsCVFallback();
+      // Never synthesize landmarks from skin-colour centroids: that would report
+      // invented hand poses. Without MediaPipe, gesture control stays unavailable.
+      detectedHands = [];
     }
 
     // Process landmarks through temporal filter and geometric analysis
@@ -271,47 +294,11 @@ export class HandTrackingService {
   }
 
   _detectHandsCVFallback() {
-    if (!this.offscreenCtx || !this.videoElement) return [];
-    const w = this.offscreenCanvas.width;
-    const h = this.offscreenCanvas.height;
-
-    try {
-      this.offscreenCtx.drawImage(this.videoElement, 0, 0, w, h);
-      const imgData = this.offscreenCtx.getImageData(0, 0, w, h);
-      const data = imgData.data;
-
-      // Fast skin-chrominance detection in YCbCr color space
-      let totalX = 0;
-      let totalY = 0;
-      let skinPixels = 0;
-
-      for (let i = 0; i < data.length; i += 16) { // 4-pixel stride for maximum CPU speed
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
-        // Skin chromaticity heuristic
-        if (r > 60 && g > 40 && b > 20 && r > g && r > b && (r - g) >= 15 && Math.abs(r - g) > 15) {
-          const pixelIndex = i / 4;
-          const x = pixelIndex % w;
-          const y = Math.floor(pixelIndex / w);
-          totalX += x;
-          totalY += y;
-          skinPixels++;
-        }
-      }
-
-      if (skinPixels > 100) {
-        const cx = totalX / skinPixels / w;
-        const cy = totalY / skinPixels / h;
-        // Construct canonical 21-landmark approximation around detected centroid
-        const landmarks = this.processor.generateCanonicalHand(cx, cy, 0.12);
-        return [{ id: 0, landmarks, handedness: "Right" }];
-      }
-    } catch {}
-
+    // Deliberately fail closed. A skin-colour centroid is not a hand landmark
+    // detector and must never be converted into fabricated 21-point gestures.
     return [];
   }
+
 }
 
 // ============================================================================
@@ -1146,6 +1133,7 @@ export class HandGestureCore {
     });
 
     this.stateManager = new InteractionStateManager();
+    this.onGesture = typeof options.onGesture === "function" ? options.onGesture : null;
 
     this.trackingService = new HandTrackingService({
       videoElement: this.permissionManager.videoElement,
@@ -1157,7 +1145,7 @@ export class HandGestureCore {
     this.isEnabled = false;
   }
 
-  async start() {
+  async start(existingStream = null) {
     this.isEnabled = true;
     this.stateManager.update(TRACKING_STATES.INITIALIZING, GESTURE_TYPES.IDLE, 0);
 
@@ -1176,7 +1164,7 @@ export class HandGestureCore {
     }
 
     try {
-      await this.trackingService.start();
+      await this.trackingService.start(existingStream);
       this.stateManager.update(TRACKING_STATES.ACTIVE, GESTURE_TYPES.IDLE, 0);
     } catch (err) {
       this.isEnabled = false;
@@ -1205,6 +1193,9 @@ export class HandGestureCore {
 
     const trackingState = frameData.handsCount > 0 ? TRACKING_STATES.HAND_DETECTED : TRACKING_STATES.ACTIVE;
     this.stateManager.update(trackingState, gestureResult.type, frameData.handsCount);
+    if (typeof this.onGesture === "function") {
+      try { this.onGesture(gestureResult, frameData); } catch { /* UI callbacks must not stop tracking. */ }
+    }
   }
 
   _handlePermissionStatus(status, error) {
