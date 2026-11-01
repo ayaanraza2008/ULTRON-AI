@@ -227,6 +227,7 @@ export function createDevicePairingRouter({
         approved_by: ownerId,
         device_id: deviceId,
         token_hash: tokenHash(token),
+        token_prefix: token.slice(0, 20),
         encrypted_token: encryptToken(token, String(env.ULTRON_DEVICE_SIGNING_SECRET)),
         created_at: new Date(now).toISOString(),
         expires_at: expiresAt
