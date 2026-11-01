@@ -4,8 +4,12 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createServer } from "node:http";
 import { createJarvisRouter } from "../jarvis-router.js";
+import { DeviceHub } from "../integrations/device-hub.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-async function withRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }, userId = "owner-user" } = {}, run) {
+async function withRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }, userId = "owner-user", deviceHub } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, res, next) => {
     if (req.headers["authorization"] || userId) {
@@ -15,7 +19,7 @@ async function withRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-use
     return res.status(401).json({ error: { message: "Unauthorized" } });
   };
   app.use(express.json());
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser }));
+  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, deviceHub }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -196,7 +200,16 @@ test("JARVIS Self-Evolution Routes: approval is bound to exact newContent and ca
 });
 
 test("JARVIS Multi-Device Hub: full pairing lifecycle and x-device-token authorization", async () => {
-  await withRouter({ env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user", ULTRON_DEVICE_PAIRING_ENABLED: "true" } }, async base => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-router-device-hub-"));
+  const deviceHub = new DeviceHub({
+    durableStoragePath: path.join(tmpDir, "paired-devices.json"),
+    env: { ULTRON_DEVICE_SIGNING_SECRET: "unit-test-device-signing-secret-at-least-32-chars" }
+  });
+  try {
+  await withRouter({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user", ULTRON_DEVICE_PAIRING_ENABLED: "true" },
+    deviceHub
+  }, async base => {
     // 1. Request pairing code (companion side)
     const reqRes = await fetch(base + "/api/jarvis/devices/pair/request", {
       method: "POST",
@@ -267,4 +280,7 @@ test("JARVIS Multi-Device Hub: full pairing lifecycle and x-device-token authori
     });
     assert.equal(invalidRes.status, 401);
   });
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
 });
