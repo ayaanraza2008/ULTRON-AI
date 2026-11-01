@@ -485,7 +485,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
 
   // --- Multi-Device Hub & Companion Pairing ---
   router.post("/jarvis/devices/pair/request", express.json(), (req, res) => {
-    const isPairingEnabled = env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN);
+    const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHub.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({
         error: {
@@ -505,6 +505,8 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   });
 
   router.post("/jarvis/devices/pair/approve", requireOwner, express.json(), (req, res) => {
+    const pairingReady = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHub.isPersistent;
+    if (!pairingReady) return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Configure ULTRON_DEVICE_STORE_PATH and a dedicated ULTRON_DEVICE_SIGNING_SECRET (32+ characters) before pairing devices." } });
     const { pairingCode } = req.body || {};
     if (!pairingCode) {
       return res.status(400).json({ error: { code: "MISSING_PAIRING_CODE", message: "Pairing code is required." } });
@@ -517,6 +519,8 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   });
 
   router.post("/jarvis/devices/pair/claim", express.json(), (req, res) => {
+    const pairingReady = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHub.isPersistent;
+    if (!pairingReady) return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Device pairing is unavailable until durable storage and its encryption secret are configured." } });
     const { pairingCode } = req.body || {};
     if (!pairingCode) {
       return res.status(400).json({ error: { code: "MISSING_PAIRING_CODE", message: "Pairing code is required." } });
@@ -530,7 +534,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   });
 
   router.post("/jarvis/devices/pair/verify", requireOwner, express.json(), (req, res) => {
-    const isPairingEnabled = env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN);
+    const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHub.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({
         error: {
@@ -540,7 +544,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
       });
     }
     const { pairingCode } = req.body || {};
-    const verified = deviceHub.verifyPairingCode(pairingCode);
+    const verified = deviceHub.verifyPairingCode(pairingCode, null, req.supabaseUser?.id);
     if (!verified.success) {
       return res.status(400).json({ error: { code: verified.error, message: "Verification failed." } });
     }
@@ -548,7 +552,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   });
 
   router.get("/jarvis/devices", requireOwner, (_req, res) => {
-    const isPairingEnabled = env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN);
+    const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHub.isPersistent;
     if (!isPairingEnabled) {
       return res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
     }
