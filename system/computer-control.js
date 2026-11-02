@@ -264,44 +264,95 @@ export class WindowsComputerControl {
   }
 
   /**
-   * Safe Clipboard Access: Write text to system clipboard.
+   * Run a fixed PowerShell executable with an encoded script. The script is
+   * passed as one argv value (never through cmd.exe); dynamic clipboard text
+   * is separately UTF-8/base64 encoded before it is embedded in the script.
+   */
+  async runClipboardPowerShell(script) {
+    const encodedScript = Buffer.from(String(script), "utf16le").toString("base64");
+    return execFileAsync("powershell.exe", [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodedScript
+    ], { timeout: 3000, maxBuffer: 64 * 1024, windowsHide: true });
+  }
+
+  /**
+   * Safe Clipboard Access: Write text to the OS clipboard when supported.
+   * In-memory fallback is explicitly reported as unavailable, never success.
    */
   async setClipboardText(text) {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
     const sanitized = String(text || "");
     this._inMemoryClipboard = sanitized;
+    const byteLength = Buffer.byteLength(sanitized);
+
     if (process.platform !== "win32") {
-      this.recordAction("SET_CLIPBOARD", "simulated", "mock_success");
-      return { success: true, byteLength: Buffer.byteLength(sanitized), simulated: true };
+      this.recordAction("SET_CLIPBOARD", "system_unavailable", "not_available");
+      return {
+        success: false,
+        available: false,
+        byteLength,
+        simulated: true,
+        fallbackStored: true,
+        errorCode: "SYSTEM_CLIPBOARD_UNAVAILABLE"
+      };
     }
+
     try {
-      const escaped = sanitized.replace(/'/g, "''");
-      const psCommand = `powershell -NoProfile -Command "Set-Clipboard -Value '${escaped}'"`;
-      await execAsync(psCommand, { timeout: 3000 });
+      const encodedText = Buffer.from(sanitized, "utf8").toString("base64");
+      const script = `$ErrorActionPreference = 'Stop'; $value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedText}')); Set-Clipboard -Value $value`;
+      await this.runClipboardPowerShell(script);
       this.recordAction("SET_CLIPBOARD", "windows_clipboard", "success");
-      return { success: true, byteLength: Buffer.byteLength(sanitized) };
-    } catch (err) {
-      this.recordAction("SET_CLIPBOARD", "in_memory_fallback", "success");
-      return { success: true, byteLength: Buffer.byteLength(sanitized), fallback: true };
+      return { success: true, available: true, byteLength, source: "system" };
+    } catch {
+      this.recordAction("SET_CLIPBOARD", "windows_clipboard", "failed");
+      return {
+        success: false,
+        available: false,
+        byteLength,
+        fallback: true,
+        fallbackStored: true,
+        source: "in_memory",
+        errorCode: "CLIPBOARD_WRITE_FAILED"
+      };
     }
   }
 
   /**
-   * Safe Clipboard Access: Read text from system clipboard.
+   * Safe Clipboard Access: Read from the OS clipboard; fallback reads are
+   * explicitly identified and are not represented as a system clipboard read.
    */
   async getClipboardText() {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
+
     if (process.platform !== "win32") {
-      this.recordAction("GET_CLIPBOARD", "simulated", "mock_success");
-      return { text: this._inMemoryClipboard || "mock_clipboard_content", simulated: true };
+      this.recordAction("GET_CLIPBOARD", "system_unavailable", "not_available");
+      return {
+        success: false,
+        available: false,
+        text: this._inMemoryClipboard,
+        simulated: true,
+        source: "in_memory",
+        errorCode: "SYSTEM_CLIPBOARD_UNAVAILABLE"
+      };
     }
+
     try {
-      const { stdout } = await execAsync('powershell -NoProfile -Command "Get-Clipboard"', { timeout: 3000 });
+      const { stdout } = await this.runClipboardPowerShell(
+        "$ErrorActionPreference = 'Stop'; Get-Clipboard -Raw | Write-Output"
+      );
+      const text = String(stdout || "").replace(/\\r?\\n$/, "");
       this.recordAction("GET_CLIPBOARD", "windows_clipboard", "success");
-      return { text: stdout ? stdout.trim() : (this._inMemoryClipboard || "") };
-    } catch (err) {
-      this.recordAction("GET_CLIPBOARD", "in_memory_fallback", "success");
-      return { text: this._inMemoryClipboard || "", fallback: true };
+      return { success: true, available: true, text, source: "system" };
+    } catch {
+      this.recordAction("GET_CLIPBOARD", "windows_clipboard", "failed");
+      return {
+        success: false,
+        available: false,
+        text: this._inMemoryClipboard,
+        fallback: true,
+        source: "in_memory",
+        errorCode: "CLIPBOARD_READ_FAILED"
+      };
     }
   }
 }
