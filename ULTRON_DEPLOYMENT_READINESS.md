@@ -30,6 +30,14 @@ PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconc
   - World Intelligence (PR): [Run 41460327214](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327214) (34s)
   - World Intelligence (Push): [Run 41460327214](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327214) (36s)
 
+## Independently checked external platform state (2026-11-02)
+
+- Supabase project `ULTRON-AI` (`opdjfhwepmcprbqojpat`) is `ACTIVE_HEALTHY`, but its applied migration ledger currently ends at `20261027185203` (`private_document_storage`). The candidate migration `20261101180000_durable_paired_devices` is **not applied**.
+- Supabase Security Advisor currently reports `auth_leaked_password_protection` as **WARN: disabled**. This is a live platform finding; a clean repository security script does not clear it.
+- Render workspace `Ultron core` contains the four expected services. The backend, browser bridge, and REA gateway point to `main`; `ultron-core-interface` still points to `feature/ultron-live-core-interface-20261029`, not `main`.
+- The latest observed live Render deploys for backend, browser bridge and REA gateway are on `b00c2e81`; the interface is on `68b04264`. PR #441 head `a5d225b5` is not deployed.
+- These are read-only observations. No migration, setting, environment variable, Blueprint sync, merge, or deployment was changed.
+
 ## Remaining release gates (Owner Authorization Boundary)
 
 1. **Owner PR Merge Authorization:** Merge PR #441 into `main` using `gh pr merge 441 --merge`.
@@ -42,4 +50,4 @@ PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconc
 
 Keep the free-first configuration. Do not upgrade Render/Supabase, add paid APIs, change production secrets, run production writes, apply the Supabase migration, merge or deploy without explicit approval. Do not paste secrets into chat or source control.
 
-No unapproved merge, Render sync/deployment, plan upgrade, production secret mutation or Supabase migration was performed.
+No unapproved merge, Render sync/deployment, plan upgrade, production secret mutation or Supabase migration was performed. The connected-platform findings above supersede any older checklist rows that imply production configuration is already complete.
