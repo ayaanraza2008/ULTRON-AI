@@ -14,7 +14,7 @@
 
 | Check | Result |
 |---|---|
-| Node suite | **1,258 total — 1,257 pass, 0 fail, 1 skipped** (`node --test`, 60.4s) |
+| Node suite | **1,260 total — 1,259 pass, 0 fail, 1 skipped** (`node --test`, 54.4s) |
 | Python suite | **17 total — 15 pass, 0 fail, 2 skipped** (`python tests/test_harness2.py`, 3.9s) |
 | Syntax integrity | **319 / 319 files clean** (`node scripts/check-syntax.mjs`) |
 | ULTRON runtime npm audit | **0 reported vulnerabilities** |

@@ -32,7 +32,7 @@
 
 ## Latest automation evidence
 
-- **Node Test Suite:** 1,258 tests — 1,257 passed, 0 failed, 1 skipped (`tests/supabase-isolation.e2e.test.js`).
+- **Node Test Suite:** 1,260 tests — 1,259 passed, 0 failed, 1 skipped (`tests/supabase-isolation.e2e.test.js`).
 - **Python Test Suite:** 17 tests — 15 passed, 0 failed, 2 skipped (`tests/test_harness2.py`).
 - **Syntax Check:** 319 / 319 files clean (`scripts/check-syntax.mjs`).
 - **Security Audit:** 0 vulnerabilities, 0 risks, 0 secrets (`npm run security:report`).

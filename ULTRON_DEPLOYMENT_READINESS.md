@@ -20,7 +20,7 @@ PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconc
 
 ## Latest CI evidence
 
-- **Node.js Test Runner:** 1,258 total — **1,257 passed, 0 failed, 1 skipped** (`node --test`, 60.4s).
+- **Node.js Test Runner:** 1,260 total — **1,259 passed, 0 failed, 1 skipped** (`node --test`, 54.4s).
 - **Python Test Harness:** 17 total — **15 passed, 0 failed, 2 skipped** (`python tests/test_harness2.py`, 3.9s).
 - **Syntax Check:** **319 / 319 files clean** (`node scripts/check-syntax.mjs`).
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`).

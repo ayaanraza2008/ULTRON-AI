@@ -194,6 +194,18 @@ export class BrainRouter {
       }
     }
 
+if (this.env.CEREBRAS_API_KEY) {
+      extraProviders.push({
+        name: "cerebras-cloud",
+        type: "cloud_ultra_fast",
+        model: taskComplexity.tier === "coding" ? "llama-3.3-70b" : "llama3.1-8b",
+        baseUrl: this.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
+        apiKeyEnv: "CEREBRAS_API_KEY",
+        supportsTools: true,
+        circuitOpen: this.isCircuitOpen("cerebras-cloud")
+      });
+    }
+
         const dshProvider = {
       name: "dsh-god-gateway",
       type: "dsh_god_inference",
@@ -212,6 +224,9 @@ export class BrainRouter {
     } else if (taskComplexity.preferredProvider === "groq" && this.env.GROQ_API_KEY) {
       const groq = extraProviders.find(p => p.name === "groq-cloud");
       candidates = [groq, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "groq-cloud"), localCpu];
+    } else if (taskComplexity.preferredProvider === "cerebras" && this.env.CEREBRAS_API_KEY) {
+      const cerebras = extraProviders.find(p => p.name === "cerebras-cloud");
+      candidates = [cerebras, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "cerebras-cloud"), localCpu];
     } else if (taskComplexity.preferredProvider === "dsh" || taskComplexity.preferredProvider === "dsh-god") {
       candidates = [dshProvider, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "dsh-god-gateway"), localCpu];
     } else {
@@ -351,7 +366,11 @@ export class BrainRouter {
         }
 
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || "";
+        const rawContent = data.choices?.[0]?.message?.content;
+        if (typeof rawContent !== "string" || !rawContent.trim()) {
+          throw new Error(`Provider ${provider.name} returned an empty completion`);
+        }
+        const content = rawContent.trim();
         const latencyMs = Date.now() - startTime;
         this.recordAttempt(provider.name, true, latencyMs);
 

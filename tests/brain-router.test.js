@@ -137,3 +137,43 @@ test("BrainRouter: ignores Gemini provider if key is an internal bearer token on
   const chain = routerWithInternalToken.selectProviderChain({ tier: "multimodal" });
   assert.ok(!chain.some(p => p.name === "gemini-flash"));
 });
+
+test("BrainRouter: prioritizes Cerebras when CEREBRAS_API_KEY is configured", () => {
+  const routerWithCerebras = new BrainRouter({
+    env: { CEREBRAS_API_KEY: "csk-mock-key-123" }
+  });
+  const chain = routerWithCerebras.selectProviderChain({ tier: "routine", preferredProvider: "cerebras" });
+  assert.equal(chain[0].name, "cerebras-cloud");
+  assert.equal(chain[0].apiKeyEnv, "CEREBRAS_API_KEY");
+});
+
+test("BrainRouter: fails over to next candidate when a provider returns an empty completion", async () => {
+  const router = new BrainRouter({
+    env: { OPENROUTER_API_KEY: "mock_test_key" }
+  });
+
+  let callCount = 0;
+  const mockFetchEmptyFailover = async (url, options) => {
+    callCount += 1;
+    if (callCount === 1) {
+      // Primary returns HTTP 200 with empty choices
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "   " } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    // Secondary recovers
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "Recovered from empty completion successfully." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const res = await router.executeInference({
+    prompt: "Test empty response failover",
+    fetchImpl: mockFetchEmptyFailover
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.provider, "openrouter-secondary");
+  assert.equal(res.fallbackCount, 1);
+  assert.ok(res.content.includes("Recovered from empty completion"));
+});
