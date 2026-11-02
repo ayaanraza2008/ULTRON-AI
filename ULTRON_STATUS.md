@@ -18,10 +18,10 @@
 | Syntax integrity | **332 / 332 files clean** (`node scripts/check-syntax.mjs`) |
 | ULTRON runtime npm audit | **0 reported vulnerabilities** |
 | Configured repository security gate | **0 confirmed vulnerabilities; 0 risks; 0 secrets (PASSED)** |
-| Windows Companion CI | **x64 compile, standalone publish and artifact upload passed** ([Run 41464829443](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829443)) |
-| Android Companion CI | **Debug APK compile and artifact upload passed** ([Run 41464829198](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829198)) |
-| Node 20/22 Test Matrix CI | **Unit & integration test suites passed** ([Run 41464816272](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464816272) & [Run 41464829315](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829315)) |
-| World Intelligence pinned build | **Passed** ([Run 41464816272](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464816272) & [Run 41464829315](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829315)); static iframe container isolated from backend runtime |
+| Windows Companion CI | **x64 compile, standalone publish and artifact upload passed** ([Run 41468262403](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262403)) |
+| Android Companion CI | **Debug APK compile and artifact upload passed** ([Run 41468262422](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262422)) |
+| Node 20/22 Test Matrix CI | **Unit & integration test suites passed** ([Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) & [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510)) |
+| World Intelligence pinned build | **Passed** ([Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) & [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510)); static iframe container isolated from backend runtime |
 
 Evidence on prior code commit `a5d225b5`: **6 / 6 GitHub Actions checks GREEN**. Subsequent documentation-only commits trigger a new, smaller CI set; verify its current result before release.
 
