@@ -45,7 +45,7 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 | **7. Spatial Intelligence Engine (Diorama)**| `spatial/` & `public/spatial-viewer.js` | `node --test tests/spatial-*.test.js` | **18/18 PASS** | **LIVE (CPU Fallback)** | Full zero-shot CUDA inference requires remote GPU (`DIORAMA_REMOTE_ENDPOINT`) | 2026-11-02 20:13:52 |
 | **8. Durable DeviceHub & Pairing** | `system/device-hub.js` & `jarvis-router.js` | `node --test tests/durable-device-hub.test.js tests/device-pairing-router.test.js` | **15/15 PASS** | **LIVE OPERATIONAL** | Local storage & HMAC signing verified; Supabase migration ready | 2026-11-02 20:31:36 |
 | **9. Browser & Research Sandbox** | `network-safety.js` & `agent-runtime.js` | `node --test tests/network-safety.test.js tests/browser-use-model-proxy.test.js` | **28/28 PASS** | Software Verified | SSRF & DNS pinning verified; live research requires `TAVILY_API_KEY` | 2026-11-02 20:31:15 |
-| **10. Companion Builds (Win/Android)** | `android/` & `windows/` | GitHub Actions CI Runs 41464829198 & 41464829443 | **2/2 PASS** | Build Verified | Standalone x64 & APK binaries built in CI; physical install pending | 2026-11-02 20:16:36 |
+| **10. Companion Builds (Win/Android)** | `android/` & `windows/` | GitHub Actions CI Runs 41468262422 & 41468262403 | **2/2 PASS** | Build Verified | Standalone x64 & APK binaries built in CI; physical install pending | 2026-11-02 20:16:36 |
 | **11. Frontend PWA & Core Proxy** | `public/` & `core-ui-proxy.mjs` | `node --test tests/core-ui.test.js` | **24/24 PASS** | **LIVE OPERATIONAL** | Standalone PWA, service worker shell, and 502 cold-start retry verified | 2026-11-02 20:31:41 |
 | **12. Production Blueprint & Rollback** | `render.yaml` & `supabase/migrations/` | `node scripts/check-syntax.mjs` | **332/332 CLEAN** | **LOCKED (Ready)** | Blueprint reconciled to 4 services; rollback migration ready | 2026-11-02 20:13:24 |
 
@@ -93,12 +93,12 @@ Summary:
 ```
 
 ### GitHub Actions CI Verification (6 / 6 Green)
-- **`build-android-companion`:** [Run 41464829198](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829198) — **PASS** (46s)
-- **`build-windows-companion`:** [Run 41464829443](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829443) — **PASS** (1m 16s)
-- **`test` (Push Node 20/22):** [Run 41464816272](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464816272) — **PASS** (1m 21s)
-- **`test` (PR Node 20/22):** [Run 41464829315](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829315) — **PASS** (1m 18s)
-- **`world-intelligence-build` (Push):** [Run 41464816272](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464816272) — **PASS** (40s)
-- **`world-intelligence-build` (PR):** [Run 41464829315](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41464829315) — **PASS** (53s)
+- **`build-android-companion`:** [Run 41468262422](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262422) — **PASS** (46s)
+- **`build-windows-companion`:** [Run 41468262403](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262403) — **PASS** (1m 16s)
+- **`test` (Push Node 20/22):** [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) — **PASS** (1m 21s)
+- **`test` (PR Node 20/22):** [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510) — **PASS** (1m 18s)
+- **`world-intelligence-build` (Push):** [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) — **PASS** (40s)
+- **`world-intelligence-build` (PR):** [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510) — **PASS** (53s)
 
 ---
 
