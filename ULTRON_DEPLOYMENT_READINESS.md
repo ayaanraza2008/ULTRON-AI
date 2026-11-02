@@ -14,7 +14,7 @@
 | `ultron-browser-use-core` | `main` | Exact service name; Python FastAPI runtime; shared token via `fromService` | `/health` |
 | `ultron-rea-gateway` | `main` | Exact service name; Node 24.22.1; generated `REA_MCP_TOKEN` | `/healthz` |
 
-PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconciled to the four live service names and is not synced. Do not sync before reviewing the resulting Render diff and confirming existing secret/branch settings.
+PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconciled to the four live service names and is not synced. The live `ultron-core-interface` service still tracks `feature/ultron-live-core-interface-20261029`, while the candidate Blueprint specifies `main`; resolve this branch change only after reviewing the Render diff and confirming existing secret settings.
 
 ## Latest CI evidence
 
