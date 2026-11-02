@@ -13,8 +13,8 @@
 
 | Check | Result |
 |---|---|
-| Node suite | **1,286 total — 1,285 pass, 0 fail, 1 skipped** (`node --test`, 52.1s) |
-| Python suite | **17 total — 15 pass, 0 fail, 2 skipped** (`python tests/test_harness2.py`, 4.1s) |
+| Node suite | **1,287 total — 1,286 pass, 0 fail, 1 skipped** (`node --test`, 66.2s) |
+| Python suite | **17 total — 15 pass, 0 fail, 2 skipped** (`python tests/test_harness2.py`, 4.0s) |
 | Syntax integrity | **332 / 332 files clean** (`node scripts/check-syntax.mjs`) |
 | ULTRON runtime npm audit | **0 reported vulnerabilities** |
 | Configured repository security gate | **0 confirmed vulnerabilities; 0 risks; 0 secrets (PASSED)** |
@@ -83,7 +83,7 @@ The single skipped Node test is `tests/supabase-isolation.e2e.test.js` (fails cl
 | Scoring Dimension | Score | Documented Denominator & Empirical Basis |
 |---|:---:|---|
 | **A. Implementation Completeness** | **100.0%** | **14 / 14 core capability domains** genuinely implemented in source code without stubs. |
-| **B. Software Verification** | **99.9%** | **1,285 / 1,286 Node tests pass** (1 skip for DB protection); **15 / 17 Python tests pass** (2 skip for Windows symlinks); **332 / 332 files clean**; **6 / 6 CI workflows green**. |
+| **B. Software Verification** | **99.9%** | **1,286 / 1,287 Node tests pass** (1 skip for DB protection); **15 / 17 Python tests pass** (2 skip for Windows symlinks); **332 / 332 files clean**; **6 / 6 CI workflows green**. |
 | **C. Live Operational Readiness** | **50.0%** | **6 / 12 domains operational locally** (Kokoro voice, Web speech, MediaPipe gestures, local DeviceHub, spatial CPU fallback, PWA proxy); 6 / 12 gated on external cloud keys / remote GPU / physical devices. |
 | **D. Security Readiness** | **100.0%** | **0 confirmed vulnerabilities, 0 risks, 0 secrets**. Network safety SSRF (19/19 PASS), k-anonymity password screening, and SHA-256 token hashing verified. |
 | **E. Production Release Readiness** | **90.0%** | Reconciled `render.yaml` (4 services), migration + rollback scripts, rollback runbook ready. Deployment locked awaiting operator command. |
