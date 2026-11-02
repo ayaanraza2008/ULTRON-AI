@@ -340,7 +340,7 @@ export class WindowsComputerControl {
       const { stdout } = await this.runClipboardPowerShell(
         "$ErrorActionPreference = 'Stop'; Get-Clipboard -Raw | Write-Output"
       );
-      const text = String(stdout || "").replace(/\\r?\\n$/, "");
+      const text = String(stdout || "").replace(/\r?\n$/, "");
       this.recordAction("GET_CLIPBOARD", "windows_clipboard", "success");
       return { success: true, available: true, text, source: "system" };
     } catch {
