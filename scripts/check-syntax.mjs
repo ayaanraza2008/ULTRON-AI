@@ -328,7 +328,20 @@ const FILES_TO_CHECK = [
   "tests/hand-gesture-core.test.js",
   "core-ui-proxy.mjs",
   "tests/core-ui.test.js",
-  "tests/jarvis-device-routes.test.js"
+  "tests/jarvis-device-routes.test.js",
+  "spatial/hardware-detector.js",
+  "tests/spatial-hardware-detector.test.js",
+  "spatial/scene-graph.js",
+  "tests/spatial-scene-graph.test.js",
+  "spatial/geometry-converter.js",
+  "tests/spatial-geometry-converter.test.js",
+  "spatial/diorama-adapter.js",
+  "tests/spatial-diorama-adapter.test.js",
+  "spatial/spatial-engine.js",
+  "tests/spatial-engine.test.js",
+  "spatial/spatial-router.js",
+  "tests/spatial-router.test.js",
+  "public/spatial-viewer.js"
 ];
 
 let checked = 0;

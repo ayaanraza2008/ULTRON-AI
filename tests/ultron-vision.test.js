@@ -61,3 +61,12 @@ f 5 6 7 8
  assert.equal(result.integrity,"geometry_parsed_topology_unverified");assert.equal(result.topologyVerified,false);
  assert.throws(()=>new UltronVision().process3DAsset("mesh","gltf"),e=>e.code==="UNSUPPORTED_3D_FORMAT");
 });
+
+
+test("UltronVision reconstruct3DSpatialScene creates a spatial job cleanly", async () => {
+  const vision = new UltronVision();
+  const validPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const job = await vision.reconstruct3DSpatialScene(validPng, { userId: "vision-test-user" });
+  assert.ok(job.jobId.startsWith("spat-job-"));
+  assert.ok(["QUEUED", "PROCESSING"].includes(job.status));
+});

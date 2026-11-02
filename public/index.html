@@ -62,6 +62,7 @@
         <button id="drawer-close" class="drawer-close" type="button" aria-label="Close features panel">×</button>
       </div>
       <nav class="drawer-nav" aria-label="ULTRON features">
+        <button type="button" data-drawer-view="spatial"><span class="nav-icon">⬡</span><span><strong>Spatial World Model</strong><small>Diorama 3D room & object modeling</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="eyes"><span class="nav-icon">◎</span><span><strong>Eyes / Camera</strong><small>See and analyze your view</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-action="voice"><span class="nav-icon">∿</span><span><strong>Voice mode</strong><small>Listen and respond aloud</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="voice-quality"><span class="nav-icon">♫</span><span><strong>Voice quality & pronunciation</strong><small>Hindi + English · male voice</small></span><span class="nav-chevron">›</span></button>
@@ -99,6 +100,43 @@
       </div>
       <label class="live-observe-toggle"><input id="camera-live-observe" type="checkbox" disabled><span><strong>Live observation</strong><small>Analyze one frame every 12 seconds while enabled</small></span></label>
       <p class="camera-privacy-note">Hand tracking runs locally in this browser after you enable it. The pinned MediaPipe runtime and model are fetched from their listed hosts; gesture camera frames are not uploaded. Separate Eyes analysis sends a selected frame only when you request analysis or enable Live observation. Video is not stored by this interface.</p>
+    </section>
+
+    <section id="spatial-panel" class="spatial-panel" aria-label="ULTRON spatial world model" hidden>
+      <div class="spatial-topline">
+        <span class="spatial-status-dot"></span>
+        <span id="spatial-status">SPATIAL WORLD MODEL — DIORAMA</span>
+        <button id="spatial-close" type="button" aria-label="Close spatial viewer">×</button>
+      </div>
+      <div class="spatial-canvas-wrapper">
+        <canvas id="spatial-canvas" width="640" height="360"></canvas>
+        <div id="spatial-overlay-hud" class="spatial-overlay-hud">
+          <div class="spatial-hud-row">
+            <span id="spatial-hw-badge" class="spatial-badge">RYZEN 7 5700U · CPU BASELINE</span>
+            <span id="spatial-stage-badge" class="spatial-badge">READY</span>
+          </div>
+          <div id="spatial-selected-object" class="spatial-selected-object" hidden>
+            <b id="spatial-obj-name">Table</b>
+            <span id="spatial-obj-pos">Pos: X:0m Y:0.4m Z:2.4m</span>
+            <span id="spatial-obj-dim">Dim: 1.4×0.75×0.8m</span>
+            <span id="spatial-obj-support">Supported by: Floor</span>
+          </div>
+        </div>
+      </div>
+      <div class="spatial-controls">
+        <button id="spatial-upload-btn" type="button" class="spatial-btn">UPLOAD IMAGE</button>
+        <button id="spatial-camera-snap-btn" type="button" class="spatial-btn">CAPTURE FROM EYES</button>
+        <button id="spatial-view-iso" type="button" class="spatial-btn">ISO VIEW</button>
+        <button id="spatial-view-top" type="button" class="spatial-btn">TOP-DOWN</button>
+        <button id="spatial-export-obj" type="button" class="spatial-btn" disabled>EXPORT OBJ</button>
+        <button id="spatial-export-gltf" type="button" class="spatial-btn" disabled>EXPORT GLTF</button>
+      </div>
+      <input id="spatial-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      <div id="spatial-query-bar" class="spatial-query-bar">
+        <input id="spatial-query-input" type="text" placeholder="Ask spatial question (e.g., 'Where is the desk?', 'How many chairs?')..." disabled>
+        <button id="spatial-query-btn" type="button" disabled>ASK</button>
+      </div>
+      <div id="spatial-query-answer" class="spatial-query-answer" hidden></div>
     </section>
     <section class="interaction-dock" aria-label="Choose how to interact with ULTRON">
       <button id="voice-mode" class="mode-card voice-card" type="button" aria-pressed="false">
@@ -155,5 +193,6 @@
   </section>
 
   <footer class="bottomline"><span>ULTRON · AUTONOMOUS INTERFACE</span><span class="footer-separator">/</span><span id="field-mode">GPU PARTICLE FIELD · INITIALIZING</span><span class="bottomline-right">VOICE · TEXT · HOLOGRAPHIC TASKS</span></footer>
+  <script type="module" src="/spatial-viewer.js"></script>
 </body>
 </html>

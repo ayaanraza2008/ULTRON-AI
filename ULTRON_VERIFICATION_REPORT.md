@@ -11,10 +11,10 @@
 
 | Test Suite / Gate | Test Runner & Scope | Total Tests | Passed | Failed | Skipped | Status | Duration |
 |---|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Node.js Test Suite** | `node --test` (13 test suites) | **1,266** | **1,265** | **0** | **1** | **PASS** | 86.1s |
-| **Python Test Harness** | `python tests/test_harness2.py` | **17** | **15** | **0** | **2** | **PASS** | 4.3s |
-| **Syntax Verification** | `node scripts/check-syntax.mjs` | **319 files** | **319** | **0** | **0** | **CLEAN** | 1.8s |
-| **Security Quality Gate** | `node scripts/security-report.mjs` | **62,560 LOC / 94 deps** | **0 findings** | **0** | **0** | **PASSED** | 2.5s |
+| **Node.js Test Suite** | `node --test` (19 test suites) | **1,286** | **1,285** | **0** | **1** | **PASS** | 52.1s |
+| **Python Test Harness** | `python tests/test_harness2.py` | **17** | **15** | **0** | **2** | **PASS** | 4.1s |
+| **Syntax Verification** | `node scripts/check-syntax.mjs` | **332 files** | **332** | **0** | **0** | **CLEAN** | 1.8s |
+| **Security Quality Gate** | `node scripts/security-report.mjs` | **64,800 LOC / 94 deps** | **0 findings** | **0** | **0** | **PASSED** | 2.5s |
 | **Android Companion CI** | GitHub Actions (`build-android-companion`) | Debug APK build | **PASS** | 0 | 0 | **PASS** | 54s |
 | **Windows Companion CI** | GitHub Actions (`build-windows-companion`) | x64 binary build | **PASS** | 0 | 0 | **PASS** | 52s |
 | **Push Matrix CI (Node 20/22)** | GitHub Actions (`test`) | Unit & integration tests | **PASS** | 0 | 0 | **PASS** | 1m 11s |
@@ -40,7 +40,7 @@
 - **Potential Risks / Warnings:** 0
 - **Informational Findings:** 0
 - **Quality Gate Result:** **PASSED**
-- **SAST:** 194 files scanned, 62,560 lines analyzed. Max CVSS: 0.0.
+- **SAST:** 207 files scanned, 64,800 lines analyzed. Max CVSS: 0.0.
 - **Dependencies (SCA):** 94 dependencies audited via `npm audit`. Vulnerabilities: 0.
-- **Secret Detection:** 372 files and 30 git commits scanned with zero-retention SHA-256 masking. Leaked secrets: 0.
+- **Secret Detection:** 385 files and 31 git commits scanned with zero-retention SHA-256 masking. Leaked secrets: 0.
 - **Third-Party Upstream Isolation:** Pinned upstream repository `bilawalsidhu/gods-eye-view` (`7be5937`) contains 5 build-time devDependency advisories. It compiles purely static HTML/CSS/JS assets running in an isolated iframe container with strict CSP (`frame-ancestors 'self'`) and sanitized `postMessage` validation in `integrations/world-intelligence-bridge.js`. Zero build dependencies run in the ULTRON backend server.

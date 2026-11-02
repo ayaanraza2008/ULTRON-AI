@@ -1852,6 +1852,17 @@
       showDrawerWelcome();
       return;
     }
+    if (name === "spatial") {
+      const spatialPanel = document.getElementById("spatial-panel");
+      if (spatialPanel) spatialPanel.hidden = false;
+      drawerHeading("Spatial World Model", "Zero-shot single-image 3D indoor scene reconstruction via Diorama (arXiv:2411.19492).");
+      drawerCard("3D World Modeling Engine", "Decomposes single-view camera or uploaded frames into 3D bounding geometry, room architecture, CAD shape retrieval, and collision-optimized layouts.", "DIORAMA 3D", "ready");
+      drawerCard("Execution Architecture", "Hardware-aware execution: runs on CPU geometric fallback for Ryzen 7 APUs, or dispatches to isolated GPU workers when CUDA or remote endpoints are configured.", "ISOLATED PIPELINE");
+      drawerButton("OPEN 3D SPATIAL VIEWER", () => {
+        if (spatialPanel) spatialPanel.hidden = false;
+      });
+      return;
+    }
     if (name === "eyes") {
       ui.cameraPanel.hidden = false;
       drawerHeading("ULTRON Eyes", "Camera access is requested only after you press Enable Eyes. Frame analysis uses the backend's configured vision model.");

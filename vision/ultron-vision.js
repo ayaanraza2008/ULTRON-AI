@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import { ImageStudioEngine } from "../media/image-studio-engine.js";
 import { VideoEditingEngine } from "../media/video-editing-engine.js";
 import { openRouterVisionMultimodalRunner, openRouterVisionObjectDetector } from "./openrouter-vision-adapter.js";
+import { spatialIntelligenceEngine } from "../spatial/spatial-engine.js";
 
 export const VISION_SUPPORTED_FORMATS=["image/png","image/jpeg","image/webp","image/gif"];
 const DEFAULT_MAX_IMAGE_BYTES=5*1024*1024;
@@ -108,6 +109,12 @@ export class UltronVision{
   return {format:normalizedFormat,vertexCount:n,faceCount:faces.length,boundingBox:{min:{x:minX,y:minY,z:minZ},max:{x:maxX,y:maxY,z:maxZ}},
    dimensions,boundingVolume:Number((dimensions.dx*dimensions.dy*dimensions.dz).toFixed(4)),vertexCentroid,
    integrity:"geometry_parsed_topology_unverified",topologyVerified:false,processedAt:new Date().toISOString()};
+ }
+ async reconstruct3DSpatialScene(imageData, options = {}) {
+  const meta = this.inspectImageMetadata(imageData);
+  const engine = options.spatialEngine || spatialIntelligenceEngine;
+  const userId = options.userId || "anonymous-spatial-user";
+  return await engine.createJob(userId, imageData, { ...options, imageMeta: meta });
  }
 }
 export const ultronVision=new UltronVision();

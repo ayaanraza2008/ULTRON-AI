@@ -2,8 +2,6 @@
 
 **Audit date:** 2026-11-02 (Asia/Kolkata)  
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED  
-**Current branch head:** `e12ba0808cf7057be0ca80b5cb796f5b9d31d451`  
-**Last green code/test checkpoint:** `e12ba0808cf7057be0ca80b5cb796f5b9d31d451`  
 **Target Render workspace:** **Ultron core**  
 **Decision:** **READY FOR OWNER RELEASE AUTHORIZATION — DEPLOYMENT LOCKED UNTIL APPROVED**
 
@@ -20,17 +18,17 @@ PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconc
 
 ## Latest CI evidence
 
-- **Node.js Test Runner:** 1,260 total — **1,259 passed, 0 failed, 1 skipped** (`node --test`, 54.4s).
-- **Python Test Harness:** 17 total — **15 passed, 0 failed, 2 skipped** (`python tests/test_harness2.py`, 3.9s).
-- **Syntax Check:** **319 / 319 files clean** (`node scripts/check-syntax.mjs`).
+- **Node.js Test Runner:** 1,286 total — **1,285 passed, 0 failed, 1 skipped** (`node --test`, 52.1s).
+- **Python Test Harness:** 17 total — **15 passed, 0 failed, 2 skipped** (`python tests/test_harness2.py`, 4.1s).
+- **Syntax Check:** **332 / 332 files clean** (`node scripts/check-syntax.mjs`).
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`).
 - **GitHub Actions (All 6 Jobs Passed):**
-  - Android Companion: [Run 41445630855](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41445630855) (50s)
-  - Windows Companion: [Run 41445630877](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41445630877) (1m 2s)
-  - Backend Unit/E2E (PR): [Run 41445630969](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41445630969) (1m 14s)
-  - Backend Unit/E2E (Push): [Run 41445623639](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41445623639) (58s)
-  - World Intelligence (PR): [Run 41445630969](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41445630969) (39s)
-  - World Intelligence (Push): [Run 41445623639](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41445623639) (46s)
+  - Android Companion: [Run 41460327279](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327279) (54s)
+  - Windows Companion: [Run 41460327281](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327281) (52s)
+  - Backend Unit/E2E (PR): [Run 41460327214](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327214) (59s)
+  - Backend Unit/E2E (Push): [Run 41460327214](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327214) (1m 11s)
+  - World Intelligence (PR): [Run 41460327214](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327214) (34s)
+  - World Intelligence (Push): [Run 41460327214](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41460327214) (36s)
 
 ## Remaining release gates (Owner Authorization Boundary)
 
@@ -38,7 +36,7 @@ PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconc
 2. **Owner Render Blueprint Sync:** In Render Dashboard -> Workspace `Ultron core` -> Blueprints, review the diff and apply candidate `render.yaml`.
 3. **Owner Supabase Migration:** Apply `supabase/migrations/20261101180000_durable_paired_devices.sql` to Supabase production SQL Editor.
 4. **Owner Supabase Auth Setting:** Toggle leaked-password protection in Supabase Dashboard (Authentication -> Security).
-5. **Provider API Keys:** Populate production keys (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `TAVILY_API_KEY`) in Render Dashboard environment variables. Note: If using Gemini, supply a Google AI Studio key starting with `AIzaSy...`, not an OAuth session token.
+5. **Provider API Keys:** Populate production keys (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY`, `TAVILY_API_KEY`) in Render Dashboard environment variables. Note: If using Gemini, supply a Google AI Studio key starting with `AIzaSy...`, not an OAuth session token.
 
 ## Cost and data safety
 

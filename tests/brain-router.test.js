@@ -177,3 +177,33 @@ test("BrainRouter: fails over to next candidate when a provider returns an empty
   assert.equal(res.fallbackCount, 1);
   assert.ok(res.content.includes("Recovered from empty completion"));
 });
+
+
+test("BrainRouter: classifies spatial 3D queries and injects spatial scene context", async () => {
+  const router = new BrainRouter({
+    env: { OPENROUTER_API_KEY: "mock_test_key" }
+  });
+
+  const complexity = router.classifyComplexity("Where is the desk located in this 3D room?");
+  assert.equal(complexity.tier, "spatial_3d");
+
+  let sentPayload = null;
+  const mockFetch = async (url, options) => {
+    sentPayload = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "The desk is at [0m, 0.4m, 2.4m]." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const res = await router.executeInference({
+    prompt: "Where is the desk?",
+    context: {
+      spatialSummary: "Room Dimensions: 4.2m x 4.8m x 2.8m. Desk at [0m, 0.4m, 2.4m]."
+    },
+    fetchImpl: mockFetch
+  });
+
+  assert.equal(res.success, true);
+  assert.ok(sentPayload.messages[0].content.includes("Active 3D Spatial World Model (Diorama)"));
+  assert.ok(sentPayload.messages[0].content.includes("Desk at [0m, 0.4m, 2.4m]"));
+});
