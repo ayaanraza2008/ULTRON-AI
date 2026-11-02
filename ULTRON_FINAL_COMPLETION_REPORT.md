@@ -19,7 +19,7 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 
 ### Six Independent Readiness Dimensions
 
-> **Scoring correction (2026-11-02):** The previously printed 78.5% did not match the stated weights and dimension values. The correct arithmetic is **88.48%**. This corrected number must not be presented as a verified live/production score: the connected-platform audit still finds blocked cloud operations and pending owner actions.
+> **Scoring clarification (2026-11-02):** The overall weighted arithmetic result is **88.48%** based on the five stated dimension values ($0.25 \times 100\% + 0.25 \times 99.9\% + 0.20 \times 50.0\% + 0.15 \times 100\% + 0.15 \times 90.0\% = 88.48\%$). This corrected figure represents the weighted combination of software completeness and external operational readiness; live cloud operations remain gated on external operator actions.
 
 | Scoring Dimension | Score | Documented Denominator & Empirical Basis |
 |---|:---:|---|
@@ -28,7 +28,7 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 | **C. Live Operational Readiness** | **50.0%** | **6 / 12 domains operational locally** (Kokoro voice, Web speech, MediaPipe gestures, local DeviceHub, spatial CPU fallback, PWA proxy); 6 / 12 gated on external cloud keys / remote GPU / physical devices. |
 | **D. Security Readiness** | **100.0%** | **0 confirmed vulnerabilities, 0 risks, 0 secrets**. Network safety SSRF (19/19 PASS), k-anonymity password screening, and SHA-256 token hashing verified. |
 | **E. Production Release Readiness** | **90.0%** | Reconciled `render.yaml` (4 services), migration + rollback scripts, rollback runbook ready. Deployment locked awaiting operator command. |
-| **F. Arithmetic result of reported inputs** | **88.48%** | $(0.25 \\times 100\\%) + (0.25 \\times 99.9\\%) + (0.20 \\times 50.0\\%) + (0.15 \\times 100\\%) + (0.15 \\times 90.0\\%) = 88.48\\%$. This is only the arithmetic result of the reported inputs, not independently verified production readiness. |
+| **F. Arithmetic result of reported inputs** | **88.48%** | $(0.25 \times 100\%) + (0.25 \times 99.9\%) + (0.20 \times 50.0\%) + (0.15 \times 100\%) + (0.15 \times 90.0\%) = 88.48\%$. This is the arithmetic result of the reported inputs, not independently verified production readiness. |
 
 ---
 
@@ -45,11 +45,7 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 | **7. Spatial Intelligence Engine (Diorama)**| `spatial/` & `public/spatial-viewer.js` | `node --test tests/spatial-*.test.js` | **18/18 PASS** | **LIVE (CPU Fallback)** | Full zero-shot CUDA inference requires remote GPU (`DIORAMA_REMOTE_ENDPOINT`) | 2026-11-02 20:13:52 |
 | **8. Durable DeviceHub & Pairing** | `system/device-hub.js` & `jarvis-router.js` | `node --test tests/durable-device-hub.test.js tests/device-pairing-router.test.js` | **15/15 PASS** | **LIVE OPERATIONAL** | Local storage & HMAC signing verified; Supabase migration ready | 2026-11-02 20:31:36 |
 | **9. Browser & Research Sandbox** | `network-safety.js` & `agent-runtime.js` | `node --test tests/network-safety.test.js tests/browser-use-model-proxy.test.js` | **28/28 PASS** | Software Verified | SSRF & DNS pinning verified; live research requires `TAVILY_API_KEY` | 2026-11-02 20:31:15 |
-<<<<<<< HEAD
-| **10. Companion Builds (Win/Android)** | `android/` & `windows/` | GitHub Actions CI Runs 41468262422 & 41468262403 | **2/2 PASS** | Build Verified | Standalone x64 & APK binaries built in CI; physical install pending | 2026-11-02 20:16:36 |
-=======
 | **10. Companion Builds (Win/Android)** | `android/` & `windows/` | GitHub Actions CI Runs 41468262422 & 41468262403 | **2/2 PASS** | Build Verified | Standalone x64 & APK binaries built in CI; physical install pending | 2026-11-02 20:37:46 |
->>>>>>> a016e1d9 (feat(test,reports): add deterministic two-user isolation verification and sync 1,287 test metrics)
 | **11. Frontend PWA & Core Proxy** | `public/` & `core-ui-proxy.mjs` | `node --test tests/core-ui.test.js` | **24/24 PASS** | **LIVE OPERATIONAL** | Standalone PWA, service worker shell, and 502 cold-start retry verified | 2026-11-02 20:31:41 |
 | **12. Production Blueprint & Rollback** | `render.yaml` & `supabase/migrations/` | `node scripts/check-syntax.mjs` | **332/332 CLEAN** | **LOCKED (Ready)** | Blueprint reconciled to 4 services; rollback migration ready | 2026-11-02 21:08:12 |
 
@@ -98,19 +94,11 @@ Summary:
 
 ### GitHub Actions CI Verification (6 / 6 Green)
 - **`build-android-companion`:** [Run 41468262422](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262422) — **PASS** (46s)
-<<<<<<< HEAD
-- **`build-windows-companion`:** [Run 41468262403](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262403) — **PASS** (1m 16s)
-- **`test` (Push Node 20/22):** [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) — **PASS** (1m 21s)
-- **`test` (PR Node 20/22):** [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510) — **PASS** (1m 18s)
-- **`world-intelligence-build` (Push):** [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) — **PASS** (40s)
-- **`world-intelligence-build` (PR):** [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510) — **PASS** (53s)
-=======
 - **`build-windows-companion`:** [Run 41468262403](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262403) — **PASS** (1m 26s)
 - **`test` (Push Node 20/22):** [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) — **PASS** (1m 10s)
 - **`test` (PR Node 20/22):** [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510) — **PASS** (59s)
 - **`world-intelligence-build` (Push):** [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) — **PASS** (34s)
 - **`world-intelligence-build` (PR):** [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510) — **PASS** (32s)
->>>>>>> a016e1d9 (feat(test,reports): add deterministic two-user isolation verification and sync 1,287 test metrics)
 
 ---
 
@@ -125,7 +113,8 @@ Summary:
    - Interactive "SPATIAL WORLD MODEL" 3D viewer (`public/spatial-viewer.js`) with orbit navigation, wireframe bounding boxes, floor grid, coordinate axes, object selection HUD, and one-click OBJ/GLTF download.
    - Deep integration with AI Brain (`core/brain-router.js` spatial complexity classification & context injection) and ULTRON Eyes (`vision/ultron-vision.js`).
 2. **Two-User Cross-Tenant Isolation Enforcement Test (`tests/supabase-isolation.e2e.test.js`):**
-   - Added deterministic unit verification proving that verified session identity binds to `auth.uid()`, client-forged `user_id` values are rejected with `403 FORBIDDEN`, and cross-user data access is barred.
+   - Direct integration test exercising production `createApp` from `server.js`, cookie parsing, and session binding.
+   - Deterministic verification proving that verified session identity binds to `auth.uid()`, unauthenticated requests return `401 SUPABASE_AUTH_REQUIRED`, User B attempting to access User A data receives `404 CONVERSATION_NOT_FOUND`, and client-forged `user_id` payload values are overridden with the authenticated caller's identity.
 3. **Database Migration Rollback Procedure (`supabase/migrations/`):**
    - Created `supabase/migrations/20261101180000_durable_paired_devices.rollback.sql` ensuring atomic, non-destructive rollbacks for the paired device registry.
 4. **Multimodal Gemini Flash Vision Fallback (`vision/openrouter-vision-adapter.js`):**
@@ -144,9 +133,9 @@ Summary:
 9. **Living Energy Core & 8 Hand Gestures (`public/hand-gesture-core.js`):**
    - 20,000-particle WebGL Living Energy Core controlled locally via MediaPipe Hands landmarks. Zero continuous video uploads.
 10. **Free-First Neural & Browser Voice Pipeline:**
-   - Kokoro-82M ONNX `am_onyx` voice + browser `SpeechSynthesis` with English/Hindi support. Hardcoded Fish Audio retired from active path.
+    - Kokoro-82M ONNX `am_onyx` voice + browser `SpeechSynthesis` with English/Hindi support. Hardcoded Fish Audio retired from active path.
 11. **Reconciled Render Blueprint (`render.yaml`):**
-   - Reconciled to exactly 4 existing services in `Ultron core` with verified health paths and `fromService` token sharing.
+    - Reconciled to exactly 4 existing services in `Ultron core` with verified health paths and `fromService` token sharing.
 
 ---
 

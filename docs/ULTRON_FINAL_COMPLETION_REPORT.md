@@ -19,6 +19,8 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 
 ### Six Independent Readiness Dimensions
 
+> **Scoring clarification (2026-11-02):** The overall weighted arithmetic result is **88.48%** based on the five stated dimension values ($0.25 \times 100\% + 0.25 \times 99.9\% + 0.20 \times 50.0\% + 0.15 \times 100\% + 0.15 \times 90.0\% = 88.48\%$). This corrected figure represents the weighted combination of software completeness and external operational readiness; live cloud operations remain gated on external operator actions.
+
 | Scoring Dimension | Score | Documented Denominator & Empirical Basis |
 |---|:---:|---|
 | **A. Implementation Completeness** | **100.0%** | **14 / 14 core capability domains** genuinely implemented in source code without stubs. |
@@ -26,7 +28,7 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 | **C. Live Operational Readiness** | **50.0%** | **6 / 12 domains operational locally** (Kokoro voice, Web speech, MediaPipe gestures, local DeviceHub, spatial CPU fallback, PWA proxy); 6 / 12 gated on external cloud keys / remote GPU / physical devices. |
 | **D. Security Readiness** | **100.0%** | **0 confirmed vulnerabilities, 0 risks, 0 secrets**. Network safety SSRF (19/19 PASS), k-anonymity password screening, and SHA-256 token hashing verified. |
 | **E. Production Release Readiness** | **90.0%** | Reconciled `render.yaml` (4 services), migration + rollback scripts, rollback runbook ready. Deployment locked awaiting operator command. |
-| **F. Overall Weighted Readiness** | **78.5%** | Balanced formula: $(0.25 \times 100\%) + (0.25 \times 99.9\%) + (0.20 \times 50.0\%) + (0.15 \times 100\%) + (0.15 \times 90.0\%) = 78.5\%$. |
+| **F. Arithmetic result of reported inputs** | **88.48%** | $(0.25 \times 100\%) + (0.25 \times 99.9\%) + (0.20 \times 50.0\%) + (0.15 \times 100\%) + (0.15 \times 90.0\%) = 88.48\%$. This is the arithmetic result of the reported inputs, not independently verified production readiness. |
 
 ---
 
@@ -111,7 +113,8 @@ Summary:
    - Interactive "SPATIAL WORLD MODEL" 3D viewer (`public/spatial-viewer.js`) with orbit navigation, wireframe bounding boxes, floor grid, coordinate axes, object selection HUD, and one-click OBJ/GLTF download.
    - Deep integration with AI Brain (`core/brain-router.js` spatial complexity classification & context injection) and ULTRON Eyes (`vision/ultron-vision.js`).
 2. **Two-User Cross-Tenant Isolation Enforcement Test (`tests/supabase-isolation.e2e.test.js`):**
-   - Added deterministic unit verification proving that verified session identity binds to `auth.uid()`, client-forged `user_id` values are rejected with `403 FORBIDDEN`, and cross-user data access is barred.
+   - Direct integration test exercising production `createApp` from `server.js`, cookie parsing, and session binding.
+   - Deterministic verification proving that verified session identity binds to `auth.uid()`, unauthenticated requests return `401 SUPABASE_AUTH_REQUIRED`, User B attempting to access User A data receives `404 CONVERSATION_NOT_FOUND`, and client-forged `user_id` payload values are overridden with the authenticated caller's identity.
 3. **Database Migration Rollback Procedure (`supabase/migrations/`):**
    - Created `supabase/migrations/20261101180000_durable_paired_devices.rollback.sql` ensuring atomic, non-destructive rollbacks for the paired device registry.
 4. **Multimodal Gemini Flash Vision Fallback (`vision/openrouter-vision-adapter.js`):**
@@ -130,9 +133,9 @@ Summary:
 9. **Living Energy Core & 8 Hand Gestures (`public/hand-gesture-core.js`):**
    - 20,000-particle WebGL Living Energy Core controlled locally via MediaPipe Hands landmarks. Zero continuous video uploads.
 10. **Free-First Neural & Browser Voice Pipeline:**
-   - Kokoro-82M ONNX `am_onyx` voice + browser `SpeechSynthesis` with English/Hindi support. Hardcoded Fish Audio retired from active path.
+    - Kokoro-82M ONNX `am_onyx` voice + browser `SpeechSynthesis` with English/Hindi support. Hardcoded Fish Audio retired from active path.
 11. **Reconciled Render Blueprint (`render.yaml`):**
-   - Reconciled to exactly 4 existing services in `Ultron core` with verified health paths and `fromService` token sharing.
+    - Reconciled to exactly 4 existing services in `Ultron core` with verified health paths and `fromService` token sharing.
 
 ---
 
