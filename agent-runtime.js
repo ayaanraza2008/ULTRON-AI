@@ -772,6 +772,45 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100, supportsTools: item.supportsTools !== false });
     }
 
+    const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+    if (groqKey && !seen.has("groq")) {
+      seen.add("groq");
+      providers.push({
+        name: "groq",
+        baseUrl: "https://api.groq.com/openai/v1",
+        apiKey: groqKey,
+        model: bounded(env.GROQ_DEFAULT_MODEL, 120) || "llama-3.3-70b-versatile",
+        priority: 20,
+        supportsTools: true
+      });
+    }
+
+    const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+    if (geminiKey && !/^(AQ\.|ya29\.)/i.test(geminiKey) && !seen.has("gemini")) {
+      seen.add("gemini");
+      providers.push({
+        name: "gemini",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+        apiKey: geminiKey,
+        model: bounded(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-1.5-flash",
+        priority: 30,
+        supportsTools: true
+      });
+    }
+
+    const cerebrasKey = typeof env.CEREBRAS_API_KEY === "string" ? env.CEREBRAS_API_KEY.trim() : "";
+    if (cerebrasKey && !seen.has("cerebras")) {
+      seen.add("cerebras");
+      providers.push({
+        name: "cerebras",
+        baseUrl: "https://api.cerebras.ai/v1",
+        apiKey: cerebrasKey,
+        model: bounded(env.CEREBRAS_DEFAULT_MODEL, 120) || "llama-3.3-70b",
+        priority: 40,
+        supportsTools: true
+      });
+    }
+
     // When a shared OpenRouter key and a model list already exist, derive a
     // bounded free-only fallback chain from that same list. These candidates
     // are plain-chat only unless separately declared in the provider registry,

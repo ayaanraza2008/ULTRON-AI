@@ -276,6 +276,9 @@ function hasConfiguredModelProvider(env) {
       if (baseUrl) return true;
     } catch { /* invalid primary endpoint; continue checking alternate providers */ }
   }
+  if (typeof env.GROQ_API_KEY === "string" && env.GROQ_API_KEY.trim()) return true;
+  if (typeof env.GEMINI_API_KEY === "string" && env.GEMINI_API_KEY.trim() && !/^(AQ\.|ya29\.)/i.test(env.GEMINI_API_KEY.trim())) return true;
+  if (typeof env.CEREBRAS_API_KEY === "string" && env.CEREBRAS_API_KEY.trim()) return true;
   let providers;
   try { providers = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]"); } catch { return false; }
   if (!Array.isArray(providers)) return false;
@@ -355,6 +358,51 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
       model,
       priority: Number.isFinite(item.priority) ? item.priority : 100,
       supportsVision: item.supportsVision === true,
+      isOpenRouter: false
+    });
+  }
+
+  const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  if (groqKey && !providers.some(provider => provider.name === "groq")) {
+    providers.push({
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKey: groqKey,
+      model: typeof env.GROQ_DEFAULT_MODEL === "string" && env.GROQ_DEFAULT_MODEL.trim()
+        ? env.GROQ_DEFAULT_MODEL.trim()
+        : "llama-3.3-70b-versatile",
+      priority: 20,
+      supportsVision: false,
+      isOpenRouter: false
+    });
+  }
+
+  const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  if (geminiKey && !/^(AQ\.|ya29\.)/i.test(geminiKey) && !providers.some(provider => provider.name === "gemini")) {
+    providers.push({
+      name: "gemini",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      apiKey: geminiKey,
+      model: typeof env.GEMINI_DEFAULT_MODEL === "string" && env.GEMINI_DEFAULT_MODEL.trim()
+        ? env.GEMINI_DEFAULT_MODEL.trim()
+        : "gemini-1.5-flash",
+      priority: 30,
+      supportsVision: true,
+      isOpenRouter: false
+    });
+  }
+
+  const cerebrasKey = typeof env.CEREBRAS_API_KEY === "string" ? env.CEREBRAS_API_KEY.trim() : "";
+  if (cerebrasKey && !providers.some(provider => provider.name === "cerebras")) {
+    providers.push({
+      name: "cerebras",
+      baseUrl: "https://api.cerebras.ai/v1",
+      apiKey: cerebrasKey,
+      model: typeof env.CEREBRAS_DEFAULT_MODEL === "string" && env.CEREBRAS_DEFAULT_MODEL.trim()
+        ? env.CEREBRAS_DEFAULT_MODEL.trim()
+        : "llama-3.3-70b",
+      priority: 40,
+      supportsVision: false,
       isOpenRouter: false
     });
   }

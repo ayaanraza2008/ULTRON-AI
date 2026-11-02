@@ -213,3 +213,18 @@ test("health does not report private HTTPS provider endpoints as configured", as
   });
   assert.equal(alternate.providerConfigured, false);
 });
+
+
+test("health recognizes standalone GROQ_API_KEY, GEMINI_API_KEY, and CEREBRAS_API_KEY", async () => {
+  const groq = await health({ GROQ_API_KEY: "gsk_synthetic_groq_key" });
+  assert.equal(groq.providerConfigured, true);
+
+  const gemini = await health({ GEMINI_API_KEY: "AIzaSySyntheticGeminiKey123456789" });
+  assert.equal(gemini.providerConfigured, true);
+
+  const geminiOauth = await health({ GEMINI_API_KEY: "ya29.synthetic_oauth_token" });
+  assert.equal(geminiOauth.providerConfigured, false);
+
+  const cerebras = await health({ CEREBRAS_API_KEY: "csk_synthetic_cerebras_key" });
+  assert.equal(cerebras.providerConfigured, true);
+});

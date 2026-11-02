@@ -39,3 +39,47 @@ test("OpenRouter vision adapter refuses non-OpenRouter endpoints and paid-only m
  const paid=createOpenRouterVisionAdapter({env:{OPENROUTER_API_KEY:"test",ULTRON_VISION_MODELS:"provider/paid-model"}});
  assert.equal(paid.isConfigured(),false);
 });
+
+
+test("Gemini vision fallback activates when GEMINI_API_KEY is configured and OPENROUTER_API_KEY is absent", async () => {
+  let captured;
+  const env = { GEMINI_API_KEY: "AIzaSyTestKey1234567890abcdefghijkl" };
+  const adapter = createOpenRouterVisionAdapter({
+    env,
+    fetchImpl: async (url, init) => {
+      captured = { url, init };
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              description: "A laptop and notebook on a desk.",
+              scene: "Study workspace.",
+              objects: [{ label: "laptop", confidence: 0.95, box: { xMin: 0.2, yMin: 0.3, xMax: 0.7, yMax: 0.8 } }],
+              ocrText: "Code",
+              ocrClear: true,
+              changesDetected: false,
+              changeSummary: "Static scene"
+            })
+          }
+        }]
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+  });
+  assert.equal(adapter.isConfigured(), true);
+  const result = await adapter.runFrame({ imageData: image, prompt: "Inspect workspace" });
+  assert.equal(captured.url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+  assert.equal(captured.init.headers["Authorization"], "Bearer AIzaSyTestKey1234567890abcdefghijkl");
+  assert.equal(captured.init.headers["HTTP-Referer"], undefined);
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.model, "gemini-1.5-flash");
+  assert.equal(result.provider, "gemini");
+  assert.equal(result.objects[0].label, "laptop");
+  assert.equal(result.outputStatus, "STRUCTURED_MODEL_OUTPUT");
+});
+
+test("Gemini vision fallback rejects internal OAuth/session tokens", () => {
+  const oauthAdapter = createOpenRouterVisionAdapter({ env: { GEMINI_API_KEY: "ya29.a0AfH6SM..." } });
+  assert.equal(oauthAdapter.isConfigured(), false);
+  const aqAdapter = createOpenRouterVisionAdapter({ env: { GEMINI_API_KEY: "AQ.SessionToken..." } });
+  assert.equal(aqAdapter.isConfigured(), false);
+});

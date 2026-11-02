@@ -25,7 +25,30 @@ function isEligibleFreeModel(value) {
 
 function readConfig(env = process.env) {
   const apiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
-  if (!apiKey) return { error: "OPENROUTER_API_KEY_REQUIRED" };
+  if (!apiKey) {
+    const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+    if (geminiKey && !/^(AQ\.|ya29\.)/i.test(geminiKey)) {
+      const rawBase = typeof env.GEMINI_BASE_URL === "string" && env.GEMINI_BASE_URL.trim()
+        ? env.GEMINI_BASE_URL.trim()
+        : "https://generativelanguage.googleapis.com/v1beta/openai";
+      const baseUrl = safeServiceBase(rawBase);
+      if (baseUrl) {
+        let parsed;
+        try { parsed = new URL(baseUrl); } catch { parsed = null; }
+        const hostname = parsed ? parsed.hostname.toLowerCase().replace(/\.$/, "") : "";
+        if (parsed && parsed.protocol === "https:" && (hostname === "generativelanguage.googleapis.com" || hostname.endsWith(".googleapis.com"))) {
+          const rawModels = typeof env.ULTRON_GEMINI_VISION_MODELS === "string" && env.ULTRON_GEMINI_VISION_MODELS.trim()
+            ? env.ULTRON_GEMINI_VISION_MODELS.slice(0, 3000).split(",").map(item => item.trim()).filter(Boolean)
+            : ["gemini-1.5-flash"];
+          const models = [...new Set(rawModels)].slice(0, MAX_FREE_MODELS);
+          if (models.length) {
+            return { apiKey: geminiKey, baseUrl, models, provider: "gemini" };
+          }
+        }
+      }
+    }
+    return { error: "OPENROUTER_API_KEY_REQUIRED" };
+  }
 
   const rawBase = typeof env.OPENROUTER_BASE_URL === "string" && env.OPENROUTER_BASE_URL.trim()
     ? env.OPENROUTER_BASE_URL.trim()
@@ -50,7 +73,7 @@ function readConfig(env = process.env) {
   const models = [...new Set(rawModels.filter(isEligibleFreeModel))].slice(0, MAX_FREE_MODELS);
   if (!models.length) return { error: "NO_ELIGIBLE_FREE_VISION_MODELS" };
 
-  return { apiKey, baseUrl, models };
+  return { apiKey, baseUrl, models, provider: "openrouter" };
 }
 
 async function readJsonLimited(response) {
@@ -111,12 +134,12 @@ function extractJsonObject(text) {
   }
 }
 
-function normaliseFrame(text, model) {
+function normaliseFrame(text, model, provider = "openrouter") {
   const parsed = extractJsonObject(text);
   if (!parsed) {
     const description = String(text || "").trim().slice(0, 8000);
     return {
-      provider: "openrouter",
+      provider,
       model,
       inferenceStatus: "LIVE_INFERENCE",
       outputStatus: description ? "MODEL_TEXT_ONLY" : "EMPTY_MODEL_OUTPUT",
@@ -158,7 +181,7 @@ function normaliseFrame(text, model) {
   const extractedText = typeof parsed.ocrText === "string" ? parsed.ocrText.slice(0, 8000) : "";
 
   return {
-    provider: "openrouter",
+    provider,
     model,
     inferenceStatus: "LIVE_INFERENCE",
     outputStatus: "STRUCTURED_MODEL_OUTPUT",
@@ -212,8 +235,10 @@ export function createOpenRouterVisionAdapter(options = {}) {
             Authorization: "Bearer " + config.apiKey,
             Accept: "application/json",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://ultron-core-interface.onrender.com",
-            "X-Title": "ULTRON AI Vision"
+            ...(config.provider === "openrouter" ? {
+              "HTTP-Referer": "https://ultron-core-interface.onrender.com",
+              "X-Title": "ULTRON AI Vision"
+            } : {})
           },
           body: JSON.stringify({
             model,
@@ -238,7 +263,8 @@ export function createOpenRouterVisionAdapter(options = {}) {
             : status === 402 ? "VISION_PROVIDER_PAYMENT_REQUIRED"
               : status === 429 ? "VISION_PROVIDER_RATE_LIMITED"
                 : status >= 500 ? "VISION_PROVIDER_UNAVAILABLE" : "VISION_PROVIDER_REQUEST_FAILED";
-          lastError = adapterError(code, "OpenRouter vision request failed (HTTP " + status + ").");
+          const providerLabel = config.provider === "gemini" ? "Gemini" : "OpenRouter";
+          lastError = adapterError(code, providerLabel + " vision request failed (HTTP " + status + ").");
           if (status === 401 || status === 403 || status === 402) break;
           continue;
         }
@@ -246,15 +272,16 @@ export function createOpenRouterVisionAdapter(options = {}) {
         const data = await readJsonLimited(response);
         const text = messageText(data?.choices?.[0]?.message);
         if (!text) {
-          lastError = adapterError("EMPTY_VISION_COMPLETION", "OpenRouter returned an empty vision completion.");
+          const providerLabel = config.provider === "gemini" ? "Gemini" : "OpenRouter";
+          lastError = adapterError("EMPTY_VISION_COMPLETION", providerLabel + " returned an empty vision completion.");
           continue;
         }
 
-        if (mode === "frame") return normaliseFrame(text, model);
+        if (mode === "frame") return normaliseFrame(text, model, config.provider || "openrouter");
         if (mode === "objects") {
           const parsed = extractJsonObject(text);
           return {
-            provider: "openrouter",
+            provider: config.provider || "openrouter",
             model,
             inferenceStatus: "LIVE_INFERENCE",
             objects: Array.isArray(parsed?.objects) ? parsed.objects : []
@@ -262,17 +289,18 @@ export function createOpenRouterVisionAdapter(options = {}) {
         }
 
         return {
-          provider: "openrouter",
+          provider: config.provider || "openrouter",
           model,
           inferenceStatus: "LIVE_INFERENCE",
           description: text.slice(0, 8000)
         };
       } catch (error) {
+        const providerLabel = config.provider === "gemini" ? "Gemini" : "OpenRouter";
         lastError = error?.code
-          ? adapterError(error.code, "OpenRouter vision request failed: " + error.code)
+          ? adapterError(error.code, providerLabel + " vision request failed: " + error.code)
           : adapterError(error?.name === "TimeoutError" || error?.name === "AbortError"
             ? "VISION_PROVIDER_TIMEOUT"
-            : "VISION_PROVIDER_UNAVAILABLE", "OpenRouter vision transport failed.");
+            : "VISION_PROVIDER_UNAVAILABLE", providerLabel + " vision transport failed.");
       }
     }
 

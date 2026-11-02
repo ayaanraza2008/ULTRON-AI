@@ -38,6 +38,7 @@ import { deviceHub } from "./integrations/device-hub.js";
 
 import express from "express";
 import { BrainRouter } from "./core/brain-router.js";
+import { safePinnedFetch } from "./network-safety.js";
 import { AgentOrchestrator } from "./agents/orchestrator.js";
 import { JarvisVoiceEngine } from "./voice/voice-engine.js";
 import { JarvisVisionEngine } from "./vision/vision-engine.js";
@@ -81,7 +82,8 @@ export function createJarvisRouter({
   privilegedSupabaseRest = supabaseRest,
   logger = console,
   deviceHub: deviceHubInstance = deviceHub,
-  authenticateDeviceToken = null
+  authenticateDeviceToken = null,
+  fetchImpl = safePinnedFetch
 } = {}) {
   if (typeof requireSupabaseUser !== "function") {
     throw new TypeError("createJarvisRouter requires the authenticated Supabase user middleware.");
@@ -253,6 +255,43 @@ export function createJarvisRouter({
       providerChain: chain.map(p => ({ name: p.name, model: p.model, type: p.type })),
       emotionalIntelligence: complexity.emotionalIntelligence || null
     });
+  });
+
+  router.post("/jarvis/brain/infer", requireOwner, express.json(), async (req, res) => {
+    const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+    const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+    const context = typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : {};
+    const preferredProvider = typeof req.body?.preferredProvider === "string" ? req.body.preferredProvider : null;
+
+    if (!prompt.trim() && messages.length === 0) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_INFERENCE_INPUT",
+          message: "Provide either a prompt string or a non-empty messages array."
+        }
+      });
+    }
+
+    try {
+      const result = await brain.executeInference({
+        prompt,
+        messages,
+        context,
+        preferredProvider,
+        fetchImpl
+      });
+      res.json({
+        status: "ok",
+        inference: result
+      });
+    } catch (err) {
+      res.status(502).json({
+        error: {
+          code: "BRAIN_INFERENCE_FAILED",
+          message: err?.message || "Brain inference failed across all providers."
+        }
+      });
+    }
   });
 
   // --- Human Emotional Intelligence (HEI) Control Routes ---
