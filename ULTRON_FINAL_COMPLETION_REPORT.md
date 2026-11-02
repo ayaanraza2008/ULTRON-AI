@@ -19,6 +19,8 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 
 ### Six Independent Readiness Dimensions
 
+> **Scoring correction (2026-11-02):** The previously printed 78.5% did not match the stated weights and dimension values. The correct arithmetic is **88.48%**. This corrected number must not be presented as a verified live/production score: the connected-platform audit still finds blocked cloud operations and pending owner actions.
+
 | Scoring Dimension | Score | Documented Denominator & Empirical Basis |
 |---|:---:|---|
 | **A. Implementation Completeness** | **100.0%** | **14 / 14 core capability domains** genuinely implemented in source code without stubs. |
