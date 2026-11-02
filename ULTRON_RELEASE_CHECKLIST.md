@@ -66,15 +66,14 @@
 In the event of an unexpected post-deployment failure:
 1. **Immediate Service Rollback via Render Dashboard:**
    - In Render Dashboard -> Service -> Deploys, click **Rollback** to `b00c2e81` (previous stable release).
-2. **Git Branch Reset:**
-   ```bash
-   git checkout main
-   git reset --hard b00c2e81d0ab930f81f0f680e4dc8213fb1b5281
-   git push origin main --force-with-lease
-   ```
+2. **Git/Application Rollback:**
+   - Prefer Render's previous-known-good deploy rollback for the affected service.
+   - For source control, create a reviewed revert commit or revert PR; do **not** reset `main` or force-push shared production history as a routine rollback.
 3. **Database Guardrails:**
-   - All migrations are additive (`IF NOT EXISTS`); no destructive table drops or column alterations were introduced.
-   - User conversation history and persistent memory remain untouched.
+   - The forward paired-device migration is additive, but `20261101180000_durable_paired_devices.rollback.sql` is **destructive**: it drops the paired-device tables and pairing RPC. It can permanently delete paired-device records and must not be run as a routine rollback.
+   - Before any database rollback, take and verify a backup/export, assess dependent objects and data, obtain explicit owner approval, and test the procedure on a disposable staging database.
+   - The migration has not been applied to production, so this rollback has not been exercised against a live schema.
+   - Conversation history and persistent memory are outside this migration's intended scope; verify backups rather than assuming data preservation.
 
 ---
 
