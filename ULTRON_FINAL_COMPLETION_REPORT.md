@@ -28,7 +28,7 @@ No mocks, stubs, simulated responses, or CPU fallbacks are ever represented as r
 | **C. Live Operational Readiness** | **50.0%** | **6 / 12 domains operational locally** (Kokoro voice, Web speech, MediaPipe gestures, local DeviceHub, spatial CPU fallback, PWA proxy); 6 / 12 gated on external cloud keys / remote GPU / physical devices. |
 | **D. Security Readiness** | **100.0%** | **0 confirmed vulnerabilities, 0 risks, 0 secrets**. Network safety SSRF (19/19 PASS), k-anonymity password screening, and SHA-256 token hashing verified. |
 | **E. Production Release Readiness** | **90.0%** | Reconciled `render.yaml` (4 services), migration + rollback scripts, rollback runbook ready. Deployment locked awaiting operator command. |
-| **F. Overall Weighted Readiness** | **78.5%** | Balanced formula: $(0.25 \times 100\%) + (0.25 \times 99.9\%) + (0.20 \times 50.0\%) + (0.15 \times 100\%) + (0.15 \times 90.0\%) = 78.5\%$. |
+| **F. Arithmetic result of reported inputs** | **88.48%** | $(0.25 \\times 100\\%) + (0.25 \\times 99.9\\%) + (0.20 \\times 50.0\\%) + (0.15 \\times 100\\%) + (0.15 \\times 90.0\\%) = 88.48\\%$. This is only the arithmetic result of the reported inputs, not independently verified production readiness. |
 
 ---
 
