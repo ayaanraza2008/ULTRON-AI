@@ -176,16 +176,22 @@ export class BrainRouter {
     }
 
     if (this.env.GEMINI_API_KEY) {
-      extraProviders.push({
-        name: "gemini-flash",
-        type: "cloud_multimodal",
-        model: "gemini-1.5-flash",
-        baseUrl: this.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai",
-        apiKeyEnv: "GEMINI_API_KEY",
-        supportsTools: true,
-        supportsVision: true,
-        circuitOpen: this.isCircuitOpen("gemini-flash")
-      });
+      const rawKey = String(this.env.GEMINI_API_KEY).trim();
+      const baseUrl = this.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai";
+      const isGoogleEndpoint = baseUrl.includes("generativelanguage.googleapis.com");
+      const isInternalToken = /^(AQ\.|ya29\.)/i.test(rawKey);
+      if (!isGoogleEndpoint || !isInternalToken) {
+        extraProviders.push({
+          name: "gemini-flash",
+          type: "cloud_multimodal",
+          model: "gemini-1.5-flash",
+          baseUrl,
+          apiKeyEnv: "GEMINI_API_KEY",
+          supportsTools: true,
+          supportsVision: true,
+          circuitOpen: this.isCircuitOpen("gemini-flash")
+        });
+      }
     }
 
         const dshProvider = {

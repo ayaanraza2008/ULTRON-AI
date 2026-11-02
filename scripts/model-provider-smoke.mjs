@@ -45,10 +45,20 @@ function loadProviderCandidates(env) {
   }
 
   if (typeof env.GEMINI_API_KEY === "string" && env.GEMINI_API_KEY.trim()) {
+    const rawKey = env.GEMINI_API_KEY.trim();
     const baseUrl = secureBaseUrl(env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai");
     const model = safeModel(env.GEMINI_DEFAULT_MODEL || "gemini-1.5-flash");
-    if (baseUrl && model) {
-      candidates.push({ name: "gemini", baseUrl, apiKey: env.GEMINI_API_KEY.trim(), model, priority: 2 });
+    const isGoogleEndpoint = Boolean(baseUrl && baseUrl.includes("generativelanguage.googleapis.com"));
+    const isInternalOrOAuthToken = /^(AQ\.|ya29\.)/i.test(rawKey);
+
+    if (isGoogleEndpoint && isInternalOrOAuthToken) {
+      errors.push({
+        provider: "gemini",
+        code: "CREDENTIAL_MISMATCH_INTERNAL_TOKEN_NOT_AI_STUDIO_KEY",
+        message: "GEMINI_API_KEY contains an internal session bearer token or OAuth token (prefix 'AQ.' or 'ya29.'), not a Google AI Studio API key. Google AI Studio keys start with 'AIzaSy' and can be generated at https://aistudio.google.com/app/apikey."
+      });
+    } else if (baseUrl && model) {
+      candidates.push({ name: "gemini", baseUrl, apiKey: rawKey, model, priority: 2 });
     } else {
       errors.push({ provider: "gemini", code: "INVALID_PROVIDER_CONFIGURATION" });
     }

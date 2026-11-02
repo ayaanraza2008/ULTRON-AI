@@ -207,3 +207,21 @@ test("smoke check auto-detects Groq and Gemini when environment variables are se
   assert.equal(report.challengeVerified, true);
   assert.equal(JSON.stringify(report).includes("gsk_test_secret"), false);
 });
+
+test("smoke check detects Gemini internal session token mismatch without sending network request", async () => {
+  let called = false;
+  const report = await runModelProviderSmoke({
+    env: {
+      GEMINI_API_KEY: "AQ.internal_bearer_session_token_12345"
+    },
+    fetchImpl: async () => { called = true; return success(); }
+  });
+
+  assert.equal(report.status, "blocked");
+  assert.equal(report.reason, "NO_ELIGIBLE_PROVIDER");
+  assert.equal(called, false);
+  const geminiError = report.configurationErrors.find(e => e.provider === "gemini");
+  assert.ok(geminiError);
+  assert.equal(geminiError.code, "CREDENTIAL_MISMATCH_INTERNAL_TOKEN_NOT_AI_STUDIO_KEY");
+  assert.match(geminiError.message, /AI Studio/i);
+});

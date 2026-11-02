@@ -129,3 +129,11 @@ test("BrainRouter: executeInference executes successfully and handles provider f
   assert.equal(failoverRes.fallbackCount, 1);
   assert.ok(failoverRes.content.includes("Fallback secondary response"));
 });
+
+test("BrainRouter: ignores Gemini provider if key is an internal bearer token on Google AI Studio endpoint", () => {
+  const routerWithInternalToken = new BrainRouter({
+    env: { GEMINI_API_KEY: "AQ.mock_internal_session_token" }
+  });
+  const chain = routerWithInternalToken.selectProviderChain({ tier: "multimodal" });
+  assert.ok(!chain.some(p => p.name === "gemini-flash"));
+});
