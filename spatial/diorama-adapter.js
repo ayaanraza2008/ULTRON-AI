@@ -261,4 +261,13 @@ export class DioramaSpatialAdapter {
       ]
     };
   }
+  _normalizeImageInput(imageInput) {
+    if (Buffer.isBuffer(imageInput)) return imageInput;
+    if (typeof imageInput === "string") {
+      const match = imageInput.match(/^data:image\\/[a-z0-9.+-]+;base64,(.+)$/i);
+      if (match) return Buffer.from(match[1], "base64");
+      if (/^[A-Za-z0-9+/=]+$/.test(imageInput)) return Buffer.from(imageInput, "base64");
+    }
+    return null;
+  }
 }
