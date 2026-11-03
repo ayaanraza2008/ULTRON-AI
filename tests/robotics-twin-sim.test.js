@@ -75,7 +75,7 @@ test("SimToRealDeploymentGate: zero battery is not replaced with a synthetic ful
   assert.equal(result.metrics.finalBatteryPercent, 0);
 });
 
-test("SimToRealDeploymentGate: rejects unsafe trajectories and issues deployment passport for safe missions", () => {
+test("SimToRealDeploymentGate: rejects unsafe trajectories and never issues a physical passport from simulation", () => {
   const gate = new SimToRealDeploymentGate();
 
   // 1. Unsafe trajectory with a collision
