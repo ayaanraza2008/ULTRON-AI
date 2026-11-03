@@ -816,7 +816,14 @@ export class SimReadyCentralExplorer {
       return { success: false, error: "ASSET_NOT_FOUND" };
     }
     const registered = project.registerRobot(asset);
-    return { success: true, importedAssetId: asset.assetId, registeredName: registered.name };
+    return {
+      success: true,
+      importedAssetId: asset.assetId,
+      registeredName: registered.name,
+      importType: "STATIC_METADATA_REGISTRATION",
+      geometryDownloaded: false,
+      liveHuggingFaceConnection: false
+    };
   }
 }
 
