@@ -85,7 +85,7 @@ test("SimToRealDeploymentGate: rejects unsafe trajectories and never issues a ph
   ];
   assert.throws(() => {
     gate.issueDeploymentPassport("bot-99", unsafeTrajectory);
-  }, /Sim-to-Real deployment rejected/);
+  }, /Simulation qualification rejected/);
 
   // 2. Safe trajectory with clearance > 0.35m and zero collisions
   const safeTrajectory = [
