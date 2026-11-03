@@ -1,92 +1,143 @@
-# ULTRON AI — Current Independently Verified Status
+# ULTRON AI — Evidence-Based Release Status
 
-**Audit date:** 2026-11-02 (Asia/Kolkata)  
-**Repository:** `ayaanraza2008/ULTRON-AI`  
-**Engineering branch:** `feat/ultron-final-100-completion`  
-**Latest implementation/code snapshot:** `a5d225b5d652800045cd3df173b5f90dd6079784` (subsequent audit corrections are documentation-only commits on PR #441)  
-**Pull request:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED  
-**Production base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
+> **Canonical release status.** This file supersedes older completion percentages, parity claims, and status snapshots in this repository. Historical reports are not release evidence. Use only the statuses defined below.
+>
+> **Release decision: NO-GO.** PR #441 is an open candidate, not merged or deployed. No production Render sync, production secret mutation, or production database migration was performed during this audit.
 
-> **Release decision: NO-GO (Pending Owner Authorization).** All feasible software components, companion builds, security audits, regression tests, and CI workflows are verified green (6/6 jobs). Live external cloud inference and physical device execution remain gated on external provider credentials and operator hardware; production deployment to Render workspace `Ultron core` requires explicit owner authorization.
+## Audit identity
 
-## Latest verified automation
+- Audit date: 2026-11-03
+- Repository: `ayaanraza2008/ULTRON-AI`
+- Production branch: `main`
+- Candidate branch: `feat/ultron-final-100-completion`
+- Candidate PR: [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)
+- Production base: `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
+- Candidate source SHA at this snapshot: `71a86fb6b5fe696e47a19af43cf27a321cdd47f0`
+- Candidate comparison at this snapshot: 186 commits ahead, 0 behind; 239 changed files.
+- Render workspace: `Ultron core`
+- No merge, deploy, Render sync, production secret mutation, or production migration was performed.
 
-| Check | Result |
-|---|---|
-| Node suite | **1,287 total — 1,286 pass, 0 fail, 1 skipped** (`node --test`, 66.2s) |
-| Python suite | **17 total — 15 pass, 0 fail, 2 skipped** (`python tests/test_harness2.py`, 4.0s) |
-| Syntax integrity | **332 / 332 files clean** (`node scripts/check-syntax.mjs`) |
-| ULTRON runtime npm audit | **0 reported vulnerabilities** |
-| Configured repository security gate | **0 confirmed vulnerabilities; 0 risks; 0 secrets (PASSED)** |
-| Windows Companion CI | **x64 compile, standalone publish and artifact upload passed** ([Run 41468262403](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262403)) |
-| Android Companion CI | **Debug APK compile and artifact upload passed** ([Run 41468262422](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262422)) |
-| Node 20/22 Test Matrix CI | **Unit & integration test suites passed** ([Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) & [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510)) |
-| World Intelligence pinned build | **Passed** ([Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) & [Run 41468262510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262510)); static iframe container isolated from backend runtime |
+## Status vocabulary
 
-Evidence on prior code commit `a5d225b5`: **6 / 6 GitHub Actions checks GREEN**. Subsequent documentation-only commits trigger a new, smaller CI set; verify its current result before release.
+Only these statuses are valid:
 
-The single skipped Node test is `tests/supabase-isolation.e2e.test.js` (fails closed without `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES` to protect remote cloud databases). The 2 skipped Python tests require unprivileged symlink permissions on Windows.
+- `IMPLEMENTED`
+- `UNIT_TESTED`
+- `INTEGRATION_TESTED`
+- `LIVE_VERIFIED`
+- `BLOCKED`
+- `NOT_TESTED`
+- `PHYSICAL_HARDWARE_PENDING`
 
-## Implemented features & fixes in PR #441
+A status applies only to the precise scope stated in its row. For example, a successful build is not physical-device acceptance, and an RLS policy listing is not proof of two-user isolation.
 
-- **ULTRON Spatial Intelligence — 3D World Modeling Engine (Diorama):**
-  - Integrated research pipeline from *Diorama: Unleashing Zero-shot Single-view 3D Scene Modeling* (arXiv:2411.19492 / ICCV 2025 Highlight).
-  - Hardware-aware detection (`spatial/hardware-detector.js`) detecting AMD Ryzen 7 5700U with integrated Radeon graphics, host RAM, CUDA, and weights.
-  - Multi-backend isolated adapter (`spatial/diorama-adapter.js`) supporting remote GPU endpoints, isolated subprocess workers (`spatial/diorama-worker-bridge.py`), and CPU geometric fallback.
-  - Comprehensive 3D scene graph model (`spatial/scene-graph.js`) with room architecture, 9-DoF object poses, physical support hierarchies, nearest-neighbor Euclidean tracking, and natural language spatial query answering.
-  - Standard 3D geometry converter (`spatial/geometry-converter.js`) supporting Wavefront OBJ and GLTF 2.0 exports with volume/centroid calculations.
-  - Secure REST router (`spatial/spatial-router.js`) mounted at `/api/spatial/*` with mandatory Supabase user authentication, progress tracking (0% -> 100%), and strict cross-user data isolation.
-  - Interactive "SPATIAL WORLD MODEL" 3D viewer (`public/spatial-viewer.js`) with orbit navigation, wireframe bounding boxes, floor grid, coordinate axes, object selection HUD, and one-click OBJ/GLTF download.
-  - Deep integration with AI Brain (`core/brain-router.js` spatial complexity classification & context injection) and ULTRON Eyes (`vision/ultron-vision.js`).
-- **Multimodal Gemini Flash Vision Fallback:** Added automatic failover in `vision/openrouter-vision-adapter.js` to Google AI Studio Gemini Flash (`gemini-1.5-flash`) via `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` when `OPENROUTER_API_KEY` is not configured. Rejects internal session/OAuth tokens (`AQ.` and `ya29.`).
-- **Direct Brain Inference REST Route:** Added `/api/jarvis/brain/infer` in `jarvis-router.js` with owner-scoped authentication, DNS-pinned safe HTTPS outbound fetch, and multi-provider failover.
-- **Standalone Groq, Gemini, and Cerebras Provider Auto-Detection:** Auto-detects `GROQ_API_KEY`, valid `GEMINI_API_KEY`, and `CEREBRAS_API_KEY` across `server.js` (`configuredChatProviders`, `hasConfiguredModelProvider`) and `agent-runtime.js` (`configuredModelProviders`) when `ULTRON_MODEL_PROVIDERS_JSON` is not explicitly declared.
-- **Cerebras Cloud Provider Integration:** Integrated Cerebras (`csk-...`) ultra-fast Llama-3.3-70b / Llama-3.1-8b inference with HTTP 200 empty-completion failover in `core/brain-router.js`.
-- **AI Provider Credential Guard:** Added detection distinguishing Google AI Studio API keys (`AIzaSy...`) from internal OAuth/session bearer tokens (`AQ.` and `ya29.`) in `scripts/model-provider-smoke.mjs` and `core/brain-router.js`. Prevents doomed 401 calls to Google AI Studio and outputs actionable setup guidance.
-- **Durable DeviceHub REST Routes & Rollback:** Complete owner-authenticated endpoints (`/api/jarvis/devices/pair/approve`, `/api/jarvis/devices/:id/revoke`, `/api/jarvis/devices/:id/rotate-token`, `/api/jarvis/devices/:id/command`) and companion-authenticated endpoints with 5-minute pairing code expiry, AES-GCM encrypted token persistence, and paired devices rollback migration (`20261101180000_durable_paired_devices.rollback.sql`).
-- **Living Energy Core & Gesture Integration:** Integrated 20,000-particle WebGL Living Energy Core with `public/hand-gesture-core.js` supporting 8 physical gestures locally with zero cloud frame uploads.
-- **Free-First Neural Voice Architecture:** Defaulted to local Kokoro-82M ONNX (`am_onyx` voice) and browser SpeechSynthesis with Hindi/English bilingual support. Retired hardcoded Fish Audio behind operator flag `ULTRON_ENABLE_FISH_AUDIO=true`.
-- **Render Blueprint Reconciliation:** Reconciled `render.yaml` to exactly 4 existing services (`ultron-ai-core`, `ultron-core-interface`, `ultron-browser-use-core`, `ultron-rea-gateway`), wiring `fromService` token sharing and generating dedicated secrets. Documented in `docs/RENDER_BLUEPRINT_RECONCILIATION.md`.
+## Acceptance matrix
 
-## Live capability state
+| Area / acceptance scope | Status | Evidence and verification | Remaining dependency |
+|---|---|---|---|
+| Release candidate branch | `IMPLEMENTED` | PR #441 open; candidate was 186 commits ahead and 0 behind production base at SHA `71a86fb6b5fe696e47a19af43cf27a321cdd47f0`; GitHub reported mergeable. | Independent full diff review and release approval. |
+| Latest exact-head CI | `NOT_TESTED` | CI for SHA `71a86fb6b5fe696e47a19af43cf27a321cdd47f0` was queued when this snapshot was written. | Wait for all workflows on the final candidate SHA. |
+| Node deterministic suite | `UNIT_TESTED` | On SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`: 1,292 tests, 1,291 passed, 0 failed, 1 skipped. | Re-run on latest candidate SHA. |
+| Python/browser navigation policy suite | `UNIT_TESTED` | On SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`, Python policy and startup smoke checks passed. | New actual Chromium launch test requires latest-head CI confirmation. |
+| Repository syntax / static check | `UNIT_TESTED` | `npm run check` passed on SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`. | Re-run on latest candidate SHA. |
+| Root dependency audit | `INTEGRATION_TESTED` | CI `npm audit --omit=dev --audit-level=high` passed on SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`. | Re-run on final SHA. |
+| Pinned World Intelligence dependency tree | `INTEGRATION_TESTED` | Pinned upstream commit `7be5937fc3e3b10cdfa8d3f833536167268768ad` initially reported 5 HIGH advisories (Vite and Zod dependency chain). CI now applies non-forced semver-safe `npm audit fix --ignore-scripts`, then audit reported 0 vulnerabilities; Vite 6.4.5 build completed with 870 modules transformed. | Upstream source remains pinned; transient build dependency remediation is not a committed upstream lockfile update. Continue auditing on each build. |
+| Repository security quality gate | `UNIT_TESTED` | `npm run security:report` passed on SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`: 0 confirmed findings, 0 potential warnings, 0 informational findings. Gate now fails closed on incomplete dependency, SAST, working-tree secret, or Git-history scans. | Re-run on latest candidate SHA; custom scanners do not prove absence of all vulnerabilities. |
+| Git-history secret scan depth | `IMPLEMENTED` | Scanner now counts actual commit headers and fails closed on empty/unavailable history; CI fetches 30 commits. | This is a recent code change; latest CI must verify it. |
+| Supabase RLS policy definitions | `LIVE_VERIFIED` | Read-only query of live `pg_policies` inspected policies for public/storage; core user-owned tables have RLS policies. Public schema CREATE privilege is false for anon/authenticated. | Policy review is not an adversarial cross-user E2E test. |
+| Supabase private document storage | `LIVE_VERIFIED` | Live storage bucket is private; user-folder ownership policies were inspected. | Verify actual upload/download with disposable accounts. |
+| Supabase two-account isolation | `BLOCKED` | Write-gated E2E test is skipped unless disposable test accounts and an isolated test environment are available. | Owner must provide/authorize disposable test identities and isolated test project. |
+| Supabase leaked-password protection | `BLOCKED` | Live Security Advisor reports `Leaked Password Protection Disabled`. | Project owner must enable it in Supabase Auth dashboard and re-check Security Advisor. |
+| Paired-device migration in production | `BLOCKED` | Migration is present in candidate source but absent from live migration history. | Review and run on isolated development DB first; production application requires explicit owner authorization. |
+| Paired-device rollback | `IMPLEMENTED` | Rollback now states that it permanently deletes pairing metadata and omits `CASCADE` so unexpected dependencies stop the transaction. | Back up required data; never run in production without explicit owner approval. |
+| AI text inference | `BLOCKED` | Provider routing and fallback code exist; no authorized real-provider smoke result was obtained in this audit. | Valid provider credentials configured in runtime and a real inference/fallback smoke test. |
+| Cloud vision inference | `BLOCKED` | Vision adapters exist; no authorized real cloud image inference was obtained in this audit. | Valid vision provider configuration and real image smoke test. |
+| Local hand-gesture processing | `IMPLEMENTED` | Candidate contains local landmark/gesture path and Living Energy Core integration. | Physical camera, gesture-by-gesture acceptance and privacy verification remain untested. |
+| Persistent worker end-to-end lifecycle | `BLOCKED` | Worker code and deterministic tests exist; no disposable-user live queue/lease/recovery acceptance was performed. | Isolated DB, disposable user, and bounded live worker run. |
+| Browser bridge live operation | `BLOCKED` | Render logs for `ultron-browser-use-core` show repeated Chromium executable `FileNotFoundError` and browser watchdog failures on 2026-10-31. | Candidate now installs Chromium during Render build, probes a real launch at startup, and returns 503 from health when browser/model configuration is missing; latest CI and later authorized Render deployment/smoke are required. |
+| Browser navigation security policy | `UNIT_TESTED` | URL validation, public HTTPS targets, DNS pinning and read-only side-effect restrictions passed deterministic Python tests on prior green SHA. | Latest-head CI and real authenticated read-only browser smoke. |
+| Coding sandbox on target PC | `PHYSICAL_HARDWARE_PENDING` | Container adapter and mocked tests exist; no real Docker daemon/isolation test was performed on target Windows host. | Verify Docker daemon, filesystem/network isolation, resource limits, process kill and cleanup on target PC. |
+| Kokoro-82M voice on target PC | `PHYSICAL_HARDWARE_PENDING` | Candidate contains Kokoro path and browser/Windows fallbacks; target model files and inference were not inspected on the physical PC. | Verify model files, actual inference, microphone/wake-word and latency on target Windows machine. |
+| Windows companion build | `INTEGRATION_TESTED` | Windows companion GitHub Actions build passed on SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`. | Physical install, DPAPI, pairing, microphone and command round-trip. |
+| Android companion build | `INTEGRATION_TESTED` | Android companion GitHub Actions build passed on SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`. | Physical APK install, Keystore, permissions, wake service and reconnect/revocation. |
+| Media workflow | `UNIT_TESTED` | CI installed FFmpeg and deterministic media tests passed on SHA `c0abf89902635396225f57aafbfecf35fcc00dcf`. | User-provided fixture acceptance and target-PC resource profile. |
+| Spatial intelligence | `UNIT_TESTED` | Candidate includes CPU fallback, scene graph and geometry conversion; deterministic checks are part of suite. | Real remote GPU endpoint/Diorama inference remains unverified. |
+| Robotics | `UNIT_TESTED` | Digital-twin/simulation code and deterministic safety checks exist. | Physical actuation and hardware-in-the-loop are not verified; no physical robot is connected. |
+| Render live service metadata | `LIVE_VERIFIED` | Read-only inspection of all four services in `Ultron core`; recent application logs show backend and interface processes starting on 2026-11-03. | Process startup does not prove all endpoints or workflows work. |
+| Render release alignment | `BLOCKED` | Backend, browser bridge and REA gateway are on `main`; interface is on `feature/ultron-live-core-interface-20261029`. Live deployed commits are backend/browser/REA `b00c2e81...`, interface `68b04264...`. | Reviewed release plan, owner approval, then separately authorized sync/deploy. |
+| Render health checks | `BLOCKED` | All four live Render services currently report an empty configured `healthCheckPath`; candidate Blueprint declares paths but is not synced. | Review Blueprint diff and explicitly authorize Render sync. |
+| Render telemetry | `NOT_TESTED` | Metrics query returned no usable CPU, memory, request-count or latency samples during this audit. | Confirm metrics availability/plan and collect service telemetry. |
 
-| Area | Status | Remaining proof |
-|---|---|---|
-| Text model inference | **SOFTWARE VERIFIED** | Outbound live test gated on valid `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `AIzaSy...` `GEMINI_API_KEY`, or `CEREBRAS_API_KEY` |
-| Vision / Eyes | **SOFTWARE VERIFIED** | Synthetic PNG preprocessing & schema verified; multi-provider OpenRouter & Gemini Flash fallback verified; live call requires provider key |
-| Spatial Intelligence (Diorama) | **SOFTWARE + TEST VERIFIED** | 18/18 PASS; isolated adapter, scene graph, geometry export, 3D viewer, and hardware fallback verified; full CUDA pipeline requires 16GB+ GPU |
-| Worker | **SOFTWARE VERIFIED** | Worker lifecycle, retry, and lease fence verified; live task requires Supabase credentials |
-| Account isolation | **BLOCKED** | Software RLS verified; live two-account test requires disposable Auth accounts |
-| Supabase Auth | **WARNING ACTIVE** | Leaked-password protection toggle requires owner action in Supabase Dashboard |
-| Gesture core | **SOURCE + CI VERIFIED** | 20/20 test suite PASS; runs locally via MediaPipe with 0 network uploads |
-| Voice | **SOFTWARE VERIFIED** | Browser Web Speech and Kokoro ONNX pipeline verified; hardware audio works locally |
-| Device pairing | **CODE + STORAGE VERIFIED** | 17/17 PASS; production schema migration pending owner approval |
-| Windows companion | **BUILD VERIFIED** | Standalone x64 binary build passed in CI; physical PC install requires operator testing |
-| Android companion | **APK BUILD VERIFIED** | Native APK build passed in CI; physical Android phone install requires operator testing |
-| Browser automation | **SOFTWARE TESTED** | Playwright bridge SSRF and token auth verified; live paired session requires operator testing |
-| Coding sandbox | **FAIL-CLOSED TESTED** | Docker isolation checks pass; host Docker daemon requires operator environment |
-| Media workflow | **FIXTURE TESTED** | FFmpeg mixing verified (9/9 PASS); full user workflow requires operator input |
-| Robotics/simulation | **SIMULATION VERIFIED** | ROS2 digital twin and IK solver verified; physical robot disconnected |
-| External integrations | **MIXED MATURITY** | Scoped adapters tested with fail-closed security guards |
+## Render live-state snapshot
 
-## Render / Supabase production state
+Workspace: `Ultron core`
 
-- Render workspace: **Ultron core**.
-- Backend currently on `main` at `b00c2e8`.
-- Interface service currently on `feature/ultron-live-core-interface-20261029` at `68b04264`.
-- Candidate `render.yaml` is fully reconciled for the 4 services, but **not synced** pending owner authorization.
-- Supabase project remains active with existing core table RLS enabled.
-- New paired-device migration (`20261101180000_durable_paired_devices.sql`) and rollback procedure (`20261101180000_durable_paired_devices.rollback.sql`) are ready in PR #441, not applied to production.
+| Service | Live branch | Live deployed commit | Live configured health path | Candidate health path |
+|---|---|---|---|---|
+| `ultron-ai-core` | `main` | `b00c2e81...` | Empty | `/api/health` |
+| `ultron-core-interface` | `feature/ultron-live-core-interface-20261029` | `68b04264...` | Empty | `/` |
+| `ultron-browser-use-core` | `main` | `b00c2e81...` | Empty | `/health` |
+| `ultron-rea-gateway` | `main` | `b00c2e81...` | Empty | `/healthz` |
 
-## Honest 6-Dimension Scorecard
+Render logs show successful process startup messages, including the backend task-worker startup message. Browser-use logs also show repeated browser-launch failures due to a missing local Chromium executable. The candidate Blueprint now installs Chromium and the bridge health endpoint fails closed, but those changes have not been deployed.
 
-| Scoring Dimension | Score | Documented Denominator & Empirical Basis |
-|---|:---:|---|
-| **A. Implementation Completeness** | **100.0%** | **14 / 14 core capability domains** genuinely implemented in source code without stubs. |
-| **B. Software Verification** | **99.9%** | **1,286 / 1,287 Node tests pass** (1 skip for DB protection); **15 / 17 Python tests pass** (2 skip for Windows symlinks); **332 / 332 files clean**; **6 / 6 CI workflows green**. |
-| **C. Live Operational Readiness** | **50.0%** | **6 / 12 domains operational locally** (Kokoro voice, Web speech, MediaPipe gestures, local DeviceHub, spatial CPU fallback, PWA proxy); 6 / 12 gated on external cloud keys / remote GPU / physical devices. |
-| **D. Security Readiness** | **100.0%** | **0 confirmed vulnerabilities, 0 risks, 0 secrets**. Network safety SSRF (19/19 PASS), k-anonymity password screening, and SHA-256 token hashing verified. |
-| **E. Production Release Readiness** | **90.0%** | Reconciled `render.yaml` (4 services), migration + rollback scripts, rollback runbook ready. Deployment locked awaiting operator command. |
-| **F. Arithmetic result of reported inputs** | **88.48%** | Correct arithmetic for the stated inputs; not independently verified production readiness. Live cloud operations and owner gates remain outstanding. |
+## Exact test evidence
 
-No unapproved merge, Render Blueprint sync/deployment, plan upgrade, production secret mutation, production database write, or Supabase migration was performed.
+### Latest completed full CI evidence before the latest browser/database hardening
+
+Commit: `c0abf89902635396225f57aafbfecf35fcc00dcf`
+
+- Node tests: 1,292 total; 1,291 pass; 0 fail; 1 skipped.
+- Python/browser policy checks: passed.
+- Syntax check: passed.
+- Root runtime dependency audit: passed.
+- Repository security report: passed (0 findings reported by configured scanners).
+- Pinned World Intelligence audit: 0 vulnerabilities after semver-safe remediation.
+- Pinned World Intelligence build: passed (870 modules transformed).
+- Windows companion build: passed.
+- Android companion build: passed.
+
+This is **not** evidence that the later browser runtime and paired-device SQL hardening passed. Current-head CI must be read from PR #441.
+
+## Release readiness calculation
+
+This is an evidence-weighted **production-readiness estimate**, not a percentage of source files or features. Weights deliberately emphasize live operations and security over code presence.
+
+| Category | Score | Weight | Weighted points |
+|---|---:|---:|---:|
+| Implementation coverage | 75% | 15% | 11.25 |
+| Deterministic automated verification | 99.92% | 15% | 14.99 |
+| Security readiness | 60% | 20% | 12.00 |
+| Live operational verification | 25% | 25% | 6.25 |
+| Production release readiness | 15% | 15% | 2.25 |
+| Physical hardware acceptance | 5% | 10% | 0.50 |
+| **Overall** |  | **100%** | **47.24%** |
+
+Calculation: `(75×0.15) + (99.92×0.15) + (60×0.20) + (25×0.25) + (15×0.15) + (5×0.10) = 47.24%`.
+
+The automated-verification score is based on the completed prior SHA and is not a claim that the latest candidate SHA is green. The overall score remains below release threshold because the production/live/hardware gates are incomplete.
+
+## P0 release blockers
+
+1. Supabase Leaked Password Protection remains disabled.
+2. Latest exact candidate SHA CI must pass after browser and paired-device hardening.
+3. Two-account live isolation and disposable-user worker acceptance remain unverified.
+4. Real AI text and vision inference remain unverified.
+5. Render interface/backend branch mismatch remains unresolved.
+6. All four live Render services have no configured health-check path; metrics evidence is absent.
+7. Browser-use live runtime previously failed due to missing Chromium; candidate fix needs CI and later authorized live verification.
+8. Physical Windows/Android installation, Kokoro inference, and Docker sandbox isolation remain pending.
+
+## Owner actions
+
+- Enable Supabase leaked-password protection in the Supabase dashboard.
+- Authorize an isolated disposable-account test environment for two-user RLS and worker E2E.
+- Ensure valid AI provider credentials are configured in the runtime; do not paste keys into chat.
+- Review the candidate Render Blueprint against the four existing services and their secrets.
+- Explicitly authorize any Render sync/deployment only after the release review.
+- Run paired-device migration first on an isolated development database; production migration requires separate explicit authorization.
+- Provide access to the target Windows PC and physical Android device for hardware acceptance.
+
+## Release safety
+
+PR #441 is open and unmerged. No production deployment, Render sync, production secret mutation, or production database migration has been performed. Do not merge or deploy until the P0 gates above are resolved or explicitly accepted by the owner with documented evidence.
