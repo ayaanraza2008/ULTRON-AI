@@ -90,6 +90,13 @@ export const SECRET_RULES = [
   }
 ];
 
+const TEST_FIXTURE_FINGERPRINTS = new Set([
+  "743554670c",
+  "1db61e13c1",
+  "9f5e00085c",
+  "8bcac7908e",
+]);
+
 export const DEFAULT_IGNORE_PATTERNS = [
   /node_modules/,
   /(?:^|[\\/])\.git(?:[\\/]|$)/,
@@ -97,9 +104,7 @@ export const DEFAULT_IGNORE_PATTERNS = [
   /(?:^|[\\/])dist(?:[\\/]|$)/,
   /(?:^|[\\/])build(?:[\\/]|$)/,
   /(?:^|[\\/])coverage(?:[\\/]|$)/,
-  /(?:^|[\\/])tests?(?:[\\/]|$)/,
   /(?:^|[\\/])vendor(?:[\\/]|$)/,
-  /(?:^|[\\/])reports(?:[\\/]|$)/,
   /\.onnx$/i,
   /\.png$/i,
   /\.jpg$/i,
@@ -166,6 +171,8 @@ export class SecretScanner {
         let match;
         while ((match = regex.exec(line)) !== null) {
           const secretVal = match[1] || match[0];
+          // Allowlist only the exact synthetic values used by legacy secret-scanner tests.
+          if (TEST_FIXTURE_FINGERPRINTS.has(this.hashSecret(secretVal))) continue;
           // Skip placeholders and test mocks
           if (
             secretVal.includes("XXXX") ||
@@ -339,6 +346,7 @@ export class SecretScanner {
                 let match;
                 while ((match = regex.exec(addedContent)) !== null) {
                   const secretVal = match[1] || match[0];
+                  if (TEST_FIXTURE_FINGERPRINTS.has(this.hashSecret(secretVal))) continue;
                   if (
                     secretVal.includes("XXXX") ||
                     secretVal.includes("test-secret") ||
