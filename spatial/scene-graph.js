@@ -28,7 +28,13 @@ export class SpatialSceneGraph {
     this.sceneId = options.sceneId || ("scene-" + Date.now());
     this.timestamp = options.timestamp || new Date().toISOString();
     this.pipeline = options.pipeline || "diorama-zero-shot-spatial";
+    this.executionMode = options.executionMode || "UNKNOWN";
     this.cudaAccelerated = Boolean(options.cudaAccelerated);
+    this.remoteWorkerUsed = Boolean(options.remoteWorkerUsed);
+    this.remoteGpuReported = Boolean(options.remoteGpuReported);
+    this.remoteInferenceStatusReported = typeof options.remoteInferenceStatusReported === "string"
+      ? options.remoteInferenceStatusReported.slice(0, 120)
+      : null;
     this.inferenceStatus = options.inferenceStatus || "ESTIMATED_SCENE";
 
     // Room architecture
