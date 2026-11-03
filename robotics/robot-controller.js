@@ -228,6 +228,7 @@ export class RobotController {
       registered: true,
       robotId,
       token,
+      tokenScope: "SIMULATION_ONLY",
       name: robotEntry.name,
       sensorsCount: supportedSensors.length,
       actuatorsCount: supportedActuators.length,
