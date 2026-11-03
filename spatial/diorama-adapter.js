@@ -45,19 +45,19 @@ function validateScenePayload(payload) {
     }
 
     for (const axis of ["x", "y", "z"]) {
-      const value = Number(position[axis]);
-      if (!Number.isFinite(value) || Math.abs(value) > 1000) {
+      const value = position[axis];
+      if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > 1000) {
         throw adapterError("INVALID_SCENE_GRAPH", `Spatial object ${index} has invalid position geometry.`);
       }
     }
     for (const axis of ["dx", "dy", "dz"]) {
-      const value = Number(dimensions[axis]);
-      if (!Number.isFinite(value) || value <= 0 || value > 1000) {
+      const value = dimensions[axis];
+      if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1000) {
         throw adapterError("INVALID_SCENE_GRAPH", `Spatial object ${index} has invalid dimensions.`);
       }
     }
     if (object.confidence !== undefined &&
-        (!Number.isFinite(Number(object.confidence)) || Number(object.confidence) < 0 || Number(object.confidence) > 1)) {
+        (typeof object.confidence !== "number" || !Number.isFinite(object.confidence) || object.confidence < 0 || object.confidence > 1)) {
       throw adapterError("INVALID_SCENE_GRAPH", `Spatial object ${index} has an invalid confidence score.`);
     }
   }
