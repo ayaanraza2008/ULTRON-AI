@@ -42,6 +42,12 @@ test("CodingSandbox: labels explicit Docker overrides as test-only", async () =>
   assert.equal(readiness.simulated, true);
   assert.equal(readiness.dockerVerified, false);
   assert.equal(sandbox.isDockerVerified, false);
+
+  const execution = await sandbox.executeJavaScript("console.log('must not run')");
+  assert.equal(execution.success, false);
+  assert.equal(execution.executed, false);
+  assert.equal(execution.errorCode, "CODE_SANDBOX_MOCK_ONLY");
+  assert.equal(execution.dockerVerified, false);
 });
 
 test("CodingSandbox: dynamically probes host Docker daemon without forcing override", async () => {
