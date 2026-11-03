@@ -86,36 +86,39 @@ export class SpatialSceneGraph {
     const label = String(data.label || "unknown_object").toLowerCase().trim();
     const category = String(data.category || this._inferCategory(label));
 
-    const box2d = {
-      xMin: Math.max(0, Math.min(1, Number(data.box2d?.xMin) || 0)),
-      yMin: Math.max(0, Math.min(1, Number(data.box2d?.yMin) || 0)),
-      xMax: Math.max(0, Math.min(1, Number(data.box2d?.xMax) || 1)),
-      yMax: Math.max(0, Math.min(1, Number(data.box2d?.yMax) || 1))
-    };
+    const box2d = data.box2d && ["xMin", "yMin", "xMax", "yMax"].every(key =>
+      typeof data.box2d[key] === "number" && Number.isFinite(data.box2d[key]) &&
+      data.box2d[key] >= 0 && data.box2d[key] <= 1
+    ) ? {
+      xMin: data.box2d.xMin,
+      yMin: data.box2d.yMin,
+      xMax: data.box2d.xMax,
+      yMax: data.box2d.yMax
+    } : null;
+
+    const position = data.pose3d?.position;
+    const dimensions = data.pose3d?.dimensions;
+    if (!position || !dimensions ||
+        !["x", "y", "z"].every(key => typeof position[key] === "number" && Number.isFinite(position[key]) && Math.abs(position[key]) <= 1000) ||
+        !["dx", "dy", "dz"].every(key => typeof dimensions[key] === "number" && Number.isFinite(dimensions[key]) && dimensions[key] > 0 && dimensions[key] <= 1000)) {
+      throw new TypeError("Spatial objects require validated finite 3D positions and positive dimensions.");
+    }
 
     const pose3d = {
-      position: {
-        x: Number.isFinite(data.pose3d?.position?.x) ? Number(data.pose3d.position.x) : 0.0,
-        y: Number.isFinite(data.pose3d?.position?.y) ? Number(data.pose3d.position.y) : 0.5,
-        z: Number.isFinite(data.pose3d?.position?.z) ? Number(data.pose3d.position.z) : 2.5
-      },
+      position: { x: position.x, y: position.y, z: position.z },
       rotation: {
-        roll: Number(data.pose3d?.rotation?.roll) || 0,
-        pitch: Number(data.pose3d?.rotation?.pitch) || 0,
-        yaw: Number(data.pose3d?.rotation?.yaw) || 0
+        roll: Number.isFinite(data.pose3d?.rotation?.roll) ? data.pose3d.rotation.roll : null,
+        pitch: Number.isFinite(data.pose3d?.rotation?.pitch) ? data.pose3d.rotation.pitch : null,
+        yaw: Number.isFinite(data.pose3d?.rotation?.yaw) ? data.pose3d.rotation.yaw : null
       },
-      dimensions: {
-        dx: Math.max(0.05, Number(data.pose3d?.dimensions?.dx) || 0.6), // width
-        dy: Math.max(0.05, Number(data.pose3d?.dimensions?.dy) || 0.6), // height
-        dz: Math.max(0.05, Number(data.pose3d?.dimensions?.dz) || 0.6)  // depth
-      }
+      dimensions: { dx: dimensions.dx, dy: dimensions.dy, dz: dimensions.dz }
     };
 
     const cadRetrieval = {
-      cadId: data.cadRetrieval?.cadId || `cad-${label}-01`,
-      source: data.cadRetrieval?.source || "Objaverse-LVIS-Diorama",
-      retrievalScore: Number.isFinite(data.cadRetrieval?.retrievalScore) ? data.cadRetrieval.retrievalScore : 0.85,
-      meshFormat: data.cadRetrieval?.meshFormat || "primitive"
+      cadId: typeof data.cadRetrieval?.cadId === "string" ? data.cadRetrieval.cadId : null,
+      source: typeof data.cadRetrieval?.source === "string" ? data.cadRetrieval.source : "UNVERIFIED",
+      retrievalScore: Number.isFinite(data.cadRetrieval?.retrievalScore) ? data.cadRetrieval.retrievalScore : null,
+      meshFormat: typeof data.cadRetrieval?.meshFormat === "string" ? data.cadRetrieval.meshFormat : "unknown"
     };
 
     const record = {
@@ -125,8 +128,8 @@ export class SpatialSceneGraph {
       box2d,
       pose3d,
       cadRetrieval,
-      confidence: Number.isFinite(data.confidence) ? data.confidence : 0.9,
-      provenance: data.provenance || PROVENANCE_TYPES.ESTIMATED_MEASUREMENT,
+      confidence: Number.isFinite(data.confidence) ? data.confidence : null,
+      provenance: data.provenance || PROVENANCE_TYPES.UNAVAILABLE,
       spatialRelations: {
         supportedBy: data.spatialRelations?.supportedBy || "floor",
         supports: Array.isArray(data.spatialRelations?.supports) ? data.spatialRelations.supports : [],
