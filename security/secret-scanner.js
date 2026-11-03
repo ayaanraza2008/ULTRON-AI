@@ -300,13 +300,24 @@ export class SecretScanner {
               message: error.message,
               commitsScanned: 0,
               findingsCount: 0,
-              isSecure: true,
+              isSecure: false,
               findings: []
             });
           }
 
           const findings = [];
           const lines = String(stdout || "").split("\n");
+          const commitsScanned = lines.filter(line => line.startsWith("commit ")).length;
+          if (commitsScanned === 0) {
+            return resolve({
+              tool: "git-history-secret-scanner",
+              status: "GIT_LOG_EMPTY",
+              commitsScanned: 0,
+              findingsCount: 0,
+              isSecure: false,
+              findings: []
+            });
+          }
           let currentCommit = "HEAD";
           let currentFile = "unknown";
 
@@ -361,7 +372,7 @@ export class SecretScanner {
             target: repoDir,
             timestamp: new Date().toISOString(),
             status: "COMPLETED",
-            commitsScanned: maxCommits,
+            commitsScanned,
             findingsCount: findings.length,
             isSecure: findings.length === 0,
             findings
