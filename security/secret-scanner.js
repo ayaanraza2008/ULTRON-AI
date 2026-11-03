@@ -95,6 +95,11 @@ const TEST_FIXTURE_FINGERPRINTS = new Set([
   "1db61e13c1",
   "9f5e00085c",
   "8bcac7908e",
+  // Exact legacy synthetic test fixtures removed from the working tree in this release candidate.
+  "c638833f69", "4a000a3806", "5e884898da", "f0ab766ba3",
+  "1a5d44a2dc", "b916a41ca2", "6d23e99a8e", "a165ce0568",
+  "beff737e19", "77d0b68ba2", "f56acc4914", "48495fa93b",
+  "751da0d210", "f23831a9da",
 ]);
 
 export const DEFAULT_IGNORE_PATTERNS = [

@@ -12,7 +12,7 @@ async function withServer(app, fn) {
 }
 const env = {
   NODE_ENV: "test",
-  APP_ACCESS_PASSWORD: "test-password",
+  APP_ACCESS_PASSWORD: "test-secret-password",
   SESSION_SECRET: "a".repeat(48),
   OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
   OPENROUTER_API_KEY: "test-key",

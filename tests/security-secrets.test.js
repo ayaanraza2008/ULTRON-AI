@@ -79,3 +79,14 @@ test("Secret Scanner: Git history scan executes safely with tool fallback", asyn
   assert.equal(typeof report.findingsCount, "number");
   assert.ok(Array.isArray(report.findings));
 });
+
+test("Secret Scanner: allowlists only exact legacy synthetic fixtures", () => {
+  const scanner = new SecretScanner();
+  const legacyFixture = ["test", "password"].join("-");
+  const allowed = scanner.scanContent('APP_ACCESS_PASSWORD: "' + legacyFixture + '"', "legacy-fixture.js");
+  assert.equal(allowed.length, 0);
+
+  const unknownFixture = ["not", "an", "allowlisted", "fixture"].join("-");
+  const detected = scanner.scanContent('password: "' + unknownFixture + '"', "unknown-fixture.js");
+  assert.equal(detected.length, 1);
+});

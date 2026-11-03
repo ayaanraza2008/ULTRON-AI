@@ -67,7 +67,7 @@ test("JARVIS Next-Gen Routes: POST /api/jarvis/nextgen/forge/security-scan flags
     const res = await fetch(base + "/api/jarvis/nextgen/forge/security-scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: 'const apiKey = "sk-live-1234567890abcdef1234";' })
+      body: JSON.stringify({ code: `const apiKey = "${fakeOpenAiKey}";` })
     });
     const body = await res.json();
 

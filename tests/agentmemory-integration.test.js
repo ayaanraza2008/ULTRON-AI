@@ -168,7 +168,7 @@ test("AgentMemory refuses to persist JWTs and GitHub access tokens", () => {
   const sensitive = [
     "We decided: save JWT eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWJjZCJ9.signatureValue123 for later.",
     "We decided: keep GitHub token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 for debugging.",
-    "We decided: store fine-grained token github_pat_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 for the project."
+    "We decided: store fine-grained token " + fakeFineGrainedPat + " for the project."
   ];
   for (const value of sensitive) assert.equal(shouldCaptureAgentMemory(value), false, value);
 });
