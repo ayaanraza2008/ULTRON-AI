@@ -65,6 +65,8 @@ test("Secret Scanner: Git history scan executes safely with tool fallback", asyn
   const report = await scanner.scanGitHistory(process.cwd(), 5);
 
   assert.equal(report.tool, "git-history-secret-scanner");
+  assert.equal(report.status, "COMPLETED");
+  assert.ok(report.commitsScanned > 0 && report.commitsScanned <= 5);
   assert.equal(typeof report.findingsCount, "number");
   assert.ok(Array.isArray(report.findings));
 });
