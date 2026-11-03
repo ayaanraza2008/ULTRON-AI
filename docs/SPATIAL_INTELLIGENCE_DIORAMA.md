@@ -1,3 +1,5 @@
+> **Verification boundary (2026-11-03):** This document describes the spatial integration architecture, not proof of live Diorama inference. The CPU fallback validates image payload metadata only and returns no invented room geometry or objects. Remote worker responses are structurally validated but their GPU/model provenance remains unverified. See [ULTRON_STATUS.md](../ULTRON_STATUS.md) for the release acceptance matrix.
+
 # ULTRON SPATIAL INTELLIGENCE — 3D WORLD MODELING ENGINE
 ## Research Lineage: Diorama (arXiv:2411.19492 / ICCV 2025 Highlight)
 
