@@ -38,6 +38,7 @@ const FILES_TO_CHECK = [
   "tests/auth-methods.test.js",
   "tests/auth-readiness.test.js",
   "tests/supabase-isolation.e2e.test.js",
+  "tests/supabase-isolation-disposable.test.js",
   "network-safety.js",
   "tests/network-safety.test.js",
   "integrations/desktop-companion.js",

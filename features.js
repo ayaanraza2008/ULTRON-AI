@@ -1450,7 +1450,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         openrouter: Boolean(env.OPENROUTER_API_KEY),
         localOllama: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)),
         litellm: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY),
-        gemini: Boolean(env.GEMINI_API_KEY),
+        gemini: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())),
         openai: Boolean(env.OPENAI_API_KEY)
       },
       tools: [
@@ -1472,7 +1472,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const providers = {
       openrouter: { configured: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", protocol: "openai-compatible" },
       openai: { configured: Boolean(env.OPENAI_API_KEY), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", protocol: "openai-compatible" },
-      gemini: { configured: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", protocol: "gemini" },
+      gemini: { configured: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", protocol: "gemini" },
       litellm: { configured: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", protocol: "openai-compatible" },
       ollama: { configured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL) && boundedString(env.OLLAMA_DEFAULT_MODEL, 120)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120) || null, protocol: "ollama" }
     };
@@ -1601,7 +1601,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const providerConfigs = {
       openrouter: { ready: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, label: "openrouter" },
       openai: { ready: Boolean(env.OPENAI_API_KEY && providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1")), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1") || "") + "/chat/completions", key: env.OPENAI_API_KEY, label: "openai" },
-      gemini: { ready: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash") + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY || ""), key: null, label: "gemini" },
+      gemini: { ready: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash") + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY || ""), key: null, label: "gemini" },
       litellm: { ready: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", url: (safeBaseUrl(env.LITELLM_BASE_URL) || "") + "/chat/completions", key: env.LITELLM_API_KEY, label: "litellm" },
       ollama: { ready: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120) || "", url: (safeBaseUrl(env.OLLAMA_BASE_URL) || "") + "/api/chat", key: null, label: "ollama" }
     };
@@ -1703,7 +1703,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const providerConfigs = {
       openrouter: { ready: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY },
       openai: { ready: Boolean(env.OPENAI_API_KEY && providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1")), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1") || "") + "/chat/completions", key: env.OPENAI_API_KEY },
-      gemini: { ready: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "", key: null },
+      gemini: { ready: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "", key: null },
       litellm: { ready: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", url: (safeBaseUrl(env.LITELLM_BASE_URL) || "") + "/chat/completions", key: env.LITELLM_API_KEY },
       ollama: { ready: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL) && boundedString(env.OLLAMA_DEFAULT_MODEL, 120)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120), url: (safeBaseUrl(env.OLLAMA_BASE_URL) || "") + "/api/chat", key: null }
     };

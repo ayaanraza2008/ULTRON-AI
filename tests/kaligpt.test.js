@@ -331,3 +331,23 @@ test("vision analysis rejects unsupported MIME types before calling a provider",
     assert.equal(called, false);
   });
 });
+
+test("KaliGPT capabilities and assist reject internal session or OAuth token in GEMINI_API_KEY", async () => {
+  await withServer({ GEMINI_API_KEY: "AQ.invalid-internal-session-token" }, async () => { throw new Error("should not call network"); }, async base => {
+    const capsRes = await fetch(base + "/api/kaligpt/capabilities");
+    const caps = await capsRes.json();
+    assert.equal(caps.providers.gemini, false);
+
+    const providersRes = await fetch(base + "/api/kaligpt/providers");
+    const provs = await providersRes.json();
+    assert.equal(provs.providers.gemini.configured, false);
+
+    const assistRes = await fetch(base + "/api/kaligpt/security/assist", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "Analyze security", provider: "gemini" })
+    });
+    assert.equal(assistRes.status, 503);
+    const body = await assistRes.json();
+    assert.equal(body.error.code, "SECURITY_PROVIDER_NOT_CONFIGURED");
+  });
+});

@@ -126,7 +126,7 @@ export class ZeroCostAiEngine {
 
     // 4. Gemini AI Studio
     const geminiKey = this.env.GEMINI_API_KEY?.trim();
-    if (geminiKey) {
+    if (geminiKey && !/^(AQ\.|ya29\.)/i.test(geminiKey)) {
       providers.push({
         name: "gemini_free",
         tier: 1,

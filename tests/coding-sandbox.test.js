@@ -156,3 +156,25 @@ test("CodingSandbox: executes Python in container and handles container timeouts
   assert.equal(res.dockerVerified, false);
   assert.ok(res.error.includes("2000ms"));
 });
+
+test("CodingSandbox: executes real Docker container when Docker daemon is available", async (t) => {
+  const sandbox = new CodingSandbox({ timeoutMs: 10000 });
+  const probe = await sandbox.checkDockerRuntime(true);
+  if (!probe.available) {
+    t.skip("Host Docker daemon is not available; real container execution skipped on host");
+    return;
+  }
+  const readiness = await sandbox.initialize();
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.code, "CODE_SANDBOX_ACTIVE");
+  assert.equal(readiness.isolationEngine, "DOCKER_CONTAINER");
+
+  const res = await sandbox.executeJavaScript("console.log(JSON.stringify({ container: true, sum: 2 + 3 }));");
+  assert.equal(res.success, true);
+  assert.equal(res.executed, true);
+  assert.equal(res.isolationEngine, "DOCKER_CONTAINER");
+  assert.equal(res.dockerVerified, true);
+  const parsed = JSON.parse(res.stdout.trim());
+  assert.equal(parsed.container, true);
+  assert.equal(parsed.sum, 5);
+});
