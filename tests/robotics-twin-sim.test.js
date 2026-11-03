@@ -57,6 +57,24 @@ test("QLearningNavigationAgent: learns state-action policy and updates Q-table",
   assert.equal(chosen, ROBOT_ACTIONS.TURN_RIGHT);
 });
 
+test("SimToRealDeploymentGate: missing safety telemetry cannot qualify a trajectory", () => {
+  const gate = new SimToRealDeploymentGate();
+  const result = gate.evaluateSimulationQualification([{ collision: false }]);
+  assert.equal(result.passed, false);
+  assert.equal(result.simulationQualified, false);
+  assert.equal(result.code, "SAFETY_TELEMETRY_INCOMPLETE");
+  assert.equal(result.physicalDeploymentAuthorized, false);
+});
+
+test("SimToRealDeploymentGate: zero battery is not replaced with a synthetic full battery", () => {
+  const gate = new SimToRealDeploymentGate();
+  const result = gate.evaluateSimulationQualification([
+    { collision: false, minClearance: 1.0, batteryPercent: 0 }
+  ]);
+  assert.equal(result.passed, false);
+  assert.equal(result.metrics.finalBatteryPercent, 0);
+});
+
 test("SimToRealDeploymentGate: rejects unsafe trajectories and issues deployment passport for safe missions", () => {
   const gate = new SimToRealDeploymentGate();
 
