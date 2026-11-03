@@ -76,8 +76,16 @@ test("SimToRealDeploymentGate: rejects unsafe trajectories and issues deployment
     { collision: false, minClearance: 0.5, batteryPercent: 92 }
   ];
 
+  const qualification = gate.evaluateSimulationQualification(safeTrajectory);
+  assert.equal(qualification.simulationQualified, true);
+  assert.equal(qualification.physicalDeploymentAuthorized, false);
+  assert.equal(qualification.qualificationType, "SIMULATION_ONLY");
+
   const passport = gate.issueDeploymentPassport("bot-99", safeTrajectory);
-  assert.equal(passport.success, true);
-  assert.ok(passport.deploymentPassportToken.startsWith("pass_"));
+  assert.equal(passport.success, false);
+  assert.equal(passport.code, "PHYSICAL_HIL_REQUIRED");
+  assert.equal(passport.simulationQualified, true);
+  assert.equal(passport.physicalDeploymentAuthorized, false);
+  assert.equal(passport.deploymentPassportToken, null);
   assert.ok(passport.evaluationScore > 50);
 });
