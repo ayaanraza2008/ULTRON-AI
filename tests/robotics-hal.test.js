@@ -34,6 +34,8 @@ test("PhysicalSafetyController: enforces velocity limits", () => {
     maxAngularVelocityRps: 1.0
   });
 
+  safety.recordHeartbeat();
+
   // Valid motion
   const valid = safety.validateMotionCommand({
     linearVelocity: 1.2,
@@ -66,6 +68,7 @@ test("PhysicalSafetyController: enforces velocity limits", () => {
 
 test("PhysicalSafetyController: enforces critical battery cutoff threshold", () => {
   const safety = new PhysicalSafetyController();
+  safety.recordHeartbeat();
   const lowBattery = safety.validateMotionCommand({
     linearVelocity: 0.5,
     angularVelocity: 0.2,
@@ -76,13 +79,16 @@ test("PhysicalSafetyController: enforces critical battery cutoff threshold", () 
   assert.equal(lowBattery.code, "BATTERY_CRITICAL");
 });
 
-test("PhysicalSafetyController: latching Emergency Stop blocks all motion until reset token provided", () => {
-  const safety = new PhysicalSafetyController();
+test("PhysicalSafetyController: latching Emergency Stop requires injected operator authorization to reset", () => {
+  const safety = new PhysicalSafetyController({
+    resetAuthorizationVerifier: (key, nonce) => key === "operator-reset-approval" && typeof nonce === "string"
+  });
   assert.equal(safety.emergencyStopLatched, false);
 
   const eStopResult = safety.triggerEmergencyStop("Test operator trigger");
   assert.equal(eStopResult.latched, true);
-  assert.ok(eStopResult.resetToken);
+  assert.equal(eStopResult.resetRequired, true);
+  assert.equal("resetToken" in eStopResult, false);
 
   // Any motion command must now be rejected
   const motionAfterEStop = safety.validateMotionCommand({
@@ -100,7 +106,7 @@ test("PhysicalSafetyController: latching Emergency Stop blocks all motion until 
   assert.equal(safety.emergencyStopLatched, true);
 
   // Correct reset token clears latch
-  const validReset = safety.clearEmergencyStop(eStopResult.resetToken);
+  const validReset = safety.clearEmergencyStop("operator-reset-approval");
   assert.equal(validReset.success, true);
   assert.equal(safety.emergencyStopLatched, false);
 });
@@ -118,6 +124,8 @@ test("RobotController: Registration handshake registers compatible robots", () =
 
   assert.equal(robot.registered, true);
   assert.equal(robot.robotId, "mobile-bot-alpha");
+  assert.equal(robot.registrationMode, "SIMULATION_ONLY");
+  assert.equal(robot.hardwareConnected, false);
 
   const fleet = controller.getFleetStatus();
   assert.equal(fleet.fleetCount, 1);
@@ -144,6 +152,8 @@ test("RobotController: Dispatch motion respects safety mode and heartbeats", () 
   assert.equal(motion.permitted, true);
   assert.equal(motion.mode, ROBOT_SAFETY_LEVELS.SIMULATION);
   assert.equal(motion.executed, true);
+  assert.equal(motion.simulated, true);
+  assert.equal(motion.physicalActuation, false);
 });
 
 test("RobotController: Brain export and import handshake with cryptographic signature", () => {
