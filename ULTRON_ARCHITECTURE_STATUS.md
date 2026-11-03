@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI — COMPLETE ARCHITECTURE STATUS
 ## JARVIS × ULTRON HYBRID INTELLIGENCE OPERATING SYSTEM
 **Evaluation Date:** 2026-11-01T12:35:00+05:30  
