@@ -55,8 +55,14 @@ export class CodingSandbox {
     }
 
     if (this.customContainerRunner) {
-      this.isDockerVerified = true;
-      this._cachedDockerStatus = { available: true, version: "mock-container-runtime" };
+      // Test injection can exercise dispatch logic, but is never a Docker proof.
+      this.isDockerVerified = false;
+      this._cachedDockerStatus = {
+        available: true,
+        version: "mock-container-runtime",
+        simulated: true,
+        reason: "MOCK_RUNNER_NOT_REAL_DOCKER"
+      };
       return this._cachedDockerStatus;
     }
 
@@ -86,6 +92,19 @@ export class CodingSandbox {
         code: "CODE_SANDBOX_DISABLED",
         reason: this.disabledReason,
         isolationEngine: "NONE (FAILED_CLOSED)",
+        supportedLanguages: SUPPORTED_SANDBOX_LANGUAGES
+      };
+    }
+
+    if (dockerStatus.simulated) {
+      return {
+        ready: false,
+        enabled: false,
+        code: "CODE_SANDBOX_MOCK_ONLY",
+        reason: "A test-only runner is configured; real Docker isolation is not verified and untrusted host execution remains blocked.",
+        isolationEngine: "MOCK_CONTAINER_RUNNER",
+        simulated: true,
+        dockerVerified: false,
         supportedLanguages: SUPPORTED_SANDBOX_LANGUAGES
       };
     }
@@ -163,8 +182,14 @@ export class CodingSandbox {
         memoryLimitMb: this.memoryLimitMb,
         cpuLimit: this.cpuLimit
       });
-      this.recordHistory(runnerRes);
-      return runnerRes;
+      const simulatedResult = {
+        ...runnerRes,
+        isolationEngine: "MOCK_CONTAINER_RUNNER",
+        simulated: true,
+        dockerVerified: false
+      };
+      this.recordHistory(simulatedResult);
+      return simulatedResult;
     }
 
     // Build strict Docker execution command
@@ -174,11 +199,17 @@ export class CodingSandbox {
       "--rm",
       `--name=${containerId}`,
       `--memory=${this.memoryLimitMb}m`,
+      `--memory-swap=${this.memoryLimitMb}m`,
       `--cpus=${this.cpuLimit}`,
+      "--pids-limit=64",
       "--network=none",
+      "--ipc=private",
       "--read-only",
-      "--tmpfs=/tmp:rw,noexec,nosuid,size=32m",
+      "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=32m",
+      "--cap-drop=ALL",
       "--security-opt=no-new-privileges",
+      "--ulimit=nofile=64:64",
+      "--init",
       "--user=1000:1000",
       image
     ];
