@@ -28,6 +28,10 @@ import { ultronSelfEvolutionEngine } from "./self-improvement/self-evolution-eng
 import crypto from "node:crypto";
 import { operatorAuthorizationService } from "./security/operator-authorization.js";
 import { deviceHub } from "./integrations/device-hub.js";
+import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
+import { deviceNetworkingManager } from "./integrations/device-networking.js";
+import { toolRegistry } from "./core/tool-registry.js";
+import { autonomousOrchestrator } from "./core/autonomous-orchestrator.js";
 /**
  * ULTRON AI — JARVIS × ULTRON Integration Router
  *
@@ -227,6 +231,138 @@ export function createJarvisRouter({
         }
       });
     }
+  });
+
+  // --- Complete Feature Visibility & Capabilities Inventory ---
+  router.get("/jarvis/capabilities", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(toolRegistry.getCapabilityInventory());
+  });
+
+  // --- Centralized Tool Registry ---
+  router.get("/jarvis/tools", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      tools: toolRegistry.listTools().map(t => ({
+        id: t.id,
+        name: t.name,
+        category: t.category,
+        description: t.description,
+        capabilities: t.capabilities,
+        permissionLevel: t.permissionLevel,
+        requiresConfirmation: t.requiresConfirmation,
+        timeoutMs: t.timeoutMs,
+        status: t.checkHealth()
+      }))
+    });
+  });
+
+  // --- Autonomous Tool Router & JARVIS Orchestration ---
+  router.post("/jarvis/orchestrate", express.json(), async (req, res) => {
+    try {
+      const { prompt, context = {} } = req.body || {};
+      const outcome = await autonomousOrchestrator.processUserRequest(prompt, context);
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { message: err.message } });
+    }
+  });
+
+  // --- Permission Center: Human Approval Gates ---
+  router.get("/jarvis/permissions/pending", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ pending: autonomousOrchestrator.getPendingApprovals() });
+  });
+
+  router.post("/jarvis/permissions/approve", express.json(), (req, res) => {
+    const { requestId } = req.body || {};
+    const result = autonomousOrchestrator.approveRequest(requestId);
+    if (!result.success) return res.status(404).json(result);
+    res.json(result);
+  });
+
+  router.post("/jarvis/permissions/reject", express.json(), (req, res) => {
+    const { requestId, reason } = req.body || {};
+    const result = autonomousOrchestrator.rejectRequest(requestId, reason);
+    if (!result.success) return res.status(404).json(result);
+    res.json(result);
+  });
+
+  // --- Autonomy Center & Emergency Controls ---
+  router.get("/jarvis/autonomy/state", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      autonomyLevel: autonomousOrchestrator.autonomyLevel,
+      emergencyHalted: autonomousOrchestrator.emergencyHalted,
+      pendingApprovalsCount: autonomousOrchestrator.getPendingApprovals().length,
+      historyCount: autonomousOrchestrator.executionHistory.length,
+      recentHistory: autonomousOrchestrator.getExecutionHistory(10)
+    });
+  });
+
+  router.post("/jarvis/autonomy/emergency-stop", express.json(), (req, res) => {
+    const reason = req.body?.reason || "Operator emergency stop invoked";
+    const result = autonomousOrchestrator.setEmergencyStop(true, reason);
+    res.json(result);
+  });
+
+  router.post("/jarvis/autonomy/emergency-reset", (_req, res) => {
+    const result = autonomousOrchestrator.setEmergencyStop(false);
+    res.json(result);
+  });
+
+  // --- Background Workflows & Real-Time Event Stream ---
+  router.get("/jarvis/autonomy/workflows", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ workflows: autonomousOrchestrator.getActiveWorkflows() });
+  });
+
+  router.post("/jarvis/autonomy/workflow/submit", express.json(), (req, res) => {
+    try {
+      const { prompt, context = {} } = req.body || {};
+      const result = autonomousOrchestrator.submitBackgroundTask(prompt, context);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: { message: err.message } });
+    }
+  });
+
+  router.post("/jarvis/autonomy/workflow/pause", express.json(), (req, res) => {
+    const { workflowId } = req.body || {};
+    const result = autonomousOrchestrator.pauseWorkflow(workflowId);
+    if (!result.success) return res.status(404).json(result);
+    res.json(result);
+  });
+
+  router.post("/jarvis/autonomy/workflow/resume", express.json(), (req, res) => {
+    const { workflowId } = req.body || {};
+    const result = autonomousOrchestrator.resumeWorkflow(workflowId);
+    if (!result.success) return res.status(404).json(result);
+    res.json(result);
+  });
+
+  router.post("/jarvis/autonomy/workflow/cancel", express.json(), (req, res) => {
+    const { workflowId, reason } = req.body || {};
+    const result = autonomousOrchestrator.cancelWorkflow(workflowId, reason);
+    if (!result.success) return res.status(404).json(result);
+    res.json(result);
+  });
+
+  router.get("/jarvis/autonomy/events", (req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    });
+    res.write("event: ready\ndata: {}\n\n");
+    const unsubscribe = autonomousOrchestrator.onEvent(evt => {
+      try {
+        res.write("event: " + evt.type + "\ndata: " + JSON.stringify(evt) + "\n\n");
+      } catch {}
+    });
+    req.on("close", () => {
+      unsubscribe();
+    });
   });
 
   // --- System & Hardware Telemetry ---
@@ -633,6 +769,85 @@ export function createJarvisRouter({
     res.json(verified);
   });
 
+  // --- Multi-Device QR Pairing & Cross-Device Routing ---
+  router.post("/jarvis/devices/pair/qr", requireOwner, express.json(), (req, res) => {
+    const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
+    if (!isPairingEnabled) {
+      return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Device pairing is not configured for durable storage." } });
+    }
+    const baseUrl = req.protocol + "://" + (req.get("host") || "localhost:10000");
+    const qrData = deviceHubInstance.generatePairingQr(req.body || {}, baseUrl);
+    res.json(qrData);
+  });
+
+  router.post("/jarvis/devices/route-command", authenticateOwnerOrDevice, express.json(), (req, res) => {
+    const { targetDeviceId, targetPlatform, action, payload, idempotencyKey } = req.body || {};
+    if (!action) {
+      return res.status(400).json({ error: { code: "INVALID_ACTION", message: "Command action is required." } });
+    }
+
+    const outcome = deviceHubInstance.routeCommand({
+      callerDeviceId: req.device?.id || null,
+      callerToken: extractDeviceBearerToken(req),
+      callerUserId: req.supabaseUser?.id || req.device?.ownerUserId || "operator",
+      targetDeviceId,
+      targetPlatform: targetPlatform || (targetDeviceId ? null : "windows"),
+      action,
+      payload: payload || {},
+      idempotencyKey: idempotencyKey || null
+    });
+
+    if (!outcome.success) {
+      const status = outcome.error === "TARGET_DEVICE_OFFLINE" ? 409 : outcome.error === "ACTION_NOT_APPROVED" ? 403 : 400;
+      return res.status(status).json({ error: { code: outcome.error, message: outcome.message }, ...outcome });
+    }
+    res.json(outcome);
+  });
+
+  router.post("/jarvis/devices/:id/heartbeat", express.json(), (req, res) => {
+    const deviceId = req.params.id;
+    const token = extractDeviceBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ error: { code: "DEVICE_TOKEN_REQUIRED", message: "Device bearer token required via header." } });
+    }
+    const outcome = deviceHubInstance.heartbeat(deviceId, token, req.body || {});
+    if (!outcome.success) {
+      return res.status(401).json({ error: { code: outcome.error, message: "Heartbeat authentication failed." } });
+    }
+    res.json(outcome);
+  });
+
+  router.get("/jarvis/devices/:id/presence", authenticateOwnerOrDevice, (req, res) => {
+    const presence = deviceHubInstance.getDevicePresence(req.params.id);
+    if (!presence.exists) {
+      return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
+    }
+    res.json(presence);
+  });
+
+  router.get("/jarvis/devices/:id/events", (req, res) => {
+    const deviceId = req.params.id;
+    const token = extractDeviceBearerToken(req) || req.query.token;
+    if (!token) {
+      return res.status(401).json({ error: { code: "DEVICE_TOKEN_REQUIRED", message: "Device token required for real-time stream." } });
+    }
+    deviceWebSocketGateway.handleSseConnection(req, res, deviceId, token);
+  });
+
+  router.get("/jarvis/devices/tasks", authenticateOwnerOrDevice, (req, res) => {
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const tasks = deviceHubInstance.getSharedTasks(limit);
+    res.json({ success: true, count: tasks.length, tasks });
+  });
+
+  router.get("/jarvis/network/connectivity", (_req, res) => {
+    res.json(deviceNetworkingManager.getConnectivityStatus());
+  });
+
+  router.get("/jarvis/network/discovery", (_req, res) => {
+    res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
+  });
+
   router.get("/jarvis/devices", requireOwner, (_req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
@@ -934,6 +1149,84 @@ export function createJarvisRouter({
           language: detectedLang,
           result: evoResult
         });
+      }
+
+      // 1.5. Cross-Device Remote Control Intent (Android <-> Windows PC)
+      const isCrossDeviceRequest = lower.includes("pc") || lower.includes("computer") || lower.includes("windows") ||
+        lower.includes("laptop") || lower.includes("desktop");
+
+      if (isCrossDeviceRequest && (lower.includes("open") || lower.includes("launch") || lower.includes("lock") || lower.includes("volume") || lower.includes("status") || lower.includes("battery"))) {
+        let action = "get_system_vitals";
+        let actionPayload = {};
+        let targetApp = null;
+
+        if (lower.includes("chrome")) { action = "launch_app"; targetApp = "chrome"; }
+        else if (lower.includes("edge")) { action = "launch_app"; targetApp = "msedge"; }
+        else if (lower.includes("vs code") || lower.includes("vscode") || lower.includes("code")) { action = "launch_app"; targetApp = "code"; }
+        else if (lower.includes("notepad")) { action = "launch_app"; targetApp = "notepad"; }
+        else if (lower.includes("calculator") || lower.includes("calc")) { action = "launch_app"; targetApp = "calculator"; }
+        else if (lower.includes("terminal") || lower.includes("cmd")) { action = "launch_app"; targetApp = "terminal"; }
+        else if (lower.includes("explorer")) { action = "launch_app"; targetApp = "explorer"; }
+        else if (lower.includes("lock")) { action = "lock_workstation"; }
+        else if (lower.includes("volume up")) { action = "set_volume"; actionPayload = { action: "volume_up" }; }
+        else if (lower.includes("volume down")) { action = "set_volume"; actionPayload = { action: "volume_down" }; }
+        else if (lower.includes("mute")) { action = "set_volume"; actionPayload = { action: "mute" }; }
+        else if (lower.includes("battery") || lower.includes("status")) { action = "get_system_vitals"; }
+
+        if (targetApp) actionPayload.app = targetApp;
+
+        const routeResult = deviceHubInstance.routeCommand({
+          callerDeviceId: req.device?.id || null,
+          callerToken: extractDeviceBearerToken(req),
+          callerUserId: req.supabaseUser?.id || req.device?.ownerUserId || "operator",
+          targetPlatform: "windows",
+          action,
+          payload: actionPayload
+        });
+
+        if (!routeResult.success && routeResult.error === "TARGET_DEVICE_OFFLINE") {
+          let offlineMsg = "Ayaan, your Windows PC is currently offline or unreachable. The command could not be dispatched.";
+          if (detectedLang === "hinglish") offlineMsg = "Ayaan, aapka Windows PC is waqt offline hai. Remote command execute nahi ho payi.";
+          else if (detectedLang === "hindi") offlineMsg = "अयान, आपका विंडोज़ पीसी इस समय ऑफलाइन है। निर्देश नहीं भेजा जा सका।";
+
+          deviceHubInstance.recordSharedMessage({ source, role: "user", content: raw });
+          deviceHubInstance.recordSharedMessage({ source: "ultron", role: "assistant", content: offlineMsg });
+
+          return res.status(409).json({
+            success: false,
+            intent: "CROSS_DEVICE_REMOTE_INTENT",
+            error: "TARGET_DEVICE_OFFLINE",
+            textResponse: offlineMsg,
+            actionTaken: "BLOCKED_PC_OFFLINE",
+            language: detectedLang
+          });
+        }
+
+        if (routeResult.success) {
+          let successMsg = targetApp
+            ? `Affirmative, Ayaan. Dispatching to your Windows PC to launch ${targetApp}.`
+            : `Affirmative, Ayaan. Executing ${action.replace(/_/g, " ")} on your Windows PC.`;
+
+          if (detectedLang === "hinglish") {
+            successMsg = targetApp
+              ? `Ji Ayaan, aapke Windows PC par ${targetApp} open kiya ja raha hai.`
+              : `Ji Ayaan, aapke Windows PC par command execute ho raha hai.`;
+          } else if (detectedLang === "hindi") {
+            successMsg = "हाँ अयान, आपके विंडोज़ पीसी पर निर्देश भेजा जा रहा है।";
+          }
+
+          deviceHubInstance.recordSharedMessage({ source, role: "user", content: raw });
+          deviceHubInstance.recordSharedMessage({ source: "ultron", role: "assistant", content: successMsg });
+
+          return res.json({
+            success: true,
+            intent: "CROSS_DEVICE_REMOTE_INTENT",
+            textResponse: successMsg,
+            actionTaken: "DISPATCHED_TO_PC",
+            language: detectedLang,
+            routeResult
+          });
+        }
       }
 
       // 2. Offline Desktop Intent via Windows Speech Daemon

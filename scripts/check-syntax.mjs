@@ -341,7 +341,11 @@ const FILES_TO_CHECK = [
   "tests/spatial-engine.test.js",
   "spatial/spatial-router.js",
   "tests/spatial-router.test.js",
-  "public/spatial-viewer.js"
+  "public/spatial-viewer.js",
+  "core/tool-registry.js",
+  "core/autonomous-orchestrator.js",
+  "tests/autonomous-intelligence-orchestrator.test.js",
+  "tests/websocket-gateway-audit.test.js"
 ];
 
 let checked = 0;

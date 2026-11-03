@@ -1700,6 +1700,49 @@
       }
       setCoreState("thinking");
       updateTaskPanel("Request received. ULTRON is generating the response.", "GENERATING RESPONSE", sources);
+
+      // Autonomous Tool Orchestration
+      let autonomousOutcome = null;
+      if (!attachments.length && !shouldResearch) {
+        try {
+          autonomousOutcome = await apiRequest("/api/jarvis/orchestrate", {
+            method: "POST",
+            body: { prompt, context: { preApproved: false } }
+          });
+        } catch {}
+
+        if (autonomousOutcome && autonomousOutcome.status === "APPROVAL_REQUIRED") {
+          const req = autonomousOutcome.approvalRequest;
+          updateTaskPanel(
+            "AUTHORIZATION REQUIRED (Level " + req.permissionLevel + "):\n" + req.actionDescription + "\nOpen Permission Center to approve or deny.",
+            "APPROVAL REQUIRED"
+          );
+          showToast("Authorization required: " + req.actionDescription, 6500);
+          setCoreState("idle");
+          busy = false;
+          ui.sendButton.disabled = false;
+          return;
+        }
+
+        if (autonomousOutcome && autonomousOutcome.verified && autonomousOutcome.intent !== "CONVERSATIONAL_INFERENCE") {
+          answer = autonomousOutcome.textResponse;
+          history.push({ role: "user", content: prompt }, { role: "assistant", content: answer });
+          if (history.length > 30) history = history.slice(-30);
+          const toolsUsed = (autonomousOutcome.stepResults || []).map(s => s.toolId).join(", ");
+          updateTaskPanel("Execution verified. Tools: " + (toolsUsed || "autonomous core") + "\n" + answer, "TASK VERIFIED");
+          markTaskComplete(answer, sources, shouldSpeak);
+          setCoreState(shouldSpeak ? "speaking" : "idle");
+          if (shouldSpeak) {
+            const spoke = await speakResponse(answer, true);
+            if (panelIsComplete) schedulePanelHide(spoke ? 850 : 4000);
+          } else {
+            schedulePanelHide(6500);
+          }
+          busy = false;
+          ui.sendButton.disabled = false;
+          return;
+        }
+      }
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const voicePrompt = streamVoiceReply
@@ -1850,6 +1893,174 @@
 
     if (name === "home") {
       showDrawerWelcome();
+      return;
+    }
+    if (name === "capabilities") {
+      drawerHeading("Capability Center", "Inspect all registered tools, schemas, and live operational status.");
+      try {
+        const inventory = await apiRequest("/api/jarvis/capabilities");
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Capability Center", (inventory?.summary?.operational || 0) + " of " + (inventory?.summary?.totalCapabilities || 0) + " capabilities operational. No simulated features.");
+        for (const cat of (inventory?.categories || [])) {
+          const catTitle = document.createElement("p");
+          catTitle.className = "drawer-eyebrow";
+          catTitle.style.marginTop = "14px";
+          catTitle.textContent = cat.category.replace(/_/g, " ") + " (" + cat.operational + "/" + cat.total + ")";
+          ui.drawerContent.appendChild(catTitle);
+          for (const tool of cat.tools) {
+            const levelLabel = "LEVEL " + tool.permissionLevel + (tool.permissionLevel === 1 ? " · READ" : tool.permissionLevel === 2 ? " · NORMAL" : tool.permissionLevel === 3 ? " · SENSITIVE" : " · CRITICAL");
+            drawerCard(
+              tool.name + " · " + levelLabel,
+              tool.description + (tool.capabilities?.length ? "\nCapabilities: " + tool.capabilities.join(", ") : ""),
+              tool.status,
+              tool.status === "OPERATIONAL" ? "ready" : tool.status === "LIMITED" ? "warning" : "error"
+            );
+          }
+        }
+      } catch (err) {
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Capability Center", "Failed to load live capabilities.");
+        drawerCard("Capability Service", err.message, "ERROR", "error");
+      }
+      return;
+    }
+    if (name === "activity") {
+      drawerHeading("Live Activity and Planner", "Autonomous workflows, agent task delegations, and execution traces.");
+      try {
+        const [state, wfPayload] = await Promise.all([
+          apiRequest("/api/jarvis/autonomy/state").catch(() => null),
+          apiRequest("/api/jarvis/autonomy/workflows").catch(() => null)
+        ]);
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Live Activity and Planner", "Active background workflows and multi-agent traces.");
+
+        const workflows = wfPayload?.workflows || [];
+        if (workflows.length > 0) {
+          const wfHeader = document.createElement("p");
+          wfHeader.className = "drawer-eyebrow";
+          wfHeader.textContent = "PERSISTENT BACKGROUND WORKFLOWS (" + workflows.length + ")";
+          ui.drawerContent.appendChild(wfHeader);
+
+          for (const wf of workflows) {
+            const isRunning = wf.status === "RUNNING";
+            const isPaused = wf.status === "PAUSED";
+            drawerCard(
+              wf.prompt.slice(0, 70) + " · [" + wf.status + "]",
+              "Agent: " + wf.activeAgent + "\nProgress: Step " + (wf.currentStepIndex + 1) + " of " + wf.totalSteps + "\nStarted: " + wf.createdAt,
+              wf.status,
+              isRunning ? "ready" : isPaused ? "warning" : "error"
+            );
+
+            if (isRunning) {
+              drawerButton("PAUSE: " + wf.id.slice(0, 10), async () => {
+                await apiRequest("/api/jarvis/autonomy/workflow/pause", { method: "POST", body: { workflowId: wf.id } });
+                showToast("Workflow " + wf.id.slice(0, 8) + " paused.");
+                void showDrawerView("activity");
+              }, true);
+            } else if (isPaused) {
+              drawerButton("RESUME: " + wf.id.slice(0, 10), async () => {
+                await apiRequest("/api/jarvis/autonomy/workflow/resume", { method: "POST", body: { workflowId: wf.id } });
+                showToast("Workflow " + wf.id.slice(0, 8) + " resumed.");
+                void showDrawerView("activity");
+              }, false);
+            }
+
+            if (isRunning || isPaused) {
+              drawerButton("CANCEL: " + wf.id.slice(0, 10), async () => {
+                await apiRequest("/api/jarvis/autonomy/workflow/cancel", { method: "POST", body: { workflowId: wf.id, reason: "Operator cancelled" } });
+                showToast("Workflow cancelled.");
+                void showDrawerView("activity");
+              }, true);
+            }
+          }
+        }
+
+        const traceHeader = document.createElement("p");
+        traceHeader.className = "drawer-eyebrow";
+        traceHeader.style.marginTop = "16px";
+        traceHeader.textContent = "COMPLETED EXECUTION TRACES";
+        ui.drawerContent.appendChild(traceHeader);
+
+        const history = state?.recentHistory || [];
+        if (!history.length) {
+          drawerCard("No Recent Activity", "ULTRON is on standby. Transmit a command to see autonomous intent classification and tool execution traces.", "STANDBY");
+        } else {
+          for (const item of history.slice(0, 10)) {
+            const stepsSummary = (item.plan?.steps || []).map((s, idx) => "Step " + (idx + 1) + ": " + s.description + " [" + s.toolId + "] (Agent: " + (s.agent || "core") + ")").join("\n");
+            drawerCard(
+              '"' + item.prompt.slice(0, 80) + '" · [' + item.intent + ']',
+              "Status: " + (item.verified ? "VERIFIED COMPLETED" : "EXECUTED") + "\n" + stepsSummary + "\nResponse: " + (item.textResponse?.slice(0, 180) || ""),
+              item.verified ? "VERIFIED" : "COMPLETED",
+              item.verified ? "ready" : "warning"
+            );
+          }
+        }
+      } catch (err) {
+        drawerCard("Activity Service", err.message, "ERROR", "error");
+      }
+      return;
+    }
+    if (name === "autonomy") {
+      drawerHeading("Autonomy Center", "Controlled independence: task planning, execution boundaries, and global kill switch.");
+      try {
+        const state = await apiRequest("/api/jarvis/autonomy/state");
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Autonomy Center", "Active Autonomy Level: " + (state?.autonomyLevel ?? 3) + ". Emergency Halt: " + (state?.emergencyHalted ? "ACTIVE" : "OFF"));
+        drawerCard("Autonomy Policy", "Level " + (state?.autonomyLevel ?? 3) + ": Autonomous execution permitted within safety gates. Sensitive operations require human confirmation.", state?.emergencyHalted ? "EMERGENCY HALTED" : "ACTIVE", state?.emergencyHalted ? "error" : "ready");
+        
+        drawerButton("EMERGENCY KILL SWITCH (HALT ALL)", async () => {
+          await apiRequest("/api/jarvis/autonomy/emergency-stop", { method: "POST", body: { reason: "Operator console kill switch" } });
+          showToast("EMERGENCY STOP ENGAGED: All ULTRON operations halted.");
+          void showDrawerView("autonomy");
+        }, true);
+
+        drawerButton("RESET EMERGENCY STOP (RESUME)", async () => {
+          await apiRequest("/api/jarvis/autonomy/emergency-reset", { method: "POST" });
+          showToast("Emergency stop reset. Autonomous operations resumed.");
+          void showDrawerView("autonomy");
+        }, false);
+
+        drawerCard("Pending Approvals", (state?.pendingApprovalsCount || 0) + " operations waiting for operator confirmation.", state?.pendingApprovalsCount ? "PENDING" : "CLEAR", state?.pendingApprovalsCount ? "warning" : "ready");
+        if (state?.pendingApprovalsCount > 0) {
+          drawerButton("VIEW PENDING APPROVALS", () => { void showDrawerView("permissions"); });
+        }
+      } catch (err) {
+        drawerCard("Autonomy Service", err.message, "ERROR", "error");
+      }
+      return;
+    }
+    if (name === "permissions") {
+      drawerHeading("Permission Center", "Human confirmation gates for Level 3 (Sensitive) and Level 4 (Critical) operations.");
+      try {
+        const payload = await apiRequest("/api/jarvis/permissions/pending");
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Permission Center", "Active authorization gates.");
+        const pending = payload?.pending || [];
+        if (!pending.length) {
+          drawerCard("No Pending Approvals", "All sensitive and critical operations are currently cleared. No actions blocked.", "CLEARED", "ready");
+        } else {
+          for (const req of pending) {
+            drawerCard(
+              "Approval Required: " + req.toolName,
+              "Action: " + req.actionDescription + "\nPermission Level: Level " + req.permissionLevel + (req.permissionLevel >= 4 ? " (CRITICAL)" : " (SENSITIVE)") + "\nRequested: " + req.createdAt,
+              "CONFIRMATION REQUIRED",
+              "warning"
+            );
+            drawerButton("APPROVE: " + req.toolName, async () => {
+              await apiRequest("/api/jarvis/permissions/approve", { method: "POST", body: { requestId: req.id } });
+              showToast("Approved " + req.toolName);
+              void showDrawerView("permissions");
+            }, false);
+            drawerButton("REJECT: " + req.toolName, async () => {
+              await apiRequest("/api/jarvis/permissions/reject", { method: "POST", body: { requestId: req.id, reason: "Operator denied" } });
+              showToast("Rejected " + req.toolName);
+              void showDrawerView("permissions");
+            }, true);
+          }
+        }
+      } catch (err) {
+        drawerCard("Permission Service", err.message, "ERROR", "error");
+      }
       return;
     }
     if (name === "spatial") {
@@ -2746,6 +2957,48 @@
   renderMode();
   setCoreState("idle");
   startParticleCore();
+
+  // --------------------------------------------------------------------------
+  // Real-Time Autonomous Intelligence Event Stream
+  // --------------------------------------------------------------------------
+  function setupAutonomyEventStream() {
+    if (typeof window === "undefined" || !window.EventSource) return;
+    try {
+      const source = new EventSource("/api/jarvis/autonomy/events");
+      source.addEventListener("TOOL_STARTED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateTaskPanel("Executing: " + data.toolId + " (" + (data.agent || "core") + ")", "TOOL EXECUTION");
+        } catch {}
+      });
+      source.addEventListener("APPROVAL_REQUIRED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Authorization required: " + (data.description || data.toolId), 8000);
+        } catch {}
+      });
+      source.addEventListener("EMERGENCY_STOP_ENGAGED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setCoreState("error");
+          showToast("EMERGENCY STOP ENGAGED: " + data.reason, 10000);
+          updateTaskPanel("EMERGENCY STOP ENGAGED: " + data.reason, "HALTED");
+        } catch {}
+      });
+      source.addEventListener("EMERGENCY_STOP_RESET", () => {
+        setCoreState("idle");
+        showToast("Emergency stop reset. Standing by.", 4000);
+        updateTaskPanel("Emergency stop reset. Standing by.", "STANDBY");
+      });
+      source.addEventListener("WORKFLOW_COMPLETED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow " + (data.workflowId ? data.workflowId.slice(0, 8) : "") + " completed.", 4500);
+        } catch {}
+      });
+    } catch {}
+  }
+  setupAutonomyEventStream();
   // Warm speech capability detection before the user first enters Voice Mode.
   void ensureSpeechCapabilities();
   void checkSession();

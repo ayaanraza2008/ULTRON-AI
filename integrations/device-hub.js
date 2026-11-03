@@ -65,6 +65,37 @@ function decryptToken(encryptedData, masterKey) {
   }
 }
 
+
+export const APPROVED_REMOTE_ACTIONS = new Set([
+  "launch_app",
+  "close_app",
+  "lock_workstation",
+  "unlock_workstation",
+  "set_volume",
+  "screen_capture",
+  "get_system_vitals",
+  "sandboxed_file_list",
+  "sandboxed_file_read",
+  "media_playback",
+  "wake_device",
+  "notify"
+]);
+
+export const APPROVED_REMOTE_APPS = new Set([
+  "chrome",
+  "msedge",
+  "edge",
+  "code",
+  "vscode",
+  "notepad",
+  "calculator",
+  "calc",
+  "explorer",
+  "terminal",
+  "cmd",
+  "spotify"
+]);
+
 export class DeviceHub {
   constructor(options = {}) {
     this.env = options.env || process.env;
@@ -73,6 +104,10 @@ export class DeviceHub {
     this.commandQueue = new Map();
     this.notifications = [];
     this.maxNotifications = 100;
+    this.taskHistory = [];
+    this.sharedConversations = [];
+    this.idempotencyIndex = new Map();
+    this.eventListeners = new Set();
 
     const defaultStoreDir = path.resolve(process.cwd(), ".local", "device-hub");
     this.durableStoragePath = options.durableStoragePath || this.env.ULTRON_DEVICE_STORE_PATH || path.join(defaultStoreDir, "paired-devices.json");
@@ -205,7 +240,7 @@ export class DeviceHub {
     }
 
     const deviceId = "dev-" + crypto.randomUUID();
-    const authToken = "ultron_dev_" + crypto.randomBytes(24).toString("hex");
+    const authToken = "ultron_dev_" + crypto.randomBytes(32).toString("hex");
     const tokenDigest = hashToken(authToken);
     const encrypted = encryptToken(authToken, this.masterKey);
 
@@ -255,7 +290,7 @@ export class DeviceHub {
     }
 
     const deviceId = "dev-" + crypto.randomUUID();
-    const deviceToken = "dev_tok_" + crypto.randomBytes(24).toString("hex");
+    const deviceToken = "ultron_dev_" + crypto.randomBytes(32).toString("hex");
     const tokenDigest = hashToken(deviceToken);
     const encrypted = encryptToken(deviceToken, this.masterKey);
 
@@ -265,7 +300,7 @@ export class DeviceHub {
       platform: entry.platform,
       authToken: deviceToken,
       tokenHash: tokenDigest,
-      tokenPrefix: deviceToken.slice(0, 12),
+      tokenPrefix: deviceToken.slice(0, 15),
       encryptedAuthToken: encrypted,
       ownerUserId: String(ownerUserId || "operator"),
       status: "active",
@@ -381,10 +416,10 @@ export class DeviceHub {
       return { success: false, error: "ACCESS_DENIED_NOT_DEVICE_OWNER" };
     }
 
-    const newToken = "dev_tok_" + crypto.randomBytes(24).toString("hex");
+    const newToken = "ultron_dev_" + crypto.randomBytes(32).toString("hex");
     device.authToken = newToken;
     device.tokenHash = hashToken(newToken);
-    device.tokenPrefix = newToken.slice(0, 12);
+    device.tokenPrefix = newToken.slice(0, 15);
     device.encryptedAuthToken = encryptToken(newToken, this.masterKey);
     device.status = "active";
     device.revokedAt = null;
@@ -578,8 +613,336 @@ export class DeviceHub {
     cmd.result = result;
     cmd.completedAt = Date.now();
 
+    const task = this.taskHistory.find(t => t.id === commandId);
+    if (task) {
+      task.status = cmd.status;
+      task.result = result;
+      task.completedAt = new Date().toISOString();
+    }
+    if (cmd.payload?.idempotencyKey && this.idempotencyIndex.has(cmd.payload.idempotencyKey)) {
+      this.idempotencyIndex.set(cmd.payload.idempotencyKey, {
+        command: cmd,
+        status: cmd.status,
+        result
+      });
+    }
+
+    this.emitEvent({
+      type: "COMMAND_COMPLETE",
+      deviceId,
+      commandId,
+      status: cmd.status,
+      result
+    });
+
     return { success: true, commandId, status: cmd.status };
   }
+
+  /**
+   * Generates a QR-code pairing payload for instant mobile camera pairing.
+   */
+  generatePairingQr(deviceMeta = {}, baseUrl = "") {
+    const pairing = this.createPairingCode(deviceMeta);
+    const cleanBase = String(baseUrl || "").replace(/\/+$/, "");
+    const qrPayload = `ultron://pair?code=${pairing.code}&server=${encodeURIComponent(cleanBase)}&platform=${deviceMeta.platform || "windows"}&expiresAt=${pairing.expiresAt}`;
+    return {
+      success: true,
+      code: pairing.code,
+      expiresAt: pairing.expiresAt,
+      deviceName: pairing.deviceName,
+      platform: deviceMeta.platform || "windows",
+      qrPayload,
+      pairingUrl: `${cleanBase}/api/devices/pairings/claim`
+    };
+  }
+
+  /**
+   * Updates device presence via heartbeat ping.
+   */
+  heartbeat(deviceId, authToken, telemetry = {}) {
+    const device = this.authenticateDevice(deviceId, authToken);
+    if (!device) return { success: false, error: "AUTHENTICATION_FAILED" };
+    device.online = true;
+    device.lastSeenAt = new Date().toISOString();
+    if (typeof telemetry.batteryPercent === "number") {
+      device.battery = {
+        percent: Math.max(0, Math.min(100, telemetry.batteryPercent)),
+        isCharging: Boolean(telemetry.isCharging)
+      };
+    }
+    if (telemetry.vitals) {
+      device.vitals = telemetry.vitals;
+    }
+    this.emitEvent({
+      type: "HEARTBEAT",
+      deviceId,
+      platform: device.platform,
+      online: true,
+      lastSeenAt: device.lastSeenAt,
+      battery: device.battery
+    });
+    return { success: true, deviceId, online: true, lastSeenAt: device.lastSeenAt };
+  }
+
+  /**
+   * Checks whether a device is currently active and has communicated recently.
+   * If the last contact exceeds maxStaleMs, the device is marked OFFLINE.
+   */
+  isDeviceOnline(deviceId, maxStaleMs = 60_000) {
+    const device = this.pairedDevices.get(deviceId);
+    if (!device || device.status === "revoked") return false;
+    if (device.online === false) return false;
+    const lastSeen = Date.parse(device.lastSeenAt || 0);
+    const isFresh = Number.isFinite(lastSeen) && (Date.now() - lastSeen) < maxStaleMs;
+    if (!isFresh) {
+      device.online = false;
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Retrieves device presence status.
+   */
+  getDevicePresence(deviceId) {
+    const device = this.pairedDevices.get(deviceId);
+    if (!device) return { exists: false, online: false };
+    const online = this.isDeviceOnline(deviceId);
+    return {
+      exists: true,
+      id: device.id,
+      name: device.name,
+      platform: device.platform,
+      online,
+      lastSeenAt: device.lastSeenAt,
+      battery: device.battery,
+      status: device.status
+    };
+  }
+
+  /**
+   * Routes a remote command from a caller device (e.g. Android) to a target device (e.g. Windows PC).
+   * Verifies authentication, presence, permission allowlists, and idempotency.
+   * NEVER claims execution if the target device is offline.
+   */
+  routeCommand({
+    callerDeviceId = null,
+    callerToken = null,
+    callerUserId = "operator",
+    targetDeviceId = null,
+    targetPlatform = null,
+    action,
+    payload = {},
+    idempotencyKey = null
+  }) {
+    // 1. Caller verification
+    if (callerDeviceId && callerToken) {
+      const caller = this.authenticateDevice(callerDeviceId, callerToken);
+      if (!caller) {
+        return { success: false, error: "CALLER_AUTHENTICATION_FAILED", message: "Calling device authentication failed." };
+      }
+      callerUserId = caller.ownerUserId || callerUserId;
+    }
+
+    // 2. Validate action against allowlist
+    const cleanAction = String(action || "").toLowerCase().trim();
+    if (!APPROVED_REMOTE_ACTIONS.has(cleanAction)) {
+      return {
+        success: false,
+        error: "ACTION_NOT_APPROVED",
+        message: `Action '${action}' is not in the approved remote action allowlist. Arbitrary shell execution is forbidden.`
+      };
+    }
+
+    // Special validation for launch_app
+    if (cleanAction === "launch_app") {
+      const app = String(payload.app || payload.appKey || payload.name || "").toLowerCase().trim();
+      if (!app || !APPROVED_REMOTE_APPS.has(app)) {
+        return {
+          success: false,
+          error: "APP_NOT_ALLOWLISTED",
+          message: `Application '${app}' is not in the approved remote launch allowlist (${Array.from(APPROVED_REMOTE_APPS).join(", ")}).`
+        };
+      }
+    }
+
+    // 3. Resolve target device
+    let target = null;
+    if (targetDeviceId) {
+      target = this.pairedDevices.get(targetDeviceId);
+    } else if (targetPlatform) {
+      const normPlatform = targetPlatform.toLowerCase().trim();
+      for (const dev of this.pairedDevices.values()) {
+        if (dev.status === "active" && (dev.platform === normPlatform || (normPlatform === "windows" && dev.platform === "windows_pc"))) {
+          if (!callerUserId || dev.ownerUserId === callerUserId || dev.ownerUserId === "operator") {
+            target = dev;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!target) {
+      return {
+        success: false,
+        error: "TARGET_DEVICE_NOT_FOUND",
+        message: `No paired target device found matching ${targetDeviceId || targetPlatform}.`
+      };
+    }
+
+    // 4. Strict presence check: Windows PC must report offline status when disconnected or powered off.
+    // NEVER pretend a remote task executed when the PC is unavailable.
+    if (!this.isDeviceOnline(target.id)) {
+      return {
+        success: false,
+        error: "TARGET_DEVICE_OFFLINE",
+        message: `Target device '${target.name}' is currently OFFLINE or unreachable. Remote task was not dispatched.`,
+        targetDevice: {
+          id: target.id,
+          name: target.name,
+          platform: target.platform,
+          online: false,
+          lastSeenAt: target.lastSeenAt
+        }
+      };
+    }
+
+    // 5. Check idempotency to prevent duplicate execution upon reconnect
+    if (idempotencyKey) {
+      const existing = this.idempotencyIndex.get(idempotencyKey);
+      if (existing) {
+        return {
+          success: true,
+          deduplicated: true,
+          command: existing.command,
+          status: existing.status,
+          result: existing.result
+        };
+      }
+    }
+
+    // 6. Enqueue command for target device
+    const enqResult = this.enqueueCommand(target.id, cleanAction, {
+      ...payload,
+      idempotencyKey,
+      callerDeviceId: callerDeviceId || null,
+      callerUserId
+    });
+
+    if (!enqResult.success) return enqResult;
+
+    // 7. Track in shared task history
+    const taskEntry = {
+      id: enqResult.command.id,
+      idempotencyKey: idempotencyKey || null,
+      action: cleanAction,
+      payload,
+      callerDeviceId: callerDeviceId || "operator",
+      callerUserId,
+      targetDeviceId: target.id,
+      targetDeviceName: target.name,
+      targetPlatform: target.platform,
+      status: "dispatched",
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      result: null
+    };
+
+    this.recordSharedTask(taskEntry);
+
+    if (idempotencyKey) {
+      this.idempotencyIndex.set(idempotencyKey, {
+        command: enqResult.command,
+        status: "dispatched",
+        result: null
+      });
+    }
+
+    // 8. Emit real-time event for WebSocket / SSE subscribers
+    this.emitEvent({
+      type: "COMMAND_DISPATCH",
+      targetDeviceId: target.id,
+      command: enqResult.command
+    });
+
+    return {
+      success: true,
+      routed: true,
+      commandId: enqResult.command.id,
+      command: enqResult.command,
+      targetDevice: {
+        id: target.id,
+        name: target.name,
+        platform: target.platform,
+        online: true
+      }
+    };
+  }
+
+  /**
+   * Records a task in the shared cross-device task history.
+   */
+  recordSharedTask(task) {
+    this.taskHistory.unshift(task);
+    if (this.taskHistory.length > 200) this.taskHistory.pop();
+    return task;
+  }
+
+  /**
+   * Retrieves shared cross-device task history.
+   */
+  getSharedTasks(limit = 50, filter = {}) {
+    let list = this.taskHistory;
+    if (filter.targetDeviceId) list = list.filter(t => t.targetDeviceId === filter.targetDeviceId);
+    if (filter.callerUserId) list = list.filter(t => t.callerUserId === filter.callerUserId);
+    return list.slice(0, limit);
+  }
+
+  /**
+   * Records a message in the shared cross-device conversation context.
+   */
+  recordSharedMessage(message) {
+    const entry = {
+      id: "msg-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      source: message.source || "user",
+      platform: message.platform || "unknown",
+      role: message.role || "user",
+      content: String(message.content || "").slice(0, 4000),
+      timestamp: new Date().toISOString()
+    };
+    this.sharedConversations.push(entry);
+    if (this.sharedConversations.length > 500) this.sharedConversations.shift();
+    this.emitEvent({ type: "MESSAGE", message: entry });
+    return entry;
+  }
+
+  /**
+   * Retrieves shared conversation history.
+   */
+  getSharedMessages(limit = 50) {
+    return this.sharedConversations.slice(-limit);
+  }
+
+  /**
+   * Registers a real-time event listener (used by WebSocket gateway and SSE).
+   */
+  registerEventListener(listener) {
+    if (typeof listener === "function") {
+      this.eventListeners.add(listener);
+      return () => this.eventListeners.delete(listener);
+    }
+    return () => {};
+  }
+
+  /**
+   * Broadcasts an event to all registered real-time listeners.
+   */
+  emitEvent(event) {
+    for (const listener of this.eventListeners) {
+      try { listener(event); } catch {}
+    }
+  }
+
 }
 
 export const deviceHub = new DeviceHub();

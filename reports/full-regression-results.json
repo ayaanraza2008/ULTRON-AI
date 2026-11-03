@@ -1,0 +1,1749 @@
+{
+  "timestamp": "2026-11-03T13:59:29.378Z",
+  "totalFiles": 193,
+  "filePassCount": 193,
+  "fileFailCount": 0,
+  "totalPassed": 1331,
+  "totalFailed": 0,
+  "totalSkipped": 1,
+  "totalDurationMs": 282649,
+  "results": [
+    {
+      "file": "tests\\adaptive-personality.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 625,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\advanced-intelligence.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 515,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\adversarial-autonomy-hardening.test.js",
+      "exitCode": 0,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 21135,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\agent-matrix-18.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3562,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\agent-runtime-approval-guard.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1263,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\agent-runtime-tool-intent-guard.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 915,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\agent-runtime.test.js",
+      "exitCode": 0,
+      "passed": 78,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1589,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\agentmemory-integration.test.js",
+      "exitCode": 0,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 581,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\agents-orchestrator.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1511,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\android-bridge.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 525,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\api-rate-limit.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1157,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\appflowy-integration.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 562,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\audio-processing-pipeline.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 503,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\auth-isolation-unit.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1189,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\auth-methods.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1295,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\auth-rate-limit.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1136,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\auth-readiness.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 547,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\auth-resend-confirmation.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1275,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\autonomous-intelligence-orchestrator.test.js",
+      "exitCode": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 13377,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\autonomous-production.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 2538,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\autonomous-quality-gate.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 556,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\autonomous-task-lifecycle.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 637,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\autonomy-levels.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 496,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\autonomy-policy-infrastructure.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 508,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\autonomy-policy.test.js",
+      "exitCode": 0,
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 528,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\bootstrap-geo-sleuth.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 520,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\brain-router.test.js",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 664,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\browser-use-completion-validation.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 981,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\browser-use-model-proxy.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1285,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\build-your-own-x.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 558,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cactus.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 546,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\chat-model-fallback.test.js",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1712,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\chat-stream-final-event.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1348,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\chrome-devtools-agent-approval.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 924,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\chrome-devtools-integration.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 560,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\code-shield.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3291,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\coding-sandbox.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 507,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cognitive-memory-agent-integration.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1005,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cognitive-memory.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 512,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\companion-endpoint.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 518,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\computer-device.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1383,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\conversation-api-user-scope.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1242,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\core-ui.test.js",
+      "exitCode": 0,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 715,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\current-service-origins.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 514,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cyber-ai-redteam.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 512,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cyber-core.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 570,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cyber-intel.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 502,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cyber-recon.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 528,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cyber-routes.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1197,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cyber-scanner.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 513,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\cyber-web.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 513,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\desktop-companion.test.js",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 574,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\device-pairing-router.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 963,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\document-storage-migration.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 504,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\document-storage.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1291,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-account-channels.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 498,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-aggregate-providers.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 501,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-brain-integration.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 598,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-combo-router.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 540,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-facade-routes.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 879,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-free-gateways.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1378,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-gateway-compatibility.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 647,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-provider-registry.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 505,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-token-optimizer.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 515,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dsh-usage-diagnostics.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 503,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\durable-device-hub.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 529,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\emotion-analyzer.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 625,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\emotion-taxonomy.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 500,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\emotional-intelligence-e2e.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1306,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\employee-provider-readiness.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 833,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\employees.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 953,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\features.test.js",
+      "exitCode": 0,
+      "passed": 47,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 2363,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\floating-core.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 499,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\forge-engine.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 511,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\genesis-engine.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 509,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\geo-intel.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 511,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\geo-sleuth-agent.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 529,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\geo-sleuth-routing.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 858,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\geo-sleuth.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 788,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\gesture-recognizer.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 505,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\google-workspace-agent.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 933,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\google-workspace-bridge.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 498,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\google-workspace-smoke.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 770,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\google-workspace.test.js",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 565,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\hand-gesture-core.test.js",
+      "exitCode": 0,
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 519,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\harden-worker-rpc-search-path-migration.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 503,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\hermes-agent.test.js",
+      "exitCode": 0,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 564,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\human-interface.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 5478,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\image-studio-engine.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 599,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\integrations.test.js",
+      "exitCode": 0,
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1005,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\jarvis-capability-benchmark.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 531,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\jarvis-device-routes.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1371,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\jarvis-evolution-routes.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1824,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\jarvis-nextgen-routes.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1181,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\jarvis-router.test.js",
+      "exitCode": 0,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1407,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\jarvis-ultron-comparator.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 551,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\kaligpt-provider-safety.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 935,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\kaligpt.test.js",
+      "exitCode": 0,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1009,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\knowledge-vault.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 529,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\kokoro-voice.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 14350,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\media-discovery-engine.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 5238,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\media-system-routes.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3624,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\memory-api-user-scope.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1291,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\message-write-conversation-ownership.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1227,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\model-provider-fallbacks.test.js",
+      "exitCode": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1025,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\model-provider-smoke.test.js",
+      "exitCode": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 555,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\model-provider-total-timeout.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 928,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\model-vision-smoke.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 559,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\multi-device-manager.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 499,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\multidevice-ecosystem.test.js",
+      "exitCode": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1320,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\network-safety.test.js",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 585,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\new-ecosystem-integrations.test.js",
+      "exitCode": 0,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 564,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\nexus-orchestrator.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 503,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\obscura-mcp.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 556,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\offline-online-modes.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 505,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\openrouter-vision-adapter.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 539,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\openseo-agent-approval.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 978,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\openseo-mcp.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 540,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\openviking-agent-tools.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 958,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\openviking.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 544,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\operator-authorization.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 508,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\paperclip-services.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 537,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\proactive-daemon.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 870,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\productivity-services.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 542,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\rea-gateway.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 648,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\rea-mcp.test.js",
+      "exitCode": 0,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 575,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\remote-task-orchestrator.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 490,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\render-blueprint.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 499,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\repository-capabilities.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 550,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\revoke-browser-bypass-privileges-migration.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 499,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\robotics-hal.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 498,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\robotics-simulation.test.js",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 568,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\robotics-twin-sim.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 498,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\runtime-readiness.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 535,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\screen-observer.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1231,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\security-sast.test.js",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 729,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\security-scripts.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 11318,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\security-secrets.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 5089,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\self-evolution-engine.test.js",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1082,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\server-authored-audit-events-migration.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 506,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\server-health.test.js",
+      "exitCode": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1358,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\server-shutdown.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 6386,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\singularity-routes.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1380,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\snap-detector.test.js",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 507,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\spaceplanner-integration.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 516,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\spatial-diorama-adapter.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 561,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\spatial-engine.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1192,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\spatial-geometry-converter.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 513,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\spatial-hardware-detector.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 507,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\spatial-router.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1291,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\spatial-scene-graph.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 538,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\start-ultron.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 561,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\strata-integration.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 932,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\supabase-auth-diagnostics.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 546,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\supabase-isolation.e2e.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 1,
+      "durationMs": 1278,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\system-control-agent.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3132,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\target-authorization.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 506,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\task-aware-skills.test.js",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 589,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\task-router.test.js",
+      "exitCode": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 516,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\task-skill-fetch-security.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 952,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\task-update-guard-migration.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 506,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\telephony-brain.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 512,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\telephony-gateway.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 512,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\telephony-multidevice-e2e.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3126,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\ultron-autonomy.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 519,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\ultron-core.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 608,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\ultron-eyes-routes.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1340,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\ultron-eyes.test.js",
+      "exitCode": 0,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 735,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\ultron-guardian.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 512,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\ultron-sentinel.test.js",
+      "exitCode": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1253,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\ultron-vision.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1459,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\video-editing-engine.test.js",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 11468,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\vision-routing.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1370,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voice-activation-e2e.test.js",
+      "exitCode": 0,
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 10654,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voice-activation-system.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 10509,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voice-audio-processing.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 524,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voice-full-loop.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3629,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voice-personality-modes.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 501,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voice-vision.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 536,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voicestudio-agent-tools.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 950,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voicestudio-consent-cloning.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1012,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voicestudio-design-voice.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 977,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voicestudio-integration.test.js",
+      "exitCode": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1032,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\voicestudio-voice-description.test.js",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 942,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\wake-word.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 506,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\websocket-gateway-audit.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 665,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\windows-automation.test.js",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3143,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\windows-capture-affinity.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 538,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\windows-desktop-agent.test.js",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3257,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\windows-speech-daemon.test.js",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 3633,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\worker-smoke.test.js",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 655,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\worker.test.js",
+      "exitCode": 0,
+      "passed": 54,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 701,
+      "errorSnippet": null
+    },
+    {
+      "file": "test\\server.test.js",
+      "exitCode": 0,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1783,
+      "errorSnippet": null
+    }
+  ]
+}

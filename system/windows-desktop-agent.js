@@ -18,6 +18,7 @@ import fs from "node:fs/promises";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { windowsAutomation } from "./windows-automation.js";
+import { WindowsComputerControl } from "./computer-control.js";
 
 const execAsync = promisify(exec);
 
@@ -37,6 +38,10 @@ export class WindowsDesktopAgent {
     this.activeTask = null;
     this.executionHistory = [];
     this.onStateChangeCallback = options.onStateChange || null;
+    this.computerControl = new WindowsComputerControl();
+    this.workerTimer = null;
+    this.heartbeatTimer = null;
+    this.workerRunning = false;
   }
 
   /**
@@ -191,6 +196,167 @@ export class WindowsDesktopAgent {
       } catch {}
     }
   }
+
+  /**
+   * Executes an authorized remote command received from the central ULTRON brain.
+   * Strictly enforces allowlists; unrestricted terminal/shell is denied.
+   */
+  async executeCommand(action, payload = {}) {
+    const cleanAction = String(action || "").toLowerCase().trim();
+    const startTime = Date.now();
+
+    try {
+      let result = null;
+
+      switch (cleanAction) {
+        case "launch_app": {
+          const app = String(payload.app || payload.appKey || payload.name || "").toLowerCase().trim();
+          result = await this.computerControl.launchApplication(app);
+          break;
+        }
+
+        case "close_app": {
+          const app = String(payload.app || payload.appKey || payload.name || "").toLowerCase().trim();
+          result = await windowsAutomation.closeApprovedApp(app);
+          break;
+        }
+
+        case "lock_workstation":
+        case "screen_lock": {
+          result = await this.lockScreen();
+          break;
+        }
+
+        case "unlock_workstation":
+        case "screen_unlock": {
+          result = await this.unlockScreen();
+          break;
+        }
+
+        case "set_volume": {
+          const volAction = payload.action || "volume_up";
+          const volVal = payload.value !== undefined ? payload.value : null;
+          result = await windowsAutomation.setSystemVolume(volAction, volVal);
+          break;
+        }
+
+        case "screen_capture":
+        case "capture_desktop_screenshot": {
+          result = await windowsAutomation.captureScreen(payload.prefix || "remote_capture");
+          break;
+        }
+
+        case "get_system_vitals":
+        case "status": {
+          result = await this.getSystemVitals();
+          break;
+        }
+
+        case "sandboxed_file_list": {
+          result = await this.computerControl.listFiles(payload.subDir || "");
+          break;
+        }
+
+        case "sandboxed_file_read": {
+          result = await this.computerControl.readFile(payload.relativePath || "");
+          break;
+        }
+
+        default: {
+          throw new Error(`Command '${action}' is not authorized on Windows Desktop Companion.`);
+        }
+      }
+
+      const outcome = {
+        success: true,
+        action: cleanAction,
+        result,
+        executionTimeMs: Date.now() - startTime,
+        executedAt: new Date().toISOString()
+      };
+
+      this.executionHistory.unshift(outcome);
+      if (this.executionHistory.length > 100) this.executionHistory.pop();
+      return outcome;
+    } catch (err) {
+      const errorOutcome = {
+        success: false,
+        action: cleanAction,
+        error: err.message,
+        executionTimeMs: Date.now() - startTime,
+        failedAt: new Date().toISOString()
+      };
+
+      this.executionHistory.unshift(errorOutcome);
+      if (this.executionHistory.length > 100) this.executionHistory.pop();
+      return errorOutcome;
+    }
+  }
+
+  /**
+   * Starts autonomous command execution worker polling for remote commands.
+   */
+  startCommandWorker({ intervalMs = 2000, deviceHub = null } = {}) {
+    if (this.workerRunning) return;
+    this.workerRunning = true;
+    const hub = deviceHub || this.deviceHub;
+
+    // Heartbeat loop every 20 seconds
+    const sendHeartbeat = async () => {
+      if (!this.workerRunning) return;
+      try {
+        const vitals = await this.getSystemVitals();
+        if (hub && this.registered && this.authToken) {
+          hub.heartbeat(this.deviceId, this.authToken, {
+            batteryPercent: vitals.battery?.percent,
+            isCharging: vitals.battery?.isCharging,
+            vitals
+          });
+        }
+      } catch {}
+    };
+
+    // Command poll loop
+    const pollAndExecute = async () => {
+      if (!this.workerRunning) return;
+      try {
+        if (hub && this.registered && this.authToken) {
+          const pending = hub.pollPendingCommands(this.deviceId, this.authToken);
+          if (pending?.success && Array.isArray(pending.commands)) {
+            for (const cmd of pending.commands) {
+              const execResult = await this.executeCommand(cmd.action, cmd.payload);
+              hub.completeCommand(this.deviceId, cmd.id, this.authToken, execResult);
+            }
+          }
+        }
+      } catch {}
+    };
+
+    sendHeartbeat();
+    this.heartbeatTimer = setInterval(sendHeartbeat, 20_000);
+    this.workerTimer = setInterval(pollAndExecute, intervalMs);
+  }
+
+  /**
+   * Stops autonomous command execution worker cleanly.
+   */
+  stopCommandWorker() {
+    this.workerRunning = false;
+    if (this.workerTimer) {
+      clearInterval(this.workerTimer);
+      this.workerTimer = null;
+    }
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    const dev = this.deviceHub?.pairedDevices?.get(this.deviceId);
+    if (dev) {
+      dev.online = false;
+      dev.lastSeenAt = new Date().toISOString();
+    }
+  }
+
 }
 
 export const windowsDesktopAgent = new WindowsDesktopAgent();

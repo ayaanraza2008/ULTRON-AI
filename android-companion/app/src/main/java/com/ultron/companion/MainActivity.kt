@@ -97,6 +97,12 @@ class MainActivity : Activity() {
             text = "Open ULTRON"
             setOnClickListener { openAssistant() }
         }
+        val openCompose = Button(this).apply {
+            text = "Open Compose Command Center"
+            setOnClickListener {
+                startActivity(android.content.Intent(this@MainActivity, com.ultron.companion.ui.UltronComposeActivity::class.java))
+            }
+        }
 
         layout.addView(title)
         layout.addView(status)
@@ -109,6 +115,7 @@ class MainActivity : Activity() {
         layout.addView(start)
         layout.addView(stop)
         layout.addView(open)
+        layout.addView(openCompose)
         setContentView(layout)
     }
 

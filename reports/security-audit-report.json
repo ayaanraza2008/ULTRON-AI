@@ -1,28 +1,28 @@
 {
   "metadata": {
-    "generatedAt": "2026-11-02T15:58:58.370Z",
+    "generatedAt": "2026-11-03T13:57:48.817Z",
     "targetRepository": "C:\\Users\\Ali Raza Zaidi\\.gemini\\antigravity\\scratch\\ULTRON-AI",
-    "elapsedSeconds": 3.62,
+    "elapsedSeconds": 8.31,
     "summary": {
-      "confirmedVulnerabilitiesCount": 0,
-      "potentialRisksCount": 0,
+      "confirmedVulnerabilitiesCount": 1,
+      "potentialRisksCount": 1,
       "informationalFindingsCount": 0,
       "skippedToolsCount": 4,
-      "isQualityGatePassed": true
+      "isQualityGatePassed": false
     }
   },
   "metrics": {
     "sast": {
-      "filesScanned": 201,
-      "linesScanned": 64896,
-      "findingsCount": 0,
+      "filesScanned": 220,
+      "linesScanned": 74696,
+      "findingsCount": 2,
       "severityBreakdown": {
         "CRITICAL": 0,
-        "HIGH": 0,
-        "MEDIUM": 0,
+        "HIGH": 1,
+        "MEDIUM": 1,
         "LOW": 0
       },
-      "maxCvssScore": 0
+      "maxCvssScore": 7.5
     },
     "dependencies": {
       "tool": "npm audit",
@@ -39,14 +39,48 @@
       }
     },
     "secrets": {
-      "filesScanned": 387,
+      "filesScanned": 1385,
       "commitsScanned": 30,
       "findingsCount": 0
     }
   },
   "findings": {
-    "confirmedVulnerabilities": [],
-    "potentialRisks": [],
+    "confirmedVulnerabilities": [
+      {
+        "source": "SAST",
+        "category": "Code Vulnerability",
+        "findingId": "vuln-3d594209",
+        "ruleId": "SAST-CWE-1321",
+        "cwe": "CWE-1321",
+        "title": "Prototype Pollution",
+        "severity": "HIGH",
+        "cvss": 7.5,
+        "filePath": "core\\autonomous-orchestrator.js",
+        "lineNumber": 45,
+        "snippet": "if (key === \"__proto__\" || key === \"constructor\" || key === \"prototype\") return undefined;",
+        "description": "Object modification directly targeting prototype properties.",
+        "remediation": "Use Map or Object.create(null) for unkeyed lookups and sanitize keys.",
+        "confidence": 0.95
+      }
+    ],
+    "potentialRisks": [
+      {
+        "source": "SAST",
+        "category": "Code Weakness",
+        "findingId": "vuln-5a468232",
+        "ruleId": "SAST-CWE-327",
+        "cwe": "CWE-327",
+        "title": "Insecure Cryptographic Algorithm",
+        "severity": "MEDIUM",
+        "cvss": 5.9,
+        "filePath": "integrations\\device-websocket-gateway.js",
+        "lineNumber": 20,
+        "snippet": "return crypto.createHash(\"sha1\").update(String(key) + WS_MAGIC_STRING).digest(\"base64\");",
+        "description": "Use of legacy or collision-vulnerable cryptographic algorithms (MD5, SHA-1, DES, RC4).",
+        "remediation": "Upgrade to SHA-256 / SHA-512 for cryptographic digests, or AES-256-GCM for encryption.",
+        "confidence": 0.95
+      }
+    ],
     "informationalFindings": []
   },
   "externalTools": [

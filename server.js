@@ -18,6 +18,8 @@ import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
 import { createJarvisRouter } from "./jarvis-router.js";
 import { createDevicePairingRouter, verifyPairedDeviceToken } from "./integrations/device-pairing-router.js";
 import { createSpatialRouter } from "./spatial/spatial-router.js";
+import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
+import { deviceNetworkingManager } from "./integrations/device-networking.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
@@ -2008,6 +2010,14 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     if (!worldIntelligenceUrl) return res.status(503).send("World Intelligence service URL is not configured.");
     res.redirect(302, worldIntelligenceUrl + "/?embed=1");
   });
+    app.get("/api/discovery/local", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
+  });
+  app.get("/api/network/connectivity", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(deviceNetworkingManager.getConnectivityStatus());
+  });
   app.get("/api/world-intelligence/status", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
@@ -2026,6 +2036,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   const port = Number(process.env.PORT) || 10000;
   const app = createApp();
   const httpServer = app.listen(port, "0.0.0.0", () => console.log(`ULTRON AI listening on port ${port}`));
+  deviceWebSocketGateway.attachToServer(httpServer);
   let worker = null;
   if (process.env.ULTRON_EMPLOYEES_ENABLED === "true") {
     worker = startWorker();
@@ -2038,6 +2049,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     shutdownStarted = true;
     console.info(`ULTRON AI received ${signal}; draining HTTP connections and stopping background work.`);
     worker?.stop();
+    deviceWebSocketGateway.close();
     httpServer.close(error => {
       if (error) {
         console.error("ULTRON HTTP server shutdown failed:", error.message);
@@ -2048,3 +2060,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   process.once("SIGTERM", () => shutdown("SIGTERM"));
   process.once("SIGINT", () => shutdown("SIGINT"));
 }
+
+export { deviceWebSocketGateway, deviceNetworkingManager };
