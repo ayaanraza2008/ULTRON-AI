@@ -71,7 +71,7 @@ export class SpatialSceneGraph {
     // 3D Objects indexed by id
     this.objects = new Map();
 
-    if (Array.isArray(options.objects)) {
+    if (!this.metadataOnly && Array.isArray(options.objects)) {
       for (const obj of options.objects) {
         this.addObject(obj);
       }
