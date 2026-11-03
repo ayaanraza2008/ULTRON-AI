@@ -631,24 +631,64 @@ export class SimulationPlaybackEngine {
  */
 export class HardwareInTheLoopBridge {
   constructor(options = {}) {
-    this.activeMode = "SIMULATION"; // "SIMULATION" | "HIL_CONNECTED" | "HARDWARE_DISCONNECTED"
+    this.activeMode = "SIMULATION";
     this.baudRate = options.baudRate || 115200;
     this.targetNode = options.targetNode || "ultron_hil_node";
+    this.hardwareAdapter = options.hardwareAdapter || null;
+    this.authorizationVerifier = options.authorizationVerifier || null;
+    this.safetyController = options.safetyController || null;
+    this.physicalHardwareVerified = false;
+    this.hardwareIdentity = null;
     this.connectionTimestamp = null;
     this.lastPacketReceived = null;
   }
 
-  handshake(authorizationToken = null) {
-    const token = authorizationToken;
-    if (!token || typeof token !== "string" || token.length < 8) {
-      return { success: false, error: "INVALID_HIL_TOKEN" };
+  async handshake(authorizationToken = null) {
+    if (!this.hardwareAdapter ||
+        this.hardwareAdapter.isPhysicalHardware !== true ||
+        typeof this.hardwareAdapter.connect !== "function" ||
+        typeof this.hardwareAdapter.send !== "function" ||
+        typeof this.authorizationVerifier !== "function" ||
+        !this.safetyController ||
+        typeof this.safetyController.validateMotionCommand !== "function") {
+      return {
+        success: false,
+        mode: "SIMULATION",
+        physicalHardwareVerified: false,
+        error: "PHYSICAL_HARDWARE_ADAPTER_REQUIRED"
+      };
+    }
+
+    let authorized = false;
+    try {
+      authorized = await this.authorizationVerifier(authorizationToken) === true;
+    } catch {
+      authorized = false;
+    }
+    if (!authorized) {
+      return { success: false, mode: "SIMULATION", error: "HIL_OPERATOR_AUTHORIZATION_FAILED" };
+    }
+
+    let connection;
+    try {
+      connection = await this.hardwareAdapter.connect();
+    } catch {
+      return { success: false, mode: "SIMULATION", error: "HARDWARE_CONNECTION_FAILED" };
+    }
+    if (connection?.physicalHardwareVerified !== true ||
+        typeof connection.deviceId !== "string" || !connection.deviceId.trim()) {
+      return { success: false, mode: "SIMULATION", error: "HARDWARE_ATTESTATION_FAILED" };
     }
 
     this.activeMode = "HIL_CONNECTED";
+    this.physicalHardwareVerified = true;
+    this.hardwareIdentity = connection.deviceId;
     this.connectionTimestamp = new Date().toISOString();
     return {
       success: true,
       mode: this.activeMode,
+      physicalHardwareVerified: true,
+      hardwareIdentity: this.hardwareIdentity,
       targetNode: this.targetNode,
       ros2Protocol: "micro_ros_dds_v2",
       baudRate: this.baudRate,
@@ -656,23 +696,51 @@ export class HardwareInTheLoopBridge {
     };
   }
 
-  /**
-   * Formats a ROS 2 Twist motion command packet
-   */
   formatRos2TwistPacket(linearMps, angularRps) {
+    const verified = this.activeMode === "HIL_CONNECTED" && this.physicalHardwareVerified;
     return {
       topic: "/cmd_vel",
       msgType: "geometry_msgs/msg/Twist",
       timestamp: Date.now(),
       linear: { x: Number(linearMps.toFixed(3)), y: 0.0, z: 0.0 },
       angular: { x: 0.0, y: 0.0, z: Number(angularRps.toFixed(3)) },
-      hilFailsafeArm: this.activeMode === "HIL_CONNECTED"
+      hilFailsafeArm: verified,
+      transmissionAllowed: verified,
+      physicalHardwareVerified: verified
     };
   }
 
-  /**
-   * Formats sensor telemetry packet for Micro-ROS transmission
-   */
+  async sendRos2TwistPacket(linearMps, angularRps, safetyContext = {}) {
+    if (this.activeMode !== "HIL_CONNECTED" || !this.physicalHardwareVerified ||
+        !this.hardwareAdapter || typeof this.hardwareAdapter.send !== "function") {
+      return { success: false, transmitted: false, physicalActuation: false, error: "HARDWARE_TRANSPORT_UNAVAILABLE" };
+    }
+
+    const safety = this.safetyController.validateMotionCommand({
+      linearVelocity: linearMps,
+      angularVelocity: angularRps,
+      targetPosition: safetyContext.targetPosition || null,
+      batteryPercent: safetyContext.batteryPercent ?? 100
+    });
+    if (!safety.safe || !safety.permitted) {
+      return { success: false, transmitted: false, physicalActuation: false, error: safety.code || "SAFETY_INTERLOCK_BLOCKED" };
+    }
+
+    const packet = this.formatRos2TwistPacket(linearMps, angularRps);
+    try {
+      const ack = await this.hardwareAdapter.send(packet);
+      if (ack?.acknowledged !== true) {
+        return { success: false, transmitted: false, physicalActuation: false, error: "HARDWARE_ACKNOWLEDGEMENT_MISSING" };
+      }
+      return { success: true, transmitted: true, physicalActuation: true, hardwareIdentity: this.hardwareIdentity, packet };
+    } catch {
+      this.activeMode = "SIMULATION";
+      this.physicalHardwareVerified = false;
+      this.hardwareIdentity = null;
+      return { success: false, transmitted: false, physicalActuation: false, error: "HARDWARE_TRANSMISSION_FAILED" };
+    }
+  }
+
   formatSensorTelemetryPacket(sensors = {}) {
     return {
       topic: "/ultron/telemetry",
@@ -681,17 +749,19 @@ export class HardwareInTheLoopBridge {
       batteryPercent: sensors.batteryPercent ?? 100,
       emergencyHaltState: sensors.emergencyHaltLatched ?? false,
       linearSpeed: sensors.linearSpeed ?? 0,
-      mode: this.activeMode
+      mode: this.activeMode,
+      physicalHardwareVerified: this.physicalHardwareVerified
     };
   }
 
   disconnect() {
     this.activeMode = "SIMULATION";
+    this.physicalHardwareVerified = false;
+    this.hardwareIdentity = null;
     this.connectionTimestamp = null;
-    return { success: true, mode: "SIMULATION" };
+    return { success: true, mode: "SIMULATION", physicalHardwareVerified: false };
   }
 }
-
 
 /**
  * Extended 3D Assets indexed from NVIDIA SimReady Central (HuggingFace)
