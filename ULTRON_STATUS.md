@@ -13,7 +13,7 @@
 
 ## A. Executive verdict
 
-<badge color="danger">NO-GO FOR MERGE / DEPLOY</badge>
+**NO-GO FOR MERGE / DEPLOY**
 
 The candidate has a green automated CI baseline on SHA 54d4062642012db1a97a3fa59195057878ba8e0d. Several high-risk false-success paths have been hardened. However, critical live and owner-dependent acceptance gates remain open.
 
@@ -193,7 +193,7 @@ Calculation:
 
 (75 × 0.15) + (99.92 × 0.15) + (65 × 0.20) + (25 × 0.25) + (15 × 0.15) + (5 × 0.10) = **48.24%**
 
-<badge color="danger">48.24% overall readiness</badge>
+**48.24% overall readiness**
 
 The automated test ratio is 1,311 / 1,312 = 99.92%. The overall score remains much lower because live operations, production readiness and physical hardware acceptance are not complete.
 
