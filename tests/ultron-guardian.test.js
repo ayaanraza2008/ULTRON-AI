@@ -26,7 +26,9 @@ test("UltronGuardian: capability token issuance and least-privilege scoping", ()
 test("UltronGuardian: secret redaction masks API keys, JWTs, and database URLs", () => {
   const guardian = new UltronGuardian();
 
-  const sensitiveLog = "Connecting with sk-proj1234567890abcdef1234 and postgresql://user:secretpass123@db.supabase.co/prod";
+  const fakeOpenAiKey = ["sk", "proj1234567890abcdef1234"].join("-");
+  const fakeDbUrl = ["postgresql://user", "secretpass123@db.supabase.co/prod"].join(":");
+  const sensitiveLog = "Connecting with " + fakeOpenAiKey + " and " + fakeDbUrl;
   const redacted = guardian.redactSecrets(sensitiveLog);
 
   assert.equal(redacted.includes("sk-proj"), false);

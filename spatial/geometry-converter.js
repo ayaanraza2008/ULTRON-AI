@@ -11,6 +11,15 @@
 /**
  * Generate 8 bounding box vertices given center (x, y, z) and dimensions (dx, dy, dz).
  */
+function assertGeometryAvailable(sceneGraph) {
+  if (sceneGraph?.metadataOnly) {
+    throw Object.assign(
+      new Error("3D geometry is unavailable: CPU fallback validated image metadata only."),
+      { code: "SCENE_GEOMETRY_UNAVAILABLE" }
+    );
+  }
+}
+
 function createBoxVertices(pos, dims) {
   const hx = dims.dx / 2;
   const hy = dims.dy / 2;
@@ -32,6 +41,7 @@ function createBoxVertices(pos, dims) {
  * Convert a SpatialSceneGraph instance into a valid Wavefront OBJ string.
  */
 export function sceneToObj(sceneGraph) {
+  assertGeometryAvailable(sceneGraph);
   const lines = [
     "# ULTRON Spatial Intelligence — 3D Scene Model",
     `# Scene ID: ${sceneGraph.sceneId}`,
@@ -92,6 +102,7 @@ export function sceneToObj(sceneGraph) {
  * Convert a SpatialSceneGraph into a GLTF 2.0 JSON structure.
  */
 export function sceneToGltf(sceneGraph) {
+  assertGeometryAvailable(sceneGraph);
   const nodes = [];
   const objects = Array.isArray(sceneGraph.objects) ? sceneGraph.objects : Array.from(sceneGraph.objects.values());
 

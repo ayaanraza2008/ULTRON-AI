@@ -167,7 +167,9 @@ export class SpatialWorldModelViewer {
         const mode = data.hardware?.worker?.executionMode || "CPU";
         this.hwBadge.textContent = isCuda
           ? `CUDA GPU · ${data.hardware.gpu.gpuName}`
-          : `RYZEN 7 5700U · ${mode}`;
+          : mode === "CPU_METADATA_FALLBACK"
+            ? "CPU METADATA ONLY · NO 3D MODEL"
+            : `CPU HOST · ${mode} CONFIGURED, NOT VERIFIED`;
       }
     } catch {}
   }
@@ -197,6 +199,10 @@ export class SpatialWorldModelViewer {
 
   async startReconstruction(imageData) {
     if (this.stageBadge) this.stageBadge.textContent = "QUEUED...";
+    if (this.exportObjBtn) this.exportObjBtn.disabled = true;
+    if (this.exportGltfBtn) this.exportGltfBtn.disabled = true;
+    if (this.queryInput) this.queryInput.disabled = true;
+    if (this.queryBtn) this.queryBtn.disabled = true;
     if (this.panel) this.panel.hidden = false;
 
     try {
@@ -233,11 +239,23 @@ export class SpatialWorldModelViewer {
 
       if (job.status === "COMPLETED" && job.sceneGraph) {
         this.currentScene = job.sceneGraph;
-        this.stageBadge.textContent = `RECONSTRUCTED (${job.sceneGraph.objects.length} Objects)`;
-        if (this.exportObjBtn) this.exportObjBtn.disabled = false;
-        if (this.exportGltfBtn) this.exportGltfBtn.disabled = false;
-        if (this.queryInput) this.queryInput.disabled = false;
-        if (this.queryBtn) this.queryBtn.disabled = false;
+        if (job.sceneGraph.metadataOnly) {
+          this.stageBadge.textContent = "METADATA ONLY · NO 3D RECONSTRUCTION";
+          if (this.exportObjBtn) this.exportObjBtn.disabled = true;
+          if (this.exportGltfBtn) this.exportGltfBtn.disabled = true;
+          if (this.queryInput) this.queryInput.disabled = true;
+          if (this.queryBtn) this.queryBtn.disabled = true;
+          if (this.queryAnswer) {
+            this.queryAnswer.hidden = false;
+            this.queryAnswer.textContent = "No 3D model is available. CPU fallback only validated the image payload.";
+          }
+        } else {
+          this.stageBadge.textContent = `WORKER RESULT · ${job.sceneGraph.objects.length} OBJECTS · ${job.sceneGraph.inferenceStatus || "UNVERIFIED"}`;
+          if (this.exportObjBtn) this.exportObjBtn.disabled = false;
+          if (this.exportGltfBtn) this.exportGltfBtn.disabled = false;
+          if (this.queryInput) this.queryInput.disabled = false;
+          if (this.queryBtn) this.queryBtn.disabled = false;
+        }
         this.render();
       } else if (job.status === "FAILED") {
         this.stageBadge.textContent = `FAILED: ${job.error?.code}`;
@@ -284,6 +302,27 @@ export class SpatialWorldModelViewer {
     // Clear background (Deep space black)
     this.ctx.fillStyle = "#040810";
     this.ctx.fillRect(0, 0, width, height);
+
+    if (!this.currentScene || this.currentScene.metadataOnly) {
+      this.ctx.fillStyle = "#aab4c8";
+      this.ctx.font = "600 13px Inter, system-ui, sans-serif";
+      this.ctx.textAlign = "center";
+      this.ctx.fillText(
+        this.currentScene?.metadataOnly ? "NO VERIFIED 3D GEOMETRY" : "NO SPATIAL SCENE LOADED",
+        width / 2,
+        height / 2 - 8
+      );
+      this.ctx.fillStyle = "#66738a";
+      this.ctx.font = "11px Inter, system-ui, sans-serif";
+      this.ctx.fillText(
+        this.currentScene?.metadataOnly
+          ? "CPU fallback validated image metadata only; configure a real model worker."
+          : "Upload an image and configure a spatial model worker to begin.",
+        width / 2,
+        height / 2 + 16
+      );
+      return;
+    }
 
     // Camera transformation matrix
     const cosY = Math.cos(this.camera.yaw);

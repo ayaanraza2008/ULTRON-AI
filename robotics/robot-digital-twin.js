@@ -40,12 +40,15 @@ export class RobotDigitalTwin {
       imuNoiseStd: 0.02
     };
     this.safetyController = new PhysicalSafetyController();
+    this.mode = "SIMULATION";
+    this.safetyController.recordHeartbeat();
   }
 
   /**
    * Physics & Kinematics simulation step (dt in seconds)
    */
   step(command = {}, dt = 0.1, obstacles = []) {
+    this.safetyController.recordHeartbeat();
     const linearCmd = Math.max(-0.5, Math.min(this.maxLinearSpeedMps, Number(command.linearVelocity || 0)));
     const angularCmd = Math.max(-this.maxAngularSpeedRps, Math.min(this.maxAngularSpeedRps, Number(command.angularVelocity || 0)));
 
@@ -223,27 +226,41 @@ export class SimToRealDeploymentGate {
   }
 
   evaluateTrajectory(trajectoryHistory = []) {
-    if (trajectoryHistory.length === 0) {
+    if (!Array.isArray(trajectoryHistory) || trajectoryHistory.length === 0) {
       return { passed: false, score: 0, reason: "Empty trajectory log." };
     }
 
-    let totalEnergyPercent = 0;
     let collisionsCount = 0;
     let minObsClearance = Infinity;
-
-    for (const pt of trajectoryHistory) {
-      if (pt.collision) collisionsCount++;
-      if (pt.minClearance !== undefined && pt.minClearance < minObsClearance) {
-        minObsClearance = pt.minClearance;
+    for (const [index, point] of trajectoryHistory.entries()) {
+      if (typeof point?.collision !== "boolean" ||
+          typeof point?.minClearance !== "number" ||
+          !Number.isFinite(point.minClearance) ||
+          point.minClearance < 0 ||
+          typeof point?.batteryPercent !== "number" ||
+          !Number.isFinite(point.batteryPercent) ||
+          point.batteryPercent < 0 ||
+          point.batteryPercent > 100) {
+        return {
+          passed: false,
+          score: 0,
+          reason: `Missing or invalid safety telemetry at trajectory step ${index}.`,
+          code: "SAFETY_TELEMETRY_INCOMPLETE"
+        };
       }
+      if (point.collision) collisionsCount++;
+      minObsClearance = Math.min(minObsClearance, point.minClearance);
     }
 
-    const startBat = trajectoryHistory[0].batteryPercent || 100;
-    const endBat = trajectoryHistory[trajectoryHistory.length - 1].batteryPercent || 100;
-    totalEnergyPercent = Number((startBat - endBat).toFixed(2));
-
-    const passedSafety = collisionsCount === 0 && minObsClearance >= this.minSafeClearanceM && endBat >= this.minBatteryPercent;
-    const score = passedSafety ? Math.max(50, Math.round(100 - (totalEnergyPercent * 2) - (trajectoryHistory.length * 0.1))) : 0;
+    const startBat = trajectoryHistory[0].batteryPercent;
+    const endBat = trajectoryHistory[trajectoryHistory.length - 1].batteryPercent;
+    const totalEnergyPercent = Number((startBat - endBat).toFixed(2));
+    const passedSafety = collisionsCount === 0 &&
+      minObsClearance >= this.minSafeClearanceM &&
+      endBat >= this.minBatteryPercent;
+    const score = passedSafety
+      ? Math.max(50, Math.round(100 - (totalEnergyPercent * 2) - (trajectoryHistory.length * 0.1)))
+      : 0;
 
     return {
       passed: passedSafety,
@@ -258,20 +275,35 @@ export class SimToRealDeploymentGate {
     };
   }
 
+  evaluateSimulationQualification(trajectoryHistory = []) {
+    const result = this.evaluateTrajectory(trajectoryHistory);
+    return {
+      ...result,
+      simulationQualified: result.passed === true,
+      physicalDeploymentAuthorized: false,
+      qualificationType: "SIMULATION_ONLY"
+    };
+  }
+
   issueDeploymentPassport(robotId, trajectoryHistory = []) {
-    const evalResult = this.evaluateTrajectory(trajectoryHistory);
-    if (!evalResult.passed) {
-      throw new Error(`Sim-to-Real deployment rejected: Safety checks failed (${JSON.stringify(evalResult.metrics)})`);
+    const qualification = this.evaluateSimulationQualification(trajectoryHistory);
+    if (!qualification.passed) {
+      throw new Error(`Simulation qualification rejected: Safety checks failed (${JSON.stringify(qualification.metrics)})`);
     }
 
-    const token = "pass_" + crypto.randomBytes(16).toString("hex");
+    // A simulation trajectory cannot authorize real-world actuation.
     return {
-      success: true,
-      deploymentPassportToken: token,
+      success: false,
+      code: "PHYSICAL_HIL_REQUIRED",
+      error: "Simulation qualification is not a physical deployment passport. Verified hardware-in-the-loop testing and owner authorization are required.",
       robotId,
-      evaluationScore: evalResult.score,
-      metrics: evalResult.metrics,
-      issuedAt: new Date().toISOString()
+      simulationQualified: true,
+      physicalDeploymentAuthorized: false,
+      deploymentPassportToken: null,
+      evaluationScore: qualification.score,
+      metrics: qualification.metrics,
+      qualificationType: "SIMULATION_ONLY",
+      evaluatedAt: new Date().toISOString()
     };
   }
 }

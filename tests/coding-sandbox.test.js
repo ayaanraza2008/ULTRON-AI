@@ -25,7 +25,7 @@ test("CodingSandbox: fails closed deterministically when Docker is not available
   assert.equal(pyRes.errorCode, "CODE_SANDBOX_DISABLED");
 });
 
-test("CodingSandbox: initializes and exposes isolation parameters when Docker is available", async () => {
+test("CodingSandbox: labels explicit Docker overrides as test-only", async () => {
   const sandbox = new CodingSandbox({
     timeoutMs: 3000,
     memoryLimitMb: 256,
@@ -35,14 +35,19 @@ test("CodingSandbox: initializes and exposes isolation parameters when Docker is
   });
   const readiness = await sandbox.initialize();
 
-  assert.equal(readiness.ready, true);
-  assert.equal(readiness.enabled, true);
-  assert.equal(readiness.code, "CODE_SANDBOX_ACTIVE");
-  assert.equal(readiness.isolationEngine, "DOCKER_CONTAINER");
-  assert.equal(readiness.dockerVersion, "24.0.5");
-  assert.equal(readiness.limits.network, "NONE_ISOLATED");
-  assert.equal(readiness.limits.memoryLimitMb, 256);
-  assert.equal(readiness.limits.cpuLimit, "0.5");
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.enabled, false);
+  assert.equal(readiness.code, "CODE_SANDBOX_MOCK_ONLY");
+  assert.equal(readiness.isolationEngine, "MOCK_CONTAINER_RUNNER");
+  assert.equal(readiness.simulated, true);
+  assert.equal(readiness.dockerVerified, false);
+  assert.equal(sandbox.isDockerVerified, false);
+
+  const execution = await sandbox.executeJavaScript("console.log('must not run')");
+  assert.equal(execution.success, false);
+  assert.equal(execution.executed, false);
+  assert.equal(execution.errorCode, "CODE_SANDBOX_MOCK_ONLY");
+  assert.equal(execution.dockerVerified, false);
 });
 
 test("CodingSandbox: dynamically probes host Docker daemon without forcing override", async () => {
@@ -93,12 +98,19 @@ test("CodingSandbox: executes JavaScript in container with resource limits via c
   });
 
   const readiness = await sandbox.initialize();
-  assert.equal(readiness.ready, true);
-  assert.equal(readiness.code, "CODE_SANDBOX_ACTIVE");
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.enabled, false);
+  assert.equal(readiness.code, "CODE_SANDBOX_MOCK_ONLY");
+  assert.equal(readiness.isolationEngine, "MOCK_CONTAINER_RUNNER");
+  assert.equal(readiness.simulated, true);
+  assert.equal(readiness.dockerVerified, false);
 
   const res = await sandbox.executeJavaScript("console.log('Hello from isolated container!');");
   assert.equal(res.success, true);
   assert.equal(res.executed, true);
+  assert.equal(res.isolationEngine, "MOCK_CONTAINER_RUNNER");
+  assert.equal(res.simulated, true);
+  assert.equal(res.dockerVerified, false);
   assert.equal(res.stdout.trim(), "Hello from isolated container!");
   assert.equal(invokedWith.lang, "javascript");
   assert.equal(invokedWith.opts.memoryLimitMb, 128);
@@ -109,6 +121,9 @@ test("CodingSandbox: executes JavaScript in container with resource limits via c
   const history = sandbox.getExecutionHistory();
   assert.equal(history.length, 1);
   assert.equal(history[0].language, "javascript");
+  assert.equal(history[0].isolationEngine, "MOCK_CONTAINER_RUNNER");
+  assert.equal(history[0].simulated, true);
+  assert.equal(history[0].dockerVerified, false);
 });
 
 test("CodingSandbox: executes Python in container and handles container timeouts", async () => {
@@ -136,5 +151,8 @@ test("CodingSandbox: executes Python in container and handles container timeouts
   assert.equal(res.executed, true);
   assert.equal(res.timedOut, true);
   assert.equal(res.errorCode, "EXECUTION_TIMEOUT");
+  assert.equal(res.isolationEngine, "MOCK_CONTAINER_RUNNER");
+  assert.equal(res.simulated, true);
+  assert.equal(res.dockerVerified, false);
   assert.ok(res.error.includes("2000ms"));
 });

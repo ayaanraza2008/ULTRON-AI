@@ -145,7 +145,7 @@ export function createSpatialRouter({
     } catch (err) {
       const statusCode = err?.code === "FORBIDDEN" ? 403
         : err?.code === "JOB_NOT_FOUND" ? 404
-        : err?.code === "SCENE_NOT_READY" ? 409 : 500;
+        : err?.code === "SCENE_NOT_READY" || err?.code === "SCENE_GEOMETRY_UNAVAILABLE" ? 409 : 500;
       res.status(statusCode).json({
         error: { code: err?.code || "EXPORT_FAILED", message: err?.message }
       });

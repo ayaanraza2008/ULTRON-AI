@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Mapping
 
 SMOKE_ENV = "ULTRON_RUN_BROWSER_SMOKE"
@@ -45,3 +46,21 @@ def configure_browser_logging() -> None:
     """Redact request/page details by suppressing verbose third-party browser logs."""
     logging.getLogger("browser_use").setLevel(logging.WARNING)
     logging.getLogger("bubus").setLevel(logging.WARNING)
+
+def browser_runtime_status() -> dict[str, Any]:
+    """Launch Chromium once to prove the actual browser runtime is usable."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            executable = Path(playwright.chromium.executable_path)
+            if not executable.is_file():
+                return {"ready": False, "reason": "CHROMIUM_EXECUTABLE_MISSING"}
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
+            browser.close()
+        return {"ready": True, "engine": "chromium"}
+    except Exception as exc:
+        return {"ready": False, "reason": type(exc).__name__[:80]}

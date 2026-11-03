@@ -267,10 +267,12 @@ test("Singularity Routes: SimReady & OpenUSD simulation endpoints manage assets,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: "OPERATOR_SIM_HIL_KEY" })
     });
-    assert.equal(hilRes.status, 200);
+    assert.equal(hilRes.status, 501);
     const hilBody = await hilRes.json();
-    assert.equal(hilBody.success, true);
-    assert.equal(hilBody.mode, "HIL_CONNECTED");
+    assert.equal(hilBody.success, false);
+    assert.equal(hilBody.mode, "SIMULATION");
+    assert.equal(hilBody.physicalHardwareVerified, false);
+    assert.equal(hilBody.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
 
     // 7. SimReady Central Asset Search
     const centralSearchRes = await fetch(base + "/api/jarvis/robotics/simready/central/search?category=logistics");
@@ -290,5 +292,8 @@ test("Singularity Routes: SimReady & OpenUSD simulation endpoints manage assets,
     const importBody = await importRes.json();
     assert.equal(importBody.success, true);
     assert.equal(importBody.importedAssetId, "simready-agv-forklift");
+    assert.equal(importBody.importType, "STATIC_METADATA_REGISTRATION");
+    assert.equal(importBody.geometryDownloaded, false);
+    assert.equal(importBody.liveHuggingFaceConnection, false);
   });
 });

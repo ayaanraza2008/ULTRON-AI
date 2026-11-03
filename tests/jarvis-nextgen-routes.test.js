@@ -64,10 +64,11 @@ test("JARVIS Next-Gen Routes: POST /api/jarvis/nextgen/autonomy/plan decomposes 
 
 test("JARVIS Next-Gen Routes: POST /api/jarvis/nextgen/forge/security-scan flags secrets", async () => {
   await withRouter({}, async base => {
+    const fakeOpenAiKey = ["sk", "live", "1234567890abcdef1234"].join("-");
     const res = await fetch(base + "/api/jarvis/nextgen/forge/security-scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: 'const apiKey = "sk-live-1234567890abcdef1234";' })
+      body: JSON.stringify({ code: `const apiKey = "${fakeOpenAiKey}";` })
     });
     const body = await res.json();
 

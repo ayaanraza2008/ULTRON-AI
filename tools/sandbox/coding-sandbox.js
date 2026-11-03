@@ -49,14 +49,26 @@ export class CodingSandbox {
     }
 
     if (this.dockerAvailableOverride === true) {
-      this.isDockerVerified = true;
-      this._cachedDockerStatus = { available: true, version: this.dockerVersionOverride || "24.0.0-verified" };
+      // Explicit availability overrides are test fixtures, never host verification.
+      this.isDockerVerified = false;
+      this._cachedDockerStatus = {
+        available: true,
+        version: this.dockerVersionOverride || "test-docker-override",
+        simulated: true,
+        reason: "DOCKER_OVERRIDE_IS_TEST_ONLY"
+      };
       return this._cachedDockerStatus;
     }
 
     if (this.customContainerRunner) {
-      this.isDockerVerified = true;
-      this._cachedDockerStatus = { available: true, version: "mock-container-runtime" };
+      // Test injection can exercise dispatch logic, but is never a Docker proof.
+      this.isDockerVerified = false;
+      this._cachedDockerStatus = {
+        available: true,
+        version: "mock-container-runtime",
+        simulated: true,
+        reason: "MOCK_RUNNER_NOT_REAL_DOCKER"
+      };
       return this._cachedDockerStatus;
     }
 
@@ -86,6 +98,19 @@ export class CodingSandbox {
         code: "CODE_SANDBOX_DISABLED",
         reason: this.disabledReason,
         isolationEngine: "NONE (FAILED_CLOSED)",
+        supportedLanguages: SUPPORTED_SANDBOX_LANGUAGES
+      };
+    }
+
+    if (dockerStatus.simulated) {
+      return {
+        ready: false,
+        enabled: false,
+        code: "CODE_SANDBOX_MOCK_ONLY",
+        reason: "A test-only runner is configured; real Docker isolation is not verified and untrusted host execution remains blocked.",
+        isolationEngine: "MOCK_CONTAINER_RUNNER",
+        simulated: true,
+        dockerVerified: false,
         supportedLanguages: SUPPORTED_SANDBOX_LANGUAGES
       };
     }
@@ -152,6 +177,21 @@ export class CodingSandbox {
         stderr: ""
       };
     }
+    if (dockerCheck.simulated && !this.customContainerRunner) {
+      return {
+        language: lang,
+        success: false,
+        executed: false,
+        timedOut: false,
+        errorCode: "CODE_SANDBOX_MOCK_ONLY",
+        error: "A test-only Docker override is not a real container runtime.",
+        isolationEngine: "NONE (FAILED_CLOSED)",
+        simulated: true,
+        dockerVerified: false,
+        stdout: "",
+        stderr: ""
+      };
+    }
 
     const execTimeout = Math.min(30000, options.timeoutMs || this.timeoutMs);
     const containerId = "sandbox-" + crypto.randomBytes(6).toString("hex");
@@ -163,8 +203,14 @@ export class CodingSandbox {
         memoryLimitMb: this.memoryLimitMb,
         cpuLimit: this.cpuLimit
       });
-      this.recordHistory(runnerRes);
-      return runnerRes;
+      const simulatedResult = {
+        ...runnerRes,
+        isolationEngine: "MOCK_CONTAINER_RUNNER",
+        simulated: true,
+        dockerVerified: false
+      };
+      this.recordHistory(simulatedResult);
+      return simulatedResult;
     }
 
     // Build strict Docker execution command
@@ -174,11 +220,17 @@ export class CodingSandbox {
       "--rm",
       `--name=${containerId}`,
       `--memory=${this.memoryLimitMb}m`,
+      `--memory-swap=${this.memoryLimitMb}m`,
       `--cpus=${this.cpuLimit}`,
+      "--pids-limit=64",
       "--network=none",
+      "--ipc=private",
       "--read-only",
-      "--tmpfs=/tmp:rw,noexec,nosuid,size=32m",
+      "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=32m",
+      "--cap-drop=ALL",
       "--security-opt=no-new-privileges",
+      "--ulimit=nofile=64:64",
+      "--init",
       "--user=1000:1000",
       image
     ];
@@ -202,6 +254,9 @@ export class CodingSandbox {
         success: true,
         executed: true,
         timedOut: false,
+        isolationEngine: "DOCKER_CONTAINER",
+        simulated: false,
+        dockerVerified: true,
         executionTimeMs: Date.now() - started,
         stdout: (stdout || "").slice(0, 32768),
         stderr: (stderr || "").slice(0, 32768)
@@ -222,6 +277,9 @@ export class CodingSandbox {
         success: false,
         executed: true,
         timedOut: isTimeout,
+        isolationEngine: "DOCKER_CONTAINER",
+        simulated: false,
+        dockerVerified: true,
         executionTimeMs: Date.now() - started,
         errorCode: isTimeout ? "EXECUTION_TIMEOUT" : "EXECUTION_ERROR",
         error: isTimeout ? `Execution exceeded timeout limit of ${execTimeout}ms.` : err.message,

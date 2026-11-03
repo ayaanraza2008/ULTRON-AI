@@ -57,7 +57,25 @@ test("QLearningNavigationAgent: learns state-action policy and updates Q-table",
   assert.equal(chosen, ROBOT_ACTIONS.TURN_RIGHT);
 });
 
-test("SimToRealDeploymentGate: rejects unsafe trajectories and issues deployment passport for safe missions", () => {
+test("SimToRealDeploymentGate: missing safety telemetry cannot qualify a trajectory", () => {
+  const gate = new SimToRealDeploymentGate();
+  const result = gate.evaluateSimulationQualification([{ collision: false }]);
+  assert.equal(result.passed, false);
+  assert.equal(result.simulationQualified, false);
+  assert.equal(result.code, "SAFETY_TELEMETRY_INCOMPLETE");
+  assert.equal(result.physicalDeploymentAuthorized, false);
+});
+
+test("SimToRealDeploymentGate: zero battery is not replaced with a synthetic full battery", () => {
+  const gate = new SimToRealDeploymentGate();
+  const result = gate.evaluateSimulationQualification([
+    { collision: false, minClearance: 1.0, batteryPercent: 0 }
+  ]);
+  assert.equal(result.passed, false);
+  assert.equal(result.metrics.finalBatteryPercent, 0);
+});
+
+test("SimToRealDeploymentGate: rejects unsafe trajectories and never issues a physical passport from simulation", () => {
   const gate = new SimToRealDeploymentGate();
 
   // 1. Unsafe trajectory with a collision
@@ -67,7 +85,7 @@ test("SimToRealDeploymentGate: rejects unsafe trajectories and issues deployment
   ];
   assert.throws(() => {
     gate.issueDeploymentPassport("bot-99", unsafeTrajectory);
-  }, /Sim-to-Real deployment rejected/);
+  }, /Simulation qualification rejected/);
 
   // 2. Safe trajectory with clearance > 0.35m and zero collisions
   const safeTrajectory = [
@@ -76,8 +94,16 @@ test("SimToRealDeploymentGate: rejects unsafe trajectories and issues deployment
     { collision: false, minClearance: 0.5, batteryPercent: 92 }
   ];
 
+  const qualification = gate.evaluateSimulationQualification(safeTrajectory);
+  assert.equal(qualification.simulationQualified, true);
+  assert.equal(qualification.physicalDeploymentAuthorized, false);
+  assert.equal(qualification.qualificationType, "SIMULATION_ONLY");
+
   const passport = gate.issueDeploymentPassport("bot-99", safeTrajectory);
-  assert.equal(passport.success, true);
-  assert.ok(passport.deploymentPassportToken.startsWith("pass_"));
+  assert.equal(passport.success, false);
+  assert.equal(passport.code, "PHYSICAL_HIL_REQUIRED");
+  assert.equal(passport.simulationQualified, true);
+  assert.equal(passport.physicalDeploymentAuthorized, false);
+  assert.equal(passport.deploymentPassportToken, null);
   assert.ok(passport.evaluationScore > 50);
 });

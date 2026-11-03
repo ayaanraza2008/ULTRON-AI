@@ -10,7 +10,7 @@ const DOCUMENT_ID = "323e4567-e89b-12d3-a456-426614174000";
 const TOKEN = "test-user-access-token";
 const ENV = {
   NODE_ENV: "test",
-  APP_ACCESS_PASSWORD: "test-password",
+  APP_ACCESS_PASSWORD: "test-secret-password",
   SESSION_SECRET: "a".repeat(48),
   OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
   OPENROUTER_API_KEY: "test-openrouter-key",

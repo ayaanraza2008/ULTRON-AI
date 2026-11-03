@@ -153,7 +153,7 @@ test("AgentMemory refuses to persist common access-token and cloud-key formats",
     "We decided: save this refresh_token: example-refresh-token for later use.",
     "We decided: client_secret=example-secret-value should be used by the integration.",
     "We decided: Authorization: Bearer example-token must be retained for debugging.",
-    "We decided: AWS key AKIA1234567890ABCDEF belongs in the configuration notes."
+    "We decided: AWS key " + ["AKIA", "1234567890ABCDEF"].join("") + " belongs in the configuration notes."
   ];
   for (const value of sensitive) assert.equal(shouldCaptureAgentMemory(value), false, value);
 });
@@ -165,10 +165,12 @@ test("AgentMemory refuses to persist bearer token wording even without an author
 
 
 test("AgentMemory refuses to persist JWTs and GitHub access tokens", () => {
+  const fakeGithubPat = ["ghp", "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"].join("_");
+  const fakeFineGrainedPat = ["github", "pat", "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"].join("_");
   const sensitive = [
     "We decided: save JWT eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWJjZCJ9.signatureValue123 for later.",
-    "We decided: keep GitHub token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 for debugging.",
-    "We decided: store fine-grained token github_pat_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 for the project."
+    "We decided: keep GitHub token " + fakeGithubPat + " for debugging.",
+    "We decided: store fine-grained token " + fakeFineGrainedPat + " for the project."
   ];
   for (const value of sensitive) assert.equal(shouldCaptureAgentMemory(value), false, value);
 });

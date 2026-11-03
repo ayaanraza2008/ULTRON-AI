@@ -16,7 +16,7 @@ import {
   SIMREADY_CENTRAL_EXTENDED_CATALOG
 } from "../robotics/simready-simulation-engine.js";
 
-test("RoboticsSim: SIMREADY_ASSET_CATALOG discovers valid 3D robot assets", () => {
+test("RoboticsSim: SIMREADY_ASSET_CATALOG exposes metadata-only robot archetypes", () => {
   assert.ok(Array.isArray(SIMREADY_ASSET_CATALOG));
   assert.ok(SIMREADY_ASSET_CATALOG.length >= 3);
 
@@ -26,8 +26,11 @@ test("RoboticsSim: SIMREADY_ASSET_CATALOG discovers valid 3D robot assets", () =
     assert.ok(asset.category, "Asset must have a category");
     assert.ok(asset.dimensionsM && typeof asset.dimensionsM.x === "number");
     assert.ok(asset.massKg > 0, "Mass must be positive");
-    assert.ok(asset.simReadyCompliance.hasVisualMesh, "Must declare visual mesh");
-    assert.ok(asset.simReadyCompliance.hasCollisionMesh, "Must declare collision mesh");
+    assert.equal(asset.simReadyCompliance.metadataOnly, true, "Static catalog entries are metadata-only");
+    assert.equal(asset.simReadyCompliance.hasVisualMesh, false, "No visual mesh is downloaded");
+    assert.equal(asset.simReadyCompliance.hasCollisionMesh, false, "No collision mesh is downloaded");
+    assert.equal(asset.assetAvailability, "METADATA_ONLY");
+    assert.ok(["STATIC_REFERENCE_NOT_FETCHED", "ULTRON_METADATA_ONLY"].includes(asset.sourceVerification));
     assert.ok(Array.isArray(asset.joints) && asset.joints.length > 0, "Must declare joints");
     assert.ok(Array.isArray(asset.defaultSensors), "Must declare default sensors");
   }
@@ -155,41 +158,57 @@ test("RoboticsSim: SimulationPlaybackEngine evaluates trajectory and computes ef
   assert.equal(report.playbackReady, true);
 });
 
-test("RoboticsSim: HardwareInTheLoopBridge performs handshake, formats ROS 2 Twist, and handles failsafe", () => {
+test("RoboticsSim: HIL bridge remains simulation-only without attested physical hardware", async () => {
   const hil = new HardwareInTheLoopBridge();
   assert.equal(hil.activeMode, "SIMULATION");
 
-  // Invalid token fails closed
-  const failRes = hil.handshake("short");
-  assert.equal(failRes.success, false);
-  assert.equal(hil.activeMode, "SIMULATION");
+  const handRes = await hil.handshake("OPERATOR_AUTHORIZED_HIL_KEY");
+  assert.equal(handRes.success, false);
+  assert.equal(handRes.mode, "SIMULATION");
+  assert.equal(handRes.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
+  assert.equal(hil.physicalHardwareVerified, false);
 
-  // Valid handshake
-  const handRes = hil.handshake("OPERATOR_AUTHORIZED_HIL_KEY");
-  assert.equal(handRes.success, true);
-  assert.equal(handRes.mode, "HIL_CONNECTED");
-
-  // Format ROS 2 motion packet
   const twist = hil.formatRos2TwistPacket(1.25, -0.45);
   assert.equal(twist.topic, "/cmd_vel");
   assert.equal(twist.msgType, "geometry_msgs/msg/Twist");
   assert.equal(twist.linear.x, 1.25);
   assert.equal(twist.angular.z, -0.45);
-  assert.equal(twist.hilFailsafeArm, true);
+  assert.equal(twist.hilFailsafeArm, false);
+  assert.equal(twist.transmissionAllowed, false);
+  assert.equal(twist.physicalHardwareVerified, false);
 
-  // Format telemetry packet
+  const blocked = await hil.sendRos2TwistPacket(1.25, -0.45);
+  assert.equal(blocked.success, false);
+  assert.equal(blocked.transmitted, false);
+  assert.equal(blocked.physicalActuation, false);
+  assert.equal(blocked.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
+
   const telem = hil.formatSensorTelemetryPacket({ batteryPercent: 88, linearSpeed: 1.1 });
   assert.equal(telem.topic, "/ultron/telemetry");
   assert.equal(telem.batteryPercent, 88);
-  assert.equal(telem.mode, "HIL_CONNECTED");
+  assert.equal(telem.mode, "SIMULATION");
+  assert.equal(telem.physicalHardwareVerified, false);
 
-  // Disconnect falls back to pure SIMULATION mode
+  const mockHil = new HardwareInTheLoopBridge({
+    hardwareAdapter: {
+      isPhysicalHardware: false,
+      connect: async () => ({ physicalHardwareVerified: true, deviceId: "fake-device" }),
+      send: async () => ({ acknowledged: true })
+    },
+    authorizationVerifier: async () => true,
+    safetyController: { validateMotionCommand: () => ({ safe: true, permitted: true }) }
+  });
+  const mockHandshake = await mockHil.handshake("test-token");
+  assert.equal(mockHandshake.success, false);
+  assert.equal(mockHandshake.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
+  assert.equal(mockHil.activeMode, "SIMULATION");
+
   const disc = hil.disconnect();
   assert.equal(disc.mode, "SIMULATION");
   assert.equal(hil.activeMode, "SIMULATION");
 });
 
-test("RoboticsSim: SimReadyCentralExplorer discovers and filters HuggingFace SimReady Central assets", () => {
+test("RoboticsSim: SimReadyCentralExplorer filters its local static metadata catalog", () => {
   assert.ok(Array.isArray(SIMREADY_CENTRAL_EXTENDED_CATALOG));
   assert.ok(SIMREADY_CENTRAL_EXTENDED_CATALOG.length >= 3);
 
@@ -210,9 +229,12 @@ test("RoboticsSim: SimReadyCentralExplorer discovers and filters HuggingFace Sim
   assert.ok(details.asset.huggingFaceSpace.includes("simready-central"));
 });
 
-test("RoboticsSim: SimReadyCentralExplorer imports asset directly into active simulation project", () => {
+test("RoboticsSim: SimReadyCentralExplorer registers metadata without downloading geometry", () => {
   const result = simReadyCentralExplorer.importAssetToProject("simready-agv-forklift");
   assert.equal(result.success, true);
   assert.equal(result.importedAssetId, "simready-agv-forklift");
   assert.equal(result.registeredName, "Autonomous Pallet Forklift AGV");
+  assert.equal(result.importType, "STATIC_METADATA_REGISTRATION");
+  assert.equal(result.geometryDownloaded, false);
+  assert.equal(result.liveHuggingFaceConnection, false);
 });

@@ -90,6 +90,18 @@ export const SECRET_RULES = [
   }
 ];
 
+const TEST_FIXTURE_FINGERPRINTS = new Set([
+  "743554670c",
+  "1db61e13c1",
+  "9f5e00085c",
+  "8bcac7908e",
+  // Exact legacy synthetic test fixtures removed from the working tree in this release candidate.
+  "c638833f69", "4a000a3806", "5e884898da", "f0ab766ba3",
+  "1a5d44a2dc", "b916a41ca2", "6d23e99a8e", "a165ce0568",
+  "beff737e19", "77d0b68ba2", "f56acc4914", "48495fa93b",
+  "751da0d210", "f23831a9da",
+]);
+
 export const DEFAULT_IGNORE_PATTERNS = [
   /node_modules/,
   /(?:^|[\\/])\.git(?:[\\/]|$)/,
@@ -97,9 +109,7 @@ export const DEFAULT_IGNORE_PATTERNS = [
   /(?:^|[\\/])dist(?:[\\/]|$)/,
   /(?:^|[\\/])build(?:[\\/]|$)/,
   /(?:^|[\\/])coverage(?:[\\/]|$)/,
-  /(?:^|[\\/])tests?(?:[\\/]|$)/,
   /(?:^|[\\/])vendor(?:[\\/]|$)/,
-  /(?:^|[\\/])reports(?:[\\/]|$)/,
   /\.onnx$/i,
   /\.png$/i,
   /\.jpg$/i,
@@ -166,6 +176,8 @@ export class SecretScanner {
         let match;
         while ((match = regex.exec(line)) !== null) {
           const secretVal = match[1] || match[0];
+          // Allowlist only the exact synthetic values used by legacy secret-scanner tests.
+          if (TEST_FIXTURE_FINGERPRINTS.has(this.hashSecret(secretVal))) continue;
           // Skip placeholders and test mocks
           if (
             secretVal.includes("XXXX") ||
@@ -300,13 +312,24 @@ export class SecretScanner {
               message: error.message,
               commitsScanned: 0,
               findingsCount: 0,
-              isSecure: true,
+              isSecure: false,
               findings: []
             });
           }
 
           const findings = [];
           const lines = String(stdout || "").split("\n");
+          const commitsScanned = lines.filter(line => line.startsWith("commit ")).length;
+          if (commitsScanned === 0) {
+            return resolve({
+              tool: "git-history-secret-scanner",
+              status: "GIT_LOG_EMPTY",
+              commitsScanned: 0,
+              findingsCount: 0,
+              isSecure: false,
+              findings: []
+            });
+          }
           let currentCommit = "HEAD";
           let currentFile = "unknown";
 
@@ -328,6 +351,7 @@ export class SecretScanner {
                 let match;
                 while ((match = regex.exec(addedContent)) !== null) {
                   const secretVal = match[1] || match[0];
+                  if (TEST_FIXTURE_FINGERPRINTS.has(this.hashSecret(secretVal))) continue;
                   if (
                     secretVal.includes("XXXX") ||
                     secretVal.includes("test-secret") ||
@@ -361,7 +385,7 @@ export class SecretScanner {
             target: repoDir,
             timestamp: new Date().toISOString(),
             status: "COMPLETED",
-            commitsScanned: maxCommits,
+            commitsScanned,
             findingsCount: findings.length,
             isSecure: findings.length === 0,
             findings

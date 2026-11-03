@@ -1,3 +1,5 @@
+> **Scope note:** This charter records intended engineering principles and long-term goals. It is not proof that any capability is implemented, live, or production-ready. Use [ULTRON_STATUS.md](ULTRON_STATUS.md) for current evidence and release acceptance.
+
 # ULTRON AI — PERMANENT MASTER CHARTER
 ## PROJECT CODENAME: ULTRON ETERNAL
 ### ONE BRAIN • COMPLETE AUTONOMY • CONTINUOUS EVOLUTION • 101% ACCOUNTABILITY

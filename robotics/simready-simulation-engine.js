@@ -19,15 +19,18 @@ export const SIMREADY_ASSET_CATALOG = [
     name: "ULTRON HexaRover v2",
     category: "mobile_base",
     description: "6-wheel independent drive heavy-duty mobile base with skid steering and LiDAR mast.",
+    assetAvailability: "METADATA_ONLY",
+    sourceVerification: "ULTRON_METADATA_ONLY",
     format: "usd",
     openUsdVersion: "23.11",
     dimensionsM: { x: 0.85, y: 0.42, z: 0.65 },
     massKg: 18.5,
     centerOfMassM: { x: 0, y: 0.12, z: 0 },
     simReadyCompliance: {
-      hasVisualMesh: true,
-      hasCollisionMesh: true,
-      hasPhysicsMaterials: true,
+      metadataOnly: true,
+      hasVisualMesh: false,
+      hasCollisionMesh: false,
+      hasPhysicsMaterials: false,
       frictionCoefficient: 0.85,
       restitution: 0.05
     },
@@ -47,15 +50,18 @@ export const SIMREADY_ASSET_CATALOG = [
     name: "ULTRON Manipulator 6DOF",
     category: "manipulator",
     description: "6-axis articulated robotic arm with modular two-finger parallel gripper.",
+    assetAvailability: "METADATA_ONLY",
+    sourceVerification: "ULTRON_METADATA_ONLY",
     format: "urdf",
     openUsdVersion: "23.11",
     dimensionsM: { x: 0.3, y: 0.95, z: 0.3 },
     massKg: 8.2,
     centerOfMassM: { x: 0, y: 0.35, z: 0 },
     simReadyCompliance: {
-      hasVisualMesh: true,
-      hasCollisionMesh: true,
-      hasPhysicsMaterials: true,
+      metadataOnly: true,
+      hasVisualMesh: false,
+      hasCollisionMesh: false,
+      hasPhysicsMaterials: false,
       frictionCoefficient: 0.7,
       restitution: 0.02
     },
@@ -75,15 +81,18 @@ export const SIMREADY_ASSET_CATALOG = [
     name: "ULTRON Humanoid Biped v1",
     category: "humanoid",
     description: "12-DOF bipedal locomotion testbed for balance, gait synthesis, and rough terrain traversal.",
+    assetAvailability: "METADATA_ONLY",
+    sourceVerification: "ULTRON_METADATA_ONLY",
     format: "usd",
     openUsdVersion: "23.11",
     dimensionsM: { x: 0.45, y: 1.15, z: 0.35 },
     massKg: 24.0,
     centerOfMassM: { x: 0, y: 0.65, z: 0 },
     simReadyCompliance: {
-      hasVisualMesh: true,
-      hasCollisionMesh: true,
-      hasPhysicsMaterials: true,
+      metadataOnly: true,
+      hasVisualMesh: false,
+      hasCollisionMesh: false,
+      hasPhysicsMaterials: false,
       frictionCoefficient: 0.9,
       restitution: 0.01
     },
@@ -631,34 +640,27 @@ export class SimulationPlaybackEngine {
  */
 export class HardwareInTheLoopBridge {
   constructor(options = {}) {
-    this.activeMode = "SIMULATION"; // "SIMULATION" | "HIL_CONNECTED" | "HARDWARE_DISCONNECTED"
+    this.activeMode = "SIMULATION";
     this.baudRate = options.baudRate || 115200;
     this.targetNode = options.targetNode || "ultron_hil_node";
+    this.physicalHardwareVerified = false;
     this.connectionTimestamp = null;
     this.lastPacketReceived = null;
   }
 
-  handshake(authorizationToken = null) {
-    const token = authorizationToken;
-    if (!token || typeof token !== "string" || token.length < 8) {
-      return { success: false, error: "INVALID_HIL_TOKEN" };
-    }
-
-    this.activeMode = "HIL_CONNECTED";
-    this.connectionTimestamp = new Date().toISOString();
+  async handshake() {
+    // No physical ROS 2 transport/attestation adapter exists in this release.
+    // Never promote a token-shaped string or injected mock to HIL_CONNECTED.
+    this.activeMode = "SIMULATION";
+    this.physicalHardwareVerified = false;
     return {
-      success: true,
-      mode: this.activeMode,
-      targetNode: this.targetNode,
-      ros2Protocol: "micro_ros_dds_v2",
-      baudRate: this.baudRate,
-      handshakeAt: this.connectionTimestamp
+      success: false,
+      mode: "SIMULATION",
+      physicalHardwareVerified: false,
+      error: "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED"
     };
   }
 
-  /**
-   * Formats a ROS 2 Twist motion command packet
-   */
   formatRos2TwistPacket(linearMps, angularRps) {
     return {
       topic: "/cmd_vel",
@@ -666,35 +668,46 @@ export class HardwareInTheLoopBridge {
       timestamp: Date.now(),
       linear: { x: Number(linearMps.toFixed(3)), y: 0.0, z: 0.0 },
       angular: { x: 0.0, y: 0.0, z: Number(angularRps.toFixed(3)) },
-      hilFailsafeArm: this.activeMode === "HIL_CONNECTED"
+      hilFailsafeArm: false,
+      transmissionAllowed: false,
+      physicalHardwareVerified: false,
+      mode: "SIMULATION"
     };
   }
 
-  /**
-   * Formats sensor telemetry packet for Micro-ROS transmission
-   */
+  async sendRos2TwistPacket() {
+    return {
+      success: false,
+      transmitted: false,
+      physicalActuation: false,
+      error: "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED"
+    };
+  }
+
   formatSensorTelemetryPacket(sensors = {}) {
     return {
       topic: "/ultron/telemetry",
       msgType: "ultron_interfaces/msg/RobotTelemetry",
       timestamp: Date.now(),
-      batteryPercent: sensors.batteryPercent ?? 100,
-      emergencyHaltState: sensors.emergencyHaltLatched ?? false,
-      linearSpeed: sensors.linearSpeed ?? 0,
-      mode: this.activeMode
+      batteryPercent: sensors.batteryPercent ?? null,
+      emergencyHaltState: sensors.emergencyHaltLatched ?? null,
+      linearSpeed: sensors.linearSpeed ?? null,
+      mode: "SIMULATION",
+      physicalHardwareVerified: false
     };
   }
 
   disconnect() {
     this.activeMode = "SIMULATION";
+    this.physicalHardwareVerified = false;
     this.connectionTimestamp = null;
-    return { success: true, mode: "SIMULATION" };
+    return { success: true, mode: "SIMULATION", physicalHardwareVerified: false };
   }
 }
 
-
 /**
- * Extended 3D Assets indexed from NVIDIA SimReady Central (HuggingFace)
+ * Static metadata references for NVIDIA SimReady Central entries.
+ * This catalogue does not fetch or bundle meshes, collision assets, or physics files.
  * https://huggingface.co/spaces/nvidia/simready-central
  */
 export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
@@ -703,6 +716,8 @@ export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
     name: "Autonomous Pallet Forklift AGV",
     category: "logistics",
     source: "nvidia/simready-central",
+    assetAvailability: "METADATA_ONLY",
+    sourceVerification: "STATIC_REFERENCE_NOT_FETCHED",
     huggingFaceSpace: "https://huggingface.co/spaces/nvidia/simready-central",
     description: "Industrial autonomous guided vehicle with dual hydraulic forks, 360-degree safety LiDAR, and 1200kg lift capacity.",
     format: "usd",
@@ -711,9 +726,10 @@ export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
     massKg: 650.0,
     centerOfMassM: { x: 0, y: 0.45, z: 0 },
     simReadyCompliance: {
-      hasVisualMesh: true,
-      hasCollisionMesh: true,
-      hasPhysicsMaterials: true,
+      metadataOnly: true,
+      hasVisualMesh: false,
+      hasCollisionMesh: false,
+      hasPhysicsMaterials: false,
       frictionCoefficient: 0.9,
       restitution: 0.01
     },
@@ -729,6 +745,8 @@ export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
     name: "Industrial Quadruped Scout v1",
     category: "robotics",
     source: "nvidia/simready-central",
+    assetAvailability: "METADATA_ONLY",
+    sourceVerification: "STATIC_REFERENCE_NOT_FETCHED",
     huggingFaceSpace: "https://huggingface.co/spaces/nvidia/simready-central",
     description: "12-DOF dynamic quadruped robotic platform for rough terrain inspection, obstacle climbing, and facility patrol.",
     format: "usd",
@@ -737,9 +755,10 @@ export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
     massKg: 32.0,
     centerOfMassM: { x: 0, y: 0.2, z: 0 },
     simReadyCompliance: {
-      hasVisualMesh: true,
-      hasCollisionMesh: true,
-      hasPhysicsMaterials: true,
+      metadataOnly: true,
+      hasVisualMesh: false,
+      hasCollisionMesh: false,
+      hasPhysicsMaterials: false,
       frictionCoefficient: 0.85,
       restitution: 0.03
     },
@@ -755,6 +774,8 @@ export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
     name: "Standard Euro Pallet (EUR 1)",
     category: "props",
     source: "nvidia/simready-central",
+    assetAvailability: "METADATA_ONLY",
+    sourceVerification: "STATIC_REFERENCE_NOT_FETCHED",
     huggingFaceSpace: "https://huggingface.co/spaces/nvidia/simready-central",
     description: "Standard industrial wooden pallet with accurate physics collision boundaries and surface friction.",
     format: "usd",
@@ -763,9 +784,10 @@ export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
     massKg: 25.0,
     centerOfMassM: { x: 0, y: 0.07, z: 0 },
     simReadyCompliance: {
-      hasVisualMesh: true,
-      hasCollisionMesh: true,
-      hasPhysicsMaterials: true,
+      metadataOnly: true,
+      hasVisualMesh: false,
+      hasCollisionMesh: false,
+      hasPhysicsMaterials: false,
       frictionCoefficient: 0.65,
       restitution: 0.02
     },
@@ -813,7 +835,14 @@ export class SimReadyCentralExplorer {
       return { success: false, error: "ASSET_NOT_FOUND" };
     }
     const registered = project.registerRobot(asset);
-    return { success: true, importedAssetId: asset.assetId, registeredName: registered.name };
+    return {
+      success: true,
+      importedAssetId: asset.assetId,
+      registeredName: registered.name,
+      importType: "STATIC_METADATA_REGISTRATION",
+      geometryDownloaded: false,
+      liveHuggingFaceConnection: false
+    };
   }
 }
 

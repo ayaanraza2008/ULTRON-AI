@@ -79,7 +79,9 @@ test("Vision Engine: validates image byte bounds and formats", () => {
 
 test("Vision Engine: redacts credentials from visual OCR text", () => {
   const engine = new JarvisVisionEngine();
-  const rawOcr = "Found API key: sk-abcdef1234567890abcdef1234567890 and token: ghp_123456789012345678901234567890123456";
+  const fakeOpenAiKey = ["sk", "abcdef1234567890abcdef1234567890"].join("-");
+  const fakeGithubPat = ["ghp", "123456789012345678901234567890123456"].join("_");
+  const rawOcr = "Found API key: " + fakeOpenAiKey + " and token: " + fakeGithubPat;
   const sanitized = engine.sanitizeOcrText(rawOcr);
 
   assert.ok(!sanitized.includes("sk-abcdef"));

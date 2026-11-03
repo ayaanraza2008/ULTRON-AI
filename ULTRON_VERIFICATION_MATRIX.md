@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI — MASTER VERIFICATION MATRIX
 ## EVIDENCE-BACKED AUTOMATED & LIVE CAPABILITY REGISTRY
 **Audit Timestamp:** 2026-11-01T13:30:00+05:30  

@@ -4,6 +4,7 @@ import express from "express";
 import { createServer } from "node:http";
 import { createSpatialRouter } from "../spatial/spatial-router.js";
 import { SpatialIntelligenceEngine } from "../spatial/spatial-engine.js";
+import { SpatialSceneGraph } from "../spatial/scene-graph.js";
 
 const sampleImageBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
@@ -42,13 +43,26 @@ test("spatial router exposes hardware status and engine health", async () => {
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.engine, "ULTRON SPATIAL INTELLIGENCE");
-    assert.equal(body.status, "OPERATIONAL");
+    assert.equal(body.status, "DEGRADED_METADATA_ONLY");
+    assert.equal(body.hardware.capabilities.canReconstruct3D, false);
     assert.ok(body.hardware.host.cpuCores >= 1);
   });
 });
 
 test("spatial router executes complete reconstruction lifecycle, export, and query", async () => {
-  const sharedEngine = new SpatialIntelligenceEngine();
+  const fixtureAdapter = {
+    async reconstructScene() {
+      return new SpatialSceneGraph({
+        sceneId: "router-spatial-test-fixture",
+        pipeline: "unit-test-fixture",
+        inferenceStatus: "TEST_FIXTURE",
+        objects: [
+          { id: "desk-fixture", label: "desk", pose3d: { position: { x: 0, y: 0.4, z: 2 }, dimensions: { dx: 1.2, dy: 0.8, dz: 0.6 } } }
+        ]
+      });
+    }
+  };
+  const sharedEngine = new SpatialIntelligenceEngine({ adapter: fixtureAdapter });
 
   await withSpatialServer({ userId: "user-alice", engine: sharedEngine }, async base => {
     // 1. Submit job
@@ -71,6 +85,8 @@ test("spatial router executes complete reconstruction lifecycle, export, and que
     const pollBody = await pollRes.json();
     assert.equal(pollBody.job.status, "COMPLETED");
     assert.equal(pollBody.job.progress, 100);
+    assert.equal(pollBody.job.sceneGraph.inferenceStatus, "TEST_FIXTURE");
+    assert.equal(pollBody.job.sceneGraph.metadataOnly, false);
 
     // 3. Export OBJ
     const exportRes = await fetch(base + `/api/spatial/jobs/${jobId}/export/obj`);
@@ -87,6 +103,24 @@ test("spatial router executes complete reconstruction lifecycle, export, and que
     assert.equal(queryRes.status, 200);
     const queryBody = await queryRes.json();
     assert.equal(queryBody.result.found, true);
+  });
+});
+
+test("spatial router refuses geometry export from metadata-only CPU fallback", async () => {
+  await withSpatialServer({}, async base => {
+    const createRes = await fetch(base + "/api/spatial/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: sampleImageBase64 })
+    });
+    assert.equal(createRes.status, 202);
+    const jobId = (await createRes.json()).job.jobId;
+    await new Promise(r => setTimeout(r, 100));
+
+    const exportRes = await fetch(base + `/api/spatial/jobs/${jobId}/export/obj`);
+    assert.equal(exportRes.status, 409);
+    const body = await exportRes.json();
+    assert.equal(body.error.code, "SCENE_GEOMETRY_UNAVAILABLE");
   });
 });
 

@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI — FINAL MASTER COMPLETION REPORT
 ## JARVIS-LEVEL INTELLIGENCE × ULTRON-LEVEL AUTONOMY
 **Software Completion Status:** **100% FEASIBLE SOFTWARE COMPLETE** | **99.9%+ VERIFIED**  

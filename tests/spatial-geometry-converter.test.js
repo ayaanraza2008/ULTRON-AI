@@ -37,3 +37,15 @@ test("sceneToGltf generates standard GLTF 2.0 JSON structure", () => {
   assert.equal(gltf.nodes[1].name, "chair_obj-chair");
   assert.deepEqual(gltf.nodes[1].translation, [0.5, 0.4, 1.5]);
 });
+
+test("geometry exporters reject metadata-only fallback scenes", () => {
+  const scene = new SpatialSceneGraph({
+    metadataOnly: true,
+    inferenceStatus: "CPU_METADATA_ONLY",
+    objects: [{ id: "fake", label: "desk" }]
+  });
+
+  assert.equal(scene.objects.size, 0);
+  assert.throws(() => sceneToObj(scene), error => error.code === "SCENE_GEOMETRY_UNAVAILABLE");
+  assert.throws(() => sceneToGltf(scene), error => error.code === "SCENE_GEOMETRY_UNAVAILABLE");
+});

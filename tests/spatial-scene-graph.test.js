@@ -29,6 +29,10 @@ test("SpatialSceneGraph populates objects, calculates nearest neighbors, and phy
 
   assert.equal(desk.category, OBJECT_CATEGORIES.FURNITURE);
   assert.equal(monitor.category, OBJECT_CATEGORIES.ELECTRONICS);
+  assert.equal(desk.confidence, null);
+  assert.equal(desk.provenance, "UNAVAILABLE");
+  assert.equal(desk.cadRetrieval.source, "UNVERIFIED");
+  assert.equal(desk.cadRetrieval.retrievalScore, null);
 
   // Support hierarchy
   assert.equal(monitor.spatialRelations.supportedBy, "obj-desk");
@@ -67,4 +71,11 @@ test("SpatialSceneGraph answers natural language spatial queries correctly", () 
   const roomRes = scene.querySpatial("What are the room dimensions?");
   assert.equal(roomRes.found, true);
   assert.ok(roomRes.dimensions.widthMeters > 0);
+});
+
+test("SpatialSceneGraph rejects objects without validated 3D geometry", () => {
+  assert.throws(
+    () => new SpatialSceneGraph({ objects: [{ id: "missing-geometry", label: "desk" }] }),
+    /require validated finite 3D positions and positive dimensions/
+  );
 });

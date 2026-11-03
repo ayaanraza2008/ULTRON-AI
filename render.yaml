@@ -162,7 +162,7 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: pip install -r browser-use-bridge/requirements.txt
+    buildCommand: pip install -r browser-use-bridge/requirements.txt && python -m playwright install --with-deps chromium
     startCommand: cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeployTrigger: commit

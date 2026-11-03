@@ -10,7 +10,9 @@ test("hardware-detector reports CPU-safe metadata fallback when CUDA is absent",
   assert.ok(result.host.totalRamMb > 0);
   assert.equal(result.gpu.hasCuda, false);
   assert.equal(result.worker.executionMode, EXECUTION_MODES.CPU_METADATA_FALLBACK);
-  assert.equal(result.capabilities.canReconstruct3D, true);
+  assert.equal(result.capabilities.canReconstruct3D, false);
+  assert.equal(result.capabilities.canAttempt3DReconstruction, false);
+  assert.equal(result.capabilities.metadataOnlyFallback, true);
   assert.equal(result.capabilities.highFidelityMeshRetrieval, false);
 });
 
@@ -24,7 +26,10 @@ test("hardware-detector switches to REMOTE_GPU when DIORAMA_REMOTE_ENDPOINT is p
 
   assert.equal(result.worker.executionMode, EXECUTION_MODES.REMOTE_GPU);
   assert.equal(result.worker.remoteTokenConfigured, true);
-  assert.equal(result.capabilities.highFidelityMeshRetrieval, true);
+  assert.equal(result.capabilities.canReconstruct3D, false);
+  assert.equal(result.capabilities.canAttempt3DReconstruction, true);
+  assert.equal(result.capabilities.highFidelityMeshRetrieval, false);
+  assert.equal(result.capabilities.highFidelityMeshRetrievalConfigured, true);
 });
 
 test("checkModelWeights flags missing files cleanly without crashing", () => {

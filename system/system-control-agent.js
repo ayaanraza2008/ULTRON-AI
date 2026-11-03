@@ -17,11 +17,12 @@
 import os from "node:os";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "node:child_process";
+import { exec, execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import crypto from "node:crypto";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export const SYSTEM_PERMISSIONS = {
   READ: "READ",
@@ -536,18 +537,38 @@ export class SystemControlAgent {
       throw new Error(`APPLICATION_NOT_ALLOWLISTED: '${appKey}' is not in the safe launch allowlist.`);
     }
 
-    if (!this.isWindows) {
-      return { success: true, app: app.name, pid: 9999, platform: process.platform };
+    // Do not route caller-controlled arguments through cmd.exe or a shell.
+    // Argument-bearing launch actions must be separately reviewed and added
+    // as structured, allowlisted options.
+    if (!(typeof args === "string" && args.trim() === "") && !(Array.isArray(args) && args.length === 0)) {
+      throw new Error("APP_ARGUMENTS_NOT_ALLOWED: This release accepts allowlisted application launches without caller-supplied arguments.");
     }
 
-    try {
-      const cmd = `start "" "${app.executable}" ${args}`.trim();
-      await execAsync(cmd, { windowsHide: false });
-      this.logAction("LAUNCH_APP", { app: app.name, executable: app.executable }, RISK_LEVELS.MEDIUM);
-      return { success: true, app: app.name, executable: app.executable };
-    } catch (err) {
-      throw new Error(`FAILED_LAUNCH: Unable to launch ${app.name}: ${err.message}`);
+    if (!this.isWindows) {
+      this.logAction("LAUNCH_APP", { app: app.name, executable: app.executable }, RISK_LEVELS.LOW);
+      return { success: false, executed: false, simulated: true, errorCode: "WINDOWS_ONLY_RUNTIME", platform: process.platform };
     }
+
+    const isCommandFile = app.executable.toLowerCase().endsWith(".cmd");
+    const executable = isCommandFile ? (process.env.ComSpec || "cmd.exe") : app.executable;
+    const executableArgs = isCommandFile ? ["/d", "/c", app.executable] : [];
+    return new Promise((resolve, reject) => {
+      const child = spawn(executable, executableArgs, {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false,
+        shell: false
+      });
+      child.once("error", error => {
+        this.logAction("LAUNCH_APP", { app: app.name, executable: app.executable }, RISK_LEVELS.MEDIUM);
+        reject(new Error(`FAILED_LAUNCH: Unable to launch ${app.name}: ${error.message}`));
+      });
+      child.once("spawn", () => {
+        child.unref();
+        this.logAction("LAUNCH_APP", { app: app.name, executable: app.executable }, RISK_LEVELS.MEDIUM);
+        resolve({ success: true, app: app.name, executable: app.executable, pid: child.pid });
+      });
+    });
   }
 
   /**
@@ -556,20 +577,27 @@ export class SystemControlAgent {
   async closeApp(appName, force = false) {
     if (this.emergencyStop) throw new Error("OPERATION_HALTED: Emergency stop active.");
     const key = String(appName).toLowerCase().trim();
+    const app = ALLOWED_APPS[key] || Object.values(ALLOWED_APPS).find(item => item.executable.toLowerCase() === key);
+    if (!app) {
+      throw new Error("PROCESS_NOT_ALLOWLISTED: Only processes associated with approved applications may be closed.");
+    }
+    const procName = app.executable.toLowerCase().endsWith(".cmd")
+      ? app.executable.replace(/\.cmd$/i, ".exe")
+      : app.executable;
 
     if (!this.isWindows) {
-      return { success: true, appName, terminated: true };
+      this.logAction("CLOSE_APP", { appName: procName, force: Boolean(force) }, RISK_LEVELS.LOW);
+      return { success: false, terminated: false, simulated: true, appName: procName, errorCode: "WINDOWS_ONLY_RUNTIME" };
     }
 
-    const flag = force ? "/F" : "";
-    const procName = key.endsWith(".exe") ? key : key + ".exe";
-    const cmd = `taskkill ${flag} /IM "${procName}" /T`;
-
+    const taskkillArgs = ["/T", "/IM", procName];
+    if (force === true) taskkillArgs.unshift("/F");
     try {
-      await execAsync(cmd, { timeout: 4000 });
-      this.logAction("CLOSE_APP", { appName, force }, RISK_LEVELS.HIGH);
+      await execFileAsync("taskkill.exe", taskkillArgs, { timeout: 4000, windowsHide: true });
+      this.logAction("CLOSE_APP", { appName: procName, force: force === true }, RISK_LEVELS.HIGH);
       return { success: true, appName: procName, terminated: true };
     } catch (err) {
+      this.logAction("CLOSE_APP", { appName: procName, force: force === true }, RISK_LEVELS.HIGH);
       return { success: false, appName: procName, error: err.message };
     }
   }
@@ -581,9 +609,9 @@ export class SystemControlAgent {
     if (this.emergencyStop) throw new Error("OPERATION_HALTED: Emergency stop active.");
     const cleanCmd = String(command).trim();
 
-    const isApproved = Array.from(APPROVED_TERMINAL_COMMANDS).some(approved => {
-      return cleanCmd === approved || cleanCmd.startsWith(approved + " ");
-    });
+    // Exact command matching prevents an approved prefix from authorizing
+    // appended arguments, redirections, pipes, or shell operators.
+    const isApproved = APPROVED_TERMINAL_COMMANDS.has(cleanCmd);
 
     if (!isApproved) {
       throw new Error(`COMMAND_NOT_APPROVED: Command '${cleanCmd}' is not on the safe terminal allowlist.`);
@@ -607,10 +635,13 @@ export class SystemControlAgent {
     const outputPath = path.join(this.workspaceBase, "screenshots", filename);
 
     if (!this.isWindows) {
-      // Mock minimal 1x1 PNG for non-windows environments
-      const dummyPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
-      await fs.writeFile(outputPath, dummyPng);
-      return { success: true, path: outputPath, width: 1920, height: 1080 };
+      return {
+        success: false,
+        captured: false,
+        simulated: true,
+        errorCode: "SCREEN_CAPTURE_UNAVAILABLE",
+        platform: process.platform
+      };
     }
 
     try {
@@ -628,7 +659,9 @@ export class SystemControlAgent {
    */
   async sendKeystroke(keys) {
     if (this.emergencyStop) throw new Error("OPERATION_HALTED: Emergency stop active.");
-    if (!this.isWindows) return { success: true, keys };
+    if (!this.isWindows) {
+      return { success: false, executed: false, simulated: true, errorCode: "WINDOWS_ONLY_RUNTIME" };
+    }
 
     // Sanitize keys to prevent arbitrary code injection
     const sanitized = String(keys).replace(/["'`$;|&]/g, "");

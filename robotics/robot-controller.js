@@ -2,17 +2,12 @@
  * ULTRON AI — Robotics & Hardware Abstraction Layer (HAL)
  * Project Codename: ULTRON SINGULARITY
  *
- * Implements a portable, hardware-independent robotics architecture:
- * - Decouples central intelligence, perception, and planning from physical actuators.
- * - Standardized robot capability handshake (sensors, actuators, kinematics).
- * - Independent, non-bypassable Physical Safety Controller:
- *   - Latching Emergency Stop (cannot be overridden by the AI model)
- *   - Geofence 3D boundary enforcement
- *   - Velocity and force limits
- *   - Battery threshold safety interlocks
- *   - Heartbeat loss fail-safe (dead-man's switch)
- * - Virtual simulation mode for dry-running kinematic motion plans.
- * - Portable brain export/import migration package.
+ * Implements simulation-first robotics architecture and safety primitives:
+ * - Digital-twin registration and kinematic dry-runs only.
+ * - Physical actuation is fail-closed; no verified actuator transport ships in this release.
+ * - Latching Emergency Stop with an injected operator authorization verifier.
+ * - Geofence, velocity, battery telemetry and heartbeat interlocks.
+ * - Physical HIL and real-world deployment remain unavailable until a trusted driver is integrated.
  */
 
 import crypto from "node:crypto";
@@ -56,7 +51,10 @@ export class PhysicalSafetyController {
       minZ: 0.0, maxZ: 3.0
     };
     this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 5000;
-    this.lastHeartbeatAt = Date.now();
+    this.resetAuthorizationVerifier = typeof options.resetAuthorizationVerifier === "function"
+      ? options.resetAuthorizationVerifier
+      : () => false;
+    this.lastHeartbeatAt = 0;
     this.safetyViolations = [];
   }
 
@@ -80,7 +78,7 @@ export class PhysicalSafetyController {
     return {
       success: true,
       latched: true,
-      resetToken: this.currentResetToken,
+      resetRequired: true,
       state: "EMERGENCY_STOP_LATCHED",
       reason
     };
@@ -93,8 +91,14 @@ export class PhysicalSafetyController {
     if (!authorizationKey || typeof authorizationKey !== "string" || authorizationKey.length < 8) {
       return { success: false, error: "INVALID_SAFETY_AUTHORIZATION_KEY" };
     }
-    if (this.currentResetToken && authorizationKey !== this.currentResetToken && authorizationKey !== "OPERATOR_OVERRIDE_KEY") {
-      return { success: false, error: "SAFETY_TOKEN_MISMATCH" };
+    let authorized = false;
+    try {
+      authorized = this.resetAuthorizationVerifier(authorizationKey, this.currentResetToken) === true;
+    } catch {
+      authorized = false;
+    }
+    if (!authorized) {
+      return { success: false, error: "PHYSICAL_OPERATOR_AUTHORIZATION_REQUIRED" };
     }
     this.emergencyStopLatched = false;
     this.currentResetToken = null;
@@ -117,15 +121,24 @@ export class PhysicalSafetyController {
    * Non-bypassable kinematic safety check.
    * Returns { safe: true, permitted: true } or rejects with specific violation.
    */
-  validateMotionCommand({ linearVelocity = 0, angularVelocity = 0, targetPosition = null, batteryPercent = 100, batteryLevel }) {
+  validateMotionCommand({ linearVelocity = 0, angularVelocity = 0, targetPosition = null, batteryPercent = null, batteryLevel }) {
     const battery = batteryLevel !== undefined ? batteryLevel : batteryPercent;
 
     if (this.emergencyStopLatched) {
       return { safe: false, permitted: false, code: "EMERGENCY_STOP_ACTIVE", reason: "Hardware halted: Emergency stop is latched." };
     }
 
+    if (typeof linearVelocity !== "number" || !Number.isFinite(linearVelocity) ||
+        typeof angularVelocity !== "number" || !Number.isFinite(angularVelocity)) {
+      return { safe: false, permitted: false, code: "INVALID_MOTION_COMMAND", reason: "Motion velocities must be finite numeric values." };
+    }
+
     if (!this.isHeartbeatAlive()) {
       return { safe: false, permitted: false, code: "HEARTBEAT_EXPIRED", reason: "Hardware halted: Dead-man's switch heartbeat expired." };
+    }
+
+    if (!Number.isFinite(battery) || battery < 0 || battery > 100) {
+      return { safe: false, permitted: false, code: "BATTERY_TELEMETRY_UNAVAILABLE", reason: "Hardware halted: valid battery telemetry is required." };
     }
 
     if (battery < this.minBatteryPercent) {
@@ -153,7 +166,10 @@ export class PhysicalSafetyController {
 
     // 3D Geofence enforcement
     if (targetPosition) {
-      const { x = 0, y = 0, z = 0 } = targetPosition;
+      const { x, y, z } = targetPosition;
+      if (![x, y, z].every(value => typeof value === "number" && Number.isFinite(value))) {
+        return { safe: false, permitted: false, code: "INVALID_TARGET_POSITION", reason: "Target position must contain finite numeric x, y and z coordinates." };
+      }
       if (!this.isWithinGeofence(x, y, z)) {
         return {
           safe: false,
@@ -178,7 +194,7 @@ export class RobotController {
   }
 
   /**
-   * Standardized Robot Registration & Capability Handshake
+   * Simulation-only robot registration; this does not connect physical hardware.
    */
   registerRobot(deviceMeta = {}) {
     const robotId = deviceMeta.robotId || deviceMeta.id || "bot-" + crypto.randomUUID();
@@ -200,7 +216,8 @@ export class RobotController {
       token,
       registeredAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
-      status: "ARMED",
+      status: "SIMULATION_ONLY",
+      hardwareConnected: false,
       battery: deviceMeta.battery ?? 100.0,
       position: { x: 0.0, y: 0.0, z: 0.0 },
       orientation: { yaw: 0.0, pitch: 0.0, roll: 0.0 }
@@ -214,9 +231,12 @@ export class RobotController {
       registered: true,
       robotId,
       token,
+      tokenScope: "SIMULATION_ONLY",
       name: robotEntry.name,
       sensorsCount: supportedSensors.length,
-      actuatorsCount: supportedActuators.length
+      actuatorsCount: supportedActuators.length,
+      registrationMode: "SIMULATION_ONLY",
+      hardwareConnected: false
     };
   }
 
@@ -242,7 +262,9 @@ export class RobotController {
     return {
       fleetCount: this.registeredRobots.size,
       robots: this.listRobots(),
-      emergencyStopLatched: this.safetyController.emergencyStopLatched
+      emergencyStopLatched: this.safetyController.emergencyStopLatched,
+      simulationMode: this.simulationMode,
+      physicalActuationEnabled: false
     };
   }
 
@@ -290,7 +312,19 @@ export class RobotController {
       };
     }
 
-    // Update robot telemetry
+    if (!dryRun) {
+      return {
+        success: false,
+        permitted: false,
+        executed: false,
+        simulated: false,
+        physicalActuation: false,
+        code: "HARDWARE_TRANSPORT_UNAVAILABLE",
+        reason: "No independently verified physical actuator transport is connected."
+      };
+    }
+
+    // Simulation updates only the digital twin; no physical command is sent.
     robot.lastSeenAt = new Date().toISOString();
     this.safetyController.recordHeartbeat();
 
@@ -302,11 +336,13 @@ export class RobotController {
       success: true,
       permitted: true,
       executed: true,
+      simulated: true,
+      physicalActuation: false,
       robotId,
       linearVelocity,
       angularVelocity,
       targetPosition,
-      mode: dryRun ? ROBOT_SAFETY_LEVELS.SIMULATION : ROBOT_SAFETY_LEVELS.AUTONOMOUS,
+      mode: ROBOT_SAFETY_LEVELS.SIMULATION,
       timestamp: new Date().toISOString()
     };
 

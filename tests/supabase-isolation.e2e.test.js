@@ -126,7 +126,7 @@ test("production server enforces two-user tenant isolation across authentication
   const app = createApp({
     env: {
       NODE_ENV: "test",
-      APP_ACCESS_PASSWORD: "test-access-password",
+      APP_ACCESS_PASSWORD: "test-secret-access-password",
       SUPABASE_URL: "https://ultron-test.supabase.co",
       SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test"
     },

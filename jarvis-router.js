@@ -1445,10 +1445,10 @@ export function createJarvisRouter({
   });
 
   router.post("/jarvis/robotics/clear-emergency-stop", requireOwner, express.json(), (req, res) => {
-    const token = req.body?.resetToken;
-    const result = robotController.clearEmergencyStop(token);
+    const authorizationKey = req.body?.authorizationKey;
+    const result = robotController.clearEmergencyStop(authorizationKey);
     if (!result.success) {
-      return res.status(400).json(result);
+      return res.status(403).json(result);
     }
     res.json(result);
   });
@@ -2044,6 +2044,7 @@ export function createJarvisRouter({
     try {
       const { robotId, trajectory } = req.body || {};
       const passport = simToRealGate.issueDeploymentPassport(robotId, trajectory);
+      if (!passport.success) return res.status(409).json(passport);
       res.json(passport);
     } catch (err) {
       res.status(400).json({ error: { message: err.message } });
@@ -2084,10 +2085,9 @@ export function createJarvisRouter({
     }
   });
 
-  router.post("/jarvis/robotics/simready/hil/handshake", requireOwner, express.json(), (req, res) => {
-    const { token } = req.body || {};
-    const result = hilBridge.handshake(token);
-    if (!result.success) return res.status(400).json(result);
+  router.post("/jarvis/robotics/simready/hil/handshake", requireOwner, express.json(), async (_req, res) => {
+    const result = await hilBridge.handshake();
+    if (!result.success) return res.status(501).json(result);
     res.json(result);
   });
 

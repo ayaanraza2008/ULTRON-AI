@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale completion percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI — Production Deployment Readiness
 
 **Audit date:** 2026-11-02 (Asia/Kolkata)  

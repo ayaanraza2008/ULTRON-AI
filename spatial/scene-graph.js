@@ -27,12 +27,25 @@ export class SpatialSceneGraph {
   constructor(options = {}) {
     this.sceneId = options.sceneId || ("scene-" + Date.now());
     this.timestamp = options.timestamp || new Date().toISOString();
-    this.pipeline = options.pipeline || "diorama-zero-shot-spatial";
+    this.pipeline = options.pipeline || "unverified-scene-graph";
+    this.executionMode = options.executionMode || "UNKNOWN";
+    this.metadataOnly = options.metadataOnly === true || options.inferenceStatus === "CPU_METADATA_ONLY";
     this.cudaAccelerated = Boolean(options.cudaAccelerated);
-    this.inferenceStatus = options.inferenceStatus || "ESTIMATED_SCENE";
+    this.remoteWorkerUsed = Boolean(options.remoteWorkerUsed);
+    this.remoteGpuReported = Boolean(options.remoteGpuReported);
+    this.remoteInferenceStatusReported = typeof options.remoteInferenceStatusReported === "string"
+      ? options.remoteInferenceStatusReported.slice(0, 120)
+      : null;
+    this.inferenceStatus = options.inferenceStatus || "UNVERIFIED_SCENE_GRAPH";
 
-    // Room architecture
-    this.architecture = {
+    // Metadata-only results must never inherit fabricated room dimensions.
+    this.architecture = this.metadataOnly ? {
+      roomType: "unknown",
+      dimensions: { widthMeters: null, lengthMeters: null, heightMeters: null },
+      floor: null,
+      ceiling: null,
+      walls: []
+    } : {
       roomType: options.architecture?.roomType || "indoor_room",
       dimensions: {
         widthMeters: Number(options.architecture?.dimensions?.widthMeters) || 4.2,
@@ -58,7 +71,7 @@ export class SpatialSceneGraph {
     // 3D Objects indexed by id
     this.objects = new Map();
 
-    if (Array.isArray(options.objects)) {
+    if (!this.metadataOnly && Array.isArray(options.objects)) {
       for (const obj of options.objects) {
         this.addObject(obj);
       }
@@ -73,36 +86,39 @@ export class SpatialSceneGraph {
     const label = String(data.label || "unknown_object").toLowerCase().trim();
     const category = String(data.category || this._inferCategory(label));
 
-    const box2d = {
-      xMin: Math.max(0, Math.min(1, Number(data.box2d?.xMin) || 0)),
-      yMin: Math.max(0, Math.min(1, Number(data.box2d?.yMin) || 0)),
-      xMax: Math.max(0, Math.min(1, Number(data.box2d?.xMax) || 1)),
-      yMax: Math.max(0, Math.min(1, Number(data.box2d?.yMax) || 1))
-    };
+    const box2d = data.box2d && ["xMin", "yMin", "xMax", "yMax"].every(key =>
+      typeof data.box2d[key] === "number" && Number.isFinite(data.box2d[key]) &&
+      data.box2d[key] >= 0 && data.box2d[key] <= 1
+    ) ? {
+      xMin: data.box2d.xMin,
+      yMin: data.box2d.yMin,
+      xMax: data.box2d.xMax,
+      yMax: data.box2d.yMax
+    } : null;
+
+    const position = data.pose3d?.position;
+    const dimensions = data.pose3d?.dimensions;
+    if (!position || !dimensions ||
+        !["x", "y", "z"].every(key => typeof position[key] === "number" && Number.isFinite(position[key]) && Math.abs(position[key]) <= 1000) ||
+        !["dx", "dy", "dz"].every(key => typeof dimensions[key] === "number" && Number.isFinite(dimensions[key]) && dimensions[key] > 0 && dimensions[key] <= 1000)) {
+      throw new TypeError("Spatial objects require validated finite 3D positions and positive dimensions.");
+    }
 
     const pose3d = {
-      position: {
-        x: Number.isFinite(data.pose3d?.position?.x) ? Number(data.pose3d.position.x) : 0.0,
-        y: Number.isFinite(data.pose3d?.position?.y) ? Number(data.pose3d.position.y) : 0.5,
-        z: Number.isFinite(data.pose3d?.position?.z) ? Number(data.pose3d.position.z) : 2.5
-      },
+      position: { x: position.x, y: position.y, z: position.z },
       rotation: {
-        roll: Number(data.pose3d?.rotation?.roll) || 0,
-        pitch: Number(data.pose3d?.rotation?.pitch) || 0,
-        yaw: Number(data.pose3d?.rotation?.yaw) || 0
+        roll: Number.isFinite(data.pose3d?.rotation?.roll) ? data.pose3d.rotation.roll : null,
+        pitch: Number.isFinite(data.pose3d?.rotation?.pitch) ? data.pose3d.rotation.pitch : null,
+        yaw: Number.isFinite(data.pose3d?.rotation?.yaw) ? data.pose3d.rotation.yaw : null
       },
-      dimensions: {
-        dx: Math.max(0.05, Number(data.pose3d?.dimensions?.dx) || 0.6), // width
-        dy: Math.max(0.05, Number(data.pose3d?.dimensions?.dy) || 0.6), // height
-        dz: Math.max(0.05, Number(data.pose3d?.dimensions?.dz) || 0.6)  // depth
-      }
+      dimensions: { dx: dimensions.dx, dy: dimensions.dy, dz: dimensions.dz }
     };
 
     const cadRetrieval = {
-      cadId: data.cadRetrieval?.cadId || `cad-${label}-01`,
-      source: data.cadRetrieval?.source || "Objaverse-LVIS-Diorama",
-      retrievalScore: Number.isFinite(data.cadRetrieval?.retrievalScore) ? data.cadRetrieval.retrievalScore : 0.85,
-      meshFormat: data.cadRetrieval?.meshFormat || "primitive"
+      cadId: typeof data.cadRetrieval?.cadId === "string" ? data.cadRetrieval.cadId : null,
+      source: typeof data.cadRetrieval?.source === "string" ? data.cadRetrieval.source : "UNVERIFIED",
+      retrievalScore: Number.isFinite(data.cadRetrieval?.retrievalScore) ? data.cadRetrieval.retrievalScore : null,
+      meshFormat: typeof data.cadRetrieval?.meshFormat === "string" ? data.cadRetrieval.meshFormat : "unknown"
     };
 
     const record = {
@@ -112,8 +128,8 @@ export class SpatialSceneGraph {
       box2d,
       pose3d,
       cadRetrieval,
-      confidence: Number.isFinite(data.confidence) ? data.confidence : 0.9,
-      provenance: data.provenance || PROVENANCE_TYPES.ESTIMATED_MEASUREMENT,
+      confidence: Number.isFinite(data.confidence) ? data.confidence : null,
+      provenance: data.provenance || PROVENANCE_TYPES.UNAVAILABLE,
       spatialRelations: {
         supportedBy: data.spatialRelations?.supportedBy || "floor",
         supports: Array.isArray(data.spatialRelations?.supports) ? data.spatialRelations.supports : [],
@@ -193,6 +209,14 @@ export class SpatialSceneGraph {
     const text = String(prompt || "").toLowerCase().trim();
     if (!text) {
       return { found: false, answer: "Provide a spatial question to query the 3D scene." };
+    }
+
+    if (this.metadataOnly) {
+      return {
+        found: false,
+        queryType: "UNAVAILABLE",
+        answer: "No 3D geometry was reconstructed. The CPU fallback only validated the image payload; configure a verified Diorama model worker for spatial queries."
+      };
     }
 
     const allObjects = Array.from(this.objects.values());
@@ -283,10 +307,13 @@ export class SpatialSceneGraph {
    * Human-readable text summary for injection into LLM Brain context.
    */
   toSummaryText() {
+    if (this.metadataOnly) {
+      return "No 3D scene was reconstructed. CPU fallback validated the image payload only; no object positions or room dimensions are available.";
+    }
     const dims = this.architecture.dimensions;
     const objs = Array.from(this.objects.values());
     if (!objs.length) {
-      return `Reconstructed empty room of ${dims.widthMeters}m × ${dims.lengthMeters}m × ${dims.heightMeters}m. No foreground objects detected.`;
+      return `Scene graph contains zero foreground objects. Room dimensions: ${dims.widthMeters}m × ${dims.lengthMeters}m × ${dims.heightMeters}m. Inference status: ${this.inferenceStatus}.`;
     }
 
     const items = objs.map(o => {
@@ -306,7 +333,12 @@ export class SpatialSceneGraph {
       sceneId: this.sceneId,
       timestamp: this.timestamp,
       pipeline: this.pipeline,
+      executionMode: this.executionMode,
+      metadataOnly: this.metadataOnly,
       cudaAccelerated: this.cudaAccelerated,
+      remoteWorkerUsed: this.remoteWorkerUsed,
+      remoteGpuReported: this.remoteGpuReported,
+      remoteInferenceStatusReported: this.remoteInferenceStatusReported,
       inferenceStatus: this.inferenceStatus,
       architecture: this.architecture,
       objects: Array.from(this.objects.values())

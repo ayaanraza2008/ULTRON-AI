@@ -14,14 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Verify Browser Use bridge policy and Python syntax
+      - name: Verify Browser Use bridge policy, Chromium runtime and Python syntax
         run: |
+          python -m pip install "playwright>=1.50,<2"
+          python -m playwright install --with-deps chromium
           python -m py_compile browser-use-bridge/main.py browser-use-bridge/navigation_policy.py browser-use-bridge/startup_smoke.py browser-use-bridge/test_navigation_policy.py browser-use-bridge/test_startup_smoke.py
           python browser-use-bridge/test_navigation_policy.py
           python browser-use-bridge/test_startup_smoke.py
@@ -65,6 +69,8 @@ jobs:
         working-directory: .build-gods-eye-view
         run: |
           npm ci --include=dev
+          npm audit fix --ignore-scripts
+          npm audit --audit-level=high
           npm run build
       - name: Verify injected ULTRON bridge
         run: |
