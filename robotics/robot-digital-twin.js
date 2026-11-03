@@ -40,12 +40,15 @@ export class RobotDigitalTwin {
       imuNoiseStd: 0.02
     };
     this.safetyController = new PhysicalSafetyController();
+    this.mode = "SIMULATION";
+    this.safetyController.recordHeartbeat();
   }
 
   /**
    * Physics & Kinematics simulation step (dt in seconds)
    */
   step(command = {}, dt = 0.1, obstacles = []) {
+    this.safetyController.recordHeartbeat();
     const linearCmd = Math.max(-0.5, Math.min(this.maxLinearSpeedMps, Number(command.linearVelocity || 0)));
     const angularCmd = Math.max(-this.maxAngularSpeedRps, Math.min(this.maxAngularSpeedRps, Number(command.angularVelocity || 0)));
 
