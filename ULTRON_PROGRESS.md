@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale completion percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI — Supreme Evolution (Project Singularity) Progress Tracker
 
 > **Mission:** Transform ULTRON AI into a unified JARVIS × ULTRON personal AI operating system.  
