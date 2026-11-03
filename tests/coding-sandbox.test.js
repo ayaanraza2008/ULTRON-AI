@@ -25,7 +25,7 @@ test("CodingSandbox: fails closed deterministically when Docker is not available
   assert.equal(pyRes.errorCode, "CODE_SANDBOX_DISABLED");
 });
 
-test("CodingSandbox: initializes and exposes isolation parameters when Docker is available", async () => {
+test("CodingSandbox: labels explicit Docker overrides as test-only", async () => {
   const sandbox = new CodingSandbox({
     timeoutMs: 3000,
     memoryLimitMb: 256,
