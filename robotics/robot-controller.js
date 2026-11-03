@@ -128,6 +128,11 @@ export class PhysicalSafetyController {
       return { safe: false, permitted: false, code: "EMERGENCY_STOP_ACTIVE", reason: "Hardware halted: Emergency stop is latched." };
     }
 
+    if (typeof linearVelocity !== "number" || !Number.isFinite(linearVelocity) ||
+        typeof angularVelocity !== "number" || !Number.isFinite(angularVelocity)) {
+      return { safe: false, permitted: false, code: "INVALID_MOTION_COMMAND", reason: "Motion velocities must be finite numeric values." };
+    }
+
     if (!this.isHeartbeatAlive()) {
       return { safe: false, permitted: false, code: "HEARTBEAT_EXPIRED", reason: "Hardware halted: Dead-man's switch heartbeat expired." };
     }
@@ -161,7 +166,10 @@ export class PhysicalSafetyController {
 
     // 3D Geofence enforcement
     if (targetPosition) {
-      const { x = 0, y = 0, z = 0 } = targetPosition;
+      const { x, y, z } = targetPosition;
+      if (![x, y, z].every(value => typeof value === "number" && Number.isFinite(value))) {
+        return { safe: false, permitted: false, code: "INVALID_TARGET_POSITION", reason: "Target position must contain finite numeric x, y and z coordinates." };
+      }
       if (!this.isWithinGeofence(x, y, z)) {
         return {
           safe: false,
