@@ -50,10 +50,13 @@ test("paired-device rollback is explicitly DESTRUCTIVE and documents data loss",
 
 // Part 2: Real Database Execution & Functional Verification
 test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", async (t) => {
-  const harness = new DisposablePgHarness();
+  const harness = new DisposablePgHarness({ suiteName: "migration" });
   const availability = await harness.checkAvailability();
 
   if (!availability.available) {
+    if (process.env.CI === "true") {
+      assert.fail(`CRITICAL CI FAILURE: Real disposable PostgreSQL is required in CI environment, but check failed: ${availability.reason}`);
+    }
     t.skip(`Real PostgreSQL database is not available on host: ${availability.reason} (runs automatically in Docker/CI environment)`);
     return;
   }

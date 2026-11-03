@@ -22,10 +22,13 @@ import { randomUUID } from "node:crypto";
 import { DisposablePgHarness, TEST_USERS } from "./helpers/disposable-pg-harness.js";
 
 test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) => {
-  const harness = new DisposablePgHarness();
+  const harness = new DisposablePgHarness({ suiteName: "rls" });
   const availability = await harness.checkAvailability();
 
   if (!availability.available) {
+    if (process.env.CI === "true") {
+      assert.fail(`CRITICAL CI FAILURE: Real disposable PostgreSQL is required in CI environment, but check failed: ${availability.reason}`);
+    }
     t.skip(`Real PostgreSQL database is not available on this host: ${availability.reason} (runs automatically in Docker/CI environment)`);
     return;
   }

@@ -47,13 +47,16 @@ The following items are **external human owner actions** that reside across the 
 
 ---
 
-## 4. LATEST AUTOMATION EVIDENCE (EXACT CANDIDATE `0561f72e`)
+## 4. LATEST AUTOMATION EVIDENCE
 
-- **Node Test Suite:** 199 test files; **1,366 passed, 0 failed, 5 skipped** (Windows host; in Linux CI with Postgres service container and Docker: 1,371 passed, 0 failed, 0 skipped) (62.38s)
+- **Node Test Suite:** 201 test files; **1,372 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,376 passed, 0 failed, 2 skipped)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink restrictions in `test_harness2.py`)
-- **Combined Automation Tests:** 1,415 discovered; **1,408 passed, 0 failed, 7 skipped** (Windows host; in Linux CI: 1,413 passed, 0 failed, 2 skipped) (99.72% pass rate)
-- **Syntax Check:** **340 / 340 files clean** (`node scripts/check-syntax.mjs`)
+- **Combined Automation Tests:** 1,422 discovered; **1,414 passed, 0 failed, 8 skipped** (Windows host; in Linux CI: 1,418 passed, 0 failed, 4 skipped) (99.44% pass rate across discovered; 100% on executed)
+- **Syntax Check:** **344 / 344 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
+- **PostgreSQL CI Activation:** Disposable `postgres:15` service container, health checks, isolated test DB provisioner (`scripts/provision-test-databases.mjs`), and fail-closed CI assertions (`assert.fail` when `CI=true`)
+- **Real Worker Runtime Verification:** Process-level integration test (`tests/worker-runtime-process.test.js`) verifying `startWorker` runtime process loop, task claiming, execution dispatch, PostgreSQL persistence, audit logging, lease renewal, stale recovery, and graceful shutdown
+- **Disposable Harness Safety:** `tests/disposable-pg-safety.test.js` 6/6 tests passing; zero fallback to production env vars, host allowlist, Supabase cloud rejection, and credentials sanitization
 - **Root Dependency Audit:** **0 vulnerabilities** (`npm audit --omit=dev --audit-level=high`)
 - **GitHub Actions Workflows (All 6 Checks Passing on PR #441):**
   - `build-android-companion`: [Run 41679626806](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626806) — PASS (1m 53s)

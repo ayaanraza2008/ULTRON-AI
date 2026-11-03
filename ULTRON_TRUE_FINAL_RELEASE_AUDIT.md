@@ -56,10 +56,10 @@ $$\text{Corrected Overall Readiness} = 18.80\% + 19.40\% + 18.20\% + 17.00\% + 1
      - Cloud audio providers opt-in / not configured (-2.0%)
 
 2. **Category 2: Automated Testing & Verification (Score: 97.0% \| Weight: 20% \| Contrib: 19.40%)**
-   - *Node.js Test Suite (30.0/30.0)*: 199 test files pass; 1,366 assertions pass on Windows (5 skipped: live DB protected, host Docker absent, 3 Postgres tests). In Linux CI with Postgres service container: 1,371 passed, 0 skipped.
+   - *Node.js Test Suite (30.0/30.0)*: 201 test files pass; 1,372 assertions pass on Windows (6 skipped: live DB protected, host Docker absent, 4 Postgres tests). In Linux CI with Postgres service container: 1,376 passed, 2 skipped.
    - *Python Test Suites (28.5/30.0)*: 44 discovered; 42 passed (-1.5% for 2 skipped symlink tests in `test_harness2.py`).
-   - *Multi-Tenant Disposable Isolation Harness (20.0/20.0)*: 7/7 tests pass in `tests/supabase-isolation-disposable.test.js`.
-   - *Syntax Verification (10.0/10.0)*: 340 / 340 files clean.
+   - *Multi-Tenant Disposable Isolation Harness (20.0/20.0)*: 7/7 tests pass in `tests/supabase-isolation-disposable.test.js` and real Postgres tests in `tests/supabase-isolation-real-pg.test.js`.
+   - *Syntax Verification (10.0/10.0)*: 344 / 344 files clean.
    - *Companion Builds (10.0/10.0)*: Windows x64 single-file EXE, Android APK with v2 signature, World Intelligence clean.
 
 3. **Category 3: Security, Privacy & Governance (Score: 91.0% \| Weight: 20% \| Contrib: 18.20%)**
@@ -100,22 +100,24 @@ $$\text{Corrected Overall Readiness} = 18.80\% + 19.40\% + 18.20\% + 17.00\% + 1
      * `test_candidate_paths_reject_traversal_and_symlinks`: skipped (`[WinError 1314]` — Windows non-elevated user symlink creation).
   4. `tools/model-lab`: 9 discovered, 9 passed, 0 skipped.
 
-### B. Node.js Test Suite Audit (Commit `becdd2a1affd923ff25e58910e3c75b4cf0d7389`)
-- **Total test files executed:** 199 / 199 (100% file completion).
-- **Total assertions:** 1,371 discovered; **1,366 passed, 0 failed, 5 skipped** on Windows (In Linux CI with Postgres service container: 1,371 passed, 0 skipped) (Duration: 62.38s, Exit Code 0).
+### B. Node.js Test Suite Audit
+- **Total test files executed:** 201 / 201 (100% file completion).
+- **Total assertions:** 1,378 discovered; **1,372 passed, 0 failed, 6 skipped** on Windows (In Linux CI with Postgres service container: 1,376 passed, 2 skipped) (Exit Code 0).
 - **Skipped Test Investigation:**
   1. `tests/supabase-isolation.e2e.test.js`: `live Supabase auth, conversation, message, and memory access is isolated between two users`.
      * Condition: Skipped because `ULTRON_E2E_ALLOW_WRITES !== "CONFIRM_ULTRON_E2E_WRITES"` and no disposable test accounts are configured. This protects the live production Supabase database (`opdjfhwepmcprbqojpat`) from dirty test data.
   2. `tests/coding-sandbox.test.js`: `CodingSandbox: executes real Docker container when Docker daemon is available`.
      * Condition: Dynamically detects whether Docker daemon is responding (`docker info`). On systems without Docker, gracefully skips with an explicit diagnostic message and fails closed.
+  3-6. Disposable PostgreSQL Test Suites (`tests/supabase-isolation-real-pg.test.js`, `tests/paired-device-migration.test.js`, `tests/worker-queue-lifecycle.test.js`, `tests/worker-runtime-process.test.js`):
+     * Condition: In local development without configured local PostgreSQL, gracefully skips with clear instructions. In GitHub Actions CI (`CI=true`), disposable `postgres:15` container executes all suites with fail-closed assertions (`assert.fail`).
 - **Disposable Two-User Isolation Harness:**
   - `tests/supabase-isolation-disposable.test.js`: Executes 7/7 tests against an in-process disposable Supabase test server, verifying User A vs User B auth, RLS read/write/delete isolation, anti-IDOR write prevention, and 401 unauthenticated rejection without touching production.
 
 ### C. Total Combined Automation Metrics
-$$\text{Total Discovered: } 1,412 \quad|\quad \text{Total Passed: } 1,408 \quad|\quad \text{Total Skipped: } 4 \quad|\quad \text{Total Failed: } 0$$
-$$\text{Total Pass Rate (Discovered): } \frac{1,408}{1,412} = 99.72\%$$
-$$\text{Total Pass Rate (Executed): } \frac{1,408}{1,408} = 100.0\%$$
-- **Syntax Check:** 337 / 337 files clean (100%).
+$$\text{Total Discovered: } 1,422 \quad|\quad \text{Total Passed: } 1,414 \quad|\quad \text{Total Skipped: } 8 \quad|\quad \text{Total Failed: } 0$$
+$$\text{Total Pass Rate (Discovered): } \frac{1,414}{1,422} = 99.44\%$$
+$$\text{Total Pass Rate (Executed): } \frac{1,414}{1,414} = 100.0\%$$
+- **Syntax Check:** 344 / 344 files clean (100%).
 - **Security Quality Gate:** 0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED).
 
 ---
