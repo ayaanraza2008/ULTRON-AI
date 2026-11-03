@@ -700,7 +700,8 @@ export class HardwareInTheLoopBridge {
 }
 
 /**
- * Extended 3D Assets indexed from NVIDIA SimReady Central (HuggingFace)
+ * Static metadata references for NVIDIA SimReady Central entries.
+ * This catalogue does not fetch or bundle meshes, collision assets, or physics files.
  * https://huggingface.co/spaces/nvidia/simready-central
  */
 export const SIMREADY_CENTRAL_EXTENDED_CATALOG = [
