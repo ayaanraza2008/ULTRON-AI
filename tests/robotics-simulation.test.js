@@ -26,8 +26,11 @@ test("RoboticsSim: SIMREADY_ASSET_CATALOG discovers valid 3D robot assets", () =
     assert.ok(asset.category, "Asset must have a category");
     assert.ok(asset.dimensionsM && typeof asset.dimensionsM.x === "number");
     assert.ok(asset.massKg > 0, "Mass must be positive");
-    assert.ok(asset.simReadyCompliance.hasVisualMesh, "Must declare visual mesh");
-    assert.ok(asset.simReadyCompliance.hasCollisionMesh, "Must declare collision mesh");
+    assert.equal(asset.simReadyCompliance.metadataOnly, true, "Static catalog entries are metadata-only");
+    assert.equal(asset.simReadyCompliance.hasVisualMesh, false, "No visual mesh is downloaded");
+    assert.equal(asset.simReadyCompliance.hasCollisionMesh, false, "No collision mesh is downloaded");
+    assert.equal(asset.assetAvailability, "METADATA_ONLY");
+    assert.equal(asset.sourceVerification, "STATIC_REFERENCE_NOT_FETCHED");
     assert.ok(Array.isArray(asset.joints) && asset.joints.length > 0, "Must declare joints");
     assert.ok(Array.isArray(asset.defaultSensors), "Must declare default sensors");
   }
