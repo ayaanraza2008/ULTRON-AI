@@ -223,27 +223,41 @@ export class SimToRealDeploymentGate {
   }
 
   evaluateTrajectory(trajectoryHistory = []) {
-    if (trajectoryHistory.length === 0) {
+    if (!Array.isArray(trajectoryHistory) || trajectoryHistory.length === 0) {
       return { passed: false, score: 0, reason: "Empty trajectory log." };
     }
 
-    let totalEnergyPercent = 0;
     let collisionsCount = 0;
     let minObsClearance = Infinity;
-
-    for (const pt of trajectoryHistory) {
-      if (pt.collision) collisionsCount++;
-      if (pt.minClearance !== undefined && pt.minClearance < minObsClearance) {
-        minObsClearance = pt.minClearance;
+    for (const [index, point] of trajectoryHistory.entries()) {
+      if (typeof point?.collision !== "boolean" ||
+          typeof point?.minClearance !== "number" ||
+          !Number.isFinite(point.minClearance) ||
+          point.minClearance < 0 ||
+          typeof point?.batteryPercent !== "number" ||
+          !Number.isFinite(point.batteryPercent) ||
+          point.batteryPercent < 0 ||
+          point.batteryPercent > 100) {
+        return {
+          passed: false,
+          score: 0,
+          reason: `Missing or invalid safety telemetry at trajectory step ${index}.`,
+          code: "SAFETY_TELEMETRY_INCOMPLETE"
+        };
       }
+      if (point.collision) collisionsCount++;
+      minObsClearance = Math.min(minObsClearance, point.minClearance);
     }
 
-    const startBat = trajectoryHistory[0].batteryPercent || 100;
-    const endBat = trajectoryHistory[trajectoryHistory.length - 1].batteryPercent || 100;
-    totalEnergyPercent = Number((startBat - endBat).toFixed(2));
-
-    const passedSafety = collisionsCount === 0 && minObsClearance >= this.minSafeClearanceM && endBat >= this.minBatteryPercent;
-    const score = passedSafety ? Math.max(50, Math.round(100 - (totalEnergyPercent * 2) - (trajectoryHistory.length * 0.1))) : 0;
+    const startBat = trajectoryHistory[0].batteryPercent;
+    const endBat = trajectoryHistory[trajectoryHistory.length - 1].batteryPercent;
+    const totalEnergyPercent = Number((startBat - endBat).toFixed(2));
+    const passedSafety = collisionsCount === 0 &&
+      minObsClearance >= this.minSafeClearanceM &&
+      endBat >= this.minBatteryPercent;
+    const score = passedSafety
+      ? Math.max(50, Math.round(100 - (totalEnergyPercent * 2) - (trajectoryHistory.length * 0.1)))
+      : 0;
 
     return {
       passed: passedSafety,
