@@ -2,17 +2,12 @@
  * ULTRON AI — Robotics & Hardware Abstraction Layer (HAL)
  * Project Codename: ULTRON SINGULARITY
  *
- * Implements a portable, hardware-independent robotics architecture:
- * - Decouples central intelligence, perception, and planning from physical actuators.
- * - Standardized robot capability handshake (sensors, actuators, kinematics).
- * - Independent, non-bypassable Physical Safety Controller:
- *   - Latching Emergency Stop (cannot be overridden by the AI model)
- *   - Geofence 3D boundary enforcement
- *   - Velocity and force limits
- *   - Battery threshold safety interlocks
- *   - Heartbeat loss fail-safe (dead-man's switch)
- * - Virtual simulation mode for dry-running kinematic motion plans.
- * - Portable brain export/import migration package.
+ * Implements simulation-first robotics architecture and safety primitives:
+ * - Digital-twin registration and kinematic dry-runs only.
+ * - Physical actuation is fail-closed; no verified actuator transport ships in this release.
+ * - Latching Emergency Stop with an injected operator authorization verifier.
+ * - Geofence, velocity, battery telemetry and heartbeat interlocks.
+ * - Physical HIL and real-world deployment remain unavailable until a trusted driver is integrated.
  */
 
 import crypto from "node:crypto";
@@ -191,7 +186,7 @@ export class RobotController {
   }
 
   /**
-   * Standardized Robot Registration & Capability Handshake
+   * Simulation-only robot registration; this does not connect physical hardware.
    */
   registerRobot(deviceMeta = {}) {
     const robotId = deviceMeta.robotId || deviceMeta.id || "bot-" + crypto.randomUUID();
