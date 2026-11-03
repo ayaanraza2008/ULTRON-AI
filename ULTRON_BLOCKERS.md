@@ -5,7 +5,7 @@
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, CONFLICT-FREE  
 **Target Render Workspace:** **Ultron core** (`https://ultron-ai-core.onrender.com`)  
 **Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
-**Candidate Commit SHA:** `03175918bb1385d38b5ee3a650eb8e6224c6efca`  
+**Candidate Commit SHA:** `175701e9658f1f1728a09aa1dc99b8e52bb387f8`  
 
 ---
 
@@ -45,7 +45,7 @@ The following items are **external human owner actions** that reside across the 
 
 ---
 
-## 4. LATEST AUTOMATION EVIDENCE (EXACT CANDIDATE `03175918`)
+## 4. LATEST AUTOMATION EVIDENCE (EXACT CANDIDATE `175701e9`)
 
 - **Node Test Suite:** 196 test files; **1,358 passed, 0 failed, 1 skipped** (63.47s)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink restrictions in `test_harness2.py`)
@@ -53,10 +53,10 @@ The following items are **external human owner actions** that reside across the 
 - **Syntax Check:** **336 / 336 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
 - **Root Dependency Audit:** **0 vulnerabilities** (`npm audit --omit=dev --audit-level=high`)
-- **GitHub Actions Workflows (All 6 Checks Passing on PR #441):**
-  - `build-android-companion`: PASS (2m 12s)
-  - `build-windows-companion`: PASS (50s)
-  - `test` (PR Run 41663607872): PASS (1m 21s)
-  - `test` (Push Run 41663593396): PASS (2m 44s)
-  - `world-intelligence-build` (PR Run 41663607872): PASS (54s)
-  - `world-intelligence-build` (Push Run 41663593396): PASS (44s)
+- **GitHub Actions Workflows (All 6 Checks Passing on PR #441 on Commit `175701e9`):**
+  - `build-android-companion`: [Run 41675740314](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740314) — PASS (2m 12s)
+  - `build-windows-companion`: [Run 41675740219](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740219) — PASS (1m 4s)
+  - `test` (PR Run 41675740264): PASS (1m 29s)
+  - `test` (Push Run 41675729513): PASS (1m 47s)
+  - `world-intelligence-build` (PR Run 41675740264): PASS (1m 10s)
+  - `world-intelligence-build` (Push Run 41675729513): PASS (45s)

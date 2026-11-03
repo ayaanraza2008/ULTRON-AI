@@ -5,7 +5,7 @@
 **Scope Policy:** Software-Only (Physical hardware permanently excluded per `ULTRON_SOFTWARE_ONLY_CHARTER.md`)  
 **Target Repository:** `ayaanraza2008/ULTRON-AI`  
 **Candidate Branch:** `feat/ultron-final-100-completion`  
-**Candidate HEAD SHA:** `03175918bb1385d38b5ee3a650eb8e6224c6efca`  
+**Candidate HEAD SHA:** `175701e9658f1f1728a09aa1dc99b8e52bb387f8`  
 **Candidate Pull Request:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
 
 ---
@@ -139,3 +139,15 @@ A software capability is verified **only** when all of the following conditions 
 - **Total Repository Files Checked:** 336 / 336 clean (100% syntax validity)
 - **Security Quality Gate Result:** PASSED (0 confirmed vulnerabilities, 0 risks, 0 secrets)
 - **Overall Defensible Software Readiness Score:** **85.10%** (Normalized against 5 software-only categories, physical hardware at 0%)
+
+### Software-Only Readiness Scorecard & Subcriteria Rubric
+
+| # | Category | Weight ($W_i$) | Score ($S_i$) | Weighted | Subcriteria Breakdown & Deductions | Classification |
+| :-: | :--- | :---: | :---: | :---: | :--- | :---: |
+| 1 | **Software Implementation** | 20% | 94.0% | 18.80% | Brain/Router (20/20), ACC (20/20), Tools (20/20), Companions (20/20), Sandboxing/Migrations (14/20: -2% Docker absent, -2% unapplied paired-device SQL, -2% opt-in audio) | `IMPLEMENTED` |
+| 2 | **Automated Verification** | 20% | 97.0% | 19.40% | Node Unit/Int (30/30), Python Suites (28.5/30: -1.5% for 2 skipped tests in `test_harness2.py`), Node E2E (18.5/20: -1.5% for 1 skipped DB test), Syntax (10/10), Builds (10/10) | `UNIT_TESTED` / `INTEGRATION_TESTED` |
+| 3 | **Security & Privacy** | 20% | 91.0% | 18.20% | SAST/Quality Gate (30/30), Dependencies (20/20), Architecture/SSRF/Sandboxing (25/25), Cloud Identity (16/25: -5% dashboard Leaked Password Protection disabled, -4% live penetration tests unperformed) | `INTEGRATION_TESTED` |
+| 4 | **Live Software Operations** | 25% | 68.0% | 17.00% | Host Kokoro ONNX (25/25), Local Tools/Vitals (25/25), Playwright Browser (18/20), Cloud AI Text/Vision (0/15: blocked on keys), Production Workers/DB Queue (0/15: unpolled) | `LIVE_VERIFIED` (Local) / `BLOCKED` (Cloud) |
+| 5 | **Release Readiness** | 15% | 78.0% | 11.70% | Candidate Hardening/CI (40/40), Reconciled Blueprint (25/25), Live Render Alignment (8/20: branch mismatch, empty health paths), PR Governance (5/15: unmerged) | `BLOCKED` (Owner Authorization Gate) |
+| — | **Physical Hardware** | **0%** | — | **0.00%** | Permanently excluded per `ULTRON_SOFTWARE_ONLY_CHARTER.md` | `NOT_APPLICABLE` |
+| **Total** | **Full Software Matrix** | **100%** | — | **85.10%** | **Independently Defensible Score (Linear Combination: 18.80 + 19.40 + 18.20 + 17.00 + 11.70)** | — |

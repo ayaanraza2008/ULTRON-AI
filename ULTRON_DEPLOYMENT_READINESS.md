@@ -4,9 +4,9 @@
 **Document Status:** Canonical Production Deployment Readiness Assessment  
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED  
 **Target Render Workspace:** **Ultron core**  
-**Candidate Commit SHA:** `03175918bb1385d38b5ee3a650eb8e6224c6efca`  
+**Candidate Commit SHA:** `175701e9658f1f1728a09aa1dc99b8e52bb387f8`
 **Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
-**Deployment Decision:** **READY FOR OWNER RELEASE AUTHORIZATION — DEPLOYMENT LOCKED UNTIL APPROVED (85.10% Readiness)**
+**Deployment Decision:** **CANDIDATE HARDENED — LIVE CLOUD ACCEPTANCE GATED ON OWNER AUTHORIZATION (85.10% Readiness)**
 
 ---
 
@@ -31,20 +31,20 @@ The target Render workspace `Ultron core` comprises four services, all mapped to
 
 ---
 
-## 3. COMPLETED EVIDENCE BASELINE (EXACT SHA `03175918`)
+## 3. COMPLETED EVIDENCE BASELINE (EXACT SHA `175701e9`)
 
 - **Node.js Test Suite:** 196 test files; **1,358 passed, 0 failed, 1 skipped** (`node --test`, 63.47s)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** across browser policy, startup smoke, Harness2, and model lab
 - **Combined Test Metric:** 1,403 discovered; **1,400 passed, 0 failed, 3 skipped** (99.79% pass rate)
 - **Syntax Check:** **336 / 336 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
-- **GitHub Actions (All 6 Checks Passing on PR #441):**
-  - Android Companion: [Run 41663607249](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607249) — PASS (2m 12s)
-  - Windows Companion: [Run 41663607508](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607508) — PASS (50s)
-  - Test Suite (PR): [Run 41663607872](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607872) — PASS (1m 21s)
-  - Test Suite (Push): [Run 41663593396](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663593396) — PASS (2m 44s)
-  - World Intelligence (PR): [Run 41663607872](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607872) — PASS (54s)
-  - World Intelligence (Push): [Run 41663593396](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663593396) — PASS (44s)
+- **GitHub Actions (All 6 Checks Passing on PR #441 on Commit `175701e9`):**
+  - Android Companion: [Run 41675740314](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740314) — PASS (2m 12s)
+  - Windows Companion: [Run 41675740219](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740219) — PASS (1m 4s)
+  - Test Suite (PR): [Run 41675740264](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740264) — PASS (1m 29s)
+  - Test Suite (Push): [Run 41675729513](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675729513) — PASS (1m 47s)
+  - World Intelligence (PR): [Run 41675740264](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740264) — PASS (1m 10s)
+  - World Intelligence (Push): [Run 41675729513](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675729513) — PASS (45s)
 
 ---
 

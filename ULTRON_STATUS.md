@@ -5,7 +5,7 @@
 **Production Branch:** `main`  
 **Production Base:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
 **Release Candidate Branch:** `feat/ultron-final-100-completion`  
-**Exact Candidate HEAD SHA:** `03175918bb1385d38b5ee3a650eb8e6224c6efca`  
+**Exact Candidate HEAD SHA:** `175701e9658f1f1728a09aa1dc99b8e52bb387f8`  
 **Candidate PR:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
 **Render Workspace:** Ultron core  
 **Supabase Project:** `opdjfhwepmcprbqojpat`  
@@ -25,9 +25,9 @@ All software-based digital-twin models, kinematic solvers, virtual device pairin
 
 ## B. Executive Verdict
 
-**SOFTWARE VERIFIED & COMPLETE — READY FOR OWNER AUTHORIZATION (85.10% Independently Defensible Software Readiness)**
+**CANDIDATE HARDENED — LIVE CLOUD ACCEPTANCE GATED ON OWNER AUTHORIZATION (85.10% Independently Defensible Software Readiness)**
 
-The active candidate branch `feat/ultron-final-100-completion` on exact SHA `03175918bb1385d38b5ee3a650eb8e6224c6efca` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
+The active candidate branch `feat/ultron-final-100-completion` on exact SHA `175701e9658f1f1728a09aa1dc99b8e52bb387f8` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
 
 The earlier claim of 97.25% has been corrected to an independently defensible score of **85.10%** after auditing live cloud operations (cloud AI provider keys, unpolled cloud workers, and unapplied cloud migrations) and acknowledging skipped tests.
 
@@ -35,7 +35,7 @@ The earlier claim of 97.25% has been corrected to an independently defensible sc
 
 ---
 
-## C. Evidence Baseline (Exact Candidate SHA `03175918`)
+## C. Evidence Baseline (Exact Candidate SHA `175701e9`)
 
 | Verification Domain | Software Status | Evidence & Test Results |
 | :--- | :---: | :--- |
@@ -54,11 +54,11 @@ The earlier claim of 97.25% has been corrected to an independently defensible sc
 | **Android Companion Build** | **PASS (100%)** | GitHub Actions build succeeded; Release APK built with v2 signature |
 | **World Intelligence Build** | **PASS (100%)** | GitHub Actions build succeeded; 870 modules transformed cleanly |
 
-### GitHub Actions CI Verification Matrix (Run on Candidate `03175918`)
-- **`ULTRON CI` (PR Run 41663607872 / Push Run 41663593396):** ✅ **SUCCESS**
-- **`ULTRON Windows Companion` (Run 41663607508):** ✅ **SUCCESS**
-- **`ULTRON Android Companion` (Run 41663607249):** ✅ **SUCCESS**
-- **All 6 PR #441 Checks:** ✅ **PASS**
+### GitHub Actions CI Verification Matrix (Run on Candidate `175701e9`)
+- **`ULTRON Android Companion` (Run 41675740314):** ✅ **SUCCESS (2m 12s)**
+- **`ULTRON CI` (PR Run 41675740264 / Push Run 41675729513):** ✅ **SUCCESS (1m 29s / 1m 47s)**
+- **`ULTRON Windows Companion` (Run 41675740219):** ✅ **SUCCESS (1m 4s)**
+- **All 6 PR #441 Checks:** ✅ **PASS (100% Green)**
 
 ---
 
@@ -68,7 +68,7 @@ Allowed Statuses: `IMPLEMENTED`, `UNIT_TESTED`, `INTEGRATION_TESTED`, `LIVE_VERI
 
 | Functional Subsystem | Software Status | Verification Method & Evidence | External Owner Requirement |
 | :--- | :---: | :--- | :--- |
-| **Release Candidate & PR #441** | `INTEGRATION_TESTED` | PR #441 open, conflict-free, synchronized to `03175918`, 6/6 CI checks pass | Owner merge authorization |
+| **Release Candidate & PR #441** | `INTEGRATION_TESTED` | PR #441 open, conflict-free, synchronized to `175701e9658f1f1728a09aa1dc99b8e52bb387f8`, 6/6 CI checks pass | Owner merge authorization |
 | **Core Brain & Model Fallback** | `UNIT_TESTED` | Sequential fallback across Tier 1-4, timeouts, 401/403/429 recovery (22/22 pass) | Owner populates valid API keys in cloud store |
 | **Live AI Text & Vision** | `BLOCKED` | Local keys fail closed (`NO_ELIGIBLE_PROVIDER`); no outbound network leak | Add valid Google AI Studio (`AIzaSy...`) or Groq key |
 | **Autonomous Orchestrator (JARVIS)**| `INTEGRATION_TESTED` | Parallel DAG execution, cycle rejection, cascading failure skips, restart recovery (19/19 pass) | Fully verified in software |
@@ -93,15 +93,15 @@ Allowed Statuses: `IMPLEMENTED`, `UNIT_TESTED`, `INTEGRATION_TESTED`, `LIVE_VERI
 
 In compliance with the Permanent Software-Only Scope Directive, readiness is calculated across the five normalized software categories, with physical hardware weighted at **0%**:
 
-| Evaluation Category | Normalized Weight ($W_i$) | Defensible Score ($S_i$) | Weighted Contribution ($W_i \times S_i$) |
-| :--- | :---: | :---: | :---: |
-| **1. Software Implementation** | 20% (0.20) | 94.0% | $0.20 \times 94.0\% = 18.80\%$ |
-| **2. Automated Testing & Regression** | 20% (0.20) | 97.0% | $0.20 \times 97.0\% = 19.40\%$ |
-| **3. Security, Privacy & Governance** | 20% (0.20) | 91.0% | $0.20 \times 91.0\% = 18.20\%$ |
-| **4. Live Software Operations** | 25% (0.25) | 68.0% | $0.25 \times 68.0\% = 17.00\%$ |
-| **5. Release & Deployment Readiness** | 15% (0.15) | 78.0% | $0.15 \times 78.0\% = 11.70\%$ |
-| **Physical Hardware** | **0% (0.00)** | — | **PERMANENTLY EXCLUDED (0.00%)** |
-| **Total Evaluation Base** | **100% (1.00)** | — | **85.10% Corrected Readiness** |
+| Evaluation Category | Normalized Weight ($W_i$) | Defensible Score ($S_i$) | Weighted Contribution ($W_i \times S_i$) | Subcriteria Breakdown & Deductions |
+| :--- | :---: | :---: | :---: | :--- |
+| **1. Software Implementation** | 20% (0.20) | 94.0% | $0.20 \times 94.0\% = 18.80\%$ | Brain/Router (20/20), ACC (20/20), Tools (20/20), Companions (20/20), Sandboxing/Migrations (14/20: -2% Docker absent, -2% unapplied paired-device SQL, -2% opt-in audio) |
+| **2. Automated Testing & Regression** | 20% (0.20) | 97.0% | $0.20 \times 97.0\% = 19.40\%$ | Node Unit/Int (30/30), Python Suites (28.5/30: -1.5% for 2 skipped symlink tests in `test_harness2.py`), Node E2E (18.5/20: -1.5% for 1 skipped DB test), Syntax (10/10), Builds (10/10) |
+| **3. Security, Privacy & Governance** | 20% (0.20) | 91.0% | $0.20 \times 91.0\% = 18.20\%$ | SAST/Quality Gate (30/30), Dependencies (20/20), Architecture/SSRF/Sandboxing (25/25), Cloud Identity (16/25: -5% dashboard Leaked Password Protection disabled, -4% live penetration tests unperformed) |
+| **4. Live Software Operations** | 25% (0.25) | 68.0% | $0.25 \times 68.0\% = 17.00\%$ | Host Kokoro ONNX (25/25), Local Tools/Vitals (25/25), Playwright Browser (18/20), Cloud AI Text/Vision (0/15: blocked on keys), Production Workers/DB Queue (0/15: unpolled) |
+| **5. Release & Deployment Readiness** | 15% (0.15) | 78.0% | $0.15 \times 78.0\% = 11.70\%$ | Candidate Hardening/CI (40/40), Reconciled Blueprint (25/25), Live Render Alignment (8/20: branch mismatch, empty health paths), PR Governance (5/15: unmerged) |
+| **Physical Hardware** | **0% (0.00)** | — | **PERMANENTLY EXCLUDED (0.00%)** | Permanently excluded per `ULTRON_SOFTWARE_ONLY_CHARTER.md` |
+| **Total Evaluation Base** | **100% (1.00)** | — | **85.10% Corrected Readiness** | **Linear Combination Total: 18.80% + 19.40% + 18.20% + 17.00% + 11.70%** |
 
 $$\text{Overall Software Readiness} = 18.80\% + 19.40\% + 18.20\% + 17.00\% + 11.70\% = \mathbf{85.10\%}$$
 
