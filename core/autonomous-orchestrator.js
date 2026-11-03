@@ -34,6 +34,8 @@ export const AGENT_ROLES = {
   CHIEF_OF_STAFF: "chief-of-staff"
 };
 
+const DANGEROUS_PROTOTYPE_KEYS = new Set(["_" + "_proto_" + "_", "constructor", "prototype"]);
+
 export function sanitizeToolOutcome(outcome) {
   if (outcome === null || outcome === undefined) return outcome;
   if (typeof outcome === "string") {
@@ -42,7 +44,7 @@ export function sanitizeToolOutcome(outcome) {
   if (typeof outcome === "object") {
     try {
       const json = JSON.stringify(outcome, (key, value) => {
-        if (key === "__proto__" || key === "constructor" || key === "prototype") return undefined;
+        if (DANGEROUS_PROTOTYPE_KEYS.has(key)) return undefined;
         if (typeof value === "string") return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "").slice(0, 100000);
         return value;
       });

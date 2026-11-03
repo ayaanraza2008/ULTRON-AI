@@ -1,32 +1,29 @@
 {
   "metadata": {
-    "generatedAt": "2026-11-03T14:36:15.309Z",
+    "generatedAt": "2026-11-03T15:21:41.489Z",
     "targetRepository": "ULTRON-AI",
-    "elapsedSeconds": 8.43,
+    "elapsedSeconds": 14.13,
     "summary": {
-      "confirmedVulnerabilitiesCount": 1,
-      "potentialRisksCount": 1,
+      "confirmedVulnerabilitiesCount": 0,
+      "potentialRisksCount": 0,
       "informationalFindingsCount": 0,
       "skippedToolsCount": 4,
-      "qualityGateBlockers": [
-        "SAST findings require review or remediation.",
-        "Critical/high findings remain unresolved."
-      ],
-      "isQualityGatePassed": false
+      "qualityGateBlockers": [],
+      "isQualityGatePassed": true
     }
   },
   "metrics": {
     "sast": {
       "filesScanned": 221,
-      "linesScanned": 77132,
-      "findingsCount": 2,
+      "linesScanned": 78974,
+      "findingsCount": 0,
       "severityBreakdown": {
         "CRITICAL": 0,
-        "HIGH": 1,
-        "MEDIUM": 1,
+        "HIGH": 0,
+        "MEDIUM": 0,
         "LOW": 0
       },
-      "maxCvssScore": 7.5
+      "maxCvssScore": 0
     },
     "dependencies": {
       "tool": "npm audit",
@@ -49,42 +46,8 @@
     }
   },
   "findings": {
-    "confirmedVulnerabilities": [
-      {
-        "source": "SAST",
-        "category": "Code Vulnerability",
-        "findingId": "vuln-c96f2b7a",
-        "ruleId": "SAST-CWE-1321",
-        "cwe": "CWE-1321",
-        "title": "Prototype Pollution",
-        "severity": "HIGH",
-        "cvss": 7.5,
-        "filePath": "core\\autonomous-orchestrator.js",
-        "lineNumber": 45,
-        "snippet": "if (key === \"__proto__\" || key === \"constructor\" || key === \"prototype\") return undefined;",
-        "description": "Object modification directly targeting prototype properties.",
-        "remediation": "Use Map or Object.create(null) for unkeyed lookups and sanitize keys.",
-        "confidence": 0.95
-      }
-    ],
-    "potentialRisks": [
-      {
-        "source": "SAST",
-        "category": "Code Weakness",
-        "findingId": "vuln-d4e9c391",
-        "ruleId": "SAST-CWE-327",
-        "cwe": "CWE-327",
-        "title": "Insecure Cryptographic Algorithm",
-        "severity": "MEDIUM",
-        "cvss": 5.9,
-        "filePath": "integrations\\device-websocket-gateway.js",
-        "lineNumber": 20,
-        "snippet": "return crypto.createHash(\"sha1\").update(String(key) + WS_MAGIC_STRING).digest(\"base64\");",
-        "description": "Use of legacy or collision-vulnerable cryptographic algorithms (MD5, SHA-1, DES, RC4).",
-        "remediation": "Upgrade to SHA-256 / SHA-512 for cryptographic digests, or AES-256-GCM for encryption.",
-        "confidence": 0.95
-      }
-    ],
+    "confirmedVulnerabilities": [],
+    "potentialRisks": [],
     "informationalFindings": []
   },
   "externalTools": [

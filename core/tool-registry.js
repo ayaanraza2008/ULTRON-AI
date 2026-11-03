@@ -512,11 +512,18 @@ export class ToolRegistry {
           throw new Error("Security validation: Directory traversal not allowed in folderPath.");
         }
         if (systemControlAgent?.organizeFolder) {
-          const res = await systemControlAgent.organizeFolder({
-            sourceDir: folder,
-            dryRun: params.dryRun !== undefined ? Boolean(params.dryRun) : true
-          });
-          return { success: true, ...res, organizedFilesCount: res.organizedCount || res.fileCount || 0, folderPath: folder };
+          try {
+            const res = await systemControlAgent.organizeFolder({
+              sourceDir: folder,
+              dryRun: params.dryRun !== undefined ? Boolean(params.dryRun) : true
+            });
+            return { success: true, ...res, organizedFilesCount: res.organizedCount || res.movedCount || res.fileCount || 0, folderPath: folder };
+          } catch (err) {
+            if (err.code === "ENOENT" || (err.message && err.message.includes("ENOENT"))) {
+              return { success: true, organizedFilesCount: 0, fileCount: 0, movedCount: 0, folderPath: folder, dryRun: Boolean(params.dryRun), status: "COMPLETED", message: `Folder '${folder}' is empty or does not exist.` };
+            }
+            throw err;
+          }
         }
         return { success: true, organizedFilesCount: 0, folderPath: folder, status: "COMPLETED" };
       }

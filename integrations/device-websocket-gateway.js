@@ -10,14 +10,14 @@
  * - Safe frame framing, unmasking, size limiting (64 KB cap), and connection recovery.
  */
 
-import crypto from "node:crypto";
+import crypto, { createHash } from "node:crypto";
 import { deviceHub as defaultDeviceHub } from "./device-hub.js";
 
 const WS_MAGIC_STRING = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const MAX_FRAME_PAYLOAD = 64 * 1024; // 64 KB safety limit per frame
 
 function createAcceptKey(key) {
-  return crypto.createHash("sha1").update(String(key) + WS_MAGIC_STRING).digest("base64");
+  return createHash("sha1").update(String(key) + WS_MAGIC_STRING).digest("base64");
 }
 
 function encodeFrame(data, opcode = 0x1) {

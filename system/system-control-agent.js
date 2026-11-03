@@ -434,7 +434,26 @@ export class SystemControlAgent {
       Archives: [".zip", ".rar", ".7z", ".tar", ".gz"]
     };
 
-    const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+    let entries = [];
+    try {
+      entries = await fs.readdir(sourceDir, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === "ENOENT" || (err.message && err.message.includes("ENOENT"))) {
+        if (dryRun) {
+          return {
+            dryRun: true,
+            sourceDir,
+            fileCount: 0,
+            plan: [],
+            message: `Directory '${sourceDir}' does not exist.`
+          };
+        }
+        await fs.mkdir(sourceDir, { recursive: true });
+        entries = [];
+      } else {
+        throw err;
+      }
+    }
     const backupId = "backup-" + Date.now();
     const backupDir = path.join(this.backupBase, backupId);
 
