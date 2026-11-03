@@ -124,14 +124,14 @@ export async function detectHardwareCapabilities(env = process.env, options = {}
 
   // Determine Execution Mode
   let executionMode = EXECUTION_MODES.CPU_METADATA_FALLBACK;
-  let statusMessage = "Running in CPU-safe mode. Lightweight 3D geometry & spatial relationships active.";
+  let statusMessage = "CPU metadata-only fallback active; no 3D reconstruction model is configured.";
 
   if (hasRemoteEndpoint) {
     executionMode = EXECUTION_MODES.REMOTE_GPU;
-    statusMessage = "Remote GPU Diorama worker endpoint configured for high-fidelity 3D scene reconstruction.";
+    statusMessage = "Remote GPU worker endpoint configured; connectivity, GPU availability and model inference are not yet verified.";
   } else if (cudaProbe.hasCuda && weightsStatus.allWeightsPresent && hasIsolatedPython) {
     executionMode = EXECUTION_MODES.LOCAL_GPU;
-    statusMessage = "Local CUDA GPU accelerated Diorama pipeline available.";
+    statusMessage = "Local CUDA hardware and model weights detected; worker inference has not yet been live-verified.";
   } else if (isAmdApu && !cudaProbe.hasCuda) {
     executionMode = EXECUTION_MODES.CPU_METADATA_FALLBACK;
     statusMessage = "Host is AMD Ryzen APU with integrated graphics. Full CUDA pipeline offline; CPU geometric fallback active.";
@@ -163,12 +163,15 @@ export async function detectHardwareCapabilities(env = process.env, options = {}
       statusMessage
     },
     capabilities: {
-      canReconstruct3D: true, // CPU fallback or GPU
-      highFidelityMeshRetrieval: executionMode === EXECUTION_MODES.LOCAL_GPU || executionMode === EXECUTION_MODES.REMOTE_GPU,
-      semanticLayoutOptimization: true,
-      architecturalPlanes: true,
-      spatialQuerying: true,
-      exportFormats: ["obj", "gltf", "json"]
+      canReconstruct3D: false,
+      canAttempt3DReconstruction: executionMode === EXECUTION_MODES.LOCAL_GPU || executionMode === EXECUTION_MODES.REMOTE_GPU,
+      highFidelityMeshRetrieval: false,
+      highFidelityMeshRetrievalConfigured: executionMode === EXECUTION_MODES.LOCAL_GPU || executionMode === EXECUTION_MODES.REMOTE_GPU,
+      metadataOnlyFallback: true,
+      semanticLayoutOptimization: false,
+      architecturalPlanes: false,
+      spatialQuerying: false,
+      exportFormats: ["json"]
     }
   };
 }
