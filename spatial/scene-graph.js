@@ -313,7 +313,7 @@ export class SpatialSceneGraph {
     const dims = this.architecture.dimensions;
     const objs = Array.from(this.objects.values());
     if (!objs.length) {
-      return `Reconstructed empty room of ${dims.widthMeters}m × ${dims.lengthMeters}m × ${dims.heightMeters}m. No foreground objects detected.`;
+      return `Scene graph contains zero foreground objects. Room dimensions: ${dims.widthMeters}m × ${dims.lengthMeters}m × ${dims.heightMeters}m. Inference status: ${this.inferenceStatus}.`;
     }
 
     const items = objs.map(o => {
