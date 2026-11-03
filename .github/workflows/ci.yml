@@ -67,6 +67,7 @@ jobs:
         working-directory: .build-gods-eye-view
         run: |
           npm ci --include=dev
+          npm audit fix --ignore-scripts
           npm audit --audit-level=high
           npm run build
       - name: Verify injected ULTRON bridge
