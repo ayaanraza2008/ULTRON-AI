@@ -49,8 +49,14 @@ export class CodingSandbox {
     }
 
     if (this.dockerAvailableOverride === true) {
-      this.isDockerVerified = true;
-      this._cachedDockerStatus = { available: true, version: this.dockerVersionOverride || "24.0.0-verified" };
+      // Explicit availability overrides are test fixtures, never host verification.
+      this.isDockerVerified = false;
+      this._cachedDockerStatus = {
+        available: true,
+        version: this.dockerVersionOverride || "test-docker-override",
+        simulated: true,
+        reason: "DOCKER_OVERRIDE_IS_TEST_ONLY"
+      };
       return this._cachedDockerStatus;
     }
 
