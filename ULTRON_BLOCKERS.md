@@ -5,7 +5,7 @@
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, CONFLICT-FREE  
 **Target Render Workspace:** **Ultron core** (`https://ultron-ai-core.onrender.com`)  
 **Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
-**Candidate Commit SHA:** `0561f72eb90b06b4093f41419d972d8a984680b5`  
+**Candidate Commit SHA:** `3399e87c5df08e5a832948741071db274b9fcd27`  
 
 ---
 
