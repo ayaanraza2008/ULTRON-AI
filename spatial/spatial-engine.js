@@ -23,12 +23,11 @@ export const JOB_STATUS = Object.freeze({
 });
 
 export const PIPELINE_STAGES = Object.freeze([
-  { id: "perception", label: "Open-World Object Localization (GroundingDINO + SAM 2)", progress: 20 },
-  { id: "depth_planes", label: "Metric Depth & Architecture Reconstruction (Metric3D)", progress: 40 },
-  { id: "cad_retrieval", label: "3D CAD Shape Retrieval (DuoduoCLIP)", progress: 60 },
-  { id: "pose_estimation", label: "9-DoF Object Pose Estimation", progress: 80 },
-  { id: "layout_optimization", label: "Semantic Layout & Physical Collision Optimization", progress: 95 },
-  { id: "completed", label: "3D Spatial Scene Reconstructed", progress: 100 }
+  { id: "queued", label: "Spatial request queued", progress: 5 },
+  { id: "backend_selection", label: "Select configured spatial backend", progress: 20 },
+  { id: "worker_execution", label: "Execute configured worker or metadata fallback", progress: 65 },
+  { id: "geometry_validation", label: "Validate returned geometry and provenance", progress: 90 },
+  { id: "completed", label: "Spatial processing finished; inspect inference status", progress: 100 }
 ]);
 
 const MAX_JOBS_PER_USER = 20;
@@ -52,7 +51,9 @@ export class SpatialIntelligenceEngine {
       engine: "ULTRON SPATIAL INTELLIGENCE",
       version: "1.0.0",
       architecture: "Diorama (arXiv:2411.19492 / 3dlg-hcvc)",
-      status: "OPERATIONAL",
+      status: hw.worker.executionMode === "CPU_METADATA_FALLBACK"
+        ? "DEGRADED_METADATA_ONLY"
+        : "CONFIGURED_NOT_LIVE_VERIFIED",
       hardware: hw,
       activeJobsCount: Array.from(this.jobs.values()).filter(j => j.status === JOB_STATUS.PROCESSING).length,
       totalCompletedJobs: Array.from(this.jobs.values()).filter(j => j.status === JOB_STATUS.COMPLETED).length
@@ -115,28 +116,32 @@ export class SpatialIntelligenceEngine {
     job.updatedAt = new Date().toISOString();
 
     try {
-      // Simulate progress progression through the real Diorama sub-stages
-      for (const st of PIPELINE_STAGES.slice(0, 5)) {
-        if (job.cancelled) return;
-        job.stage = st.id;
-        job.stageLabel = st.label;
-        job.progress = st.progress;
-        job.updatedAt = new Date().toISOString();
-        // Minor yield between steps
-        await new Promise(r => setTimeout(r, 20));
-      }
+      job.stage = PIPELINE_STAGES[1].id;
+      job.stageLabel = PIPELINE_STAGES[1].label;
+      job.progress = PIPELINE_STAGES[1].progress;
+      job.updatedAt = new Date().toISOString();
 
       if (job.cancelled) return;
 
+      job.stage = PIPELINE_STAGES[2].id;
+      job.stageLabel = PIPELINE_STAGES[2].label;
+      job.progress = PIPELINE_STAGES[2].progress;
+      job.updatedAt = new Date().toISOString();
       const sceneGraph = await this.adapter.reconstructScene(imageInput, options);
 
       if (job.cancelled) return;
 
-      job.status = JOB_STATUS.COMPLETED;
-      job.stage = PIPELINE_STAGES[5].id;
-      job.stageLabel = PIPELINE_STAGES[5].label;
-      job.progress = 100;
+      job.stage = PIPELINE_STAGES[3].id;
+      job.stageLabel = PIPELINE_STAGES[3].label;
+      job.progress = PIPELINE_STAGES[3].progress;
+      job.updatedAt = new Date().toISOString();
       job.sceneGraph = sceneGraph;
+      job.status = JOB_STATUS.COMPLETED;
+      job.stage = PIPELINE_STAGES[4].id;
+      job.stageLabel = sceneGraph.metadataOnly
+        ? "Metadata-only fallback completed; no 3D reconstruction performed"
+        : "Worker result validated; inference provenance is reported separately";
+      job.progress = 100;
       job.completedAt = new Date().toISOString();
       job.updatedAt = new Date().toISOString();
     } catch (err) {
@@ -216,7 +221,10 @@ export class SpatialIntelligenceEngine {
       throw Object.assign(new Error("Access to this spatial job is restricted to the job owner."), { code: "FORBIDDEN" });
     }
     if (job.status !== JOB_STATUS.COMPLETED || !job.sceneGraph) {
-      throw Object.assign(new Error("3D spatial scene has not completed reconstruction."), { code: "SCENE_NOT_READY" });
+      throw Object.assign(new Error("Spatial processing has not completed."), { code: "SCENE_NOT_READY" });
+    }
+    if (job.sceneGraph.metadataOnly) {
+      throw Object.assign(new Error("No 3D geometry is available from the metadata-only CPU fallback."), { code: "SCENE_GEOMETRY_UNAVAILABLE" });
     }
 
     const fmt = String(format || "").toLowerCase().trim();
@@ -270,7 +278,7 @@ export class SpatialIntelligenceEngine {
     const latestJobId = this.latestUserJob.get(userId);
     if (!latestJobId) return null;
     const job = this.jobs.get(latestJobId);
-    if (!job || job.status !== JOB_STATUS.COMPLETED || !job.sceneGraph) return null;
+    if (!job || job.status !== JOB_STATUS.COMPLETED || !job.sceneGraph || job.sceneGraph.metadataOnly) return null;
 
     const text = String(prompt || "").toLowerCase();
     const isSpatialIntent = /\b(room|3d|spatial|objects|table|chair|desk|distance|nearest|dimension|where|layout|furniture)\b/i.test(text);
