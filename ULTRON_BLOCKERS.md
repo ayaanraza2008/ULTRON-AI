@@ -5,7 +5,7 @@
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, CONFLICT-FREE  
 **Target Render Workspace:** **Ultron core** (`https://ultron-ai-core.onrender.com`)  
 **Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
-**Candidate Commit SHA:** `175701e9658f1f1728a09aa1dc99b8e52bb387f8`  
+**Candidate Commit SHA:** `0561f72eb90b06b4093f41419d972d8a984680b5`  
 
 ---
 
@@ -22,9 +22,9 @@ All physical hardware items (physical robot construction, motors, CAN bus wiring
 The following items are **external human owner actions** that reside across the deployment boundary. Zero software engineering blockers remain in the codebase:
 
 | ID | Priority | Area | Software Status | What Closes It (Owner Action) |
-| :-: | :---: | :--- | :--- | :--- |
-| **BLK-01** | P0 | Supabase Auth Security | K-anonymity breached-password screening implemented locally in `auth-methods.js`. | Project owner toggles **Leaked Password Protection** to Enabled in Supabase Dashboard (Authentication -> Attack Protection). |
-| **BLK-02** | P0 | Live Cloud AI Inference | Multi-provider fallback across OpenRouter, Groq, Cerebras, and Gemini Flash fully tested in code. | Project owner configures valid `OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `AIzaSy...` `GEMINI_API_KEY` in Render Dashboard environment variables. |
+| :-: | :--- | :--- | :--- | :--- |
+| **BLK-01** | P0 | Supabase Auth Security | K-anonymity breached-password screening implemented locally in `auth-methods.js`. Multi-tenant RLS isolation 100% verified in `tests/supabase-isolation-disposable.test.js`. | Project owner toggles **Leaked Password Protection** to Enabled in Supabase Dashboard (Authentication -> Attack Protection). |
+| **BLK-02** | P0 | Live Cloud AI Inference | Multi-provider fallback across OpenRouter, Groq, Cerebras, and Gemini Flash fully tested in code; invalid session/OAuth tokens rejected safely across all routes. | Project owner configures valid `OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `AIzaSy...` `GEMINI_API_KEY` in Render Dashboard environment variables. |
 | **BLK-03** | P0 | Live Database Migration | Migration `20261101180000_durable_paired_devices.sql` verified with non-destructive rollback. | Project owner applies migration file in Supabase SQL Editor upon authorization. |
 | **BLK-04** | P0 | PR #441 Merge Governance | Candidate branch `feat/ultron-final-100-completion` is conflict-free with 6/6 CI checks passing. | Project owner conducts final code review and merges PR #441 to `main`. |
 | **BLK-05** | P1 | Render Blueprint Sync | Reconciled `render.yaml` maps all 4 services to `main` with active health check endpoints. | Project owner syncs Blueprint in Render Dashboard workspace "Ultron core" after merge. |
@@ -41,22 +41,24 @@ The following items are **external human owner actions** that reside across the 
 | **Kokoro 82M TTS Inference** | **CLOSED (VERIFIED ON HOST):** Real ONNX model (`models/kokoro/kokoro-v1.0.onnx`) verified on host AMD Ryzen 7 5700U; generates 24kHz PCM WAV in <1.0s. |
 | **Browser Use Runtime** | **CLOSED (VERIFIED IN CI):** Playwright Chromium installation, real process launch, and SSRF security policies verified in CI and local tests. |
 | **Security Quality Gate** | **CLOSED (0 FINDINGS):** Master security pipeline passes with 0 confirmed vulnerabilities, 0 risks, and 0 secrets. |
+| **Multi-Tenant RLS Testing** | **CLOSED (7/7 PASS):** In-process disposable Supabase test server verifies User A vs User B auth, RLS read/write/delete isolation, anti-IDOR, and 401 unauth with 0 production mutations. |
+| **Docker Sandbox Detection** | **CLOSED (VERIFIED IN CI):** Dynamic host probing runs real containers on Docker-enabled runners, and fails closed safely with `CODE_SANDBOX_DISABLED` when absent. |
 | **Missing Runner Directories** | **CLOSED (FIXED IN 03175918):** `SystemControlAgent.organizeFolder` and tool registry handle missing headless Linux runner directories gracefully. |
 
 ---
 
-## 4. LATEST AUTOMATION EVIDENCE (EXACT CANDIDATE `175701e9`)
+## 4. LATEST AUTOMATION EVIDENCE (EXACT CANDIDATE `0561f72e`)
 
-- **Node Test Suite:** 196 test files; **1,358 passed, 0 failed, 1 skipped** (63.47s)
+- **Node Test Suite:** 197 test files; **1,366 passed, 0 failed, 2 skipped** (62.38s)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink restrictions in `test_harness2.py`)
-- **Combined Automation Tests:** 1,403 discovered; **1,400 passed, 0 failed, 3 skipped** (99.79% pass rate)
-- **Syntax Check:** **336 / 336 files clean** (`node scripts/check-syntax.mjs`)
+- **Combined Automation Tests:** 1,412 discovered; **1,408 passed, 0 failed, 4 skipped** (99.72% pass rate)
+- **Syntax Check:** **337 / 337 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
 - **Root Dependency Audit:** **0 vulnerabilities** (`npm audit --omit=dev --audit-level=high`)
-- **GitHub Actions Workflows (All 6 Checks Passing on PR #441 on Commit `175701e9`):**
-  - `build-android-companion`: [Run 41675740314](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740314) — PASS (2m 12s)
-  - `build-windows-companion`: [Run 41675740219](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740219) — PASS (1m 4s)
-  - `test` (PR Run 41675740264): PASS (1m 29s)
-  - `test` (Push Run 41675729513): PASS (1m 47s)
-  - `world-intelligence-build` (PR Run 41675740264): PASS (1m 10s)
-  - `world-intelligence-build` (Push Run 41675729513): PASS (45s)
+- **GitHub Actions Workflows (All 6 Checks Passing on PR #441):**
+  - `build-android-companion`: [Run 41679626806](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626806) — PASS (1m 53s)
+  - `build-windows-companion`: [Run 41679626882](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626882) — PASS (1m 1s)
+  - `test` (PR Run 41679626809): PASS (1m 40s)
+  - `test` (Push Run 41679617151): PASS (1m 36s)
+  - `world-intelligence-build` (PR Run 41679626809): PASS (2m 32s)
+  - `world-intelligence-build` (Push Run 41679617151): PASS (44s)

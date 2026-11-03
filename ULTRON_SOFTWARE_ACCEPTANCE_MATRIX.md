@@ -5,7 +5,7 @@
 **Scope Policy:** Software-Only (Physical hardware permanently excluded per `ULTRON_SOFTWARE_ONLY_CHARTER.md`)  
 **Target Repository:** `ayaanraza2008/ULTRON-AI`  
 **Candidate Branch:** `feat/ultron-final-100-completion`  
-**Candidate HEAD SHA:** `175701e9658f1f1728a09aa1dc99b8e52bb387f8`  
+**Candidate HEAD SHA:** `0561f72eb90b06b4093f41419d972d8a984680b5`  
 **Candidate Pull Request:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
 
 ---
@@ -33,6 +33,7 @@ A software capability is verified **only** when all of the following conditions 
 | **SSRF & Address Protection** | Blocks loopback, private IPv4/IPv6, and metadata URLs before network dispatch. | `tests/model-provider-smoke.test.js` | `INTEGRATION_TESTED` (PASS) |
 | **Token Budget & Optimizer** | Context pruning and token compaction to respect context windows without losing semantic state. | `tests/dsh-token-optimizer.test.js` | `UNIT_TESTED` (PASS) |
 | **Offline Behavior** | Graceful fallback to local heuristic intent parser when network is completely offline. | `tests/offline-online-modes.test.js` | `UNIT_TESTED` (PASS) |
+| **Gemini Key Token Guard** | Rejects invalid internal session tokens (`AQ.`) and OAuth tokens (`ya29.`) across all core inference routes. | `tests/kaligpt.test.js` | `UNIT_TESTED` (PASS) |
 
 ### Category B: Autonomous Orchestrator (JARVIS ACC)
 | Capability | Requirement & Verification Standard | Test File / Command | Software Status |
@@ -99,10 +100,10 @@ A software capability is verified **only** when all of the following conditions 
 | Capability | Requirement & Verification Standard | Test File / Command | Software Status |
 | :--- | :--- | :--- | :---: |
 | **K-Anonymity Passwords** | Checks HaveIBeenPwned API via 5-char SHA-1 prefix; rejects compromised passwords before Supabase. | `tests/auth-methods.test.js` | `INTEGRATION_TESTED` (PASS) |
-| **Docker Sandboxing** | Probes host Docker daemon; fails closed (`CODE_SANDBOX_DISABLED`) without Docker; never fakes container isolation. | `tests/coding-sandbox.test.js` | `UNIT_TESTED` (PASS) |
+| **Docker Sandboxing** | Probes host Docker daemon; executes real container on Docker runners; fails closed (`CODE_SANDBOX_DISABLED`) without Docker. | `tests/coding-sandbox.test.js` | `UNIT_TESTED` (PASS) |
 | **Secret Scanning** | Scans repository and last 30 commits; zero static secrets or unmasked tokens. | `scripts/security-report.mjs` | `INTEGRATION_TESTED` (PASS) |
 | **SAST Code Shield** | Scans for prototype pollution, command injection, path traversal; zero findings. | `scripts/security-report.mjs` | `INTEGRATION_TESTED` (PASS) |
-| **Two-User RLS Isolation** | Multi-tenant tenant isolation across users, tasks, and identity bindings. | `tests/auth-isolation-unit.test.js` | `UNIT_TESTED` (PASS) |
+| **Two-User RLS Isolation** | Dedicated disposable Supabase test server verifies User A vs User B auth, RLS read/write/delete isolation, anti-IDOR, and 401 unauth. | `tests/supabase-isolation-disposable.test.js` | `INTEGRATION_TESTED` (PASS) |
 
 ### Category H: Robotics Simulation & Digital Twin (100% Software)
 | Capability | Requirement & Verification Standard | Test File / Command | Software Status |
@@ -132,11 +133,11 @@ A software capability is verified **only** when all of the following conditions 
 
 ## 3. SUMMARY METRICS ACROSS ALL SOFTWARE CRITERIA
 
-- **Total Automated Tests Discovered:** 1,403 (1,359 Node + 44 Python)
-- **Total Automated Tests Passed:** 1,400 (1,358 Node + 42 Python)
-- **Total Automated Tests Skipped:** 3 (1 Node in `supabase-isolation.e2e.test.js`; 2 Python in `test_harness2.py`)
+- **Total Automated Tests Discovered:** 1,412 (1,368 Node + 44 Python)
+- **Total Automated Tests Passed:** 1,408 (1,366 Node + 42 Python)
+- **Total Automated Tests Skipped:** 4 (2 Node: live DB protected + host Docker absent; 2 Python in `test_harness2.py`)
 - **Total Automated Tests Failed:** 0
-- **Total Repository Files Checked:** 336 / 336 clean (100% syntax validity)
+- **Total Repository Files Checked:** 337 / 337 clean (100% syntax validity)
 - **Security Quality Gate Result:** PASSED (0 confirmed vulnerabilities, 0 risks, 0 secrets)
 - **Overall Defensible Software Readiness Score:** **85.10%** (Normalized against 5 software-only categories, physical hardware at 0%)
 
@@ -144,8 +145,8 @@ A software capability is verified **only** when all of the following conditions 
 
 | # | Category | Weight ($W_i$) | Score ($S_i$) | Weighted | Subcriteria Breakdown & Deductions | Classification |
 | :-: | :--- | :---: | :---: | :---: | :--- | :---: |
-| 1 | **Software Implementation** | 20% | 94.0% | 18.80% | Brain/Router (20/20), ACC (20/20), Tools (20/20), Companions (20/20), Sandboxing/Migrations (14/20: -2% Docker absent, -2% unapplied paired-device SQL, -2% opt-in audio) | `IMPLEMENTED` |
-| 2 | **Automated Verification** | 20% | 97.0% | 19.40% | Node Unit/Int (30/30), Python Suites (28.5/30: -1.5% for 2 skipped tests in `test_harness2.py`), Node E2E (18.5/20: -1.5% for 1 skipped DB test), Syntax (10/10), Builds (10/10) | `UNIT_TESTED` / `INTEGRATION_TESTED` |
+| 1 | **Software Implementation** | 20% | 94.0% | 18.80% | Brain/Router (20/20), ACC (20/20), Tools (20/20), Companions (20/20), Sandboxing/Migrations (14/20: -2% Docker absent on host, -2% unapplied paired-device SQL, -2% opt-in audio) | `IMPLEMENTED` |
+| 2 | **Automated Verification** | 20% | 97.0% | 19.40% | Node Unit/Int (30/30), Python Suites (28.5/30: -1.5% for 2 skipped tests in `test_harness2.py`), Node E2E (18.5/20: -1.5% for live DB test protected), Syntax (10/10), Builds (10/10) | `UNIT_TESTED` / `INTEGRATION_TESTED` |
 | 3 | **Security & Privacy** | 20% | 91.0% | 18.20% | SAST/Quality Gate (30/30), Dependencies (20/20), Architecture/SSRF/Sandboxing (25/25), Cloud Identity (16/25: -5% dashboard Leaked Password Protection disabled, -4% live penetration tests unperformed) | `INTEGRATION_TESTED` |
 | 4 | **Live Software Operations** | 25% | 68.0% | 17.00% | Host Kokoro ONNX (25/25), Local Tools/Vitals (25/25), Playwright Browser (18/20), Cloud AI Text/Vision (0/15: blocked on keys), Production Workers/DB Queue (0/15: unpolled) | `LIVE_VERIFIED` (Local) / `BLOCKED` (Cloud) |
 | 5 | **Release Readiness** | 15% | 78.0% | 11.70% | Candidate Hardening/CI (40/40), Reconciled Blueprint (25/25), Live Render Alignment (8/20: branch mismatch, empty health paths), PR Governance (5/15: unmerged) | `BLOCKED` (Owner Authorization Gate) |

@@ -4,7 +4,7 @@
 **Document Status:** Canonical Production Deployment Readiness Assessment  
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED  
 **Target Render Workspace:** **Ultron core**  
-**Candidate Commit SHA:** `175701e9658f1f1728a09aa1dc99b8e52bb387f8`
+**Candidate Commit SHA:** `0561f72eb90b06b4093f41419d972d8a984680b5`  
 **Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
 **Deployment Decision:** **CANDIDATE HARDENED — LIVE CLOUD ACCEPTANCE GATED ON OWNER AUTHORIZATION (85.10% Readiness)**
 
@@ -31,20 +31,20 @@ The target Render workspace `Ultron core` comprises four services, all mapped to
 
 ---
 
-## 3. COMPLETED EVIDENCE BASELINE (EXACT SHA `175701e9`)
+## 3. COMPLETED EVIDENCE BASELINE (EXACT SHA `0561f72e`)
 
-- **Node.js Test Suite:** 196 test files; **1,358 passed, 0 failed, 1 skipped** (`node --test`, 63.47s)
+- **Node.js Test Suite:** 197 test files; **1,366 passed, 0 failed, 2 skipped** (`node --test`, 62.38s)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** across browser policy, startup smoke, Harness2, and model lab
-- **Combined Test Metric:** 1,403 discovered; **1,400 passed, 0 failed, 3 skipped** (99.79% pass rate)
-- **Syntax Check:** **336 / 336 files clean** (`node scripts/check-syntax.mjs`)
+- **Combined Test Metric:** 1,412 discovered; **1,408 passed, 0 failed, 4 skipped** (99.72% pass rate)
+- **Syntax Check:** **337 / 337 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
-- **GitHub Actions (All 6 Checks Passing on PR #441 on Commit `175701e9`):**
-  - Android Companion: [Run 41675740314](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740314) — PASS (2m 12s)
-  - Windows Companion: [Run 41675740219](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740219) — PASS (1m 4s)
-  - Test Suite (PR): [Run 41675740264](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740264) — PASS (1m 29s)
-  - Test Suite (Push): [Run 41675729513](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675729513) — PASS (1m 47s)
-  - World Intelligence (PR): [Run 41675740264](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675740264) — PASS (1m 10s)
-  - World Intelligence (Push): [Run 41675729513](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41675729513) — PASS (45s)
+- **GitHub Actions (All 6 Checks Passing on PR #441):**
+  - Android Companion: [Run 41679626806](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626806) — PASS (1m 53s)
+  - Windows Companion: [Run 41679626882](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626882) — PASS (1m 1s)
+  - Test Suite (PR): [Run 41679626809](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626809) — PASS (1m 40s)
+  - Test Suite (Push): [Run 41679617151](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679617151) — PASS (1m 36s)
+  - World Intelligence (PR): [Run 41679626809](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626809) — PASS (2m 32s)
+  - World Intelligence (Push): [Run 41679617151](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679617151) — PASS (44s)
 
 ---
 
@@ -57,11 +57,3 @@ The codebase is software-complete and locked against unapproved modifications. T
 3. **Owner Supabase Migration:** Apply `supabase/migrations/20261101180000_durable_paired_devices.sql` in the Supabase SQL Editor.
 4. **Owner Supabase Auth Setting:** Toggle **Leaked Password Protection** to Enabled in Supabase Dashboard (Authentication -> Attack Protection).
 5. **Production API Keys:** Populate production keys (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `AIzaSy...` `GEMINI_API_KEY`, `TAVILY_API_KEY`) in Render Dashboard environment variables.
-
----
-
-## 5. COST AND DATA SAFETY INVARIANTS
-
-- **Zero Unapproved Deployment:** No automatic deploy to Render has been or will be triggered without explicit authorization.
-- **Zero Production Mutation:** Production Supabase database `opdjfhwepmcprbqojpat` was not touched.
-- **Zero Cost Escalation:** Free-first model routing is preserved; zero paid services were subscribed to.
