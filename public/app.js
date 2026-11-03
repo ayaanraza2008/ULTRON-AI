@@ -2163,6 +2163,24 @@
       addCustomConnectorBrief();
       return;
     }
+    if (name === "mobile-control") {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Android Mobile Control", "Direct Mobile MCP & ADB hardware bridge. Inspect screen, touch, launch apps, and automate devices.");
+      drawerButton("OPEN MOBILE COMMAND CENTER", () => {
+        const panel = document.getElementById("mobile-panel");
+        if (panel) panel.hidden = false;
+        setDrawerOpen(false);
+      }, true);
+      drawerButton("SCAN & DISCOVER DEVICES", async () => {
+        try {
+          const res = await apiRequest("/api/mobile/devices?refresh=1");
+          drawerCard("Connected Android Devices", `${res.count || 0} device(s) found.`, res.connected ? "ONLINE" : "STANDBY", res.connected ? "ready" : "warning");
+        } catch (err) {
+          drawerCard("Mobile MCP Error", err.message, "ERROR", "error");
+        }
+      });
+      return;
+    }
     if (name === "devices") {
       ui.drawerContent.replaceChildren();
       drawerHeading("PC and mobile devices", "Pair a device to this ULTRON account. Each device receives its own revocable token; the code expires after five minutes and is claimable only once.");

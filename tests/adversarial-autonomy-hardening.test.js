@@ -482,9 +482,9 @@ test("Adversarial Security: Sanitizes malicious external tool output and prevent
 // 10. REAL TOOL EXECUTION INVENTORY VERIFICATION
 // ==========================================
 
-test("Real Tool Execution Audit: All 18 tools execute real paths with schema validation", async () => {
+test("Real Tool Execution Audit: All 23 tools execute real paths with schema validation", async () => {
   const allTools = toolRegistry.listTools();
-  assert.equal(allTools.length, 18);
+  assert.equal(allTools.length, 23);
 
   const testPayloads = {
     ai_chat_inference: { prompt: "Health check" },
@@ -504,7 +504,12 @@ test("Real Tool Execution Audit: All 18 tools execute real paths with schema val
     web_search_research: { query: "autonomous agents" },
     knowledge_vault_query: { query: "cybersecurity" },
     multidevice_remote_dispatch: { targetPlatform: "windows", action: "get_system_vitals", dryRun: true },
-    cybersecurity_defensive_scan: {}
+    cybersecurity_defensive_scan: {},
+    mobile_device_discovery: { dryRun: true },
+    mobile_screen_inspection: { dryRun: true },
+    mobile_interaction_dispatch: { action: "press_key", keycode: 4, dryRun: true },
+    mobile_app_lifecycle: { operation: "launch", packageName: "com.android.settings", dryRun: true },
+    mobile_autonomous_task: { goal: "test mobile task", dryRun: true }
   };
 
   for (const tool of allTools) {

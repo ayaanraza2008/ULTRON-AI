@@ -285,14 +285,49 @@ const ALIASES = {
   "windows-computer-assistant": "system-agent",
   "self-evaluation-agent": "self-improvement-agent",
   "software-engineer": "software-engineering-agent",
-  "execution-agent": "ultron-core"
+  "execution-agent": "ultron-core",
+  "mobile-agent": "mobile-device-agent",
+  "mobile-task-agent": "mobile-device-agent"
+};
+
+export const MOBILE_AGENT_METADATA = {
+  id: "mobile-device-agent",
+  name: "MOBILE TASK AGENT",
+  role: "Native Mobile Device Automation & Hardware Bridge",
+  responsibility: "Android device discovery, screen perception, UI automation, app lifecycle, and secure mobile workflows via Mobile MCP and ADB.",
+  capabilities: [
+    "mobile_device_discovery",
+    "mobile_screen_perception",
+    "mobile_ui_interaction",
+    "mobile_app_orchestration",
+    "mobile_workflow_automation",
+    "mobile_security_guard"
+  ],
+  allowedTools: [
+    "mobile_device_discovery",
+    "mobile_screen_inspection",
+    "mobile_interaction_dispatch",
+    "mobile_app_lifecycle",
+    "mobile_autonomous_task"
+  ],
+  maxConcurrency: 2,
+  autonomyLevelThreshold: 2,
+  retryPolicy: { maxRetries: 3, backoffFactor: 2, initialDelayMs: 1000 },
+  executionBoundaries: { timeoutMs: 60000, maxPayloadBytes: 2097152 }
 };
 
 export function getAgentById(agentId) {
   const canonical = ALIASES[agentId] || agentId;
+  if (canonical === "mobile-device-agent") {
+    return MOBILE_AGENT_METADATA;
+  }
   return ULTRON_AGENT_CATALOG.find(agent => agent.id === canonical) || null;
 }
 
 export function listAvailableAgents(currentAutonomyLevel = 2) {
-  return ULTRON_AGENT_CATALOG.filter(agent => currentAutonomyLevel >= agent.autonomyLevelThreshold);
+  const base = ULTRON_AGENT_CATALOG.filter(agent => currentAutonomyLevel >= agent.autonomyLevelThreshold);
+  if (currentAutonomyLevel >= MOBILE_AGENT_METADATA.autonomyLevelThreshold) {
+    return [...base, MOBILE_AGENT_METADATA];
+  }
+  return base;
 }

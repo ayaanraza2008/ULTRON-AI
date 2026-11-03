@@ -349,7 +349,22 @@ const FILES_TO_CHECK = [
   "core/tool-registry.js",
   "core/autonomous-orchestrator.js",
   "tests/autonomous-intelligence-orchestrator.test.js",
-  "tests/websocket-gateway-audit.test.js"
+  "tests/websocket-gateway-audit.test.js",
+  "mobile/adb-bridge.js",
+  "mobile/mobile-mcp-client.js",
+  "mobile/mobile-device-registry.js",
+  "mobile/mobile-permission-engine.js",
+  "mobile/mobile-task-planner.js",
+  "mobile/mobile-control-engine.js",
+  "mobile/mobile-router.js",
+  "agents/mobile-task-agent.js",
+  "public/mobile-control.js",
+  "tests/mobile-adb-bridge.test.js",
+  "tests/mobile-mcp-client.test.js",
+  "tests/mobile-permissions.test.js",
+  "tests/mobile-task-planner.test.js",
+  "tests/mobile-control-engine.test.js",
+  "tests/mobile-integration.test.js"
 ];
 
 let checked = 0;

@@ -31,7 +31,8 @@ export const AGENT_ROLES = {
   RESEARCH_SCHOLAR: "research-scholar",
   VISION_PERCEPTION: "vision-perception-agent",
   FLEET_DISPATCHER: "fleet-dispatcher",
-  CHIEF_OF_STAFF: "chief-of-staff"
+  CHIEF_OF_STAFF: "chief-of-staff",
+  MOBILE_DEVICE_AGENT: "mobile-device-agent"
 };
 
 const DANGEROUS_PROTOTYPE_KEYS = new Set(["_" + "_proto_" + "_", "constructor", "prototype"]);
@@ -666,6 +667,11 @@ export class AutonomousOrchestrator {
       return { intent: "SECURITY_DEFENSE_SCAN", domain: "SECURITY", language, confidence: 0.90 };
     }
 
+    // Native Mobile Device Automation & Control
+    if (/\b(mobile mcp|android device|phone screenshot|phone screen|mobile phone|connected phone|screen on phone)\b/i.test(text)) {
+      return { intent: "MOBILE_DEVICE_CONTROL", domain: "INTEGRATIONS", language, confidence: 0.93 };
+    }
+
     // Cross-Device Mobile / PC Sync
     if (/\b(on pc|on my computer|on laptop|on windows|on android|on phone)\b/i.test(text)) {
       return { intent: "CROSS_DEVICE_REMOTE", domain: "INTEGRATIONS", language, confidence: 0.87 };
@@ -845,6 +851,28 @@ export class AutonomousOrchestrator {
           description: "Perform defensive security assessment",
           params: {}
         });
+        break;
+      }
+
+      case "MOBILE_DEVICE_CONTROL": {
+        plan.steps.push({
+          id: "step-1",
+          dependsOn: [],
+          toolId: "mobile_device_discovery",
+          agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
+          description: "Discover connected mobile devices and verify status",
+          params: {}
+        });
+        if (/screenshot|screen|capture|inspect/i.test(prompt)) {
+          plan.steps.push({
+            id: "step-2",
+            dependsOn: ["step-1"],
+            toolId: "mobile_screen_inspection",
+            agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
+            description: "Capture mobile screen and inspect UI hierarchy",
+            params: {}
+          });
+        }
         break;
       }
 

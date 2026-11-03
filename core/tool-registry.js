@@ -32,6 +32,7 @@ import { cyberSecurityIntel as defaultCyberSecurityIntel } from "../security/cyb
 import { ultronCore as defaultUltronCore } from "./ultron-core.js";
 import { zeroCostAiEngine as defaultZeroCostAiEngine } from "./zero-cost-ai.js";
 import { ultronAutonomy as defaultUltronAutonomy } from "../autonomy/ultron-autonomy.js";
+import { mobileControlEngine as defaultMobileControlEngine } from "../mobile/mobile-control-engine.js";
 import { AgentOrchestrator } from "../agents/orchestrator.js";
 
 export const PERMISSION_LEVELS = {
@@ -75,6 +76,7 @@ export class ToolRegistry {
       ultronCore: defaultUltronCore,
       zeroCostAiEngine: defaultZeroCostAiEngine,
       ultronAutonomy: defaultUltronAutonomy,
+      mobileControlEngine: defaultMobileControlEngine,
       agentOrchestrator: new AgentOrchestrator()
     };
 
@@ -770,6 +772,200 @@ export class ToolRegistry {
           return { success: true, assessment };
         }
         return { success: true, status: "CLEAN", findingsCount: 0, checkedItems: 14 };
+      }
+    });
+
+    // Mobile Device Control Tools (Mobile MCP & ADB Subsystem)
+    this.registerTool({
+      id: "mobile_device_discovery",
+      name: "Android Mobile Device Discovery",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Discovers connected Android devices via ADB and Mobile MCP with hardware capability evaluation.",
+      capabilities: ["device_discovery", "mobile_inspection", "adb_status"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          forceRefresh: { type: "boolean" },
+          dryRun: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        if (params.dryRun) {
+          return { success: true, dryRun: true, message: "Device discovery dry-run validated." };
+        }
+        if (this.adapters.mobileControlEngine?.discoverDevices) {
+          const res = await this.adapters.mobileControlEngine.discoverDevices(params.forceRefresh);
+          return { success: true, ...res };
+        }
+        return { success: true, connected: false, count: 0, devices: [] };
+      }
+    });
+
+    this.registerTool({
+      id: "mobile_screen_inspection",
+      name: "Mobile Screen Capture & UI Hierarchy",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Captures Android screen frames and dumps UI accessibility element hierarchies for multimodal LLM vision.",
+      capabilities: ["screen_capture", "ui_hierarchy_dump", "mobile_vision"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 20000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          deviceId: { type: "string" },
+          includeHierarchy: { type: "boolean" },
+          dryRun: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        if (params.dryRun) {
+          return { success: true, dryRun: true, message: "Screen inspection dry-run validated." };
+        }
+        if (this.adapters.mobileControlEngine) {
+          const screen = await this.adapters.mobileControlEngine.captureScreen(params.deviceId);
+          let hierarchy = null;
+          if (params.includeHierarchy) {
+            hierarchy = await this.adapters.mobileControlEngine.getHierarchy(params.deviceId);
+          }
+          return { success: true, screen, hierarchy };
+        }
+        return { success: true, captured: false, note: "Mobile engine standby" };
+      }
+    });
+
+    this.registerTool({
+      id: "mobile_interaction_dispatch",
+      name: "Mobile Touch & Input Dispatcher",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Dispatches touch gestures (tap, swipe), hardware keys, and text input to connected Android devices.",
+      capabilities: ["touch_dispatch", "keyboard_input", "gesture_automation"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          deviceId: { type: "string" },
+          action: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          x1: { type: "number" },
+          y1: { type: "number" },
+          x2: { type: "number" },
+          y2: { type: "number" },
+          text: { type: "string" },
+          keycode: { type: "number" },
+          dryRun: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        if (params.dryRun) {
+          return { success: true, dryRun: true, action: params.action };
+        }
+        if (this.adapters.mobileControlEngine?.executeAction) {
+          const res = await this.adapters.mobileControlEngine.executeAction(
+            params.deviceId,
+            params.action,
+            params
+          );
+          return { success: true, result: res };
+        }
+        return { success: true, dispatched: false };
+      }
+    });
+
+    this.registerTool({
+      id: "mobile_app_lifecycle",
+      name: "Mobile App Lifecycle Controller",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Manages Android application states: launches, terminates, clears caches, and queries running apps.",
+      capabilities: ["app_management", "process_lifecycle", "mobile_launch"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
+      timeoutMs: 25000,
+      inputSchema: {
+        type: "object",
+        required: ["operation", "packageName"],
+        properties: {
+          deviceId: { type: "string" },
+          operation: { type: "string" },
+          packageName: { type: "string" },
+          activity: { type: "string" },
+          dryRun: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        if (params.dryRun) {
+          return { success: true, dryRun: true, operation: params.operation, packageName: params.packageName };
+        }
+        if (this.adapters.mobileControlEngine) {
+          let outcome;
+          if (params.operation === "launch") {
+            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "launch_app", {
+              package: params.packageName,
+              activity: params.activity
+            });
+          } else if (params.operation === "terminate") {
+            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "terminate_app", {
+              package: params.packageName
+            });
+          } else if (params.operation === "clear_data") {
+            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "clear_app_data", {
+              package: params.packageName
+            });
+          } else {
+            throw new Error(`Unsupported mobile app lifecycle operation: '${params.operation}'`);
+          }
+          return { success: true, outcome };
+        }
+        return { success: true, managed: false };
+      }
+    });
+
+    this.registerTool({
+      id: "mobile_autonomous_task",
+      name: "Autonomous Mobile Multi-Step Workflow",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Orchestrates multi-step autonomous Android execution DAG with pre-state and post-verification assertions.",
+      capabilities: ["autonomous_planning", "mobile_dag_execution", "multi_step_automation"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
+      timeoutMs: 60000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          goal: { type: "string" },
+          deviceId: { type: "string" },
+          plan: { type: "object" },
+          dryRun: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        if (params.dryRun) {
+          return { success: true, dryRun: true, message: "Autonomous mobile workflow dry-run passed." };
+        }
+        if (this.adapters.mobileControlEngine) {
+          let plan = params.plan;
+          if (!plan && params.goal) {
+            plan = await this.adapters.mobileControlEngine.planner.planFromIntent(params.goal, { deviceId: params.deviceId });
+          }
+          if (!plan) {
+            throw new Error("Missing workflow plan or natural language goal for mobile autonomous task.");
+          }
+          const res = await this.adapters.mobileControlEngine.executeWorkflow(plan, { deviceId: params.deviceId });
+          return { success: res.success, workflow: res };
+        }
+        return { success: true, executed: false };
       }
     });
   }
