@@ -413,10 +413,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   });
   app.use("/api", apiRateLimiter);
 
-  const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-  app.use(express.static(publicDir));
-  const voiceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "voice");
-  app.use("/voice", express.static(voiceDir));
+  // Frontend assets are intentionally absent; this service exposes API routes only.
 
 
   // Authenticated OpenAI-compatible proxy for the Browser Use bridge.
