@@ -162,7 +162,7 @@ test("RoboticsSim: HIL bridge remains simulation-only without attested physical 
   const handRes = await hil.handshake("OPERATOR_AUTHORIZED_HIL_KEY");
   assert.equal(handRes.success, false);
   assert.equal(handRes.mode, "SIMULATION");
-  assert.equal(handRes.error, "PHYSICAL_HARDWARE_ADAPTER_REQUIRED");
+  assert.equal(handRes.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
   assert.equal(hil.physicalHardwareVerified, false);
 
   const twist = hil.formatRos2TwistPacket(1.25, -0.45);
@@ -178,7 +178,7 @@ test("RoboticsSim: HIL bridge remains simulation-only without attested physical 
   assert.equal(blocked.success, false);
   assert.equal(blocked.transmitted, false);
   assert.equal(blocked.physicalActuation, false);
-  assert.equal(blocked.error, "HARDWARE_TRANSPORT_UNAVAILABLE");
+  assert.equal(blocked.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
 
   const telem = hil.formatSensorTelemetryPacket({ batteryPercent: 88, linearSpeed: 1.1 });
   assert.equal(telem.topic, "/ultron/telemetry");
@@ -197,7 +197,7 @@ test("RoboticsSim: HIL bridge remains simulation-only without attested physical 
   });
   const mockHandshake = await mockHil.handshake("test-token");
   assert.equal(mockHandshake.success, false);
-  assert.equal(mockHandshake.error, "PHYSICAL_HARDWARE_ADAPTER_REQUIRED");
+  assert.equal(mockHandshake.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
   assert.equal(mockHil.activeMode, "SIMULATION");
 
   const disc = hil.disconnect();
