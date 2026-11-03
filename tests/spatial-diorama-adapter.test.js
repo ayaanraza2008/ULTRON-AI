@@ -113,5 +113,5 @@ test("DioramaSpatialAdapter falls back to CPU when remote mode is forced without
   assert.equal(scene.executionMode, EXECUTION_MODES.CPU_METADATA_FALLBACK);
   assert.equal(scene.cudaAccelerated, false);
   assert.equal(scene.remoteWorkerUsed, false);
-  assert.equal(scene.inferenceStatus, "CPU_GEOMETRIC_FALLBACK");
+  assert.equal(scene.inferenceStatus, "CPU_METADATA_ONLY");
 });
