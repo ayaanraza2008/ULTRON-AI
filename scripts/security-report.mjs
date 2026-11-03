@@ -268,6 +268,15 @@ async function main() {
   console.log(`  - JSON: ${jsonPath}`);
   console.log(`  - MD:   ${mdPath}\n`);
 
+  if (confirmedVulnerabilities.length > 0) {
+    console.error("Confirmed finding locations (source values/snippets intentionally omitted):");
+    confirmedVulnerabilities.forEach((finding, index) => {
+      console.error(
+        `${index + 1}. ${finding.source} | ${finding.severity} | ${finding.filePath}:${finding.lineNumber} | ${finding.title}`
+      );
+    });
+  }
+
   console.log(`=================================================`);
   console.log(`Summary:`);
   console.log(`  Confirmed Vulnerabilities: ${confirmedVulnerabilities.length}`);
