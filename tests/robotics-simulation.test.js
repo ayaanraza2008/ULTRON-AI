@@ -155,35 +155,51 @@ test("RoboticsSim: SimulationPlaybackEngine evaluates trajectory and computes ef
   assert.equal(report.playbackReady, true);
 });
 
-test("RoboticsSim: HardwareInTheLoopBridge performs handshake, formats ROS 2 Twist, and handles failsafe", () => {
+test("RoboticsSim: HIL bridge remains simulation-only without attested physical hardware", async () => {
   const hil = new HardwareInTheLoopBridge();
   assert.equal(hil.activeMode, "SIMULATION");
 
-  // Invalid token fails closed
-  const failRes = hil.handshake("short");
-  assert.equal(failRes.success, false);
-  assert.equal(hil.activeMode, "SIMULATION");
+  const handRes = await hil.handshake("OPERATOR_AUTHORIZED_HIL_KEY");
+  assert.equal(handRes.success, false);
+  assert.equal(handRes.mode, "SIMULATION");
+  assert.equal(handRes.error, "PHYSICAL_HARDWARE_ADAPTER_REQUIRED");
+  assert.equal(hil.physicalHardwareVerified, false);
 
-  // Valid handshake
-  const handRes = hil.handshake("OPERATOR_AUTHORIZED_HIL_KEY");
-  assert.equal(handRes.success, true);
-  assert.equal(handRes.mode, "HIL_CONNECTED");
-
-  // Format ROS 2 motion packet
   const twist = hil.formatRos2TwistPacket(1.25, -0.45);
   assert.equal(twist.topic, "/cmd_vel");
   assert.equal(twist.msgType, "geometry_msgs/msg/Twist");
   assert.equal(twist.linear.x, 1.25);
   assert.equal(twist.angular.z, -0.45);
-  assert.equal(twist.hilFailsafeArm, true);
+  assert.equal(twist.hilFailsafeArm, false);
+  assert.equal(twist.transmissionAllowed, false);
+  assert.equal(twist.physicalHardwareVerified, false);
 
-  // Format telemetry packet
+  const blocked = await hil.sendRos2TwistPacket(1.25, -0.45);
+  assert.equal(blocked.success, false);
+  assert.equal(blocked.transmitted, false);
+  assert.equal(blocked.physicalActuation, false);
+  assert.equal(blocked.error, "HARDWARE_TRANSPORT_UNAVAILABLE");
+
   const telem = hil.formatSensorTelemetryPacket({ batteryPercent: 88, linearSpeed: 1.1 });
   assert.equal(telem.topic, "/ultron/telemetry");
   assert.equal(telem.batteryPercent, 88);
-  assert.equal(telem.mode, "HIL_CONNECTED");
+  assert.equal(telem.mode, "SIMULATION");
+  assert.equal(telem.physicalHardwareVerified, false);
 
-  // Disconnect falls back to pure SIMULATION mode
+  const mockHil = new HardwareInTheLoopBridge({
+    hardwareAdapter: {
+      isPhysicalHardware: false,
+      connect: async () => ({ physicalHardwareVerified: true, deviceId: "fake-device" }),
+      send: async () => ({ acknowledged: true })
+    },
+    authorizationVerifier: async () => true,
+    safetyController: { validateMotionCommand: () => ({ safe: true, permitted: true }) }
+  });
+  const mockHandshake = await mockHil.handshake("test-token");
+  assert.equal(mockHandshake.success, false);
+  assert.equal(mockHandshake.error, "PHYSICAL_HARDWARE_ADAPTER_REQUIRED");
+  assert.equal(mockHil.activeMode, "SIMULATION");
+
   const disc = hil.disconnect();
   assert.equal(disc.mode, "SIMULATION");
   assert.equal(hil.activeMode, "SIMULATION");
