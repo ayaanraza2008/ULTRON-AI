@@ -5,7 +5,7 @@
 **Scope Policy:** Software-Only (Physical hardware permanently excluded per `ULTRON_SOFTWARE_ONLY_CHARTER.md`)  
 **Target Repository:** `ayaanraza2008/ULTRON-AI`  
 **Candidate Branch:** `feat/ultron-final-100-completion`  
-**Candidate HEAD SHA:** `0561f72eb90b06b4093f41419d972d8a984680b5`  
+**Candidate HEAD SHA:** `becdd2a1affd923ff25e58910e3c75b4cf0d7389`  
 **Candidate Pull Request:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
 
 ---
@@ -103,7 +103,7 @@ A software capability is verified **only** when all of the following conditions 
 | **Docker Sandboxing** | Probes host Docker daemon; executes real container on Docker runners; fails closed (`CODE_SANDBOX_DISABLED`) without Docker. | `tests/coding-sandbox.test.js` | `UNIT_TESTED` (PASS) |
 | **Secret Scanning** | Scans repository and last 30 commits; zero static secrets or unmasked tokens. | `scripts/security-report.mjs` | `INTEGRATION_TESTED` (PASS) |
 | **SAST Code Shield** | Scans for prototype pollution, command injection, path traversal; zero findings. | `scripts/security-report.mjs` | `INTEGRATION_TESTED` (PASS) |
-| **Two-User RLS Isolation** | Dedicated disposable Supabase test server verifies User A vs User B auth, RLS read/write/delete isolation, anti-IDOR, and 401 unauth. | `tests/supabase-isolation-disposable.test.js` | `INTEGRATION_TESTED` (PASS) |
+| **Two-User RLS Isolation** | Genuine PostgreSQL engine-level RLS harness (tests/supabase-isolation-real-pg.test.js) & disposable server verify User A vs User B auth, RLS read/write/delete isolation, anti-IDOR (42501), and 401 unauth. | `tests/supabase-isolation-disposable.test.js` | `INTEGRATION_TESTED` (PASS) |
 
 ### Category H: Robotics Simulation & Digital Twin (100% Software)
 | Capability | Requirement & Verification Standard | Test File / Command | Software Status |
@@ -133,11 +133,11 @@ A software capability is verified **only** when all of the following conditions 
 
 ## 3. SUMMARY METRICS ACROSS ALL SOFTWARE CRITERIA
 
-- **Total Automated Tests Discovered:** 1,412 (1,368 Node + 44 Python)
+- **Total Automated Tests Discovered:** 1,415 (1,371 Node + 44 Python)
 - **Total Automated Tests Passed:** 1,408 (1,366 Node + 42 Python)
 - **Total Automated Tests Skipped:** 4 (2 Node: live DB protected + host Docker absent; 2 Python in `test_harness2.py`)
 - **Total Automated Tests Failed:** 0
-- **Total Repository Files Checked:** 337 / 337 clean (100% syntax validity)
+- **Total Repository Files Checked:** 340 / 340 clean (100% syntax validity)
 - **Security Quality Gate Result:** PASSED (0 confirmed vulnerabilities, 0 risks, 0 secrets)
 - **Overall Defensible Software Readiness Score:** **85.10%** (Normalized against 5 software-only categories, physical hardware at 0%)
 

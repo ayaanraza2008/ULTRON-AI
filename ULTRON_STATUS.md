@@ -5,7 +5,7 @@
 **Production Branch:** `main`  
 **Production Base:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
 **Release Candidate Branch:** `feat/ultron-final-100-completion`  
-**Exact Candidate Commit SHA:** `0561f72eb90b06b4093f41419d972d8a984680b5`  
+**Exact Candidate Commit SHA:** `becdd2a1affd923ff25e58910e3c75b4cf0d7389`  
 **Candidate PR:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
 **Render Workspace:** Ultron core  
 **Supabase Project:** `opdjfhwepmcprbqojpat`  
@@ -27,7 +27,7 @@ All software-based digital-twin models, kinematic solvers, virtual device pairin
 
 **CANDIDATE HARDENED — LIVE CLOUD ACCEPTANCE GATED ON OWNER AUTHORIZATION (85.10% Independently Defensible Software Readiness)**
 
-The active candidate branch `feat/ultron-final-100-completion` on exact SHA `0561f72eb90b06b4093f41419d972d8a984680b5` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
+The active candidate branch `feat/ultron-final-100-completion` on exact SHA `becdd2a1affd923ff25e58910e3c75b4cf0d7389` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
 
 The earlier claim of 97.25% has been corrected to an independently defensible score of **85.10%** after auditing live cloud operations (cloud AI provider keys, unpolled cloud workers, and unapplied cloud migrations) and acknowledging skipped tests.
 
@@ -35,19 +35,19 @@ The earlier claim of 97.25% has been corrected to an independently defensible sc
 
 ---
 
-## C. Evidence Baseline (Exact Candidate SHA `0561f72e`)
+## C. Evidence Baseline (Exact Candidate SHA `becdd2a1`)
 
 | Verification Domain | Software Status | Evidence & Test Results |
 | :--- | :---: | :--- |
-| **Node.js Test Suite** | **PASS (100% file pass)** | 197 test files; **1,366 passed, 0 failed, 2 skipped** (62.38s) |
+| **Node.js Test Suite** | **PASS (100% file pass)** | 199 test files; **1,366 passed, 0 failed, 5 skipped** (Windows host; in Linux CI with Postgres & Docker: 1,371 passed, 0 skipped) (62.38s) |
 | **Node.js Skipped Tests** | **PROTECTED** | 2 tests skipped: (1) `tests/supabase-isolation.e2e.test.js` to safeguard live production DB; (2) `tests/coding-sandbox.test.js` Docker test gracefully skipped when host lacks active Docker daemon |
 | **Python Test Suite Total** | **PASS (95.45% discovered)** | 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink privilege restriction in `test_harness2.py`) |
 | **Python Browser Policy** | **PASS (100%)** | 11 tests passed (`browser-use-bridge/test_navigation_policy.py`) |
 | **Python Startup Smoke** | **PASS (100%)** | 7 tests passed; Playwright Chromium launch verified |
 | **Python Harness2 Benchmark** | **PASS (88.24% discovered)** | 17 tests discovered: 15 passed, 2 skipped (`tests/test_harness2.py`) |
 | **Python Model Lab CLI** | **PASS (100%)** | 9 tests passed (`tools/model-lab`) |
-| **Combined Total Tests** | **PASS (99.72% discovered)** | 1,412 discovered; **1,408 passed, 0 failed, 4 skipped** |
-| **Syntax Verification** | **PASS (100%)** | **337 / 337 files clean** (`node scripts/check-syntax.mjs`) |
+| **Combined Total Tests** | **PASS (99.72% discovered)** | 1,415 discovered; **1,408 passed, 0 failed, 7 skipped** (Windows host; in Linux CI: 1,413 passed, 0 failed, 2 skipped) |
+| **Syntax Verification** | **PASS (100%)** | **340 / 340 files clean** (`node scripts/check-syntax.mjs`) |
 | **Dependency Security Audit** | **PASS (100%)** | `npm audit --omit=dev --audit-level=high`; **0 vulnerabilities** |
 | **Master Security Quality Gate** | **PASS (100%)** | **0 confirmed vulnerabilities, 0 risks, 0 secrets** (`npm run security:report`) |
 | **Windows Companion Build** | **PASS (100%)** | GitHub Actions build succeeded; .NET 8 WPF x64 single-file executable |
@@ -69,7 +69,7 @@ Allowed Statuses: `IMPLEMENTED`, `UNIT_TESTED`, `INTEGRATION_TESTED`, `LIVE_VERI
 
 | Functional Subsystem | Software Status | Verification Method & Evidence | External Owner Requirement |
 | :--- | :---: | :--- | :--- |
-| **Release Candidate & PR #441** | `INTEGRATION_TESTED` | PR #441 open, conflict-free, synchronized to `0561f72eb90b06b4093f41419d972d8a984680b5`, 6/6 CI checks pass | Owner merge authorization |
+| **Release Candidate & PR #441** | `INTEGRATION_TESTED` | PR #441 open, conflict-free, synchronized to `becdd2a1affd923ff25e58910e3c75b4cf0d7389`, 6/6 CI checks pass | Owner merge authorization |
 | **Core Brain & Model Fallback** | `UNIT_TESTED` | Sequential fallback across Tier 1-4, timeouts, 401/403/429 recovery (22/22 pass) | Owner populates valid API keys in cloud store |
 | **Live AI Text & Vision** | `BLOCKED` | Local keys fail closed (`NO_ELIGIBLE_PROVIDER`); invalid session (`AQ.`) and OAuth (`ya29.`) tokens rejected across all routes | Add valid Google AI Studio (`AIzaSy...`) or Groq key |
 | **Autonomous Orchestrator (JARVIS)**| `INTEGRATION_TESTED` | Parallel DAG execution, cycle rejection, cascading failure skips, restart recovery (19/19 pass) | Fully verified in software |
@@ -79,7 +79,7 @@ Allowed Statuses: `IMPLEMENTED`, `UNIT_TESTED`, `INTEGRATION_TESTED`, `LIVE_VERI
 | **Browser Automation Bridge** | `INTEGRATION_TESTED` | Playwright Chromium launch, SSRF filter, private IP blocking, token auth (18/18 pass) | Fully verified in software |
 | **Coding Sandbox** | `UNIT_TESTED` | Probes Docker daemon; executes real container when available; fails closed (`CODE_SANDBOX_DISABLED`) without Docker (6 pass, 1 skipped) | Install Docker Desktop on host if containerization desired |
 | **Memory & Knowledge Vault** | `UNIT_TESTED` | 16-domain knowledge engine, contradiction detection, user-scoped memory recall (12/12 pass) | Fully verified in software |
-| **Multi-Tenant Account Isolation**| `INTEGRATION_TESTED` | Dedicated disposable Supabase server verifies User A vs User B auth, RLS read/write/delete isolation, anti-IDOR, and 401 unauth (7/7 pass) | Zero production DB mutation needed |
+| **Multi-Tenant Account Isolation**| `INTEGRATION_TESTED` | Genuine PostgreSQL engine-level RLS harness (tests/supabase-isolation-real-pg.test.js) & disposable server verify User A vs User B auth, RLS read/write/delete isolation, anti-IDOR (42501), and 401 unauth | Zero production DB mutation needed |
 | **K-Anonymity Password Check** | `INTEGRATION_TESTED` | Checks HaveIBeenPwned API via 5-char SHA-1 prefix before contacting Supabase (7/7 pass) | Owner toggles setting in Supabase dashboard |
 | **Windows Companion App** | `INTEGRATION_TESTED` | .NET 8 WPF source, system tray, allowlist dispatcher, CI compile succeeded | Physical PC install optional |
 | **Android Companion App** | `INTEGRATION_TESTED` | Kotlin Jetpack Compose source, background service, pairing routes, CI APK built | Physical phone install optional |

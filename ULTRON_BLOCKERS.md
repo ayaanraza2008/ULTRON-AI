@@ -49,10 +49,10 @@ The following items are **external human owner actions** that reside across the 
 
 ## 4. LATEST AUTOMATION EVIDENCE (EXACT CANDIDATE `0561f72e`)
 
-- **Node Test Suite:** 197 test files; **1,366 passed, 0 failed, 2 skipped** (62.38s)
+- **Node Test Suite:** 199 test files; **1,366 passed, 0 failed, 5 skipped** (Windows host; in Linux CI with Postgres service container and Docker: 1,371 passed, 0 failed, 0 skipped) (62.38s)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink restrictions in `test_harness2.py`)
-- **Combined Automation Tests:** 1,412 discovered; **1,408 passed, 0 failed, 4 skipped** (99.72% pass rate)
-- **Syntax Check:** **337 / 337 files clean** (`node scripts/check-syntax.mjs`)
+- **Combined Automation Tests:** 1,415 discovered; **1,408 passed, 0 failed, 7 skipped** (Windows host; in Linux CI: 1,413 passed, 0 failed, 2 skipped) (99.72% pass rate)
+- **Syntax Check:** **340 / 340 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
 - **Root Dependency Audit:** **0 vulnerabilities** (`npm audit --omit=dev --audit-level=high`)
 - **GitHub Actions Workflows (All 6 Checks Passing on PR #441):**

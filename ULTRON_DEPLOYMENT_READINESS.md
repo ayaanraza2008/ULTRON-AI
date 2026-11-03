@@ -33,10 +33,10 @@ The target Render workspace `Ultron core` comprises four services, all mapped to
 
 ## 3. COMPLETED EVIDENCE BASELINE (EXACT SHA `0561f72e`)
 
-- **Node.js Test Suite:** 197 test files; **1,366 passed, 0 failed, 2 skipped** (`node --test`, 62.38s)
+- **Node.js Test Suite:** 199 test files; **1,366 passed, 0 failed, 5 skipped** (Windows host; in Linux CI with Postgres & Docker: 1,371 passed, 0 skipped) (`node --test`, 62.38s)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** across browser policy, startup smoke, Harness2, and model lab
-- **Combined Test Metric:** 1,412 discovered; **1,408 passed, 0 failed, 4 skipped** (99.72% pass rate)
-- **Syntax Check:** **337 / 337 files clean** (`node scripts/check-syntax.mjs`)
+- **Combined Test Metric:** 1,415 discovered; **1,408 passed, 0 failed, 7 skipped** (Windows host; in Linux CI: 1,413 passed, 0 failed, 2 skipped) (99.72% pass rate)
+- **Syntax Check:** **340 / 340 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
 - **GitHub Actions (All 6 Checks Passing on PR #441):**
   - Android Companion: [Run 41679626806](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626806) — PASS (1m 53s)
