@@ -83,6 +83,10 @@ test("DioramaSpatialAdapter rejects invalid remote geometry instead of filling f
   const adapter = new DioramaSpatialAdapter({
     env: { DIORAMA_REMOTE_ENDPOINT: "https://diorama-worker.example.com" },
     fetchImpl: async () => new Response(JSON.stringify({
+      architecture: {
+        dimensions: { widthMeters: 4, lengthMeters: 5, heightMeters: 3 },
+        floor: { bounds: { xMin: -2, xMax: 2, zMin: 0, zMax: 5 } }
+      },
       objects: [{
         id: "bad-object",
         label: "desk",
