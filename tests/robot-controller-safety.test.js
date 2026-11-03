@@ -80,3 +80,23 @@ test("PhysicalSafetyController requires a live heartbeat and valid battery telem
   const noBattery = safety.validateMotionCommand({});
   assert.equal(noBattery.code, "BATTERY_TELEMETRY_UNAVAILABLE");
 });
+
+test("PhysicalSafetyController rejects nonnumeric velocities and target coordinates", () => {
+  const safety = new PhysicalSafetyController();
+  safety.recordHeartbeat();
+
+  const badVelocity = safety.validateMotionCommand({
+    linearVelocity: "not-a-number",
+    angularVelocity: 0,
+    batteryPercent: 100
+  });
+  assert.equal(badVelocity.code, "INVALID_MOTION_COMMAND");
+
+  const badPosition = safety.validateMotionCommand({
+    linearVelocity: 0,
+    angularVelocity: 0,
+    targetPosition: { x: "1", y: 0, z: 0 },
+    batteryPercent: 100
+  });
+  assert.equal(badPosition.code, "INVALID_TARGET_POSITION");
+});
