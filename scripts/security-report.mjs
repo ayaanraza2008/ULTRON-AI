@@ -144,6 +144,18 @@ async function main() {
     });
   }
 
+  const qualityGateBlockers = [];
+  if (sastReport.isSecure !== true) qualityGateBlockers.push("SAST findings require review or remediation.");
+  if (depReport.status !== "COMPLETED" || depReport.isSecure !== true) {
+    qualityGateBlockers.push("Dependency audit did not complete cleanly or reported vulnerabilities.");
+  }
+  if (secretRepoReport.isSecure !== true) qualityGateBlockers.push("Working-tree secret scan found potential credentials.");
+  if (secretGitReport.status !== "COMPLETED" || secretGitReport.isSecure !== true) {
+    qualityGateBlockers.push("Git-history secret scan did not complete cleanly or found potential credentials.");
+  }
+  if (confirmedVulnerabilities.length > 0) qualityGateBlockers.push("Critical/high findings remain unresolved.");
+
+  const isQualityGatePassed = qualityGateBlockers.length === 0;
   const masterReport = {
     metadata: {
       generatedAt: new Date().toISOString(),
@@ -154,7 +166,8 @@ async function main() {
         potentialRisksCount: potentialRisks.length,
         informationalFindingsCount: informationalFindings.length,
         skippedToolsCount: skippedOrUnavailableTools.length,
-        isQualityGatePassed: confirmedVulnerabilities.length === 0
+        qualityGateBlockers,
+        isQualityGatePassed
       }
     },
     metrics: {
@@ -263,7 +276,7 @@ async function main() {
   console.log(`  Quality Gate Result:        ${masterReport.metadata.summary.isQualityGatePassed ? "PASSED" : "FAILED"}`);
   console.log(`=================================================`);
 
-  process.exit(confirmedVulnerabilities.length > 0 ? 1 : 0);
+  process.exit(isQualityGatePassed ? 0 : 1);
 }
 
 main().catch((err) => {
