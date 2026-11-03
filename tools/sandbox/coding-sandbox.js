@@ -177,6 +177,21 @@ export class CodingSandbox {
         stderr: ""
       };
     }
+    if (dockerCheck.simulated && !this.customContainerRunner) {
+      return {
+        language: lang,
+        success: false,
+        executed: false,
+        timedOut: false,
+        errorCode: "CODE_SANDBOX_MOCK_ONLY",
+        error: "A test-only Docker override is not a real container runtime.",
+        isolationEngine: "NONE (FAILED_CLOSED)",
+        simulated: true,
+        dockerVerified: false,
+        stdout: "",
+        stderr: ""
+      };
+    }
 
     const execTimeout = Math.min(30000, options.timeoutMs || this.timeoutMs);
     const containerId = "sandbox-" + crypto.randomBytes(6).toString("hex");
@@ -239,6 +254,9 @@ export class CodingSandbox {
         success: true,
         executed: true,
         timedOut: false,
+        isolationEngine: "DOCKER_CONTAINER",
+        simulated: false,
+        dockerVerified: true,
         executionTimeMs: Date.now() - started,
         stdout: (stdout || "").slice(0, 32768),
         stderr: (stderr || "").slice(0, 32768)
@@ -259,6 +277,9 @@ export class CodingSandbox {
         success: false,
         executed: true,
         timedOut: isTimeout,
+        isolationEngine: "DOCKER_CONTAINER",
+        simulated: false,
+        dockerVerified: true,
         executionTimeMs: Date.now() - started,
         errorCode: isTimeout ? "EXECUTION_TIMEOUT" : "EXECUTION_ERROR",
         error: isTimeout ? `Execution exceeded timeout limit of ${execTimeout}ms.` : err.message,
