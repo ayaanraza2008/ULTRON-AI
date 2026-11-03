@@ -16,7 +16,7 @@ import {
   SIMREADY_CENTRAL_EXTENDED_CATALOG
 } from "../robotics/simready-simulation-engine.js";
 
-test("RoboticsSim: SIMREADY_ASSET_CATALOG discovers valid 3D robot assets", () => {
+test("RoboticsSim: SIMREADY_ASSET_CATALOG exposes metadata-only robot archetypes", () => {
   assert.ok(Array.isArray(SIMREADY_ASSET_CATALOG));
   assert.ok(SIMREADY_ASSET_CATALOG.length >= 3);
 
