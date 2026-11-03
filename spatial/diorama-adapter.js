@@ -35,6 +35,29 @@ function validateScenePayload(payload) {
     throw adapterError("INVALID_SCENE_GRAPH", "Spatial worker result must contain an objects array with at most 500 entries.");
   }
 
+  if (payload.metadataOnly !== true) {
+    const room = payload.architecture?.dimensions;
+    const floorBounds = payload.architecture?.floor?.bounds;
+    if (!room || !floorBounds) {
+      throw adapterError("INVALID_SCENE_GRAPH", "Model worker result must include room dimensions and floor bounds.");
+    }
+    for (const axis of ["widthMeters", "lengthMeters", "heightMeters"]) {
+      const value = room[axis];
+      if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1000) {
+        throw adapterError("INVALID_SCENE_GRAPH", "Model worker returned invalid room dimensions.");
+      }
+    }
+    for (const key of ["xMin", "xMax", "zMin", "zMax"]) {
+      const value = floorBounds[key];
+      if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > 1000) {
+        throw adapterError("INVALID_SCENE_GRAPH", "Model worker returned invalid floor bounds.");
+      }
+    }
+    if (floorBounds.xMin >= floorBounds.xMax || floorBounds.zMin >= floorBounds.zMax) {
+      throw adapterError("INVALID_SCENE_GRAPH", "Model worker returned inverted floor bounds.");
+    }
+  }
+
   for (const [index, object] of payload.objects.entries()) {
     const position = object?.pose3d?.position;
     const dimensions = object?.pose3d?.dimensions;
