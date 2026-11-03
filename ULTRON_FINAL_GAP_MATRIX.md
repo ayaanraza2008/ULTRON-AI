@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI — FINAL CAPABILITY & GAP MATRIX
 ## Rigorous Verification Across All 14 Core Functional Domains
 
