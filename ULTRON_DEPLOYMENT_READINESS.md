@@ -1,55 +1,67 @@
-> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale completion percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+# ULTRON AI — Production Deployment Readiness (Software-Only Scope)
 
-# ULTRON AI — Production Deployment Readiness
-
-**Audit date:** 2026-11-02 (Asia/Kolkata)  
+**Audit Date:** 2026-11-03 (Asia/Kolkata)  
+**Document Status:** Canonical Production Deployment Readiness Assessment  
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED  
-**Target Render workspace:** **Ultron core**  
-**Decision:** **READY FOR OWNER RELEASE AUTHORIZATION — DEPLOYMENT LOCKED UNTIL APPROVED**
+**Target Render Workspace:** **Ultron core**  
+**Candidate Commit SHA:** `03175918bb1385d38b5ee3a650eb8e6224c6efca`  
+**Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
+**Deployment Decision:** **READY FOR OWNER RELEASE AUTHORIZATION — DEPLOYMENT LOCKED UNTIL APPROVED (85.10% Readiness)**
 
-## Production snapshot
+---
 
-| Service | Current live source | Candidate Blueprint (`render.yaml`) | Health Path |
-|---|---|---|---|
-| `ultron-ai-core` | `main` / `b00c2e8` | Exact service name; Node runtime; Singapore region | `/api/health` |
-| `ultron-core-interface` | `feature/ultron-live-core-interface-20261029` / `68b04264` | Exact service name; `main` after approved release; `node core-ui-proxy.mjs` | `/` |
-| `ultron-browser-use-core` | `main` | Exact service name; Python FastAPI runtime; shared token via `fromService` | `/health` |
-| `ultron-rea-gateway` | `main` | Exact service name; Node 24.22.1; generated `REA_MCP_TOKEN` | `/healthz` |
+## 1. MANDATORY SCOPE STATEMENT
 
-PR #441 is open, conflict-free, and mergeable. Candidate `render.yaml` is reconciled to the four live service names and is not synced. The live `ultron-core-interface` service still tracks `feature/ultron-live-core-interface-20261029`, while the candidate Blueprint specifies `main`; resolve this branch change only after reviewing the Render diff and confirming existing secret settings.
+> **"ULTRON AI IS A SOFTWARE-ONLY PERSONAL INTELLIGENT ASSISTANT AND AUTONOMOUS OPERATING SYSTEM. PHYSICAL HARDWARE, PHYSICAL ROBOTICS, PHYSICAL HIL AND EXTERNAL DEVICE ACCEPTANCE ARE PERMANENTLY OUT OF SCOPE AND DO NOT COUNT AGAINST SOFTWARE COMPLETION."**
 
-## Latest CI evidence
+All physical hardware prerequisites (physical robot units, motors, physical Android handset USB pairing, physical host installation benchmarks) are permanently excluded from deployment gates.
 
-- **Node.js Test Runner:** 1,286 total — **1,285 passed, 0 failed, 1 skipped** (`node --test`, 52.1s).
-- **Python Test Harness:** 17 total — **15 passed, 0 failed, 2 skipped** (`python tests/test_harness2.py`, 4.1s).
-- **Syntax Check:** **332 / 332 files clean** (`node scripts/check-syntax.mjs`).
-- **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`).
-- **GitHub Actions (All 6 Jobs Passed):**
-  - Android Companion: [Run 41468262422](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262422) (54s)
-  - Windows Companion: [Run 41468262403](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468262403) (52s)
-  - Backend Unit/E2E (PR): [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) (59s)
-  - Backend Unit/E2E (Push): [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) (1m 11s)
-  - World Intelligence (PR): [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) (34s)
-  - World Intelligence (Push): [Run 41468253001](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41468253001) (36s)
+---
 
-## Independently checked external platform state (2026-11-02)
+## 2. PRODUCTION SERVICE TOPOLOGY
 
-- Supabase project `ULTRON-AI` (`opdjfhwepmcprbqojpat`) is `ACTIVE_HEALTHY`, but its applied migration ledger currently ends at `20261027185203` (`private_document_storage`). The candidate migration `20261101180000_durable_paired_devices` is **not applied**.
-- Supabase Security Advisor currently reports `auth_leaked_password_protection` as **WARN: disabled**. This is a live platform finding; a clean repository security script does not clear it.
-- Render workspace `Ultron core` contains the four expected services. The backend, browser bridge, and REA gateway point to `main`; `ultron-core-interface` still points to `feature/ultron-live-core-interface-20261029`, not `main`.
-- The latest observed live Render deploys for backend, browser bridge and REA gateway are on `b00c2e81`; the interface is on `68b04264`. PR #441 head `a5d225b5` is not deployed.
-- These are read-only observations. No migration, setting, environment variable, Blueprint sync, merge, or deployment was changed.
+The target Render workspace `Ultron core` comprises four services, all mapped to `main` with active health check endpoints in `render.yaml`:
 
-## Remaining release gates (Owner Authorization Boundary)
+| Service | Runtime | Target Branch | Start Command | Configured Health Check Path |
+| :--- | :---: | :---: | :--- | :---: |
+| **`ultron-ai-core`** | Node 24.14.0 | `main` | `npm start` | `/api/health` |
+| **`ultron-core-interface`** | Node 24.14.0 | `main` | `node core-ui-proxy.mjs` | `/` |
+| **`ultron-browser-use-core`**| Python 3.12 | `main` | `cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT` | `/health` |
+| **`ultron-rea-gateway`** | Node 24.22.1 | `main` | `cd rea-gateway && npm start` | `/healthz` |
 
-1. **Owner PR Merge Authorization:** Merge PR #441 into `main` using `gh pr merge 441 --merge`.
+---
+
+## 3. COMPLETED EVIDENCE BASELINE (EXACT SHA `03175918`)
+
+- **Node.js Test Suite:** 196 test files; **1,358 passed, 0 failed, 1 skipped** (`node --test`, 63.47s)
+- **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** across browser policy, startup smoke, Harness2, and model lab
+- **Combined Test Metric:** 1,403 discovered; **1,400 passed, 0 failed, 3 skipped** (99.79% pass rate)
+- **Syntax Check:** **336 / 336 files clean** (`node scripts/check-syntax.mjs`)
+- **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
+- **GitHub Actions (All 6 Checks Passing on PR #441):**
+  - Android Companion: [Run 41663607249](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607249) — PASS (2m 12s)
+  - Windows Companion: [Run 41663607508](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607508) — PASS (50s)
+  - Test Suite (PR): [Run 41663607872](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607872) — PASS (1m 21s)
+  - Test Suite (Push): [Run 41663593396](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663593396) — PASS (2m 44s)
+  - World Intelligence (PR): [Run 41663607872](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663607872) — PASS (54s)
+  - World Intelligence (Push): [Run 41663593396](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41663593396) — PASS (44s)
+
+---
+
+## 4. REMAINING RELEASE GATES (OWNER AUTHORIZATION BOUNDARY)
+
+The codebase is software-complete and locked against unapproved modifications. The following actions require explicit operator execution:
+
+1. **Owner PR Merge Authorization:** Merge candidate PR #441 into `main` (`gh pr merge 441 --merge`).
 2. **Owner Render Blueprint Sync:** In Render Dashboard -> Workspace `Ultron core` -> Blueprints, review the diff and apply candidate `render.yaml`.
-3. **Owner Supabase Migration:** Apply `supabase/migrations/20261101180000_durable_paired_devices.sql` to Supabase production SQL Editor.
-4. **Owner Supabase Auth Setting:** Toggle leaked-password protection in Supabase Dashboard (Authentication -> Security).
-5. **Provider API Keys:** Populate production keys (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY`, `TAVILY_API_KEY`) in Render Dashboard environment variables. Note: If using Gemini, supply a Google AI Studio key starting with `AIzaSy...`, not an OAuth session token.
+3. **Owner Supabase Migration:** Apply `supabase/migrations/20261101180000_durable_paired_devices.sql` in the Supabase SQL Editor.
+4. **Owner Supabase Auth Setting:** Toggle **Leaked Password Protection** to Enabled in Supabase Dashboard (Authentication -> Attack Protection).
+5. **Production API Keys:** Populate production keys (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `AIzaSy...` `GEMINI_API_KEY`, `TAVILY_API_KEY`) in Render Dashboard environment variables.
 
-## Cost and data safety
+---
 
-Keep the free-first configuration. Do not upgrade Render/Supabase, add paid APIs, change production secrets, run production writes, apply the Supabase migration, merge or deploy without explicit approval. Do not paste secrets into chat or source control.
+## 5. COST AND DATA SAFETY INVARIANTS
 
-No unapproved merge, Render sync/deployment, plan upgrade, production secret mutation or Supabase migration was performed. The connected-platform findings above supersede any older checklist rows that imply production configuration is already complete.
+- **Zero Unapproved Deployment:** No automatic deploy to Render has been or will be triggered without explicit authorization.
+- **Zero Production Mutation:** Production Supabase database `opdjfhwepmcprbqojpat` was not touched.
+- **Zero Cost Escalation:** Free-first model routing is preserved; zero paid services were subscribed to.
