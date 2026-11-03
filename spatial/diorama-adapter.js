@@ -218,110 +218,24 @@ export class DioramaSpatialAdapter {
   }
 
   /**
-   * Mode 3: CPU Geometric Fallback
-   * Fully functional baseline for AMD Ryzen 7 5700U without CUDA.
+   * Mode 3: honest CPU metadata-only fallback.
+   * No local model is installed on the target AMD/Radeon profile by default;
+   * therefore this path validates the image payload but does not invent geometry.
    */
-  async _executeCpuFallback(imageBuffer, options) {
-    // Generate valid 3D scene estimation with clear disclaimer
-    const sceneId = "spat-" + crypto.randomBytes(4).toString("hex");
-
+  async _executeCpuFallback(imageBuffer) {
     return {
-      sceneId,
-      pipeline: "diorama-cpu-geometric-fallback",
-      cudaAccelerated: false,
-      inferenceStatus: "CPU_GEOMETRIC_FALLBACK",
-      architecture: {
-        roomType: "indoor_office_room",
-        dimensions: {
-          widthMeters: 4.2,
-          lengthMeters: 4.8,
-          heightMeters: 2.8
-        },
-        floor: {
-          normal: [0, 1, 0],
-          elevation: 0.0,
-          bounds: { xMin: -2.1, xMax: 2.1, zMin: 0.0, zMax: 4.8 }
-        },
-        ceiling: {
-          normal: [0, -1, 0],
-          elevation: 2.8
-        },
-        walls: [
-          { id: "wall-back", normal: [0, 0, -1], distanceMeters: 4.8 },
-          { id: "wall-left", normal: [1, 0, 0], distanceMeters: 2.1 },
-          { id: "wall-right", normal: [-1, 0, 0], distanceMeters: 2.1 }
-        ]
-      },
-      objects: [
-        {
-          id: "obj-desk-primary",
-          label: "desk",
-          category: "furniture",
-          box2d: { xMin: 0.2, yMin: 0.4, xMax: 0.8, yMax: 0.85 },
-          pose3d: {
-            position: { x: 0.0, y: 0.4, z: 2.4 },
-            rotation: { roll: 0, pitch: 0, yaw: 0 },
-            dimensions: { dx: 1.4, dy: 0.75, dz: 0.8 }
-          },
-          cadRetrieval: {
-            cadId: "cad-desk-diorama-001",
-            source: "Objaverse-LVIS-Diorama",
-            retrievalScore: 0.84,
-            meshFormat: "primitive"
-          },
-          confidence: 0.88,
-          provenance: "ESTIMATED_MEASUREMENT"
-        },
-        {
-          id: "obj-monitor-main",
-          label: "monitor",
-          category: "electronics",
-          box2d: { xMin: 0.35, yMin: 0.25, xMax: 0.65, yMax: 0.5 },
-          pose3d: {
-            position: { x: 0.0, y: 0.95, z: 2.4 },
-            rotation: { roll: 0, pitch: 0, yaw: 0 },
-            dimensions: { dx: 0.6, dy: 0.4, dz: 0.15 }
-          },
-          cadRetrieval: {
-            cadId: "cad-monitor-diorama-004",
-            source: "Objaverse-LVIS-Diorama",
-            retrievalScore: 0.91,
-            meshFormat: "primitive"
-          },
-          confidence: 0.92,
-          provenance: "ESTIMATED_MEASUREMENT"
-        },
-        {
-          id: "obj-chair-main",
-          label: "chair",
-          category: "furniture",
-          box2d: { xMin: 0.3, yMin: 0.5, xMax: 0.7, yMax: 0.95 },
-          pose3d: {
-            position: { x: 0.0, y: 0.45, z: 1.4 },
-            rotation: { roll: 0, pitch: 0, yaw: 0 },
-            dimensions: { dx: 0.6, dy: 0.9, dz: 0.6 }
-          },
-          cadRetrieval: {
-            cadId: "cad-chair-diorama-012",
-            source: "Objaverse-LVIS-Diorama",
-            retrievalScore: 0.87,
-            meshFormat: "primitive"
-          },
-          confidence: 0.86,
-          provenance: "ESTIMATED_MEASUREMENT"
-        }
+      sceneId: "spat-" + crypto.randomBytes(4).toString("hex"),
+      pipeline: "cpu-metadata-only-fallback",
+      inferenceStatus: "CPU_METADATA_ONLY",
+      metadataOnly: true,
+      source: "IMAGE_PAYLOAD_VALIDATED_ONLY",
+      imageBytes: imageBuffer.length,
+      architecture: null,
+      objects: [],
+      warnings: [
+        "No local Diorama model inference was performed.",
+        "Configure a verified local model worker or remote worker to produce 3D geometry."
       ]
     };
-  }
-
-  _normalizeImageInput(imageInput) {
-    if (Buffer.isBuffer(imageInput)) return imageInput;
-    if (typeof imageInput === "string") {
-      const match = imageInput.match(/^data:image\/[a-z0-9.+-]+;base64,(.+)$/i);
-      if (match) return Buffer.from(match[1], "base64");
-      // Raw base64 string
-      if (/^[A-Za-z0-9+/=]+$/.test(imageInput)) return Buffer.from(imageInput, "base64");
-    }
-    return null;
   }
 }
