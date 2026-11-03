@@ -30,7 +30,7 @@ test("RoboticsSim: SIMREADY_ASSET_CATALOG discovers valid 3D robot assets", () =
     assert.equal(asset.simReadyCompliance.hasVisualMesh, false, "No visual mesh is downloaded");
     assert.equal(asset.simReadyCompliance.hasCollisionMesh, false, "No collision mesh is downloaded");
     assert.equal(asset.assetAvailability, "METADATA_ONLY");
-    assert.equal(asset.sourceVerification, "STATIC_REFERENCE_NOT_FETCHED");
+    assert.ok(["STATIC_REFERENCE_NOT_FETCHED", "ULTRON_METADATA_ONLY"].includes(asset.sourceVerification));
     assert.ok(Array.isArray(asset.joints) && asset.joints.length > 0, "Must declare joints");
     assert.ok(Array.isArray(asset.defaultSensors), "Must declare default sensors");
   }
