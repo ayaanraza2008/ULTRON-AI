@@ -2990,10 +2990,64 @@
         showToast("Emergency stop reset. Standing by.", 4000);
         updateTaskPanel("Emergency stop reset. Standing by.", "STANDBY");
       });
+      source.addEventListener("TOOL_COMPLETED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const duration = data.durationMs ? " (" + data.durationMs + "ms)" : "";
+          updateTaskPanel("Completed: " + data.toolId + duration, "TOOL COMPLETED");
+        } catch {}
+      });
+      source.addEventListener("TOOL_FAILED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateTaskPanel("Tool Failed: " + data.toolId + " - " + (data.error || "Execution error"), "TOOL FAILED");
+          showToast("Tool failed: " + (data.error || data.toolId), 6000);
+        } catch {}
+      });
+      source.addEventListener("APPROVAL_GRANTED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Authorization granted for " + (data.toolId || data.requestId), 3500);
+        } catch {}
+      });
+      source.addEventListener("APPROVAL_REJECTED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Authorization rejected: " + (data.reason || "Denied by operator"), 4000);
+        } catch {}
+      });
       source.addEventListener("WORKFLOW_COMPLETED", (event) => {
         try {
           const data = JSON.parse(event.data);
           showToast("Workflow " + (data.workflowId ? data.workflowId.slice(0, 8) : "") + " completed.", 4500);
+          updateTaskPanel("Workflow completed successfully.", "WORKFLOW COMPLETED");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_FAILED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow failed: " + (data.error || "Execution error"), 6000);
+          updateTaskPanel("Workflow execution failed: " + (data.error || "Error"), "WORKFLOW FAILED");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_PAUSED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow paused at step " + (data.stepIndex ?? ""), 3500);
+          updateTaskPanel("Workflow paused by operator.", "PAUSED");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_RESUMED", (event) => {
+        try {
+          showToast("Workflow execution resumed.", 3500);
+          updateTaskPanel("Workflow execution resumed.", "RUNNING");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_CANCELLED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow cancelled: " + (data.reason || "Operator request"), 4000);
+          updateTaskPanel("Workflow cancelled: " + (data.reason || "Operator request"), "CANCELLED");
         } catch {}
       });
     } catch {}

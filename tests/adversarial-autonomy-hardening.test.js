@@ -522,3 +522,91 @@ test("Real Tool Execution Audit: All 18 tools execute real paths with schema val
     assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: true (received: ${JSON.stringify(outcome)})`);
   }
 });
+
+// ==========================================
+// 11. BACKGROUND RESTART RECOVERY & INTERRUPTED TASK MARKING
+// ==========================================
+
+test("Background Reliability: Recovers interrupted tasks safely upon restart without zombie execution", async () => {
+  const testDir = path.join(os.tmpdir(), "ultron-test-recovery-" + Date.now());
+  fs.mkdirSync(testDir, { recursive: true });
+
+  try {
+    const workflowsFile = path.join(testDir, "workflows.json");
+    const inFlightWorkflow = [
+      {
+        id: "wf-zombie-candidate-123",
+        userId: "operator",
+        prompt: "Long running deployment",
+        intent: "MULTI_AGENT_COORDINATION",
+        status: "RUNNING",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        currentStepIndex: 1,
+        stepResults: [{ stepId: "step-1", success: true }]
+      }
+    ];
+    fs.writeFileSync(workflowsFile, JSON.stringify(inFlightWorkflow, null, 2), "utf8");
+
+    // Instantiate orchestrator simulating server reboot
+    const rebootedOrchestrator = new AutonomousOrchestrator({ registry: toolRegistry, persistenceDir: testDir });
+    const recovered = rebootedOrchestrator.getActiveWorkflows();
+
+    const wf = recovered.find(w => w.id === "wf-zombie-candidate-123");
+    assert.ok(wf, "Interrupted workflow must be loaded into memory");
+    assert.equal(wf.status, "INTERRUPTED", "In-flight task must be transitioned from RUNNING to INTERRUPTED on reboot");
+  } finally {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
+// ==========================================
+// 12. AUTONOMOUS DAG RETRY LIMITS & DURATION AUDIT
+// ==========================================
+
+test("Autonomous Planning: Enforces retry limits and records step execution duration", async () => {
+  const testRegistry = toolRegistry;
+  let attemptCount = 0;
+
+  testRegistry.registerTool({
+    id: "flaky_audit_tool",
+    name: "Flaky Audit Tool",
+    category: "AUTONOMOUS_OPERATIONS",
+    description: "Fails on first attempt, succeeds on second attempt",
+    capabilities: ["retry_audit"],
+    permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+    timeoutMs: 5000,
+    checkHealth: () => "OPERATIONAL",
+    execute: async () => {
+      attemptCount++;
+      if (attemptCount === 1) {
+        throw new Error("Simulated transient socket glitch on attempt 1");
+      }
+      return { success: true, attemptsTaken: attemptCount };
+    }
+  });
+
+  const orchestrator = new AutonomousOrchestrator({ registry: testRegistry });
+  const plan = {
+    id: "retry-audit-plan",
+    steps: [
+      {
+        id: "step-retry-1",
+        dependsOn: [],
+        toolId: "flaky_audit_tool",
+        agent: AGENT_ROLES.SYSTEMS_CONTROLLER,
+        description: "Test transient retry handling",
+        maxRetries: 2,
+        params: {}
+      }
+    ]
+  };
+
+  const res = await orchestrator.executePlanDAG(plan, {});
+  assert.equal(res.allPassed, true, "DAG should pass after successful retry attempt");
+  assert.equal(attemptCount, 2, "Tool must have retried exactly once");
+  const stepRes = res.stepResults[0];
+  assert.equal(stepRes.success, true);
+  assert.ok(typeof stepRes.durationMs === "number", "Execution durationMs must be recorded");
+  assert.ok(stepRes.durationMs >= 0, "Execution duration must be non-negative");
+});

@@ -268,6 +268,27 @@ export function createJarvisRouter({
     }
   });
 
+  router.post("/jarvis/tools/:toolId/execute", express.json(), async (req, res) => {
+    try {
+      const { toolId } = req.params;
+      const tool = toolRegistry.getTool(toolId);
+      if (!tool) {
+        return res.status(404).json({ success: false, error: `Tool '${toolId}' not found in registry.` });
+      }
+      if (autonomousOrchestrator.emergencyHalted) {
+        return res.status(403).json({ success: false, error: "EMERGENCY_STOP_ACTIVE" });
+      }
+      if (tool.permissionLevel >= 3 && !req.body?.approved) {
+        return res.status(403).json({ success: false, error: "APPROVAL_REQUIRED", permissionLevel: tool.permissionLevel });
+      }
+      const userContext = { userId: req.user?.id || req.body?.userId || "operator", isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin) };
+      const outcome = await toolRegistry.execute(toolId, req.body?.params || {}, userContext);
+      res.json({ success: true, toolId, outcome });
+    } catch (err) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
   // --- Permission Center: Human Approval Gates ---
   router.get("/jarvis/permissions/pending", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -276,15 +297,31 @@ export function createJarvisRouter({
 
   router.post("/jarvis/permissions/approve", express.json(), (req, res) => {
     const { requestId } = req.body || {};
-    const result = autonomousOrchestrator.approveRequest(requestId);
-    if (!result.success) return res.status(404).json(result);
+    const operatorContext = {
+      userId: req.body?.userId || req.user?.id || "operator",
+      isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin)
+    };
+    const result = autonomousOrchestrator.approveRequest(requestId, operatorContext);
+    if (!result.success) {
+      if (result.error === "CROSS_USER_APPROVAL_DENIED") return res.status(403).json(result);
+      if (result.error === "APPROVAL_NOT_FOUND") return res.status(404).json(result);
+      return res.status(400).json(result);
+    }
     res.json(result);
   });
 
   router.post("/jarvis/permissions/reject", express.json(), (req, res) => {
     const { requestId, reason } = req.body || {};
-    const result = autonomousOrchestrator.rejectRequest(requestId, reason);
-    if (!result.success) return res.status(404).json(result);
+    const operatorContext = {
+      userId: req.body?.userId || req.user?.id || "operator",
+      isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin)
+    };
+    const result = autonomousOrchestrator.rejectRequest(requestId, reason, operatorContext);
+    if (!result.success) {
+      if (result.error === "CROSS_USER_APPROVAL_DENIED") return res.status(403).json(result);
+      if (result.error === "APPROVAL_NOT_FOUND") return res.status(404).json(result);
+      return res.status(400).json(result);
+    }
     res.json(result);
   });
 
@@ -302,24 +339,36 @@ export function createJarvisRouter({
 
   router.post("/jarvis/autonomy/emergency-stop", express.json(), (req, res) => {
     const reason = req.body?.reason || "Operator emergency stop invoked";
-    const result = autonomousOrchestrator.setEmergencyStop(true, reason);
+    const auth = { userId: req.user?.id || req.body?.userId || "operator" };
+    const result = autonomousOrchestrator.setEmergencyStop(true, reason, auth);
     res.json(result);
   });
 
-  router.post("/jarvis/autonomy/emergency-reset", (_req, res) => {
-    const result = autonomousOrchestrator.setEmergencyStop(false);
+  router.post("/jarvis/autonomy/emergency-reset", (req, res) => {
+    const auth = { userId: req.user?.id || req.body?.userId || "operator" };
+    const result = autonomousOrchestrator.setEmergencyStop(false, "Operator reset", auth);
     res.json(result);
   });
 
   // --- Background Workflows & Real-Time Event Stream ---
-  router.get("/jarvis/autonomy/workflows", (_req, res) => {
+  router.get("/jarvis/autonomy/workflows", (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json({ workflows: autonomousOrchestrator.getActiveWorkflows() });
+    const userContext = {
+      userId: req.query?.userId || req.user?.id,
+      isAdmin: Boolean(req.user?.isAdmin || req.query?.isAdmin === "true")
+    };
+    res.json({ workflows: autonomousOrchestrator.getActiveWorkflows(userContext) });
   });
 
   router.post("/jarvis/autonomy/workflow/submit", express.json(), (req, res) => {
     try {
       const { prompt, context = {} } = req.body || {};
+      if (req.user?.id && !context.userId) {
+        context.userId = req.user.id;
+      }
+      if (req.user?.isAdmin && context.isAdmin === undefined) {
+        context.isAdmin = true;
+      }
       const result = autonomousOrchestrator.submitBackgroundTask(prompt, context);
       res.json(result);
     } catch (err) {
@@ -329,22 +378,46 @@ export function createJarvisRouter({
 
   router.post("/jarvis/autonomy/workflow/pause", express.json(), (req, res) => {
     const { workflowId } = req.body || {};
-    const result = autonomousOrchestrator.pauseWorkflow(workflowId);
-    if (!result.success) return res.status(404).json(result);
+    const userContext = {
+      userId: req.body?.userId || req.user?.id || "operator",
+      isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin)
+    };
+    const result = autonomousOrchestrator.pauseWorkflow(workflowId, userContext);
+    if (!result.success) {
+      if (result.error === "CROSS_USER_ACCESS_DENIED") return res.status(403).json(result);
+      if (result.error === "Workflow not found") return res.status(404).json(result);
+      return res.status(400).json(result);
+    }
     res.json(result);
   });
 
   router.post("/jarvis/autonomy/workflow/resume", express.json(), (req, res) => {
     const { workflowId } = req.body || {};
-    const result = autonomousOrchestrator.resumeWorkflow(workflowId);
-    if (!result.success) return res.status(404).json(result);
+    const userContext = {
+      userId: req.body?.userId || req.user?.id || "operator",
+      isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin)
+    };
+    const result = autonomousOrchestrator.resumeWorkflow(workflowId, userContext);
+    if (!result.success) {
+      if (result.error === "CROSS_USER_ACCESS_DENIED") return res.status(403).json(result);
+      if (result.error === "Workflow not found") return res.status(404).json(result);
+      return res.status(400).json(result);
+    }
     res.json(result);
   });
 
   router.post("/jarvis/autonomy/workflow/cancel", express.json(), (req, res) => {
     const { workflowId, reason } = req.body || {};
-    const result = autonomousOrchestrator.cancelWorkflow(workflowId, reason);
-    if (!result.success) return res.status(404).json(result);
+    const userContext = {
+      userId: req.body?.userId || req.user?.id || "operator",
+      isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin)
+    };
+    const result = autonomousOrchestrator.cancelWorkflow(workflowId, reason, userContext);
+    if (!result.success) {
+      if (result.error === "CROSS_USER_ACCESS_DENIED") return res.status(403).json(result);
+      if (result.error === "Workflow not found") return res.status(404).json(result);
+      return res.status(400).json(result);
+    }
     res.json(result);
   });
 

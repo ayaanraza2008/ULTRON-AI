@@ -321,14 +321,16 @@ export class AutonomousOrchestrator {
 
       // 3. Execute all ready steps concurrently (parallel DAG wave)
       await Promise.all(readySteps.map(async (step) => {
+        const stepStartTime = Date.now();
         step.status = "RUNNING";
-        trace("TOOL_STARTED", { stepId: step.id, toolId: step.toolId, agent: step.agent, description: step.description });
+        trace("TOOL_STARTED", { stepId: step.id, toolId: step.toolId, agent: step.agent, description: step.description, startedAt: new Date(stepStartTime).toISOString() });
         const tool = this.registry.getTool(step.toolId);
 
         if (!tool) {
           step.status = "FAILED";
           failed.add(step.id);
-          const errRes = { stepId: step.id, toolId: step.toolId, success: false, error: `Tool ${step.toolId} not found in registry.` };
+          const durationMs = Date.now() - stepStartTime;
+          const errRes = { stepId: step.id, toolId: step.toolId, success: false, durationMs, error: `Tool ${step.toolId} not found in registry.` };
           stepResults.push(errRes);
           trace("TOOL_FAILED", errRes);
           return;
@@ -343,6 +345,7 @@ export class AutonomousOrchestrator {
           try {
             const timeoutPromise = new Promise((_, reject) => {
               timerId = setTimeout(() => reject(new Error(`Tool ${step.toolId} timed out after ${tool.timeoutMs}ms`)), tool.timeoutMs);
+              if (timerId?.unref) timerId.unref();
             });
             const mergedParams = { ...step.params, _upstreamArtifacts: artifacts };
             outcome = await Promise.race([tool.execute(mergedParams, context), timeoutPromise]);
@@ -358,10 +361,11 @@ export class AutonomousOrchestrator {
           }
         }
 
+        const durationMs = Date.now() - stepStartTime;
         if (lastErr) {
           step.status = "FAILED";
           failed.add(step.id);
-          const failRecord = { stepId: step.id, toolId: step.toolId, agent: step.agent, success: false, error: lastErr.message };
+          const failRecord = { stepId: step.id, toolId: step.toolId, agent: step.agent, success: false, durationMs, error: lastErr.message };
           stepResults.push(failRecord);
           trace("TOOL_FAILED", failRecord);
         } else {
@@ -369,9 +373,9 @@ export class AutonomousOrchestrator {
           completed.add(step.id);
           const sanitizedOutcome = sanitizeToolOutcome(outcome);
           artifacts[step.id] = sanitizedOutcome;
-          const successRecord = { stepId: step.id, toolId: step.toolId, agent: step.agent, success: true, outcome: sanitizedOutcome };
+          const successRecord = { stepId: step.id, toolId: step.toolId, agent: step.agent, success: true, durationMs, outcome: sanitizedOutcome };
           stepResults.push(successRecord);
-          trace("TOOL_COMPLETED", { stepId: step.id, toolId: step.toolId, agent: step.agent, success: true, outcomeSummary: "Completed" });
+          trace("TOOL_COMPLETED", { stepId: step.id, toolId: step.toolId, agent: step.agent, durationMs, success: true, outcomeSummary: "Completed" });
         }
       }));
     }
@@ -1053,10 +1057,11 @@ export class AutonomousOrchestrator {
       });
 
       if (!tool) {
-        workflow.stepResults.push({ stepId: step.id, success: false, error: "Tool not found" });
+        workflow.stepResults.push({ stepId: step.id, success: false, durationMs: 0, error: "Tool not found" });
         continue;
       }
 
+      const stepStart = Date.now();
       let outcome = null;
       let errMessage = null;
       for (let attempt = 1; attempt <= 2; attempt++) {
@@ -1064,6 +1069,7 @@ export class AutonomousOrchestrator {
         try {
           const timeoutPromise = new Promise((_, reject) => {
             timerId = setTimeout(() => reject(new Error(`Timeout after ${tool.timeoutMs}ms`)), tool.timeoutMs);
+            if (timerId?.unref) timerId.unref();
           });
           outcome = await Promise.race([tool.execute(step.params, context), timeoutPromise]);
           clearTimeout(timerId);
@@ -1078,12 +1084,13 @@ export class AutonomousOrchestrator {
         }
       }
 
+      const stepDuration = Date.now() - stepStart;
       if (errMessage) {
-        workflow.stepResults.push({ stepId: step.id, toolId: step.toolId, success: false, error: errMessage });
-        this.emitEvent({ type: "STEP_FAILED", workflowId: workflow.id, stepId: step.id, error: errMessage });
+        workflow.stepResults.push({ stepId: step.id, toolId: step.toolId, success: false, durationMs: stepDuration, error: errMessage });
+        this.emitEvent({ type: "STEP_FAILED", workflowId: workflow.id, stepId: step.id, durationMs: stepDuration, error: errMessage });
       } else {
-        workflow.stepResults.push({ stepId: step.id, toolId: step.toolId, success: true, outcome });
-        this.emitEvent({ type: "STEP_COMPLETED", workflowId: workflow.id, stepId: step.id, outcome });
+        workflow.stepResults.push({ stepId: step.id, toolId: step.toolId, success: true, durationMs: stepDuration, outcome });
+        this.emitEvent({ type: "STEP_COMPLETED", workflowId: workflow.id, stepId: step.id, durationMs: stepDuration, outcome });
       }
 
       this.persistWorkflowsToDisk();
