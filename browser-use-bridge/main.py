@@ -13,6 +13,7 @@ from startup_smoke import (SMOKE_TASK, browser_smoke_enabled, browser_runtime_st
 app = FastAPI(title="ULTRON Browser Use Bridge", docs_url=None, redoc_url=None)
 SIDE_EFFECTS = re.compile(r"\b(send|submit|purchase|buy|checkout|pay|transfer|delete|publish|post|comment|message|email|invite|change password|change billing|place order|book|reserve|cancel subscription|upload|share publicly|accept terms|sign contract)\b", re.I)
 PRIVATE_TARGET = re.compile(r"https?://(?:localhost|127\.|0\.0\.0\.0|10\.\d+\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)", re.I)
+BROWSER_RUNTIME_STATUS: dict[str, Any] = {"ready": False, "reason": "NOT_CHECKED"}
 
 class BrowserTask(BaseModel):
     task: str = Field(min_length=3, max_length=2500)
