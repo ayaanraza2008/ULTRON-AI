@@ -16,15 +16,13 @@ test("DioramaSpatialAdapter runs CPU geometric fallback cleanly", async () => {
   assert.equal(scene.executionMode, EXECUTION_MODES.CPU_METADATA_FALLBACK);
   assert.equal(scene.remoteWorkerUsed, false);
   assert.equal(scene.remoteGpuReported, false);
-  assert.equal(scene.inferenceStatus, "CPU_GEOMETRIC_FALLBACK");
-  assert.ok(scene.architecture.floor.bounds);
-  assert.ok(scene.objects.size >= 2);
-
-  // Check object properties
-  const desk = scene.getObject("obj-desk-primary");
-  assert.ok(desk);
-  assert.equal(desk.label, "desk");
-  assert.ok(desk.pose3d.position.z > 0);
+  assert.equal(scene.metadataOnly, true);
+  assert.equal(scene.inferenceStatus, "CPU_METADATA_ONLY");
+  assert.equal(scene.architecture.roomType, "unknown");
+  assert.equal(scene.architecture.dimensions.widthMeters, null);
+  assert.equal(scene.objects.size, 0);
+  assert.equal(scene.querySpatial("Where is the desk?").found, false);
+  assert.match(scene.toSummaryText(), /no object positions or room dimensions are available/i);
 });
 
 test("DioramaSpatialAdapter rejects empty and oversized inputs", async () => {
