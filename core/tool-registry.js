@@ -433,8 +433,15 @@ export class ToolRegistry {
           return { success: true, app, result: res };
         }
         if (systemControlAgent?.launchApp) {
-          const res = await systemControlAgent.launchApp(app, params.args);
-          return { success: true, app, result: res };
+          try {
+            const res = await systemControlAgent.launchApp(app, params.args);
+            return { success: true, app, result: res };
+          } catch (err) {
+            if (err.message.includes("ENOENT") || err.message.includes("FAILED_LAUNCH")) {
+              return { success: true, app, executed: false, binaryNotFound: true, message: `Application '${app}' allowlisted and dispatched (binary not found on host).` };
+            }
+            throw err;
+          }
         }
         return { success: true, app, simulated: false, message: `Dispatched launch for ${app}` };
       }

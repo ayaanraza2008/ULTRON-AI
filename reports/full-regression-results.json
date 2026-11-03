@@ -1,12 +1,12 @@
 {
-  "timestamp": "2026-11-03T13:59:29.378Z",
-  "totalFiles": 193,
-  "filePassCount": 193,
+  "timestamp": "2026-11-03T14:37:55.080Z",
+  "totalFiles": 196,
+  "filePassCount": 196,
   "fileFailCount": 0,
-  "totalPassed": 1331,
+  "totalPassed": 1358,
   "totalFailed": 0,
   "totalSkipped": 1,
-  "totalDurationMs": 282649,
+  "totalDurationMs": 286495,
   "results": [
     {
       "file": "tests\\adaptive-personality.test.js",
@@ -14,7 +14,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 625,
+      "durationMs": 612,
       "errorSnippet": null
     },
     {
@@ -23,16 +23,16 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 515,
+      "durationMs": 501,
       "errorSnippet": null
     },
     {
       "file": "tests\\adversarial-autonomy-hardening.test.js",
       "exitCode": 0,
-      "passed": 17,
+      "passed": 19,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 21135,
+      "durationMs": 21467,
       "errorSnippet": null
     },
     {
@@ -41,7 +41,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3562,
+      "durationMs": 3556,
       "errorSnippet": null
     },
     {
@@ -50,7 +50,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1263,
+      "durationMs": 996,
       "errorSnippet": null
     },
     {
@@ -59,7 +59,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 915,
+      "durationMs": 922,
       "errorSnippet": null
     },
     {
@@ -68,7 +68,7 @@
       "passed": 78,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1589,
+      "durationMs": 1574,
       "errorSnippet": null
     },
     {
@@ -77,7 +77,7 @@
       "passed": 14,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 581,
+      "durationMs": 549,
       "errorSnippet": null
     },
     {
@@ -86,7 +86,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1511,
+      "durationMs": 1519,
       "errorSnippet": null
     },
     {
@@ -95,7 +95,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 525,
+      "durationMs": 517,
       "errorSnippet": null
     },
     {
@@ -104,7 +104,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1157,
+      "durationMs": 1137,
       "errorSnippet": null
     },
     {
@@ -113,7 +113,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 562,
+      "durationMs": 540,
       "errorSnippet": null
     },
     {
@@ -122,7 +122,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 503,
+      "durationMs": 508,
       "errorSnippet": null
     },
     {
@@ -131,7 +131,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1189,
+      "durationMs": 1186,
       "errorSnippet": null
     },
     {
@@ -140,7 +140,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1295,
+      "durationMs": 1288,
       "errorSnippet": null
     },
     {
@@ -149,7 +149,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1136,
+      "durationMs": 1148,
       "errorSnippet": null
     },
     {
@@ -158,7 +158,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 547,
+      "durationMs": 540,
       "errorSnippet": null
     },
     {
@@ -167,7 +167,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1275,
+      "durationMs": 1261,
       "errorSnippet": null
     },
     {
@@ -176,7 +176,7 @@
       "passed": 11,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 13377,
+      "durationMs": 12521,
       "errorSnippet": null
     },
     {
@@ -185,7 +185,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 2538,
+      "durationMs": 3010,
       "errorSnippet": null
     },
     {
@@ -194,7 +194,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 556,
+      "durationMs": 583,
       "errorSnippet": null
     },
     {
@@ -203,7 +203,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 637,
+      "durationMs": 671,
       "errorSnippet": null
     },
     {
@@ -212,7 +212,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 496,
+      "durationMs": 501,
       "errorSnippet": null
     },
     {
@@ -221,7 +221,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 508,
+      "durationMs": 516,
       "errorSnippet": null
     },
     {
@@ -230,7 +230,7 @@
       "passed": 31,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 528,
+      "durationMs": 524,
       "errorSnippet": null
     },
     {
@@ -239,7 +239,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 520,
+      "durationMs": 519,
       "errorSnippet": null
     },
     {
@@ -248,7 +248,7 @@
       "passed": 10,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 664,
+      "durationMs": 691,
       "errorSnippet": null
     },
     {
@@ -257,7 +257,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 981,
+      "durationMs": 1013,
       "errorSnippet": null
     },
     {
@@ -266,7 +266,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1285,
+      "durationMs": 1331,
       "errorSnippet": null
     },
     {
@@ -275,7 +275,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 558,
+      "durationMs": 639,
       "errorSnippet": null
     },
     {
@@ -284,7 +284,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 546,
+      "durationMs": 612,
       "errorSnippet": null
     },
     {
@@ -293,7 +293,7 @@
       "passed": 10,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1712,
+      "durationMs": 1836,
       "errorSnippet": null
     },
     {
@@ -302,7 +302,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1348,
+      "durationMs": 1496,
       "errorSnippet": null
     },
     {
@@ -311,7 +311,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 924,
+      "durationMs": 938,
       "errorSnippet": null
     },
     {
@@ -320,7 +320,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 560,
+      "durationMs": 578,
       "errorSnippet": null
     },
     {
@@ -329,7 +329,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3291,
+      "durationMs": 4661,
       "errorSnippet": null
     },
     {
@@ -338,7 +338,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 507,
+      "durationMs": 513,
       "errorSnippet": null
     },
     {
@@ -347,7 +347,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1005,
+      "durationMs": 1007,
       "errorSnippet": null
     },
     {
@@ -356,7 +356,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 512,
+      "durationMs": 542,
       "errorSnippet": null
     },
     {
@@ -365,7 +365,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 518,
+      "durationMs": 531,
       "errorSnippet": null
     },
     {
@@ -374,7 +374,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1383,
+      "durationMs": 1563,
       "errorSnippet": null
     },
     {
@@ -383,7 +383,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1242,
+      "durationMs": 1289,
       "errorSnippet": null
     },
     {
@@ -392,7 +392,7 @@
       "passed": 21,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 715,
+      "durationMs": 711,
       "errorSnippet": null
     },
     {
@@ -401,7 +401,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 514,
+      "durationMs": 513,
       "errorSnippet": null
     },
     {
@@ -410,7 +410,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 512,
+      "durationMs": 521,
       "errorSnippet": null
     },
     {
@@ -419,7 +419,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 570,
+      "durationMs": 580,
       "errorSnippet": null
     },
     {
@@ -428,7 +428,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 502,
+      "durationMs": 516,
       "errorSnippet": null
     },
     {
@@ -437,7 +437,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 528,
+      "durationMs": 547,
       "errorSnippet": null
     },
     {
@@ -446,7 +446,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1197,
+      "durationMs": 1241,
       "errorSnippet": null
     },
     {
@@ -455,7 +455,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 513,
+      "durationMs": 510,
       "errorSnippet": null
     },
     {
@@ -464,7 +464,16 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 513,
+      "durationMs": 527,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\dependency-audit-gate.test.js",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 508,
       "errorSnippet": null
     },
     {
@@ -473,7 +482,7 @@
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 574,
+      "durationMs": 580,
       "errorSnippet": null
     },
     {
@@ -482,7 +491,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 963,
+      "durationMs": 1008,
       "errorSnippet": null
     },
     {
@@ -491,7 +500,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 504,
+      "durationMs": 497,
       "errorSnippet": null
     },
     {
@@ -500,7 +509,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1291,
+      "durationMs": 1292,
       "errorSnippet": null
     },
     {
@@ -509,7 +518,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 498,
+      "durationMs": 506,
       "errorSnippet": null
     },
     {
@@ -518,7 +527,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 501,
+      "durationMs": 517,
       "errorSnippet": null
     },
     {
@@ -527,7 +536,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 598,
+      "durationMs": 612,
       "errorSnippet": null
     },
     {
@@ -536,7 +545,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 540,
+      "durationMs": 505,
       "errorSnippet": null
     },
     {
@@ -545,7 +554,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 879,
+      "durationMs": 821,
       "errorSnippet": null
     },
     {
@@ -554,7 +563,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1378,
+      "durationMs": 1426,
       "errorSnippet": null
     },
     {
@@ -563,7 +572,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 647,
+      "durationMs": 633,
       "errorSnippet": null
     },
     {
@@ -572,7 +581,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 505,
+      "durationMs": 522,
       "errorSnippet": null
     },
     {
@@ -581,7 +590,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 515,
+      "durationMs": 506,
       "errorSnippet": null
     },
     {
@@ -590,7 +599,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 503,
+      "durationMs": 520,
       "errorSnippet": null
     },
     {
@@ -599,7 +608,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 529,
+      "durationMs": 540,
       "errorSnippet": null
     },
     {
@@ -608,7 +617,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 625,
+      "durationMs": 640,
       "errorSnippet": null
     },
     {
@@ -617,7 +626,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 500,
+      "durationMs": 516,
       "errorSnippet": null
     },
     {
@@ -626,7 +635,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1306,
+      "durationMs": 1313,
       "errorSnippet": null
     },
     {
@@ -635,7 +644,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 833,
+      "durationMs": 854,
       "errorSnippet": null
     },
     {
@@ -644,7 +653,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 953,
+      "durationMs": 966,
       "errorSnippet": null
     },
     {
@@ -653,7 +662,7 @@
       "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 2363,
+      "durationMs": 2346,
       "errorSnippet": null
     },
     {
@@ -662,7 +671,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 499,
+      "durationMs": 509,
       "errorSnippet": null
     },
     {
@@ -671,7 +680,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 511,
+      "durationMs": 505,
       "errorSnippet": null
     },
     {
@@ -680,7 +689,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 509,
+      "durationMs": 508,
       "errorSnippet": null
     },
     {
@@ -689,7 +698,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 511,
+      "durationMs": 508,
       "errorSnippet": null
     },
     {
@@ -698,7 +707,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 529,
+      "durationMs": 538,
       "errorSnippet": null
     },
     {
@@ -707,7 +716,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 858,
+      "durationMs": 871,
       "errorSnippet": null
     },
     {
@@ -716,7 +725,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 788,
+      "durationMs": 796,
       "errorSnippet": null
     },
     {
@@ -725,7 +734,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 505,
+      "durationMs": 499,
       "errorSnippet": null
     },
     {
@@ -734,7 +743,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 933,
+      "durationMs": 937,
       "errorSnippet": null
     },
     {
@@ -743,7 +752,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 498,
+      "durationMs": 501,
       "errorSnippet": null
     },
     {
@@ -752,7 +761,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 770,
+      "durationMs": 776,
       "errorSnippet": null
     },
     {
@@ -761,7 +770,7 @@
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 565,
+      "durationMs": 564,
       "errorSnippet": null
     },
     {
@@ -770,7 +779,7 @@
       "passed": 23,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 519,
+      "durationMs": 522,
       "errorSnippet": null
     },
     {
@@ -779,7 +788,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 503,
+      "durationMs": 501,
       "errorSnippet": null
     },
     {
@@ -797,7 +806,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 5478,
+      "durationMs": 5359,
       "errorSnippet": null
     },
     {
@@ -806,7 +815,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 599,
+      "durationMs": 585,
       "errorSnippet": null
     },
     {
@@ -815,7 +824,7 @@
       "passed": 19,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1005,
+      "durationMs": 970,
       "errorSnippet": null
     },
     {
@@ -824,7 +833,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 531,
+      "durationMs": 554,
       "errorSnippet": null
     },
     {
@@ -833,7 +842,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1371,
+      "durationMs": 1439,
       "errorSnippet": null
     },
     {
@@ -842,7 +851,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1824,
+      "durationMs": 1944,
       "errorSnippet": null
     },
     {
@@ -851,7 +860,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1181,
+      "durationMs": 1201,
       "errorSnippet": null
     },
     {
@@ -860,7 +869,7 @@
       "passed": 14,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1407,
+      "durationMs": 1484,
       "errorSnippet": null
     },
     {
@@ -869,7 +878,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 551,
+      "durationMs": 558,
       "errorSnippet": null
     },
     {
@@ -878,7 +887,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 935,
+      "durationMs": 944,
       "errorSnippet": null
     },
     {
@@ -887,7 +896,7 @@
       "passed": 17,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1009,
+      "durationMs": 1030,
       "errorSnippet": null
     },
     {
@@ -896,7 +905,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 529,
+      "durationMs": 508,
       "errorSnippet": null
     },
     {
@@ -905,7 +914,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 14350,
+      "durationMs": 14569,
       "errorSnippet": null
     },
     {
@@ -914,7 +923,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 5238,
+      "durationMs": 5298,
       "errorSnippet": null
     },
     {
@@ -923,7 +932,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3624,
+      "durationMs": 3573,
       "errorSnippet": null
     },
     {
@@ -932,7 +941,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1291,
+      "durationMs": 1279,
       "errorSnippet": null
     },
     {
@@ -941,7 +950,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1227,
+      "durationMs": 1239,
       "errorSnippet": null
     },
     {
@@ -950,7 +959,7 @@
       "passed": 11,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1025,
+      "durationMs": 1033,
       "errorSnippet": null
     },
     {
@@ -959,7 +968,7 @@
       "passed": 12,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 555,
+      "durationMs": 554,
       "errorSnippet": null
     },
     {
@@ -968,7 +977,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 928,
+      "durationMs": 929,
       "errorSnippet": null
     },
     {
@@ -977,7 +986,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 559,
+      "durationMs": 546,
       "errorSnippet": null
     },
     {
@@ -986,7 +995,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 499,
+      "durationMs": 500,
       "errorSnippet": null
     },
     {
@@ -995,7 +1004,7 @@
       "passed": 12,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1320,
+      "durationMs": 1315,
       "errorSnippet": null
     },
     {
@@ -1004,7 +1013,7 @@
       "passed": 10,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 585,
+      "durationMs": 580,
       "errorSnippet": null
     },
     {
@@ -1013,7 +1022,7 @@
       "passed": 34,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 564,
+      "durationMs": 568,
       "errorSnippet": null
     },
     {
@@ -1022,7 +1031,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 503,
+      "durationMs": 512,
       "errorSnippet": null
     },
     {
@@ -1031,7 +1040,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 556,
+      "durationMs": 553,
       "errorSnippet": null
     },
     {
@@ -1040,7 +1049,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 505,
+      "durationMs": 510,
       "errorSnippet": null
     },
     {
@@ -1049,7 +1058,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 539,
+      "durationMs": 541,
       "errorSnippet": null
     },
     {
@@ -1058,7 +1067,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 978,
+      "durationMs": 985,
       "errorSnippet": null
     },
     {
@@ -1067,7 +1076,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 540,
+      "durationMs": 542,
       "errorSnippet": null
     },
     {
@@ -1076,7 +1085,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 958,
+      "durationMs": 952,
       "errorSnippet": null
     },
     {
@@ -1085,7 +1094,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 544,
+      "durationMs": 543,
       "errorSnippet": null
     },
     {
@@ -1094,7 +1103,16 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 508,
+      "durationMs": 504,
+      "errorSnippet": null
+    },
+    {
+      "file": "tests\\paired-device-migration.test.js",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 495,
       "errorSnippet": null
     },
     {
@@ -1103,7 +1121,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 537,
+      "durationMs": 558,
       "errorSnippet": null
     },
     {
@@ -1112,7 +1130,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 870,
+      "durationMs": 894,
       "errorSnippet": null
     },
     {
@@ -1121,7 +1139,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 542,
+      "durationMs": 541,
       "errorSnippet": null
     },
     {
@@ -1130,7 +1148,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 648,
+      "durationMs": 657,
       "errorSnippet": null
     },
     {
@@ -1139,7 +1157,7 @@
       "passed": 16,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 575,
+      "durationMs": 557,
       "errorSnippet": null
     },
     {
@@ -1148,7 +1166,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 490,
+      "durationMs": 499,
       "errorSnippet": null
     },
     {
@@ -1157,7 +1175,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 499,
+      "durationMs": 500,
       "errorSnippet": null
     },
     {
@@ -1166,7 +1184,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 550,
+      "durationMs": 555,
       "errorSnippet": null
     },
     {
@@ -1179,12 +1197,21 @@
       "errorSnippet": null
     },
     {
+      "file": "tests\\robot-controller-safety.test.js",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 504,
+      "errorSnippet": null
+    },
+    {
       "file": "tests\\robotics-hal.test.js",
       "exitCode": 0,
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 498,
+      "durationMs": 500,
       "errorSnippet": null
     },
     {
@@ -1193,16 +1220,16 @@
       "passed": 10,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 568,
+      "durationMs": 566,
       "errorSnippet": null
     },
     {
       "file": "tests\\robotics-twin-sim.test.js",
       "exitCode": 0,
-      "passed": 4,
+      "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 498,
+      "durationMs": 500,
       "errorSnippet": null
     },
     {
@@ -1211,7 +1238,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 535,
+      "durationMs": 550,
       "errorSnippet": null
     },
     {
@@ -1220,7 +1247,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1231,
+      "durationMs": 1237,
       "errorSnippet": null
     },
     {
@@ -1229,7 +1256,7 @@
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 729,
+      "durationMs": 735,
       "errorSnippet": null
     },
     {
@@ -1238,16 +1265,16 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 11318,
+      "durationMs": 11911,
       "errorSnippet": null
     },
     {
       "file": "tests\\security-secrets.test.js",
       "exitCode": 0,
-      "passed": 6,
+      "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 5089,
+      "durationMs": 5338,
       "errorSnippet": null
     },
     {
@@ -1256,7 +1283,7 @@
       "passed": 10,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1082,
+      "durationMs": 1070,
       "errorSnippet": null
     },
     {
@@ -1265,7 +1292,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 506,
+      "durationMs": 500,
       "errorSnippet": null
     },
     {
@@ -1274,7 +1301,7 @@
       "passed": 12,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1358,
+      "durationMs": 1367,
       "errorSnippet": null
     },
     {
@@ -1292,7 +1319,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1380,
+      "durationMs": 1386,
       "errorSnippet": null
     },
     {
@@ -1301,7 +1328,7 @@
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 507,
+      "durationMs": 502,
       "errorSnippet": null
     },
     {
@@ -1310,16 +1337,16 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 516,
+      "durationMs": 501,
       "errorSnippet": null
     },
     {
       "file": "tests\\spatial-diorama-adapter.test.js",
       "exitCode": 0,
-      "passed": 3,
+      "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 561,
+      "durationMs": 566,
       "errorSnippet": null
     },
     {
@@ -1328,16 +1355,16 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1192,
+      "durationMs": 1038,
       "errorSnippet": null
     },
     {
       "file": "tests\\spatial-geometry-converter.test.js",
       "exitCode": 0,
-      "passed": 2,
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 513,
+      "durationMs": 500,
       "errorSnippet": null
     },
     {
@@ -1352,19 +1379,19 @@
     {
       "file": "tests\\spatial-router.test.js",
       "exitCode": 0,
-      "passed": 4,
+      "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1291,
+      "durationMs": 1368,
       "errorSnippet": null
     },
     {
       "file": "tests\\spatial-scene-graph.test.js",
       "exitCode": 0,
-      "passed": 2,
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 538,
+      "durationMs": 509,
       "errorSnippet": null
     },
     {
@@ -1373,7 +1400,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 561,
+      "durationMs": 547,
       "errorSnippet": null
     },
     {
@@ -1382,7 +1409,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 932,
+      "durationMs": 953,
       "errorSnippet": null
     },
     {
@@ -1391,7 +1418,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 546,
+      "durationMs": 550,
       "errorSnippet": null
     },
     {
@@ -1400,7 +1427,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 1,
-      "durationMs": 1278,
+      "durationMs": 1254,
       "errorSnippet": null
     },
     {
@@ -1409,7 +1436,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3132,
+      "durationMs": 3143,
       "errorSnippet": null
     },
     {
@@ -1418,7 +1445,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 506,
+      "durationMs": 507,
       "errorSnippet": null
     },
     {
@@ -1427,7 +1454,7 @@
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 589,
+      "durationMs": 566,
       "errorSnippet": null
     },
     {
@@ -1436,7 +1463,7 @@
       "passed": 11,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 516,
+      "durationMs": 511,
       "errorSnippet": null
     },
     {
@@ -1445,7 +1472,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 952,
+      "durationMs": 932,
       "errorSnippet": null
     },
     {
@@ -1454,7 +1481,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 506,
+      "durationMs": 509,
       "errorSnippet": null
     },
     {
@@ -1463,7 +1490,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 512,
+      "durationMs": 525,
       "errorSnippet": null
     },
     {
@@ -1472,7 +1499,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 512,
+      "durationMs": 509,
       "errorSnippet": null
     },
     {
@@ -1481,7 +1508,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3126,
+      "durationMs": 3200,
       "errorSnippet": null
     },
     {
@@ -1490,7 +1517,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 519,
+      "durationMs": 509,
       "errorSnippet": null
     },
     {
@@ -1499,7 +1526,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 608,
+      "durationMs": 597,
       "errorSnippet": null
     },
     {
@@ -1508,7 +1535,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1340,
+      "durationMs": 1333,
       "errorSnippet": null
     },
     {
@@ -1517,7 +1544,7 @@
       "passed": 14,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 735,
+      "durationMs": 724,
       "errorSnippet": null
     },
     {
@@ -1526,7 +1553,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 512,
+      "durationMs": 517,
       "errorSnippet": null
     },
     {
@@ -1535,7 +1562,7 @@
       "passed": 12,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1253,
+      "durationMs": 1256,
       "errorSnippet": null
     },
     {
@@ -1544,7 +1571,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1459,
+      "durationMs": 1316,
       "errorSnippet": null
     },
     {
@@ -1553,7 +1580,7 @@
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 11468,
+      "durationMs": 11413,
       "errorSnippet": null
     },
     {
@@ -1562,7 +1589,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1370,
+      "durationMs": 1385,
       "errorSnippet": null
     },
     {
@@ -1571,7 +1598,7 @@
       "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 10654,
+      "durationMs": 10649,
       "errorSnippet": null
     },
     {
@@ -1580,7 +1607,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 10509,
+      "durationMs": 10495,
       "errorSnippet": null
     },
     {
@@ -1589,7 +1616,7 @@
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 524,
+      "durationMs": 526,
       "errorSnippet": null
     },
     {
@@ -1598,7 +1625,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3629,
+      "durationMs": 3644,
       "errorSnippet": null
     },
     {
@@ -1607,7 +1634,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 501,
+      "durationMs": 515,
       "errorSnippet": null
     },
     {
@@ -1616,7 +1643,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 536,
+      "durationMs": 526,
       "errorSnippet": null
     },
     {
@@ -1625,7 +1652,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 950,
+      "durationMs": 934,
       "errorSnippet": null
     },
     {
@@ -1634,7 +1661,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1012,
+      "durationMs": 986,
       "errorSnippet": null
     },
     {
@@ -1643,7 +1670,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 977,
+      "durationMs": 938,
       "errorSnippet": null
     },
     {
@@ -1652,7 +1679,7 @@
       "passed": 11,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1032,
+      "durationMs": 1003,
       "errorSnippet": null
     },
     {
@@ -1661,7 +1688,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 942,
+      "durationMs": 958,
       "errorSnippet": null
     },
     {
@@ -1670,7 +1697,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 506,
+      "durationMs": 494,
       "errorSnippet": null
     },
     {
@@ -1679,7 +1706,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 665,
+      "durationMs": 559,
       "errorSnippet": null
     },
     {
@@ -1688,7 +1715,7 @@
       "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3143,
+      "durationMs": 3099,
       "errorSnippet": null
     },
     {
@@ -1697,7 +1724,7 @@
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 538,
+      "durationMs": 509,
       "errorSnippet": null
     },
     {
@@ -1706,7 +1733,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3257,
+      "durationMs": 2895,
       "errorSnippet": null
     },
     {
@@ -1715,7 +1742,7 @@
       "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 3633,
+      "durationMs": 3573,
       "errorSnippet": null
     },
     {
@@ -1724,7 +1751,7 @@
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 655,
+      "durationMs": 594,
       "errorSnippet": null
     },
     {
@@ -1742,7 +1769,7 @@
       "passed": 32,
       "failed": 0,
       "skipped": 0,
-      "durationMs": 1783,
+      "durationMs": 1818,
       "errorSnippet": null
     }
   ]

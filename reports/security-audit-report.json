@@ -1,20 +1,24 @@
 {
   "metadata": {
-    "generatedAt": "2026-11-03T13:57:48.817Z",
+    "generatedAt": "2026-11-03T14:36:15.309Z",
     "targetRepository": "ULTRON-AI",
-    "elapsedSeconds": 8.31,
+    "elapsedSeconds": 8.43,
     "summary": {
       "confirmedVulnerabilitiesCount": 1,
       "potentialRisksCount": 1,
       "informationalFindingsCount": 0,
       "skippedToolsCount": 4,
+      "qualityGateBlockers": [
+        "SAST findings require review or remediation.",
+        "Critical/high findings remain unresolved."
+      ],
       "isQualityGatePassed": false
     }
   },
   "metrics": {
     "sast": {
-      "filesScanned": 220,
-      "linesScanned": 74696,
+      "filesScanned": 221,
+      "linesScanned": 77132,
       "findingsCount": 2,
       "severityBreakdown": {
         "CRITICAL": 0,
@@ -39,7 +43,7 @@
       }
     },
     "secrets": {
-      "filesScanned": 1385,
+      "filesScanned": 1588,
       "commitsScanned": 30,
       "findingsCount": 0
     }
@@ -49,7 +53,7 @@
       {
         "source": "SAST",
         "category": "Code Vulnerability",
-        "findingId": "vuln-3d594209",
+        "findingId": "vuln-c96f2b7a",
         "ruleId": "SAST-CWE-1321",
         "cwe": "CWE-1321",
         "title": "Prototype Pollution",
@@ -67,7 +71,7 @@
       {
         "source": "SAST",
         "category": "Code Weakness",
-        "findingId": "vuln-5a468232",
+        "findingId": "vuln-d4e9c391",
         "ruleId": "SAST-CWE-327",
         "cwe": "CWE-327",
         "title": "Insecure Cryptographic Algorithm",
