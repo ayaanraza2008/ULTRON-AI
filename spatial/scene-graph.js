@@ -27,7 +27,7 @@ export class SpatialSceneGraph {
   constructor(options = {}) {
     this.sceneId = options.sceneId || ("scene-" + Date.now());
     this.timestamp = options.timestamp || new Date().toISOString();
-    this.pipeline = options.pipeline || "diorama-zero-shot-spatial";
+    this.pipeline = options.pipeline || "unverified-scene-graph";
     this.executionMode = options.executionMode || "UNKNOWN";
     this.metadataOnly = options.metadataOnly === true || options.inferenceStatus === "CPU_METADATA_ONLY";
     this.cudaAccelerated = Boolean(options.cudaAccelerated);
@@ -36,7 +36,7 @@ export class SpatialSceneGraph {
     this.remoteInferenceStatusReported = typeof options.remoteInferenceStatusReported === "string"
       ? options.remoteInferenceStatusReported.slice(0, 120)
       : null;
-    this.inferenceStatus = options.inferenceStatus || "ESTIMATED_SCENE";
+    this.inferenceStatus = options.inferenceStatus || "UNVERIFIED_SCENE_GRAPH";
 
     // Metadata-only results must never inherit fabricated room dimensions.
     this.architecture = this.metadataOnly ? {
