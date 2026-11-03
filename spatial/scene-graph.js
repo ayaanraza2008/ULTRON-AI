@@ -29,6 +29,7 @@ export class SpatialSceneGraph {
     this.timestamp = options.timestamp || new Date().toISOString();
     this.pipeline = options.pipeline || "diorama-zero-shot-spatial";
     this.executionMode = options.executionMode || "UNKNOWN";
+    this.metadataOnly = options.metadataOnly === true || options.inferenceStatus === "CPU_METADATA_ONLY";
     this.cudaAccelerated = Boolean(options.cudaAccelerated);
     this.remoteWorkerUsed = Boolean(options.remoteWorkerUsed);
     this.remoteGpuReported = Boolean(options.remoteGpuReported);
@@ -37,8 +38,14 @@ export class SpatialSceneGraph {
       : null;
     this.inferenceStatus = options.inferenceStatus || "ESTIMATED_SCENE";
 
-    // Room architecture
-    this.architecture = {
+    // Metadata-only results must never inherit fabricated room dimensions.
+    this.architecture = this.metadataOnly ? {
+      roomType: "unknown",
+      dimensions: { widthMeters: null, lengthMeters: null, heightMeters: null },
+      floor: null,
+      ceiling: null,
+      walls: []
+    } : {
       roomType: options.architecture?.roomType || "indoor_room",
       dimensions: {
         widthMeters: Number(options.architecture?.dimensions?.widthMeters) || 4.2,
@@ -201,6 +208,14 @@ export class SpatialSceneGraph {
       return { found: false, answer: "Provide a spatial question to query the 3D scene." };
     }
 
+    if (this.metadataOnly) {
+      return {
+        found: false,
+        queryType: "UNAVAILABLE",
+        answer: "No 3D geometry was reconstructed. The CPU fallback only validated the image payload; configure a verified Diorama model worker for spatial queries."
+      };
+    }
+
     const allObjects = Array.from(this.objects.values());
 
     // "How many [label]s"
@@ -289,6 +304,9 @@ export class SpatialSceneGraph {
    * Human-readable text summary for injection into LLM Brain context.
    */
   toSummaryText() {
+    if (this.metadataOnly) {
+      return "No 3D scene was reconstructed. CPU fallback validated the image payload only; no object positions or room dimensions are available.";
+    }
     const dims = this.architecture.dimensions;
     const objs = Array.from(this.objects.values());
     if (!objs.length) {
@@ -312,7 +330,12 @@ export class SpatialSceneGraph {
       sceneId: this.sceneId,
       timestamp: this.timestamp,
       pipeline: this.pipeline,
+      executionMode: this.executionMode,
+      metadataOnly: this.metadataOnly,
       cudaAccelerated: this.cudaAccelerated,
+      remoteWorkerUsed: this.remoteWorkerUsed,
+      remoteGpuReported: this.remoteGpuReported,
+      remoteInferenceStatusReported: this.remoteInferenceStatusReported,
       inferenceStatus: this.inferenceStatus,
       architecture: this.architecture,
       objects: Array.from(this.objects.values())
