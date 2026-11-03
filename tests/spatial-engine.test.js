@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { SpatialIntelligenceEngine, JOB_STATUS } from "../spatial/spatial-engine.js";
+import { SpatialSceneGraph } from "../spatial/scene-graph.js";
 
 const sampleImageBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-test("SpatialIntelligenceEngine creates and completes 3D reconstruction job", async () => {
+test("SpatialIntelligenceEngine completes CPU metadata-only processing without inventing geometry", async () => {
   const engine = new SpatialIntelligenceEngine();
   const created = await engine.createJob("user-alice", sampleImageBase64);
 
@@ -18,7 +19,9 @@ test("SpatialIntelligenceEngine creates and completes 3D reconstruction job", as
   assert.equal(job.status, JOB_STATUS.COMPLETED);
   assert.equal(job.progress, 100);
   assert.ok(job.sceneGraph);
-  assert.ok(job.sceneGraph.objects.length > 0);
+  assert.equal(job.sceneGraph.metadataOnly, true);
+  assert.equal(job.sceneGraph.inferenceStatus, "CPU_METADATA_ONLY");
+  assert.equal(job.sceneGraph.objects.length, 0);
 });
 
 test("SpatialIntelligenceEngine enforces strict user isolation", async () => {
@@ -44,10 +47,23 @@ test("SpatialIntelligenceEngine enforces strict user isolation", async () => {
   );
 });
 
-test("SpatialIntelligenceEngine exports 3D scene assets and answers spatial queries", async () => {
-  const engine = new SpatialIntelligenceEngine();
+test("SpatialIntelligenceEngine exports and queries an explicitly supplied test-fixture scene", async () => {
+  const fixtureAdapter = {
+    async reconstructScene() {
+      return new SpatialSceneGraph({
+        sceneId: "spatial-unit-test-fixture",
+        pipeline: "unit-test-fixture",
+        inferenceStatus: "TEST_FIXTURE",
+        objects: [
+          { id: "desk-fixture", label: "desk", pose3d: { position: { x: 0, y: 0.4, z: 2 }, dimensions: { dx: 1.2, dy: 0.8, dz: 0.6 } } },
+          { id: "chair-fixture", label: "chair", pose3d: { position: { x: 0, y: 0.4, z: 1.2 }, dimensions: { dx: 0.5, dy: 0.8, dz: 0.5 } } }
+        ]
+      });
+    }
+  };
+  const engine = new SpatialIntelligenceEngine({ adapter: fixtureAdapter });
   const created = await engine.createJob("user-alice", sampleImageBase64);
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 50));
 
   // Export OBJ
   const objExport = engine.exportSceneAsset(created.jobId, "user-alice", "obj");
