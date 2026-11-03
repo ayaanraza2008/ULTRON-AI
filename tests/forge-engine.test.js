@@ -32,9 +32,10 @@ test("ForgeEngine: generates paired implementation code and unit tests", () => {
 test("ForgeEngine: security analyzer detects hardcoded secrets and command injection", () => {
   const forge = new ForgeEngine();
 
-  // Insecure snippet
+  // Insecure snippet is assembled at runtime so no static credential literal is committed.
+  const fakeOpenAiKey = ["sk", "live", "1234567890abcdef1234"].join("-");
   const vulnerableCode = `
-    const apiKey = ["sk", "live", "1234567890abcdef1234"].join("-");
+    const apiKey = "${fakeOpenAiKey}";
     const cmd = "rm -rf " + userInput;
     exec(cmd);
   `;
