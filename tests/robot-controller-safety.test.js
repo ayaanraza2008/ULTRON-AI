@@ -7,6 +7,7 @@ test("RobotController registrations are explicitly simulation-only", () => {
   const registration = controller.registerRobot({ robotId: "bot-sim-1" });
   assert.equal(registration.success, true);
   assert.equal(registration.registrationMode, "SIMULATION_ONLY");
+  assert.equal(registration.tokenScope, "SIMULATION_ONLY");
   assert.equal(registration.hardwareConnected, false);
   assert.equal(controller.getRobot("bot-sim-1").status, "SIMULATION_ONLY");
   assert.equal(controller.getFleetStatus().physicalActuationEnabled, false);
