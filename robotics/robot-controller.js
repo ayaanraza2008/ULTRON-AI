@@ -59,7 +59,7 @@ export class PhysicalSafetyController {
     this.resetAuthorizationVerifier = typeof options.resetAuthorizationVerifier === "function"
       ? options.resetAuthorizationVerifier
       : () => false;
-    this.lastHeartbeatAt = Date.now();
+    this.lastHeartbeatAt = 0;
     this.safetyViolations = [];
   }
 
@@ -126,7 +126,7 @@ export class PhysicalSafetyController {
    * Non-bypassable kinematic safety check.
    * Returns { safe: true, permitted: true } or rejects with specific violation.
    */
-  validateMotionCommand({ linearVelocity = 0, angularVelocity = 0, targetPosition = null, batteryPercent = 100, batteryLevel }) {
+  validateMotionCommand({ linearVelocity = 0, angularVelocity = 0, targetPosition = null, batteryPercent = null, batteryLevel }) {
     const battery = batteryLevel !== undefined ? batteryLevel : batteryPercent;
 
     if (this.emergencyStopLatched) {
@@ -135,6 +135,10 @@ export class PhysicalSafetyController {
 
     if (!this.isHeartbeatAlive()) {
       return { safe: false, permitted: false, code: "HEARTBEAT_EXPIRED", reason: "Hardware halted: Dead-man's switch heartbeat expired." };
+    }
+
+    if (!Number.isFinite(battery) || battery < 0 || battery > 100) {
+      return { safe: false, permitted: false, code: "BATTERY_TELEMETRY_UNAVAILABLE", reason: "Hardware halted: valid battery telemetry is required." };
     }
 
     if (battery < this.minBatteryPercent) {
