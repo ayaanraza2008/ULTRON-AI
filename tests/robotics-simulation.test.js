@@ -205,7 +205,7 @@ test("RoboticsSim: HIL bridge remains simulation-only without attested physical 
   assert.equal(hil.activeMode, "SIMULATION");
 });
 
-test("RoboticsSim: SimReadyCentralExplorer discovers and filters HuggingFace SimReady Central assets", () => {
+test("RoboticsSim: SimReadyCentralExplorer filters its local static metadata catalog", () => {
   assert.ok(Array.isArray(SIMREADY_CENTRAL_EXTENDED_CATALOG));
   assert.ok(SIMREADY_CENTRAL_EXTENDED_CATALOG.length >= 3);
 
@@ -226,9 +226,12 @@ test("RoboticsSim: SimReadyCentralExplorer discovers and filters HuggingFace Sim
   assert.ok(details.asset.huggingFaceSpace.includes("simready-central"));
 });
 
-test("RoboticsSim: SimReadyCentralExplorer imports asset directly into active simulation project", () => {
+test("RoboticsSim: SimReadyCentralExplorer registers metadata without downloading geometry", () => {
   const result = simReadyCentralExplorer.importAssetToProject("simready-agv-forklift");
   assert.equal(result.success, true);
   assert.equal(result.importedAssetId, "simready-agv-forklift");
   assert.equal(result.registeredName, "Autonomous Pallet Forklift AGV");
+  assert.equal(result.importType, "STATIC_METADATA_REGISTRATION");
+  assert.equal(result.geometryDownloaded, false);
+  assert.equal(result.liveHuggingFaceConnection, false);
 });
