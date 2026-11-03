@@ -30,6 +30,41 @@ function adapterError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+function validateScenePayload(payload) {
+  if (!payload || typeof payload !== "object" || !Array.isArray(payload.objects) || payload.objects.length > 500) {
+    throw adapterError("INVALID_SCENE_GRAPH", "Spatial worker result must contain an objects array with at most 500 entries.");
+  }
+
+  for (const [index, object] of payload.objects.entries()) {
+    const position = object?.pose3d?.position;
+    const dimensions = object?.pose3d?.dimensions;
+    if (!object || typeof object.id !== "string" || !object.id.trim() ||
+        typeof object.label !== "string" || !object.label.trim() ||
+        !position || !dimensions) {
+      throw adapterError("INVALID_SCENE_GRAPH", `Spatial object ${index} is missing its identity or 3D geometry.`);
+    }
+
+    for (const axis of ["x", "y", "z"]) {
+      const value = Number(position[axis]);
+      if (!Number.isFinite(value) || Math.abs(value) > 1000) {
+        throw adapterError("INVALID_SCENE_GRAPH", `Spatial object ${index} has invalid position geometry.`);
+      }
+    }
+    for (const axis of ["dx", "dy", "dz"]) {
+      const value = Number(dimensions[axis]);
+      if (!Number.isFinite(value) || value <= 0 || value > 1000) {
+        throw adapterError("INVALID_SCENE_GRAPH", `Spatial object ${index} has invalid dimensions.`);
+      }
+    }
+    if (object.confidence !== undefined &&
+        (!Number.isFinite(Number(object.confidence)) || Number(object.confidence) < 0 || Number(object.confidence) > 1)) {
+      throw adapterError("INVALID_SCENE_GRAPH", `Spatial object ${index} has an invalid confidence score.`);
+    }
+  }
+
+  return payload;
+}
+
 export class DioramaSpatialAdapter {
   constructor(options = {}) {
     this.env = options.env || process.env;
@@ -57,18 +92,40 @@ export class DioramaSpatialAdapter {
 
     // 3. Dispatch to appropriate backend
     let rawResult;
+    let actualMode = EXECUTION_MODES.CPU_METADATA_FALLBACK;
     if (mode === EXECUTION_MODES.REMOTE_GPU && hw.worker.remoteEndpoint) {
       rawResult = await this._executeRemoteGpu(buffer, hw.worker.remoteEndpoint, this.env.DIORAMA_REMOTE_TOKEN, options);
-    } else if (mode === EXECUTION_MODES.LOCAL_GPU && hw.worker.hasIsolatedPython) {
+      actualMode = EXECUTION_MODES.REMOTE_GPU;
+    } else if (mode === EXECUTION_MODES.LOCAL_GPU && hw.worker.hasIsolatedPython && hw.gpu.hasCuda) {
       rawResult = await this._executeLocalIsolatedWorker(buffer, hw.worker.pythonBin, hw.weights.weightsDir, options);
+      actualMode = EXECUTION_MODES.LOCAL_GPU;
     } else {
       rawResult = await this._executeCpuFallback(buffer, options);
     }
 
-    // 4. Wrap in validated SpatialSceneGraph
+    const validatedResult = validateScenePayload(rawResult);
+    const remoteWorkerUsed = actualMode === EXECUTION_MODES.REMOTE_GPU;
+    const cudaAccelerated = actualMode === EXECUTION_MODES.LOCAL_GPU && hw.gpu.hasCuda;
+
+    // Remote worker claims are retained as metadata but are not treated as
+    // independently verified CUDA or Diorama model inference.
+    const inferenceStatus = actualMode === EXECUTION_MODES.CPU_METADATA_FALLBACK
+      ? (rawResult.inferenceStatus || "CPU_GEOMETRIC_FALLBACK")
+      : actualMode === EXECUTION_MODES.REMOTE_GPU
+        ? "REMOTE_RESULT_UNVERIFIED"
+        : "LOCAL_CUDA_RESULT_UNVERIFIED";
+
+    // 4. Wrap only validated geometry; never label a remote response as local CUDA.
     return new SpatialSceneGraph({
-      ...rawResult,
-      cudaAccelerated: mode === EXECUTION_MODES.LOCAL_GPU || mode === EXECUTION_MODES.REMOTE_GPU
+      ...validatedResult,
+      executionMode: actualMode,
+      cudaAccelerated,
+      remoteWorkerUsed,
+      remoteGpuReported: remoteWorkerUsed && rawResult.cudaAccelerated === true,
+      remoteInferenceStatusReported: remoteWorkerUsed && typeof rawResult.inferenceStatus === "string"
+        ? rawResult.inferenceStatus
+        : null,
+      inferenceStatus
     });
   }
 
