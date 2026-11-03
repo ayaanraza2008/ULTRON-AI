@@ -716,11 +716,17 @@ export class HardwareInTheLoopBridge {
       return { success: false, transmitted: false, physicalActuation: false, error: "HARDWARE_TRANSPORT_UNAVAILABLE" };
     }
 
+    if (!Number.isFinite(safetyContext.batteryPercent)) {
+      return { success: false, transmitted: false, physicalActuation: false, error: "BATTERY_TELEMETRY_UNAVAILABLE" };
+    }
+    if (typeof this.safetyController.isHeartbeatAlive !== "function" || !this.safetyController.isHeartbeatAlive()) {
+      return { success: false, transmitted: false, physicalActuation: false, error: "HEARTBEAT_EXPIRED" };
+    }
     const safety = this.safetyController.validateMotionCommand({
       linearVelocity: linearMps,
       angularVelocity: angularRps,
       targetPosition: safetyContext.targetPosition || null,
-      batteryPercent: safetyContext.batteryPercent ?? 100
+      batteryPercent: safetyContext.batteryPercent
     });
     if (!safety.safe || !safety.permitted) {
       return { success: false, transmitted: false, physicalActuation: false, error: safety.code || "SAFETY_INTERLOCK_BLOCKED" };
@@ -746,9 +752,9 @@ export class HardwareInTheLoopBridge {
       topic: "/ultron/telemetry",
       msgType: "ultron_interfaces/msg/RobotTelemetry",
       timestamp: Date.now(),
-      batteryPercent: sensors.batteryPercent ?? 100,
-      emergencyHaltState: sensors.emergencyHaltLatched ?? false,
-      linearSpeed: sensors.linearSpeed ?? 0,
+      batteryPercent: sensors.batteryPercent ?? null,
+      emergencyHaltState: sensors.emergencyHaltLatched ?? null,
+      linearSpeed: sensors.linearSpeed ?? null,
       mode: this.activeMode,
       physicalHardwareVerified: this.physicalHardwareVerified
     };
