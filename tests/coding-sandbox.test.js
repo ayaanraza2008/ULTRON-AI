@@ -200,24 +200,13 @@ test("CodingSandbox: Genuine Docker Security & Isolation Battery", async (t) => 
 
   await t.test("3. Memory limit enforcement: process exceeding memory quota is terminated", async () => {
     // 64MB memory limit
-    const tightSandbox = new CodingSandbox({ memoryLimitMb: 64, timeoutMs: 8000 });
+    const tightSandbox = new CodingSandbox({ memoryLimitMb: 64, timeoutMs: 5000 });
     await tightSandbox.initialize();
 
-    // Attempting to allocate 200MB buffer in a 64MB container triggers OOM killer
-    const oomCode = `
-      try {
-        const buffers = [];
-        for (let i = 0; i < 20; i++) {
-          buffers.push(Buffer.alloc(10 * 1024 * 1024));
-        }
-        console.log("SURVIVED");
-      } catch (err) {
-        console.error("CAUGHT_IN_V8:" + err.message);
-      }
-    `;
+    // Actively allocate and fill memory pages to force real RSS allocation exceeding the 64MB container quota
+    const oomCode = "const buffers = []; while (true) { buffers.push(Buffer.alloc(10 * 1024 * 1024, 0x42)); }";
     const res = await tightSandbox.executeJavaScript(oomCode);
-    assert.ok(res.success === false || res.stdout.includes("CAUGHT_IN_V8") || !res.stdout.includes("SURVIVED"),
-      "Memory limit must terminate container or cause V8 allocation error");
+    assert.equal(res.success, false, "Container process exceeding memory quota must terminate with failure");
   });
 
   await t.test("4. Filesystem isolation: read-only root blocks host & container disk tampering", async () => {
