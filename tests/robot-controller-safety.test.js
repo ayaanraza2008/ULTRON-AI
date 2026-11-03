@@ -69,3 +69,13 @@ test("PhysicalSafetyController keeps emergency stop latched when authorization i
   assert.equal(result.error, "PHYSICAL_OPERATOR_AUTHORIZATION_REQUIRED");
   assert.equal(safety.emergencyStopLatched, true);
 });
+
+test("PhysicalSafetyController requires a live heartbeat and valid battery telemetry", () => {
+  const safety = new PhysicalSafetyController();
+  const noHeartbeat = safety.validateMotionCommand({ batteryPercent: 100 });
+  assert.equal(noHeartbeat.code, "HEARTBEAT_EXPIRED");
+
+  safety.recordHeartbeat();
+  const noBattery = safety.validateMotionCommand({});
+  assert.equal(noBattery.code, "BATTERY_TELEMETRY_UNAVAILABLE");
+});
