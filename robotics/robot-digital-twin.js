@@ -258,20 +258,35 @@ export class SimToRealDeploymentGate {
     };
   }
 
+  evaluateSimulationQualification(trajectoryHistory = []) {
+    const result = this.evaluateTrajectory(trajectoryHistory);
+    return {
+      ...result,
+      simulationQualified: result.passed === true,
+      physicalDeploymentAuthorized: false,
+      qualificationType: "SIMULATION_ONLY"
+    };
+  }
+
   issueDeploymentPassport(robotId, trajectoryHistory = []) {
-    const evalResult = this.evaluateTrajectory(trajectoryHistory);
-    if (!evalResult.passed) {
-      throw new Error(`Sim-to-Real deployment rejected: Safety checks failed (${JSON.stringify(evalResult.metrics)})`);
+    const qualification = this.evaluateSimulationQualification(trajectoryHistory);
+    if (!qualification.passed) {
+      throw new Error(`Simulation qualification rejected: Safety checks failed (${JSON.stringify(qualification.metrics)})`);
     }
 
-    const token = "pass_" + crypto.randomBytes(16).toString("hex");
+    // A simulation trajectory cannot authorize real-world actuation.
     return {
-      success: true,
-      deploymentPassportToken: token,
+      success: false,
+      code: "PHYSICAL_HIL_REQUIRED",
+      error: "Simulation qualification is not a physical deployment passport. Verified hardware-in-the-loop testing and owner authorization are required.",
       robotId,
-      evaluationScore: evalResult.score,
-      metrics: evalResult.metrics,
-      issuedAt: new Date().toISOString()
+      simulationQualified: true,
+      physicalDeploymentAuthorized: false,
+      deploymentPassportToken: null,
+      evaluationScore: qualification.score,
+      metrics: qualification.metrics,
+      qualificationType: "SIMULATION_ONLY",
+      evaluatedAt: new Date().toISOString()
     };
   }
 }
