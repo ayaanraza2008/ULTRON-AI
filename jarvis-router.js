@@ -26,6 +26,7 @@ import { knowledgeEngine } from "./knowledge/knowledge-engine.js";
 import { cyberSecurityIntel } from "./security/cyber-intel.js";
 import { geoIntelligence } from "./system/geo-intel.js";
 import { telephonyGateway, CALLER_AUTH_STATUS } from "./telephony/telephony-gateway.js";
+import { createTelephonyWebhookGuard } from "./telephony/webhook-security.js";
 import { telephonyBrain } from "./telephony/telephony-brain.js";
 import { windowsDesktopAgent } from "./system/windows-desktop-agent.js";
 import { multiDeviceManager } from "./integrations/multi-device-manager.js";
@@ -50,6 +51,21 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
   }
 
   const ownerUserId = String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+  const requireTelephonyWebhook = createTelephonyWebhookGuard({ env });
+  const configuredOwnerNumbers = String(env.ULTRON_OWNER_PHONE_NUMBERS || "")
+    .split(",")
+    .map(phone => telephonyGateway.normalizePhoneNumber(phone))
+    .filter(Boolean);
+  const invalidOwnerNumber = configuredOwnerNumbers.find(phone => !/^\\+[1-9]\\d{7,14}$/.test(phone));
+  if (invalidOwnerNumber) {
+    throw new Error("ULTRON_OWNER_PHONE_NUMBERS must contain only comma-separated E.164 phone numbers.");
+  }
+  const configuredTelephonyPin = String(env.ULTRON_TELEPHONY_PIN || "").trim();
+  if (configuredTelephonyPin && !/^\\d{4}$/.test(configuredTelephonyPin)) {
+    throw new Error("ULTRON_TELEPHONY_PIN must be exactly four digits.");
+  }
+  telephonyGateway.ownerPhoneNumbers = new Set(configuredOwnerNumbers);
+  telephonyGateway.securityPin = configuredTelephonyPin || null;
   const requireOwner = [
     requireSupabaseUser,
     (req, res, next) => {
@@ -759,7 +775,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
 
   
   // --- Telephone Access & Telephony Gateway (Jarvis Calling) ---
-  router.post("/telephony/incoming-call", express.urlencoded({ extended: true }), express.json(), (req, res) => {
+  router.post("/telephony/incoming-call", express.urlencoded({ extended: true }), express.json(), requireTelephonyWebhook, (req, res) => {
     const from = req.body.From || req.body.from || req.body.caller || "";
     const to = req.body.To || req.body.to || "";
     const callSid = req.body.CallSid || req.body.callSid || req.body.callId;
@@ -769,7 +785,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     res.send(callResult.twiml);
   });
 
-  router.post("/telephony/process-speech", express.urlencoded({ extended: true }), express.json(), async (req, res) => {
+  router.post("/telephony/process-speech", express.urlencoded({ extended: true }), express.json(), requireTelephonyWebhook, async (req, res) => {
     const callId = req.query.callId || req.body.callId || req.body.CallSid;
     const speechResult = req.body.SpeechResult || req.body.speechResult || req.body.text || "";
     const call = telephonyGateway.getCall(callId);
@@ -796,7 +812,7 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     res.send(telephonyGateway.generateSpeechResponseTwiML(callId, outcome.spokenResponse, Boolean(outcome.hangup)));
   });
 
-  router.post("/telephony/verify-pin", express.urlencoded({ extended: true }), express.json(), (req, res) => {
+  router.post("/telephony/verify-pin", express.urlencoded({ extended: true }), express.json(), requireTelephonyWebhook, (req, res) => {
     const callId = req.query.callId || req.body.callId || req.body.CallSid;
     const digits = req.body.Digits || req.body.digits || req.body.pin || "";
 
@@ -812,13 +828,13 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     }
   });
 
-  router.post("/telephony/timeout-prompt", express.urlencoded({ extended: true }), (req, res) => {
+  router.post("/telephony/timeout-prompt", express.urlencoded({ extended: true }), requireTelephonyWebhook, (req, res) => {
     const callId = req.query.callId || req.body.callId;
     res.setHeader("Content-Type", "text/xml");
     res.send(telephonyGateway.generateSpeechResponseTwiML(callId, "I did not detect any speech. Are you still there, sir?"));
   });
 
-  router.post("/telephony/status-callback", express.urlencoded({ extended: true }), express.json(), (req, res) => {
+  router.post("/telephony/status-callback", express.urlencoded({ extended: true }), express.json(), requireTelephonyWebhook, (req, res) => {
     const callId = req.body.CallSid || req.body.callId;
     const callStatus = req.body.CallStatus || req.body.callStatus;
     if (callStatus === "completed" || callStatus === "canceled") {
