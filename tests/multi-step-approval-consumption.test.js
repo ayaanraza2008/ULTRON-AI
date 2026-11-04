@@ -54,7 +54,6 @@ test("Multi-step sensitive plans consume approvals only after every step is auth
   assert.equal(pending.approvalRequests.length, 2);
   const [approvalOne, approvalTwo] = pending.approvalRequests;
   assert.equal(orchestrator.approveRequest(approvalOne.id, { userId: "owner-a" }).success, true);
-  assert.equal(orchestrator.approveRequest(approvalTwo.id, { userId: "owner-a" }).success, true);
 
   // Supplying only the first approval must not consume it while the second
   // action is still awaiting approval.
@@ -68,6 +67,8 @@ test("Multi-step sensitive plans consume approvals only after every step is auth
   assert.equal(approvalOne.status, "APPROVED");
   assert.equal(approvalOne.consumed, false);
   assert.equal(calls.length, 0);
+
+  assert.equal(orchestrator.approveRequest(approvalTwo.id, { userId: "owner-a" }).success, true);
 
   const completed = await orchestrator.processUserRequest("Run both sensitive actions", {
     userId: "owner-a",
