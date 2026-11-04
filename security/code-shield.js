@@ -151,7 +151,7 @@ export const SAST_RULES = [
     name: "Hardcoded Credential Exposure",
     severity: "CRITICAL",
     cvss: 8.9,
-    pattern: /(?:(?:api[_-]?key|secret|token|password|auth_key)\s*[:=]\s*["'][A-Za-z0-9_\-]{20,}["']|\bsk-[A-Za-z0-9_-]{24,}|\bghp_[A-Za-z0-9_]{30,}|\bsb_secret_[A-Za-z0-9_.-]{20,})/i,
+    pattern: /(?:(?:api[_-]?key|secret|token|password|auth_key)\s*[:=]\s*["'][A-Za-z0-9_\-]{20,}["']|\bsk-[A-Za-z0-9_-]{24,}|\bgh[pousr]_[A-Za-z0-9]{36,}\b|\bsb_secret_[A-Za-z0-9_.-]{20,})/i,
     description: "Plaintext credential or API token stored in source code.",
     remediation: "Store credentials in secure environment variables or vault secret managers; redact from git history."
   }

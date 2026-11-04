@@ -28,7 +28,7 @@ export const SECRET_RULES = [
     id: "SEC-GITHUB-PAT",
     name: "GitHub Personal Access Token",
     severity: "CRITICAL",
-    pattern: /\b(gh[pousr]_[A-Za-z0-9_]{36,})\b/g,
+    pattern: /\b(gh[pousr]_[A-Za-z0-9]{36,}\b|github_pat_[A-Za-z0-9_]{22,255}_[A-Za-z0-9]{22,255})\b/g,
     description: "GitHub Personal Access Token (classic or fine-grained) detected.",
     recommendation: "Revoke token via GitHub Security Settings and migrate to short-lived GitHub App tokens or secrets store."
   },
@@ -100,6 +100,8 @@ const TEST_FIXTURE_FINGERPRINTS = new Set([
   "1a5d44a2dc", "b916a41ca2", "6d23e99a8e", "a165ce0568",
   "beff737e19", "77d0b68ba2", "f56acc4914", "48495fa93b",
   "751da0d210", "f23831a9da",
+  // sha256(ghp_fakeToken...)[0:10]-style legacy DOGUMENTATION dummy (contained in commit fb1798a1 prose; never a live credential).
+  "62bd92d59f",
 ]);
 
 export const DEFAULT_IGNORE_PATTERNS = [
