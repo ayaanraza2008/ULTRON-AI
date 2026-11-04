@@ -106,3 +106,52 @@ test("Target Authorization: Emergency stop halts all security testing", () => {
   assert.equal(resume.success, true);
   assert.equal(gateway.emergencyStopEngaged, false);
 });
+
+
+test("Target Authorization: URL host matching rejects deceptive suffix and substring hosts", () => {
+  const gateway = new TargetAuthorizationGateway();
+  gateway.registerScope({
+    organization: "Scoped Example",
+    targets: ["example.test"],
+    permittedActivities: [PERMITTED_ACTIVITIES.PASSIVE_RECON],
+    ownerApproved: true,
+    authorizationProof: "PROOF-HOST-BOUNDARY"
+  });
+
+  assert.equal(gateway.assertAuthorization("https://api.example.test/login").authorized, true);
+  assert.throws(() => gateway.assertAuthorization("https://example.test.attacker.invalid/"), /TARGET_OUT_OF_SCOPE/);
+  assert.throws(() => gateway.assertAuthorization("https://notexample.test/"), /TARGET_OUT_OF_SCOPE/);
+});
+
+test("Target Authorization: excluded endpoints and future authorization windows fail closed", () => {
+  const gateway = new TargetAuthorizationGateway();
+  const scope = gateway.registerScope({
+    organization: "Endpoint Scoped Lab",
+    targets: ["https://scope.example.test"],
+    excludedEndpoints: ["/api/admin", "/internal/secret"],
+    permittedActivities: [PERMITTED_ACTIVITIES.PASSIVE_RECON],
+    ownerApproved: true,
+    authorizationProof: "PROOF-EXCLUDED-ENDPOINT"
+  });
+
+  assert.equal(gateway.assertAuthorization("https://scope.example.test/api/public").authorized, true);
+  assert.throws(() => gateway.assertAuthorization("https://scope.example.test/api/admin/delete"), /ENDPOINT_EXCLUDED/);
+  scope.validFrom = new Date(Date.now() + 60_000).toISOString();
+  assert.throws(() => gateway.assertAuthorization("https://scope.example.test/api/public"), /TARGET_OUT_OF_SCOPE/);
+  assert.equal(gateway.listScopes().find(item => item.scopeId === scope.scopeId).isActive, false);
+});
+
+test("Target Authorization: enforces the per-scope sliding-window request limit", () => {
+  const gateway = new TargetAuthorizationGateway();
+  gateway.registerScope({
+    organization: "Rate Limited Lab",
+    targets: ["rate-limited.example.test"],
+    allowedRateLimit: 1,
+    permittedActivities: [PERMITTED_ACTIVITIES.PASSIVE_RECON],
+    ownerApproved: true,
+    authorizationProof: "PROOF-RATE-LIMIT"
+  });
+
+  assert.equal(gateway.assertAuthorization("rate-limited.example.test").authorized, true);
+  assert.throws(() => gateway.assertAuthorization("rate-limited.example.test"), /RATE_LIMIT_EXCEEDED/);
+});
