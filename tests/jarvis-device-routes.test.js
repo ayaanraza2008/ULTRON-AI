@@ -113,14 +113,14 @@ test("JARVIS DeviceHub Endpoints: Full Command, Telemetry, Rotation, Notificatio
       const cmdRes = await fetch(base + `/api/jarvis/devices/${deviceId}/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "capture_desktop_screenshot", payload: { display: 1 } })
+        body: JSON.stringify({ action: "get_system_vitals", payload: {} })
       });
       const cmdBody = await cmdRes.json();
       assert.equal(cmdRes.status, 200);
       assert.equal(cmdBody.success, true);
       assert.ok(cmdBody.command.id);
       assert.ok(cmdBody.command.signature);
-      assert.equal(cmdBody.command.action, "capture_desktop_screenshot");
+      assert.equal(cmdBody.command.action, "get_system_vitals");
       const cmdId = cmdBody.command.id;
 
       // 8. Companion polls pending commands using Bearer header
@@ -216,4 +216,31 @@ test("JARVIS DeviceHub Endpoints: Full Command, Telemetry, Rotation, Notificatio
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
+});
+
+
+test("JARVIS direct command enqueue rejects actions and applications outside the allowlist", async () => {
+  const deviceHub = new DeviceHub({ env: {
+    ULTRON_DEVICE_SIGNING_SECRET: "unit-test-device-signing-secret-at-least-32-chars"
+  } });
+  const pairing = deviceHub.createPairingCode({ name: "Owner PC", platform: "windows" });
+  const paired = deviceHub.verifyPairingCode(pairing.code, null, "owner-user");
+  assert.equal(paired.success, true);
+  await withDeviceRouter({ deviceHub }, async base => {
+    const unsupported = await fetch(base + `/api/jarvis/devices/${paired.deviceId}/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "execute_shell", payload: { command: "whoami" } })
+    });
+    assert.equal(unsupported.status, 403);
+    assert.equal((await unsupported.json()).error.code, "REMOTE_ACTION_NOT_APPROVED");
+
+    const unapprovedApp = await fetch(base + `/api/jarvis/devices/${paired.deviceId}/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "launch_app", payload: { app: "powershell.exe" } })
+    });
+    assert.equal(unapprovedApp.status, 403);
+    assert.equal((await unapprovedApp.json()).error.code, "REMOTE_APP_NOT_APPROVED");
+  });
 });
