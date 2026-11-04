@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createAgentRouter } from "../agent-runtime.js";
 import { ImmichConnector } from "../integrations/immich.js";
+import { parsePrivateDataReadApproval } from "../agent-runtime.js";
 
 const ownerId = "00000000-0000-4000-8000-000000000001";
 
@@ -109,6 +110,78 @@ test("private Immich search is blocked until an explicit approval and never call
     assert.equal(body.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
     assert.equal(providerCalls, 2);
     assert.equal(immichCalls, 0);
+  });
+});
+
+test("private-data consent requires an exact current-message attestation", () => {
+  assert.equal(parsePrivateDataReadApproval(
+    "I approve reading my Immich photo and video metadata for this request. Search for beach photos.",
+    "immich"
+  ), true);
+  assert.equal(parsePrivateDataReadApproval(
+    "Search my Immich library. I approve reading my Immich photo and video metadata for this request.",
+    "immich"
+  ), false);
+  assert.equal(parsePrivateDataReadApproval(
+    "I approve reading my AppFlowy workspace and documents for this request. Actually, cancel that.",
+    "appflowy"
+  ), false);
+  assert.equal(parsePrivateDataReadApproval(
+    "I approve reading my AppFlowy workspace and documents for this request.",
+    "immich"
+  ), false);
+});
+
+test("explicit current-message approval allows only the requested owner-scoped Immich metadata search", async () => {
+  let providerCalls = 0;
+  let immichCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "provider-test-secret",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    IMMICH_BASE_URL: "https://immich.example.com",
+    IMMICH_API_KEY: "immich-private-key"
+  };
+  const prompt = "I approve reading my Immich photo and video metadata for this request. Search for beach photos.";
+
+  await withServer(env, ownerId, async (url, options = {}) => {
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      providerCalls += 1;
+      if (providerCalls === 1) {
+        const payload = JSON.parse(options.body);
+        assert.ok(payload.tools.some(tool => tool.function?.name === "immich_search_assets"));
+        return new Response(JSON.stringify({
+          choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+            id: "immich-approved-search",
+            type: "function",
+            function: { name: "immich_search_assets", arguments: JSON.stringify({ query: "beach", limit: 5 }) }
+          }] } }]
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: "Found one matching beach photo in your library." } }]
+      }), { status: 200 });
+    }
+
+    assert.equal(url, "https://immich.example.com/api/search/metadata");
+    immichCalls += 1;
+    return new Response(JSON.stringify({ assets: { items: [
+      { id: "asset-approved", type: "IMAGE", originalFileName: "beach.jpg", fileCreatedAt: "2026-03-01", originalPath: "/private/original.jpg" }
+    ] } }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(providerCalls, 2);
+    assert.equal(immichCalls, 1);
+    assert.equal(body.toolResults.length, 1);
+    assert.equal(body.toolResults[0].result.count, 1);
+    assert.equal(body.toolResults[0].result.assets[0].originalFileName, "beach.jpg");
+    assert.equal(JSON.stringify(body.toolResults).includes("/private/original.jpg"), false);
   });
 });
 
