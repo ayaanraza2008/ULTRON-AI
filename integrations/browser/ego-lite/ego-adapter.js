@@ -261,7 +261,7 @@ export class EgoBrowserAdapter {
   async dragAndDrop(source, target, options = {}) {
     const pageId = options.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for dragAndDrop");
-    return await this.actionExecutor.dragAndDrop(pageId, source, target);
+    return await this.actionExecutor.dragAndDrop(pageId, source, target, options);
   }
 
   /**
@@ -287,7 +287,7 @@ export class EgoBrowserAdapter {
    */
   async download(downloadUrl, filename, options = {}) {
     const pageId = options.pageId || this.activePageId;
-    return await this.actionExecutor.downloadFile(pageId, downloadUrl, filename);
+    return await this.actionExecutor.downloadFile(pageId, downloadUrl, filename, options);
   }
 
   /**
@@ -297,6 +297,14 @@ export class EgoBrowserAdapter {
     const pageId = this.activePageId;
     if (!pageId) throw new Error("No active page for evaluate");
     return await this.actionExecutor.evaluate(pageId, script, ...args);
+  }
+
+  /**
+   * Guarded Chrome DevTools Protocol access. All CDP operations require
+   * action-bound owner approval at the executor boundary.
+   */
+  async cdp(method, params = {}, options = {}) {
+    return await this.actionExecutor.cdp(method, params, options);
   }
 
   /**
