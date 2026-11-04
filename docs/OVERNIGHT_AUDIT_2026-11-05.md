@@ -186,8 +186,8 @@ Next safe diagnostic step: add redacted provider-attempt telemetry (provider nam
 
 As of 2026-11-04 21:25Z:
 - [PR #447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) — mobile authorization hardening, draft/unmerged, latest CI green (**1,613 passed, 0 failed, 3 skipped**; World Intelligence build green).
-- [PR #449](https://github.com/ayaanraza2008/ULTRON-AI/pull/449) — AppFlowy read-only agent wiring, draft/unmerged, latest CI green (**1,610 passed, 0 failed, 3 skipped**; World Intelligence build green).
-- [PR #450](https://github.com/ayaanraza2008/ULTRON-AI/pull/450) — redacted Browser Use provider-failure diagnostics, draft/unmerged; CI was still pending at this snapshot.
+- [PR #448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448) — AppFlowy + Immich owner-scoped private-read tools with exact current-message approval; draft/unmerged, CI rerunning after final fail-closed and task-routing updates. [PR #449](https://github.com/ayaanraza2008/ULTRON-AI/pull/449) was closed as superseded.
+- [PR #450](https://github.com/ayaanraza2008/ULTRON-AI/pull/450) — redacted Browser Use provider-failure diagnostics and startup-smoke readiness gating, draft/unmerged, latest CI green (**1,608 passed, 0 failed, 3 skipped**; World Intelligence build green).
 - [PR #446](https://github.com/ayaanraza2008/ULTRON-AI/pull/446) — this evidence refresh, draft/unmerged.
 
 No PR has been merged and no deployment was initiated. Green CI does not substitute for source review or external live acceptance tests.
