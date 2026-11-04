@@ -369,6 +369,7 @@ const FILES_TO_CHECK = [
   "integrations/browser/ego-lite/direct-chromium-driver.js",
   "tests/ego-browser-integration.test.js",
   "tests/ego-browser-real-world.test.js",
+  "tests/ego-browser-real-cdp.test.js",
   "mobile/adb-bridge.js",
   "mobile/mobile-mcp-client.js",
   "mobile/mobile-device-registry.js",
@@ -394,6 +395,7 @@ for (const file of FILES_TO_CHECK) {
   try {
     execFileSync(process.execPath, ["--check", file], { stdio: "pipe" });
     checked++;
+    if (checked % 50 === 0) { console.log(`[check-syntax] Progress: ${checked}/${FILES_TO_CHECK.length} files verified...`); }
   } catch (err) {
     console.error(`Syntax check failed for ${file}:`, err.message);
     failed++;

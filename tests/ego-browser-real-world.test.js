@@ -69,19 +69,24 @@ describe("ULTRON AI — Ego Lite Real-World Verification & Gap Closure", () => {
     // Verify adapter reports direct CDP driver
     assert.equal(adapter.getExecutionDriverType(), DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
 
-    await adapter.taskSpace("cdp-verification-space");
-    const navResult = await adapter.goto("about:blank");
+    try {
+      await adapter.taskSpace("cdp-verification-space");
+      const navResult = await adapter.goto("about:blank");
 
-    // The executionDriver must be DIRECT_CHROMIUM_CDP
-    assert.equal(navResult.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
-    assert.equal(navResult.driverVerified, true);
-    assert.notEqual(navResult.executionDriver, DRIVER_TYPE.EGO_LITE_DESKTOP);
+      // The executionDriver must be DIRECT_CHROMIUM_CDP
+      assert.equal(navResult.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
+      assert.equal(navResult.driverVerified, true);
+      assert.notEqual(navResult.executionDriver, DRIVER_TYPE.EGO_LITE_DESKTOP);
 
-    const snapshotResult = await adapter.snapshot();
-    assert.equal(snapshotResult.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
-    assert.equal(snapshotResult.driverVerified, true);
+      const snapshotResult = await adapter.snapshot();
+      assert.equal(snapshotResult.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
+      assert.equal(snapshotResult.driverVerified, true);
 
-    await adapter.closeTaskSpace("cdp-verification-space");
+      await adapter.closeTaskSpace("cdp-verification-space");
+    } finally {
+      // Release the real browser process / sockets so the test can exit cleanly.
+      await cdpDriver.close();
+    }
   });
 
   // -------------------------------------------------------------
@@ -137,45 +142,54 @@ describe("ULTRON AI — Ego Lite Real-World Verification & Gap Closure", () => {
     const adapter = new EgoBrowserAdapter({ securityGuard });
     adapter.setDriver(cdpDriver);
 
-    // 1. TaskSpace creation
-    const space = await adapter.taskSpace("real-web-test-space");
-    assert.equal(space.name, "real-web-test-space");
+    try {
+      // 1. TaskSpace creation
+      const space = await adapter.taskSpace("real-web-test-space");
+      assert.equal(space.name, "real-web-test-space");
 
-    // 2. Genuine navigation to RFC 2606 reserved example domain
-    const targetUrl = "https://example.com";
-    const navRes = await adapter.goto(targetUrl);
-    assert.equal(navRes.url, targetUrl);
-    assert.equal(navRes.status, 200);
-    assert.equal(navRes.title, "Example Domain");
-    assert.equal(navRes.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
-    assert.equal(navRes.driverVerified, true);
+      // 2. Genuine navigation to RFC 2606 reserved example domain
+      const targetUrl = "https://example.com";
+      const navRes = await adapter.goto(targetUrl);
+      assert.equal(navRes.status, 200);
+      assert.equal(navRes.title, "Example Domain");
+      assert.match(String(navRes.url), /example\.com\/?$/i, "genuinely navigated (URL may be normalized by the browser)");
+      assert.equal(navRes.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
+      assert.equal(navRes.driverVerified, true);
 
-    // 3. Semantic snapshot and element extraction
-    const snapRes = await adapter.snapshot();
-    assert.equal(snapRes.title, "Example Domain");
-    assert.ok(snapRes.elementsCount > 0, "Snapshot must have extracted elements");
-    assert.ok(snapRes.textTree.includes("Example Domain"));
-    assert.equal(snapRes.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
+      // 3. Semantic snapshot and element extraction
+      const snapRes = await adapter.snapshot();
+      assert.equal(snapRes.title, "Example Domain");
+      assert.ok(snapRes.elementsCount > 0, "Snapshot must have extracted elements");
+      assert.ok(snapRes.textTree.includes("Example Domain"));
+      assert.equal(snapRes.executionDriver, DRIVER_TYPE.DIRECT_CHROMIUM_CDP);
 
-    // Verify extracted semantic elements contain actual headings/links/paragraphs
-    const heading = snapRes.elements.find((el) => el.role === "heading" || el.name.includes("Example"));
-    assert.ok(heading, "Heading element must be extracted from genuine HTML");
+      // Verify extracted semantic elements contain actual headings/links/paragraphs (real page evidence)
+      const heading = snapRes.elements.find((el) => el.role === "heading" || (el.name || "").includes("Example"));
+      assert.ok(heading, "Heading element must be extracted from genuine HTML");
+      assert.ok(
+        snapRes.elements.some((el) => el.role === "link" && el.href),
+        "A real link must be extracted from the genuine page"
+      );
 
-    // 4. Error recovery: attempt SSRF navigation, verify clean rejection and recovery
-    await assert.rejects(
-      async () => {
-        await adapter.goto("http://169.254.169.254/latest/meta-data");
-      },
-      /blocked by (?:SSRF|security)/i
-    );
+      // 4. Error recovery: attempt SSRF navigation, verify clean rejection and recovery
+      await assert.rejects(
+        async () => {
+          await adapter.goto("http://169.254.169.254/latest/meta-data");
+        },
+        /blocked by (?:SSRF|security)/i
+      );
 
-    // Verify TaskSpace remains intact and operable after rejection
-    const healthyCheck = await adapter.goto("about:blank");
-    assert.equal(healthyCheck.status, 200);
+      // Verify TaskSpace remains intact and operable after rejection
+      const healthyCheck = await adapter.goto("about:blank");
+      assert.equal(healthyCheck.status, 200);
 
-    // 5. Cleanup
-    await adapter.closeTaskSpace("real-web-test-space");
-    assert.equal(adapter.listTaskSpaces().some((s) => s.id === space.id), false);
+      // 5. Cleanup
+      await adapter.closeTaskSpace("real-web-test-space");
+      assert.equal(adapter.listTaskSpaces().some((s) => s.id === space.id), false);
+    } finally {
+      // Release the real browser process / sockets so the test can exit cleanly.
+      await cdpDriver.close();
+    }
   });
 
   // -------------------------------------------------------------

@@ -150,6 +150,7 @@ async function run() {
   });
 
   console.log("\n=== REAL-WORLD VERIFICATION COMPLETED SUCCESSFULLY ===");
+  process.exit(0);
 }
 
 run().catch(err => {

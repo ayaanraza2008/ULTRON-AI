@@ -20,6 +20,7 @@ import { EgoLearningManager } from "./ego-learning-manager.js";
 import { EgoSecurityGuard } from "./ego-security-guard.js";
 import { EgoAuditLogger } from "./ego-audit-logger.js";
 import { EgoBrowserRouter } from "./ego-browser-router.js";
+import { DirectChromiumCdpDriver } from "./direct-chromium-driver.js";
 
 export class EgoBrowserAdapter {
   /**
@@ -394,4 +395,11 @@ export class EgoBrowserAdapter {
 }
 
 // Export singleton
-export const egoBrowserAdapter = new EgoBrowserAdapter();
+export const egoBrowserAdapter = new EgoBrowserAdapter({
+  // Real Chromium/CDP fallback driver: launches the host browser lazily on the
+  // first navigation when available; degrades to honest HTTP_FETCH_PREVIEW and
+  // simulated:true interaction reports when no browser binary exists.
+  driver: new DirectChromiumCdpDriver({
+    securityGuard: new EgoSecurityGuard()
+  })
+});
