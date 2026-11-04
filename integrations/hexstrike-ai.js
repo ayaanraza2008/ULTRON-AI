@@ -93,7 +93,7 @@ export function getHexStrikeReadiness(env = process.env) {
     } catch {}
   }
   const scanRoot = clean(env.HEXSTRIKE_SCAN_ROOT, 1000);
-  const scanRootConfigured = Boolean(scanRoot && path.isAbsolute(scanRoot));
+  const scanRootConfigured = Boolean(scanRoot && path.isAbsolute(scanRoot) && isShellSafePath(scanRoot));
   const configured = enabled && Boolean(base) && ownerConfigured && remoteGatewayReady;
   const scanReady = configured && scanRootConfigured;
   let note;

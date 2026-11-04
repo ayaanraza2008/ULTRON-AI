@@ -14,7 +14,7 @@ ULTRON exposes a deliberately narrow, owner-only adapter to an already-installed
   - `trivy-config`: local configuration / IaC scan
   - `checkov`: local infrastructure-as-code scan
 
-The adapter reuses ULTRON Supabase authentication, the configured integration-owner UUID, the existing target-authorization gateway, and Guardian audit events. Scan paths must be existing directories beneath a shared absolute workspace root; symlink/path traversal escapes are rejected. Requests and responses are bounded and redirects are disabled.
+The adapter reuses ULTRON Supabase authentication, the configured integration-owner UUID, the existing target-authorization gateway, and Guardian audit events. The same guarded operation is exposed to ULTRON's agent runtime as the owner-only `hexstrike_scan` tool and appears in `GET /api/agent/tools` when configured. Scan paths must be existing directories beneath a shared absolute workspace root; symlink/path traversal escapes are rejected. Requests and responses are bounded and redirects are disabled.
 
 ## Deliberately not exposed
 
@@ -38,7 +38,7 @@ ULTRON_INTEGRATION_OWNER_USER_ID=
 - Keep `HEXSTRIKE_ENABLED=false` until the service has been installed and reviewed.
 - For same-host development, use explicit loopback HTTP only (for example `http://127.0.0.1:8888`).
 - Remote use requires HTTPS behind a private authentication gateway that validates the bearer token. Set `HEXSTRIKE_REMOTE_GATEWAY_CONFIRMED=true` only after verifying that gateway. The upstream HexStrike server itself must not be exposed directly to the public internet.
-- `HEXSTRIKE_SCAN_ROOT` must be an absolute directory visible to both ULTRON and HexStrike, ideally a dedicated read-only workspace mount. The submitted `target` is a relative subdirectory such as `.` or `project`.
+- `HEXSTRIKE_SCAN_ROOT` must be an absolute directory visible to both ULTRON and HexStrike, ideally a dedicated read-only workspace mount. Keep the canonical path shell-safe (letters, digits, dot, underscore, colon, slash and hyphen only; no spaces or shell metacharacters). The submitted `target` is a relative subdirectory such as `.` or `project`.
 - The owner UUID must match the signed-in Supabase Auth user. Non-owner users cannot inspect service health or launch scans.
 
 ## Installation notes

@@ -337,7 +337,7 @@ export function buildIntegrationCatalog(env = process.env) {
       mode: "owner_scoped_external_security_service",
       requiredEnv: ["HEXSTRIKE_ENABLED=true", "HEXSTRIKE_BASE_URL", "HEXSTRIKE_SCAN_ROOT", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       optionalEnv: ["HEXSTRIKE_API_TOKEN", "HEXSTRIKE_REMOTE_GATEWAY_CONFIRMED"],
-      apiRoutes: ["/api/integrations/hexstrike/status", "/api/integrations/hexstrike/scan"],
+      apiRoutes: ["/api/integrations/hexstrike/status", "/api/integrations/hexstrike/scan", "agent tool: hexstrike_scan"],
       note: hexstrikeReadiness.note
     },
     {
