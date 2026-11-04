@@ -229,19 +229,26 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
     });
 
     await t.test("7. Unauthenticated callers (anon role) are rejected", async () => {
+      // Reading conversations fails closed with 42501 (privileges revoked from anon)
       await harness.asRole("anon", null, async (client) => {
-        // Reading conversations: returns 0 rows (anon has no auth.uid())
-        const anonSelect = await client.query("SELECT * FROM public.conversations;");
-        assert.equal(anonSelect.rows.length, 0);
+        await assert.rejects(
+          client.query("SELECT * FROM public.conversations;"),
+          (err) => {
+            assert.ok(err.code === "42501" || /permission denied/i.test(err.message));
+            return true;
+          }
+        );
+      });
 
-        // Inserting without authentication fails
+      // Inserting without authentication fails closed with 42501
+      await harness.asRole("anon", null, async (client) => {
         await assert.rejects(
           client.query(
             "INSERT INTO public.conversations (user_id, title) VALUES ($1, $2);",
             [userA.id, "Anon forged"]
           ),
           (err) => {
-            assert.ok(err.code === "42501" || /violates row-level security policy/i.test(err.message));
+            assert.ok(err.code === "42501" || /permission denied|violates row-level security policy/i.test(err.message));
             return true;
           }
         );

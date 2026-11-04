@@ -393,6 +393,14 @@ export class DisposablePgHarness {
     }
   }
 
+  /**
+   * Executes a query directly using the privileged pool connection (e.g. for migrations or verification)
+   */
+  async query(text, params) {
+    if (!this.pool) throw new Error("Database harness not initialized");
+    return this.pool.query(text, params);
+  }
+
   async close() {
     if (this.pool) {
       await this.pool.end().catch(() => {});

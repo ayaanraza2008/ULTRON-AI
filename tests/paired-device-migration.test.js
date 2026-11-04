@@ -246,28 +246,26 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
     });
 
     await t.test("5. Destructive Rollback Execution & Schema Teardown Verification", async () => {
-      await harness.asRole("service_role", null, async (client) => {
-        // Execute the destructive rollback SQL
-        const rollbackSql = fs.readFileSync(rollbackPath, "utf8");
-        await client.query(rollbackSql);
+      // Execute the destructive rollback SQL using privileged connection (table owner)
+      const rollbackSql = fs.readFileSync(rollbackPath, "utf8");
+      await harness.query(rollbackSql);
 
-        // Verify both tables are dropped
-        const tablesRes = await client.query(`
-          SELECT tablename FROM pg_tables
-          WHERE schemaname = 'public' AND tablename IN ('paired_devices', 'pending_device_pairings');
-        `);
-        assert.equal(tablesRes.rows.length, 0, "All paired-device tables must be dropped by rollback");
+      // Verify both tables are dropped
+      const tablesRes = await harness.query(`
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public' AND tablename IN ('paired_devices', 'pending_device_pairings');
+      `);
+      assert.equal(tablesRes.rows.length, 0, "All paired-device tables must be dropped by rollback");
 
-        // Verify RPC function is dropped
-        const procRes = await client.query(`
-          SELECT proname FROM pg_proc WHERE proname = 'claim_pending_device_pairing';
-        `);
-        assert.equal(procRes.rows.length, 0, "claim_pending_device_pairing function must be dropped by rollback");
+      // Verify RPC function is dropped
+      const procRes = await harness.query(`
+        SELECT proname FROM pg_proc WHERE proname = 'claim_pending_device_pairing';
+      `);
+      assert.equal(procRes.rows.length, 0, "claim_pending_device_pairing function must be dropped by rollback");
 
-        // Re-apply migration so remaining tests have access to the tables
-        const migrationSql = fs.readFileSync(migrationPath, "utf8");
-        await client.query(migrationSql);
-      });
+      // Re-apply migration so remaining tests have access to the tables
+      const migrationSql = fs.readFileSync(migrationPath, "utf8");
+      await harness.query(migrationSql);
     });
 
   } finally {
