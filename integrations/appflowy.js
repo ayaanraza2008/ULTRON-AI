@@ -4,7 +4,7 @@
  *
  * Implements an owner-scoped, read-only adapter to an AppFlowy Cloud
  * or AppFlowy Server API instance, allowing ULTRON to securely inspect
- * workspace documents, notes, and database schemas.
+ * workspace listing and document retrieval.
  *
  * Enforces least-privilege security boundaries:
  * - Read-only operations only (no workspace deletion, writing, or permission changes).
@@ -79,7 +79,6 @@ export function getAppFlowyReadiness({ env = process.env, userId = null } = {}) 
     capabilities: [
       "read_only_workspace_listing",
       "read_only_document_read",
-      "read_only_database_listing"
     ],
     note: !settings.configured
       ? "Configure APPFLOWY_BASE_URL and APPFLOWY_API_TOKEN before use."
