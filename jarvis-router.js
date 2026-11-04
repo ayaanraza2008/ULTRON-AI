@@ -27,7 +27,7 @@ import { humanInterface } from "./intelligence/human-interface.js";
 import { ultronSelfEvolutionEngine } from "./self-improvement/self-evolution-engine.js";
 import crypto from "node:crypto";
 import { operatorAuthorizationService } from "./security/operator-authorization.js";
-import { deviceHub } from "./integrations/device-hub.js";
+import { deviceHub, APPROVED_REMOTE_ACTIONS, APPROVED_REMOTE_APPS } from "./integrations/device-hub.js";
 import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
 import { deviceNetworkingManager } from "./integrations/device-networking.js";
 import { toolRegistry } from "./core/tool-registry.js";
@@ -960,7 +960,9 @@ export function createJarvisRouter({
     if (!isPairingEnabled) {
       return res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
     }
-    const devices = deviceHubInstance.listPairedDevices();
+    const ownerId = req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
+    const devices = deviceHubInstance.listPairedDevices(ownerId);
     res.json({ devices, connected: devices.length > 0, status: devices.length > 0 ? "CONFIGURED" : "READY" });
   });
 
@@ -1028,6 +1030,27 @@ export function createJarvisRouter({
         }
       });
     }
+    const normalizedAction = action.trim().toLowerCase();
+    if (!APPROVED_REMOTE_ACTIONS.has(normalizedAction)) {
+      return res.status(403).json({
+        error: {
+          code: "REMOTE_ACTION_NOT_APPROVED",
+          message: "The requested remote action is not in ULTRON's approved action set."
+        }
+      });
+    }
+    const safePayload = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    if (["launch_app", "close_app"].includes(normalizedAction)) {
+      const app = String(safePayload.app || safePayload.appKey || safePayload.name || "").trim().toLowerCase();
+      if (!APPROVED_REMOTE_APPS.has(app)) {
+        return res.status(403).json({
+          error: {
+            code: "REMOTE_APP_NOT_APPROVED",
+            message: "The requested application is not in ULTRON's approved application set."
+          }
+        });
+      }
+    }
     const device = deviceHubInstance.pairedDevices.get(deviceId);
     if (!device) {
       return res.status(404).json({
@@ -1045,7 +1068,7 @@ export function createJarvisRouter({
         }
       });
     }
-    const result = deviceHubInstance.enqueueCommand(deviceId, action, payload || {});
+    const result = deviceHubInstance.enqueueCommand(deviceId, normalizedAction, safePayload);
     if (!result.success) {
       return res.status(400).json({
         error: {
@@ -1148,6 +1171,9 @@ export function createJarvisRouter({
       });
     }
     const { deviceId, title, body, priority, type } = req.body || {};
+    if (deviceId && !devices.some(device => device.id === deviceId)) {
+      return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found for this ULTRON account." } });
+    }
     if (!title || !body) {
       return res.status(400).json({
         error: {
@@ -1156,13 +1182,15 @@ export function createJarvisRouter({
         }
       });
     }
-    const notification = deviceHubInstance.sendNotification({ deviceId, title, body, priority, type });
+    const notification = deviceHubInstance.sendNotification({ ownerUserId: ownerId, deviceId, title, body, priority, type });
     res.json({ success: true, notification });
   });
 
   router.get("/jarvis/notifications", requireOwner, (req, res) => {
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
-    res.json({ success: true, notifications: deviceHubInstance.getNotifications(limit) });
+    const ownerId = req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
+    res.json({ success: true, notifications: deviceHubInstance.getNotifications(limit, { ownerUserId: ownerId }) });
   });
 
   // --- Smart Home ---
