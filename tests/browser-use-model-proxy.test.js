@@ -227,3 +227,39 @@ test("Browser Use model proxy falls back from an OpenRouter rate limit to an alt
   });
 });
 
+
+
+test("Browser Use model proxy logs redacted provider failure metadata without keys or response bodies", async () => {
+  const warnings = [];
+  const app = createApp({
+    env: {
+      ULTRON_BROWSER_USE_TOKEN: "shared-test-token",
+      OPENROUTER_API_KEY: "provider-secret-that-must-not-be-logged",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+      OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+      ULTRON_AVAILABLE_MODELS: "openrouter/free"
+    },
+    fetchImpl: async () => new Response(JSON.stringify({ error: { message: "provider body must not be logged" } }), { status: 429 }),
+    logger: { warn(message, details) { warnings.push({ message, details }); }, error() {} }
+  });
+  await withServer(app, async base => {
+    const response = await fetch(base + "/api/internal/browser-use/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer shared-test-token" },
+      body: JSON.stringify({ model: "openrouter/free", messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(response.status, 429);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].message, "Browser Use model gateway provider returned non-success status");
+    assert.deepEqual(warnings[0].details, {
+      provider: "openrouter",
+      model: "openrouter/free",
+      status: 429,
+      attempt: 1,
+      attempts: 1
+    });
+    const serialized = JSON.stringify(warnings);
+    assert.equal(serialized.includes("provider-secret-that-must-not-be-logged"), false);
+    assert.equal(serialized.includes("provider body must not be logged"), false);
+  });
+});
