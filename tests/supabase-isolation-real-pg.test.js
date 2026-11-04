@@ -173,8 +173,8 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
     });
 
     await t.test("5. User A CANNOT insert records with User B's identity (RLS 42501 rejection)", async () => {
+      // Attempting to insert a conversation forged with user_id = userB.id
       await harness.asRole("authenticated", userA.id, async (client) => {
-        // Attempting to insert a conversation forged with user_id = userB.id
         await assert.rejects(
           client.query(
             "INSERT INTO public.conversations (user_id, title) VALUES ($1, $2);",
@@ -186,8 +186,10 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
             return true;
           }
         );
+      });
 
-        // Attempting to insert a memory forged with user_id = userB.id
+      // Attempting to insert a memory forged with user_id = userB.id (separate transaction to avoid 25P02)
+      await harness.asRole("authenticated", userA.id, async (client) => {
         await assert.rejects(
           client.query(
             "INSERT INTO public.memory_items (user_id, kind, title, content) VALUES ($1, $2, $3, $4);",

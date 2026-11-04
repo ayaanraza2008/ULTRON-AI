@@ -267,6 +267,11 @@ export class DisposablePgHarness {
         ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
         ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
         ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+        DO $$ BEGIN
+          EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;', current_user);
+          EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;', current_user);
+          EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;', current_user);
+        END $$;
 
         -- Create auth schema and users table
         CREATE SCHEMA IF NOT EXISTS auth;
@@ -343,12 +348,6 @@ export class DisposablePgHarness {
         }
       }
 
-      // Grant table, sequence, and routine privileges across public schema to Supabase roles
-      await client.query(`
-        GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-        GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
-      `);
 
       this.isReady = true;
       return {
