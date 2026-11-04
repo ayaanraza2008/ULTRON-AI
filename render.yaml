@@ -184,6 +184,8 @@ services:
         value: "openrouter/free"
       - key: PYTHON_VERSION
         value: "3.12.8"
+      - key: ULTRON_ENABLE_CDP_BROWSER_AGENT
+        value: "NO"
 
   # 4. REA authenticated MCP gateway
   - type: web

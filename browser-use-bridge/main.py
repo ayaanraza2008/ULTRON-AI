@@ -212,7 +212,7 @@ async def run_task(payload: BrowserTask, x_ultron_browser_token: str | None = He
 
         # BrowserUse's CDP agent remains available for larger/local instances.
         # The Render Free profile defaults to a lighter Playwright read-only path.
-        if os.getenv("ULTRON_BROWSER_USE_AGENT_ENABLED", "NO").strip().upper() == "YES":
+        if os.getenv("ULTRON_ENABLE_CDP_BROWSER_AGENT", "NO").strip().upper() == "YES":
             try:
                 configure_browser_logging()
                 from browser_use import Agent, BrowserProfile
