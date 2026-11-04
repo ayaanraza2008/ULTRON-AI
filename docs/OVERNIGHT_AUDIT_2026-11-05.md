@@ -179,7 +179,7 @@ A subsequent full application-log inspection found a failure that the warning/er
 - The Core proxy's source returns 502 after provider transport/upstream failure or after all eligible provider attempts fail. The current logs do not reveal which upstream provider/model failed, and no provider response body or credentials should be logged.
 - Root cause is **not yet established**. Candidate causes include provider availability/model routing, a rejected provider key, or a provider-side HTTP failure. Do not label Browser Use live-ready or attempt to bypass the health gate.
 
-Next safe diagnostic step: add redacted provider-attempt telemetry (provider name, model ID, upstream HTTP status/error class, attempt index; never API keys or response bodies) to the Core internal proxy, deploy only after explicit deployment authorization, then run a real read-only public-site smoke test. Until then, Browser Use remains a production blocker.
+Next safe diagnostic step: add redacted provider-attempt telemetry (provider name, model ID, upstream HTTP status/error class, attempt index; never API keys or response bodies) to the Core internal proxy, deploy only after explicit deployment authorization, then run a real read-only public-site smoke test. Until repeated smoke runs and a real public-site navigation/extraction test pass consistently, Browser Use should remain marked as intermittently verified rather than production-stable.
 
 
 ## 15. Pull-request verification snapshot
@@ -191,3 +191,13 @@ As of 2026-11-04 21:25Z:
 - [PR #446](https://github.com/ayaanraza2008/ULTRON-AI/pull/446) — this evidence refresh, draft/unmerged.
 
 No PR has been merged and no deployment was initiated. Green CI does not substitute for source review or external live acceptance tests.
+
+
+## 16. Latest Browser Use smoke result (after test-only revert deploy)
+
+The Browser Use bridge restarted on the Render deployment of commit `4f2bdf2` (the test-only revert; runtime source remained unchanged). Its startup log sequence at 2026-11-04 21:37Z showed:
+- first Core model-gateway call: HTTP 502;
+- retry: HTTP 200;
+- startup smoke: `status: passed`, target host `example.com`, provider `openrouter-compatible`, model `openrouter/free`, result length 374.
+
+This supersedes the earlier “smoke failed” observation as the latest state: the bridge passed its latest read-only startup smoke, but the transient 502 remains an observed reliability issue. A single startup smoke does not prove sustained uptime or real-world navigation/extraction quality. PR #450's redacted attempt telemetry remains useful for diagnosing future intermittent failures; its readiness gate should be validated before merge.
