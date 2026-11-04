@@ -168,7 +168,7 @@ internal static class RemoteCommandExecutor
         if (!TryNumber(payload, out var requested, "percent", "volume", "level"))
             return Failure("INVALID_VOLUME", "Provide a volume value from 0 to 100.");
 
-        var percent = Math.Clamp((int)Math.Round(requested), 0, 100);
+        var percent = (int)Math.Round(Math.Clamp(requested, 0d, 100d));
         var channel = (uint)Math.Round(percent * 65535.0 / 100.0);
         var packed = channel | (channel << 16);
         var result = NativeMethods.waveOutSetVolume(IntPtr.Zero, packed);
@@ -227,6 +227,7 @@ internal static class RemoteCommandExecutor
         var directory = ResolveSharedPath(FirstString(payload, "path", "directory"));
         Directory.CreateDirectory(directory);
         var entries = Directory.EnumerateFileSystemEntries(directory)
+            .Where(path => !IsReparsePoint(path))
             .Take(100)
             .Select(path => new
             {
@@ -245,6 +246,8 @@ internal static class RemoteCommandExecutor
         var extension = Path.GetExtension(file);
         if (!new[] { ".txt", ".md", ".json", ".log", ".csv" }.Contains(extension, StringComparer.OrdinalIgnoreCase))
             return Failure("FILE_TYPE_NOT_ALLOWED", "Only text, Markdown, JSON, log, and CSV files can be read.");
+        if (IsReparsePoint(file))
+            return Failure("FILE_LINK_NOT_ALLOWED", "Symbolic links and reparse-point files are not allowed in the ULTRON Shared folder.");
         var info = new FileInfo(file);
         if (!info.Exists)
             return Failure("FILE_NOT_FOUND", "The requested file does not exist in the ULTRON Shared folder.");
@@ -263,11 +266,26 @@ internal static class RemoteCommandExecutor
             "ULTRON Shared"));
         Directory.CreateDirectory(root);
         var full = Path.GetFullPath(Path.Combine(root, relativePath ?? ""));
+        var relative = Path.GetRelativePath(root, full);
+        var current = root;
+        foreach (var segment in relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".") continue;
+            current = Path.Combine(current, segment);
+            if ((File.Exists(current) || Directory.Exists(current)) && IsReparsePoint(current))
+                throw new InvalidOperationException("Symbolic links and reparse points are not allowed in the ULTRON Shared folder.");
+        }
         var prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
         if (!full.Equals(root, StringComparison.OrdinalIgnoreCase) &&
             !full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The requested path is outside the ULTRON Shared folder.");
         return full;
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        catch { return true; }
     }
 
     private static bool TryString(JsonElement value, string name, out string text)
