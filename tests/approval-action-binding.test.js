@@ -109,3 +109,27 @@ test("Matching approval snapshot still dispatches once and consumes the proof", 
   assert.equal(calls(), 1);
   assert.equal(approval.status, "CONSUMED");
 });
+
+
+test("Approved exact owner action can safely resume on re-entry without a client token map", async () => {
+  const { orchestrator, calls } = makeFixture();
+  const approvedParams = { destination: "/approved/path", overwrite: false };
+  const approval = orchestrator.createApprovalRequest({
+    workflowId: "first-workflow",
+    stepId: "step-1",
+    toolId: "approval_bound_action",
+    toolName: "Approval-bound action",
+    permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+    actionDescription: "Perform exact approved action",
+    parameters: approvedParams,
+    userId: "owner-a"
+  });
+  assert.equal(orchestrator.approveRequest(approval.id, { userId: "owner-a" }).success, true);
+
+  // The UI may reload between approval and resume. The server can discover
+  // exactly one unused approval matching the same authenticated owner/action.
+  const result = await orchestrator.processUserRequest("run the action", { userId: "owner-a" });
+  assert.equal(result.verified, true);
+  assert.equal(calls(), 1);
+  assert.equal(approval.status, "CONSUMED");
+});
