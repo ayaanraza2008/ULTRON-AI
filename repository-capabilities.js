@@ -66,7 +66,7 @@ const REPOSITORIES = [
     integration: "owner_scoped_agent_tools", status: "adapter_present_unverified_live",
     abilities: ["owner-scoped workspace listing", "bounded read-only document retrieval"],
     limits: ["Requires an authorized AppFlowy workspace/API or local connector; workspace data must remain user-scoped."],
-    envKeys: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN"], license: "AGPL-3.0 shown in upstream README; review network/distribution obligations", source: "https://github.com/AppFlowy-IO/AppFlowy"
+    envKeys: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "AGPL-3.0 shown in upstream README; review network/distribution obligations", source: "https://github.com/AppFlowy-IO/AppFlowy"
   },
   {
     id: "open-seo", repo: "every-app/open-seo", domain: "seo",
@@ -74,7 +74,7 @@ const REPOSITORIES = [
     integration: "owner_scoped_agent_tool", status: "adapter_present_unverified_live",
     abilities: ["owner-scoped SEO research tool dispatch", "bounded keyword and site-audit operations subject to provider credits"],
     limits: ["The upstream README requires a DataForSEO key for SEO data; costs may apply. Do not make paid calls unless configured and within an approved budget."],
-    envKeys: ["OPENSEO_BASE_URL", "OPENSEO_API_TOKEN"], optionalEnv: ["DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"], license: "Review repository LICENSE; data provider usage is separate", source: "https://github.com/every-app/open-seo"
+    envKeys: ["OPENSEO_BASE_URL", "OPENSEO_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"], license: "Review repository LICENSE; data provider usage is separate", source: "https://github.com/every-app/open-seo"
   },
   {
     id: "immich", repo: "immich-app/immich", domain: "personal_media",
