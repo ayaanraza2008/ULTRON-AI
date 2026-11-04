@@ -207,7 +207,7 @@ async def run_task(payload: BrowserTask, x_ultron_browser_token: str | None = He
     base_url, api_key = model_settings
     model = os.getenv("OPENROUTER_DEFAULT_MODEL", "openrouter/free")
     try:
-        from langchain_openai import ChatOpenAI
+        from browser_use import ChatOpenAI
         llm = ChatOpenAI(model=model, base_url=base_url, api_key=api_key)
 
         # BrowserUse's CDP agent remains available for larger/local instances.
