@@ -661,7 +661,10 @@ internal sealed class CompanionContext : ApplicationContext
             {
                 var existingDeviceId = LoadDeviceId();
                 if (!string.IsNullOrWhiteSpace(existingDeviceId))
+                    {
                     SaveDeviceIdentity(existingDeviceId, entered);
+                    if (_remoteCommandsCheckBox.Checked) _commandPollTimer.Start();
+                }
                 else
                     SaveDeviceToken(entered);
                 _pairingCodeBox.Clear();
@@ -733,6 +736,7 @@ internal sealed class CompanionContext : ApplicationContext
             }
 
             SaveDeviceIdentity(deviceId, token);
+            if (_remoteCommandsCheckBox.Checked) _commandPollTimer.Start();
             _pairingCodeBox.Clear();
             ShowStatus("Paired securely" + (string.IsNullOrWhiteSpace(deviceName) ? "." : " as " + deviceName + ".") + " Token protected with Windows DPAPI.");
         }
@@ -796,7 +800,10 @@ internal sealed class CompanionContext : ApplicationContext
         {
             var fromEnvironmentId = Environment.GetEnvironmentVariable("ULTRON_DEVICE_ID");
             var fromEnvironmentToken = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
-            if (!string.IsNullOrWhiteSpace(fromEnvironmentId) && !string.IsNullOrWhiteSpace(fromEnvironmentToken))
+            if (!string.IsNullOrWhiteSpace(fromEnvironmentId) &&
+                Regex.IsMatch(fromEnvironmentId, @"^[A-Za-z0-9-]{1,128}$") &&
+                !string.IsNullOrWhiteSpace(fromEnvironmentToken) &&
+                Regex.IsMatch(fromEnvironmentToken, @"^ultron_dev_[a-f0-9]{64}$", RegexOptions.IgnoreCase))
                 return (fromEnvironmentId, fromEnvironmentToken);
 
             var path = DeviceIdentityPath();
@@ -975,7 +982,10 @@ internal sealed class CompanionContext : ApplicationContext
             }
             if (!response.IsSuccessStatusCode) return;
 
+            if (response.Content.Headers.ContentLength is long responseLength && responseLength > 512 * 1024)
+                return;
             var json = await response.Content.ReadAsStringAsync();
+            if (json.Length > 512 * 1024) return;
             using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
             if (!doc.RootElement.TryGetProperty("commands", out var commands) ||
                 commands.ValueKind != System.Text.Json.JsonValueKind.Array)
@@ -990,7 +1000,7 @@ internal sealed class CompanionContext : ApplicationContext
                     continue;
 
                 object result;
-                if (!RemoteCommandExecutor.VerifySignature(identity.Token, command))
+                if (!RemoteCommandExecutor.VerifySignature(identity.Token, command, identity.DeviceId))
                 {
                     result = new { success = false, error = "COMMAND_SIGNATURE_INVALID", output = "The command signature could not be verified. No action was executed." };
                 }
