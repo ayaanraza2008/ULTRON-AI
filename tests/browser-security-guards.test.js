@@ -151,3 +151,16 @@ test("Ego browser refuses live driver actions when no security guard is injected
   );
   assert.equal(clicks, 0);
 });
+
+
+test("Ego browser treats unresolved selectors and ambiguous fills as privileged", async () => {
+  const executor = new EgoActionExecutor({ securityGuard: new EgoSecurityGuard() });
+  await assert.rejects(
+    () => executor.click("page-3", "button:nth-of-type(2)"),
+    error => error.code === "BROWSER_APPROVAL_REQUIRED"
+  );
+  await assert.rejects(
+    () => executor.fill("page-3", "input:nth-child(3)", "form-value"),
+    error => error.code === "BROWSER_APPROVAL_REQUIRED"
+  );
+});
