@@ -130,3 +130,19 @@ test("Android companion only captures a command after an explicit Speak button a
   assert.ok(service.includes("getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)"));
   assert.ok(!service.includes("/api/jarvis/voice/process-command"));
 });
+
+
+test("Android companion schedules owner-authenticated telemetry only for paired devices", async () => {
+  const main = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/MainActivity.kt", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/service/UltronSyncWorker.kt", import.meta.url), "utf8");
+  assert.ok(main.includes("PeriodicWorkRequestBuilder<UltronSyncWorker>(15, TimeUnit.MINUTES)"));
+  assert.ok(main.includes("NetworkType.CONNECTED"));
+  assert.ok(main.includes("ExistingPeriodicWorkPolicy.KEEP"));
+  assert.ok(main.includes('cancelUniqueWork(TELEMETRY_WORK_NAME)'));
+  assert.ok(main.includes("if (DeviceTokenStore.isPaired(this))"));
+  assert.ok(worker.includes('"/api/devices/me/heartbeat"') === false);
+  assert.ok(worker.includes("client.sendTelemetry(batteryPct, isCharging)"));
+  assert.ok(worker.includes("if (level < 0 || scale <= 0)"));
+  const api = await readFile(new URL("../android-companion/app/src/main/java/com/ultron/companion/network/UltronApiClient.kt", import.meta.url), "utf8");
+  assert.ok(api.includes('openConnection("/api/devices/me/heartbeat", "POST")'));
+});
