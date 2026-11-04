@@ -39,9 +39,17 @@ test("AppFlowy: readiness enforces owner matching", () => {
   assert.equal(ownerReadiness.ownerAuthorized, true);
 });
 
-test("AppFlowy: listWorkspaces fails closed if caller is not the owner", async () => {
+test("AppFlowy: listWorkspaces fails closed if caller is not the owner or has no authenticated identity", async () => {
   await assert.rejects(
     () => appflowyListWorkspaces({ env: VALID_ENV, userId: "intruder-user" }),
+    { code: "APPFLOWY_OWNER_MISMATCH" }
+  );
+  await assert.rejects(
+    () => appflowyListWorkspaces({ env: VALID_ENV }),
+    { code: "APPFLOWY_OWNER_MISMATCH" }
+  );
+  await assert.rejects(
+    () => appflowyGetDocument({ documentId: "doc-99", env: VALID_ENV }),
     { code: "APPFLOWY_OWNER_MISMATCH" }
   );
 });
