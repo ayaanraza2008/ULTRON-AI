@@ -45,7 +45,7 @@ create table if not exists public.pending_device_pairings (
   approved boolean not null default false,
   approved_by uuid references auth.users(id) on delete cascade,
   device_id uuid,
-  token_hash text,
+  token_hash text check (token_hash is null or token_hash ~ '^[a-f0-9]{64}$'),
   token_prefix text,
   encrypted_token text,
   created_at timestamptz not null default now(),

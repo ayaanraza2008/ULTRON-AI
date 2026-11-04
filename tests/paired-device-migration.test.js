@@ -172,7 +172,7 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
         await assert.rejects(
           client.query(`
             INSERT INTO public.pending_device_pairings (code, device_name, platform, token_hash)
-            VALUES ('654321', 'Bad Device', 'solaris', $1);
+            VALUES ('654322', 'Bad Device', 'solaris', $1);
           `, [validHash]),
           (err) => {
             assert.equal(err.code, "23514", "Check constraint must reject unapproved platform");
