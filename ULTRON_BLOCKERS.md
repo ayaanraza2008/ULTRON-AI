@@ -5,7 +5,9 @@
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, CONFLICT-FREE  
 **Target Render Workspace:** **Ultron core** (`https://ultron-ai-core.onrender.com`)  
 **Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
-**Candidate Commit SHA:** `3399e87c5df08e5a832948741071db274b9fcd27`  
+**Candidate Engineering Commit SHA:** `59720886be5a35c2e5ee67bd79b9e0c3f1a19807`  
+**Production Base SHA:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
+**Exact CI-Tested SHA:** `3399e87c5df08e5a832948741071db274b9fcd27`  
 
 ---
 
@@ -49,10 +51,10 @@ The following items are **external human owner actions** that reside across the 
 
 ## 4. LATEST AUTOMATION EVIDENCE
 
-- **Node Test Suite:** 201 test files; **1,372 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,376 passed, 0 failed, 2 skipped)
+- **Node Test Suite:** 202 test files; **1,388 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,392 passed, 0 failed, 2 skipped)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink restrictions in `test_harness2.py`)
-- **Combined Automation Tests:** 1,422 discovered; **1,414 passed, 0 failed, 8 skipped** (Windows host; in Linux CI: 1,418 passed, 0 failed, 4 skipped) (99.44% pass rate across discovered; 100% on executed)
-- **Syntax Check:** **344 / 344 files clean** (`node scripts/check-syntax.mjs`)
+- **Combined Automation Tests:** 1,438 discovered; **1,430 passed, 0 failed, 8 skipped** (Windows host; in Linux CI: 1,434 passed, 0 failed, 4 skipped) (99.44% pass rate across discovered; 100% on executed)
+- **Syntax Check:** **357 / 357 files clean** (`node scripts/check-syntax.mjs`)
 - **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
 - **PostgreSQL CI Activation:** Disposable `postgres:15` service container, health checks, isolated test DB provisioner (`scripts/provision-test-databases.mjs`), and fail-closed CI assertions (`assert.fail` when `CI=true`)
 - **Real Worker Runtime Verification:** Process-level integration test (`tests/worker-runtime-process.test.js`) verifying `startWorker` runtime process loop, task claiming, execution dispatch, PostgreSQL persistence, audit logging, lease renewal, stale recovery, and graceful shutdown

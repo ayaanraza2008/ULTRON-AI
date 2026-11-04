@@ -5,7 +5,9 @@
 **Production Branch:** `main`  
 **Production Base:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
 **Release Candidate Branch:** `feat/ultron-final-100-completion`  
-**Exact Candidate Commit SHA:** `3399e87c5df08e5a832948741071db274b9fcd27`  
+**Exact Engineering Commit SHA:** `59720886be5a35c2e5ee67bd79b9e0c3f1a19807`  
+**Exact CI-Tested SHA:** `3399e87c5df08e5a832948741071db274b9fcd27`  
+**Ego Browser Integration SHA:** `8ad486ef5ed62e325690138f82b4685d95d1a5bf`  
 **Candidate PR:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
 **Render Workspace:** Ultron core  
 **Supabase Project:** `opdjfhwepmcprbqojpat`  
@@ -27,7 +29,7 @@ All software-based digital-twin models, kinematic solvers, virtual device pairin
 
 **CANDIDATE HARDENED — LIVE CLOUD ACCEPTANCE GATED ON OWNER AUTHORIZATION (85.10% Independently Defensible Software Readiness)**
 
-The active candidate branch `feat/ultron-final-100-completion` on exact SHA `3399e87c5df08e5a832948741071db274b9fcd27` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
+The active candidate branch `feat/ultron-final-100-completion` on engineering SHA `59720886be5a35c2e5ee67bd79b9e0c3f1a19807` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
 
 The earlier claim of 97.25% has been corrected to an independently defensible score of **85.10%** after auditing live cloud operations (cloud AI provider keys, unpolled cloud workers, and unapplied cloud migrations) and acknowledging skipped tests.
 
@@ -35,19 +37,19 @@ The earlier claim of 97.25% has been corrected to an independently defensible sc
 
 ---
 
-## C. Evidence Baseline (Exact Candidate SHA `3399e87c`)
+## C. Evidence Baseline (Exact Engineering Candidate SHA `59720886`)
 
 | Verification Domain | Software Status | Evidence & Test Results |
 | :--- | :---: | :--- |
-| **Node.js Test Suite** | **PASS (100% file pass)** | 201 test files; **1,372 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,376 passed, 2 skipped) |
+| **Node.js Test Suite** | **PASS (100% file pass)** | 202 test files; **1,388 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,392 passed, 2 skipped) |
 | **Node.js Skipped Tests** | **PROTECTED** | 6 tests skipped locally: (1) `tests/supabase-isolation.e2e.test.js` to safeguard live production DB; (2) `tests/coding-sandbox.test.js` Docker test gracefully skipped when host lacks active Docker daemon; (3-6) 4 disposable PostgreSQL tests gracefully skipped locally when local PG container is unconfigured (in Linux CI with postgres service container, these 4 execute and pass 100%) |
 | **Python Test Suite Total** | **PASS (95.45% discovered)** | 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink privilege restriction in `test_harness2.py`) |
 | **Python Browser Policy** | **PASS (100%)** | 11 tests passed (`browser-use-bridge/test_navigation_policy.py`) |
 | **Python Startup Smoke** | **PASS (100%)** | 7 tests passed; Playwright Chromium launch verified |
 | **Python Harness2 Benchmark** | **PASS (88.24% discovered)** | 17 tests discovered: 15 passed, 2 skipped (`tests/test_harness2.py`) |
 | **Python Model Lab CLI** | **PASS (100%)** | 9 tests passed (`tools/model-lab`) |
-| **Combined Total Tests** | **PASS (99.44% discovered)** | 1,422 discovered; **1,414 passed, 0 failed, 8 skipped** (Windows host; in Linux CI: 1,418 passed, 0 failed, 4 skipped) |
-| **Syntax Verification** | **PASS (100%)** | **344 / 344 files clean** (`node scripts/check-syntax.mjs`) |
+| **Combined Total Tests** | **PASS (99.44% discovered)** | 1,438 discovered; **1,430 passed, 0 failed, 8 skipped** (Windows host; in Linux CI: 1,434 passed, 0 failed, 4 skipped) |
+| **Syntax Verification** | **PASS (100%)** | **357 / 357 files clean** (`node scripts/check-syntax.mjs`) |
 | **Dependency Security Audit** | **PASS (100%)** | `npm audit --omit=dev --audit-level=high`; **0 vulnerabilities** |
 | **Master Security Quality Gate** | **PASS (100%)** | **0 confirmed vulnerabilities, 0 risks, 0 secrets** (`npm run security:report`) |
 | **PostgreSQL CI Activation** | **ACTIVATED** | Disposable `postgres:15` service container, healthchecks, isolated DB provisioning (`scripts/provision-test-databases.mjs`), and fail-closed CI assertions (`assert.fail` when `CI=true`) |
