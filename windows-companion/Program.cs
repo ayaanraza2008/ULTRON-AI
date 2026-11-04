@@ -36,6 +36,7 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly CheckBox _autoStartCheckBox;
+    private readonly CheckBox _remoteCommandsCheckBox;
     private readonly TextBox _pairingCodeBox;
     private readonly Button _pairButton;
     private readonly System.Windows.Forms.Timer _commandPollTimer;
@@ -60,24 +61,25 @@ internal sealed class CompanionContext : ApplicationContext
         _window = new Form
         {
             Text = "ULTRON Wake Companion",
-            Width = 520,
-            Height = 330,
+            Width = 540,
+            Height = 370,
             StartPosition = FormStartPosition.CenterScreen,
-            MinimumSize = new System.Drawing.Size(450, 300)
+            MinimumSize = new System.Drawing.Size(470, 340)
         };
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 6,
             Padding = new Padding(16)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 19));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 23));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 21));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 16));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 17));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 19));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 17));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 16));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 15));
 
         var title = new Label
         {
@@ -101,6 +103,14 @@ internal sealed class CompanionContext : ApplicationContext
             Checked = IsAutoStartEnabled()
         };
         _autoStartCheckBox.CheckedChanged += (_, _) => HandleAutoStartChanged();
+
+        _remoteCommandsCheckBox = new CheckBox
+        {
+            Text = "Allow allowlisted remote commands from paired devices",
+            AutoSize = true,
+            Checked = IsRemoteCommandsEnabled()
+        };
+        _remoteCommandsCheckBox.CheckedChanged += (_, _) => HandleRemoteCommandsChanged();
 
         var pairingPanel = new FlowLayoutPanel
         {
@@ -141,6 +151,7 @@ internal sealed class CompanionContext : ApplicationContext
         layout.Controls.Add(buttons, 0, 2);
         layout.Controls.Add(pairingPanel, 0, 3);
         layout.Controls.Add(_autoStartCheckBox, 0, 4);
+        layout.Controls.Add(_remoteCommandsCheckBox, 0, 5);
         _window.Controls.Add(layout);
 
         _floatingCore = new FloatingCoreOverlayForm(this);
@@ -169,7 +180,12 @@ internal sealed class CompanionContext : ApplicationContext
 
         _commandPollTimer = new System.Windows.Forms.Timer { Interval = 3000 };
         _commandPollTimer.Tick += async (_, _) => await PollPendingCommandsAsync();
-        _commandPollTimer.Start();
+        if (_remoteCommandsCheckBox.Checked)
+        {
+            if (string.IsNullOrWhiteSpace(LoadDeviceId()) || string.IsNullOrWhiteSpace(LoadDeviceToken()))
+                ShowStatus("Remote commands are enabled, but this companion must be paired before it can receive tasks.");
+            _commandPollTimer.Start();
+        }
 
         _window.FormClosing += (_, e) =>
         {
@@ -241,6 +257,48 @@ internal sealed class CompanionContext : ApplicationContext
                 ShowStatus("Could not update the Windows startup setting.");
             }
         }
+    }
+
+    private void HandleRemoteCommandsChanged()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\\ULTRON\\Companion", writable: true)
+                ?? throw new InvalidOperationException("Could not open ULTRON companion settings.");
+            key.SetValue("AllowRemoteCommands", _remoteCommandsCheckBox.Checked ? 1 : 0, RegistryValueKind.DWord);
+            if (_remoteCommandsCheckBox.Checked)
+            {
+                if (string.IsNullOrWhiteSpace(LoadDeviceId()) || string.IsNullOrWhiteSpace(LoadDeviceToken()))
+                {
+                    ShowStatus("Remote commands are enabled. Pair this Windows device before it can receive tasks.");
+                    return;
+                }
+                _commandPollTimer.Start();
+                ShowStatus("Allowlisted remote commands enabled. ULTRON will show each completed task here.");
+            }
+            else
+            {
+                _commandPollTimer.Stop();
+                ShowStatus("Remote command polling disabled. Voice commands to ULTRON remain available.");
+            }
+        }
+        catch
+        {
+            _remoteCommandsCheckBox.CheckedChanged -= (_, _) => HandleRemoteCommandsChanged();
+            _remoteCommandsCheckBox.Checked = false;
+            _commandPollTimer.Stop();
+            ShowStatus("Could not save the remote-command permission. Remote command polling remains disabled.");
+        }
+    }
+
+    private bool IsRemoteCommandsEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\\ULTRON\\Companion", writable: false);
+            return key?.GetValue("AllowRemoteCommands") is int value && value == 1;
+        }
+        catch { return false; }
     }
 
     private void SetAutoStartChecked(bool value)
@@ -884,7 +942,7 @@ internal sealed class CompanionContext : ApplicationContext
 
     private async Task PollPendingCommandsAsync()
     {
-        if (_allowExit || Interlocked.Exchange(ref _commandPollInProgress, 1) != 0) return;
+        if (_allowExit || !_remoteCommandsCheckBox.Checked || Interlocked.Exchange(ref _commandPollInProgress, 1) != 0) return;
         try
         {
             var identity = LoadDeviceIdentity();
