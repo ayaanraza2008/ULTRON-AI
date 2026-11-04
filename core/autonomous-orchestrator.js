@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { toolRegistry, PERMISSION_LEVELS } from "./tool-registry.js";
+import { createToolApprovalProof } from "../security/tool-approval-authority.js";
 
 export const AGENT_ROLES = {
   GTM_GROWTH: "gtm-growth-strategist",
@@ -351,7 +352,12 @@ export class AutonomousOrchestrator {
               if (timerId?.unref) timerId.unref();
             });
             const mergedParams = { ...step.params, _upstreamArtifacts: artifacts };
-            outcome = await Promise.race([tool.execute(mergedParams, context), timeoutPromise]);
+            const { toolApprovalProofs, ...publicContext } = context || {};
+            const stepApproval = toolApprovalProofs instanceof Map ? toolApprovalProofs.get(step.id) : null;
+            const toolContext = stepApproval
+              ? { ...publicContext, actorId: stepApproval.actorId, toolApprovalProof: stepApproval.proof }
+              : publicContext;
+            outcome = await Promise.race([tool.execute(mergedParams, toolContext), timeoutPromise]);
             clearTimeout(timerId);
             lastErr = null;
             break;
@@ -444,6 +450,9 @@ export class AutonomousOrchestrator {
     });
 
     // Step 3: Permission Evaluation & Human Confirmation Check
+    // These details are created only after the orchestrator validates and consumes
+    // its pending approval. Caller-provided booleans or proof-shaped objects are ignored.
+    const approvalProofDetails = new Map();
     for (const step of plan.steps) {
       const tool = this.registry.getTool(step.toolId);
       if (!tool) continue;
@@ -523,22 +532,13 @@ export class AutonomousOrchestrator {
           approval.consumedAt = new Date().toISOString();
           approval.consumedByWorkflow = workflowId;
           isAuthorized = true;
+          approvalProofDetails.set(step.id, {
+            actorId: approval.userId || context.userId || "operator",
+            toolId: tool.id,
+            permissionLevel: tool.permissionLevel,
+            approvalId: approval.id
+          });
           trace("APPROVAL_CONSUMED", { approvalId: approval.id, toolId: tool.id });
-        } else if (context.preApproved) {
-          // Check for a previously approved, unconsumed approval for this tool
-          const matching = Array.from(this.pendingApprovals.values()).find(
-            r => r.toolId === tool.id && r.status === "APPROVED" && !r.consumed && (!r.userId || !context.userId || r.userId === context.userId || context.isAdmin)
-          );
-          if (matching) {
-            matching.consumed = true;
-            matching.status = "CONSUMED";
-            matching.consumedAt = new Date().toISOString();
-            matching.consumedByWorkflow = workflowId;
-            isAuthorized = true;
-            trace("APPROVAL_CONSUMED", { approvalId: matching.id, toolId: tool.id });
-          } else if (context.trustedInternalAdmin === true || (!this.strictApprovalGates && this.autonomyLevel >= tool.permissionLevel)) {
-            isAuthorized = true;
-          }
         }
 
         if (!isAuthorized) {
@@ -573,8 +573,19 @@ export class AutonomousOrchestrator {
       }
     }
 
+    // Mint opaque process-local proofs only after validation and consumption.
+    // A raw approvalId, preApproved flag, or caller-created object is never proof.
+    const toolApprovalProofs = new Map();
+    for (const [stepId, details] of approvalProofDetails) {
+      toolApprovalProofs.set(stepId, {
+        actorId: details.actorId,
+        proof: createToolApprovalProof(details)
+      });
+    }
+
     // Step 4: Step-by-Step DAG Execution with Safe Retries
-    const dagResult = await this.executePlanDAG(plan, context, trace);
+    const executionContext = { ...context, toolApprovalProofs };
+    const dagResult = await this.executePlanDAG(plan, executionContext, trace);
     const stepResults = dagResult.stepResults;
 
     // Step 5: Verification
