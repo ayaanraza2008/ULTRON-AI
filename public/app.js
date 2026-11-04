@@ -1785,9 +1785,9 @@
             ? " " + requests.length + " sensitive steps require approval."
             : "";
           updateTaskPanel(
-            "AUTHORIZATION REQUIRED (Level " + (req?.permissionLevel || "Sensitive") + "):\\n" +
+            "AUTHORIZATION REQUIRED (Level " + (req?.permissionLevel || "Sensitive") + "):\n" +
               (req?.actionDescription || "A sensitive action requires confirmation.") +
-              countText + "\\nOpen Permission Center to approve. ULTRON will resume only after every required approval is granted.",
+              countText + "\nOpen Permission Center to approve. ULTRON will resume only after every required approval is granted.",
             "APPROVAL REQUIRED"
           );
           showToast("Authorization required: " + (req?.actionDescription || "sensitive action") + countText, 6500);
