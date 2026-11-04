@@ -12,6 +12,7 @@
 
 import crypto, { createHash } from "node:crypto";
 import { deviceHub as defaultDeviceHub } from "./device-hub.js";
+import { verifyPairedDeviceToken } from "./device-pairing-router.js";
 
 const WS_MAGIC_STRING = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const MAX_FRAME_PAYLOAD = 64 * 1024; // 64 KB safety limit per frame
@@ -101,7 +102,10 @@ export class DeviceWebSocketGateway {
   constructor(options = {}) {
     this.deviceHub = options.deviceHub || defaultDeviceHub;
     this.logger = options.logger || console;
-    this.authenticateDeviceToken = options.authenticateDeviceToken || null;
+    this.authenticateDeviceToken = options.authenticateDeviceToken ||
+      (String(process.env.NODE_ENV || "").toLowerCase() === "production"
+        ? token => verifyPairedDeviceToken({ token, env: process.env, logger: this.logger })
+        : null);
     this.clients = new Map(); // deviceId -> ClientSession
     this.sseClients = new Map(); // deviceId -> Set(res)
     this.pingIntervalMs = options.pingIntervalMs || 30_000;
