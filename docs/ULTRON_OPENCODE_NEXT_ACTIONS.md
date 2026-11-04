@@ -7,12 +7,12 @@
 4. Update `AGENTS.md` to register OpenCode as a supported engineering environment (done in this session if applied).
 5. Exercise MCP servers (GitHub/Supabase/Render) from OpenCode and record results in the connection matrix.
 
-## Owner-gated (require explicit authorization)
-6. Merge PR #441 (`feat/ultron-final-100-completion`) to `main` after final review.
-7. Apply Supabase migration `20261101180000_durable_paired_devices.sql`.
-8. Enable Supabase Leaked Password Protection.
-9. Configure Render env vars for AI providers and sync blueprint.
-10. Deploy (only on explicit `DEPLOY` instruction).
+## Owner-gated (require explicit authorization) — exact actions
+6. **PR #441 merge governance**: review candidate branch `feat/ultron-final-100-completion` (head in flux; latest completed CI run `41820731210` failed on `security(windows): block symlink escape`; newer pushes in progress). Resolve CI failure, then merge to `main`. Command: `gh pr merge 441 --squash` (only after green CI + owner approval).
+7. **Supabase migration**: open Supabase Dashboard → SQL Editor → paste `supabase/migrations/20261101180000_durable_paired_devices.sql` → Run. Verify rollback script first. No production data reset.
+8. **Leaked Password Protection**: Supabase Dashboard → Authentication → Attack Protection → enable "Leaked Password Protection".
+9. **Render env vars**: Render Dashboard → workspace "Ultron core" → service `ultron-ai-core` → Environment → add `OPENROUTER_API_KEY` (and optionally `GROQ_API_KEY`, `GEMINI_API_KEY`) → Save. Then sync blueprint (`render.yaml`).
+10. **Deploy**: only on explicit owner instruction `DEPLOY`. No auto-deploy.
 
 ## Integration work
 11. Decide whether to integrate PR #442 (frontend removal) and #443 (eternal integration).
