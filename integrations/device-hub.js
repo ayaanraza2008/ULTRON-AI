@@ -129,6 +129,38 @@ export class DeviceHub {
   }
 
   /**
+   * Hydrates a device already verified against the durable Supabase registry.
+   * The DB remains authoritative; this is only an in-process command cache.
+   */
+  importPairedDevice(record = {}) {
+    const id = String(record.id || "").trim();
+    const ownerUserId = String(record.ownerUserId || record.owner_user_id || "").trim();
+    const authToken = String(record.authToken || "").trim();
+    if (!id || !ownerUserId || !/^ultron_dev_[a-f0-9]{64}$/i.test(authToken) || record.status === "revoked") return null;
+
+    const previous = this.pairedDevices.get(id);
+    const now = new Date().toISOString();
+    const device = {
+      ...(previous || {}),
+      id,
+      name: String(record.name || record.device_name || previous?.name || "Companion Device").slice(0, 120),
+      platform: String(record.platform || previous?.platform || "unknown").toLowerCase(),
+      authToken,
+      tokenHash: hashToken(authToken),
+      tokenPrefix: authToken.slice(0, 20),
+      ownerUserId,
+      status: "active",
+      pairedAt: record.pairedAt || record.paired_at || previous?.pairedAt || now,
+      lastSeenAt: now,
+      battery: previous?.battery || null,
+      online: true,
+      source: "supabase"
+    };
+    this.pairedDevices.set(id, device);
+    return device;
+  }
+
+  /**
    * Loads durable paired devices from encrypted disk registry.
    */
   loadFromDisk() {
@@ -619,8 +651,11 @@ export class DeviceHub {
       task.result = result;
       task.completedAt = new Date().toISOString();
     }
-    if (cmd.payload?.idempotencyKey && this.idempotencyIndex.has(cmd.payload.idempotencyKey)) {
-      this.idempotencyIndex.set(cmd.payload.idempotencyKey, {
+    const scopedIdempotencyKey = cmd.payload?.idempotencyKey
+      ? `${device.ownerUserId}:${cmd.payload.idempotencyKey}`
+      : null;
+    if (scopedIdempotencyKey && this.idempotencyIndex.has(scopedIdempotencyKey)) {
+      this.idempotencyIndex.set(scopedIdempotencyKey, {
         command: cmd,
         status: cmd.status,
         result
@@ -774,7 +809,7 @@ export class DeviceHub {
       const normPlatform = targetPlatform.toLowerCase().trim();
       for (const dev of this.pairedDevices.values()) {
         if (dev.status === "active" && (dev.platform === normPlatform || (normPlatform === "windows" && dev.platform === "windows_pc"))) {
-          if (!callerUserId || dev.ownerUserId === callerUserId || dev.ownerUserId === "operator") {
+          if (callerUserId && dev.ownerUserId === callerUserId) {
             target = dev;
             break;
           }
@@ -787,6 +822,16 @@ export class DeviceHub {
         success: false,
         error: "TARGET_DEVICE_NOT_FOUND",
         message: `No paired target device found matching ${targetDeviceId || targetPlatform}.`
+      };
+    }
+
+    // A caller must never operate a device owned by another account. This check
+    // also protects explicit targetDeviceId requests, not only platform searches.
+    if (!callerUserId || !target.ownerUserId || target.ownerUserId !== callerUserId) {
+      return {
+        success: false,
+        error: "ACCESS_DENIED_NOT_DEVICE_OWNER",
+        message: "The requested device belongs to a different ULTRON account."
       };
     }
 
@@ -807,9 +852,11 @@ export class DeviceHub {
       };
     }
 
+    // Idempotency keys are private to an owner; another account may reuse a key.
+    const scopedIdempotencyKey = idempotencyKey ? `${callerUserId}:${idempotencyKey}` : null;
     // 5. Check idempotency to prevent duplicate execution upon reconnect
-    if (idempotencyKey) {
-      const existing = this.idempotencyIndex.get(idempotencyKey);
+    if (scopedIdempotencyKey) {
+      const existing = this.idempotencyIndex.get(scopedIdempotencyKey);
       if (existing) {
         return {
           success: true,
@@ -839,6 +886,7 @@ export class DeviceHub {
       payload,
       callerDeviceId: callerDeviceId || "operator",
       callerUserId,
+      ownerUserId: target.ownerUserId,
       targetDeviceId: target.id,
       targetDeviceName: target.name,
       targetPlatform: target.platform,
@@ -850,8 +898,8 @@ export class DeviceHub {
 
     this.recordSharedTask(taskEntry);
 
-    if (idempotencyKey) {
-      this.idempotencyIndex.set(idempotencyKey, {
+    if (scopedIdempotencyKey) {
+      this.idempotencyIndex.set(scopedIdempotencyKey, {
         command: enqResult.command,
         status: "dispatched",
         result: null
@@ -893,6 +941,7 @@ export class DeviceHub {
    */
   getSharedTasks(limit = 50, filter = {}) {
     let list = this.taskHistory;
+    if (filter.ownerUserId) list = list.filter(t => t.ownerUserId === filter.ownerUserId);
     if (filter.targetDeviceId) list = list.filter(t => t.targetDeviceId === filter.targetDeviceId);
     if (filter.callerUserId) list = list.filter(t => t.callerUserId === filter.callerUserId);
     return list.slice(0, limit);
