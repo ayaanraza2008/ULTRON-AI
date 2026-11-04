@@ -99,7 +99,7 @@ test("Target Authorization: Emergency stop halts all security testing", () => {
   // Disengage requires master key
   assert.throws(
     () => gateway.disengageEmergencyStop("wrong-key"),
-    /Invalid operator master authorization key/
+    /Invalid or unconfigured operator authorization key/
   );
 
   const resume = gateway.disengageEmergencyStop("test-operator-master-key-at-least-32-chars");
