@@ -170,61 +170,41 @@ describe("ULTRON ETERNAL — Total Capability Integration Test Battery", () => {
   });
 
   // --- 4. PROMETHEUS SECURE SELF-EVOLUTION ---
-  describe("4. Prometheus Secure Self-Evolution Sandbox", () => {
-    const testToolId = `circle_calc_${Date.now()}`;
+  describe("4. Prometheus Secure Self-Evolution fail-closed boundary", () => {
+    const testToolId = `blocked_calc_${Date.now()}`;
 
-    it("rejects malicious or unsafe code patterns during static AST inspection", () => {
+    it("rejects malicious or unsafe code patterns during static screening", () => {
       const maliciousCode = "const cp = require('child_process'); cp.exec('calc.exe'); process.exit(1);";
       const validation = prometheusEvolutionEngine.validateSourceSecurity(maliciousCode, "javascript");
       assert.equal(validation.safe, false);
+      assert.equal(validation.validatedForExecution, false);
       assert.ok(validation.violations.length >= 2);
     });
 
-    it("synthesizes validated tool and registers version 1", async () => {
-      const safeCode = `
-        export function computeCircleArea(radius) {
-          if (radius <= 0) return 0;
-          return Math.PI * radius * radius;
-        }
-      `;
-      const res = await prometheusEvolutionEngine.synthesizeTool({
+    it("rejects Python source rather than treating an unscanned language as safe", () => {
+      const validation = prometheusEvolutionEngine.validateSourceSecurity(
+        "import os\\nos.system('whoami')",
+        "python"
+      );
+      assert.equal(validation.safe, false);
+      assert.equal(validation.validatedForExecution, false);
+      assert.ok(validation.violations.includes("UNSUPPORTED_LANGUAGE"));
+    });
+
+    it("does not stage or register source without a verified isolated sandbox", async () => {
+      const safeLookingCode = "export function computeCircleArea(radius) { return Math.PI * radius * radius; }";
+      const result = await prometheusEvolutionEngine.synthesizeTool({
         toolId: testToolId,
         name: "Circle Area Calculator",
-        description: "Computes circle geometric area safely",
-        category: "AUTONOMOUS_OPERATIONS",
-        permissionLevel: 2,
-        sourceCode: safeCode,
+        sourceCode: safeLookingCode,
         language: "javascript"
       });
-      assert.equal(res.success, true);
-      assert.equal(res.securityVerdict, "ACCEPTED_SAFE");
-      assert.equal(res.tool.version, 1);
-    });
-
-    it("upgrades tool to version 2 on subsequent safe synthesis", async () => {
-      const updatedCode = `
-        export function computeCircleArea(radius) {
-          if (!radius || radius <= 0) return 0;
-          return Number((Math.PI * radius * radius).toFixed(2));
-        }
-      `;
-      const res = await prometheusEvolutionEngine.synthesizeTool({
-        toolId: testToolId,
-        name: "Circle Area Calculator v2",
-        description: "Computes circle area with 2 decimal rounding",
-        category: "AUTONOMOUS_OPERATIONS",
-        permissionLevel: 2,
-        sourceCode: updatedCode,
-        language: "javascript"
-      });
-      assert.equal(res.success, true);
-      assert.equal(res.tool.version, 2);
-    });
-
-    it("rolls back tool to version 1 on demand", async () => {
-      const rollback = await prometheusEvolutionEngine.rollbackTool(testToolId);
-      assert.equal(rollback.success, true);
-      assert.equal(rollback.currentVersion, 1);
+      assert.equal(result.success, false);
+      assert.equal(result.code, "SELF_EVOLUTION_SANDBOX_UNAVAILABLE");
+      assert.equal(
+        prometheusEvolutionEngine.listTools().tools.some(tool => tool.id === testToolId),
+        false
+      );
     });
   });
 
