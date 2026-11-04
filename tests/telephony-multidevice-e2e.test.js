@@ -7,7 +7,20 @@ import { telephonyGateway } from "../telephony/telephony-gateway.js";
 import { multiDeviceManager } from "../integrations/multi-device-manager.js";
 import { windowsDesktopAgent } from "../system/windows-desktop-agent.js";
 
-async function withRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }, userId = "owner-user" } = {}, run) {
+const WEBHOOK_SECRET = "unit-test-webhook-secret-32-characters-minimum"; 
+const telephonyFetch = (url, init = {}) => fetch(url, {
+  ...init,
+  headers: {
+    ...(init.headers || {}),
+    "x-ultron-telephony-secret": WEBHOOK_SECRET
+  }
+});
+
+async function withRouter({ env = {
+  ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+  ULTRON_TELEPHONY_WEBHOOK_SECRET: WEBHOOK_SECRET,
+  ULTRON_TELEPHONY_PIN: "1001"
+}, userId = "owner-user" } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, _res, next) => {
     req.supabaseUser = { id: userId };
@@ -35,7 +48,7 @@ test("E2E Test 1 & 3: Inbound telephone call from authorized owner establishes v
     telephonyGateway.ownerPhoneNumbers.add("+919876543210");
 
     // 1. Incoming Call Webhook
-    const callRes = await fetch(base + "/api/telephony/incoming-call", {
+    const callRes = await telephonyFetch(base + "/api/telephony/incoming-call", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -51,7 +64,7 @@ test("E2E Test 1 & 3: Inbound telephone call from authorized owner establishes v
     assert.ok(twiml.includes("Good evening sir. ULTRON is online."));
 
     // 2. Process English speech utterance
-    const speechRes = await fetch(base + "/api/telephony/process-speech?callId=CA_e2e_owner_01", {
+    const speechRes = await telephonyFetch(base + "/api/telephony/process-speech?callId=CA_e2e_owner_01", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -69,7 +82,7 @@ test("E2E Test 2: Inbound telephone call processes Hindi/Hinglish instructions",
     telephonyGateway.ownerPhoneNumbers.add("+919876543210");
     telephonyGateway.handleIncomingCall({ callSid: "CA_hindi_01", from: "+919876543210" });
 
-    const speechRes = await fetch(base + "/api/telephony/process-speech?callId=CA_hindi_01", {
+    const speechRes = await telephonyFetch(base + "/api/telephony/process-speech?callId=CA_hindi_01", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -89,7 +102,7 @@ test("E2E Test 4, 5, 6, 7: Telephone instruction checks PC and executes screen u
     telephonyGateway.handleIncomingCall({ callSid: "CA_unlock_screen", from: "+919876543210" });
 
     // Say: "can you unlock my screen?"
-    const speechRes = await fetch(base + "/api/telephony/process-speech?callId=CA_unlock_screen", {
+    const speechRes = await telephonyFetch(base + "/api/telephony/process-speech?callId=CA_unlock_screen", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -139,7 +152,7 @@ test("E2E Test 8 & 9: Multi-Device ecosystem simultaneous mobile unlock, media p
 test("E2E Test 10 & 11: Unauthorized caller cannot control computer and high-risk action fails closed", async () => {
   await withRouter({}, async base => {
     // Call from unauthorized number
-    const callRes = await fetch(base + "/api/telephony/incoming-call", {
+    const callRes = await telephonyFetch(base + "/api/telephony/incoming-call", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -152,7 +165,7 @@ test("E2E Test 10 & 11: Unauthorized caller cannot control computer and high-ris
     assert.ok(twiml.includes("Security authorization required"));
 
     // Attempting to unlock screen without passing PIN challenge is rejected
-    const hackSpeechRes = await fetch(base + "/api/telephony/process-speech?callId=CA_unauth_hacker", {
+    const hackSpeechRes = await telephonyFetch(base + "/api/telephony/process-speech?callId=CA_unauth_hacker", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
