@@ -1767,17 +1767,30 @@
         try {
           autonomousOutcome = await apiRequest("/api/jarvis/orchestrate", {
             method: "POST",
-            body: { prompt, context: { preApproved: false } }
+            body: { prompt, context: {} }
           });
         } catch {}
 
         if (autonomousOutcome && autonomousOutcome.status === "APPROVAL_REQUIRED") {
           const req = autonomousOutcome.approvalRequest;
+          const requests = Array.isArray(autonomousOutcome.approvalRequests) && autonomousOutcome.approvalRequests.length
+            ? autonomousOutcome.approvalRequests
+            : (req ? [req] : []);
+          const workflowId = autonomousOutcome.workflowId || req?.workflowId;
+          if (workflowId) {
+            approvalPromptByWorkflow.set(workflowId, { prompt, shouldSpeak });
+            approvedIdsByWorkflow.set(workflowId, {});
+          }
+          const countText = requests.length > 1
+            ? " " + requests.length + " sensitive steps require approval."
+            : "";
           updateTaskPanel(
-            "AUTHORIZATION REQUIRED (Level " + req.permissionLevel + "):\n" + req.actionDescription + "\nOpen Permission Center to approve or deny.",
+            "AUTHORIZATION REQUIRED (Level " + (req?.permissionLevel || "Sensitive") + "):\\n" +
+              (req?.actionDescription || "A sensitive action requires confirmation.") +
+              countText + "\\nOpen Permission Center to approve. ULTRON will resume only after every required approval is granted.",
             "APPROVAL REQUIRED"
           );
-          showToast("Authorization required: " + req.actionDescription, 6500);
+          showToast("Authorization required: " + (req?.actionDescription || "sensitive action") + countText, 6500);
           setCoreState("idle");
           busy = false;
           ui.sendButton.disabled = false;
