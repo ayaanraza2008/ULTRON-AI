@@ -35,6 +35,8 @@ test("JARVIS control routes reject anonymous and non-owner users", async () => {
     ["/jarvis/tools", "GET"],
     ["/jarvis/permissions/pending", "GET"],
     ["/jarvis/autonomy/state", "GET"],
+    ["/jarvis/autonomy/emergency-stop", "POST"],
+    ["/jarvis/autonomy/emergency-reset", "POST"],
     ["/jarvis/autonomy/workflows", "GET"],
     ["/jarvis/autonomy/events", "GET"],
     ["/jarvis/orchestrate", "POST"],
