@@ -8,3 +8,8 @@ test("routes HexStrike security-scan requests to the guarded cybersecurity tools
   assert.deepEqual(route.categories, ["cybersecurity"]);
   assert.deepEqual(route.toolNames, ["hexstrike_scan", "check_integrations"]);
 });
+
+test("does not route an explanatory HexStrike question into a scan tool", () => {
+  const route = classifyTaskRoute("Explain what HexStrike AI does");
+  assert.equal(route.categories.includes("cybersecurity"), false);
+});
