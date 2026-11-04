@@ -125,13 +125,14 @@ test("MobileControlEngine: executes single action with pre/post state capture", 
   engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   // Execute tap only after explicit owner authorization.
-  const tapRes = await engine.executeAction("mobile_click_on_screen_at_coordinates", {
+  const tapRes = await engine.executeAction("tap", {
     device: "emulator-5554",
     x: 500,
     y: 800
   }, { userId: "test-owner" });
 
   assert.equal(tapRes.success, true);
+  assert.equal(tapRes.action, "mobile_click_on_screen_at_coordinates", "UI aliases must resolve to real Mobile MCP tool names.");
   assert.ok(tapRes.verification);
   assert.ok(tapRes.verification.preState);
   assert.ok(tapRes.verification.postState);
