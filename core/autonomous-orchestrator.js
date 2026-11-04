@@ -530,6 +530,40 @@ export class AutonomousOrchestrator {
         }
 
         if (!approval) {
+          // Allow a repeated owner request to resume only when exactly one
+          // unconsumed approval matches the same authenticated owner, step,
+          // tool, permission, description and canonical parameter snapshot.
+          // This keeps UI refresh/re-entry usable without weakening approval.
+          const fingerprint = approvalParametersFingerprint(step.params);
+          const requestingActor = typeof context.userId === "string" && context.userId.trim()
+            ? context.userId.trim()
+            : "operator";
+          const matchingApproved = Array.from(this.pendingApprovals.values()).filter(candidate =>
+            candidate.status === "APPROVED" &&
+            !candidate.consumed &&
+            candidate.userId === requestingActor &&
+            candidate.stepId === step.id &&
+            candidate.toolId === tool.id &&
+            Number(candidate.permissionLevel) === Number(tool.permissionLevel) &&
+            candidate.actionDescription === step.description &&
+            candidate.parametersFingerprint === fingerprint &&
+            Number.isFinite(Date.parse(candidate.expiresAt || "")) &&
+            Date.now() <= Date.parse(candidate.expiresAt)
+          );
+          if (matchingApproved.length > 1) {
+            return {
+              success: false,
+              workflowId,
+              status: "APPROVAL_AMBIGUOUS",
+              error: "Multiple matching approved requests exist. Supply the exact per-step approval ID.",
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
+          if (matchingApproved.length === 1) approval = matchingApproved[0];
+        }
+
+        if (!approval) {
           // Reuse a matching pending request rather than creating duplicates.
           const fingerprint = approvalParametersFingerprint(step.params);
           const existingPending = Array.from(this.pendingApprovals.values()).find(candidate =>
