@@ -221,7 +221,7 @@ describe("ULTRON AI — Ego Lite Autonomous Browser Subsystem", () => {
       pageId: "page-test",
       simulatedElements: [
         { role: "textbox", name: "Username", placeholder: "Enter username" },
-        { role: "button", name: "Submit" }
+        { role: "link", name: "Open details", href: "https://example.com/details" }
       ]
     });
 
@@ -323,14 +323,20 @@ describe("ULTRON AI — Ego Lite Autonomous Browser Subsystem", () => {
   // -------------------------------------------------------------
   test("11. Safe Downloads: enforces safe path, saves to downloads dir, prevents traversal", async () => {
     const actionExecutor = new EgoActionExecutor({
-      downloadsDir: testDownloadsDir
+      downloadsDir: testDownloadsDir,
+      securityGuard: new EgoSecurityGuard({
+        dnsLookup: async () => [{ address: "93.184.216.34", family: 4 }],
+        approvalVerifier: async ({ actionName, actorId, approvalToken }) =>
+          actorId === "test-owner" && approvalToken === "test-download-approval" && actionName === "download"
+      })
     });
 
     // Valid download
     const res = await actionExecutor.downloadFile(
       "page-1",
       "https://example.com/release-notes.txt",
-      "release-notes.txt"
+      "release-notes.txt",
+      { actorId: "test-owner", approvalToken: "test-download-approval" }
     );
 
     assert.equal(res.downloaded, true);

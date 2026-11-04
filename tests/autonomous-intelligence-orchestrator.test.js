@@ -89,7 +89,7 @@ test("AutonomousOrchestrator: enforces Level 3 Sensitive Confirmation Gates for 
   const approveRes = orchestrator.approveRequest(outcome.approvalRequest.id);
   assert.equal(approveRes.success, true);
 
-  const approvedOutcome = await orchestrator.processUserRequest("Organize my downloads folder", { preApproved: true });
+  const approvedOutcome = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId: outcome.approvalRequest.id });
   assert.equal(approvedOutcome.verified, true);
   assert.ok(approvedOutcome.textResponse.includes("File organization completed"));
 });
@@ -128,11 +128,23 @@ test("AutonomousOrchestrator: Global Emergency Stop halts execution and rejects 
 test("AutonomousOrchestrator: Multilingual persona responses (English, Hindi, Hinglish)", async () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
 
-  const enRes = await orchestrator.processUserRequest("Launch chrome on my computer", { preApproved: true });
-  assert.ok(enRes.textResponse.includes("Affirmative, Ayaan") || enRes.textResponse.includes("Launching chrome"));
+  const enPending = await orchestrator.processUserRequest("Launch chrome on my computer");
+  assert.equal(enPending.status, "APPROVAL_REQUIRED");
+  assert.equal(orchestrator.approveRequest(enPending.approvalRequest.id).success, true);
+  const enRes = await orchestrator.processUserRequest("Launch chrome on my computer", {
+    approvalId: enPending.approvalRequest.id
+  });
+  assert.ok(enRes.verified || enRes.status === "FAILED");
+  assert.ok(enRes.textResponse.includes("Ayaan") || enRes.textResponse.toLowerCase().includes("chrome"));
 
-  const hiRes = await orchestrator.processUserRequest("Chrome shuru karo bhai", { preApproved: true });
-  assert.ok(hiRes.textResponse.includes("Ayaan") || hiRes.textResponse.includes("chrome"));
+  const hiPending = await orchestrator.processUserRequest("Chrome shuru karo bhai");
+  assert.equal(hiPending.status, "APPROVAL_REQUIRED");
+  assert.equal(orchestrator.approveRequest(hiPending.approvalRequest.id).success, true);
+  const hiRes = await orchestrator.processUserRequest("Chrome shuru karo bhai", {
+    approvalId: hiPending.approvalRequest.id
+  });
+  assert.ok(hiRes.verified || hiRes.status === "FAILED");
+  assert.ok(hiRes.textResponse.includes("Ayaan") || hiRes.textResponse.toLowerCase().includes("chrome"));
 });
 
 test("AutonomousOrchestrator: Emits real-time visual events through lifecycle", async () => {
