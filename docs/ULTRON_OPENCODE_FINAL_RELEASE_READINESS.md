@@ -38,9 +38,17 @@ No blocker is auto-resolvable from this environment.
 - Mobile MCP: software layer verified; physical device blocked (no ADB/mobilecli on PATH).
 
 ## 5. Readiness verdict
-**NOT production-ready.** All local software checks are green (0 failures), but 5 owner-gated blockers remain and PR #441 CI is not green. Do not deploy.
+**Software-ready pending owner-gated production actions.** All local software checks are green (0 failures) and PR #441 CI is now green. 5 owner-gated blockers remain (Supabase/Auth/migration/Render/API keys). Do not deploy without explicit `DEPLOY`.
 
-## 6. Exact remaining actions (owner)
+## 6. PR #441 merge-readiness checklist
+- [x] Latest CI run green (test + world-intelligence-build)
+- [x] Local audit branch green (1,460 tests, 0 fail)
+- [x] No uncommitted changes on audit branch
+- [ ] Owner final code review of candidate diff
+- [ ] Owner merges PR #441 to `main` (explicit authorization)
+- [ ] Post-merge: apply migration, enable leaked-password protection, configure Render env, sync blueprint
+
+## 7. Exact remaining actions (owner)
 1. Fix the failing `companion-endpoint.test.js` assertion on the candidate branch (or confirm the intended companion API contract).
 2. Re-run CI on `feat/ultron-final-100-completion` until all checks pass.
 3. Review and merge PR #441 to `main` (explicit authorization).
@@ -51,13 +59,13 @@ No blocker is auto-resolvable from this environment.
 8. Run `npm run diagnose:auth` and `npm run smoke:worker` with service-role key.
 9. Only then issue `DEPLOY`.
 
-## 7. Phase 10 evidence
-- PR #441 latest completed run `41820731210` failure root cause: `tests/companion-endpoint.test.js` expected `SaveDeviceToken(token)` in `windows-companion/Program.cs`; at that commit the source lacked it. Current candidate HEAD `aa3e845b` and local audit branch both contain `SaveDeviceToken(token)`; the assertion is satisfied. No local code change required.
-- Full suite re-run: **1,460 tests, 1,455 pass, 0 fail, 5 skipped**.
-- Branches preserved: 17 local branches + 1 stash intact. Working tree clean.
-- Candidate branch continues to receive pushes; its CI is not yet green (notification/companion assertions). This does not affect the audit branch.
+## 8. Phase 11 evidence
+- PR #441 latest run `41823485741` (fix(cyber): report evidence limits...): **SUCCESS** — both `test` and `world-intelligence-build` green. Candidate CI is now green.
+- Earlier failures (companion-endpoint SaveDeviceToken, notification delivery assertions) were superseded by newer commits that resolved them.
+- Full local suite: **1,460 tests, 1,455 pass, 0 fail, 5 skipped**.
+- Branches preserved: 17 local + 1 stash; working tree clean.
 
-## 8. Safe next engineering steps (no approval needed)
+## 9. Safe next engineering steps (no approval needed)
 - Configure a valid OpenRouter key locally for provider smoke tests.
 - Install ADB only if physical device testing is desired.
 - Continue integration work on feature branches; keep `main` protected.
