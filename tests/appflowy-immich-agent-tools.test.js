@@ -199,7 +199,7 @@ test("Immich connector is owner-bound and returns only bounded metadata", async 
       if (url.endsWith("/api/server/version")) {
         return new Response(JSON.stringify({ major: 1, minor: 2, patch: 3 }), { status: 200 });
       }
-      if (url.endsWith("/api/albums")) {
+      if (url.includes("/api/albums")) {
         return new Response(JSON.stringify([
           { id: "album-1", albumName: "Family", assetCount: 8, createdAt: "2026-01-01" },
           { id: "album-2", albumName: "Travel", assetCount: 12, createdAt: "2026-02-01" }
