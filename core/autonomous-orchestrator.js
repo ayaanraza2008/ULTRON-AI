@@ -515,12 +515,15 @@ export class AutonomousOrchestrator {
               events: collectedEvents
             };
           }
-          if (approval.userId && context.userId && approval.userId !== context.userId && !context.isAdmin) {
+          const requestingActor = typeof context.userId === "string" && context.userId.trim()
+            ? context.userId.trim()
+            : "operator";
+          if (approval.userId && approval.userId !== requestingActor) {
             return {
               success: false,
               workflowId,
               status: "CROSS_USER_ACCESS_DENIED",
-              error: "Cross-user security violation: approval token was granted to a different user.",
+              error: "Cross-user security violation: approval token was granted to a different authenticated user.",
               intent: intentAnalysis.intent,
               events: collectedEvents
             };
@@ -1285,12 +1288,15 @@ export class AutonomousOrchestrator {
     if (req.status === "REJECTED") {
       return { success: false, error: "APPROVAL_ALREADY_REJECTED", request: req };
     }
-    if (req.userId && operatorContext.userId && req.userId !== operatorContext.userId && !operatorContext.isAdmin) {
+    const operatorId = typeof operatorContext.userId === "string" && operatorContext.userId.trim()
+      ? operatorContext.userId.trim()
+      : "operator";
+    if (req.userId && req.userId !== operatorId) {
       return { success: false, error: "CROSS_USER_APPROVAL_DENIED" };
     }
     req.status = "APPROVED";
     req.approvedAt = new Date().toISOString();
-    req.approvedBy = operatorContext.userId || "operator";
+    req.approvedBy = operatorId;
     this.emitEvent({ type: "APPROVAL_GRANTED", requestId: id, toolId: req.toolId });
     return { success: true, request: req };
   }
@@ -1301,13 +1307,16 @@ export class AutonomousOrchestrator {
     if (req.status === "CONSUMED" || req.consumed) {
       return { success: false, error: "APPROVAL_ALREADY_CONSUMED" };
     }
-    if (req.userId && operatorContext.userId && req.userId !== operatorContext.userId && !operatorContext.isAdmin) {
+    const operatorId = typeof operatorContext.userId === "string" && operatorContext.userId.trim()
+      ? operatorContext.userId.trim()
+      : "operator";
+    if (req.userId && req.userId !== operatorId) {
       return { success: false, error: "CROSS_USER_APPROVAL_DENIED" };
     }
     req.status = "REJECTED";
     req.rejectedReason = reason;
     req.rejectedAt = new Date().toISOString();
-    req.rejectedBy = operatorContext.userId || "operator";
+    req.rejectedBy = operatorId;
     this.emitEvent({ type: "APPROVAL_REJECTED", requestId: id, reason });
     return { success: true, request: req };
   }
