@@ -30,10 +30,10 @@ export function validateTwilioWebhook(req, { authToken, publicBaseUrl } = {}) {
   let signedPayload = url;
   for (const key of Object.keys(params).sort()) {
     const rawValue = params[key];
-    const value = Array.isArray(rawValue)
-      ? rawValue.map(item => String(item)).sort().join("")
-      : String(rawValue ?? "");
-    signedPayload += key + value;
+    const values = Array.isArray(rawValue)
+      ? Array.from(new Set(rawValue.map(item => String(item)))).sort()
+      : [String(rawValue ?? "")];
+    for (const value of values) signedPayload += key + value;
   }
 
   const expected = createHmac("sha1", token).update(signedPayload, "utf8").digest("base64");
