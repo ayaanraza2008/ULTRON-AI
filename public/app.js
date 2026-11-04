@@ -19,6 +19,7 @@
     cameraPlaceholder: byId("camera-placeholder"),
     cameraStatus: byId("camera-status"),
     cameraToggle: byId("camera-toggle"),
+    gestureToggle: byId("gesture-toggle"),
     cameraAnalyze: byId("camera-analyze"),
     cameraLiveObserve: byId("camera-live-observe"),
     cameraRecBadge: byId("camera-rec-badge"),
@@ -276,6 +277,132 @@
     return program;
   }
 
+  
+  // --------------------------------------------------------------------------
+  // Real-Time Hand Gesture Control for Living Energy Core
+  // --------------------------------------------------------------------------
+  let handGestureActive = false;
+  let gestureScale = 1.0;
+  let gestureTargetScale = 1.0;
+  let lastGestureType = "IDLE";
+
+  function setupHandGestureControl() {
+    if (typeof window === "undefined" || !window.handGestureCore) return;
+    const hgc = window.handGestureCore;
+    hgc.permissionManager.videoElement = ui.cameraVideo;
+    hgc.trackingService.videoElement = ui.cameraVideo;
+
+    // HandGestureCore owns recognition. Subscribe to its single per-frame result
+    // instead of running the stateful recognizer a second time in the UI.
+    hgc.onGesture = (gesture) => {
+      if (!gesture || !gesture.type) return;
+      const direction = gesture.params?.direction || "";
+      const gestureKey = gesture.type + ":" + direction;
+      const changed = gestureKey !== lastGestureType;
+      if (changed) lastGestureType = gestureKey;
+
+      // Two-hand distance is continuous, so update scale on every frame. Other
+      // gestures are edge-triggered to avoid repeatedly opening the drawer.
+      if (changed || gesture.type === "TWO_HAND_EXPAND_COMPRESS") {
+        handleRecognizedGesture(gesture, changed);
+      }
+    };
+  }
+
+  function handleRecognizedGesture(gesture, announce = true) {
+    if (!gesture || !gesture.type) return;
+    const type = gesture.type;
+    switch (type) {
+      case "OPEN_PALM": {
+        const requestedScale = Number(gesture.params?.expansion);
+        gestureTargetScale = Number.isFinite(requestedScale)
+          ? Math.min(1.8, Math.max(1.15, requestedScale))
+          : 1.45;
+        if (announce) showToast("Gesture: OPEN PALM — Radial Energy Expansion", 1800);
+        break;
+      }
+      case "CLOSED_FIST":
+      case "PINCH": {
+        const requestedScale = Number(gesture.params?.contraction);
+        gestureTargetScale = Number.isFinite(requestedScale)
+          ? Math.max(0.45, Math.min(0.9, requestedScale))
+          : 0.55;
+        if (announce) showToast("Gesture: PINCH / FIST — Gravitational Inward Pull", 1800);
+        break;
+      }
+      case "TWO_HAND_EXPAND_COMPRESS": {
+        const requestedScale = Number(gesture.params?.scaleFactor);
+        if (Number.isFinite(requestedScale)) {
+          gestureTargetScale = Math.min(2.2, Math.max(0.45, requestedScale));
+        }
+        if (announce) {
+          const expanding = Number(gesture.params?.delta) >= 0;
+          showToast(expanding
+            ? "Gesture: TWO HANDS APART — Core Expanding"
+            : "Gesture: TWO HANDS TOGETHER — Core Contracting", 1800);
+        }
+        break;
+      }
+      case "HORIZONTAL_MOTION":
+        if (gesture.params?.direction === "LEFT") {
+          if (announce) showToast("Gesture: SWIPE LEFT — Navigating View", 1800);
+          showDrawerView("tasks");
+        } else if (gesture.params?.direction === "RIGHT") {
+          if (announce) showToast("Gesture: SWIPE RIGHT — Closing Drawer", 1800);
+          setDrawerOpen(false);
+        }
+        break;
+      case "HAND_REMOVAL":
+      case "IDLE":
+        gestureTargetScale = 1.0;
+        break;
+      default:
+        break;
+    }
+  }
+
+  async function toggleHandGestureControl() {
+    if (!window.handGestureCore) {
+      showToast("Hand gesture engine is loading. Try again in a moment.");
+      return;
+    }
+    if (handGestureActive) {
+      window.handGestureCore.stop();
+      handGestureActive = false;
+      lastGestureType = "IDLE";
+      gestureTargetScale = 1.0;
+      ui.gestureToggle.textContent = "ENABLE HAND CONTROL";
+      ui.gestureToggle.setAttribute("aria-pressed", "false");
+      ui.gestureToggle.disabled = !cameraStream;
+      showToast("Hand gesture interaction stopped. Eyes can remain on.");
+      return;
+    }
+
+    if (!cameraStream) {
+      const ok = await enableCamera();
+      if (!ok) return;
+    }
+
+    setupHandGestureControl();
+    ui.gestureToggle.disabled = true;
+    ui.gestureToggle.textContent = "INITIALIZING HAND CONTROL";
+    try {
+      await window.handGestureCore.start(cameraStream);
+      handGestureActive = true;
+      ui.gestureToggle.disabled = false;
+      ui.gestureToggle.textContent = "STOP HAND CONTROL";
+      ui.gestureToggle.setAttribute("aria-pressed", "true");
+      showToast("Hand control active. Open palm, pinch/fist, two-hand distance, and left/right swipe are enabled locally.", 4200);
+    } catch (err) {
+      handGestureActive = false;
+      lastGestureType = "IDLE";
+      ui.gestureToggle.disabled = !cameraStream;
+      ui.gestureToggle.textContent = "RETRY HAND CONTROL";
+      ui.gestureToggle.setAttribute("aria-pressed", "false");
+      showToast("Hand control unavailable: " + (err?.message || "tracking could not initialize") + ". Eyes camera remains available.", 5200);
+    }
+  }
+
   function startParticleCore() {
     const canvas = byId("core-canvas");
     const vertexSource = [
@@ -297,7 +424,7 @@
       "  float waveA = sin(uTime * 1.28 + index * 0.021 + y * 5.2);",
       "  float waveB = cos(uTime * 0.76 + index * 0.0087);",
       "  float waveC = sin(angle * 3.0 - uTime * 0.62);",
-      "  float shell = 0.61 + waveA * 0.035 + waveB * 0.025 + waveC * 0.018 + uEnergy * 0.075;",
+      "  float shell = (0.61 + waveA * 0.035 + waveB * 0.025 + waveC * 0.018 + uEnergy * 0.075) * gestureScale;",
       "  vec3 p = vec3(cos(angle) * ring, y, sin(angle) * ring);",
       "  float twist = uTime * 0.105;",
       "  p.xz = mat2(cos(twist), -sin(twist), sin(twist), cos(twist)) * p.xz;",
@@ -308,20 +435,20 @@
       "  gl_Position = vec4(p.x * scale / max(0.45, uAspect), p.y * scale, p.z * 0.22, 1.0);",
       "  float sparkle = 0.5 + 0.5 * sin(index * 0.29 + uTime * 2.2);",
       "  gl_PointSize = clamp((1.0 + sparkle * 1.5 + uEnergy * 1.85) * uDpr, 1.0, 5.0);",
-      "  vec3 crimson = vec3(1.0, 0.035, 0.24);",
-      "  vec3 violet = vec3(0.62, 0.10, 1.0);",
-      "  vec3 blue = vec3(0.035, 0.40, 1.0);",
-      "  vec3 cyan = vec3(0.06, 0.82, 1.0);",
-      "  float colorFlow = 0.5 + 0.5 * sin(angle * 0.09 + uTime * 0.26 + fraction * 7.0);",
-      "  vec3 hue = mix(crimson, violet, colorFlow);",
-      "  hue = mix(hue, blue, 0.36 + 0.40 * sin(index * 0.007 + uTime * 0.37));",
+      "  vec3 crimson = vec3(1.0, 0.04, 0.22);",
+      "  vec3 deepCrimson = vec3(0.85, 0.02, 0.14);",
+      "  vec3 purple = vec3(0.65, 0.12, 1.0);",
+      "  vec3 ultraviolet = vec3(0.80, 0.22, 1.0);",
+      "  vec3 magenta = vec3(0.95, 0.08, 0.65);",
+      "  float colorFlow = 0.5 + 0.5 * sin(angle * 0.09 + uTime * 0.32 + fraction * 8.0);",
+      "  vec3 hue = mix(deepCrimson, purple, colorFlow);",
+      "  hue = mix(hue, magenta, 0.35 + 0.35 * sin(index * 0.007 + uTime * 0.42));",
       "  float listening = max(0.0, 1.0 - abs(uState - 1.0));",
       "  float thinking = max(0.0, 1.0 - abs(uState - 2.0));",
       "  float speaking = max(0.0, 1.0 - abs(uState - 3.0));",
       "  float research = max(0.0, 1.0 - abs(uState - 4.0));",
-      "  hue = mix(hue, cyan, listening * 0.46 + research * 0.22);",
-      "  hue = mix(hue, violet, thinking * 0.31);",
-      "  hue = mix(hue, crimson, speaking * 0.32);",
+      "  hue = mix(hue, crimson, listening * 0.55 + speaking * 0.45);",
+      "  hue = mix(hue, ultraviolet, thinking * 0.65 + research * 0.35);",
       "  vColor = hue;",
       "  vAlpha = 0.40 + 0.60 * (0.5 + 0.5 * sin(index * 0.013 + uTime * (0.7 + uEnergy)));",
       "}"
@@ -376,6 +503,7 @@
       const frame = (timestamp) => {
         if (!gl) return;
         const seconds = timestamp * 0.001;
+        gestureScale += (gestureTargetScale - gestureScale) * 0.12;
         let liveLevel = micLevel;
         if (analyser && audioSamples) {
           analyser.getByteTimeDomainData(audioSamples);
@@ -760,7 +888,7 @@
     return segments.map(segment => ({ ...segment, text: segment.text.trim() })).filter(segment => segment.text);
   }
 
-  function stopFishAudioPlayback() {
+  function stopActiveSpeechAudio() {
     if (finishActiveSpeechAudio) {
       finishActiveSpeechAudio(false);
       return;
@@ -776,28 +904,33 @@
     finishActiveSpeechAudio = null;
   }
 
-  async function requestFishAudioSpeech(text) {
-    const response = await fetch("/api/speech/synthesize", {
+  async function requestKokoroSpeech(text) {
+    const cleanText = String(text || "").trim().slice(0, 4000);
+    if (!cleanText) throw new Error("No text was supplied for speech synthesis.");
+    const result = await apiRequest("/api/jarvis/voice/kokoro", {
       method: "POST",
-      credentials: "same-origin",
-      cache: "no-store",
-      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text: String(text || "").trim().slice(0, 4000) }),
-      ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(60000) } : {})
+      body: { text: cleanText, voice: "am_onyx", speed: 0.95 }
     });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      const details = payload && typeof payload === "object" ? payload.error : null;
-      throw new Error(details && typeof details.message === "string" ? details.message : "Fish Audio synthesis failed (" + response.status + ").");
+    if (result?.speechAvailable !== true || result?.audioKind !== "speech" || result?.fallback === true) {
+      throw new Error("Kokoro speech is not available on this backend. Browser speech will be used instead.");
     }
-    const blob = await response.blob();
-    if (!blob.size || (blob.type && !blob.type.startsWith("audio/"))) throw new Error("Fish Audio returned an empty or invalid audio response.");
-    return blob;
+    const dataUrl = typeof result.dataUrl === "string" ? result.dataUrl : "";
+    const match = /^data:audio\/wav;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+    if (!match || match[1].length > 12 * 1024 * 1024) {
+      throw new Error("Kokoro returned an invalid or oversized audio payload.");
+    }
+    const binary = window.atob(match[1]);
+    if (!binary.length || binary.length > 9 * 1024 * 1024) {
+      throw new Error("Kokoro audio payload exceeded the safety limit.");
+    }
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type: "audio/wav" });
   }
 
-  function playFishAudioBlob(blob, epoch) {
-    if (epoch !== speechEpoch || !blob || !blob.size) return Promise.resolve(false);
-    stopFishAudioPlayback();
+  function playSpeechBlob(blob, epoch) {
+    if (epoch !== speechEpoch || !blob || !blob.size || blob.size > 9 * 1024 * 1024) return Promise.resolve(false);
+    stopActiveSpeechAudio();
     const objectUrl = URL.createObjectURL(blob);
     const player = new window.Audio(objectUrl);
     activeSpeechAudio = player;
@@ -832,20 +965,19 @@
     if (!shouldSpeak) return false;
     speechEpoch += 1;
     const epoch = speechEpoch;
-    stopFishAudioPlayback();
+    stopActiveSpeechAudio();
     try { window.speechSynthesis?.cancel?.(); } catch { /* use a fresh response */ }
     await ensureSpeechCapabilities();
     if (epoch !== speechEpoch) return false;
-    if (speechCapabilities.premiumTtsConfigured) {
-      try {
-        const blob = await requestFishAudioSpeech(text);
-        if (epoch !== speechEpoch) return false;
-        const played = await playFishAudioBlob(blob, epoch);
-        if (played || epoch !== speechEpoch) return played;
-      } catch {
-        if (epoch !== speechEpoch) return false;
-        showToast("Fish Audio voice is unavailable right now. Falling back to your browser's installed voice.", 3000);
-      }
+    try {
+      const blob = await requestKokoroSpeech(text);
+      if (epoch !== speechEpoch) return false;
+      const played = await playSpeechBlob(blob, epoch);
+      if (played || epoch !== speechEpoch) return played;
+    } catch {
+      if (epoch !== speechEpoch) return false;
+      // A missing model/owner route falls back to the installed browser voice.
+      // Diagnostic tones are never passed to the audio player.
     }
     return speakResponseBrowser(text, epoch);
   }
@@ -900,14 +1032,14 @@
     });
   }
 
-  async function speakStreamingSegment(text, epoch, preferFishAudio) {
+  async function speakStreamingSegment(text, epoch, preferKokoro) {
     const segment = String(text || "").trim();
     if (!segment || epoch !== speechEpoch) return false;
-    if (preferFishAudio) {
+    if (preferKokoro) {
       try {
-        const blob = await requestFishAudioSpeech(segment);
+        const blob = await requestKokoroSpeech(segment);
         if (epoch !== speechEpoch) return false;
-        const played = await playFishAudioBlob(blob, epoch);
+        const played = await playSpeechBlob(blob, epoch);
         if (played || epoch !== speechEpoch) return played;
       } catch {
         if (epoch !== speechEpoch) return false;
@@ -986,7 +1118,7 @@
       if (voiceActive && mode === "voice" && !busy && !textInputOpen) scheduleRecognitionRestart();
       return;
     }
-    ui.captionText.textContent = "TRANSCRIBING · FISH AUDIO";
+    ui.captionText.textContent = "TRANSCRIBING · SERVER VOICE";
     ui.voiceSubtitle.textContent = "Transcribing your speech…";
     const blob = new Blob(session.chunks, { type: session.recorder.mimeType || "audio/webm" });
     const submitted = await transcribeRecordedAudio(blob);
@@ -1030,7 +1162,7 @@
       return true;
     } catch (error) {
       ui.captionText.textContent = "VOICE TRANSCRIPTION FAILED";
-      showToast(error.message || "Speech recognition failed. Check the Fish Audio connection and try again.", 6500);
+      showToast(error.message || "Speech recognition failed. Check the server connection and try again.", 6500);
       return false;
     }
   }
@@ -1041,8 +1173,14 @@
     speechCapabilitiesPromise = (async () => {
       try {
         const payload = await apiRequest("/api/capabilities");
-        speechCapabilities = payload?.providers?.speech && typeof payload.providers.speech === "object"
+        const rawSpeech = payload?.providers?.speech && typeof payload.providers.speech === "object"
           ? payload.providers.speech : {};
+        const legacyRemoteProvider = rawSpeech.provider === "fish-audio";
+        speechCapabilities = {
+          ...rawSpeech,
+          premiumTtsConfigured: false,
+          premiumSttConfigured: Boolean(rawSpeech.premiumSttConfigured && !legacyRemoteProvider)
+        };
       } catch {
         speechCapabilities = {};
       } finally {
@@ -1066,7 +1204,7 @@
         releaseMicVisualizer();
         renderMode();
         setCoreState("error");
-        showToast("Browser speech recognition is unavailable, and ULTRON has no server-side transcription provider configured. Configure FISH_API_KEY on the backend.");
+        showToast("Browser speech recognition is unavailable, and ULTRON has no server-side transcription provider configured. Install/enable browser speech recognition or use the Windows companion.");
         return;
       }
       if (typeof window.MediaRecorder !== "function") {
@@ -1119,7 +1257,7 @@
       };
       recorder.start(250);
       setCoreState("listening");
-      ui.voiceSubtitle.textContent = "Listening · Fish Audio transcription";
+      ui.voiceSubtitle.textContent = "Listening · server/browser transcription";
       ui.captionText.textContent = "LISTENING · SPEAK NATURALLY";
       session.monitorTimer = window.setInterval(() => {
         if (fallbackRecorderSession !== session || recorder.state !== "recording") return;
@@ -1363,7 +1501,7 @@
       startRecognition();
     }
     if (voiceActive) {
-      ui.voiceSubtitle.textContent = forceFallbackRecognition ? "Listening · Fish Audio transcription" : "Listening · tap to pause";
+      ui.voiceSubtitle.textContent = forceFallbackRecognition ? "Listening · server transcription" : "Listening · tap to pause";
       ui.captionText.textContent = forceFallbackRecognition ? "LISTENING · SERVER TRANSCRIPTION" : "LISTENING · SPEAK NATURALLY";
     }
   }
@@ -1373,7 +1511,7 @@
     stopRecognition();
     releaseMicVisualizer();
     speechEpoch += 1;
-    stopFishAudioPlayback();
+    stopActiveSpeechAudio();
     try { window.speechSynthesis?.cancel?.(); } catch { /* ignore */ }
     renderMode();
     if (!busy) setCoreState("idle");
@@ -1437,7 +1575,7 @@
     ui.muteToggle.title = mutedInTextMode ? "Allow ULTRON to speak in Text Mode" : "Mute spoken replies in Text Mode";
     if (mutedInTextMode) {
       speechEpoch += 1;
-      stopFishAudioPlayback();
+      stopActiveSpeechAudio();
       try { window.speechSynthesis?.cancel?.(); } catch { /* no active utterance */ }
       if (coreState === "speaking") setCoreState("idle");
     }
@@ -1479,7 +1617,7 @@
     const shouldSpeak = source !== "camera-auto" && (mode === "voice" || (mode === "text" && !mutedInTextMode));
     const streamVoiceReply = source === "voice" && shouldSpeak && attachments.length === 0;
     let streamSpeechEpoch = null;
-    let streamSpeechUsesFish = false;
+    let streamSpeechUsesKokoro = true;
     let streamSpeechFallbackNotified = false;
     let streamSpeechCount = 0;
     let streamSpeechBuffer = "";
@@ -1491,16 +1629,16 @@
       streamSpeechCount += 1;
       // Start synthesis while the previous chunk is playing, then preserve
       // playback order. This removes an extra network round-trip between chunks.
-      const fishAudioBlobPromise = streamSpeechUsesFish
-        ? requestFishAudioSpeech(clean).catch(() => null)
+      const kokoroSpeechPromise = streamSpeechUsesKokoro
+        ? requestKokoroSpeech(clean).catch(() => null)
         : Promise.resolve(null);
       streamSpeechQueue = streamSpeechQueue.then(async () => {
         if (streamSpeechEpoch === null || streamSpeechEpoch !== speechEpoch) return;
         let spoke = false;
-        if (streamSpeechUsesFish) {
-          const blob = await fishAudioBlobPromise;
+        if (streamSpeechUsesKokoro) {
+          const blob = await kokoroSpeechPromise;
           if (blob && streamSpeechEpoch === speechEpoch) {
-            spoke = await playFishAudioBlob(blob, streamSpeechEpoch);
+            spoke = await playSpeechBlob(blob, streamSpeechEpoch);
           }
           if (!spoke && streamSpeechEpoch === speechEpoch) {
             spoke = await speakResponseBrowser(clean, streamSpeechEpoch);
@@ -1510,7 +1648,7 @@
         }
         if (!spoke && streamSpeechEpoch === speechEpoch && !streamSpeechFallbackNotified) {
           streamSpeechFallbackNotified = true;
-          showToast("Voice playback is unavailable. Check your browser audio output and Fish Audio settings.", 4500);
+          showToast("Voice playback is unavailable. Check your browser audio output and server settings.", 4500);
         }
       });
     };
@@ -1524,7 +1662,7 @@
           streamSpeechBuffer = streamSpeechBuffer.slice(match[0].length);
           continue;
         }
-        // Never cut Fish Audio or browser speech at an arbitrary word count.
+        // Never cut server or browser speech at an arbitrary word count.
         // Sentence-boundary synthesis avoids abrupt timbre/pitch resets between tiny clips.
         // Voice answers are instructed to be one short English sentence, so this
         // normally produces one continuous audio clip while still starting early.
@@ -1562,6 +1700,49 @@
       }
       setCoreState("thinking");
       updateTaskPanel("Request received. ULTRON is generating the response.", "GENERATING RESPONSE", sources);
+
+      // Autonomous Tool Orchestration
+      let autonomousOutcome = null;
+      if (!attachments.length && !shouldResearch) {
+        try {
+          autonomousOutcome = await apiRequest("/api/jarvis/orchestrate", {
+            method: "POST",
+            body: { prompt, context: { preApproved: false } }
+          });
+        } catch {}
+
+        if (autonomousOutcome && autonomousOutcome.status === "APPROVAL_REQUIRED") {
+          const req = autonomousOutcome.approvalRequest;
+          updateTaskPanel(
+            "AUTHORIZATION REQUIRED (Level " + req.permissionLevel + "):\n" + req.actionDescription + "\nOpen Permission Center to approve or deny.",
+            "APPROVAL REQUIRED"
+          );
+          showToast("Authorization required: " + req.actionDescription, 6500);
+          setCoreState("idle");
+          busy = false;
+          ui.sendButton.disabled = false;
+          return;
+        }
+
+        if (autonomousOutcome && autonomousOutcome.verified && autonomousOutcome.intent !== "CONVERSATIONAL_INFERENCE") {
+          answer = autonomousOutcome.textResponse;
+          history.push({ role: "user", content: prompt }, { role: "assistant", content: answer });
+          if (history.length > 30) history = history.slice(-30);
+          const toolsUsed = (autonomousOutcome.stepResults || []).map(s => s.toolId).join(", ");
+          updateTaskPanel("Execution verified. Tools: " + (toolsUsed || "autonomous core") + "\n" + answer, "TASK VERIFIED");
+          markTaskComplete(answer, sources, shouldSpeak);
+          setCoreState(shouldSpeak ? "speaking" : "idle");
+          if (shouldSpeak) {
+            const spoke = await speakResponse(answer, true);
+            if (panelIsComplete) schedulePanelHide(spoke ? 850 : 4000);
+          } else {
+            schedulePanelHide(6500);
+          }
+          busy = false;
+          ui.sendButton.disabled = false;
+          return;
+        }
+      }
       const context = history.slice(streamVoiceReply ? -8 : -18);
       const outgoingPrompt = researchPromptText(prompt, researchData);
       const voicePrompt = streamVoiceReply
@@ -1570,8 +1751,8 @@
       const messages = context.concat([{ role: "user", content: voicePrompt }]).slice(-40);
       if (streamVoiceReply) {
         streamSpeechEpoch = ++speechEpoch;
-        streamSpeechUsesFish = Boolean(speechCapabilities.premiumTtsConfigured);
-        stopFishAudioPlayback();
+        streamSpeechUsesKokoro = true;
+        stopActiveSpeechAudio();
         try { window.speechSynthesis?.cancel?.(); } catch { /* no previous speech to stop */ }
       }
       const requestBody = { messages, persona: "ultron", ...(attachments.length ? { attachments } : {}) };
@@ -1714,6 +1895,185 @@
       showDrawerWelcome();
       return;
     }
+    if (name === "capabilities") {
+      drawerHeading("Capability Center", "Inspect all registered tools, schemas, and live operational status.");
+      try {
+        const inventory = await apiRequest("/api/jarvis/capabilities");
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Capability Center", (inventory?.summary?.operational || 0) + " of " + (inventory?.summary?.totalCapabilities || 0) + " capabilities operational. No simulated features.");
+        for (const cat of (inventory?.categories || [])) {
+          const catTitle = document.createElement("p");
+          catTitle.className = "drawer-eyebrow";
+          catTitle.style.marginTop = "14px";
+          catTitle.textContent = cat.category.replace(/_/g, " ") + " (" + cat.operational + "/" + cat.total + ")";
+          ui.drawerContent.appendChild(catTitle);
+          for (const tool of cat.tools) {
+            const levelLabel = "LEVEL " + tool.permissionLevel + (tool.permissionLevel === 1 ? " · READ" : tool.permissionLevel === 2 ? " · NORMAL" : tool.permissionLevel === 3 ? " · SENSITIVE" : " · CRITICAL");
+            drawerCard(
+              tool.name + " · " + levelLabel,
+              tool.description + (tool.capabilities?.length ? "\nCapabilities: " + tool.capabilities.join(", ") : ""),
+              tool.status,
+              tool.status === "OPERATIONAL" ? "ready" : tool.status === "LIMITED" ? "warning" : "error"
+            );
+          }
+        }
+      } catch (err) {
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Capability Center", "Failed to load live capabilities.");
+        drawerCard("Capability Service", err.message, "ERROR", "error");
+      }
+      return;
+    }
+    if (name === "activity") {
+      drawerHeading("Live Activity and Planner", "Autonomous workflows, agent task delegations, and execution traces.");
+      try {
+        const [state, wfPayload] = await Promise.all([
+          apiRequest("/api/jarvis/autonomy/state").catch(() => null),
+          apiRequest("/api/jarvis/autonomy/workflows").catch(() => null)
+        ]);
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Live Activity and Planner", "Active background workflows and multi-agent traces.");
+
+        const workflows = wfPayload?.workflows || [];
+        if (workflows.length > 0) {
+          const wfHeader = document.createElement("p");
+          wfHeader.className = "drawer-eyebrow";
+          wfHeader.textContent = "PERSISTENT BACKGROUND WORKFLOWS (" + workflows.length + ")";
+          ui.drawerContent.appendChild(wfHeader);
+
+          for (const wf of workflows) {
+            const isRunning = wf.status === "RUNNING";
+            const isPaused = wf.status === "PAUSED";
+            drawerCard(
+              wf.prompt.slice(0, 70) + " · [" + wf.status + "]",
+              "Agent: " + wf.activeAgent + "\nProgress: Step " + (wf.currentStepIndex + 1) + " of " + wf.totalSteps + "\nStarted: " + wf.createdAt,
+              wf.status,
+              isRunning ? "ready" : isPaused ? "warning" : "error"
+            );
+
+            if (isRunning) {
+              drawerButton("PAUSE: " + wf.id.slice(0, 10), async () => {
+                await apiRequest("/api/jarvis/autonomy/workflow/pause", { method: "POST", body: { workflowId: wf.id } });
+                showToast("Workflow " + wf.id.slice(0, 8) + " paused.");
+                void showDrawerView("activity");
+              }, true);
+            } else if (isPaused) {
+              drawerButton("RESUME: " + wf.id.slice(0, 10), async () => {
+                await apiRequest("/api/jarvis/autonomy/workflow/resume", { method: "POST", body: { workflowId: wf.id } });
+                showToast("Workflow " + wf.id.slice(0, 8) + " resumed.");
+                void showDrawerView("activity");
+              }, false);
+            }
+
+            if (isRunning || isPaused) {
+              drawerButton("CANCEL: " + wf.id.slice(0, 10), async () => {
+                await apiRequest("/api/jarvis/autonomy/workflow/cancel", { method: "POST", body: { workflowId: wf.id, reason: "Operator cancelled" } });
+                showToast("Workflow cancelled.");
+                void showDrawerView("activity");
+              }, true);
+            }
+          }
+        }
+
+        const traceHeader = document.createElement("p");
+        traceHeader.className = "drawer-eyebrow";
+        traceHeader.style.marginTop = "16px";
+        traceHeader.textContent = "COMPLETED EXECUTION TRACES";
+        ui.drawerContent.appendChild(traceHeader);
+
+        const history = state?.recentHistory || [];
+        if (!history.length) {
+          drawerCard("No Recent Activity", "ULTRON is on standby. Transmit a command to see autonomous intent classification and tool execution traces.", "STANDBY");
+        } else {
+          for (const item of history.slice(0, 10)) {
+            const stepsSummary = (item.plan?.steps || []).map((s, idx) => "Step " + (idx + 1) + ": " + s.description + " [" + s.toolId + "] (Agent: " + (s.agent || "core") + ")").join("\n");
+            drawerCard(
+              '"' + item.prompt.slice(0, 80) + '" · [' + item.intent + ']',
+              "Status: " + (item.verified ? "VERIFIED COMPLETED" : "EXECUTED") + "\n" + stepsSummary + "\nResponse: " + (item.textResponse?.slice(0, 180) || ""),
+              item.verified ? "VERIFIED" : "COMPLETED",
+              item.verified ? "ready" : "warning"
+            );
+          }
+        }
+      } catch (err) {
+        drawerCard("Activity Service", err.message, "ERROR", "error");
+      }
+      return;
+    }
+    if (name === "autonomy") {
+      drawerHeading("Autonomy Center", "Controlled independence: task planning, execution boundaries, and global kill switch.");
+      try {
+        const state = await apiRequest("/api/jarvis/autonomy/state");
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Autonomy Center", "Active Autonomy Level: " + (state?.autonomyLevel ?? 3) + ". Emergency Halt: " + (state?.emergencyHalted ? "ACTIVE" : "OFF"));
+        drawerCard("Autonomy Policy", "Level " + (state?.autonomyLevel ?? 3) + ": Autonomous execution permitted within safety gates. Sensitive operations require human confirmation.", state?.emergencyHalted ? "EMERGENCY HALTED" : "ACTIVE", state?.emergencyHalted ? "error" : "ready");
+        
+        drawerButton("EMERGENCY KILL SWITCH (HALT ALL)", async () => {
+          await apiRequest("/api/jarvis/autonomy/emergency-stop", { method: "POST", body: { reason: "Operator console kill switch" } });
+          showToast("EMERGENCY STOP ENGAGED: All ULTRON operations halted.");
+          void showDrawerView("autonomy");
+        }, true);
+
+        drawerButton("RESET EMERGENCY STOP (RESUME)", async () => {
+          await apiRequest("/api/jarvis/autonomy/emergency-reset", { method: "POST" });
+          showToast("Emergency stop reset. Autonomous operations resumed.");
+          void showDrawerView("autonomy");
+        }, false);
+
+        drawerCard("Pending Approvals", (state?.pendingApprovalsCount || 0) + " operations waiting for operator confirmation.", state?.pendingApprovalsCount ? "PENDING" : "CLEAR", state?.pendingApprovalsCount ? "warning" : "ready");
+        if (state?.pendingApprovalsCount > 0) {
+          drawerButton("VIEW PENDING APPROVALS", () => { void showDrawerView("permissions"); });
+        }
+      } catch (err) {
+        drawerCard("Autonomy Service", err.message, "ERROR", "error");
+      }
+      return;
+    }
+    if (name === "permissions") {
+      drawerHeading("Permission Center", "Human confirmation gates for Level 3 (Sensitive) and Level 4 (Critical) operations.");
+      try {
+        const payload = await apiRequest("/api/jarvis/permissions/pending");
+        ui.drawerContent.replaceChildren();
+        drawerHeading("Permission Center", "Active authorization gates.");
+        const pending = payload?.pending || [];
+        if (!pending.length) {
+          drawerCard("No Pending Approvals", "All sensitive and critical operations are currently cleared. No actions blocked.", "CLEARED", "ready");
+        } else {
+          for (const req of pending) {
+            drawerCard(
+              "Approval Required: " + req.toolName,
+              "Action: " + req.actionDescription + "\nPermission Level: Level " + req.permissionLevel + (req.permissionLevel >= 4 ? " (CRITICAL)" : " (SENSITIVE)") + "\nRequested: " + req.createdAt,
+              "CONFIRMATION REQUIRED",
+              "warning"
+            );
+            drawerButton("APPROVE: " + req.toolName, async () => {
+              await apiRequest("/api/jarvis/permissions/approve", { method: "POST", body: { requestId: req.id } });
+              showToast("Approved " + req.toolName);
+              void showDrawerView("permissions");
+            }, false);
+            drawerButton("REJECT: " + req.toolName, async () => {
+              await apiRequest("/api/jarvis/permissions/reject", { method: "POST", body: { requestId: req.id, reason: "Operator denied" } });
+              showToast("Rejected " + req.toolName);
+              void showDrawerView("permissions");
+            }, true);
+          }
+        }
+      } catch (err) {
+        drawerCard("Permission Service", err.message, "ERROR", "error");
+      }
+      return;
+    }
+    if (name === "spatial") {
+      const spatialPanel = document.getElementById("spatial-panel");
+      if (spatialPanel) spatialPanel.hidden = false;
+      drawerHeading("Spatial World Model", "Zero-shot single-image 3D indoor scene reconstruction via Diorama (arXiv:2411.19492).");
+      drawerCard("3D World Modeling Engine", "Decomposes single-view camera or uploaded frames into 3D bounding geometry, room architecture, CAD shape retrieval, and collision-optimized layouts.", "DIORAMA 3D", "ready");
+      drawerCard("Execution Architecture", "Hardware-aware execution: runs on CPU geometric fallback for Ryzen 7 APUs, or dispatches to isolated GPU workers when CUDA or remote endpoints are configured.", "ISOLATED PIPELINE");
+      drawerButton("OPEN 3D SPATIAL VIEWER", () => {
+        if (spatialPanel) spatialPanel.hidden = false;
+      });
+      return;
+    }
     if (name === "eyes") {
       ui.cameraPanel.hidden = false;
       drawerHeading("ULTRON Eyes", "Camera access is requested only after you press Enable Eyes. Frame analysis uses the backend's configured vision model.");
@@ -1726,17 +2086,17 @@
     }
     if (name === "voice-quality") {
       await ensureSpeechCapabilities();
-      drawerHeading("Voice quality & pronunciation", "ULTRON uses a deep Indian male Fish Audio voice for natural Hindi-English speech. Auto recognition uses Fish Audio transcription when configured; browser language selection is available as a fallback.");
-      drawerCard("Fish Audio synthesis",
-        speechCapabilities.premiumTtsConfigured ? "The backend reports a speech output provider. A real response still depends on the key, voice model, and available quota." : "No server-side synthesis is configured; ULTRON will use browser-installed voices.",
-        speechCapabilities.premiumTtsConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER FALLBACK",
-        speechCapabilities.premiumTtsConfigured ? "ready" : "warning");
-      drawerCard("Fish Audio recognition",
-        speechCapabilities.premiumSttConfigured ? "The backend reports a transcription provider for recorded-microphone fallback." : "Server transcription is unavailable; this browser must support its native speech-recognition service.",
-        speechCapabilities.premiumSttConfigured ? "CONFIGURED · UNVERIFIED" : "BROWSER ONLY",
+      drawerHeading("Voice quality & pronunciation", "ULTRON prefers the deep male Kokoro am_onyx voice when genuine local synthesis is available, and automatically falls back to the voices installed in your browser.");
+      drawerCard("Kokoro am_onyx synthesis",
+        "ULTRON attempts genuine Kokoro am_onyx speech when the backend model and runtime are installed. Missing models and diagnostic tones are rejected; installed browser voices remain the fallback.",
+        "KOKORO → BROWSER FALLBACK",
+        "warning");
+      drawerCard("Speech recognition",
+        "A compatible server transcription provider may be used when configured; otherwise ULTRON uses browser speech recognition or the Windows companion.",
+        speechCapabilities.premiumSttConfigured ? "SERVER STT · UNVERIFIED" : "BROWSER ONLY",
         speechCapabilities.premiumSttConfigured ? "ready" : "warning");
-      drawerCard("Voice reference", "Kamal · deep Indian male · Hindi-English", "FISH AUDIO VOICE");
-      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with Fish Audio transcription." : "Auto detection needs server-side Fish Audio transcription; browser fallback currently uses English (India).") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
+      drawerCard("Voice reference", "am_onyx · deep, calm, authoritative male · English and Hindi browser fallback", "KOKORO / BROWSER");
+      drawerCard("Recognition mode", speechLanguageMode === "auto" ? (speechCapabilities.premiumSttConfigured ? "Automatic Hindi + English language detection with server transcription." : "Automatic browser recognition uses English (India). Select Hindi when your browser has a Hindi speech recognizer installed.") : speechLanguageMode === "hi-IN" ? "Hindi-first browser recognition (hi-IN)." : "English-first browser recognition (en-IN).", speechLanguageMode === "auto" ? "AUTO" : speechLanguageMode === "hi-IN" ? "HINDI" : "ENGLISH", speechLanguageMode === "auto" && !speechCapabilities.premiumSttConfigured ? "warning" : "ready");
       drawerButton("AUTO · HINDI + ENGLISH", () => setSpeechLanguageMode("auto"), speechLanguageMode !== "auto");
       drawerButton("HINDI · hi-IN", () => setSpeechLanguageMode("hi-IN"), speechLanguageMode !== "hi-IN");
       drawerButton("ENGLISH · en-IN", () => setSpeechLanguageMode("en-IN"), speechLanguageMode !== "en-IN");
@@ -1803,109 +2163,211 @@
       addCustomConnectorBrief();
       return;
     }
-    if (name === "devices") {
-      drawerHeading("PC and mobile devices", "Cloud ULTRON cannot directly operate your personal devices just because this page is open. A paired local companion and explicit scopes are required.");
-      drawerCard("Windows PC", "Checking whether the backend knows about a configured companion…", "CHECKING", "warning");
-      try {
-        const payload = await apiRequest("/api/capabilities");
-        ui.drawerContent.replaceChildren();
-        drawerHeading("PC and mobile devices", "The browser and cloud service have limited access. Device control must be paired, visible, scoped, and revocable.");
-        const desktop = payload?.providers?.desktop || {};
-        drawerCard("Windows PC companion",
-          desktop.localAgentConfigured
-            ? "Companion configuration is present, but this alone does not prove a PC is paired, online, or authorized for actions."
-            : "No configured companion was reported. Install and securely pair a local companion before any PC actions can be enabled.",
-          desktop.localAgentConfigured ? "CONFIGURED · UNVERIFIED" : "NOT PAIRED",
-          desktop.localAgentConfigured ? "warning" : "warning");
-        drawerCard("Mobile companion",
-          "No mobile control companion is connected through this interface yet. Mobile permissions and supported actions must be implemented by a trusted mobile app.",
-          "NOT CONNECTED", "warning");
-        drawerCard("Access boundaries",
-          "The browser cannot bypass operating-system permissions. Sensitive, destructive, external or money-related actions must require a separate confirmation.",
-          "SCOPED ACCESS");
-
-        const scopeHeading = document.createElement("h3");
-        scopeHeading.className = "drawer-view-title";
-        scopeHeading.textContent = "Request device permissions";
-        const scopeText = document.createElement("p");
-        scopeText.className = "drawer-view-description";
-        scopeText.textContent = "Select only the capabilities you want a future paired companion to request. These selections are a draft policy—not an active grant.";
-        ui.drawerContent.append(scopeHeading, scopeText);
-        const scopeList = document.createElement("div");
-        scopeList.className = "device-scope-list";
-        const scopes = [
-          ["screen-view", "View screen", "Capture a visible screen only after the companion displays an active indicator."],
-          ["selected-files", "User-selected files", "Read files or folders you explicitly select in the local companion."],
-          ["approved-apps", "Launch approved apps", "Open only apps listed in a user-reviewed allowlist."],
-          ["keyboard-mouse", "Keyboard and mouse", "Perform visible interaction after a per-session confirmation."],
-          ["allowlisted-system", "Allowlisted system actions", "Use reviewed settings and diagnostics; no arbitrary shell commands."],
-          ["mobile-bridge", "Paired mobile actions", "Request only permissions supported by a separately installed mobile companion."]
-        ];
-        for (const scopeInfo of scopes) {
-          const label = document.createElement("label");
-          label.className = "device-scope";
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.value = scopeInfo[0];
-          checkbox.checked = requestedDeviceScopes.has(scopeInfo[0]);
-          checkbox.addEventListener("change", () => {
-            if (checkbox.checked) requestedDeviceScopes.add(scopeInfo[0]);
-            else requestedDeviceScopes.delete(scopeInfo[0]);
-          });
-          const textBox = document.createElement("span");
-          const name = document.createElement("strong");
-          name.textContent = scopeInfo[1];
-          const detail = document.createElement("small");
-          detail.textContent = scopeInfo[2];
-          textBox.append(name, detail);
-          label.append(checkbox, textBox);
-          scopeList.appendChild(label);
+    if (name === "mobile-control") {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("Android Mobile Control", "Direct Mobile MCP & ADB hardware bridge. Inspect screen, touch, launch apps, and automate devices.");
+      drawerButton("OPEN MOBILE COMMAND CENTER", () => {
+        const panel = document.getElementById("mobile-panel");
+        if (panel) panel.hidden = false;
+        setDrawerOpen(false);
+      }, true);
+      drawerButton("SCAN & DISCOVER DEVICES", async () => {
+        try {
+          const res = await apiRequest("/api/mobile/devices?refresh=1");
+          drawerCard("Connected Android Devices", `${res.count || 0} device(s) found.`, res.connected ? "ONLINE" : "STANDBY", res.connected ? "ready" : "warning");
+        } catch (err) {
+          drawerCard("Mobile MCP Error", err.message, "ERROR", "error");
         }
-        ui.drawerContent.appendChild(scopeList);
-        const manifestOutput = document.createElement("div");
-        manifestOutput.className = "drawer-note";
-        manifestOutput.hidden = true;
-        const makeManifest = document.createElement("button");
-        makeManifest.type = "button";
-        makeManifest.className = "drawer-action";
-        makeManifest.textContent = "PREPARE PERMISSION POLICY";
-        makeManifest.addEventListener("click", () => {
-          if (!requestedDeviceScopes.size) {
-            showToast("Select at least one permission scope first.");
-            return;
-          }
-          const brief = [
-            "ULTRON device permission request",
-            "Device target: user-owned, explicitly paired device",
-            "Requested scopes: " + Array.from(requestedDeviceScopes).join(", "),
-            "Grant status: NOT GRANTED by this web page",
-            "Activation requirements: install a trusted local/mobile companion, pair this account and device, show an obvious active indicator, persist a revocable least-privilege policy, and require confirmation for sensitive actions.",
-            "Disallowed by default: arbitrary shell commands, stealth capture, credential extraction, persistence, and actions outside the user's selected device."
-          ].join("\n");
-          manifestOutput.replaceChildren();
-          const text = document.createElement("pre");
-          text.className = "permission-manifest";
-          text.textContent = brief;
-          manifestOutput.appendChild(text);
+      });
+      return;
+    }
+    if (name === "devices") {
+      ui.drawerContent.replaceChildren();
+      drawerHeading("PC and mobile devices", "Pair a device to this ULTRON account. Each device receives its own revocable token; the code expires after five minutes and is claimable only once.");
+
+      const form = document.createElement("div");
+      form.className = "device-scope-list";
+      const nameField = document.createElement("label");
+      nameField.className = "drawer-field";
+      const nameLabel = document.createElement("span");
+      nameLabel.textContent = "DEVICE NAME";
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.maxLength = 120;
+      nameInput.placeholder = "e.g. My Windows PC";
+      nameInput.value = "Windows Companion";
+      nameField.append(nameLabel, nameInput);
+
+      const platformField = document.createElement("label");
+      platformField.className = "drawer-field";
+      const platformLabel = document.createElement("span");
+      platformLabel.textContent = "PLATFORM";
+      const platformSelect = document.createElement("select");
+      for (const [value, label] of [["windows", "Windows"], ["android", "Android"], ["linux", "Linux"], ["macos", "macOS"], ["ios", "iOS"]]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        platformSelect.appendChild(option);
+      }
+      platformField.append(platformLabel, platformSelect);
+      form.append(nameField, platformField);
+      ui.drawerContent.appendChild(form);
+
+      const pairingOutput = document.createElement("div");
+      pairingOutput.className = "drawer-note";
+      pairingOutput.hidden = true;
+      ui.drawerContent.appendChild(pairingOutput);
+
+      const createPairingButton = drawerButton("GENERATE ONE-TIME PAIRING CODE", async () => {
+        const deviceName = nameInput.value.trim();
+        const platform = platformSelect.value;
+        if (!deviceName || deviceName.length > 120) {
+          showToast("Enter a device name between 1 and 120 characters.");
+          return;
+        }
+        createPairingButton.disabled = true;
+        createPairingButton.textContent = "CREATING SECURE PAIRING…";
+        try {
+          const result = await apiRequest("/api/devices/pairings", {
+            method: "POST",
+            body: { deviceName, platform }
+          });
+          pairingOutput.replaceChildren();
+          const code = document.createElement("strong");
+          code.textContent = result.pairingCode;
+          code.style.display = "block";
+          code.style.fontSize = "22px";
+          code.style.letterSpacing = ".22em";
+          code.style.color = "#e8f8ff";
+          const expiry = document.createElement("p");
+          expiry.textContent = "Expires: " + new Date(result.expiresAt).toLocaleTimeString();
+          const instruction = document.createElement("p");
+          instruction.textContent = "Enter this code in the installed ULTRON companion. The companion claims it once through the secure pairing endpoint. This code does not grant screen, microphone, file, or system-control permissions.";
           const copy = document.createElement("button");
           copy.type = "button";
           copy.className = "drawer-action secondary";
-          copy.textContent = "COPY PERMISSION POLICY";
+          copy.textContent = "COPY PAIRING CODE";
           copy.addEventListener("click", () => {
             if (navigator.clipboard?.writeText) {
-              navigator.clipboard.writeText(brief).then(() => showToast("Permission policy copied."), () => showToast(brief, 9000));
-            } else showToast(brief, 9000);
+              navigator.clipboard.writeText(result.pairingCode).then(() => showToast("Pairing code copied."), () => showToast("Could not copy the code. Select it manually."));
+            } else showToast("Select the displayed pairing code manually.");
           });
-          manifestOutput.appendChild(copy);
-          manifestOutput.hidden = false;
-        });
-        ui.drawerContent.append(makeManifest, manifestOutput);
-        drawerButton("VIEW INTEGRATIONS", () => { void showDrawerView("apps"); });
-      } catch (error) {
-        ui.drawerContent.replaceChildren();
-        drawerHeading("PC and mobile devices", "The backend capability endpoint could not be read.");
-        drawerCard("Device status unavailable", error.message, error.code || "REQUEST FAILED", "error");
-      }
+          pairingOutput.append(code, expiry, instruction, copy);
+          pairingOutput.hidden = false;
+          showToast("One-time pairing code created. It expires in five minutes.", 4500);
+        } catch (error) {
+          pairingOutput.textContent = error.message || "Device pairing is not available.";
+          pairingOutput.hidden = false;
+          showToast(error.message || "Could not create a device pairing code.", 5000);
+        } finally {
+          createPairingButton.disabled = false;
+          createPairingButton.textContent = "GENERATE ONE-TIME PAIRING CODE";
+        }
+      });
+      createPairingButton.style.marginBottom = "14px";
+
+      drawerHeading("Paired devices", "Only devices registered to your signed-in account appear here. Revoking a device immediately invalidates its token.");
+      const deviceList = document.createElement("div");
+      deviceList.className = "device-scope-list";
+      deviceList.textContent = "Loading your device registry…";
+      ui.drawerContent.appendChild(deviceList);
+
+      const renderDeviceList = async () => {
+        deviceList.replaceChildren();
+        try {
+          const payload = await apiRequest("/api/devices");
+          const devices = Array.isArray(payload?.devices) ? payload.devices : [];
+          if (!devices.length) {
+            const empty = document.createElement("p");
+            empty.className = "drawer-view-description";
+            empty.textContent = "No paired devices yet. Generate a code above to pair your Windows or mobile companion.";
+            deviceList.appendChild(empty);
+            return;
+          }
+          for (const device of devices) {
+            const card = document.createElement("article");
+            card.className = "drawer-status-card";
+            const title = document.createElement("strong");
+            title.textContent = device.device_name || "ULTRON Companion";
+            const detail = document.createElement("p");
+            detail.textContent = String(device.platform || "device").toUpperCase() + " · Last seen " + (device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "not yet connected");
+            const status = document.createElement("span");
+            status.className = "drawer-status-chip" + (device.status === "active" ? "" : " warning");
+            status.textContent = String(device.status || "unknown").toUpperCase();
+            card.append(title, detail, status);
+
+            const rowActions = document.createElement("div");
+            rowActions.style.display = "grid";
+            rowActions.style.gridTemplateColumns = "1fr 1fr";
+            rowActions.style.gap = "7px";
+            rowActions.style.marginTop = "8px";
+
+            const rotate = document.createElement("button");
+            rotate.type = "button";
+            rotate.className = "drawer-action secondary";
+            rotate.textContent = "ROTATE TOKEN";
+            rotate.addEventListener("click", async () => {
+              rotate.disabled = true;
+              try {
+                const result = await apiRequest("/api/devices/" + encodeURIComponent(device.id) + "/rotate-token", { method: "POST", body: {} });
+                showToast("Device token rotated. The companion must be updated with the new token.", 6000);
+                const note = document.createElement("div");
+                note.className = "drawer-note";
+                note.textContent = "New one-time token for " + (device.device_name || "device") + ": " + result.deviceToken;
+                card.appendChild(note);
+                const copy = document.createElement("button");
+                copy.type = "button";
+                copy.className = "drawer-action secondary";
+                copy.textContent = "COPY NEW TOKEN";
+                copy.addEventListener("click", () => {
+                  if (!navigator.clipboard?.writeText) {
+                    showToast("Clipboard access is unavailable. Copy the token from the secure note manually.");
+                    return;
+                  }
+                  navigator.clipboard.writeText(result.deviceToken)
+                    .then(() => showToast("New device token copied."))
+                    .catch(() => showToast("Copy failed. Keep the token private."));
+                });
+                card.appendChild(copy);
+              } catch (error) {
+                showToast(error.message || "Could not rotate the device token.");
+              } finally {
+                rotate.disabled = false;
+              }
+            });
+
+            const revoke = document.createElement("button");
+            revoke.type = "button";
+            revoke.className = "drawer-action secondary";
+            revoke.textContent = "REVOKE DEVICE";
+            revoke.addEventListener("click", async () => {
+              if (!window.confirm("Revoke " + (device.device_name || "this device") + "? Its paired token will stop authenticating.")) return;
+              revoke.disabled = true;
+              try {
+                await apiRequest("/api/devices/" + encodeURIComponent(device.id), { method: "DELETE" });
+                showToast("Device access revoked.");
+                await renderDeviceList();
+              } catch (error) {
+                showToast(error.message || "Could not revoke the device.");
+                revoke.disabled = false;
+              }
+            });
+            rowActions.append(rotate, revoke);
+            card.appendChild(rowActions);
+            deviceList.appendChild(card);
+          }
+        } catch (error) {
+          deviceList.replaceChildren();
+          const message = document.createElement("p");
+          message.className = "drawer-note";
+          message.textContent = error.message || "Device registry is unavailable. Apply the reviewed paired-device migration and configure the dedicated signing secret.";
+          deviceList.appendChild(message);
+        }
+      };
+
+      drawerButton("REFRESH DEVICE LIST", () => { void renderDeviceList(); }, true);
+      await renderDeviceList();
+      drawerButton("VIEW INTEGRATIONS", () => { void showDrawerView("apps"); });
       return;
     }
     if (name === "control") {
@@ -2249,6 +2711,7 @@
       ui.cameraToggle.textContent = "STOP EYES";
       ui.cameraAnalyze.disabled = false;
       ui.cameraLiveObserve.disabled = false;
+      ui.gestureToggle.disabled = false;
       ui.cameraPlaceholder.hidden = ui.cameraVideo.readyState >= 2;
       ui.cameraRecBadge.hidden = true;
       setDrawerOpen(false);
@@ -2274,6 +2737,12 @@
   }
 
   function stopCamera(showNotice = true) {
+    if (handGestureActive && window.handGestureCore) {
+      window.handGestureCore.stop();
+      handGestureActive = false;
+      lastGestureType = "IDLE";
+      gestureTargetScale = 1.0;
+    }
     if (cameraLiveTimer) window.clearTimeout(cameraLiveTimer);
     cameraLiveTimer = null;
     ui.cameraLiveObserve.checked = false;
@@ -2288,6 +2757,9 @@
     ui.cameraToggle.textContent = "ENABLE EYES";
     ui.cameraAnalyze.disabled = true;
     ui.cameraLiveObserve.disabled = true;
+    ui.gestureToggle.disabled = true;
+    ui.gestureToggle.textContent = "ENABLE HAND CONTROL";
+    ui.gestureToggle.setAttribute("aria-pressed", "false");
     ui.cameraPlaceholder.hidden = false;
     ui.cameraPlaceholder.querySelector("b").textContent = "CAMERA OFF";
     ui.cameraPlaceholder.querySelector("small").textContent = "Enable Eyes to request camera permission";
@@ -2442,6 +2914,7 @@
     if (cameraStream) stopCamera();
     else void enableCamera();
   });
+  ui.gestureToggle.addEventListener("click", () => { void toggleHandGestureControl(); });
   ui.cameraAnalyze.addEventListener("click", () => { void analyzeCameraFrame(false); });
   ui.cameraClose.addEventListener("click", () => {
     stopCamera();
@@ -2502,6 +2975,102 @@
   renderMode();
   setCoreState("idle");
   startParticleCore();
+
+  // --------------------------------------------------------------------------
+  // Real-Time Autonomous Intelligence Event Stream
+  // --------------------------------------------------------------------------
+  function setupAutonomyEventStream() {
+    if (typeof window === "undefined" || !window.EventSource) return;
+    try {
+      const source = new EventSource("/api/jarvis/autonomy/events");
+      source.addEventListener("TOOL_STARTED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateTaskPanel("Executing: " + data.toolId + " (" + (data.agent || "core") + ")", "TOOL EXECUTION");
+        } catch {}
+      });
+      source.addEventListener("APPROVAL_REQUIRED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Authorization required: " + (data.description || data.toolId), 8000);
+        } catch {}
+      });
+      source.addEventListener("EMERGENCY_STOP_ENGAGED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setCoreState("error");
+          showToast("EMERGENCY STOP ENGAGED: " + data.reason, 10000);
+          updateTaskPanel("EMERGENCY STOP ENGAGED: " + data.reason, "HALTED");
+        } catch {}
+      });
+      source.addEventListener("EMERGENCY_STOP_RESET", () => {
+        setCoreState("idle");
+        showToast("Emergency stop reset. Standing by.", 4000);
+        updateTaskPanel("Emergency stop reset. Standing by.", "STANDBY");
+      });
+      source.addEventListener("TOOL_COMPLETED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const duration = data.durationMs ? " (" + data.durationMs + "ms)" : "";
+          updateTaskPanel("Completed: " + data.toolId + duration, "TOOL COMPLETED");
+        } catch {}
+      });
+      source.addEventListener("TOOL_FAILED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateTaskPanel("Tool Failed: " + data.toolId + " - " + (data.error || "Execution error"), "TOOL FAILED");
+          showToast("Tool failed: " + (data.error || data.toolId), 6000);
+        } catch {}
+      });
+      source.addEventListener("APPROVAL_GRANTED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Authorization granted for " + (data.toolId || data.requestId), 3500);
+        } catch {}
+      });
+      source.addEventListener("APPROVAL_REJECTED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Authorization rejected: " + (data.reason || "Denied by operator"), 4000);
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_COMPLETED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow " + (data.workflowId ? data.workflowId.slice(0, 8) : "") + " completed.", 4500);
+          updateTaskPanel("Workflow completed successfully.", "WORKFLOW COMPLETED");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_FAILED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow failed: " + (data.error || "Execution error"), 6000);
+          updateTaskPanel("Workflow execution failed: " + (data.error || "Error"), "WORKFLOW FAILED");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_PAUSED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow paused at step " + (data.stepIndex ?? ""), 3500);
+          updateTaskPanel("Workflow paused by operator.", "PAUSED");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_RESUMED", (event) => {
+        try {
+          showToast("Workflow execution resumed.", 3500);
+          updateTaskPanel("Workflow execution resumed.", "RUNNING");
+        } catch {}
+      });
+      source.addEventListener("WORKFLOW_CANCELLED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          showToast("Workflow cancelled: " + (data.reason || "Operator request"), 4000);
+          updateTaskPanel("Workflow cancelled: " + (data.reason || "Operator request"), "CANCELLED");
+        } catch {}
+      });
+    } catch {}
+  }
+  setupAutonomyEventStream();
   // Warm speech capability detection before the user first enters Voice Mode.
   void ensureSpeechCapabilities();
   void checkSession();

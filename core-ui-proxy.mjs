@@ -15,6 +15,12 @@ const STATIC_ASSETS = new Map([
   ["/favicon.svg", ["favicon.svg", "image/svg+xml; charset=utf-8"]],
   ["/manifest.webmanifest", ["manifest.webmanifest", "application/manifest+json; charset=utf-8"]],
   ["/service-worker.js", ["service-worker.js", "text/javascript; charset=utf-8"]],
+  ["/hand-gesture-core.js", ["hand-gesture-core.js", "text/javascript; charset=utf-8"]],
+  ["/spatial-viewer.js", ["spatial-viewer.js", "text/javascript; charset=utf-8"]],
+  ["/mobile-control.js", ["mobile-control.js", "text/javascript; charset=utf-8"]],
+  ["/hud-dashboard.html", ["hud-dashboard.html", "text/html; charset=utf-8"]],
+  ["/hud-dashboard.js", ["hud-dashboard.js", "text/javascript; charset=utf-8"]],
+  ["/hud-style.css", ["hud-style.css", "text/css; charset=utf-8"]],
   ["/icons/icon-180.png", ["icons/icon-180.png", "image/png"]],
   ["/icons/icon-192.png", ["icons/icon-192.png", "image/png"]],
   ["/icons/icon-512.png", ["icons/icon-512.png", "image/png"]]
@@ -30,7 +36,10 @@ function securityHeaders(res) {
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self)");
-  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'");
+  // The hand tracker loads a version-pinned MediaPipe module and its WASM/model
+  // assets. Camera frames remain local; only these static runtime assets are
+  // fetched from the explicitly allow-listed origins.
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:; manifest-src 'self'");
 }
 
 async function readRequestBody(req) {

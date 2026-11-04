@@ -13,7 +13,8 @@
   <link rel="apple-touch-icon" href="/icons/icon-180.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+  <script type="module" src="/hand-gesture-core.js"></script>
+  <script type="module" src="/app.js"></script>
 </head>
 <body>
   <div class="universe" aria-hidden="true">
@@ -57,10 +58,16 @@
     <button id="drawer-scrim" class="drawer-scrim" type="button" aria-label="Close features panel" hidden></button>
     <aside id="feature-drawer" class="feature-drawer" aria-label="ULTRON feature panel" hidden>
       <div class="drawer-header">
-        <div><p class="drawer-eyebrow">ULTRON INTERFACE</p><h2>Capabilities</h2><p class="drawer-subtitle">One core. Context-aware tools.</p></div>
+        <div><p class="drawer-eyebrow">ULTRON SYSTEM</p><h2>Settings & Capabilities</h2><p class="drawer-subtitle">One core. Multi-device intelligence.</p></div>
         <button id="drawer-close" class="drawer-close" type="button" aria-label="Close features panel">×</button>
       </div>
       <nav class="drawer-nav" aria-label="ULTRON features">
+        <button type="button" data-drawer-view="capabilities"><span class="nav-icon">◈</span><span><strong>Capability Center</strong><small>All 7 feature categories & live status</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="activity"><span class="nav-icon">⚡</span><span><strong>Live Activity & Planner</strong><small>Real-time execution & tool traces</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="autonomy"><span class="nav-icon">⚙</span><span><strong>Autonomy Center</strong><small>Autonomous workflows & kill switch</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="permissions"><span class="nav-icon">🛡</span><span><strong>Permission Center</strong><small>Approval gates & audit history</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="memory"><span class="nav-icon">🧠</span><span><strong>Memory Center</strong><small>Conversations & recall vault</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="spatial"><span class="nav-icon">⬡</span><span><strong>Spatial World Model</strong><small>Diorama 3D room & object modeling</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="eyes"><span class="nav-icon">◎</span><span><strong>Eyes / Camera</strong><small>See and analyze your view</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-action="voice"><span class="nav-icon">∿</span><span><strong>Voice mode</strong><small>Listen and respond aloud</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="voice-quality"><span class="nav-icon">♫</span><span><strong>Voice quality & pronunciation</strong><small>Hindi + English · male voice</small></span><span class="nav-chevron">›</span></button>
@@ -70,6 +77,7 @@
         <button type="button" data-drawer-view="tasks"><span class="nav-icon">◷</span><span><strong>Tasks</strong><small>Queue and task status</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="apps"><span class="nav-icon">⌘</span><span><strong>Connect apps</strong><small>Integrations and access scopes</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="devices"><span class="nav-icon">▣</span><span><strong>PC / mobile devices</strong><small>Pairing and permissions</small></span><span class="nav-chevron">›</span></button>
+        <button type="button" data-drawer-view="mobile-control"><span class="nav-icon">📱</span><span><strong>Android Mobile Control</strong><small>Mobile MCP · Screen Mirror & Touch</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="control" class="system-control-nav"><span class="nav-icon">⏻</span><span><strong>Full system control</strong><small>Request a paired control session</small></span><span class="nav-chevron">›</span></button>
         <button type="button" data-drawer-view="system"><span class="nav-icon">⦿</span><span><strong>System readiness</strong><small>Backend, model, and voice</small></span><span class="nav-chevron">›</span></button>
       </nav>
@@ -91,10 +99,166 @@
     <section id="camera-panel" class="camera-panel" aria-label="ULTRON eyes camera" hidden>
       <div class="camera-topline"><span class="camera-live-dot"></span><span id="camera-status">EYES OFFLINE</span><button id="camera-close" type="button" aria-label="Close camera view">×</button></div>
       <div class="camera-preview"><video id="eye-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder"><span>◎</span><b>CAMERA OFF</b><small>Enable Eyes to request camera permission</small></div><span id="camera-rec-badge" class="camera-rec-badge" hidden>● LIVE</span></div>
-      <div class="camera-buttons"><button id="camera-toggle" type="button" class="camera-primary">ENABLE EYES</button><button id="camera-analyze" type="button" disabled>ANALYZE VIEW</button></div>
+      <div class="camera-buttons">
+        <button id="camera-toggle" type="button" class="camera-primary">ENABLE EYES</button>
+        <button id="camera-analyze" type="button" disabled>ANALYZE VIEW</button>
+        <button id="gesture-toggle" type="button" disabled aria-pressed="false">ENABLE HAND CONTROL</button>
+      </div>
       <label class="live-observe-toggle"><input id="camera-live-observe" type="checkbox" disabled><span><strong>Live observation</strong><small>Analyze one frame every 12 seconds while enabled</small></span></label>
-      <p class="camera-privacy-note">Camera access starts only after you enable it. Frames are sent to the configured vision model only when you analyze or enable live observation; this interface does not store video.</p>
+      <p class="camera-privacy-note">Hand tracking runs locally in this browser after you enable it. The pinned MediaPipe runtime and model are fetched from their listed hosts; gesture camera frames are not uploaded. Separate Eyes analysis sends a selected frame only when you request analysis or enable Live observation. Video is not stored by this interface.</p>
     </section>
+
+    <section id="spatial-panel" class="spatial-panel" aria-label="ULTRON spatial world model" hidden>
+      <div class="spatial-topline">
+        <span class="spatial-status-dot"></span>
+        <span id="spatial-status">SPATIAL WORLD MODEL — DIORAMA</span>
+        <button id="spatial-close" type="button" aria-label="Close spatial viewer">×</button>
+      </div>
+      <div class="spatial-canvas-wrapper">
+        <canvas id="spatial-canvas" width="640" height="360"></canvas>
+        <div id="spatial-overlay-hud" class="spatial-overlay-hud">
+          <div class="spatial-hud-row">
+            <span id="spatial-hw-badge" class="spatial-badge">RYZEN 7 5700U · CPU BASELINE</span>
+            <span id="spatial-stage-badge" class="spatial-badge">READY</span>
+          </div>
+          <div id="spatial-selected-object" class="spatial-selected-object" hidden>
+            <b id="spatial-obj-name">Table</b>
+            <span id="spatial-obj-pos">Pos: X:0m Y:0.4m Z:2.4m</span>
+            <span id="spatial-obj-dim">Dim: 1.4×0.75×0.8m</span>
+            <span id="spatial-obj-support">Supported by: Floor</span>
+          </div>
+        </div>
+      </div>
+      <div class="spatial-controls">
+        <button id="spatial-upload-btn" type="button" class="spatial-btn">UPLOAD IMAGE</button>
+        <button id="spatial-camera-snap-btn" type="button" class="spatial-btn">CAPTURE FROM EYES</button>
+        <button id="spatial-view-iso" type="button" class="spatial-btn">ISO VIEW</button>
+        <button id="spatial-view-top" type="button" class="spatial-btn">TOP-DOWN</button>
+        <button id="spatial-export-obj" type="button" class="spatial-btn" disabled>EXPORT OBJ</button>
+        <button id="spatial-export-gltf" type="button" class="spatial-btn" disabled>EXPORT GLTF</button>
+      </div>
+      <input id="spatial-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      <div id="spatial-query-bar" class="spatial-query-bar">
+        <input id="spatial-query-input" type="text" placeholder="Ask spatial question (e.g., 'Where is the desk?', 'How many chairs?')..." disabled>
+        <button id="spatial-query-btn" type="button" disabled>ASK</button>
+      </div>
+      <div id="spatial-query-answer" class="spatial-query-answer" hidden></div>
+    </section>
+    <!-- Native Android Mobile Control Panel (Mobile MCP & ADB) -->
+    <section id="mobile-panel" class="mobile-panel" aria-label="ULTRON Mobile Device Command Center" hidden>
+      <div class="mobile-topline">
+        <span class="mobile-status-dot"></span>
+        <span id="mobile-status-badge">MOBILE MCP READY</span>
+        <button id="mobile-refresh-btn" type="button" class="mobile-icon-btn" title="Refresh Devices">↻</button>
+        <button id="mobile-close" type="button" class="mobile-close-btn" aria-label="Close mobile panel">×</button>
+      </div>
+
+      <!-- 1. Device Discovery Card -->
+      <div id="mobile-device-list" class="mobile-device-list">
+        <div class="mobile-empty-state">
+          <span>📱</span>
+          <b>Scanning for Android Devices...</b>
+        </div>
+      </div>
+
+      <!-- 2. Screen Mirror / Snapshot Viewer with Interactive Coordinate Picker -->
+      <div class="mobile-section-header">
+        <span>SCREEN MIRROR & VISION</span>
+        <span id="mobile-coords-display" class="coords-display">Tap Screen to Pick X,Y</span>
+      </div>
+      <div id="mobile-preview-wrapper" class="mobile-preview-wrapper">
+        <div id="mobile-preview-placeholder" class="preview-placeholder">
+          <span>📷</span>
+          <p>No screen frame captured yet</p>
+        </div>
+        <img id="mobile-screen-img" class="screen-preview-img" alt="Android Screen Frame" hidden />
+      </div>
+      <div class="mobile-capture-bar">
+        <button id="mobile-capture-btn" type="button" class="mobile-action-btn primary-btn">📸 CAPTURE SCREEN</button>
+      </div>
+
+      <!-- 3. Action Dispatch Palette -->
+      <div class="mobile-section-header">QUICK ACTIONS</div>
+      <div class="mobile-quick-actions">
+        <button type="button" class="quick-btn" data-mobile-action="back" title="Back">⮌ BACK</button>
+        <button type="button" class="quick-btn" data-mobile-action="home" title="Home">⌂ HOME</button>
+        <button type="button" class="quick-btn" data-mobile-action="app_switch" title="Recents">▢ RECENTS</button>
+        <button type="button" class="quick-btn" data-mobile-action="volume_up" title="Vol Up">🔊 +</button>
+        <button type="button" class="quick-btn" data-mobile-action="volume_down" title="Vol Down">🔉 -</button>
+        <button type="button" class="quick-btn" data-mobile-action="power" title="Lock/Power">🔒 POWER</button>
+      </div>
+
+      <!-- App Launcher & Text Input -->
+      <div class="mobile-input-grid">
+        <div class="input-col">
+          <label for="mobile-app-select">Launch Application</label>
+          <div class="app-launch-row">
+            <select id="mobile-app-select">
+              <option value="com.google.android.youtube">YouTube</option>
+              <option value="com.android.chrome">Chrome</option>
+              <option value="com.android.settings">Settings</option>
+              <option value="com.google.android.GoogleCamera">Camera</option>
+              <option value="com.google.android.documentsui">Files</option>
+              <option value="custom">Custom Package...</option>
+            </select>
+            <button id="mobile-launch-app-btn" type="button" class="mobile-action-btn">LAUNCH</button>
+          </div>
+          <input id="mobile-custom-app" type="text" placeholder="e.g. com.spotify.music" style="display:none; margin-top: 4px;" />
+        </div>
+
+        <div class="input-col">
+          <label for="mobile-type-input">Send Keystrokes / Text</label>
+          <div class="text-type-row">
+            <input id="mobile-type-input" type="text" placeholder="Type text to phone..." />
+            <button id="mobile-type-btn" type="button" class="mobile-action-btn">SEND</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Touch Gestures -->
+      <div class="mobile-section-header">TOUCH & GESTURES</div>
+      <div class="mobile-gesture-grid">
+        <div class="coord-tap-row">
+          <input id="mobile-input-x" type="number" placeholder="X (px)" />
+          <input id="mobile-input-y" type="number" placeholder="Y (px)" />
+          <button id="mobile-tap-coords-btn" type="button" class="mobile-action-btn">TAP AT (X,Y)</button>
+        </div>
+        <div class="swipe-btn-group">
+          <button type="button" class="swipe-btn" data-mobile-swipe="up">↑ SWIPE UP</button>
+          <button type="button" class="swipe-btn" data-mobile-swipe="down">↓ SWIPE DOWN</button>
+          <button type="button" class="swipe-btn" data-mobile-swipe="left">← SWIPE LEFT</button>
+          <button type="button" class="swipe-btn" data-mobile-swipe="right">→ SWIPE RIGHT</button>
+        </div>
+      </div>
+
+      <!-- 5. Autonomous Task Input & Log Viewer -->
+      <div class="mobile-section-header">AUTONOMOUS MOBILE TASK</div>
+      <form id="mobile-auto-form" class="mobile-auto-form">
+        <input id="mobile-auto-input" type="text" placeholder="Tell ULTRON what to do on your phone..." required />
+        <button type="submit" class="mobile-action-btn primary-btn">EXECUTE TASK</button>
+      </form>
+      <div id="mobile-workflow-log" class="mobile-workflow-log" aria-live="polite">
+        <div class="log-item">Ready for autonomous mobile commands.</div>
+      </div>
+    </section>
+
+    <!-- 4. Level 3/4 Confirmation Modal with 60s Countdown Timer -->
+    <div id="mobile-confirm-modal" class="mobile-modal" hidden>
+      <div class="mobile-modal-content">
+        <div class="modal-badge">SECURITY CONFIRMATION REQUIRED</div>
+        <h3>Sensitive Action Authorization</h3>
+        <p id="mobile-modal-desc">A sensitive mobile operation requires authorization.</p>
+        <div class="modal-countdown">
+          <span>Token TTL:</span>
+          <b id="mobile-modal-timer">60s</b>
+        </div>
+        <div class="modal-actions">
+          <button id="mobile-modal-authorize" type="button" class="modal-btn auth-btn">AUTHORIZE</button>
+          <button id="mobile-modal-deny" type="button" class="modal-btn deny-btn">DENY</button>
+        </div>
+      </div>
+    </div>
+
     <section class="interaction-dock" aria-label="Choose how to interact with ULTRON">
       <button id="voice-mode" class="mode-card voice-card" type="button" aria-pressed="false">
         <span class="mode-icon mic-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"></path></svg></span>
@@ -150,5 +314,7 @@
   </section>
 
   <footer class="bottomline"><span>ULTRON · AUTONOMOUS INTERFACE</span><span class="footer-separator">/</span><span id="field-mode">GPU PARTICLE FIELD · INITIALIZING</span><span class="bottomline-right">VOICE · TEXT · HOLOGRAPHIC TASKS</span></footer>
+  <script type="module" src="/spatial-viewer.js"></script>
+  <script type="module" src="/mobile-control.js"></script>
 </body>
 </html>
