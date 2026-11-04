@@ -955,7 +955,7 @@ export function createJarvisRouter({
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
   });
 
-  router.get("/jarvis/devices", requireOwner, (_req, res) => {
+  router.get("/jarvis/devices", requireOwner, (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
@@ -1161,7 +1161,9 @@ export function createJarvisRouter({
   });
 
   router.post("/jarvis/notifications", requireOwner, express.json(), (req, res) => {
-    const devices = deviceHubInstance.listPairedDevices();
+    const ownerId = req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
+    const devices = deviceHubInstance.listPairedDevices(ownerId);
     if (!devices.length) {
       return res.status(503).json({
         error: {
