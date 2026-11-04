@@ -125,3 +125,16 @@ All agents must maintain and consult these repository memory files:
 - [`PROJECT_STATUS.md`](PROJECT_STATUS.md): Historical planning snapshot; not release evidence.
 - [`CHANGELOG.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/CHANGELOG.md): History of revisions, changes, and upgrades.
 - [`TASK_TRACKER.md`](TASK_TRACKER.md): Planning and coordination notes; not release evidence.
+
+---
+
+## 9. OpenCode (Primary Development Environment)
+
+OpenCode is the primary engineering environment for ULTRON AI as of 2026-11-04.
+
+- **Authorized agent name:** OpenCode (in addition to Google Antigravity, Claude Code, OpenAI Codex).
+- **Branch prefix:** `agent/opencode/<description>` (or `agent/claude/...` when acting as Claude).
+- **Project instructions:** This file (`AGENTS.md`), `CLAUDE.md`, `ULTRON_ARCHITECTURE.md`, and `docs/ULTRON_OPENCODE_CONTINUATION_STATE.md`.
+- **MCP servers:** configured in `.mcp.json` (GitHub, Supabase, Render). Credentials come from environment variables only.
+- **Continuity:** OpenCode must read `docs/ULTRON_OPENCODE_CONTINUATION_STATE.md` at session start and resume unfinished tasks.
+- **No secrets** may be written into these instruction files.

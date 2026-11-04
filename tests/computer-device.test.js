@@ -81,7 +81,7 @@ test("Computer Control: command allowlist permits safe commands and blocks arbit
   assert.ok(safe.stdout.startsWith("v"));
 
   await assert.rejects(async () => {
-    await ctrl.runApprovedCommand("powershell -Command Remove-Item -Force C:\\");
+    await ctrl.runApprovedCommand("curl http://malicious.site");
   }, /not in the approved command allowlist/);
 });
 

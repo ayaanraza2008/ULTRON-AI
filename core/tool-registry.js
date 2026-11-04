@@ -998,7 +998,8 @@ export class ToolRegistry {
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
       execute: async (params = {}) => {
         if (params.action === "get") {
-          return this.adapters.windowsAutomation.getDisplayBrightness();
+          const res = await this.adapters.windowsAutomation.getDisplayBrightness();
+          return { success: true, ...res };
         }
         return this.adapters.windowsAutomation.setDisplayBrightness(params.level);
       }
@@ -1139,7 +1140,8 @@ export class ToolRegistry {
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
       execute: async () => {
-        return this.adapters.windowsAutomation.getSystemVitals();
+        const res = await this.adapters.windowsAutomation.getSystemVitals();
+        return { success: true, ...res };
       }
     });
 
@@ -1166,6 +1168,7 @@ export class ToolRegistry {
         const safety = helper.validateUrlSafety(normalized);
         const profiles = await helper.findBrowserProfileDirs();
         return {
+          success: true,
           input: params.input,
           normalizedUrl: normalized,
           safety,
