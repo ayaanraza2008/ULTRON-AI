@@ -134,15 +134,17 @@ Read-only inspection of the Render workspace confirmed the expected workspace **
 - All four services are on the Render Free plan in Singapore. The browser bridge and REA gateway have public IP allowlists (`0.0.0.0/0`); their application-level authentication and route protections must be verified independently.
 - No deployment, restart, environment mutation, or service configuration change was performed during this audit.
 
-## 11. AppFlowy agent wiring follow-up
+## 11. AppFlowy and Immich agent wiring follow-up
 
-The AppFlowy adapter was present but its agent tool registration was missing. A separate draft PR [#449](https://github.com/ayaanraza2008/ULTRON-AI/pull/449) now proposes:
-- explicit owner-scoped `check_appflowy`, `appflowy_list_workspaces`, and `appflowy_get_document` tools;
-- deterministic routing for AppFlowy workspace requests;
-- fail-closed behavior when the authenticated user ID is absent;
+The AppFlowy and Immich adapters existed but agent tool registration and private-data approval boundaries needed hardening. Draft PR [#448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448), based on mobile authorization PR #447, now proposes:
+- owner-scoped `check_appflowy`, `appflowy_list_workspaces`, and `appflowy_get_document` tools;
+- owner-scoped Immich status, album listing, and metadata search tools;
+- exact current-message approval before any private AppFlowy document or Immich media metadata read;
+- fail-closed behavior when authenticated user identity is absent;
+- deterministic AppFlowy productivity and Immich media-library routing;
 - owner-only tool-catalog visibility and regression tests.
 
-PR #449 is **draft / unmerged**. Its latest GitHub Actions run passed: **1,610 tests passed, 0 failed, 3 skipped**, and the World Intelligence build passed. The PR is not deployed. The reference-repository matrix should therefore describe AppFlowy as “agent wiring proposed in PR #449; live instance unverified” until the PR is reviewed/merged and an actual AppFlowy instance is smoke-tested.
+PR #448 is **draft / unmerged**. CI is rerunning after the latest AppFlowy owner-identity and task-routing updates. Standalone PR #449 was closed as superseded. Neither integration is deployed or live-verified; actual AppFlowy/Immich instances and credentials are still required.
 
 
 ## 12. Render runtime-log follow-up
