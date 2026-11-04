@@ -103,8 +103,16 @@ export class EgoPageManager {
     // If taskSpaceManager is wired, also reflect page label in taskSpace state
     if (this.taskSpaceManager) {
       const space = this.taskSpaceManager.getTaskSpace(taskSpaceId);
-      if (space && !space.pages.includes(label)) {
-        space.pages.push(label);
+      if (space && space.pages) {
+        if (space.pages instanceof Map) {
+          if (!space.pages.has(label)) {
+            space.pages.set(label, { label, spaceId: taskSpaceId, targetId: pageState.targetId, url: initialUrl, openedBy: "agent", active: true });
+          }
+        } else if (Array.isArray(space.pages)) {
+          if (!space.pages.includes(label)) {
+            space.pages.push(label);
+          }
+        }
       }
     }
 
