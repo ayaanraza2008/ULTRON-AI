@@ -374,7 +374,9 @@ const FILES_TO_CHECK = [
   "tests/edge-tts-adapter.test.js",
   "tests/browser-automation-helper.test.js",
   "tests/windows-command-security.test.js",
-  "tests/companion-api.test.js"
+  "tests/companion-api.test.js",
+  "public/particle-swarm-engine.js",
+  "tests/particle-swarm-engine.test.js"
 ];
 
 let checked = 0;
