@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { toolRegistry, PERMISSION_LEVELS } from "../core/tool-registry.js";
+import { toolRegistry, ToolRegistry, PERMISSION_LEVELS } from "../core/tool-registry.js";
 import { AutonomousOrchestrator, AGENT_ROLES } from "../core/autonomous-orchestrator.js";
 
 // ==========================================
@@ -39,9 +39,22 @@ test("Adversarial Security: Rejects malformed and empty app launch parameters", 
     /Missing required parameter 'app'/i
   );
 
+  // Isolate the adapter-level validation test behind a trusted test verifier.
+  // The production singleton intentionally rejects privileged dispatch without
+  // an authenticated, one-time approval proof.
+  const validationRegistry = new ToolRegistry({
+    approvalVerifier: async ({ actorId, toolId, confirmationToken }) =>
+      actorId === "test-owner" &&
+      toolId === "windows_app_launch" &&
+      confirmationToken === "test-only-approval"
+  });
   await assert.rejects(
     async () => {
-      await toolRegistry.execute("windows_app_launch", { app: "calc.exe; rm -rf /" });
+      await validationRegistry.execute(
+        "windows_app_launch",
+        { app: "calc.exe; rm -rf /", dryRun: true },
+        { actorId: "test-owner", confirmationToken: "test-only-approval" }
+      );
     },
     /APPLICATION_NOT_ALLOWLISTED|Application name must contain valid/i
   );
