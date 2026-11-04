@@ -5,6 +5,11 @@
  * Enforces URL safety (SSRF protection, private network blocking),
  * untrusted web content / prompt injection defense, and autonomy boundaries
  * (Level 1-2 autonomous vs Level 3-4 user confirmation / handoff).
+ *
+ * SSRF & LOOPBACK POLICY:
+ * - Production (NODE_ENV === 'production') MUST NEVER gain loopback or internal network access.
+ * - Cloud metadata (169.254.169.254) and RFC 1918 private subnets are ALWAYS unconditionally blocked.
+ * - Explicit test-only exceptions (allowTestLoopback: true) are permitted ONLY in non-production test suites.
  */
 
 import { PERMISSION_LEVELS } from "./ego-constants.js";
@@ -12,13 +17,23 @@ import { PERMISSION_LEVELS } from "./ego-constants.js";
 export class EgoSecurityGuard {
   /**
    * @param {Object} options
-   * @param {boolean} [options.allowLocal=false] - Allow localhost/internal network in dev
+   * @param {boolean} [options.allowTestLoopback=false] - Explicit, secure test-only exception for loopback
+   * @param {boolean} [options.allowLocal=false] - Legacy alias for allowTestLoopback
+   * @param {Array<number>} [options.testAllowedPorts] - Optional port restriction for test loopback
    * @param {Array<string>} [options.blockedDomains]
    * @param {Array<string>} [options.allowedDomains]
    * @param {number} [options.autonomyLevel=2] - Maximum autonomous execution level
    */
   constructor(options = {}) {
-    this.allowLocal = Boolean(options.allowLocal);
+    const isProduction = process.env.NODE_ENV === "production";
+    // Explicit, secure test-only exception.
+    // In production, loopback bypass is strictly disallowed regardless of flags.
+    this.allowTestLoopback = !isProduction && Boolean(options.allowTestLoopback || options.allowLocal);
+    this.allowLocal = this.allowTestLoopback; // Backward-compatibility alias
+    this.testAllowedPorts = Array.isArray(options.testAllowedPorts)
+      ? new Set(options.testAllowedPorts.map(Number))
+      : null;
+
     this.blockedDomains = new Set(
       (options.blockedDomains || []).map((d) => d.toLowerCase())
     );
@@ -35,7 +50,7 @@ export class EgoSecurityGuard {
   /**
    * Validate URL against SSRF and protocol policies
    * @param {string} urlString
-   * @returns {{ allowed: boolean, reason?: string }}
+   * @returns {{ allowed: boolean, reason?: string, isTestLoopbackException?: boolean }}
    */
   validateUrl(urlString) {
     if (this.emergencyStopEngaged) {
@@ -83,28 +98,58 @@ export class EgoSecurityGuard {
       }
     }
 
-    // SSRF / Localhost / Private IP checks
-    if (!this.allowLocal) {
-      if (
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname === "0.0.0.0" ||
-        hostname === "::1" ||
-        hostname.endsWith(".localhost") ||
-        hostname.endsWith(".local")
-      ) {
-        return { allowed: false, reason: "Access to loopback/localhost is blocked for security" };
+    // SSRF DEFENSE: Cloud metadata (169.254.169.254) and link-local (169.254.0.0/16) are ALWAYS blocked unconditionally.
+    if (hostname === "169.254.169.254" || hostname.startsWith("169.254.")) {
+      return { allowed: false, reason: "Access to cloud metadata service is strictly blocked (SSRF defense)" };
+    }
+
+    // SSRF DEFENSE: RFC 1918 private subnets are ALWAYS blocked unconditionally.
+    if (this._isPrivateIp(hostname)) {
+      return { allowed: false, reason: "Access to private internal network IP is blocked (SSRF defense)" };
+    }
+
+    // SSRF DEFENSE: Unspecified 0.0.0.0 is ALWAYS blocked unconditionally.
+    if (hostname === "0.0.0.0") {
+      return { allowed: false, reason: "Access to 0.0.0.0 is blocked for security (SSRF defense)" };
+    }
+
+    // SSRF DEFENSE: Loopback / localhost handling
+    const isLoopback =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local");
+
+    if (isLoopback) {
+      if (process.env.NODE_ENV === "production") {
+        return {
+          allowed: false,
+          reason: "Access to loopback/localhost is strictly forbidden in production (SSRF defense)"
+        };
       }
 
-      // Cloud metadata IP
-      if (hostname === "169.254.169.254") {
-        return { allowed: false, reason: "Access to cloud metadata service is strictly blocked" };
+      if (this.allowTestLoopback) {
+        if (this.testAllowedPorts && this.testAllowedPorts.size > 0) {
+          const port = parsed.port ? parseInt(parsed.port, 10) : (parsed.protocol === "https:" ? 443 : 80);
+          if (!this.testAllowedPorts.has(port)) {
+            return {
+              allowed: false,
+              reason: `Port ${port} is not in test-allowed loopback ports`
+            };
+          }
+        }
+        return {
+          allowed: true,
+          isTestLoopbackException: true,
+          reason: "Explicit secure test-only loopback exception active in non-production environment"
+        };
       }
 
-      // Private RFC 1918 subnets
-      if (this._isPrivateIp(hostname)) {
-        return { allowed: false, reason: "Access to private internal network IP is blocked" };
-      }
+      return {
+        allowed: false,
+        reason: "Access to loopback/localhost is blocked for security (SSRF defense)"
+      };
     }
 
     return { allowed: true };

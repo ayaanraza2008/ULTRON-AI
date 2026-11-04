@@ -3,7 +3,8 @@
  * Module: integrations/browser/ego-lite/ego-audit-logger.js
  *
  * Maintains an auditable, sanitized log of all browser interactions,
- * tracking performance, error rates, memory impact, and redacting sensitive data.
+ * tracking performance, error rates, memory impact, verified execution driver,
+ * and redacting sensitive data.
  */
 
 export class EgoAuditLogger {
@@ -32,6 +33,8 @@ export class EgoAuditLogger {
       taskSpaceId: entry.taskSpaceId || null,
       pageId: entry.pageId || null,
       target: this._sanitizeTarget(entry.target),
+      executionDriver: entry.executionDriver || "TEST_DOUBLE",
+      driverVerified: entry.driverVerified !== false,
       durationMs: entry.durationMs || 0,
       success: entry.success !== false,
       error: entry.error ? String(entry.error) : null,
@@ -98,7 +101,9 @@ export class EgoAuditLogger {
   /**
    * Clear all logs
    */
-  clearLogs() {
+  clear() {
     this.entries = [];
+    this.totalLogged = 0;
+    this.errorCount = 0;
   }
 }

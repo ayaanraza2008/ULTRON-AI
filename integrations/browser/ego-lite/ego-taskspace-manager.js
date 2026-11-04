@@ -224,8 +224,7 @@ export class EgoTaskSpaceManager {
    * - User-owned tabs are preserved
    */
   async finish(spaceId, options = {}) {
-    const numericId = typeof spaceId === "number" ? spaceId : parseInt(spaceId, 10);
-    const space = this.spaces.get(numericId) || this.spaces.get(spaceId);
+    const space = this.getTaskSpace(spaceId);
     if (!space) return false;
 
     const closedPages = [];
@@ -255,9 +254,21 @@ export class EgoTaskSpaceManager {
   /**
    * Get raw TaskSpace by ID
    */
-  getTaskSpace(spaceId) {
-    const numericId = typeof spaceId === "number" ? spaceId : parseInt(spaceId, 10);
-    return this.spaces.get(numericId) || this.spaces.get(spaceId) || null;
+  getTaskSpace(spaceIdOrName) {
+    if (!spaceIdOrName) return null;
+    if (this.spaces.has(spaceIdOrName)) {
+      return this.spaces.get(spaceIdOrName);
+    }
+    const numericId = typeof spaceIdOrName === "number" ? spaceIdOrName : parseInt(spaceIdOrName, 10);
+    if (!isNaN(numericId) && this.spaces.has(numericId)) {
+      return this.spaces.get(numericId);
+    }
+    for (const space of this.spaces.values()) {
+      if (space.name === String(spaceIdOrName)) {
+        return space;
+      }
+    }
+    return null;
   }
 
   /**

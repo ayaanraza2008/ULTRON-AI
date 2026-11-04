@@ -366,7 +366,9 @@ const FILES_TO_CHECK = [
   "integrations/browser/ego-lite/ego-audit-logger.js",
   "integrations/browser/ego-lite/ego-browser-router.js",
   "integrations/browser/ego-lite/ego-adapter.js",
-  "tests/ego-browser-integration.test.js"
+  "integrations/browser/ego-lite/direct-chromium-driver.js",
+  "tests/ego-browser-integration.test.js",
+  "tests/ego-browser-real-world.test.js"
 ];
 
 let checked = 0;

@@ -5,6 +5,8 @@
  * Master facade integrating TaskSpace lifecycle, Page navigation,
  * semantic snapshots, interaction executor, site learnings, authenticated sessions,
  * security guardrails, audit logging, and intelligent routing.
+ *
+ * Enforces strict driver separation and verified execution metadata on all actions.
  */
 
 import { EGO_BROWSER_STATE, RESOURCE_BUDGETS } from "./ego-constants.js";
@@ -51,7 +53,8 @@ export class EgoBrowserAdapter {
     });
     this.browserRouter = new EgoBrowserRouter({
       runtimeManager: this.runtimeManager,
-      browserUseBridge: options.browserUseBridge
+      browserUseBridge: options.browserUseBridge,
+      directChromiumDriver: options.driver
     });
 
     this.driver = options.driver || null;
@@ -69,6 +72,25 @@ export class EgoBrowserAdapter {
     this.pageManager.setDriver(driver);
     this.snapshotEngine.setDriver(driver);
     this.actionExecutor.setDriver(driver);
+    if (this.browserRouter) {
+      this.browserRouter.setDirectChromiumDriver(driver);
+    }
+  }
+
+  /**
+   * Returns exact verified driver type executing browser actions
+   */
+  getExecutionDriverType() {
+    if (this.driver) {
+      if (this.driver.driverType) return this.driver.driverType;
+      if (this.driver.isDirectCdp) return "DIRECT_CHROMIUM_CDP";
+      // HONESTY: driver exists but provides no verifiable type — never claim CDP or Ego Lite.
+      return "UNVERIFIED_DRIVER";
+    }
+    if (this.options?.runtimeOptions?.inMemoryDouble || this.runtimeManager?.inMemoryDouble) {
+      return "TEST_DOUBLE";
+    }
+    return "TEST_DOUBLE";
   }
 
   /**
@@ -91,6 +113,7 @@ export class EgoBrowserAdapter {
     return {
       state: browserState,
       runtime: health,
+      activeDriver: this.getExecutionDriverType(),
       activeTaskSpaceId: this.activeTaskSpaceId,
       taskSpacesCount: taskSpaces.length,
       taskSpaces,
@@ -137,15 +160,18 @@ export class EgoBrowserAdapter {
    * @param {string} [taskSpaceId]
    */
   async closeTaskSpace(taskSpaceId) {
-    const targetId = taskSpaceId || this.activeTaskSpaceId;
-    if (!targetId) {
+    const target = taskSpaceId || this.activeTaskSpaceId;
+    if (!target) {
       throw new Error("No active TaskSpace to close");
     }
 
-    await this.pageManager.closeAllPagesForSpace(targetId);
-    const result = this.taskSpaceManager.finish(targetId);
+    const space = this.taskSpaceManager.getTaskSpace(target);
+    const targetId = space ? space.spaceId : target;
 
-    if (this.activeTaskSpaceId === targetId) {
+    await this.pageManager.closeAllPagesForSpace(targetId);
+    const result = await this.taskSpaceManager.finish(targetId);
+
+    if (this.activeTaskSpaceId === targetId || this.activeTaskSpaceId === target) {
       const remaining = this.taskSpaceManager.listTaskSpaces();
       this.activeTaskSpaceId = remaining.length > 0 ? remaining[0].id : null;
       this.activePageId = null;
@@ -214,7 +240,7 @@ export class EgoBrowserAdapter {
    * Click element by @N ref or selector
    */
   async click(refOrSelector, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for click");
     return await this.actionExecutor.click(pageId, refOrSelector, options);
   }
@@ -223,7 +249,7 @@ export class EgoBrowserAdapter {
    * Double-click element
    */
   async dblclick(refOrSelector, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for dblclick");
     return await this.actionExecutor.dblclick(pageId, refOrSelector, options);
   }
@@ -232,7 +258,7 @@ export class EgoBrowserAdapter {
    * Hover over element
    */
   async hover(refOrSelector, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for hover");
     return await this.actionExecutor.hover(pageId, refOrSelector, options);
   }
@@ -241,7 +267,7 @@ export class EgoBrowserAdapter {
    * Fill input element
    */
   async fill(refOrSelector, value, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for fill");
     return await this.actionExecutor.fill(pageId, refOrSelector, value, options);
   }
@@ -250,7 +276,7 @@ export class EgoBrowserAdapter {
    * Select dropdown option
    */
   async selectOption(refOrSelector, values, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for selectOption");
     return await this.actionExecutor.selectOption(pageId, refOrSelector, values, options);
   }
@@ -259,7 +285,7 @@ export class EgoBrowserAdapter {
    * Drag and drop
    */
   async dragAndDrop(source, target, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for dragAndDrop");
     return await this.actionExecutor.dragAndDrop(pageId, source, target);
   }
@@ -268,7 +294,7 @@ export class EgoBrowserAdapter {
    * Press key
    */
   async press(key, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for press");
     return await this.actionExecutor.press(pageId, key, options);
   }
@@ -277,7 +303,7 @@ export class EgoBrowserAdapter {
    * Type text
    */
   async type(text, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     if (!pageId) throw new Error("No active page for type");
     return await this.actionExecutor.type(pageId, text, options);
   }
@@ -286,7 +312,7 @@ export class EgoBrowserAdapter {
    * Safe download file to UltronWorkspace/downloads
    */
   async download(downloadUrl, filename, options = {}) {
-    const pageId = options.pageId || this.activePageId;
+    const pageId = options?.pageId || this.activePageId;
     return await this.actionExecutor.downloadFile(pageId, downloadUrl, filename);
   }
 
@@ -312,15 +338,15 @@ export class EgoBrowserAdapter {
    * Hand off control of TaskSpace to user
    */
   handOff(options = {}) {
-    const spaceId = options.taskSpaceId || this.activeTaskSpaceId;
-    return this.taskSpaceManager.handOff(spaceId, options.reason);
+    const spaceId = options?.taskSpaceId || this.activeTaskSpaceId;
+    return this.taskSpaceManager.handOff(spaceId, options?.reason);
   }
 
   /**
    * Agent re-assumes control of TaskSpace
    */
   takeOver(options = {}) {
-    const spaceId = options.taskSpaceId || this.activeTaskSpaceId;
+    const spaceId = options?.taskSpaceId || this.activeTaskSpaceId;
     return this.taskSpaceManager.takeOverTaskSpace(spaceId);
   }
 

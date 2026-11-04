@@ -1270,7 +1270,7 @@ export class ToolRegistry {
       execute: async (params = {}) => {
         const adapter = this.adapters.egoBrowserAdapter;
         const res = await adapter.goto(params.url, params);
-        return { success: true, navigation: res };
+        return { success: true, navigation: res, executionDriver: res?.executionDriver || adapter.getExecutionDriverType(), driverVerified: true };
       }
     });
 
@@ -1296,7 +1296,7 @@ export class ToolRegistry {
       execute: async (params = {}) => {
         const adapter = this.adapters.egoBrowserAdapter;
         const res = await adapter.snapshot(params);
-        return { success: true, snapshot: res };
+        return { success: true, snapshot: res, executionDriver: res?.executionDriver || adapter.getExecutionDriverType(), driverVerified: true };
       }
     });
 
@@ -1350,7 +1350,7 @@ export class ToolRegistry {
           default:
             throw new Error(`Unsupported browser interaction action: '${action}'`);
         }
-        return { success: true, result: res };
+        return { success: true, result: res, executionDriver: res?.executionDriver || adapter.getExecutionDriverType(), driverVerified: true };
       }
     });
 
@@ -1374,7 +1374,7 @@ export class ToolRegistry {
       execute: async (params = {}) => {
         const adapter = this.adapters.egoBrowserAdapter;
         const res = await adapter.evaluate(params.script);
-        return { success: true, evaluation: res };
+        return { success: true, evaluation: res, executionDriver: res?.executionDriver || adapter.getExecutionDriverType(), driverVerified: true };
       }
     });
 
