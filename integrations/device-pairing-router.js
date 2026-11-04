@@ -192,7 +192,7 @@ export function createDevicePairingRouter({
   async function requirePairedDevice(req, res, next) {
     const headerToken = req.headers["x-device-token"];
     const authHeader = req.headers.authorization;
-    const bearerToken = typeof authHeader === "string" && /^Bearer\\s+/i.test(authHeader)
+    const bearerToken = typeof authHeader === "string" && /^Bearer\s+/i.test(authHeader)
       ? authHeader.replace(/^Bearer\\s+/i, "").trim()
       : "";
     const token = typeof headerToken === "string" && headerToken.trim() ? headerToken.trim() : bearerToken;
