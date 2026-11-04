@@ -114,7 +114,8 @@ export async function resolveHexStrikeScanTarget(target, scanRoot) {
     throw Object.assign(new Error("Scan target must be a relative path beneath HEXSTRIKE_SCAN_ROOT."), { code: "INVALID_SCAN_TARGET" });
   }
   const segments = requested.replace(/\\/g, "/").split("/");
-  if (segments.some(segment => segment === ".." || segment === "")) {
+  if (!/^[A-Za-z0-9._/-]+$/.test(requested.replace(/\\/g, "/")) ||
+      segments.some(segment => segment === ".." || segment === "")) {
     throw Object.assign(new Error("Scan target path traversal is not allowed."), { code: "INVALID_SCAN_TARGET" });
   }
   if (!scanRoot || !path.isAbsolute(scanRoot)) {
@@ -122,6 +123,9 @@ export async function resolveHexStrikeScanTarget(target, scanRoot) {
   }
 
   const root = await fs.realpath(scanRoot);
+  if (!/^[A-Za-z0-9._:/\\-]+$/.test(root)) {
+    throw Object.assign(new Error("HEXSTRIKE_SCAN_ROOT contains shell-unsafe path characters."), { code: "SCAN_ROOT_UNSAFE" });
+  }
   const resolved = await fs.realpath(path.resolve(root, requested));
   const relative = path.relative(root, resolved);
   if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
