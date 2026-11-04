@@ -27,6 +27,7 @@ const CATEGORY_TOOLS = Object.freeze({
   ],
   desktop: ["check_desktop_companion"],
   productivity: [
+    "appflowy_list_workspaces", "appflowy_get_document",
     "chatwoot_list_conversations", "openproject_list_projects",
     "openproject_list_work_packages", "caldiy_list_event_types",
     "caldiy_check_availability"
@@ -46,6 +47,7 @@ const CATEGORY_TOOLS = Object.freeze({
   cactus: ["check_cactus"],
   comfyui: ["check_comfyui", "run_comfyui_workflow"],
   media: [
+    "immich_check_status", "immich_list_albums", "immich_search_assets",
     "create_youtube_production_plan", "check_comfyui", "run_comfyui_workflow",
     "create_talking_avatar", "design_speech_voice", "synthesize_speech"
   ]
@@ -65,7 +67,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
   ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
   ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
-  ["productivity", /\b(?:chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
+  ["productivity", /\b(?:appflowy|app flowy|chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
   ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
   ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|we (?:decided|agreed|chose)|decision noted|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
   ["open_seo", /\b(?:open\s*seo|openseo)\b/i],
@@ -74,7 +76,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["integrations", /\b(?:integration status|check integrations|what integrations|connected services|capability status|provider status|list capabilities|which tools are available|tools available for|connector readiness|repository readiness)\b/i],
   ["planning", /\b(?:plan (?:my|the|a|an)|create a plan|multi[- ]step task|schedule (?:a|an|the) (?:task|employee|routine)|background task|enqueue task|queue (?:a |the |this )?(?:background )?(?:research |review |report |task|employee)|queue .*\b(?:background|research|review|report|task)\b|\b(?:background|queue|enqueue)\b.{0,80}\b(?:task|report|research|review|employee)\b|run this in the background)\b/i],
   ["browser", /\b(?:obscura|public web page snapshot|capture this public page)\b/i],
-  ["media", /\b(?:talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
+  ["media", /\b(?:immich|photo library|video library|search my photos|search my videos|albums?|talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
 ]);
 
 const COMPLEX_PATTERN = /\b(?:then|after that|step by step|multi[- ]step|end to end|from scratch|complete project|across multiple|and also|and then|first .* then|workflow|autonomously|queue (?:a |the |an )?(?:task|report|research))\b/i;
