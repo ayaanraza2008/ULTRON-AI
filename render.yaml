@@ -80,6 +80,9 @@ services:
       # Dedicated AES-GCM key for the Supabase-backed paired-device registry.
       - key: ULTRON_DEVICE_SIGNING_SECRET
         generateValue: true
+      # Optional operator reset credential; without it, emergency-stop reset fails closed.
+      - key: ULTRON_OPERATOR_MASTER_KEY
+        sync: false
       - key: ULTRON_BROWSER_USE_URL
         value: https://ultron-browser-use-core.onrender.com
       # The browser bridge imports this same backend token with fromService below.
