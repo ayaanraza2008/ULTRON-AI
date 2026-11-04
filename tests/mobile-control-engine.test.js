@@ -97,6 +97,7 @@ test("MobileControlEngine: initializes lifecycle and discovers devices", async (
   assert.equal(initRes.initialized, true);
   assert.equal(initRes.devicesCount, 1);
   assert.equal(initRes.activeDevice.id, "emulator-5554");
+  assert.equal(permissions.deviceAuthorizations.size, 0, "Discovery must not silently authorize a device.");
 
   const status = await engine.getStatus();
   assert.equal(status.initialized, true);
@@ -121,13 +122,14 @@ test("MobileControlEngine: executes single action with pre/post state capture", 
   });
 
   await engine.initialize();
+  engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
-  // Execute tap
+  // Execute tap only after explicit owner authorization.
   const tapRes = await engine.executeAction("mobile_click_on_screen_at_coordinates", {
     device: "emulator-5554",
     x: 500,
     y: 800
-  });
+  }, { userId: "test-owner" });
 
   assert.equal(tapRes.success, true);
   assert.ok(tapRes.verification);
@@ -154,6 +156,7 @@ test("MobileControlEngine: executes multi-step workflow with cancellation suppor
   });
 
   await engine.initialize();
+  engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   const plan = {
     id: "wf-test-1",
@@ -163,7 +166,7 @@ test("MobileControlEngine: executes multi-step workflow with cancellation suppor
     ]
   };
 
-  const wfResult = await engine.executeWorkflow(plan, { deviceId: "emulator-5554" });
+  const wfResult = await engine.executeWorkflow(plan, { deviceId: "emulator-5554", userId: "test-owner" });
   assert.equal(wfResult.success, true);
   assert.equal(wfResult.totalSteps, 2);
   assert.equal(wfResult.stepResults.length, 2);
