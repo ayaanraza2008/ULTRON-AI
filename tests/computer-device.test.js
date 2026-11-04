@@ -117,7 +117,8 @@ test("Device Hub: pairing workflow, telemetry, and notifications", () => {
     title: "JARVIS Task Complete",
     body: "System integrity scan finished with zero defects."
   });
-  assert.equal(notif.delivered, true);
+  assert.equal(notif.delivered, false);
+  assert.equal(notif.deliveryStatus, "NOT_DISPATCHED");
   assert.equal(hub.getNotifications().length, 1);
 });
 
