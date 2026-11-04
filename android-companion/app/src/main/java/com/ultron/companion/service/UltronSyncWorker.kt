@@ -28,7 +28,10 @@ class UltronSyncWorker(
             }
             val level: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
             val scale: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-            val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else 100
+            if (level < 0 || scale <= 0) {
+                return Result.retry()
+            }
+            val batteryPct = (level * 100 / scale).coerceIn(0, 100)
             val status: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
             val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == BatteryManager.BATTERY_STATUS_FULL
