@@ -141,7 +141,7 @@ test("Immich connector is owner-bound and returns only bounded metadata", async 
     }
   });
 
-  await assert.rejects(() => connector.listAlbums("different-user"), /OWNER|ACCESS_DENIED/);
+  await assert.rejects(() => connector.listAlbums("different-user"), /owner|access denied/i);
   const status = await connector.checkServerStatus(ownerId);
   assert.equal(status.online, true);
   const albums = await connector.listAlbums(ownerId, { limit: 1 });
