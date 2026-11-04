@@ -45,7 +45,7 @@ create table if not exists public.pending_device_pairings (
   approved boolean not null default false,
   approved_by uuid references auth.users(id) on delete cascade,
   device_id uuid,
-  token_hash text,
+  token_hash text check (token_hash is null or token_hash ~ '^[a-f0-9]{64}$'),
   token_prefix text,
   encrypted_token text,
   created_at timestamptz not null default now(),
@@ -94,15 +94,15 @@ begin
 
   select *
     into pairing
-    from public.pending_device_pairings
-   where code = p_code
-     and approved = true
-     and approved_by is not null
-     and device_id is not null
-     and token_hash is not null
-     and token_prefix is not null
-     and encrypted_token is not null
-     and expires_at > now()
+    from public.pending_device_pairings pd
+   where pd.code = p_code
+     and pd.approved = true
+     and pd.approved_by is not null
+     and pd.device_id is not null
+     and pd.token_hash is not null
+     and pd.token_prefix is not null
+     and pd.encrypted_token is not null
+     and pd.expires_at > now()
    for update;
 
   if not found then

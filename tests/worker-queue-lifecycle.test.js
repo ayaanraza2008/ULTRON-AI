@@ -18,10 +18,13 @@ import crypto from "node:crypto";
 import { DisposablePgHarness, TEST_USERS } from "./helpers/disposable-pg-harness.js";
 
 test("Real PostgreSQL: Worker Task Lifecycle & Queue Recovery", async (t) => {
-  const harness = new DisposablePgHarness();
+  const harness = new DisposablePgHarness({ suiteName: "worker" });
   const availability = await harness.checkAvailability();
 
   if (!availability.available) {
+    if (process.env.CI === "true") {
+      assert.fail(`CRITICAL CI FAILURE: Real disposable PostgreSQL is required in CI environment, but check failed: ${availability.reason}`);
+    }
     t.skip(`Real PostgreSQL database is not available on host: ${availability.reason} (runs automatically in Docker/CI environment)`);
     return;
   }

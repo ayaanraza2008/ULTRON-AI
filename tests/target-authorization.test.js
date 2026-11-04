@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TargetAuthorizationGateway, PERMITTED_ACTIVITIES, TARGET_TYPES } from "../security/target-authorization-gateway.js";
+import { UltronGuardian } from "../security/ultron-guardian.js";
 
 test("Target Authorization: Default local lab scope is seeded and active", () => {
   const gateway = new TargetAuthorizationGateway();
@@ -82,7 +83,8 @@ test("Target Authorization: Blocks non-permitted activity with ACTIVITY_NOT_PERM
 });
 
 test("Target Authorization: Emergency stop halts all security testing", () => {
-  const gateway = new TargetAuthorizationGateway();
+  const guardian = new UltronGuardian({ masterKey: "test-operator-master-key-at-least-32-chars" });
+  const gateway = new TargetAuthorizationGateway({ guardian });
 
   // Engage emergency stop
   gateway.engageEmergencyStop("Operator flagged anomalous traffic");
@@ -97,10 +99,59 @@ test("Target Authorization: Emergency stop halts all security testing", () => {
   // Disengage requires master key
   assert.throws(
     () => gateway.disengageEmergencyStop("wrong-key"),
-    /Invalid operator master authorization key/
+    /Invalid or unconfigured operator authorization key/
   );
 
-  const resume = gateway.disengageEmergencyStop("ULTRON_OPERATOR_MASTER_KEY_SECRET");
+  const resume = gateway.disengageEmergencyStop("test-operator-master-key-at-least-32-chars");
   assert.equal(resume.success, true);
   assert.equal(gateway.emergencyStopEngaged, false);
+});
+
+
+test("Target Authorization: URL host matching rejects deceptive suffix and substring hosts", () => {
+  const gateway = new TargetAuthorizationGateway();
+  gateway.registerScope({
+    organization: "Scoped Example",
+    targets: ["example.test"],
+    permittedActivities: [PERMITTED_ACTIVITIES.PASSIVE_RECON],
+    ownerApproved: true,
+    authorizationProof: "PROOF-HOST-BOUNDARY"
+  });
+
+  assert.equal(gateway.assertAuthorization("https://api.example.test/login").authorized, true);
+  assert.throws(() => gateway.assertAuthorization("https://example.test.attacker.invalid/"), /TARGET_OUT_OF_SCOPE/);
+  assert.throws(() => gateway.assertAuthorization("https://notexample.test/"), /TARGET_OUT_OF_SCOPE/);
+});
+
+test("Target Authorization: excluded endpoints and future authorization windows fail closed", () => {
+  const gateway = new TargetAuthorizationGateway();
+  const scope = gateway.registerScope({
+    organization: "Endpoint Scoped Lab",
+    targets: ["https://scope.example.test"],
+    excludedEndpoints: ["/api/admin", "/internal/secret"],
+    permittedActivities: [PERMITTED_ACTIVITIES.PASSIVE_RECON],
+    ownerApproved: true,
+    authorizationProof: "PROOF-EXCLUDED-ENDPOINT"
+  });
+
+  assert.equal(gateway.assertAuthorization("https://scope.example.test/api/public").authorized, true);
+  assert.throws(() => gateway.assertAuthorization("https://scope.example.test/api/admin/delete"), /ENDPOINT_EXCLUDED/);
+  scope.validFrom = new Date(Date.now() + 60_000).toISOString();
+  assert.throws(() => gateway.assertAuthorization("https://scope.example.test/api/public"), /TARGET_OUT_OF_SCOPE/);
+  assert.equal(gateway.listScopes().find(item => item.scopeId === scope.scopeId).isActive, false);
+});
+
+test("Target Authorization: enforces the per-scope sliding-window request limit", () => {
+  const gateway = new TargetAuthorizationGateway();
+  gateway.registerScope({
+    organization: "Rate Limited Lab",
+    targets: ["rate-limited.example.test"],
+    allowedRateLimit: 1,
+    permittedActivities: [PERMITTED_ACTIVITIES.PASSIVE_RECON],
+    ownerApproved: true,
+    authorizationProof: "PROOF-RATE-LIMIT"
+  });
+
+  assert.equal(gateway.assertAuthorization("rate-limited.example.test").authorized, true);
+  assert.throws(() => gateway.assertAuthorization("rate-limited.example.test"), /RATE_LIMIT_EXCEEDED/);
 });

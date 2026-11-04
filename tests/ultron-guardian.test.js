@@ -75,7 +75,8 @@ test("UltronGuardian: sandboxed code execution enforces safe evaluation and limi
 });
 
 test("UltronGuardian: latching Emergency Stop revokes tokens and enforces shutdown", () => {
-  const guardian = new UltronGuardian({ masterKey: "MY_SECRET_KEY" });
+  const operatorKey = "guardian-test-operator-key-at-least-32-characters";
+  const guardian = new UltronGuardian({ masterKey: operatorKey });
   const token = guardian.issueCapabilityToken("actor-1", [PERMISSION_SCOPES.ADMIN_CONTROL]);
 
   guardian.engageEmergencyStop("Unauthorized elevation detected");
@@ -89,10 +90,23 @@ test("UltronGuardian: latching Emergency Stop revokes tokens and enforces shutdo
   // Disengage with wrong key fails
   assert.throws(() => {
     guardian.disengageEmergencyStop("wrong_key");
-  }, /Invalid operator key/);
+  }, /Invalid or unconfigured operator key/);
 
   // Disengage with valid key restores
-  const restoreRes = guardian.disengageEmergencyStop("MY_SECRET_KEY");
+  const restoreRes = guardian.disengageEmergencyStop(operatorKey);
   assert.equal(restoreRes.latched, false);
   assert.equal(guardian.emergencyStopLatched, false);
+});
+
+
+test("UltronGuardian: emergency stop fails closed without a configured operator key", () => {
+  const guardian = new UltronGuardian();
+  const token = guardian.issueCapabilityToken("actor", [PERMISSION_SCOPES.READ_ONLY]);
+  const stopped = guardian.engageEmergencyStop("test");
+  assert.equal(stopped.revokedTokensCount, 1);
+  assert.equal(guardian.activeCapabilityTokens.size, 0);
+  assert.throws(() => guardian.disengageEmergencyStop("ULTRON_OPERATOR_MASTER_KEY_SECRET"), /Invalid or unconfigured operator key/);
+  assert.throws(() => guardian.disengageEmergencyStop("OVERRIDE_AUTH_KEY_2026"), /Invalid or unconfigured operator key/);
+  assert.equal(guardian.emergencyStopLatched, true);
+  assert.notEqual(token, "");
 });

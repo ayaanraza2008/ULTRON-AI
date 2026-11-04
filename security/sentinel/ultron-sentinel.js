@@ -102,7 +102,7 @@ export class UltronSentinel {
   /**
    * Resume operations from emergency stop.
    */
-  emergencyResume(operatorKey = "ULTRON_OPERATOR_MASTER_KEY_SECRET") {
+  emergencyResume(operatorKey) {
     this.authGateway.disengageEmergencyStop(operatorKey);
     return {
       success: true,

@@ -10,6 +10,7 @@
  */
 
 import crypto from "node:crypto";
+import path from "node:path";
 import { ultronGuardian, PERMISSION_SCOPES } from "./ultron-guardian.js";
 
 export const PERMITTED_ACTIVITIES = {
@@ -23,6 +24,97 @@ export const PERMITTED_ACTIVITIES = {
   INCIDENT_INVESTIGATION: "INCIDENT_INVESTIGATION",
   REMEDIATION_PATCH: "REMEDIATION_PATCH"
 };
+
+
+
+function normalizeUrlPath(value = "/") {
+  let decoded = String(value || "/");
+  try { decoded = decodeURIComponent(decoded); } catch {}
+  const normalized = path.posix.normalize("/" + decoded.replace(/\\/g, "/").replace(/^\/+/, ""));
+  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : "/";
+}
+
+function isFilesystemTarget(value) {
+  return value.startsWith("/") || value.startsWith("./") || value.startsWith("../") || /^[a-z]:[\\/]/i.test(value);
+}
+
+function normalizeFilesystemTarget(value) {
+  if (/^[a-z]:[\\/]/i.test(value)) {
+    return path.win32.normalize(value).replace(/\\/g, "/").toLowerCase();
+  }
+  return path.resolve(value).replace(/\\/g, "/").toLowerCase();
+}
+
+function parseAuthorizedTarget(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return { kind: "invalid" };
+
+  if (raw.startsWith("memory://")) {
+    return { kind: "scheme", scheme: "memory:", value: raw };
+  }
+  if (isFilesystemTarget(raw)) {
+    return { kind: "path", value: normalizeFilesystemTarget(raw) };
+  }
+
+  const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
+  const urlInput = hasExplicitScheme
+    ? raw
+    : raw === "::1"
+      ? "http://[::1]"
+      : "http://" + raw;
+  try {
+    const parsed = new URL(urlInput);
+    if (!parsed.hostname) return { kind: "opaque", value: raw };
+    return {
+      kind: "host",
+      hostname: parsed.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, ""),
+      port: parsed.port || "",
+      protocol: hasExplicitScheme ? parsed.protocol : "",
+      pathname: normalizeUrlPath(parsed.pathname)
+    };
+  } catch {
+    return { kind: "opaque", value: raw };
+  }
+}
+
+function isWithinPath(targetPath, scopePath) {
+  return targetPath === scopePath || targetPath.startsWith(scopePath === "/" ? "/" : scopePath + "/");
+}
+
+function targetMatches(scopeTarget, requestedTarget) {
+  const scope = parseAuthorizedTarget(scopeTarget);
+  const requested = parseAuthorizedTarget(requestedTarget);
+  if (scope.kind !== requested.kind) return false;
+
+  if (scope.kind === "path") return isWithinPath(requested.value, scope.value);
+  if (scope.kind === "scheme") {
+    if (scope.value === "memory://") return requested.value.startsWith("memory://");
+    return requested.value === scope.value || requested.value.startsWith(scope.value.replace(/\/+$/, "") + "/");
+  }
+  if (scope.kind === "opaque") return scope.value === requested.value;
+  if (scope.kind !== "host") return false;
+
+  const hostMatches = requested.hostname === scope.hostname || requested.hostname.endsWith("." + scope.hostname);
+  if (!hostMatches) return false;
+  if (scope.port && requested.port !== scope.port) return false;
+  if (scope.protocol && requested.protocol !== scope.protocol) return false;
+  return scope.pathname === "/" || isWithinPath(requested.pathname, scope.pathname);
+}
+
+function endpointIsExcluded(target, excludedEndpoints = []) {
+  const requested = parseAuthorizedTarget(target);
+  const requestedPath = requested.kind === "host" ? requested.pathname : null;
+  if (!requestedPath) return false;
+
+  return excludedEndpoints.some(endpoint => {
+    const raw = String(endpoint || "").trim().toLowerCase();
+    if (!raw) return false;
+    const excludedPath = raw.startsWith("/")
+      ? normalizeUrlPath(raw)
+      : parseAuthorizedTarget(raw).pathname;
+    return Boolean(excludedPath && isWithinPath(requestedPath, excludedPath));
+  });
+}
 
 export const TARGET_TYPES = {
   LOCAL_LAB: "LOCAL_LAB",
@@ -39,7 +131,8 @@ export class TargetAuthorizationGateway {
     this.guardian = options.guardian || ultronGuardian;
     this.activeScopes = new Map();
     this.emergencyStopEngaged = false;
-    this.defaultRateLimit = 5; // Max 5 req/sec default to avoid service disruption
+    this.defaultRateLimit = 5; // Max 5 requests per second default to avoid service disruption
+    this.rateLimitWindows = new Map();
 
     // Seed default authorized local security laboratory scope
     this._seedDefaultLocalLabScope();
@@ -159,22 +252,13 @@ export class TargetAuthorizationGateway {
     let matchingScope = null;
 
     for (const scope of this.activeScopes.values()) {
-      // Check expiration
-      if (now > new Date(scope.validUntil).getTime()) {
+      const validFrom = Date.parse(scope.validFrom || "");
+      const validUntil = Date.parse(scope.validUntil || "");
+      if (!Number.isFinite(validFrom) || !Number.isFinite(validUntil) || now < validFrom || now > validUntil) {
         continue;
       }
 
-      // Check target match (exact or subdomain/suffix)
-      const matchesTarget = scope.targets.some(t => {
-        if (cleanTarget === t) return true;
-        if (cleanTarget.endsWith("." + t) || cleanTarget.startsWith(t + "/") || cleanTarget.includes("://" + t)) return true;
-        // Local path match
-        if (t.startsWith("./") || t.startsWith("/") || t.includes("\\")) {
-          return cleanTarget.startsWith(t);
-        }
-        return false;
-      });
-
+      const matchesTarget = scope.targets.some(scopeTarget => targetMatches(scopeTarget, cleanTarget));
       if (matchesTarget) {
         matchingScope = scope;
         break;
@@ -190,6 +274,16 @@ export class TargetAuthorizationGateway {
       throw new Error(`TARGET_OUT_OF_SCOPE: Target '${cleanTarget}' is not registered under any valid authorized scope.`);
     }
 
+    // Excluded route prefixes override an otherwise matching hostname/path scope.
+    if (endpointIsExcluded(cleanTarget, matchingScope.excludedEndpoints)) {
+      this.guardian.recordAudit("SECURITY_ENDPOINT_BLOCKED", matchingScope.owner, {
+        target: cleanTarget,
+        scopeId: matchingScope.scopeId,
+        reason: "ENDPOINT_EXCLUDED"
+      });
+      throw new Error("ENDPOINT_EXCLUDED: Target endpoint is explicitly excluded from this authorization scope.");
+    }
+
     // Verify activity permission
     if (!matchingScope.permittedActivities.includes(requestedActivity)) {
       this.guardian.recordAudit("SECURITY_ACTIVITY_BLOCKED", matchingScope.owner, {
@@ -200,6 +294,21 @@ export class TargetAuthorizationGateway {
       });
       throw new Error(`ACTIVITY_NOT_PERMITTED: Activity '${requestedActivity}' is not authorized under scope '${matchingScope.scopeId}'. Permitted: [${matchingScope.permittedActivities.join(", ")}].`);
     }
+
+    // Enforce the per-scope sliding-window request ceiling.
+    const windowStart = now - 1000;
+    const recentRequests = (this.rateLimitWindows.get(matchingScope.scopeId) || []).filter(timestamp => timestamp > windowStart);
+    if (recentRequests.length >= matchingScope.allowedRateLimit) {
+      this.rateLimitWindows.set(matchingScope.scopeId, recentRequests);
+      this.guardian.recordAudit("SECURITY_RATE_LIMITED", matchingScope.owner, {
+        target: cleanTarget,
+        scopeId: matchingScope.scopeId,
+        allowedRateLimit: matchingScope.allowedRateLimit
+      });
+      throw new Error("RATE_LIMIT_EXCEEDED: The authorized scope request rate limit has been reached.");
+    }
+    recentRequests.push(now);
+    this.rateLimitWindows.set(matchingScope.scopeId, recentRequests);
 
     return {
       authorized: true,
@@ -238,7 +347,7 @@ export class TargetAuthorizationGateway {
     return Array.from(this.activeScopes.values()).map(s => ({
       ...s,
       isExpired: now > new Date(s.validUntil).getTime(),
-      isActive: now <= new Date(s.validUntil).getTime() && !this.emergencyStopEngaged
+      isActive: now >= new Date(s.validFrom).getTime() && now <= new Date(s.validUntil).getTime() && !this.emergencyStopEngaged
     }));
   }
 
@@ -255,8 +364,11 @@ export class TargetAuthorizationGateway {
    * Disengage Emergency Stop with operator verification.
    */
   disengageEmergencyStop(operatorKey) {
-    if (operatorKey !== "ULTRON_OPERATOR_MASTER_KEY_SECRET") {
-      throw new Error("EMERGENCY_STOP_CLEAR_FAILED: Invalid operator master authorization key.");
+    if (typeof this.guardian.verifyOperatorKey !== "function" || !this.guardian.verifyOperatorKey(operatorKey)) {
+      throw new Error("EMERGENCY_STOP_CLEAR_FAILED: Invalid or unconfigured operator authorization key.");
+    }
+    if (this.guardian.emergencyStopLatched) {
+      this.guardian.disengageEmergencyStop(operatorKey);
     }
     this.emergencyStopEngaged = false;
     this.guardian.recordAudit("CYBER_EMERGENCY_STOP_DISENGAGED", "operator");

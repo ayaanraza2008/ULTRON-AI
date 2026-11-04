@@ -30,7 +30,10 @@ export class UltronGuardian {
     this.activeCapabilityTokens = new Map();
     this.auditLogChain = [];
     this.lastBlockHash = "0000000000000000000000000000000000000000000000000000000000000000";
-    this.operatorMasterKey = options.masterKey || "ULTRON_OPERATOR_MASTER_KEY_SECRET";
+    const configuredMasterKey = options.masterKey ?? process.env.ULTRON_OPERATOR_MASTER_KEY ?? "";
+    this.operatorMasterKey = typeof configuredMasterKey === "string" && configuredMasterKey.length >= 32
+      ? configuredMasterKey
+      : "";
   }
 
   /**
@@ -186,23 +189,35 @@ export class UltronGuardian {
   }
 
   /**
+   * Constant-time verification for the separately configured operator reset key.
+   * No source-controlled fallback exists. Environment keys must be at least 32 characters.
+   */
+  verifyOperatorKey(operatorKey) {
+    const expected = Buffer.from(String(this.operatorMasterKey || ""), "utf8");
+    const provided = Buffer.from(String(operatorKey || ""), "utf8");
+    if (!expected.length || expected.length !== provided.length) return false;
+    return crypto.timingSafeEqual(expected, provided);
+  }
+
+  /**
    * Latching Emergency Stop
    */
   engageEmergencyStop(reason = "Manual Operator Emergency Stop") {
     this.emergencyStopLatched = true;
+    const revokedTokensCount = this.activeCapabilityTokens.size;
     this.activeCapabilityTokens.clear(); // Immediately revoke all issued tokens
     const block = this.recordAudit("ENGAGE_EMERGENCY_STOP", "OPERATOR", { reason });
     return {
       latched: true,
       reason,
-      revokedTokensCount: this.activeCapabilityTokens.size,
+      revokedTokensCount,
       auditHash: block.currentHash
     };
   }
 
   disengageEmergencyStop(operatorKey) {
-    if (operatorKey !== this.operatorMasterKey && operatorKey !== "OVERRIDE_AUTH_KEY_2026") {
-      throw new Error("Invalid operator key. Cannot disengage Emergency Stop.");
+    if (!this.verifyOperatorKey(operatorKey)) {
+      throw new Error("Invalid or unconfigured operator key. Cannot disengage Emergency Stop.");
     }
     this.emergencyStopLatched = false;
     this.recordAudit("DISENGAGE_EMERGENCY_STOP", "OPERATOR", { status: "RESTORED" });

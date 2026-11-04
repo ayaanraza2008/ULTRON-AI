@@ -27,7 +27,7 @@ import { humanInterface } from "./intelligence/human-interface.js";
 import { ultronSelfEvolutionEngine } from "./self-improvement/self-evolution-engine.js";
 import crypto from "node:crypto";
 import { operatorAuthorizationService } from "./security/operator-authorization.js";
-import { deviceHub } from "./integrations/device-hub.js";
+import { deviceHub, APPROVED_REMOTE_ACTIONS, APPROVED_REMOTE_APPS } from "./integrations/device-hub.js";
 import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
 import { deviceNetworkingManager } from "./integrations/device-networking.js";
 import { toolRegistry } from "./core/tool-registry.js";
@@ -135,7 +135,14 @@ export function createJarvisRouter({
           ? await authenticateDeviceToken(deviceToken)
           : null;
         if (pairedDevice) {
-          req.device = pairedDevice;
+          const hydratedDevice = deviceHubInstance.importPairedDevice({
+            ...pairedDevice,
+            authToken: deviceToken
+          });
+          if (!hydratedDevice) {
+            return res.status(401).json({ error: { code: "INVALID_DEVICE_IDENTITY", message: "The verified device could not be loaded into the command runtime." } });
+          }
+          req.device = hydratedDevice;
           return next();
         }
       } catch (error) {
@@ -155,7 +162,13 @@ export function createJarvisRouter({
       // A single static desktop token is retained only as an explicit legacy
       // migration path. New devices must use the per-device stored token hash.
       if (env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN) {
-        req.device = { id: "legacy-companion-device", name: "Legacy Companion", authToken: deviceToken };
+        req.device = deviceHubInstance.importPairedDevice({
+          id: "legacy-companion-device",
+          ownerUserId,
+          name: "Legacy Companion",
+          platform: "windows",
+          authToken: deviceToken
+        }) || { id: "legacy-companion-device", name: "Legacy Companion", authToken: deviceToken };
         return next();
       }
       return res.status(401).json({
@@ -871,15 +884,30 @@ export function createJarvisRouter({
     });
 
     if (!outcome.success) {
-      const status = outcome.error === "TARGET_DEVICE_OFFLINE" ? 409 : outcome.error === "ACTION_NOT_APPROVED" ? 403 : 400;
+      const status = outcome.error === "TARGET_DEVICE_OFFLINE" ? 409
+        : ["ACTION_NOT_APPROVED", "ACCESS_DENIED_NOT_DEVICE_OWNER"].includes(outcome.error) ? 403 : 400;
       return res.status(status).json({ error: { code: outcome.error, message: outcome.message }, ...outcome });
     }
     res.json(outcome);
   });
 
-  router.post("/jarvis/devices/:id/heartbeat", express.json(), (req, res) => {
+  router.post("/jarvis/devices/my/heartbeat", authenticateOwnerOrDevice, express.json(), (req, res) => {
+    if (!req.device?.id || !req.device?.authToken) {
+      return res.status(401).json({ error: { code: "DEVICE_AUTHENTICATION_REQUIRED", message: "A verified paired device is required." } });
+    }
+    const outcome = deviceHubInstance.heartbeat(req.device.id, req.device.authToken, req.body || {});
+    if (!outcome.success) {
+      return res.status(401).json({ error: { code: outcome.error, message: "Heartbeat authentication failed." } });
+    }
+    res.json(outcome);
+  });
+
+  router.post("/jarvis/devices/:id/heartbeat", authenticateOwnerOrDevice, express.json(), (req, res) => {
     const deviceId = req.params.id;
-    const token = extractDeviceBearerToken(req);
+    if (!req.device?.id || req.device.id !== deviceId) {
+      return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only send its own heartbeat." } });
+    }
+    const token = req.device.authToken;
     if (!token) {
       return res.status(401).json({ error: { code: "DEVICE_TOKEN_REQUIRED", message: "Device bearer token required via header." } });
     }
@@ -891,6 +919,11 @@ export function createJarvisRouter({
   });
 
   router.get("/jarvis/devices/:id/presence", authenticateOwnerOrDevice, (req, res) => {
+    const requesterOwnerId = req.device?.ownerUserId || req.supabaseUser?.id;
+    const targetDevice = deviceHubInstance.pairedDevices.get(req.params.id);
+    if (!requesterOwnerId || !targetDevice || targetDevice.ownerUserId !== requesterOwnerId) {
+      return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found for this account." } });
+    }
     const presence = deviceHubInstance.getDevicePresence(req.params.id);
     if (!presence.exists) {
       return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
@@ -898,18 +931,19 @@ export function createJarvisRouter({
     res.json(presence);
   });
 
-  router.get("/jarvis/devices/:id/events", (req, res) => {
+  router.get("/jarvis/devices/:id/events", authenticateOwnerOrDevice, (req, res) => {
     const deviceId = req.params.id;
-    const token = extractDeviceBearerToken(req) || req.query.token;
-    if (!token) {
-      return res.status(401).json({ error: { code: "DEVICE_TOKEN_REQUIRED", message: "Device token required for real-time stream." } });
+    if (!req.device?.id || req.device.id !== deviceId) {
+      return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only subscribe to its own event stream." } });
     }
-    deviceWebSocketGateway.handleSseConnection(req, res, deviceId, token);
+    deviceWebSocketGateway.handleSseConnection(req, res, deviceId, req.device.authToken);
   });
 
   router.get("/jarvis/devices/tasks", authenticateOwnerOrDevice, (req, res) => {
+    const ownerId = req.device?.ownerUserId || req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner or paired device is required." } });
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
-    const tasks = deviceHubInstance.getSharedTasks(limit);
+    const tasks = deviceHubInstance.getSharedTasks(limit, { ownerUserId: ownerId });
     res.json({ success: true, count: tasks.length, tasks });
   });
 
@@ -921,12 +955,14 @@ export function createJarvisRouter({
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
   });
 
-  router.get("/jarvis/devices", requireOwner, (_req, res) => {
+  router.get("/jarvis/devices", requireOwner, (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
     }
-    const devices = deviceHubInstance.listPairedDevices();
+    const ownerId = req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
+    const devices = deviceHubInstance.listPairedDevices(ownerId);
     res.json({ devices, connected: devices.length > 0, status: devices.length > 0 ? "CONFIGURED" : "READY" });
   });
 
@@ -994,6 +1030,27 @@ export function createJarvisRouter({
         }
       });
     }
+    const normalizedAction = action.trim().toLowerCase();
+    if (!APPROVED_REMOTE_ACTIONS.has(normalizedAction)) {
+      return res.status(403).json({
+        error: {
+          code: "REMOTE_ACTION_NOT_APPROVED",
+          message: "The requested remote action is not in ULTRON's approved action set."
+        }
+      });
+    }
+    const safePayload = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    if (["launch_app", "close_app"].includes(normalizedAction)) {
+      const app = String(safePayload.app || safePayload.appKey || safePayload.name || "").trim().toLowerCase();
+      if (!APPROVED_REMOTE_APPS.has(app)) {
+        return res.status(403).json({
+          error: {
+            code: "REMOTE_APP_NOT_APPROVED",
+            message: "The requested application is not in ULTRON's approved application set."
+          }
+        });
+      }
+    }
     const device = deviceHubInstance.pairedDevices.get(deviceId);
     if (!device) {
       return res.status(404).json({
@@ -1011,7 +1068,7 @@ export function createJarvisRouter({
         }
       });
     }
-    const result = deviceHubInstance.enqueueCommand(deviceId, action, payload || {});
+    const result = deviceHubInstance.enqueueCommand(deviceId, normalizedAction, safePayload);
     if (!result.success) {
       return res.status(400).json({
         error: {
@@ -1023,9 +1080,12 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.get("/jarvis/devices/:id/commands/pending", (req, res) => {
+  router.get("/jarvis/devices/:id/commands/pending", authenticateOwnerOrDevice, (req, res) => {
     const deviceId = req.params.id;
-    const token = extractDeviceBearerToken(req);
+    const token = req.device?.authToken;
+    if (req.device?.id !== deviceId) {
+      return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only poll its own command queue." } });
+    }
     if (!token) {
       return res.status(401).json({
         error: {
@@ -1046,9 +1106,12 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.post("/jarvis/devices/:id/commands/:cmdId/complete", express.json(), (req, res) => {
+  router.post("/jarvis/devices/:id/commands/:cmdId/complete", authenticateOwnerOrDevice, express.json(), (req, res) => {
     const { id: deviceId, cmdId } = req.params;
-    const token = extractDeviceBearerToken(req);
+    const token = req.device?.authToken;
+    if (req.device?.id !== deviceId) {
+      return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only complete its own commands." } });
+    }
     if (!token) {
       return res.status(401).json({
         error: {
@@ -1070,9 +1133,12 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.post("/jarvis/devices/:id/telemetry", express.json(), (req, res) => {
+  router.post("/jarvis/devices/:id/telemetry", authenticateOwnerOrDevice, express.json(), (req, res) => {
     const deviceId = req.params.id;
-    const token = extractDeviceBearerToken(req);
+    const token = req.device?.authToken;
+    if (req.device?.id !== deviceId) {
+      return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only update its own telemetry." } });
+    }
     if (!token) {
       return res.status(401).json({
         error: {
@@ -1095,7 +1161,9 @@ export function createJarvisRouter({
   });
 
   router.post("/jarvis/notifications", requireOwner, express.json(), (req, res) => {
-    const devices = deviceHubInstance.listPairedDevices();
+    const ownerId = req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
+    const devices = deviceHubInstance.listPairedDevices(ownerId);
     if (!devices.length) {
       return res.status(503).json({
         error: {
@@ -1105,6 +1173,9 @@ export function createJarvisRouter({
       });
     }
     const { deviceId, title, body, priority, type } = req.body || {};
+    if (deviceId && !devices.some(device => device.id === deviceId)) {
+      return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found for this ULTRON account." } });
+    }
     if (!title || !body) {
       return res.status(400).json({
         error: {
@@ -1113,13 +1184,15 @@ export function createJarvisRouter({
         }
       });
     }
-    const notification = deviceHubInstance.sendNotification({ deviceId, title, body, priority, type });
+    const notification = deviceHubInstance.sendNotification({ ownerUserId: ownerId, deviceId, title, body, priority, type });
     res.json({ success: true, notification });
   });
 
   router.get("/jarvis/notifications", requireOwner, (req, res) => {
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
-    res.json({ success: true, notifications: deviceHubInstance.getNotifications(limit) });
+    const ownerId = req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
+    res.json({ success: true, notifications: deviceHubInstance.getNotifications(limit, { ownerUserId: ownerId }) });
   });
 
   // --- Smart Home ---

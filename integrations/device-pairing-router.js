@@ -1,6 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
+import { deviceHub as defaultDeviceHub } from "./device-hub.js";
 
 const ALLOWED_PLATFORMS = new Set(["windows", "android", "linux", "macos", "ios"]);
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -112,6 +113,7 @@ export function createDevicePairingRouter({
   env = process.env,
   fetchImpl = safePinnedFetch,
   requireSupabaseUser,
+  deviceHub: deviceHubInstance = defaultDeviceHub,
   logger = console
 } = {}) {
   if (typeof requireSupabaseUser !== "function") {
@@ -187,6 +189,32 @@ export function createDevicePairingRouter({
     next();
   }
 
+  async function requirePairedDevice(req, res, next) {
+    const headerToken = req.headers["x-device-token"];
+    const authHeader = req.headers.authorization;
+    const bearerToken = typeof authHeader === "string" && /^Bearer\s+/i.test(authHeader)
+      ? authHeader.replace(/^Bearer\\s+/i, "").trim()
+      : "";
+    const token = typeof headerToken === "string" && headerToken.trim() ? headerToken.trim() : bearerToken;
+    if (!token) {
+      return res.status(401).json({ error: { code: "DEVICE_TOKEN_REQUIRED", message: "A paired-device token is required." } });
+    }
+    try {
+      const verified = await verifyPairedDeviceToken({ token, env, fetchImpl, logger });
+      if (!verified) {
+        return res.status(401).json({ error: { code: "INVALID_DEVICE_TOKEN", message: "The device token is invalid, expired, or revoked." } });
+      }
+      const device = deviceHubInstance.importPairedDevice({ ...verified, authToken: token });
+      if (!device) {
+        return res.status(401).json({ error: { code: "INVALID_DEVICE_IDENTITY", message: "The paired device identity could not be loaded." } });
+      }
+      req.pairedDevice = device;
+      return next();
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: error.code || "DEVICE_AUTHENTICATION_FAILED", message: error.message || "Device authentication failed." } });
+    }
+  }
+
   router.get("/devices", requireSupabaseUser, async (req, res) => {
     if (!isUuid(req.supabaseUser?.id)) {
       return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Sign in to manage your paired devices." } });
@@ -200,6 +228,66 @@ export function createDevicePairingRouter({
       res.json({ devices: Array.isArray(rows) ? rows : [] });
     } catch (error) {
       res.status(error.status || 502).json({ error: { code: error.code || "DEVICE_LIST_FAILED", message: error.message } });
+    }
+  });
+
+  router.get("/devices/me", requirePairedDevice, async (req, res) => {
+    try {
+      const ownerId = req.pairedDevice.ownerUserId;
+      const rows = await databaseRequest(
+        "/rest/v1/paired_devices?select=id,device_name,platform,status,last_seen_at,paired_at,battery_percent,is_charging&owner_user_id=eq." +
+        encodeURIComponent(ownerId) + "&status=eq.active&order=paired_at.desc&limit=50"
+      );
+      const now = Date.now();
+      const devices = (Array.isArray(rows) ? rows : []).map(row => {
+        const lastSeen = Date.parse(row.last_seen_at || "");
+        return {
+          id: row.id,
+          name: row.device_name,
+          platform: row.platform,
+          status: row.status,
+          pairedAt: row.paired_at,
+          lastSeenAt: row.last_seen_at,
+          online: Number.isFinite(lastSeen) && now - lastSeen <= 60_000,
+          battery: typeof row.battery_percent === "number"
+            ? { percent: row.battery_percent, isCharging: Boolean(row.is_charging) }
+            : null
+        };
+      });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ deviceId: req.pairedDevice.id, devices });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: error.code || "DEVICE_STATUS_FAILED", message: error.message } });
+    }
+  });
+
+  router.post("/devices/me/heartbeat", requirePairedDevice, async (req, res) => {
+    try {
+      const device = req.pairedDevice;
+      const patch = { last_seen_at: new Date().toISOString() };
+      if (typeof req.body?.batteryPercent === "number" && Number.isFinite(req.body.batteryPercent)) {
+        patch.battery_percent = Math.max(0, Math.min(100, Math.round(req.body.batteryPercent)));
+      }
+      if (typeof req.body?.isCharging === "boolean") {
+        patch.is_charging = req.body.isCharging;
+      }
+      const rows = await databaseRequest(
+        "/rest/v1/paired_devices?id=eq." + encodeURIComponent(device.id) +
+        "&owner_user_id=eq." + encodeURIComponent(device.ownerUserId) +
+        "&status=eq.active&select=id,last_seen_at,battery_percent,is_charging",
+        { method: "PATCH", body: patch, prefer: "return=representation" }
+      );
+      if (!Array.isArray(rows) || !rows[0]?.id) {
+        return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "The paired device is no longer active." } });
+      }
+      deviceHubInstance.heartbeat(device.id, device.authToken, {
+        batteryPercent: patch.battery_percent,
+        isCharging: patch.is_charging
+      });
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ success: true, deviceId: device.id, lastSeenAt: rows[0].last_seen_at });
+    } catch (error) {
+      return res.status(error.status || 502).json({ error: { code: error.code || "DEVICE_HEARTBEAT_FAILED", message: error.message } });
     }
   });
 
@@ -369,7 +457,7 @@ export async function verifyPairedDeviceToken({ token, env = process.env, fetchI
     const rows = await readJsonLimited(response);
     if (!response.ok || !Array.isArray(rows) || !rows[0]?.id) return null;
     const row = rows[0];
-    return { id: row.id, ownerUserId: row.owner_user_id, name: row.device_name, platform: row.platform, status: row.status };
+    return { id: row.id, ownerUserId: row.owner_user_id, name: row.device_name, platform: row.platform, status: row.status, authToken: token };
   } catch (error) {
     logger.warn?.("Paired device token verification failed", { name: error?.name || "Error" });
     return null;

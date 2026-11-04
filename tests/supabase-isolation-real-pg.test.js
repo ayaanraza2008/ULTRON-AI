@@ -22,10 +22,13 @@ import { randomUUID } from "node:crypto";
 import { DisposablePgHarness, TEST_USERS } from "./helpers/disposable-pg-harness.js";
 
 test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) => {
-  const harness = new DisposablePgHarness();
+  const harness = new DisposablePgHarness({ suiteName: "rls" });
   const availability = await harness.checkAvailability();
 
   if (!availability.available) {
+    if (process.env.CI === "true") {
+      assert.fail(`CRITICAL CI FAILURE: Real disposable PostgreSQL is required in CI environment, but check failed: ${availability.reason}`);
+    }
     t.skip(`Real PostgreSQL database is not available on this host: ${availability.reason} (runs automatically in Docker/CI environment)`);
     return;
   }
@@ -170,8 +173,8 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
     });
 
     await t.test("5. User A CANNOT insert records with User B's identity (RLS 42501 rejection)", async () => {
+      // Attempting to insert a conversation forged with user_id = userB.id
       await harness.asRole("authenticated", userA.id, async (client) => {
-        // Attempting to insert a conversation forged with user_id = userB.id
         await assert.rejects(
           client.query(
             "INSERT INTO public.conversations (user_id, title) VALUES ($1, $2);",
@@ -183,8 +186,10 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
             return true;
           }
         );
+      });
 
-        // Attempting to insert a memory forged with user_id = userB.id
+      // Attempting to insert a memory forged with user_id = userB.id (separate transaction to avoid 25P02)
+      await harness.asRole("authenticated", userA.id, async (client) => {
         await assert.rejects(
           client.query(
             "INSERT INTO public.memory_items (user_id, kind, title, content) VALUES ($1, $2, $3, $4);",
@@ -224,19 +229,26 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
     });
 
     await t.test("7. Unauthenticated callers (anon role) are rejected", async () => {
+      // Reading conversations fails closed with 42501 (privileges revoked from anon)
       await harness.asRole("anon", null, async (client) => {
-        // Reading conversations: returns 0 rows (anon has no auth.uid())
-        const anonSelect = await client.query("SELECT * FROM public.conversations;");
-        assert.equal(anonSelect.rows.length, 0);
+        await assert.rejects(
+          client.query("SELECT * FROM public.conversations;"),
+          (err) => {
+            assert.ok(err.code === "42501" || /permission denied/i.test(err.message));
+            return true;
+          }
+        );
+      });
 
-        // Inserting without authentication fails
+      // Inserting without authentication fails closed with 42501
+      await harness.asRole("anon", null, async (client) => {
         await assert.rejects(
           client.query(
             "INSERT INTO public.conversations (user_id, title) VALUES ($1, $2);",
             [userA.id, "Anon forged"]
           ),
           (err) => {
-            assert.ok(err.code === "42501" || /violates row-level security policy/i.test(err.message));
+            assert.ok(err.code === "42501" || /permission denied|violates row-level security policy/i.test(err.message));
             return true;
           }
         );

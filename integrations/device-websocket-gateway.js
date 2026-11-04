@@ -12,6 +12,7 @@
 
 import crypto, { createHash } from "node:crypto";
 import { deviceHub as defaultDeviceHub } from "./device-hub.js";
+import { verifyPairedDeviceToken } from "./device-pairing-router.js";
 
 const WS_MAGIC_STRING = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const MAX_FRAME_PAYLOAD = 64 * 1024; // 64 KB safety limit per frame
@@ -101,6 +102,10 @@ export class DeviceWebSocketGateway {
   constructor(options = {}) {
     this.deviceHub = options.deviceHub || defaultDeviceHub;
     this.logger = options.logger || console;
+    this.authenticateDeviceToken = options.authenticateDeviceToken ||
+      (String(process.env.NODE_ENV || "").toLowerCase() === "production"
+        ? token => verifyPairedDeviceToken({ token, env: process.env, logger: this.logger })
+        : null);
     this.clients = new Map(); // deviceId -> ClientSession
     this.sseClients = new Map(); // deviceId -> Set(res)
     this.pingIntervalMs = options.pingIntervalMs || 30_000;
@@ -119,7 +124,10 @@ export class DeviceWebSocketGateway {
     this.attachedServer = server;
 
     this.upgradeHandler = (req, socket, head) => {
-      this.handleUpgrade(req, socket, head);
+      this.handleUpgrade(req, socket, head).catch(error => {
+        this.logger.warn?.("Device WebSocket authentication failed", { name: error?.name || "Error" });
+        try { socket.destroy(); } catch {}
+      });
     };
 
     server.on("upgrade", this.upgradeHandler);
@@ -149,9 +157,22 @@ export class DeviceWebSocketGateway {
   }
 
   /**
+   * Resolves a device through the durable registry if the server provides one.
+   * A failed durable lookup never falls back to an old process-local token.
+   */
+  async authenticateToken(token) {
+    if (typeof this.authenticateDeviceToken === "function") {
+      const verified = await this.authenticateDeviceToken(token);
+      if (!verified) return null;
+      return this.deviceHub.importPairedDevice({ ...verified, authToken: token });
+    }
+    return this.deviceHub.findDeviceByToken(token);
+  }
+
+  /**
    * Handles HTTP Upgrade request for WebSocket connection.
    */
-  handleUpgrade(req, socket, head) {
+  async handleUpgrade(req, socket, head) {
     const url = new URL(req.url, "http://localhost");
     const pathname = url.pathname;
 
@@ -176,7 +197,7 @@ export class DeviceWebSocketGateway {
 
     let device = null;
     if (token) {
-      device = this.deviceHub.findDeviceByToken(token);
+      device = await this.authenticateToken(token);
     }
 
     // Perform RFC 6455 Handshake
@@ -214,7 +235,7 @@ export class DeviceWebSocketGateway {
     }
 
     socket.on("data", chunk => {
-      this.handleSocketData(clientSession, chunk);
+      this.handleSocketData(clientSession, chunk).catch(() => socket.destroy());
     });
 
     socket.on("close", () => {
@@ -249,7 +270,7 @@ export class DeviceWebSocketGateway {
     }, this.pingIntervalMs);
 
     if (head && head.length > 0) {
-      this.handleSocketData(clientSession, head);
+      await this.handleSocketData(clientSession, head);
     }
   }
 
@@ -319,7 +340,7 @@ export class DeviceWebSocketGateway {
   /**
    * Processes incoming data chunks from a client socket.
    */
-  handleSocketData(clientSession, chunk) {
+  async handleSocketData(clientSession, chunk) {
     clientSession.buffer = Buffer.concat([clientSession.buffer, chunk]);
 
     while (clientSession.buffer.length > 0) {
@@ -357,7 +378,7 @@ export class DeviceWebSocketGateway {
       // Handle Text Frame (opcode 0x1)
       if (frame.opcode === 0x1) {
         const text = frame.payload.toString("utf8");
-        this.handleClientMessage(clientSession, text);
+        await this.handleClientMessage(clientSession, text);
       }
     }
   }
@@ -365,7 +386,7 @@ export class DeviceWebSocketGateway {
   /**
    * Handles incoming JSON messages from a companion client.
    */
-  handleClientMessage(clientSession, text) {
+  async handleClientMessage(clientSession, text) {
     let msg;
     try {
       msg = JSON.parse(text);
@@ -375,7 +396,7 @@ export class DeviceWebSocketGateway {
 
     // 1. Auth Message
     if (msg.type === "AUTH" && msg.token) {
-      const device = this.deviceHub.findDeviceByToken(msg.token);
+      const device = await this.authenticateToken(msg.token);
       if (!device) {
         this.sendFrame(clientSession.socket, { type: "AUTH_FAILED", error: "INVALID_DEVICE_TOKEN" });
         clientSession.socket.destroy();
@@ -472,6 +493,10 @@ export class DeviceWebSocketGateway {
    * Broadcasts presence changes to all connected owner devices.
    */
   broadcastPresence(deviceId, online) {
+    const sourceDevice = this.deviceHub.pairedDevices.get(deviceId);
+    const ownerUserId = sourceDevice?.ownerUserId;
+    if (!ownerUserId) return;
+
     const payload = {
       type: "DEVICE_PRESENCE",
       deviceId,
@@ -480,13 +505,14 @@ export class DeviceWebSocketGateway {
     };
 
     for (const [id, client] of this.clients.entries()) {
-      if (id !== deviceId) {
+      if (id !== deviceId && client.device?.ownerUserId === ownerUserId) {
         this.sendFrame(client.socket, payload);
       }
     }
 
     for (const [id, set] of this.sseClients.entries()) {
-      if (id !== deviceId) {
+      const subscriber = this.deviceHub.pairedDevices.get(id);
+      if (id !== deviceId && subscriber?.ownerUserId === ownerUserId) {
         for (const res of set) {
           try { res.write(`event: presence\ndata: ${JSON.stringify(payload)}\n\n`); } catch {}
         }
@@ -511,13 +537,21 @@ export class DeviceWebSocketGateway {
         status: event.status,
         result: event.result
       };
-      for (const client of this.clients.values()) {
-        this.sendFrame(client.socket, broadcastMsg);
+      const sourceDevice = this.deviceHub.pairedDevices.get(event.deviceId);
+      const ownerUserId = sourceDevice?.ownerUserId;
+      if (ownerUserId) {
+        for (const client of this.clients.values()) {
+          if (client.device?.ownerUserId === ownerUserId) {
+            this.sendFrame(client.socket, broadcastMsg);
+          }
+        }
       }
-    } else if (event.type === "MESSAGE" && event.message) {
+    } else if (event.type === "MESSAGE" && event.message?.ownerUserId) {
       const msgPayload = { type: "MESSAGE_SYNC", message: event.message };
       for (const client of this.clients.values()) {
-        this.sendFrame(client.socket, msgPayload);
+        if (client.device?.ownerUserId === event.message.ownerUserId) {
+          this.sendFrame(client.socket, msgPayload);
+        }
       }
     }
   }

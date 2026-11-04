@@ -50,10 +50,13 @@ test("paired-device rollback is explicitly DESTRUCTIVE and documents data loss",
 
 // Part 2: Real Database Execution & Functional Verification
 test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", async (t) => {
-  const harness = new DisposablePgHarness();
+  const harness = new DisposablePgHarness({ suiteName: "migration" });
   const availability = await harness.checkAvailability();
 
   if (!availability.available) {
+    if (process.env.CI === "true") {
+      assert.fail(`CRITICAL CI FAILURE: Real disposable PostgreSQL is required in CI environment, but check failed: ${availability.reason}`);
+    }
     t.skip(`Real PostgreSQL database is not available on host: ${availability.reason} (runs automatically in Docker/CI environment)`);
     return;
   }
@@ -134,10 +137,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
     });
 
     await t.test("3. Schema constraints: enforces 6-digit codes and 64-char hex SHA-256 token hashes", async () => {
-      await harness.asRole("service_role", null, async (client) => {
-        const validHash = crypto.createHash("sha256").update("sample-token").digest("hex");
+      const validHash = crypto.createHash("sha256").update("sample-token").digest("hex");
 
-        // Invalid code (not 6 digits, e.g. 5 digits or letters) fails check constraint
+      // Invalid code (not 6 digits, e.g. 5 digits or letters) fails check constraint
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query(`
             INSERT INTO public.pending_device_pairings (code, device_name, platform, token_hash)
@@ -148,8 +151,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
             return true;
           }
         );
+      });
 
-        // Invalid token_hash (not 64-hex) fails check constraint
+      // Invalid token_hash (not 64-hex) fails check constraint
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query(`
             INSERT INTO public.pending_device_pairings (code, device_name, platform, token_hash)
@@ -160,12 +165,14 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
             return true;
           }
         );
+      });
 
-        // Invalid platform (e.g. 'solaris') fails check constraint
+      // Invalid platform (e.g. 'solaris') fails check constraint
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query(`
             INSERT INTO public.pending_device_pairings (code, device_name, platform, token_hash)
-            VALUES ('654321', 'Bad Device', 'solaris', $1);
+            VALUES ('654322', 'Bad Device', 'solaris', $1);
           `, [validHash]),
           (err) => {
             assert.equal(err.code, "23514", "Check constraint must reject unapproved platform");
@@ -182,6 +189,7 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
       const tokenHash1 = crypto.createHash("sha256").update(token1).digest("hex");
       const tokenPrefix1 = token1.slice(0, 8);
 
+      // Part A: Register and successfully claim pending pairing
       await harness.asRole("service_role", null, async (client) => {
         // Insert pending challenge approved by User A
         await client.query(`
@@ -209,8 +217,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
         // Verify pairing code was atomically deleted from pending_device_pairings
         const pendingRes = await client.query("SELECT * FROM public.pending_device_pairings WHERE code = $1;", [code1]);
         assert.equal(pendingRes.rows.length, 0);
+      });
 
-        // Replay attack: calling claim again with same code MUST throw P0001
+      // Part B: Replay attack: calling claim again with same code MUST throw P0001 in isolated transaction
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query("SELECT * FROM public.claim_pending_device_pairing($1);", [code1]),
           (err) => {
@@ -219,8 +229,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
             return true;
           }
         );
+      });
 
-        // Expired pairing code test
+      // Part C: Expired pairing code rejection in isolated transaction
+      await harness.asRole("service_role", null, async (client) => {
         const expiredCode = "111222";
         await client.query(`
           INSERT INTO public.pending_device_pairings (
@@ -243,28 +255,26 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
     });
 
     await t.test("5. Destructive Rollback Execution & Schema Teardown Verification", async () => {
-      await harness.asRole("service_role", null, async (client) => {
-        // Execute the destructive rollback SQL
-        const rollbackSql = fs.readFileSync(rollbackPath, "utf8");
-        await client.query(rollbackSql);
+      // Execute the destructive rollback SQL using privileged connection (table owner)
+      const rollbackSql = fs.readFileSync(rollbackPath, "utf8");
+      await harness.query(rollbackSql);
 
-        // Verify both tables are dropped
-        const tablesRes = await client.query(`
-          SELECT tablename FROM pg_tables
-          WHERE schemaname = 'public' AND tablename IN ('paired_devices', 'pending_device_pairings');
-        `);
-        assert.equal(tablesRes.rows.length, 0, "All paired-device tables must be dropped by rollback");
+      // Verify both tables are dropped
+      const tablesRes = await harness.query(`
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public' AND tablename IN ('paired_devices', 'pending_device_pairings');
+      `);
+      assert.equal(tablesRes.rows.length, 0, "All paired-device tables must be dropped by rollback");
 
-        // Verify RPC function is dropped
-        const procRes = await client.query(`
-          SELECT proname FROM pg_proc WHERE proname = 'claim_pending_device_pairing';
-        `);
-        assert.equal(procRes.rows.length, 0, "claim_pending_device_pairing function must be dropped by rollback");
+      // Verify RPC function is dropped
+      const procRes = await harness.query(`
+        SELECT proname FROM pg_proc WHERE proname = 'claim_pending_device_pairing';
+      `);
+      assert.equal(procRes.rows.length, 0, "claim_pending_device_pairing function must be dropped by rollback");
 
-        // Re-apply migration so remaining tests have access to the tables
-        const migrationSql = fs.readFileSync(migrationPath, "utf8");
-        await client.query(migrationSql);
-      });
+      // Re-apply migration so remaining tests have access to the tables
+      const migrationSql = fs.readFileSync(migrationPath, "utf8");
+      await harness.query(migrationSql);
     });
 
   } finally {
