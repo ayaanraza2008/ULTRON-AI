@@ -13,6 +13,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { ByoxShellAstValidator } from "./byox-shell-ast-validator.js";
 import { constants as fsConstants } from "node:fs";
 
 const execAsync = promisify(exec);
@@ -50,6 +51,7 @@ export class WindowsComputerControl {
     this.emergencyStop = false;
     this.actionHistory = [];
     this._inMemoryClipboard = "";
+    this.astValidator = options.astValidator || new ByoxShellAstValidator();
   }
 
   async initialize() {
@@ -475,5 +477,12 @@ export class WindowsComputerControl {
         errorCode: "CLIPBOARD_READ_FAILED"
       };
     }
+  }
+
+  /**
+   * BYOX Tokenized AST validation for composite or parameterized commands.
+   */
+  validateCommandAst(commandStr) {
+    return this.astValidator.validateCommand(commandStr);
   }
 }

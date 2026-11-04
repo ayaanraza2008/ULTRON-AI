@@ -242,3 +242,19 @@ test("BrainRouter: classifies spatial 3D queries and injects spatial scene conte
   assert.ok(sentPayload.messages[0].content.includes("Active 3D Spatial World Model (Diorama)"));
   assert.ok(sentPayload.messages[0].content.includes("Desk at [0m, 0.4m, 2.4m]"));
 });
+
+
+test("BrainRouter: BYOX pure-CPU semantic intent classification and embedding", () => {
+  const router = new BrainRouter();
+  const emb = router.getSemanticEmbedding("open chromium browser and click link");
+  assert.equal(emb.length, 128);
+
+  const res = router.classifySemanticIntent("increase system volume please", [
+    { name: "BROWSER", description: "navigate to website or search internet" },
+    { name: "VOLUME", description: "increase speaker volume, audio, mute" },
+    { name: "CODE", description: "debug javascript or write python function" }
+  ]);
+
+  assert.equal(res.topIntent, "VOLUME");
+  assert.ok(res.confidence > 0.45);
+});

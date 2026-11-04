@@ -1,4 +1,5 @@
 import { ultronHEI } from "../intelligence/hei/index.js";
+import { ByoxTensorReasoner } from "./byox-tensor-reasoner.js";
 /**
  * ULTRON AI — Advanced Brain Router & Intelligence Engine
  *
@@ -37,6 +38,7 @@ export class BrainRouter {
     this.offlineMode = false;
     this.circuitBreakers = new Map();
     this.hei = options.hei || ultronHEI;
+    this.tensorReasoner = options.tensorReasoner || new ByoxTensorReasoner({ dimensions: 128 });
   }
 
   /**
@@ -441,6 +443,7 @@ if (this.env.CEREBRAS_API_KEY) {
       }
     }
 
+
     return {
       success: false,
       content: null,
@@ -449,5 +452,19 @@ if (this.env.CEREBRAS_API_KEY) {
       complexityTier: complexity.tier,
       chainAttempted: chain.map(p => p.name)
     };
+  }
+
+  /**
+   * Local zero-shot semantic intent classification via pure-CPU tensor reasoner.
+   */
+  classifySemanticIntent(prompt, candidateIntents) {
+    return this.tensorReasoner.classifyIntent(prompt, candidateIntents);
+  }
+
+  /**
+   * Generate pure-CPU deterministic dense embedding.
+   */
+  getSemanticEmbedding(text) {
+    return this.tensorReasoner.embed(text);
   }
 }
