@@ -62,3 +62,62 @@ test("GestureRecognizer: Evaluates two-hand interactive gestures for Energy Core
   assert.equal(contractResult.gesture, GESTURE_TYPES.TWO_HAND_CONTRACT);
   assert.ok(contractResult.coreScaleDelta < -0.05);
 });
+
+test("GestureRecognizer: extended gesture taxonomy (fist, thumbs, pointing)", () => {
+  const recognizer = new GestureRecognizer();
+  const palmBase = () => {
+    const landmarks = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
+    landmarks[0] = { x: 0.5, y: 0.5, z: 0 };
+    // Folded default: each pip sits 0.05 from the wrist, tips no further.
+    landmarks[6] = { x: 0.5, y: 0.45, z: 0 };
+    landmarks[8] = { x: 0.5, y: 0.45, z: 0 };
+    landmarks[10] = { x: 0.5, y: 0.47, z: 0 };
+    landmarks[12] = { x: 0.5, y: 0.47, z: 0 };
+    landmarks[14] = { x: 0.5, y: 0.48, z: 0 };
+    landmarks[16] = { x: 0.5, y: 0.48, z: 0 };
+    landmarks[18] = { x: 0.5, y: 0.49, z: 0 };
+    landmarks[20] = { x: 0.5, y: 0.49, z: 0 };
+    return landmarks;
+  };
+
+  // Closed fist: everything retracted; thumb folded across its own axis so
+  // its tip cannot be farther from the wrist than its IP joint.
+  const fist = palmBase();
+  fist[3] = { x: 0.44, y: 0.51, z: 0 };
+  fist[4] = { x: 0.44, y: 0.52, z: 0 };
+  const fistResult = recognizer.classifySingleHand(fist);
+  assert.equal(fistResult.gesture, GESTURE_TYPES.CLOSED_FIST);
+  assert.ok(fistResult.confidence >= 0.85);
+
+  // Thumbs up: fingers folded, thumb extended well above the wrist.
+  const thumbsUp = palmBase();
+  thumbsUp[2] = { x: 0.5, y: 0.45, z: 0 };
+  thumbsUp[3] = { x: 0.5, y: 0.40, z: 0 };
+  thumbsUp[4] = { x: 0.5, y: 0.25, z: 0 };
+  const up = recognizer.classifySingleHand(thumbsUp);
+  assert.equal(up.gesture, GESTURE_TYPES.THUMBS_UP);
+  assert.equal(up.aboveWrist, true);
+
+  // Thumbs down: thumb extended below the wrist.
+  const thumbsDown = palmBase();
+  thumbsDown[2] = { x: 0.5, y: 0.55, z: 0 };
+  thumbsDown[3] = { x: 0.5, y: 0.60, z: 0 };
+  thumbsDown[4] = { x: 0.5, y: 0.75, z: 0 };
+  const down = recognizer.classifySingleHand(thumbsDown);
+  assert.equal(down.gesture, GESTURE_TYPES.THUMBS_DOWN);
+  assert.equal(down.aboveWrist, false);
+
+  // Pointing: index alone extended toward the top of the frame.
+  const pointing = fist.map(p => ({ ...p }));
+  pointing[6] = { x: 0.5, y: 0.45, z: 0 };
+  pointing[8] = { x: 0.5, y: 0.20, z: 0 };
+  const point = recognizer.classifySingleHand(pointing);
+  assert.equal(point.gesture, GESTURE_TYPES.POINTING);
+  assert.ok(point.confidence >= 0.8);
+
+  // Examined taxonomy stays UI-scoped: none of these classes map to destructive actions.
+  const harmful = ["DELETE", "EXECUTE_COMMAND", "SEND_PAYMENT"];
+  for (const cls of harmful) {
+    assert.equal(Object.values(GESTURE_TYPES).includes(cls), false);
+  }
+});

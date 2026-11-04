@@ -16,6 +16,10 @@ export const GESTURE_TYPES = {
   NONE: "NONE",
   PINCH: "PINCH",
   OPEN_PALM: "OPEN_PALM",
+  CLOSED_FIST: "CLOSED_FIST",
+  THUMBS_UP: "THUMBS_UP",
+  THUMBS_DOWN: "THUMBS_DOWN",
+  POINTING: "POINTING",
   TWO_HAND_EXPAND: "TWO_HAND_EXPAND",
   TWO_HAND_CONTRACT: "TWO_HAND_CONTRACT",
   SWIPE_LEFT: "SWIPE_LEFT",
@@ -26,6 +30,7 @@ export class GestureRecognizer {
   constructor(options = {}) {
     this.pinchThreshold = options.pinchThreshold ?? 0.08; // Normalized distance (0 to 1)
     this.palmExtensionThreshold = options.palmExtensionThreshold ?? 0.15;
+    this.fingerExtensionRatio = options.fingerExtensionRatio ?? 1.15; // tip must exceed pip by this ratio
     this.lastHandDistance = null;
     this.gestureHistory = [];
   }
@@ -63,16 +68,46 @@ export class GestureRecognizer {
       };
     }
 
-    // Check Open Palm: All fingertips extended far from wrist
-    const fingerTips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
-    const extensions = fingerTips.map(tip => this.calculateDistance(tip, wrist));
-    const allExtended = extensions.every(ext => ext > this.palmExtensionThreshold);
+    // Finger extension: tip must protrude clearly beyond its pip joint relative to the wrist
+    // (prevents open-palm false positives from curled fingers near the wrist plane).
+    const fingerChains = [[8, 6], [12, 10], [16, 14], [20, 18]];
+    const extensions = fingerChains.map(([, pip]) => this.calculateDistance(landmarks[0] || wrist, landmarks[pip]));
+    const tips = fingerChains.map(([tip]) => this.calculateDistance(landmarks[0] || wrist, landmarks[tip]));
+    const extended = tips.map((tipDist, i) => tipDist > extensions[i] * this.fingerExtensionRatio);
+    const extendedCount = extended.filter(Boolean).length;
+    // Thumb extension: tip must protrude beyond the thumb IP joint relative to the wrist
+    // (a folded thumb crossing the palm must not register as extended).
+    const thumbExtended =
+      this.calculateDistance(thumbTip, wrist) >
+      this.calculateDistance(landmarks[3] || thumbTip, wrist) * this.fingerExtensionRatio;
 
+    // Open palm: all 4 fingers extended (thumb may be folded — typical relaxed open hand).
+    const allExtended = extended.every(Boolean);
     if (allExtended) {
       return {
         gesture: GESTURE_TYPES.OPEN_PALM,
         confidence: 0.95,
-        extensions
+        extensions: tips
+      };
+    }
+
+    // Closed fist: no finger extended, tips retracted toward the palm.
+    if (extendedCount === 0 && !thumbExtended) {
+      return { gesture: GESTURE_TYPES.CLOSED_FIST, confidence: 0.9 };
+    }
+
+    // Pointing: index alone extended.
+    if (extendedCount === 1 && extended[0]) {
+      return { gesture: GESTURE_TYPES.POINTING, confidence: 0.85, direction: indexTip };
+    }
+
+    // Thumbs-only gestures: vertical thumb axis decides agreement (up) or veto-like signal (down).
+    if (extendedCount === 0 && thumbExtended) {
+      const aboveWrist = thumbTip.y < (wrist?.y ?? 0.5);
+      return {
+        gesture: aboveWrist ? GESTURE_TYPES.THUMBS_UP : GESTURE_TYPES.THUMBS_DOWN,
+        confidence: 0.85,
+        aboveWrist
       };
     }
 

@@ -68,6 +68,41 @@ test("BrainRouter: provider chain with circuit breaking and CPU fallback", () =>
   assert.equal(newChain[0].name, "openrouter-secondary");
 });
 
+test("BrainRouter: token telemetry prefers provider usage, labels estimates, and feeds the health summary", () => {
+  const router = new BrainRouter({ env: {} });
+
+  const providerReported = router.captureProviderUsage({
+    usage: { prompt_tokens: 12, completion_tokens: 34 },
+    choices: [{ message: { content: "answer" } }]
+  });
+  assert.deepEqual(providerReported, { promptTokens: 12, completionTokens: 34, source: "provider_usage" });
+
+  const estimated = router.captureProviderUsage({
+    choices: [{ message: { content: "12345678901234567890" } }],
+    messages: [{ role: "user", content: "?" }]
+  });
+  assert.equal(estimated.completionTokens, 5);
+  assert.equal(estimated.promptTokens, 1);
+  assert.equal(estimated.source, "estimated");
+
+  assert.equal(router.captureProviderUsage({}), null);
+  assert.equal(router.captureProviderUsage(null), null);
+
+  // Invalid usage values with no measurable content → nothing is recorded.
+  const rejected = router.captureProviderUsage({
+    usage: { prompt_tokens: -5, completion_tokens: Number.MAX_SAFE_INTEGER }
+  });
+  assert.equal(rejected, null);
+
+  router.recordAttempt("openrouter-primary", true, 10, { usage: { prompt_tokens: 10, completion_tokens: 20 } });
+  // Second attempt: no provider usage → estimated (20-char content → 5 completion tokens, no message history → 0 prompt).
+  router.recordAttempt("openrouter-primary", true, 10, { choices: [{ message: { content: "abababababababababab" } }] });
+  const health = router.getHealthSummary()["openrouter-primary"];
+  assert.equal(health.totalPromptTokens, 10);
+  assert.equal(health.totalCompletionTokens, 25);
+  assert.equal(health.tokenUsageSource, "estimated");
+});
+
 test("BrainRouter: prioritizes Groq and Gemini when environment keys are configured", () => {
   const routerWithGroq = new BrainRouter({
     env: { GROQ_API_KEY: "gsk_mock_key_123" }
