@@ -255,8 +255,11 @@ export class TargetAuthorizationGateway {
    * Disengage Emergency Stop with operator verification.
    */
   disengageEmergencyStop(operatorKey) {
-    if (operatorKey !== "ULTRON_OPERATOR_MASTER_KEY_SECRET") {
-      throw new Error("EMERGENCY_STOP_CLEAR_FAILED: Invalid operator master authorization key.");
+    if (typeof this.guardian.verifyOperatorKey !== "function" || !this.guardian.verifyOperatorKey(operatorKey)) {
+      throw new Error("EMERGENCY_STOP_CLEAR_FAILED: Invalid or unconfigured operator authorization key.");
+    }
+    if (this.guardian.emergencyStopLatched) {
+      this.guardian.disengageEmergencyStop(operatorKey);
     }
     this.emergencyStopEngaged = false;
     this.guardian.recordAudit("CYBER_EMERGENCY_STOP_DISENGAGED", "operator");
