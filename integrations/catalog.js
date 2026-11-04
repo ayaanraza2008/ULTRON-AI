@@ -320,7 +320,7 @@ export function buildIntegrationCatalog(env = process.env) {
     {
       id: "appflowy",
       name: "AppFlowy Workspace",
-      capability: "Owner-scoped read-only workspace notes, documents, and database schema inspection",
+      capability: "Owner-scoped read-only workspace listing and document retrieval",
       state: appflowyReadiness.state,
       configured: Boolean(appflowyReadiness.configured),
       mode: "owner_scoped_external_api",
