@@ -198,8 +198,11 @@ export class ToolRegistry {
         const requiresApproval =
           tool.requiresConfirmation === true ||
           Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+        let approvalVerified = false;
+        let approvalActorId = "";
         if (requiresApproval) {
           const actorId = typeof context?.actorId === "string" ? context.actorId.trim() : "";
+          approvalActorId = actorId;
           let verified = consumeToolApprovalProof(context?.toolApprovalProof, {
             actorId,
             toolId: tool.id,
@@ -238,12 +241,22 @@ export class ToolRegistry {
               { code: "TOOL_APPROVAL_INVALID" }
             );
           }
+          approvalVerified = true;
         }
 
         const controller = new AbortController();
         const suppliedContext = context && typeof context === "object" && !Array.isArray(context)
           ? context
           : {};
+        const executionContext = { ...suppliedContext };
+        if (approvalVerified && tool.id.startsWith("mobile_")) {
+          // The mobile engine trusts this marker only on the server-side tool
+          // execution path after the outer single-use proof has been consumed.
+          executionContext.mobileApprovalVerified = true;
+          executionContext.mobileApprovalActorId = approvalActorId;
+          executionContext.mobileApprovalToolId = tool.id;
+          executionContext.mobileApprovalPermissionLevel = tool.permissionLevel;
+        }
         const callerSignal = suppliedContext.signal &&
           typeof suppliedContext.signal === "object" &&
           typeof suppliedContext.signal.addEventListener === "function" &&
@@ -265,7 +278,7 @@ export class ToolRegistry {
         });
         try {
           const execution = Promise.resolve().then(() =>
-            toolMeta.execute(params, { ...suppliedContext, signal })
+            toolMeta.execute(params, { ...executionContext, signal })
           );
           return await Promise.race([execution, timeoutPromise]);
         } finally {
@@ -979,19 +992,20 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, message: "Screen inspection dry-run validated." };
         }
         if (this.adapters.mobileControlEngine) {
-          const screen = await this.adapters.mobileControlEngine.captureScreen(params.deviceId);
+          const ownerContext = { userId: context.actorId };
+          const screen = await this.adapters.mobileControlEngine.captureScreen(params.deviceId, {}, ownerContext);
           let hierarchy = null;
           if (params.includeHierarchy) {
-            hierarchy = await this.adapters.mobileControlEngine.getHierarchy(params.deviceId);
+            hierarchy = await this.adapters.mobileControlEngine.getHierarchy(params.deviceId, ownerContext);
           }
-          return { success: true, screen, hierarchy };
+          return { success: Boolean(screen.success), screen, hierarchy };
         }
-        return { success: true, captured: false, note: "Mobile engine standby" };
+        return { success: false, captured: false, note: "Mobile engine standby" };
       }
     });
 
@@ -1022,19 +1036,26 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, action: params.action };
         }
         if (this.adapters.mobileControlEngine?.executeAction) {
+          const actionName = String(params.action || "");
           const res = await this.adapters.mobileControlEngine.executeAction(
-            params.deviceId,
-            params.action,
-            params
+            actionName,
+            { ...params, device: params.deviceId },
+            {
+              userId: context.actorId,
+              mobileApprovalVerified: context.mobileApprovalVerified,
+              mobileApprovalActorId: context.mobileApprovalActorId,
+              mobileApprovalToolId: context.mobileApprovalToolId,
+              mobileApprovalPermissionLevel: context.mobileApprovalPermissionLevel
+            }
           );
-          return { success: true, result: res };
+          return { success: Boolean(res.success), result: res };
         }
-        return { success: true, dispatched: false };
+        return { success: false, dispatched: false };
       }
     });
 
@@ -1059,31 +1080,31 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, operation: params.operation, packageName: params.packageName };
         }
         if (this.adapters.mobileControlEngine) {
-          let outcome;
-          if (params.operation === "launch") {
-            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "launch_app", {
-              package: params.packageName,
-              activity: params.activity
-            });
-          } else if (params.operation === "terminate") {
-            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "terminate_app", {
-              package: params.packageName
-            });
-          } else if (params.operation === "clear_data") {
-            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "clear_app_data", {
-              package: params.packageName
-            });
-          } else {
-            throw new Error(`Unsupported mobile app lifecycle operation: '${params.operation}'`);
-          }
-          return { success: true, outcome };
+          let actionName;
+          if (params.operation === "launch") actionName = "mobile_launch_app";
+          else if (params.operation === "terminate") actionName = "mobile_terminate_app";
+          else if (params.operation === "clear_data") actionName = "mobile_clear_app_data";
+          else throw new Error(`Unsupported mobile app lifecycle operation: '${params.operation}'`);
+
+          const outcome = await this.adapters.mobileControlEngine.executeAction(
+            actionName,
+            { device: params.deviceId, package: params.packageName, packageName: params.packageName, activity: params.activity },
+            {
+              userId: context.actorId,
+              mobileApprovalVerified: context.mobileApprovalVerified,
+              mobileApprovalActorId: context.mobileApprovalActorId,
+              mobileApprovalToolId: context.mobileApprovalToolId,
+              mobileApprovalPermissionLevel: context.mobileApprovalPermissionLevel
+            }
+          );
+          return { success: Boolean(outcome.success), outcome };
         }
-        return { success: true, managed: false };
+        return { success: false, managed: false };
       }
     });
 
@@ -1106,7 +1127,7 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, message: "Autonomous mobile workflow dry-run passed." };
         }
@@ -1118,10 +1139,17 @@ export class ToolRegistry {
           if (!plan) {
             throw new Error("Missing workflow plan or natural language goal for mobile autonomous task.");
           }
-          const res = await this.adapters.mobileControlEngine.executeWorkflow(plan, { deviceId: params.deviceId });
+          const res = await this.adapters.mobileControlEngine.executeWorkflow(plan, {
+            deviceId: params.deviceId,
+            userId: context.actorId,
+            mobileApprovalVerified: context.mobileApprovalVerified,
+            mobileApprovalActorId: context.mobileApprovalActorId,
+            mobileApprovalToolId: context.mobileApprovalToolId,
+            mobileApprovalPermissionLevel: context.mobileApprovalPermissionLevel
+          });
           return { success: res.success, workflow: res };
         }
-        return { success: true, executed: false };
+        return { success: false, executed: false };
       }
     });
 
