@@ -8,6 +8,7 @@ import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
 import { createVoiceStudioRouter } from "./integrations/voicestudio.js";
 import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
+import { createHexStrikeRouter } from "./integrations/hexstrike-ai.js";
 import { startWorker } from "./worker.js";
 import { buildRuntimeReadiness } from "./runtime-readiness.js";
 import { createAgentRouter } from "./agent-runtime.js";
@@ -16,6 +17,12 @@ import { resolveStrataProvider } from "./integrations/strata.js";
 import { getHermesAgentReadiness, resolveHermesAgentProvider } from "./integrations/hermes-agent.js";
 import { safePinnedFetch, safeServiceBase } from "./network-safety.js";
 import { createJarvisRouter } from "./jarvis-router.js";
+import { createDevicePairingRouter, verifyPairedDeviceToken } from "./integrations/device-pairing-router.js";
+import { createSpatialRouter } from "./spatial/spatial-router.js";
+import { createMobileRouter } from "./mobile/mobile-router.js";
+import { createCompanionRouter } from "./system/companion-router.js";
+import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
+import { deviceNetworkingManager } from "./integrations/device-networking.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
@@ -224,7 +231,7 @@ async function readResponseJsonLimited(response, maxBytes = 1_000_000) {
 
 async function isCompromisedPassword(password, fetchImpl) {
   // HIBP's Pwned Passwords range API uses k-anonymity: transmit only the first
-  // five SHA-1 hex characters, never the password or its complete hash.
+  // five SHA-1 hex characters, never the password or its complete hash. // nosec: HIBP protocol requires SHA-1
   const hash = crypto.createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
   const prefix = hash.slice(0, 5);
   const targetSuffix = hash.slice(5);
@@ -275,6 +282,9 @@ function hasConfiguredModelProvider(env) {
       if (baseUrl) return true;
     } catch { /* invalid primary endpoint; continue checking alternate providers */ }
   }
+  if (typeof env.GROQ_API_KEY === "string" && env.GROQ_API_KEY.trim()) return true;
+  if (typeof env.GEMINI_API_KEY === "string" && env.GEMINI_API_KEY.trim() && !/^(AQ\.|ya29\.)/i.test(env.GEMINI_API_KEY.trim())) return true;
+  if (typeof env.CEREBRAS_API_KEY === "string" && env.CEREBRAS_API_KEY.trim()) return true;
   let providers;
   try { providers = JSON.parse(env.ULTRON_MODEL_PROVIDERS_JSON || "[]"); } catch { return false; }
   if (!Array.isArray(providers)) return false;
@@ -354,6 +364,51 @@ function configuredChatProviders(env, openRouterBaseUrl = null, userId = null) {
       model,
       priority: Number.isFinite(item.priority) ? item.priority : 100,
       supportsVision: item.supportsVision === true,
+      isOpenRouter: false
+    });
+  }
+
+  const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  if (groqKey && !providers.some(provider => provider.name === "groq")) {
+    providers.push({
+      name: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKey: groqKey,
+      model: typeof env.GROQ_DEFAULT_MODEL === "string" && env.GROQ_DEFAULT_MODEL.trim()
+        ? env.GROQ_DEFAULT_MODEL.trim()
+        : "llama-3.3-70b-versatile",
+      priority: 20,
+      supportsVision: false,
+      isOpenRouter: false
+    });
+  }
+
+  const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  if (geminiKey && !/^(AQ\.|ya29\.)/i.test(geminiKey) && !providers.some(provider => provider.name === "gemini")) {
+    providers.push({
+      name: "gemini",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      apiKey: geminiKey,
+      model: typeof env.GEMINI_DEFAULT_MODEL === "string" && env.GEMINI_DEFAULT_MODEL.trim()
+        ? env.GEMINI_DEFAULT_MODEL.trim()
+        : "gemini-1.5-flash",
+      priority: 30,
+      supportsVision: true,
+      isOpenRouter: false
+    });
+  }
+
+  const cerebrasKey = typeof env.CEREBRAS_API_KEY === "string" ? env.CEREBRAS_API_KEY.trim() : "";
+  if (cerebrasKey && !providers.some(provider => provider.name === "cerebras")) {
+    providers.push({
+      name: "cerebras",
+      baseUrl: "https://api.cerebras.ai/v1",
+      apiKey: cerebrasKey,
+      model: typeof env.CEREBRAS_DEFAULT_MODEL === "string" && env.CEREBRAS_DEFAULT_MODEL.trim()
+        ? env.CEREBRAS_DEFAULT_MODEL.trim()
+        : "llama-3.3-70b",
+      priority: 40,
+      supportsVision: false,
       isOpenRouter: false
     });
   }
@@ -1936,10 +1991,20 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
   app.use("/api", createFeatureRouter({ env, fetchImpl, requireSession, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
   app.use("/api", createIntegrationRouter({ env, fetchImpl, requireSupabaseUser }));
+  app.use("/api", createHexStrikeRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
+  app.use("/api", createDevicePairingRouter({ env, fetchImpl, requireSupabaseUser, logger }));
+  app.use("/api", createSpatialRouter({ requireSupabaseUser, logger }));
+  app.use("/api", createMobileRouter({ requireSupabaseUser, requireSession, logger }));
+  app.use("/api/mobile", createMobileRouter({ requireSupabaseUser, requireSession, logger }));
+  app.use("/api/companion", createCompanionRouter({ requireSession, logger }));
+  app.use("/api", createCompanionRouter({ requireSession, logger }));
+  app.use("/api", createJarvisRouter({
+    env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger,
+    authenticateDeviceToken: token => verifyPairedDeviceToken({ token, env, fetchImpl, logger })
+  }));
 
   // God's Eye View is built as a pinned, separately audited static workspace.
   // Its own provider proxy is not mounted into ULTRON; only its browser bundle is served here.
@@ -1952,6 +2017,14 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.get(["/world-intelligence", "/world-intelligence/"], (_req, res) => {
     if (!worldIntelligenceUrl) return res.status(503).send("World Intelligence service URL is not configured.");
     res.redirect(302, worldIntelligenceUrl + "/?embed=1");
+  });
+    app.get("/api/discovery/local", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
+  });
+  app.get("/api/network/connectivity", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(deviceNetworkingManager.getConnectivityStatus());
   });
   app.get("/api/world-intelligence/status", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -1971,6 +2044,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   const port = Number(process.env.PORT) || 10000;
   const app = createApp();
   const httpServer = app.listen(port, "0.0.0.0", () => console.log(`ULTRON AI listening on port ${port}`));
+  deviceWebSocketGateway.attachToServer(httpServer);
   let worker = null;
   if (process.env.ULTRON_EMPLOYEES_ENABLED === "true") {
     worker = startWorker();
@@ -1983,6 +2057,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     shutdownStarted = true;
     console.info(`ULTRON AI received ${signal}; draining HTTP connections and stopping background work.`);
     worker?.stop();
+    deviceWebSocketGateway.close();
     httpServer.close(error => {
       if (error) {
         console.error("ULTRON HTTP server shutdown failed:", error.message);
@@ -1993,3 +2068,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   process.once("SIGTERM", () => shutdown("SIGTERM"));
   process.once("SIGINT", () => shutdown("SIGINT"));
 }
+
+export { deviceWebSocketGateway, deviceNetworkingManager };

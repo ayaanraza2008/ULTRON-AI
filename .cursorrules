@@ -1,4 +1,4 @@
 # ULTRON ETERNAL — Cursor & VSCode Rules
-# Permanent Source of Truth: ULTRON_MASTER_CHARTER.md & ULTRON_CHECKPOINT.md
+# Engineering principles: ULTRON_MASTER_CHARTER.md and ULTRON_CHECKPOINT.md. Canonical release evidence: ULTRON_STATUS.md.
 # Follow the 12 Immutable Laws of ULTRON Engineering.
 # Always preserve existing architecture, run npm run check and npm test before committing.

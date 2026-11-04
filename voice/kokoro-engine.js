@@ -191,6 +191,9 @@ export class KokoroEngine {
       sampleRate,
       dataUrl,
       fallback: true,
+      speechAvailable: false,
+      audioKind: "diagnostic_tone",
+      fallbackReason: "KOKORO_RUNTIME_UNAVAILABLE",
       timestamp: new Date().toISOString()
     };
   }
@@ -296,6 +299,10 @@ export class KokoroEngine {
             generationTimeSec: jsonOut.generationTimeSec,
             sampleRate: jsonOut.sampleRate,
             dataUrl: jsonOut.dataUrl,
+            speechAvailable: jsonOut.speechAvailable === true && jsonOut.audioKind === "speech",
+            audioKind: jsonOut.audioKind || "unknown",
+            fallback: Boolean(jsonOut.fallback),
+            fallbackReason: jsonOut.fallbackReason || null,
             timestamp: new Date().toISOString()
           };
 

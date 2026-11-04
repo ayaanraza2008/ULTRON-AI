@@ -1,11 +1,18 @@
+# ULTRON AI — Render workspace "Ultron core"
+# This Blueprint maps the four existing live services in that workspace.
+# It is a candidate configuration only. Do not sync it until the service/secret
+# diff has been reviewed in Render Dashboard.
+
 services:
+  # 1. ULTRON AI backend
   - type: web
-    name: ultron-ai
+    name: ultron-ai-core
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm install --ignore-scripts && mkdir -p .runtime && rm -rf .runtime/geo-sleuth && git clone --filter=blob:none https://github.com/Oldcircle/geo-sleuth.git .runtime/geo-sleuth && git -C .runtime/geo-sleuth checkout e01849f778afeb7c53ca79331313fbcfcb879486 && curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh
-    startCommand: export PATH="$HOME/.local/bin:$PATH"; npm start
+    branch: main
+    buildCommand: npm install --ignore-scripts
+    startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     buildFilter:
@@ -29,10 +36,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: WORLD_INTELLIGENCE_URL
-        value: https://ultron-world-intelligence.onrender.com
       - key: NODE_VERSION
         value: 24.14.0
+      # This legacy/optional endpoint may be hosted outside this workspace.
+      - key: WORLD_INTELLIGENCE_URL
+        value: https://ultron-world-intelligence.onrender.com
       - key: OPENROUTER_BASE_URL
         value: https://openrouter.ai/api/v1
       - key: OPENROUTER_TIMEOUT_SECONDS
@@ -42,10 +50,6 @@ services:
       - key: OPENVIKING_BASE_URL
         sync: false
       - key: OPENVIKING_API_TOKEN
-        sync: false
-      - key: ULTRON_BROWSER_USE_URL
-        value: https://ultron-browser-use.onrender.com
-      - key: ULTRON_BROWSER_USE_TOKEN
         sync: false
       - key: OPENROUTER_DEFAULT_MODEL
         value: "openrouter/free"
@@ -73,6 +77,17 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      # Dedicated AES-GCM key for the Supabase-backed paired-device registry.
+      - key: ULTRON_DEVICE_SIGNING_SECRET
+        generateValue: true
+      # Optional operator reset credential; without it, emergency-stop reset fails closed.
+      - key: ULTRON_OPERATOR_MASTER_KEY
+        sync: false
+      - key: ULTRON_BROWSER_USE_URL
+        value: https://ultron-browser-use-core.onrender.com
+      # The browser bridge imports this same backend token with fromService below.
+      - key: ULTRON_BROWSER_USE_TOKEN
+        sync: false
       - key: COMFYUI_BASE_URL
         sync: false
       - key: COMFYUI_API_KEY
@@ -101,14 +116,6 @@ services:
         value: "90"
       - key: TAVILY_API_KEY
         sync: false
-      - key: FISH_API_KEY
-        sync: false
-      - key: FISH_AUDIO_VOICE_MODEL_ID
-        value: "7a18a1851d2649108c48ec9f2c80eb2c"
-      - key: FISH_AUDIO_TTS_MODEL
-        value: "s2.1-pro-free"
-      - key: FISH_AUDIO_STT_MODEL
-        value: "transcribe-1"
       - key: TTS_API_BASE_URL
         sync: false
       - key: TTS_API_KEY
@@ -128,71 +135,72 @@ services:
       - key: GEO_SLEUTH_ROOT
         value: .runtime/geo-sleuth/skills/geo-sleuth
 
- 
+  # 2. ULTRON Living Core interface + same-origin API proxy
   - type: web
-    name: ultron-browser-use
+    name: ultron-core-interface
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm install --ignore-scripts
+    startCommand: node core-ui-proxy.mjs
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "core-ui-proxy.mjs"
+        - "public/**"
+        - "package.json"
+        - "package-lock.json"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.14.0
+
+  # 3. Browser Use bridge — read-only public HTTPS navigation only
+  - type: web
+    name: ultron-browser-use-core
     runtime: python
     plan: free
     region: singapore
-    buildCommand: pip install -r browser-use-bridge/requirements.txt
+    branch: main
+    buildCommand: pip install -r browser-use-bridge/requirements.txt && python -m playwright install --with-deps chromium
     startCommand: cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     autoDeployTrigger: commit
     buildFilter:
       paths:
-        - "browser-use-bridge/main.py"
-        - "browser-use-bridge/navigation_policy.py"
-        - "browser-use-bridge/requirements.txt"
+        - "browser-use-bridge/**"
+    envVars:
+      - key: ULTRON_BROWSER_USE_TOKEN
+        fromService:
+          type: web
+          name: ultron-ai-core
+          envVarKey: ULTRON_BROWSER_USE_TOKEN
+      - key: ULTRON_MODEL_GATEWAY_BASE_URL
+        value: https://ultron-ai-core.onrender.com/api/internal/browser-use/v1
+      - key: OPENROUTER_DEFAULT_MODEL
+        value: "openrouter/free"
 
+  # 4. REA authenticated MCP gateway
   - type: web
-    name: ultron-world-intelligence
+    name: ultron-rea-gateway
     runtime: node
     plan: free
     region: singapore
-    buildCommand: rm -rf .build-gods-eye-view && git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci --include=dev && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
-    startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
+    branch: main
+    buildCommand: cd rea-gateway && npm install --omit=dev
+    startCommand: cd rea-gateway && npm start
+    healthCheckPath: /healthz
     autoDeployTrigger: commit
     buildFilter:
       paths:
-        - "scripts/patch-world-intelligence-source.mjs"
-        - "scripts/inject-world-intelligence-bridge.mjs"
-        - "public/world-intelligence-bridge.js"
+        - "rea-gateway/**"
     envVars:
-      - key: NODE_VERSION
-        value: 24.14.0
       - key: NODE_ENV
         value: production
-      - key: PUPPETEER_SKIP_DOWNLOAD
-        value: "1"
-      - key: GEV_EMBED_FRAME_ANCESTORS
-        value: https://ultron-core-interface.onrender.com
-
-  # Additional existing globe services are retained for backward compatibility.
-  # Restrict their automatic rebuilds to the actual bridge inputs so API/test/doc
-  # commits do not consume build minutes on identical external globe sources.
-  - type: web
-    name: ultron-world-intelligence-globe
-    runtime: node
-    plan: free
-    region: singapore
-    buildCommand: git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
-    startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
-    autoDeployTrigger: commit
-    buildFilter:
-      paths:
-        - "scripts/patch-world-intelligence-source.mjs"
-        - "scripts/inject-world-intelligence-bridge.mjs"
-        - "public/world-intelligence-bridge.js"
-
-  - type: web
-    name: ultron-world-intelligence-live
-    runtime: node
-    plan: free
-    region: singapore
-    buildCommand: rm -rf .build-gods-eye-view && git clone https://github.com/bilawalsidhu/gods-eye-view.git .build-gods-eye-view && cd .build-gods-eye-view && git checkout 7be5937fc3e3b10cdfa8d3f833536167268768ad && cd .. && node scripts/patch-world-intelligence-source.mjs && cd .build-gods-eye-view && npm ci --include=dev && npm run build && cd .. && node scripts/inject-world-intelligence-bridge.mjs
-    startCommand: cd .build-gods-eye-view && npm run preview -- --host 0.0.0.0 --port $PORT
-    autoDeployTrigger: commit
-    buildFilter:
-      paths:
-        - "scripts/patch-world-intelligence-source.mjs"
-        - "scripts/inject-world-intelligence-bridge.mjs"
-        - "public/world-intelligence-bridge.js"
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: REA_MCP_TOKEN
+        generateValue: true

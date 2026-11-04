@@ -4,14 +4,14 @@ import express from "express";
 import { createServer } from "node:http";
 import { createJarvisRouter } from "../jarvis-router.js";
 
-async function withRouter({ env = {}, userId = "owner-user", supabaseRest, privilegedSupabaseRest, logger = { warn() {} } } = {}, run) {
+async function withRouter({ env = {}, userId = "owner-user", supabaseRest, privilegedSupabaseRest, logger = { warn() {} }, fetchImpl } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, _res, next) => {
     req.supabaseUser = { id: userId };
     next();
   };
   app.use(express.json());
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest, logger }));
+  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest, logger, ...(fetchImpl ? { fetchImpl } : {}) }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -310,5 +310,54 @@ test("JARVIS exposes live JARVIS + ULTRON capability comparator to configured ow
     assert.ok(body.evaluation.jarvisAlignmentScore > 85);
     assert.ok(body.evaluation.ultronAlignmentScore > 80);
     assert.equal(body.evaluation.categoriesCount, 14);
+  });
+});
+
+
+test("JARVIS brain inference endpoint rejects empty prompt and empty messages", async () => {
+  await withRouter({
+    env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }
+  }, async base => {
+    const res = await fetch(base + "/api/jarvis/brain/infer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "   ", messages: [] })
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error.code, "INVALID_INFERENCE_INPUT");
+  });
+});
+
+test("JARVIS brain inference endpoint executes inference with configured provider and failover", async () => {
+  let captured;
+  const mockFetch = async (url, init) => {
+    captured = { url, init };
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "ULTRON Brain inference operational." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  await withRouter({
+    env: {
+      ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+      GROQ_API_KEY: "gsk_test_mock_key_for_inference"
+    },
+    fetchImpl: mockFetch
+  }, async base => {
+    const res = await fetch(base + "/api/jarvis/brain/infer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Check system readiness",
+        preferredProvider: "groq"
+      })
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "ok");
+    assert.equal(body.inference.success, true);
+    assert.equal(body.inference.content, "ULTRON Brain inference operational.");
+    assert.equal(body.inference.provider, "groq-cloud");
+    assert.ok(captured.url.includes("api.groq.com"));
   });
 });

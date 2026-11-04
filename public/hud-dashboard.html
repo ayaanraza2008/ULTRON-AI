@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ULTRON AI — JARVIS Command Center</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="floating-core.css">
+</head>
+<body class="theme-dark">
+  <header class="hud-header">
+    <div class="header-left">
+      <div class="reactor-core" id="reactorCore" title="ULTRON Core Intelligence State">
+        <div class="core-ring outer"></div>
+        <div class="core-ring inner"></div>
+        <div class="core-glow"></div>
+      </div>
+      <div class="brand">
+        <h1 class="brand-title">ULTRON <span class="accent">AI</span></h1>
+        <p class="brand-subtitle">JARVIS Personal AI Operating System</p>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="status-pill" id="coreStatusPill">
+        <span class="status-dot"></span>
+        <span class="status-text" id="coreStatusText">CORE: IDLE</span>
+      </div>
+      <div class="autonomy-selector">
+        <label for="autonomyLevelSelect">Autonomy:</label>
+        <select id="autonomyLevelSelect">
+          <option value="0">L0 - Manual</option>
+          <option value="1">L1 - Assisted</option>
+          <option value="2" selected>L2 - Supervised</option>
+          <option value="3">L3 - Conditional</option>
+          <option value="4">L4 - High Autonomy</option>
+          <option value="5">L5 - Continuous</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button class="btn btn-danger kill-switch-btn" id="killSwitchBtn">
+        <span class="btn-icon">⚡</span> EMERGENCY STOP
+      </button>
+    </div>
+  </header>
+
+  <!-- System Telemetry HUD -->
+  <section class="telemetry-bar" id="telemetryBar">
+    <div class="telemetry-item">
+      <span class="telemetry-label">CPU:</span>
+      <span class="telemetry-value" id="cpuLabel">AMD Ryzen 7 5700U (16T)</span>
+    </div>
+    <div class="telemetry-item">
+      <span class="telemetry-label">RAM:</span>
+      <span class="telemetry-value" id="ramLabel">Loading...</span>
+    </div>
+    <div class="telemetry-item">
+      <span class="telemetry-label">OS:</span>
+      <span class="telemetry-value" id="osLabel">Windows</span>
+    </div>
+    <div class="telemetry-item">
+      <span class="telemetry-label">AGENTS:</span>
+      <span class="telemetry-value" id="agentCountLabel">12 Online</span>
+    </div>
+    <div id="eyesHeaderTelemetryPill" class="eyes-status-pill active" style="display: none; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.4); font-size: 11px; font-weight: 600; color: #00f0ff;">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #00f0ff; display: inline-block; animation: pulse-energy 1s infinite;"></span>
+      <span>EYES ACTIVE</span>
+    </div>
+  </section>
+
+  <!-- Navigation Tabs -->
+  <nav class="hud-nav">
+    <button class="nav-tab active" data-tab="tab-console">Console & Voice</button>
+    <button class="nav-tab" data-tab="tab-agents">12-Agent Matrix</button>
+    <button class="nav-tab" data-tab="tab-orchestrator">Task Board</button>
+    <button class="nav-tab" data-tab="tab-coding">Coding Sandbox</button>
+    <button class="nav-tab" data-tab="tab-computer">PC & Devices</button>
+    <button class="nav-tab" data-tab="tab-system-control">System Control</button>
+    <button class="nav-tab" data-tab="tab-media-studio">Media & Video Studio</button>
+    <button class="nav-tab" data-tab="tab-model-intelligence">Model Intelligence & Gateway</button>
+    <button class="nav-tab" data-tab="tab-memory">Memory Vault</button>
+    <button class="nav-tab" data-tab="tab-smarthome">IoT & Smart Home</button>
+    <button class="nav-tab" data-tab="tab-hei">Emotional Intelligence</button>
+    <button class="nav-tab" data-tab="tab-security">Security & Audit</button>
+    <button class="nav-tab" data-tab="tab-eyes">👁️ ULTRON Eyes</button>
+    <button class="nav-tab" data-tab="tab-cyber">🛡️ Cyber Core</button>
+    <button class="nav-tab" data-tab="tab-sentinel">🛰️ SENTINEL</button>
+  </nav>
+
+  <!-- Tab Content Panels -->
+  <main class="hud-main">
+    <!-- Panel 1: Console & Voice -->
+    <section class="tab-panel active" id="tab-console">
+      <div class="console-grid">
+        <!-- Telephony Live Call HUD Banner -->
+        <div class="telephony-call-hud" id="telephonyCallHud">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #ff6b00; animation: pulse-energy 0.8s infinite;"></span>
+              <strong style="color: #ff6b00; letter-spacing: 1px;">TELEPHONY VOICE CALL ACTIVE</strong>
+              <span id="callNumberBadge" style="font-size: 12px; color: var(--cyan-accent); font-family: monospace;">Caller: +91 (Verified Owner)</span>
+            </div>
+            <div>
+              <button class="btn btn-sm btn-danger" id="hangupCallBtn">End Call</button>
+            </div>
+          </div>
+          <div style="margin-top: 8px; font-size: 13px; color: #e2e8f0;">
+            <span>Live Transcription: </span><em id="callLiveTranscript">"ULTRON is online. Ready for command."</em>
+          </div>
+        </div>
+
+        <div class="chat-viewport" id="chatViewport">
+          <div class="message system">
+            <span class="sender">ULTRON CORE:</span>
+            <span class="text">All 12 specialized intelligence agents calibrated. JARVIS voice and vision bridges operational. How may I assist you, sir?</span>
+          </div>
+        </div>
+
+        <div class="voice-hud-panel">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 style="margin: 0;">JARVIS Voice Intelligence</h3>
+              <span id="voiceHudActiveBadge" style="display: none; font-size: 10px; background: #a855f7; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">⚡ WAKE</span>
+            </div>
+            <div id="micStatusPill" class="mic-status-pill muted" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); font-size: 11px; font-weight: 600; color: #94a3b8; transition: all 0.3s ease;">
+              <span id="micActiveDot" style="width: 8px; height: 8px; border-radius: 50%; background: #64748b; display: inline-block;"></span>
+              <span id="micStatusLabel">STANDBY</span>
+            </div>
+          </div>
+          <div class="voice-controls">
+            <button class="btn btn-primary" id="pushToTalkBtn">🎙️ Push To Talk</button>
+            <button class="btn" id="toggleAlwaysOnWakeBtn">⚡ Wake Word: ULTRON [OFF]</button>
+            <button class="btn" id="toggleSnapActivationBtn">🫰 Snap Wake [OFF]</button>
+            <button class="btn" id="listenContinuousBtn">🎧 Continuous Mode</button>
+            <button class="btn btn-warning" id="stopAudioBtn">🛑 Stop Speech</button>
+            <button class="btn btn-danger btn-sm" id="emergencyMicMuteBtn" title="Emergency Mic Mute">🔇 Mute Mic</button>
+          </div>
+          <div id="voiceActivationStatusText" style="font-size: 12px; color: #94a3b8; margin: 4px 0 8px 0; min-height: 18px;">
+            Voice Activation Ready. Say "ULTRON" or snap fingers to wake.
+          </div>
+          <div class="voice-profile-picker" style="display: flex; gap: 12px; align-items: center; margin-top: 6px;">
+            <div style="flex: 1;">
+              <label for="snapSensitivitySelect">Snap Sensitivity:</label>
+              <select id="snapSensitivitySelect">
+                <option value="NORMAL" selected>Normal (Balanced)</option>
+                <option value="HIGH">High (Light Snaps)</option>
+                <option value="LOW">Low (Loud Snaps Only)</option>
+              </select>
+            </div>
+            <div style="flex: 1;">
+              <label for="convoTimeoutSelect">Continuous Auto-Listen:</label>
+              <select id="convoTimeoutSelect">
+                <option value="5000">5 seconds</option>
+                <option value="10000" selected>10 seconds (Default)</option>
+                <option value="15000">15 seconds</option>
+                <option value="0">Disabled (Wake Word Each Time)</option>
+              </select>
+            </div>
+          </div>
+          <div class="voice-waveform" id="voiceWaveform">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+          <div class="voice-profile-picker">
+            <label for="voiceProfileSelect">Voice Profile:</label>
+            <select id="voiceProfileSelect">
+              <option value="ultron_onyx" selected>ULTRON Onyx (Kokoro am_onyx - Deep & Authoritative)</option>
+              <option value="ultron_command">ULTRON Command (Deep Strategic)</option>
+              <option value="jarvis_prime">JARVIS Prime (British/Refined)</option>
+              <option value="hinglish_conversational">Desi Assistant (Hindi/Hinglish Friendly)</option>
+            </select>
+          </div>
+          <div class="voice-profile-picker">
+            <label for="voicePersonalitySelect">Personality Mode:</label>
+            <select id="voicePersonalitySelect">
+              <option value="NORMAL" selected>NORMAL — Deep, Calm & Intelligent</option>
+              <option value="COMMAND">COMMAND — Firm & Authoritative</option>
+              <option value="ALERT">ALERT — Serious, Urgent & Clear</option>
+              <option value="RESEARCH">RESEARCH — Measured & Articulate</option>
+              <option value="SUCCESS">SUCCESS — Controlled Confidence</option>
+              <option value="ERROR">ERROR — Composed & Direct</option>
+              <option value="WAKE-UP">WAKE-UP — Short Acknowledgment</option>
+            </select>
+          </div>
+          <div class="voice-profile-picker">
+            <label for="voiceLanguageSelect">Speech Dialect:</label>
+            <select id="voiceLanguageSelect">
+              <option value="auto" selected>Auto Dialect (Hinglish / Hindi / English)</option>
+              <option value="hi-IN">Hindi First (Spoken & Clean)</option>
+              <option value="en-IN">Indian English (Refined)</option>
+            </select>
+          </div>
+          <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" id="speakOnyxBtn">🔊 Test Onyx Voice (Kokoro am_onyx)</button>
+            <button class="btn btn-secondary btn-sm" id="speakOfflineBtn">🔊 Test PC Speaker (Offline SAPI)</button>
+          </div>
+          <div id="heiLiveBadge" style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); font-size: 11px; color: #c084fc; margin-top: 6px;">🧠 HEI: Active (Adaptive Tone & Empathy Engine)</div>
+          <div class="voice-status-badge" id="voiceStatusBadge" style="margin-top: 6px; font-size: 11px; color: #4ade80;">
+            ● Primary Voice Engine: Kokoro-82M (am_onyx Active) | Latency: &lt;50ms
+          </div>
+          <div class="daily-briefing-box" id="dailyBriefingBox">
+            <h4>Daily Intelligence Briefing</h4>
+            <p id="dailyBriefingText">Loading briefing...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="console-input-bar">
+        <input type="text" id="userInput" placeholder="Ask ULTRON anything or issue an agent command (English, Hindi, or Hinglish)..." />
+        <button class="btn btn-accent" id="sendBtn">Transmit</button>
+      </div>
+    </section>
+
+    <!-- Panel 2: 12-Agent Matrix -->
+    <section class="tab-panel" id="tab-agents">
+      <h2>12 Specialized System Agents</h2>
+      <div class="agent-grid" id="agentGrid">
+        <!-- Dynamically rendered -->
+      </div>
+    </section>
+
+    <!-- Panel 3: Task Board -->
+    <section class="tab-panel" id="tab-orchestrator">
+      <div class="panel-header-actions">
+        <h2>Orchestrated Multi-Agent Tasks</h2>
+        <button class="btn btn-primary" id="newTaskModalBtn">+ Create Orchestrated Task</button>
+      </div>
+      <div class="task-list" id="orchestratorTaskList">
+        <p class="placeholder-text">No active background tasks running.</p>
+      </div>
+    </section>
+
+    <!-- Panel 4: Coding Sandbox -->
+    <section class="tab-panel" id="tab-coding">
+      <h2>Isolated Coding Sandbox</h2>
+      <p class="section-desc">Coding Agent scratchpad with CPU timeout (10s) and 256 MB memory bounding (Optimized for Ryzen 7 5700U).</p>
+      <div class="coding-editor-container">
+        <textarea id="sandboxCodeInput" rows="10" placeholder="// Enter JavaScript / Node.js snippet here...&#10;console.log('ULTRON Sandbox Active');"></textarea>
+        <div class="editor-actions">
+          <button class="btn btn-accent" id="runSandboxBtn">▶ Execute in Sandbox</button>
+        </div>
+        <div class="sandbox-terminal" id="sandboxTerminal">
+          <pre id="sandboxOutput">// Execution output will appear here...</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel 5: PC & Devices -->
+    <section class="tab-panel" id="tab-computer">
+      <div class="devices-grid">
+        <div class="card" style="grid-column: 1 / -1;">
+          <h3>Multi-Device Ecosystem (Synchronized Control)</h3>
+          <p class="section-desc">Simultaneous control across PC and multiple mobile devices as demonstrated in the reference video.</p>
+          <div class="btn-group" style="margin-bottom: 12px; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="unlockAllMobileBtn">🔓 Unlock All 3 Mobile Devices</button>
+            <button class="btn btn-accent" id="playSongAllDevicesBtn">🎵 Play Favorite Song Across All Devices</button>
+            <button class="btn" id="lockAllMobileBtn">🔒 Lock All Mobile Devices</button>
+            <button class="btn" id="unlockPcBtn">💻 Unlock PC Screen</button>
+            <button class="btn" id="simulateCallBtn">📞 Simulate Inbound Call</button>
+            <button class="btn" id="toggleGestureBtn">✋ Enable Hand Gesture Control</button>
+          </div>
+          <div class="gesture-telemetry-bar" id="gestureTelemetryBar" style="display: none; align-items: center; gap: 10px; margin-top: 8px; margin-bottom: 12px; padding: 8px 12px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 6px; font-size: 12px; flex-wrap: wrap;">
+            <span style="color: #00f0ff; font-weight: bold;">⚡ GESTURE CORE:</span>
+            <span class="status-pill" id="gestureStatusPill" style="padding: 2px 8px; font-size: 11px;">STATUS: STANDBY</span>
+            <span class="badge" id="gestureHandsCountBadge" style="background: rgba(37, 99, 235, 0.3); border: 1px solid #3b82f6; padding: 2px 8px; border-radius: 4px; color: #93c5fd;">0 HANDS</span>
+            <span class="badge" id="gestureActiveActionBadge" style="background: rgba(168, 85, 247, 0.3); border: 1px solid #a855f7; padding: 2px 8px; border-radius: 4px; color: #d8b4fe;">IDLE</span>
+            <label style="color: #94a3b8; font-size: 11px; margin-left: auto;">Sensitivity:
+              <select id="gestureSensitivitySelect" style="background: #1e293b; color: #f8fafc; border: 1px solid #475569; border-radius: 4px; padding: 2px 6px; font-size: 11px;">
+                <option value="0.75">Low</option>
+                <option value="1.0" selected>Normal</option>
+                <option value="1.5">High</option>
+              </select>
+            </label>
+            <button class="btn btn-sm" id="toggleGesturePreviewBtn" style="padding: 2px 8px; font-size: 11px;" title="Toggle Camera Preview Window">👁️ Preview</button>
+          </div>
+          <video id="gestureVideoFeed" playsinline muted style="display: none; position: fixed; bottom: 155px; right: 24px; width: 160px; height: 120px; border-radius: 8px; border: 1px solid #00f0ff; z-index: 999998; object-fit: cover; transform: scaleX(-1); background: #000; box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);"></video>
+
+          <div class="device-card-grid" id="deviceFleetGrid">
+            <div class="device-card" id="card-pc">
+              <strong>Primary Windows PC</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="pcLockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">AMD Ryzen 7 5700U • Host Node</div>
+            </div>
+            <div class="device-card" id="card-phone-1">
+              <strong>Android Phone Alpha</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="phone1LockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">Primary Mobile • Battery: 92%</div>
+            </div>
+            <div class="device-card" id="card-phone-2">
+              <strong>Android Phone Beta</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="phone2LockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">Second Mobile • Battery: 84%</div>
+            </div>
+            <div class="device-card" id="card-phone-3">
+              <strong>Android Phone Gamma</strong>
+              <div style="font-size: 12px; color: #94a3b8; margin: 4px 0;">Status: <span class="device-lock-state locked" id="phone3LockLabel">LOCKED</span></div>
+              <div style="font-size: 11px; color: #64748b;">Third Mobile • Battery: 78%</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Windows PC Control</h3>
+          <div class="btn-group">
+            <button class="btn" id="launchNotepadBtn">Launch Notepad</button>
+            <button class="btn" id="launchCalcBtn">Launch Calculator</button>
+            <button class="btn" id="launchExplorerBtn">Open Workspace Folder</button>
+          </div>
+          <h4>Hardware & Session Controls</h4>
+          <div class="btn-group">
+            <button class="btn" id="lockPcBtn">🔒 Lock Workstation</button>
+            <button class="btn" id="captureScreenBtn">📸 Capture Screen</button>
+            <button class="btn" id="volDownBtn">🔉 Vol -</button>
+            <button class="btn" id="volUpBtn">🔊 Vol +</button>
+            <button class="btn" id="volMuteBtn">🔇 Mute</button>
+          </div>
+          <div class="battery-status-bar" id="batteryStatusBar" style="margin-top:10px; font-size:13px; color:var(--text-dim);">
+            <span>⚡ Battery: <strong id="batteryPercentLabel">Checking...</strong></span>
+          </div>
+          <div class="btn-group">
+            <button class="btn" id="runGitStatusBtn">Git Status</button>
+            <button class="btn" id="runNodeVerBtn">Node Version</button>
+            <button class="btn" id="runIpconfigBtn">IP Config</button>
+          </div>
+          <pre class="terminal-mini" id="pcTerminalOutput"></pre>
+        </div>
+
+        <div class="card">
+          <h3>Android & Companion Devices</h3>
+          <button class="btn btn-primary" id="requestPairingBtn">Generate Pairing PIN</button>
+          <div class="pairing-box" id="pairingBox" style="display:none;">
+            <p>Enter this code in ULTRON Companion App:</p>
+            <div class="pairing-code" id="pairingCodeDisplay">------</div>
+          </div>
+          <div class="paired-devices-list" id="pairedDevicesList">
+            <p>No external companions paired yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel 6: Memory Vault -->
+    <section class="tab-panel" id="tab-memory">
+      <h2>Cognitive Memory Vault</h2>
+      <div class="memory-search-bar">
+        <input type="text" id="memorySearchInput" placeholder="Search long-term memory vault..." />
+      </div>
+      <div class="memory-items-list" id="memoryItemsList">
+        <div class="memory-card">
+          <h4>Profile Fact</h4>
+          <p>Operator: Ayaan Raza. System: AMD Ryzen 7 5700U with 8 GB RAM.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel 7: Smart Home & IoT -->
+    <section class="tab-panel" id="tab-smarthome">
+      <h2>Smart Home & IoT Devices</h2>
+      <div class="smarthome-grid" id="smarthomeGrid">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- Panel 8: Security & Audit -->
+    <section class="tab-panel" id="tab-security">
+      <h2>Security & Operational Audit Trail</h2>
+      <div class="audit-log-container" id="auditLogContainer">
+        <!-- Logs dynamically rendered -->
+      </div>
+    </section>
+
+    <!-- Panel: System Control (Complete Windows Agent Control) -->
+    <section class="tab-panel" id="tab-system-control">
+      <h2>Advanced Windows System Control</h2>
+      <div class="system-control-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px;">
+        <!-- Connected Drives -->
+        <div class="card">
+          <h3>Storage & Connected Drives</h3>
+          <div id="uiDrivesList" style="margin-top: 10px; font-size: 13px;">
+            <div style="background: rgba(0, 243, 255, 0.05); padding: 10px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.2);">
+              <strong>C: [OS NVMe SSD]</strong> - Fixed Internal (184.2 GB Free of 476.5 GB)
+              <div style="background: #1a202c; height: 8px; border-radius: 4px; margin-top: 6px; overflow: hidden;">
+                <div style="background: var(--cyan-accent); width: 62%; height: 100%;"></div>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-primary" id="refreshDrivesBtn" style="margin-top: 12px;">Refresh Drives</button>
+        </div>
+
+        <!-- System Vitals & Performance -->
+        <div class="card">
+          <h3>AMD Ryzen 7 5700U Telemetry</h3>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; font-size: 13px;">
+            <div>CPU Load: <span id="uiCpuPercent" style="color: var(--cyan-accent); font-weight: bold;">18%</span></div>
+            <div>RAM Headroom: <span id="uiRamPercent" style="color: #48bb78; font-weight: bold;">5.2 GB Free / 8.0 GB</span></div>
+            <div>GPU Engine: <span style="color: #cbd5e0;">AMD Radeon Graphics (Hardware Acceleration Active)</span></div>
+            <div>Health Guard: <span style="color: #48bb78; font-weight: bold;">OPTIMAL (<85% RAM threshold)</span></div>
+          </div>
+          <button class="btn btn-sm btn-primary" id="refreshPerfBtn" style="margin-top: 12px;">Update Vitals</button>
+        </div>
+
+        <!-- Application & Window Control -->
+        <div class="card">
+          <h3>Application Launcher</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
+            <button class="btn btn-sm btn-outline" onclick="launchApp('notepad')">Notepad</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('calculator')">Calculator</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('explorer')">Explorer</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('terminal')">Terminal</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('browser')">Edge Browser</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('code')">VS Code</button>
+            <button class="btn btn-sm btn-outline" onclick="launchApp('vlc')">VLC</button>
+          </div>
+          <div style="margin-top: 12px;">
+            <button class="btn btn-sm btn-primary" id="takeScreenshotBtn">Capture Screenshot</button>
+            <span id="screenshotStatus" style="font-size: 12px; margin-left: 8px; color: var(--cyan-accent);"></span>
+          </div>
+        </div>
+
+        <!-- Safe Folder Organizer & Backup -->
+        <div class="card">
+          <h3>Intelligent Folder Organizer</h3>
+          <p style="font-size: 12px; color: #a0aec0;">Automatically categorizes Videos, Images, Audio, and Documents with an atomic .ultron-backup snapshot.</p>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <input type="text" id="organizeTargetInput" placeholder="Folder path (e.g. Downloads)" style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <button class="btn btn-sm btn-primary" id="organizeFolderBtn">Organize</button>
+          </div>
+          <div id="organizeResult" style="font-size: 12px; margin-top: 8px; color: #48bb78;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel: Media & Video Studio (Autonomous Content Production) -->
+    <section class="tab-panel" id="tab-media-studio">
+      <h2>Autonomous Media & Video Production Studio</h2>
+
+      <!-- Flagship One-Command Production Box -->
+      <div class="card" style="margin-top: 16px; border: 1px solid var(--cyan-accent); background: linear-gradient(180deg, rgba(0, 243, 255, 0.05) 0%, rgba(11, 22, 44, 0.8) 100%);">
+        <h3 style="color: var(--cyan-accent); letter-spacing: 1px;">ONE-COMMAND AUTONOMOUS PRODUCTION</h3>
+        <p style="font-size: 13px; color: #cbd5e0;">Instruct ULTRON to discover your footage, select clips, edit, grade, beat-sync, add voiceovers and render automatically.</p>
+        
+        <div style="display: flex; gap: 10px; margin-top: 12px;">
+          <input type="text" id="autoProdPromptInput" placeholder='e.g. "ULTRON, find the best footage on my drive and create a dangerous cinematic action edit."' style="flex: 1; padding: 12px; background: #070d19; border: 1px solid var(--cyan-accent); color: #fff; border-radius: 6px; font-size: 14px;" />
+          <button class="btn btn-primary" id="startAutoProdBtn" style="padding: 12px 24px; font-weight: bold; background: var(--cyan-accent); color: #000;">Execute Production</button>
+        </div>
+
+        <!-- Quick Template Buttons -->
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('ULTRON, find the best footage on my drive and create a dangerous cinematic action edit.')">Dangerous Action Edit</button>
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('ULTRON, create a 30-second cinematic mystery reel using my existing footage.')">30s Mystery Reel</button>
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('Make a 15-second high energy vertical reel for YouTube Shorts.')">YouTube Shorts (9:16)</button>
+          <button class="btn btn-sm btn-outline" onclick="setProductionPrompt('ULTRON, find all sunset images and compose a travel highlights montage.')">Sunset Travel Highlights</button>
+        </div>
+
+        <!-- 12-Stage Visual Progress Bar -->
+        <div id="prodProgressContainer" style="display: none; margin-top: 16px; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 6px;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+            <span id="prodStageLabel" style="color: var(--cyan-accent); font-weight: bold;">Stage: INITIALIZING</span>
+            <span id="prodPercentLabel" style="color: #48bb78; font-weight: bold;">0%</span>
+          </div>
+          <div style="background: #1a202c; height: 10px; border-radius: 5px; overflow: hidden;">
+            <div id="prodProgressBar" style="background: linear-gradient(90deg, var(--cyan-accent), #48bb78); width: 0%; height: 100%; transition: width 0.3s;"></div>
+          </div>
+          <div id="prodExportDetail" style="margin-top: 10px; font-size: 13px; color: #e2e8f0;"></div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px;">
+        <!-- Media Library & Drive Indexer -->
+        <div class="card">
+          <h3>Media Library & Search</h3>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <input type="text" id="mediaSearchInput" placeholder='Search media e.g. "car", "sunset"...' style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <button class="btn btn-sm btn-primary" id="searchMediaBtn">Search</button>
+          </div>
+          <div id="mediaResultsList" style="margin-top: 12px; max-height: 240px; overflow-y: auto; font-size: 12px;">
+            <div style="color: #a0aec0;">Click search or scan a directory to view indexed files.</div>
+          </div>
+        </div>
+
+        <!-- Autonomous Image Studio -->
+        <div class="card">
+          <h3>Autonomous Image Studio</h3>
+          <p style="font-size: 12px; color: #a0aec0;">High-impact thumbnail generation and prompt enhancement.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+            <input type="text" id="thumbTitleInput" placeholder="Thumbnail Title (e.g. ULTRON AI)" style="padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <input type="text" id="thumbSubInput" placeholder="Subtitle Tagline" style="padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <div style="display: flex; gap: 8px;">
+              <select id="thumbPresetSelect" style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;">
+                <option value="CYBERPUNK">Cyberpunk Neon</option>
+                <option value="CINEMATIC_TEAL_ORANGE">Teal & Orange</option>
+                <option value="DARK_MYSTERY">Dark Mystery</option>
+                <option value="NOIR_MONOCHROME">Film Noir</option>
+              </select>
+              <button class="btn btn-sm btn-primary" id="generateThumbBtn">Create Thumbnail</button>
+            </div>
+          </div>
+          <div id="thumbPreviewArea" style="margin-top: 12px;"></div>
+        </div>
+      </div>
+    </section>
+
+      <!-- Panel: Model Intelligence & Gateway (DSH-GOD Deep Capability Integration) -->
+    <section class="tab-panel" id="tab-model-intelligence">
+      <div class="panel-header-actions">
+        <h2>DSH-GOD Model Intelligence & Universal Gateway</h2>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-sm btn-primary" id="refreshDshStatusBtn">Refresh Status</button>
+          <button class="btn btn-sm btn-secondary" id="toggleDshGatewayBtn">Start/Stop Gateway</button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div class="grid grid-4" style="margin-top: 15px;">
+        <div class="card stat-card">
+          <div class="stat-label">Providers Registry</div>
+          <div class="stat-value" id="dshTotalProviders">76 Providers</div>
+          <div class="stat-desc" id="dshTotalModels">1,200+ Models Available</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">RTK Token Savings</div>
+          <div class="stat-value" id="dshSavedBytes">0 B</div>
+          <div class="stat-desc" id="dshSavedPercent">0% Compaction Reduction</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Universal Gateway</div>
+          <div class="stat-value" id="dshGatewayStatus">127.0.0.1:8080</div>
+          <div class="stat-desc">OpenAI & Anthropic Wire</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Free Inference Lanes</div>
+          <div class="stat-value" style="color: #48bb78;">OpenCode & Kilo</div>
+          <div class="stat-desc">Keyless Free Routing Active</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top: 20px;">
+        <!-- Provider & Catalog Explorer -->
+        <div class="card">
+          <h3>76-Provider Catalog & Management</h3>
+          <p style="font-size: 12px; color: #a0aec0;">Configure API keys, custom base URLs, and enable/disable upstream channels.</p>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <input type="text" id="dshProviderSearchInput" placeholder="Search providers or models..." style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;" />
+            <select id="dshCategoryFilter" style="padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;">
+              <option value="">All Categories</option>
+              <option value="apikey">API Key</option>
+              <option value="free">Free</option>
+              <option value="free-tier">Free Tier</option>
+              <option value="local">Local</option>
+              <option value="oauth">OAuth</option>
+            </select>
+            <button class="btn btn-sm btn-primary" id="dshSearchProvidersBtn">Filter</button>
+          </div>
+          <div id="dshProvidersList" style="margin-top: 12px; max-height: 280px; overflow-y: auto; font-size: 12px;">
+            <div style="color: #a0aec0;">Click Refresh or Filter to load provider registry.</div>
+          </div>
+        </div>
+
+        <!-- Virtual Combo Chains & Testing -->
+        <div class="card">
+          <h3>Virtual Combo Chains & Execution</h3>
+          <p style="font-size: 12px; color: #a0aec0;">Fault-tolerant chains with fallback, round-robin, smart, and capacity intersection.</p>
+          <div id="dshCombosList" style="margin-top: 10px; max-height: 160px; overflow-y: auto; font-size: 12px;">
+            <div style="color: #a0aec0;">Loading virtual combo models...</div>
+          </div>
+
+          <h4 style="margin-top: 15px; margin-bottom: 6px; font-size: 13px;">Execute Inference Turn</h4>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; gap: 8px;">
+              <select id="dshTestModelSelect" style="flex: 1; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px;">
+                <option value="combo:fast-free">combo:fast-free (Fallback Chain)</option>
+                <option value="combo:smart-code">combo:smart-code (Smart Code)</option>
+                <option value="combo:balanced-general">combo:balanced-general (Round-Robin)</option>
+                <option value="opencode:deepseek-chat">opencode:deepseek-chat (Keyless)</option>
+                <option value="kilo:free-qwen">kilo:free-qwen (Keyless Free Pool)</option>
+              </select>
+              <button class="btn btn-sm btn-primary" id="dshRunInferenceBtn">Run Test</button>
+            </div>
+            <textarea id="dshPromptInput" rows="2" placeholder="Enter prompt to execute through DSH-GOD engine..." style="width: 100%; padding: 6px; background: #0d1527; border: 1px solid #2d3748; color: #fff; border-radius: 4px; font-family: monospace;"></textarea>
+          </div>
+          <div id="dshInferenceOutput" style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 12px; max-height: 140px; overflow-y: auto;">
+            <div style="color: #a0aec0;">Telemetry and model output will appear here.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Channels & Health Row -->
+      <div class="card" style="margin-top: 20px;">
+        <h3>10 Standalone Account Channels Status</h3>
+        <p style="font-size: 12px; color: #a0aec0;">Audit status and memory profiles for LobsterAI, Qoder, TRAE, Cline, Loomy, Raccoon, MiniMax, ZCode, Gemini.</p>
+        <div id="dshChannelsList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 12px;">
+          <div style="color: #a0aec0;">Loading account channel matrices...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel: Emotional Intelligence (HEI) -->
+    <section class="tab-panel" id="tab-hei">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2>Human Emotional Intelligence & Adaptive Personality (HEI)</h2>
+        <span class="badge" style="background: #a855f7; color: white;">51-Emotion Engine Active</span>
+      </div>
+      <p style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">
+        ULTRON recognizes 51 distinct human emotions from A to Z, evaluates intensity, valence, and mixed emotional states, and naturally adapts communication, personality, tone, behavior, and responses with profound emotional intelligence and privacy.
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+        <!-- Card 1: Adaptive Controls -->
+        <div class="card">
+          <h3>Adaptive Response Controls</h3>
+          <div style="margin: 12px 0;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="heiMasterToggle" checked />
+              <span style="font-weight: 600;">Enable Adaptive Emotional Responses</span>
+            </label>
+            <p style="font-size: 11px; color: #94a3b8; margin-top: 4px;">When active, ULTRON automatically adapts its communication tone and pacing.</p>
+          </div>
+
+          <div style="margin: 12px 0;">
+            <label for="heiStyleSelect">Preferred Communication Style:</label>
+            <select id="heiStyleSelect" style="width: 100%; padding: 6px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; margin-top: 4px;">
+              <option value="BALANCED" selected>Balanced (Natural, Poised & Versatile)</option>
+              <option value="DIRECT">Direct & Solution-Focused (Concise, Pragmatic)</option>
+              <option value="EMPATHETIC">Empathetic & Supportive (Warm, Patient)</option>
+              <option value="ANALYTICAL">Analytical & Inquiring (Deep, Exploratory)</option>
+            </select>
+          </div>
+
+          <div style="margin: 12px 0;">
+            <label style="display: flex; justify-content: space-between;">
+              <span>Empathy Level:</span>
+              <span id="heiEmpathyVal">0.80</span>
+            </label>
+            <input type="range" id="heiEmpathySlider" min="0.1" max="1.0" step="0.05" value="0.8" style="width: 100%; margin-top: 4px;" />
+          </div>
+
+          <div style="margin: 12px 0;">
+            <label style="display: flex; justify-content: space-between;">
+              <span>Confidence Threshold:</span>
+              <span id="heiConfidenceVal">0.35</span>
+            </label>
+            <input type="range" id="heiConfidenceSlider" min="0.1" max="0.9" step="0.05" value="0.35" style="width: 100%; margin-top: 4px;" />
+          </div>
+        </div>
+
+        <!-- Card 2: Personalization & Boundaries -->
+        <div class="card">
+          <h3>Personalization & Boundaries</h3>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin: 12px 0;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <input type="checkbox" id="heiDirectWhenFrustrated" checked />
+              <span>Prioritize direct solutions when frustrated (skip lectures)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <input type="checkbox" id="heiFewerQuestionsWhenOverwhelmed" checked />
+              <span>Reduce questions when overwhelmed (focus on 1 step)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <input type="checkbox" id="heiEnthusiasticWhenCelebrating" checked />
+              <span>Share genuine enthusiasm when celebrating progress</span>
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button class="btn btn-secondary btn-sm" id="heiClearContextBtn">Clear Active Context</button>
+            <button class="btn btn-danger btn-sm" id="heiDeleteMemoryBtn">Delete Emotional Memory</button>
+          </div>
+          <div id="heiMemoryStatusText" style="font-size: 11px; color: #4ade80; margin-top: 8px;">
+            ● Strict Privacy Guard: Zero psychiatric profiling. Data stored strictly in your local session.
+          </div>
+        </div>
+
+        <!-- Card 3: Live Emotional Analysis Telemetry -->
+        <div class="card" style="grid-column: 1 / -1;">
+          <h3>Real-Time Emotional Analysis & Live Trajectory</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 10px;">
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 6px; border: 1px solid #1e293b;">
+              <div style="font-size: 11px; color: #94a3b8;">PRIMARY EMOTION</div>
+              <div id="heiLivePrimary" style="font-size: 16px; font-weight: bold; color: #38bdf8; margin-top: 4px;">CALMNESS</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 6px; border: 1px solid #1e293b;">
+              <div style="font-size: 11px; color: #94a3b8;">INTENSITY & CONFIDENCE</div>
+              <div id="heiLiveIntensity" style="font-size: 14px; color: #f1f5f9; margin-top: 4px;">Intensity: 0.30 | Conf: 0.85</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 6px; border: 1px solid #1e293b;">
+              <div style="font-size: 11px; color: #94a3b8;">EMOTIONAL TRAJECTORY</div>
+              <div id="heiLiveTrend" style="font-size: 14px; color: #4ade80; margin-top: 4px;">STABLE (Equilibrium)</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 6px; border: 1px solid #1e293b;">
+              <div style="font-size: 11px; color: #94a3b8;">ADAPTIVE TONE</div>
+              <div id="heiLiveTone" style="font-size: 13px; color: #c084fc; margin-top: 4px;">SERENE_BALANCED</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  
+    <!-- Panel: ULTRON Eyes (Vision Sensory System) -->
+    <section class="tab-panel" id="tab-eyes">
+      <div class="eyes-container">
+        <!-- Control Toolbar -->
+        <div class="card" style="margin-bottom: 16px;">
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <label for="eyesCameraSelect" style="font-size: 12px; color: var(--text-muted); font-weight: bold;">CAMERA:</label>
+                <select id="eyesCameraSelect" style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px;">
+                  <option value="cam-default-0">Integrated HD Webcam (Default)</option>
+                </select>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <label for="eyesFpsSelect" style="font-size: 12px; color: var(--text-muted); font-weight: bold;">SAMPLING:</label>
+                <select id="eyesFpsSelect" style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px;">
+                  <option value="1">1 FPS (Ultra-Light / Low RAM)</option>
+                  <option value="2" selected>2 FPS (Balanced Default)</option>
+                  <option value="3">3 FPS (Responsive)</option>
+                  <option value="5">5 FPS (High Precision)</option>
+                </select>
+              </div>
+
+              <div id="eyesStatusPill" class="eyes-status-pill standby" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); font-size: 11px; font-weight: 600; color: #94a3b8;">
+                <span class="status-dot gray" style="width: 8px; height: 8px; border-radius: 50%; background: #64748b; display: inline-block;"></span>
+                <span>VISION STANDBY</span>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-primary" id="eyesStartBtn">👁️ Start Live Vision</button>
+              <button class="btn" id="eyesPauseBtn" disabled>⏸️ Pause</button>
+              <button class="btn" id="eyesResumeBtn" disabled>▶️ Resume</button>
+              <button class="btn btn-danger" id="eyesStopBtn" disabled>⏹️ Stop Camera</button>
+              <button class="btn btn-warning" id="eyesClearMemBtn">🗑️ Clear Memory</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Vision Grid -->
+        <div style="display: grid; grid-template-columns: minmax(320px, 1.2fr) minmax(320px, 1fr); gap: 16px;">
+          <!-- Left Column: Video Viewport & Overlays -->
+          <div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--cyan-accent); box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);">
+              <video id="eyesVideoElement" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; display: block;"></video>
+              <canvas id="eyesOverlayCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+              
+              <!-- HUD Corner Overlays -->
+              <div style="position: absolute; top: 10px; left: 10px; font-size: 10px; font-family: monospace; color: var(--cyan-accent); background: rgba(10, 13, 20, 0.7); padding: 2px 6px; border-radius: 3px; border: 1px solid rgba(0, 240, 255, 0.4);">
+                ULTRON EYES // FEED ACTIVE
+              </div>
+            </div>
+
+            <!-- Privacy Guarantee Banner -->
+            <div style="font-size: 11px; color: #94a3b8; background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 6px; border: 1px solid #1e293b; line-height: 1.4;">
+              🛡️ <strong>Privacy & Security Protocol:</strong> Live camera streaming operates exclusively upon explicit user authorization. Video feeds and biometric facial representations are processed in bounded session memory with ZERO permanent background archiving without explicit consent.
+            </div>
+          </div>
+
+          <!-- Right Column: Perception Panels & Q&A -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Panel 1: Detected Objects -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: var(--cyan-accent); letter-spacing: 1px;">DETECTED OBJECTS & 2D LOCALIZATION</h4>
+              <div id="eyesObjectsList" style="min-height: 40px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                <span class="text-muted" style="font-size: 12px;">Awaiting camera stream...</span>
+              </div>
+            </div>
+
+            <!-- Panel 2: Scene & Environment -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #10b981; letter-spacing: 1px;">SCENE UNDERSTANDING & ENVIRONMENTAL CHANGES</h4>
+              <div id="eyesSceneDescription" style="font-size: 12px; color: var(--text-main); min-height: 30px;">
+                Scene analysis standby.
+              </div>
+            </div>
+
+            <!-- Panel 3: Visible Text OCR -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #38bdf8; letter-spacing: 1px;">VISIBLE TEXT & DOCUMENT OCR</h4>
+              <div id="eyesOcrText" style="min-height: 24px; font-size: 12px;">
+                No text in current frame.
+              </div>
+            </div>
+
+            <!-- Panel 4: Human Activity -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #c084fc; letter-spacing: 1px;">HUMAN ACTIVITY & POSTURE PERCEPTION</h4>
+              <div id="eyesHumanActivity" style="min-height: 24px; font-size: 12px;">
+                Monitoring field of view.
+              </div>
+            </div>
+
+            <!-- Panel 5: Visual Q&A Console -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #ff6b00; letter-spacing: 1px;">VISUAL DECISION-MAKING & REASONING CONSOLE</h4>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="ULTRON, mere saamne kya hai?">👁️ Mere Saamne Kya Hai?</button>
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="Camera se dekho aur mujhe scene samjhao.">🔍 Scene Samjhao</button>
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="Is screen par kya likha hai?">📄 Read Screen Text</button>
+                <button type="button" class="btn btn-sm eyes-quick-chip" data-query="Is device me koi visible problem hai?">🛠️ Check Device Issues</button>
+              </div>
+
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="eyesQueryInput" placeholder="Ask ULTRON about what the camera sees..." style="flex: 1; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 12px; border-radius: 4px; font-size: 13px;" />
+                <button class="btn btn-primary" id="eyesQueryBtn">Ask EYES</button>
+              </div>
+
+              <div id="eyesQueryResult" style="margin-top: 10px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  
+    <!-- Panel: ULTRON Cyber Core (Ethical Hacking & Cybersecurity) -->
+    <section class="tab-panel" id="tab-cyber">
+      <div class="cyber-container" style="display: flex; flex-direction: column; gap: 16px;">
+        <!-- Top Control Bar -->
+        <div class="card" style="padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h3 style="margin: 0; color: #00f0ff; letter-spacing: 1px;">ULTRON CYBER CORE COMMAND</h3>
+              <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.4); color: #00f0ff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                13 SPECIALIST CYBER AGENTS ARMED
+              </span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-danger" id="cyberEmergencyStopBtn">🛑 Engage Cyber Emergency Stop</button>
+              <button class="btn btn-sm btn-primary" id="cyberEmergencyResumeBtn">▶️ Resume Operations</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3-Column Grid -->
+        <div style="display: grid; grid-template-columns: minmax(280px, 1fr) minmax(340px, 1.4fr) minmax(300px, 1.2fr); gap: 16px;">
+          <!-- Left Column: 13 Cyber Agents & Authorized Scope Registry -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #00f0ff; letter-spacing: 1px;">13-SPECIALIST CYBER AGENT FLEET</h4>
+              <div id="cyberAgentsList" style="display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto;">
+                <span class="text-muted" style="font-size: 11px;">Loading Cyber Agents...</span>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="margin: 0; font-size: 12px; color: #10b981; letter-spacing: 1px;">AUTHORIZED TARGET SCOPES</h4>
+                <button class="btn btn-sm" id="cyberRegisterScopeBtn" style="font-size: 10px; padding: 2px 6px;">+ Add Scope</button>
+              </div>
+              <div id="cyberScopesList" style="max-height: 220px; overflow-y: auto;">
+                <span class="text-muted" style="font-size: 11px;">Loading Scopes...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Middle Column: Mission Execution Console -->
+          <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <h4 style="margin: 0; font-size: 12px; color: #ff6b00; letter-spacing: 1px;">AUTONOMOUS SECURITY ASSESSMENT MISSION</h4>
+            <div style="font-size: 11px; color: #94a3b8;">
+              Executes coordinated workflow: <strong>RECON → SCAN → WEB/API → SAST → AI RED-TEAM → REPORT</strong>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="cyberTargetInput" value="localhost" placeholder="Enter authorized target (e.g. localhost, myapp.test)" style="flex: 1; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 12px; border-radius: 4px; font-size: 13px;" />
+              <button class="btn btn-primary" id="cyberRunMissionBtn">🚀 Run Mission</button>
+            </div>
+
+            <div id="cyberMissionResult" style="min-height: 250px; flex: 1;">
+              <div style="border: 1px dashed #1e293b; padding: 20px; text-align: center; color: #64748b; font-size: 12px; border-radius: 4px;">
+                Enter target and click 'Run Mission' to execute authorized multi-agent assessment.
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Specialized Tools (SAST, Web, AI Red-Team) -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Tool 1: Code Shield SAST -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 12px; color: #38bdf8; letter-spacing: 1px;">CODE SHIELD (SAST & SECRETS)</h4>
+              <textarea id="cyberSastInput" placeholder="Paste source code snippet to scan for CWE vulnerabilities..." style="width: 100%; height: 60px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: #38bdf8; font-family: monospace; font-size: 11px; padding: 6px; border-radius: 4px;"></textarea>
+              <button class="btn btn-sm btn-primary" id="cyberSastBtn" style="margin-top: 6px; width: 100%;">Scan Code</button>
+              <div id="cyberSastResult" style="margin-top: 6px; font-size: 11px;"></div>
+            </div>
+
+            <!-- Tool 2: Web & API Audit -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 12px; color: #c084fc; letter-spacing: 1px;">WEB & API DEFENSE AUDITOR</h4>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="cyberWebInput" value="http://localhost:3000" style="flex: 1; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-main); padding: 4px 8px; font-size: 11px; border-radius: 4px;" />
+                <button class="btn btn-sm btn-primary" id="cyberWebBtn">Audit</button>
+              </div>
+              <div id="cyberWebResult" style="margin-top: 6px; font-size: 11px;"></div>
+            </div>
+
+            <!-- Tool 3: AI Red-Team -->
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 12px; color: #ec4899; letter-spacing: 1px;">AI RED-TEAM EVALUATOR</h4>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">Tests Prompt Injection, Tool Escalation & Canary Leaks.</div>
+              <button class="btn btn-sm btn-primary" id="cyberAiRedTeamBtn" style="width: 100%;">Evaluate AI Defenses</button>
+              <div id="cyberAiRedTeamResult" style="margin-top: 6px; font-size: 11px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  
+    <!-- Panel: ULTRON SENTINEL (Autonomous Cybersecurity & Network Intelligence) -->
+    <section class="tab-panel" id="tab-sentinel">
+      <div class="sentinel-container" style="display: flex; flex-direction: column; gap: 14px;">
+        <!-- Top Command Bar -->
+        <div class="card" style="padding: 12px; background: rgba(13, 17, 23, 0.95); border: 1px solid #1e293b;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h3 style="margin: 0; color: #c084fc; letter-spacing: 1.5px; font-size: 14px;">🛰️ ULTRON SENTINEL DIVISION</h3>
+              <span id="sentinelStatusBadge" style="font-size: 11px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #10b981; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                ONLINE_DEFENSIVE
+              </span>
+              <span style="font-size: 10px; color: #94a3b8; background: #0f172a; padding: 2px 6px; border-radius: 3px; border: 1px solid #1e293b;">
+                ₹0-FIRST • PURE CPU (0 CUDA)
+              </span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-danger" id="sentinelEmergencyHaltBtn">🛑 Emergency Halt</button>
+            </div>
+          </div>
+          <div id="sentinelHwTelemetry" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, 0.08);">
+            <!-- Hardware Telemetry Populated Dynamically -->
+          </div>
+        </div>
+
+        <!-- Scan Target & Control Toolbar -->
+        <div class="card" style="padding: 10px; background: rgba(15, 23, 42, 0.85); border: 1px solid #1e293b;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="sentinelTargetInput" value="localhost" placeholder="Target host or IP (e.g. localhost, 127.0.0.1)" style="flex: 1; min-width: 200px; background: #070913; border: 1px solid #334155; color: #fff; padding: 7px 12px; border-radius: 4px; font-size: 12px; font-family: monospace;" />
+            <button class="btn btn-primary btn-sm" id="sentinelStartScanBtn">▶ Start Safe Scan</button>
+            <button class="btn btn-secondary btn-sm" id="sentinelPauseBtn">⏸ Pause</button>
+            <button class="btn btn-secondary btn-sm" id="sentinelResumeBtn">⏯ Resume</button>
+            <button class="btn btn-secondary btn-sm" id="sentinelStopBtn">⏹ Stop</button>
+            <button class="btn btn-primary btn-sm" id="sentinelReportBtn" style="background: #7c3aed; border-color: #6d28d9;">📋 Generate Report</button>
+          </div>
+        </div>
+
+        <!-- 3-Column Sentinel Operations Grid -->
+        <div style="display: grid; grid-template-columns: minmax(240px, 1fr) minmax(340px, 1.4fr) minmax(300px, 1.2fr); gap: 14px;">
+          <!-- Left Column: 7-Phase Workflow & Active Scopes -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 11px; color: #c084fc; letter-spacing: 1px;">7-PHASE AUTONOMOUS LOOP</h4>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div id="sentinel-phase-discover" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">1. DISCOVER — Host/Subnet Reachability</div>
+                <div id="sentinel-phase-inventory" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">2. INVENTORY — Safe TCP Port Probes</div>
+                <div id="sentinel-phase-analyze" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">3. ANALYZE — Banner & Fingerprint Match</div>
+                <div id="sentinel-phase-identify_risks" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">4. IDENTIFY RISKS — CVSS v3.1 Scoring</div>
+                <div id="sentinel-phase-prioritize" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">5. PRIORITIZE — Impact Ranking</div>
+                <div id="sentinel-phase-recommend" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">6. RECOMMEND — Concrete Patch Advice</div>
+                <div id="sentinel-phase-report" style="padding: 5px 8px; border-radius: 4px; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.5); font-size: 10px; font-family: monospace;">7. REPORT — Audit Trail & Synthesis</div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 6px 0; font-size: 11px; color: #10b981; letter-spacing: 1px;">AUTHORIZATION & STATUS</h4>
+              <div style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+                <div><span style="color: #64748b;">Active Scopes:</span> <strong id="sentinelScopesCount" style="color: #10b981;">1 Authorized</strong></div>
+                <div><span style="color: #64748b;">Active Vulns:</span> <strong id="sentinelActiveVulnsCount" style="color: #f97316;">0 Open</strong></div>
+                <div><span style="color: #64748b;">Policy:</span> <span style="color: #94a3b8;">Defensive & Non-Destructive</span></div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px; flex: 1;">
+              <h4 style="margin: 0 0 6px 0; font-size: 11px; color: #38bdf8; letter-spacing: 1px;">ACTIVITY LOG & RATIONALE</h4>
+              <div id="sentinelActivityLog" style="max-height: 220px; overflow-y: auto; font-family: monospace; font-size: 10px; color: #94a3b8;">
+                Ready. Click 'Start Safe Scan' to initiate assessment.
+              </div>
+            </div>
+          </div>
+
+          <!-- Middle Column: Topology Graph & Discovered Assets -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="card" style="padding: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 11px; color: #c084fc; letter-spacing: 1px;">NETWORK TOPOLOGY GRAPH</h4>
+              <div id="sentinelTopologyContainer" style="min-height: 220px; display: flex; align-items: center; justify-content: center; background: #070913; border: 1px solid #1e293b; border-radius: 4px;">
+                <span style="color: #64748b; font-size: 11px;">Topology renders upon scan execution.</span>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 12px; flex: 1;">
+              <h4 style="margin: 0 0 8px 0; font-size: 11px; color: #38bdf8; letter-spacing: 1px;">DISCOVERED ASSETS & OPEN PORTS</h4>
+              <div id="sentinelAssetsContainer" style="max-height: 240px; overflow-y: auto;">
+                <span style="color: #64748b; font-size: 11px;">No assets discovered yet.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Security Findings & CVE Remediation -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="card" style="padding: 12px; flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="margin: 0; font-size: 11px; color: #f43f5e; letter-spacing: 1px;">FINDINGS & CVE CORRELATION</h4>
+                <span style="font-size: 9px; color: #94a3b8;">CVSS v3.1 Precision</span>
+              </div>
+              <div id="sentinelFindingsContainer" style="max-height: 480px; overflow-y: auto;">
+                <div style="border: 1px dashed #1e293b; padding: 20px; text-align: center; color: #64748b; font-size: 11px; border-radius: 4px;">
+                  Findings and CVE remediations will populate after analysis.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module" src="voice-activation.js"></script>
+  <script type="module" src="hand-gesture-core.js"></script>
+  <script src="app.js"></script>
+  <script src="ultron-eyes.js"></script>
+  <script src="cyber-dashboard.js"></script>
+  <script src="sentinel-dashboard.js"></script>
+  <script type="module" src="floating-core.js"></script>
+</body>
+</html>

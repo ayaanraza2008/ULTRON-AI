@@ -12,16 +12,44 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ultron_tester
+          POSTGRES_PASSWORD: ultron_test_password
+          POSTGRES_DB: ultron_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CI: "true"
+      ULTRON_ALLOW_TEST_MIGRATIONS: "true"
+      PGPASSWORD: ultron_test_password
+      ULTRON_TEST_DATABASE_URL: "postgres://ultron_tester@127.0.0.1:5432/ultron_test"
+      ULTRON_TEST_RLS_DATABASE_URL: "postgres://ultron_tester@127.0.0.1:5432/ultron_test_rls"
+      ULTRON_TEST_MIGRATION_DATABASE_URL: "postgres://ultron_tester@127.0.0.1:5432/ultron_test_migration"
+      ULTRON_TEST_WORKER_DATABASE_URL: "postgres://ultron_tester@127.0.0.1:5432/ultron_test_worker"
+      ULTRON_TEST_RUNTIME_DATABASE_URL: "postgres://ultron_tester@127.0.0.1:5432/ultron_test_runtime"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Verify Browser Use bridge policy and Python syntax
+      - name: Verify Browser Use bridge policy, Chromium runtime and Python syntax
         run: |
+          python -m pip install "playwright>=1.50,<2"
+          python -m playwright install --with-deps chromium
           python -m py_compile browser-use-bridge/main.py browser-use-bridge/navigation_policy.py browser-use-bridge/startup_smoke.py browser-use-bridge/test_navigation_policy.py browser-use-bridge/test_startup_smoke.py
           python browser-use-bridge/test_navigation_policy.py
           python browser-use-bridge/test_startup_smoke.py
@@ -38,7 +66,17 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=high
       - run: npm run check
+      - name: Install FFmpeg for real media-render integration tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          ffmpeg -version
+          ffprobe -version
+      - name: Provision isolated disposable PostgreSQL test databases
+        run: node scripts/provision-test-databases.mjs
       - run: npm test
+      - name: Run ULTRON repository security quality gate
+        run: npm run security:report
   world-intelligence-build:
     runs-on: ubuntu-latest
     steps:
@@ -57,6 +95,8 @@ jobs:
         working-directory: .build-gods-eye-view
         run: |
           npm ci --include=dev
+          npm audit fix --ignore-scripts
+          npm audit --audit-level=high
           npm run build
       - name: Verify injected ULTRON bridge
         run: |

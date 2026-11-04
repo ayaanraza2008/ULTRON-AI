@@ -6,7 +6,7 @@ import { SmartHomeHub } from "../integrations/smart-home.js";
 import { ProductivitySuite } from "../integrations/productivity.js";
 
 test("Coding Sandbox: fails closed until a verified OS-level isolation runtime is configured", async () => {
-  const sandbox = new CodingSandbox({ timeoutMs: 3000 });
+  const sandbox = new CodingSandbox({ timeoutMs: 3000, dockerAvailable: false });
   const readiness = await sandbox.initialize();
 
   assert.equal(readiness.ready, false);

@@ -78,7 +78,7 @@ test("Media & System Routes: Video timeline builder and prompt enhancement endpo
   });
 });
 
-test("Media & System Routes: Autonomous production endpoint executes 12-step pipeline", async () => {
+test("Media & System Routes: Autonomous production endpoint reports missing source media", async () => {
   await withRouter({}, async base => {
     const prodRes = await fetch(base + "/api/jarvis/media/production/autonomous", {
       method: "POST",
@@ -88,18 +88,20 @@ test("Media & System Routes: Autonomous production endpoint executes 12-step pip
       })
     });
     const prodBody = await prodRes.json();
-    assert.equal(prodRes.status, 200);
-    assert.equal(prodBody.success, true);
-    assert.equal(prodBody.status, "COMPLETED");
-    assert.equal(prodBody.stagesCompleted, 12);
-    assert.ok(prodBody.videoExportPath);
+    assert.equal(prodRes.status, 424);
+    assert.equal(prodBody.success, false);
+    assert.equal(prodBody.status, "BLOCKED_MEDIA_RENDER");
+    assert.equal(prodBody.videoExportStatus, "BLOCKED_SOURCE_MEDIA_UNAVAILABLE");
+    assert.equal(prodBody.videoExportPath, null);
+    assert.deepEqual(prodBody.stagesBlocked, ["RENDERING_VIDEO", "SAVING_EXPORT"]);
 
-    // Verify history endpoint
+    // The orchestration history records the blocked result for follow-up.
     const historyRes = await fetch(base + "/api/jarvis/media/production/history");
     const historyBody = await historyRes.json();
     assert.equal(historyRes.status, 200);
     assert.equal(historyBody.success, true);
     assert.ok(historyBody.history.length >= 1);
+    assert.equal(historyBody.history[0].status, "BLOCKED_MEDIA_RENDER");
   });
 });
 

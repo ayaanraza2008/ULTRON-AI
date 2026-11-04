@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale completion percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI Development State
 
 Last verified: 2026-10-31 UTC (main CI and exact Render production revision verified; external provider, account and device flows remain open)

@@ -156,7 +156,10 @@ class Harness2Tests(unittest.TestCase):
             harness2.candidate_dir(run_root, "../../outside")
         outside = self.root / "outside"
         outside.mkdir()
-        (candidates / "baseline").symlink_to(outside, target_is_directory=True)
+        try:
+            (candidates / "baseline").symlink_to(outside, target_is_directory=True)
+        except OSError as e:
+            raise unittest.SkipTest(f"Symlinks not supported on OS: {e}")
         with self.assertRaises(harness2.Harness2Error):
             harness2.candidate_dir(run_root, "baseline")
 
@@ -223,7 +226,10 @@ class Harness2Tests(unittest.TestCase):
 
         config = self.root / ".harness2" / "config.json"
         planted_json_tmp = config.with_suffix(config.suffix + ".tmp")
-        planted_json_tmp.symlink_to(outside)
+        try:
+            planted_json_tmp.symlink_to(outside)
+        except OSError as e:
+            raise unittest.SkipTest(f"Symlinks not supported on OS: {e}")
         harness2.atomic_json(config, {"safe": True})
         self.assertEqual(outside.read_text(encoding="utf-8"), "keep me")
         self.assertTrue(planted_json_tmp.is_symlink())

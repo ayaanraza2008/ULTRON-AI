@@ -22,6 +22,7 @@ import { classifyTaskRoute } from "./task-router.js";
 import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./integrations/google-workspace.js";
 import { getChromeDevToolsReadiness, runChromeDevToolsAction } from "./integrations/chrome-devtools.js";
 import { getOpenSeoReadiness, runOpenSeoTool } from "./integrations/openseo-mcp.js";
+import { getHexStrikeReadiness, runHexStrikeScan } from "./integrations/hexstrike-ai.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
@@ -132,6 +133,7 @@ const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
   "synthesize_speech",
   "transcribe_audio",
   "check_openviking",
+  "hexstrike_scan",
   "openviking_find_context",
   "openviking_read_context",
   "google_gmail_list_unread",
@@ -692,6 +694,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     { type: "function", function: { name: "enqueue_employee_task", description: "Queue a background AI Employee plan/draft/review/report only when the user explicitly asks for background or scheduled work. Does not perform external actions.", parameters: { type: "object", properties: { role: { type: "string", enum: [...ROLES] }, goal: { type: "string", minLength: 2, maxLength: 2000 }, context: { type: "string", maxLength: 4000 }, mode: { type: "string", enum: [...MODES] } }, required: ["role", "goal", "mode"], additionalProperties: false } } },
     { type: "function", function: { name: "geo_sleuth_investigate", description: "Autonomously run the bounded Geo-Sleuth photo-geolocation workflow on the image attached to this agent request. Runs intake, initializes an isolated candidate board, computes next steps, checks the board and produces an evidence report. Never invent coordinates or precision. Reverse-image search sends image-derived information to external providers and is off unless the user begins their current message with: I approve sending image-derived information from this photo to external reverse-image search providers for this investigation.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_integrations", description: "Report which ULTRON integrations are configured and what dependencies are missing. This is configuration status, not proof of live connectivity.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "hexstrike_scan", description: "Owner-only authorized local defensive scan using the configured HexStrike service. Only Trivy filesystem/config and Checkov IaC scans are allowed; target must be a relative directory under HEXSTRIKE_SCAN_ROOT and inside an active ULTRON security scope. No remote scanning, exploit, brute-force, or arbitrary command execution.", parameters: { type: "object", properties: { tool: { type: "string", enum: ["trivy-fs", "trivy-config", "checkov"] }, target: { type: "string", minLength: 1, maxLength: 240, description: "Relative directory under HEXSTRIKE_SCAN_ROOT." } }, required: ["tool", "target"], additionalProperties: false } } },
     { type: "function", function: { name: "check_cactus", description: "Read-only: check whether the configured local Cactus/Needle OpenAI-compatible model server is reachable and list its available model IDs. Does not download models or run inference.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "check_desktop_companion", description: "Read-only: check the authenticated Windows companion status and paired-device capabilities. Never executes commands, reads local files, captures screenshots, or controls the PC.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "obscura_inspect_public_page", description: "Read-only: use the configured Obscura MCP browser to navigate to a public HTTPS URL and return a DOM/text snapshot. Private/local targets, authentication bypass, stealth flags, proxy rotation, form submission, purchases, and publishing are blocked.", parameters: { type: "object", properties: { url: { type: "string", minLength: 10, maxLength: 2000 } }, required: ["url"], additionalProperties: false } } },
@@ -770,6 +773,45 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       if (!baseUrl) continue;
       seen.add(name);
       providers.push({ name, baseUrl, apiKey, model: item.model.trim(), priority: Number.isFinite(item.priority) ? item.priority : 100, supportsTools: item.supportsTools !== false });
+    }
+
+    const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+    if (groqKey && !seen.has("groq")) {
+      seen.add("groq");
+      providers.push({
+        name: "groq",
+        baseUrl: "https://api.groq.com/openai/v1",
+        apiKey: groqKey,
+        model: bounded(env.GROQ_DEFAULT_MODEL, 120) || "llama-3.3-70b-versatile",
+        priority: 20,
+        supportsTools: true
+      });
+    }
+
+    const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+    if (geminiKey && !/^(AQ\.|ya29\.)/i.test(geminiKey) && !seen.has("gemini")) {
+      seen.add("gemini");
+      providers.push({
+        name: "gemini",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+        apiKey: geminiKey,
+        model: bounded(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-1.5-flash",
+        priority: 30,
+        supportsTools: true
+      });
+    }
+
+    const cerebrasKey = typeof env.CEREBRAS_API_KEY === "string" ? env.CEREBRAS_API_KEY.trim() : "";
+    if (cerebrasKey && !seen.has("cerebras")) {
+      seen.add("cerebras");
+      providers.push({
+        name: "cerebras",
+        baseUrl: "https://api.cerebras.ai/v1",
+        apiKey: cerebrasKey,
+        model: bounded(env.CEREBRAS_DEFAULT_MODEL, 120) || "llama-3.3-70b",
+        priority: 40,
+        supportsTools: true
+      });
     }
 
     // When a shared OpenRouter key and a model list already exist, derive a
@@ -1002,6 +1044,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       }));
     }
     if (name === "check_integrations") return { integrations: buildIntegrationCatalog(env), note: "Configured status only; not all external services are live-tested." };
+    if (name === "hexstrike_scan") return runHexStrikeScan({ env, fetchImpl, userId: req.supabaseUser?.id, tool: args.tool, target: args.target });
     if (name === "check_openviking") return getOpenVikingReadiness({ env, userId: req.supabaseUser?.id });
     if (name === "openviking_find_context") return findOpenVikingContext({ env, userId: req.supabaseUser?.id, query: args.query, limit: args.limit, targetUri: args.targetUri, fetchImpl });
     if (name === "openviking_read_context") return readOpenVikingContext({ env, userId: req.supabaseUser?.id, uri: args.uri, fetchImpl });
@@ -1452,6 +1495,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         { name: "create_spaceplanner_plan", available: true, execution: "automatic_spaceplanner_compatible_json_and_editor_link_no_external_save" },
         { name: "coding_assist", available: hasEmployeeModelProvider(env), execution: "draft_only" },
         { name: "check_integrations", available: true, execution: "configuration_readiness_only" },
+        { name: "hexstrike_scan", available: (() => { const readiness = getHexStrikeReadiness(env); return readiness.scanReady && Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID) && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID; })(), state: getHexStrikeReadiness(env).state, execution: "owner_scoped_authorized_local_trivy_and_checkov_scans_only" },
         { name: "geo_sleuth_investigate", available: env.GEO_SLEUTH_ENABLED === "true", execution: "bounded_autonomous_photo_geolocation" },
         { name: "check_comfyui", available: Boolean(safeBase(env.COMFYUI_BASE_URL)), execution: "live_health_check_when_configured" },
         { name: "world_intelligence_command", available: true, execution: "returns_validated_action_for_browser_dispatch_not_server_executed" },

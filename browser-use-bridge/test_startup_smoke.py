@@ -1,10 +1,15 @@
 """Pure policy tests for opt-in browser smoke logging."""
 import unittest
 
-from startup_smoke import SMOKE_ENV, SMOKE_TASK, browser_smoke_enabled, configure_browser_logging, summarize_browser_smoke
+from startup_smoke import SMOKE_ENV, SMOKE_TASK, browser_smoke_enabled, browser_runtime_status, configure_browser_logging, summarize_browser_smoke
 
 
 class BrowserStartupSmokeTests(unittest.TestCase):
+    def test_browser_runtime_probe_launches_real_chromium(self):
+        status = browser_runtime_status()
+        self.assertTrue(status.get("ready"), status)
+        self.assertEqual(status.get("engine"), "chromium")
+
     def test_smoke_is_opt_in_and_off_by_default(self):
         self.assertFalse(browser_smoke_enabled({}))
         self.assertFalse(browser_smoke_enabled({SMOKE_ENV: "true"}))

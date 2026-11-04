@@ -4,7 +4,7 @@ import { createApp } from "../server.js";
 
 const env = {
   NODE_ENV: "test",
-  APP_ACCESS_PASSWORD: "test-password",
+  APP_ACCESS_PASSWORD: "test-secret-password",
   SESSION_SECRET: "test-session-secret-that-is-at-least-32-chars",
   OPENROUTER_API_KEY: "test-provider-key",
   OPENROUTER_DEFAULT_MODEL: "vendor/model-a",

@@ -1,8 +1,8 @@
 # GEMINI.md — Gemini & Antigravity Agent Guidelines
 ## PROJECT CODENAME: ULTRON ETERNAL
-### ONE BRAIN • COMPLETE AUTONOMY • CONTINUOUS EVOLUTION • 101% ACCOUNTABILITY
+### ONE BRAIN • CONTINUOUS IMPROVEMENT • EVIDENCE-BASED ACCOUNTABILITY
 
-> **Permanent Single Source of Truth:** Read [`ULTRON_MASTER_CHARTER.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_MASTER_CHARTER.md) and [`ULTRON_CHECKPOINT.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/ULTRON_CHECKPOINT.md).  
+> **Engineering principles and resume notes:** `ULTRON_MASTER_CHARTER.md` and `ULTRON_CHECKPOINT.md`. **Canonical release status and evidence:** `ULTRON_STATUS.md`.  
 > **Project:** ULTRON AI (`ayaanraza2008/ULTRON-AI`)  
 > **Render Destination:** Workspace **`Ultron core`** (`https://ultron-ai-core.onrender.com`)  
 > **Database:** Supabase project `opdjfhwepmcprbqojpat` (Region: `ap-south-1`, Mumbai)  
@@ -13,7 +13,7 @@
 
 ## 1. THE 12 IMMUTABLE LAWS (MANDATORY FOR ALL AGENTS)
 
-1. **Continue From Actual State:** Never assume previous work; inspect `git status` and `ULTRON_CHECKPOINT.md`.
+1. **Continue From Actual State:** Never assume previous work; inspect `git status`, read `ULTRON_CHECKPOINT.md` for historical resume context, and use `ULTRON_STATUS.md` for current release blockers.
 2. **Never Restart From Scratch:** Upgrade the existing repository; never rebuild from zero.
 3. **Never Replace Architecture With Demos:** No mock-only replacements or disconnected demos in production code.
 4. **Preserve User Data & History:** Never flush databases or wipe user memory without approval.
@@ -31,11 +31,11 @@
 ## 2. MASTER SHORTCUT COMMAND PROTOCOL
 
 When the user gives these shortcut instructions, execute the corresponding protocol:
-- **`ULTRON STATUS`**: Run a fresh, 10-section 101% audit of the entire project adhering to Section 6 of the Master Directive.
+- **`ULTRON STATUS`**: Run a fresh, evidence-based audit of the entire project; never inflate completion percentages adhering to Section 6 of the Master Directive.
 - **`CONTINUE ULTRON`**: Read `ULTRON_CHECKPOINT.md`, select the next priority task, implement it, test it, and update the checkpoint.
 - **`FIX ULTRON`**: Investigate and repair actual errors or failing tests; verify with regression tests.
 - **`VERIFY ULTRON`**: Execute a fresh evidence-based audit (`npm run check`, `npm test`, endpoint health).
-- **`ULTRON COMPLETE`**: Audit all criteria in `ULTRON_ACCEPTANCE_MATRIX.md` and report verified completion status.
+- **`ULTRON COMPLETE`**: Use `ULTRON_STATUS.md` as the canonical acceptance matrix and report only evidence-backed statuses.
 
 ---
 

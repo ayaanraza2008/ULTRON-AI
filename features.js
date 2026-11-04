@@ -30,16 +30,16 @@ const FISH_AUDIO_DEFAULT_VOICE_MODEL_ID = "db9ad6eb7fb84294b2046cf05ef64718";
 const FISH_AUDIO_TTS_MODELS = new Set(["s1", "s2-pro", "s2.1-pro", "s2.1-pro-free", "drama-3"]);
 const FISH_AUDIO_STT_MODELS = new Set(["transcribe-1", "transcribe-1-pro"]);
 
-function fishAudioConfig(env = {}) {
-  const apiKey = boundedString(env.FISH_API_KEY, 2000);
-  const configuredTtsModel = boundedString(env.FISH_AUDIO_TTS_MODEL, 80);
-  const configuredSttModel = boundedString(env.FISH_AUDIO_STT_MODEL, 80);
+function fishAudioConfig(_env = {}) {
+  // Fish Audio has been retired from ULTRON's supported provider path.
+  // Old keys or an old explicit opt-in flag can never activate outbound requests.
   return {
-    configured: Boolean(apiKey),
-    apiKey,
-    voiceModelId: boundedString(env.FISH_AUDIO_VOICE_MODEL_ID, 160) || FISH_AUDIO_DEFAULT_VOICE_MODEL_ID,
-    ttsModel: FISH_AUDIO_TTS_MODELS.has(configuredTtsModel) ? configuredTtsModel : "s2.1-pro-free",
-    sttModel: FISH_AUDIO_STT_MODELS.has(configuredSttModel) ? configuredSttModel : "transcribe-1"
+    configured: false,
+    enabled: false,
+    apiKey: "",
+    voiceModelId: "",
+    ttsModel: "",
+    sttModel: ""
   };
 }
 
@@ -894,7 +894,6 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
           },
           body: JSON.stringify({
             text,
-            language: "en",
             reference_id: fish.voiceModelId,
             format: "mp3",
             latency: "balanced",
@@ -927,7 +926,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
       } finally { timeout.close(); }
     }
 
-    if (!env.TTS_API_BASE_URL || !env.TTS_API_KEY) return res.status(503).json({ error: { code: "TTS_NOT_CONFIGURED", message: "Speech synthesis is not configured. Configure FISH_API_KEY or an OpenAI-compatible TTS provider." } });
+    if (!env.TTS_API_BASE_URL || !env.TTS_API_KEY) return res.status(503).json({ error: { code: "TTS_NOT_CONFIGURED", message: "Server speech synthesis is not configured. ULTRON can use Kokoro when installed, or the browser's built-in voice." } });
     const base = safeBaseUrl(env.TTS_API_BASE_URL);
     if (!base) return res.status(503).json({ error: { code: "TTS_ENDPOINT_INVALID", message: "TTS_API_BASE_URL must be a valid HTTPS endpoint." } });
     const voice = boundedString(req.body?.voice, 120);
@@ -1008,7 +1007,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
       } finally { timeout.close(); }
     }
 
-    if (!env.STT_API_BASE_URL || !env.STT_API_KEY) return res.status(503).json({ error: { code: "STT_NOT_CONFIGURED", message: "Speech recognition is not configured. Configure FISH_API_KEY or an OpenAI-compatible STT provider." } });
+    if (!env.STT_API_BASE_URL || !env.STT_API_KEY) return res.status(503).json({ error: { code: "STT_NOT_CONFIGURED", message: "Server speech recognition is not configured. Use browser recognition or configure a compatible STT provider." } });
     const base = safeBaseUrl(env.STT_API_BASE_URL);
     if (!base) return res.status(503).json({ error: { code: "STT_ENDPOINT_INVALID", message: "STT_API_BASE_URL must be a valid HTTPS endpoint." } });
     const timeout = withTimeout(30000);
@@ -1451,7 +1450,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
         openrouter: Boolean(env.OPENROUTER_API_KEY),
         localOllama: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)),
         litellm: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY),
-        gemini: Boolean(env.GEMINI_API_KEY),
+        gemini: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())),
         openai: Boolean(env.OPENAI_API_KEY)
       },
       tools: [
@@ -1473,7 +1472,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const providers = {
       openrouter: { configured: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", protocol: "openai-compatible" },
       openai: { configured: Boolean(env.OPENAI_API_KEY), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", protocol: "openai-compatible" },
-      gemini: { configured: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", protocol: "gemini" },
+      gemini: { configured: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", protocol: "gemini" },
       litellm: { configured: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", protocol: "openai-compatible" },
       ollama: { configured: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL) && boundedString(env.OLLAMA_DEFAULT_MODEL, 120)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120) || null, protocol: "ollama" }
     };
@@ -1602,7 +1601,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const providerConfigs = {
       openrouter: { ready: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, label: "openrouter" },
       openai: { ready: Boolean(env.OPENAI_API_KEY && providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1")), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1") || "") + "/chat/completions", key: env.OPENAI_API_KEY, label: "openai" },
-      gemini: { ready: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash") + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY || ""), key: null, label: "gemini" },
+      gemini: { ready: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash") + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY || ""), key: null, label: "gemini" },
       litellm: { ready: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", url: (safeBaseUrl(env.LITELLM_BASE_URL) || "") + "/chat/completions", key: env.LITELLM_API_KEY, label: "litellm" },
       ollama: { ready: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120) || "", url: (safeBaseUrl(env.OLLAMA_BASE_URL) || "") + "/api/chat", key: null, label: "ollama" }
     };
@@ -1704,7 +1703,7 @@ export function createFeatureRouter({ env = process.env, fetchImpl = safePinnedF
     const providerConfigs = {
       openrouter: { ready: Boolean(env.OPENROUTER_API_KEY), model: boundedString(env.OPENROUTER_DEFAULT_MODEL, 120) || "openrouter/free", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY },
       openai: { ready: Boolean(env.OPENAI_API_KEY && providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1")), model: boundedString(env.OPENAI_DEFAULT_MODEL, 120) || "gpt-4o-mini", url: (providerBaseWithDefault(env.OPENAI_BASE_URL, "https://api.openai.com/v1") || "") + "/chat/completions", key: env.OPENAI_API_KEY },
-      gemini: { ready: Boolean(env.GEMINI_API_KEY), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "", key: null },
+      gemini: { ready: Boolean(env.GEMINI_API_KEY && !/^(AQ\.|ya29\.)/i.test(String(env.GEMINI_API_KEY).trim())), model: boundedString(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-2.5-flash", url: "", key: null },
       litellm: { ready: Boolean(safeBaseUrl(env.LITELLM_BASE_URL) && env.LITELLM_API_KEY), model: boundedString(env.LITELLM_DEFAULT_MODEL, 120) || "openai/gpt-4o-mini", url: (safeBaseUrl(env.LITELLM_BASE_URL) || "") + "/chat/completions", key: env.LITELLM_API_KEY },
       ollama: { ready: Boolean(safeBaseUrl(env.OLLAMA_BASE_URL) && boundedString(env.OLLAMA_DEFAULT_MODEL, 120)), model: boundedString(env.OLLAMA_DEFAULT_MODEL, 120), url: (safeBaseUrl(env.OLLAMA_BASE_URL) || "") + "/api/chat", key: null }
     };

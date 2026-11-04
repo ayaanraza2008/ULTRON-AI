@@ -20,11 +20,20 @@
     "test:supabase:e2e": "node --test tests/supabase-isolation.e2e.test.js",
     "smoke:google-workspace": "node scripts/google-workspace-smoke.mjs",
     "test:harness2": "python3 -m unittest discover -s tests -p 'test_harness2.py' -v",
-    "smoke:hermes": "node scripts/hermes-agent-smoke.mjs"
+    "smoke:hermes": "node scripts/hermes-agent-smoke.mjs",
+    "security:sast": "node scripts/security-sast.mjs",
+    "security:dependencies": "node scripts/security-dependencies.mjs",
+    "security:secrets": "node scripts/security-secrets.mjs",
+    "security:report": "node scripts/security-report.mjs",
+    "test:ui": "node --test tests/core-ui.test.js",
+    "start:proxy": "node core-ui-proxy.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",
     "mammoth": "^1.9.1",
     "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "pg": "^8.23.1"
   }
 }

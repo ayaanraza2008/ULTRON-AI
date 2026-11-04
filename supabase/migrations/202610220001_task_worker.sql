@@ -1,4 +1,5 @@
--- Safe queue claim RPC. Only the server-side service role may claim work.\nalter table public.agent_tasks add column if not exists attempts integer not null default 0 check (attempts >= 0 and attempts <= 10);
+-- Safe queue claim RPC. Only the server-side service role may claim work.
+alter table public.agent_tasks add column if not exists attempts integer not null default 0 check (attempts >= 0 and attempts <= 10);
 create or replace function public.ultron_claim_next_task()
 returns setof public.agent_tasks
 language sql

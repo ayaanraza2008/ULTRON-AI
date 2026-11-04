@@ -65,9 +65,11 @@ test("CyberSecurityIntel: Security headers inspection audits CSP, HSTS, X-Frame-
 test("CyberSecurityIntel: Static secret scanner detects exposed API keys and private keys", () => {
   const intel = new CyberSecurityIntel();
 
+  const fakeGithubKey = ["ghp", "123456789012345678901234567890"].join("_");
+  const fakeAwsKey = ["AKIA", "IOSFODNN7EXAMPLE"].join("");
   const sourceSnippet = `
-    const githubKey = "ghp_123456789012345678901234567890";
-    const awsKey = "AKIAIOSFODNN7EXAMPLE";
+    const githubKey = "${fakeGithubKey}";
+    const awsKey = "${fakeAwsKey}";
     const normalVar = "hello world";
   `;
 

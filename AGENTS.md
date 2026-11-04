@@ -1,6 +1,6 @@
 # ULTRON AI — Multi-Agent Engineering Instructions
 
-> **Source of Truth for All AI Coding Environments**  
+> **Engineering principles:** `ULTRON_MASTER_CHARTER.md`. **Current release evidence and acceptance status:** `ULTRON_STATUS.md`.  
 > Authorized Agents: **Google Antigravity** | **Claude Code** | **OpenAI Codex**  
 > Ecosystem: **GitHub × Supabase × Render (ULTRON CORE)**
 
@@ -121,6 +121,20 @@ All agents must maintain and consult these repository memory files:
 - [`INTEGRATION_GUIDE.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/INTEGRATION_GUIDE.md): GitHub, Supabase, and Render MCP integration guide.
 - [`SECURITY_POLICY.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/SECURITY_POLICY.md): Detailed 3-tier permissions and credential policies.
 - [`TESTING_GUIDE.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/TESTING_GUIDE.md): Testing philosophy, test runner usage, and smoke guides.
-- [`PROJECT_STATUS.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/PROJECT_STATUS.md): Current live checkpoint, verified revisions, and blockers.
+- [`ULTRON_STATUS.md`](ULTRON_STATUS.md): Canonical evidence-based release status, acceptance matrix, blockers and readiness calculation.
+- [`PROJECT_STATUS.md`](PROJECT_STATUS.md): Historical planning snapshot; not release evidence.
 - [`CHANGELOG.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/CHANGELOG.md): History of revisions, changes, and upgrades.
-- [`TASK_TRACKER.md`](file:///C:/Users/Ali%20Raza%20Zaidi/.gemini/antigravity/scratch/ULTRON-AI/TASK_TRACKER.md): Live task status and multi-agent coordination board.
+- [`TASK_TRACKER.md`](TASK_TRACKER.md): Planning and coordination notes; not release evidence.
+
+---
+
+## 9. OpenCode (Primary Development Environment)
+
+OpenCode is the primary engineering environment for ULTRON AI as of 2026-11-04.
+
+- **Authorized agent name:** OpenCode (in addition to Google Antigravity, Claude Code, OpenAI Codex).
+- **Branch prefix:** `agent/opencode/<description>` (or `agent/claude/...` when acting as Claude).
+- **Project instructions:** This file (`AGENTS.md`), `CLAUDE.md`, `ULTRON_ARCHITECTURE.md`, and `docs/ULTRON_OPENCODE_CONTINUATION_STATE.md`.
+- **MCP servers:** configured in `.mcp.json` (GitHub, Supabase, Render). Credentials come from environment variables only.
+- **Continuity:** OpenCode must read `docs/ULTRON_OPENCODE_CONTINUATION_STATE.md` at session start and resume unfinished tasks.
+- **No secrets** may be written into these instruction files.

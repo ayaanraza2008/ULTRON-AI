@@ -166,19 +166,33 @@ export const JARVIS_BENCHMARK_SPEC = [
     id: "vision_multimodal",
     name: "Vision and multimodal intelligence",
     weight: 6,
-    subsystems: ["vision/vision-engine.js", "vision/screen-observer.js", "vision/gesture-recognizer.js"],
+    subsystems: [
+      "vision/vision-engine.js",
+      "vision/screen-observer.js",
+      "vision/gesture-recognizer.js",
+      "vision/ultron-vision.js",
+      "vision/ultron-eyes-manager.js",
+      "public/ultron-eyes.js"
+    ],
     acceptanceCriteria: [
       "Multimodal screenshot and image analysis with automated credential scrubbers (JWT, API keys)",
       "Multi-monitor screen observer daemon with visual change detection",
       "Document parsing and text extraction for PDF and DOCX files",
-      "Web camera pinch and two-hand distance gesture recognition for holographic core scaling"
+      "Web camera pinch and two-hand distance gesture recognition for holographic core scaling",
+      "ULTRON EYES native live camera sensory subsystem with default camera preselection, device switching, and bounded sampling",
+      "Human-like visual perception pipeline (object classification & 2D localization, multi-frame tracking, scene understanding, privacy-preserving activity perception, OCR, change detection, and spatial approximations)",
+      "Visual reasoning Q&A engine connected to ULTRON CORE, separating direct observations from model inferences with uncertainty scoring and consequential action approval gates",
+      "Session-based visual memory with explicit purge controls and zero permanent camera archiving without authorization"
     ],
     testFiles: [
       "tests/voice-vision.test.js",
       "tests/screen-observer.test.js",
-      "tests/gesture-recognizer.test.js"
+      "tests/gesture-recognizer.test.js",
+      "tests/ultron-vision.test.js",
+      "tests/ultron-eyes.test.js",
+      "tests/ultron-eyes-routes.test.js"
     ],
-    knownLimitations: "Optical gesture recognition requires user-granted webcam permissions; runs purely on client browser."
+    knownLimitations: "Live camera capture requires explicit user consent and platform permission; runs with CPU-bounded 1-5 FPS adaptive sampling to protect 8GB RAM."
   },
   {
     id: "agent_orchestration",
@@ -258,21 +272,47 @@ export const JARVIS_BENCHMARK_SPEC = [
     id: "security_permissions",
     name: "Security and permissions",
     weight: 7,
-    subsystems: ["network-safety.js", "security/cyber-intel.js", "server.js"],
+    subsystems: [
+      "network-safety.js",
+      "security/cyber-intel.js",
+      "security/ultron-guardian.js",
+      "security/target-authorization-gateway.js",
+      "security/code-shield.js",
+      "security/cyber-web.js",
+      "security/cyber-ai-redteam.js",
+      "security/cyber-recon.js",
+      "security/cyber-scanner.js",
+      "security/cyber-incident.js",
+      "security/cyber-reporter.js",
+      "security/cyber-core.js",
+      "public/cyber-dashboard.js",
+      "server.js"
+    ],
     acceptanceCriteria: [
       "Supabase JWT session validation and owner UUID gate on all JARVIS control routes",
       "Strict target scope enforcement restricting defensive security scans to localhost/approved targets",
       "DNS-pinned network safety fetch preventing SSRF and DNS rebinding attacks",
       "HMAC-SHA256 signature verification on remote companion commands with replay defense",
-      "Zero plain secrets in repository code, logs, or git revision history"
+      "Zero plain secrets in repository code, logs, or git revision history",
+      "Target Authorization Gateway requiring proof of ownership and emergency stop cessation controls",
+      "13-specialist cybersecurity agent network coordinating Recon, Scanning, Web, Code SAST, AI Red-Team, and Incident Response",
+      "Code Shield static security testing (SAST) detecting CWE-78, CWE-89, CWE-79, CWE-22, CWE-918, CWE-798, and CycloneDX SBOM generation",
+      "Web & API security assessment engine auditing CSP, HSTS, CORS, cookie flags, and JWT algorithm vulnerabilities",
+      "AI Red-Team security suite validating prompt injection resistance, tool privilege barriers, and canary secret protection"
     ],
     testFiles: [
       "tests/network-safety.test.js",
       "tests/cyber-intel.test.js",
       "tests/auth-isolation-unit.test.js",
-      "tests/server-health.test.js"
+      "tests/server-health.test.js",
+      "tests/target-authorization.test.js",
+      "tests/code-shield.test.js",
+      "tests/cyber-web.test.js",
+      "tests/cyber-ai-redteam.test.js",
+      "tests/cyber-core.test.js",
+      "tests/cyber-routes.test.js"
     ],
-    knownLimitations: "Public cloud egress blocked in OFFLINE mode; private IP ranges (RFC 1918/4193) strictly barred from outbound fetching."
+    knownLimitations: "Public cloud egress blocked in OFFLINE mode; private IP ranges (RFC 1918/4193) strictly barred from outbound fetching; scans restricted to authorized scopes."
   },
   {
     id: "reliability_self_monitoring",

@@ -43,6 +43,9 @@ export class AutonomousProductionOrchestrator {
     this.workspaceBase = options.workspaceBase || path.join(os.homedir(), "Documents", "UltronWorkspace");
     this.productionHistory = [];
     this.activeTask = null;
+    this.mediaDiscovery = options.mediaDiscoveryEngine || mediaDiscoveryEngine;
+    this.videoEditing = options.videoEditingEngine || videoEditingEngine;
+    this.imageStudio = options.imageStudioEngine || imageStudioEngine;
   }
 
   /**
@@ -119,10 +122,10 @@ export class AutonomousProductionOrchestrator {
 
     // Step 2: Search authorized storage
     notify(1, { preset: intent.presetKey, duration: intent.targetDuration });
-    let mediaCandidates = mediaDiscoveryEngine.searchMedia(naturalPrompt);
+    let mediaCandidates = this.mediaDiscovery.searchMedia(naturalPrompt);
     if (mediaCandidates.length === 0) {
       // Fallback to all videos in library
-      mediaCandidates = Array.from(mediaDiscoveryEngine.catalog.values())
+      mediaCandidates = Array.from(this.mediaDiscovery.catalog.values())
         .filter(m => m.mediaType === MEDIA_TYPES.VIDEO);
     }
 
@@ -143,7 +146,7 @@ export class AutonomousProductionOrchestrator {
 
     // Step 6 & 7: Generate editing plan and build timeline
     notify(5, { targetDuration: intent.targetDuration });
-    const timeline = videoEditingEngine.buildTimeline({
+    const timeline = this.videoEditing.buildTimeline({
       presetKey: intent.presetKey,
       title: `ULTRON ${intent.presetKey} Edit`,
       sourceClips: selectedClips,
@@ -164,31 +167,41 @@ export class AutonomousProductionOrchestrator {
 
     // Step 10: Render video
     notify(8, { preset: timeline.preset });
-    const renderResult = await videoEditingEngine.renderVideo(timeline);
+    const renderResult = await this.videoEditing.renderVideo(timeline);
 
-    // Step 11: Generate preview thumbnail
-    notify(10, { renderId: renderResult.renderId });
-    const thumbnailResult = await imageStudioEngine.exportThumbnail({
+    // Step 11: Save the export only when a real video was produced.
+    notify(9, {
+      exported: Boolean(renderResult.success && renderResult.outputPath),
+      renderStatus: renderResult.status || (renderResult.success ? "COMPLETED" : "FAILED")
+    });
+
+    // Step 12: Generate the package thumbnail even when the video render is blocked.
+    notify(10, { renderId: renderResult.renderId, renderStatus: renderResult.status });
+    const thumbnailResult = await this.imageStudio.exportThumbnail({
       title: `ULTRON ${intent.presetKey}`,
       subtitle: `${intent.targetDuration}s CINEMATIC MASTER`,
       preset: intent.presetKey === "ACTION" ? "CYBERPUNK" : "CINEMATIC_TEAL_ORANGE"
     });
 
     // Step 12: Complete & save package
+    const videoExportReady = Boolean(renderResult.success && renderResult.outputPath);
     const finishedPackage = {
-      success: true,
+      success: videoExportReady,
       taskId,
       prompt: naturalPrompt,
       concept: conceptNarrative,
       preset: timeline.preset,
       aspectRatio: timeline.dimensions.aspectRatio,
       durationSeconds: intent.targetDuration,
-      videoExportPath: renderResult.outputPath,
-      manifestPath: renderResult.manifestPath,
-      thumbnailPath: thumbnailResult.outputPath,
+      videoExportPath: videoExportReady ? renderResult.outputPath : null,
+      videoExportStatus: renderResult.status || (videoExportReady ? "COMPLETED" : "FAILED"),
+      videoExportError: videoExportReady ? null : (renderResult.error || "VIDEO_EXPORT_UNAVAILABLE"),
+      manifestPath: renderResult.manifestPath || null,
+      thumbnailPath: thumbnailResult.success ? thumbnailResult.outputPath : null,
       executionTimeMs: Date.now() - startTime,
-      stagesCompleted: 12,
-      status: "COMPLETED"
+      stagesCompleted: videoExportReady ? 12 : 10,
+      stagesBlocked: videoExportReady ? [] : ["RENDERING_VIDEO", "SAVING_EXPORT"],
+      status: videoExportReady ? "COMPLETED" : "BLOCKED_MEDIA_RENDER"
     };
 
     notify(11, finishedPackage);

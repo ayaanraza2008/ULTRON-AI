@@ -96,3 +96,48 @@ test("AdaptivePersonalityEngine: generates natural representative responses matc
   const anxResp = engine.generateAdaptiveResponse("I'm nervous about what happens next.", anxAssessment);
   assert.ok(anxResp.includes("uncertainty") || anxResp.includes("together"));
 });
+
+test("AdaptivePersonalityEngine: recognizes all 16 Section 3.3 specialized conversational and emotional states", () => {
+  const engine = new AdaptivePersonalityEngine();
+  const analyzer = new DeepEmotionalAnalyzer({ confidenceThreshold: 0.20 });
+
+  const requiredEmotions = [
+    "HAPPINESS", "EXCITEMENT", "SADNESS", "ANGER", "FRUSTRATION",
+    "CONFUSION", "NERVOUSNESS", "FEAR", "ANXIETY", "DISAPPOINTMENT",
+    "SARCASM", "CURIOSITY", "MOTIVATION", "EMOTIONAL_EXHAUSTION",
+    "MIXED_EMOTIONS", "SUBTLE_TONE_SHIFT"
+  ];
+
+  for (const emotionKey of requiredEmotions) {
+    const policy = engine.getPolicyForEmotion(emotionKey);
+    assert.ok(policy, `Policy should exist for ${emotionKey}`);
+    assert.ok(policy.tone, `Tone should exist for ${emotionKey}`);
+    assert.ok(Array.isArray(policy.dos) && policy.dos.length > 0, `Dos should exist for ${emotionKey}`);
+    assert.ok(Array.isArray(policy.donts) && policy.donts.length > 0, `Donts should exist for ${emotionKey}`);
+    assert.ok(policy.strategy, `Strategy should exist for ${emotionKey}`);
+  }
+
+  // 1. Confusion
+  const confusionAssessment = analyzer.analyze("I'm so confused, this makes no sense and I don't understand.");
+  assert.equal(confusionAssessment.primaryEmotion, "CONFUSION");
+
+  // 2. Nervousness
+  const nervousAssessment = analyzer.analyze("I'm having serious jitters and butterflies about the release.");
+  assert.equal(nervousAssessment.primaryEmotion, "NERVOUSNESS");
+
+  // 3. Curiosity
+  const curiousAssessment = analyzer.analyze("I am really curious, how does it work under the hood?");
+  assert.equal(curiousAssessment.primaryEmotion, "CURIOSITY");
+
+  // 4. Motivation
+  const motivationAssessment = analyzer.analyze("Let's do this! Chalo karte hain, unstoppable building today!");
+  assert.equal(motivationAssessment.primaryEmotion, "MOTIVATION");
+
+  // 5. Emotional exhaustion
+  const exhaustionAssessment = analyzer.analyze("I am burnt out and completely exhausted, brain is fried.");
+  assert.equal(exhaustionAssessment.primaryEmotion, "EMOTIONAL_EXHAUSTION");
+
+  // 6. Subtle tone shift
+  const subtleAssessment = analyzer.analyze("fine.");
+  assert.equal(subtleAssessment.primaryEmotion, "SUBTLE_TONE_SHIFT");
+});

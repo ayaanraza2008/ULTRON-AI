@@ -21,11 +21,18 @@ test("OpenRouter request metadata uses the active ULTRON Core interface origin",
   }
 });
 
-test("Render blueprint embeds World Intelligence under the active ULTRON Core interface origin", async () => {
+test("Render blueprint maps only live Ultron core services and preserves the external World Intelligence endpoint", async () => {
   const blueprint = await readFile(new URL("../render.yaml", import.meta.url), "utf8");
-  const lines = blueprint.split(/\r?\n/);
-  const embedIndex = lines.findIndex(line => line.trim() === "- key: GEV_EMBED_FRAME_ANCESTORS");
-  assert.notEqual(embedIndex, -1, "World Intelligence frame-ancestor setting must exist");
-  assert.ok(lines[embedIndex + 1]?.includes(activeInterfaceOrigin), "World Intelligence must allow the current UI origin");
+  const serviceNames = [...blueprint.matchAll(/^    name:\s*([^\n#]+)/gm)].map(match => match[1].trim());
+  assert.deepEqual(serviceNames.slice(0, 4), [
+    "ultron-ai-core",
+    "ultron-core-interface",
+    "ultron-browser-use-core",
+    "ultron-rea-gateway"
+  ]);
+  assert.ok(blueprint.includes("WORLD_INTELLIGENCE_URL"));
+  assert.ok(blueprint.includes("https://ultron-world-intelligence.onrender.com"));
+  assert.ok(!/^    name:\s*ultron-world-intelligence(?:-globe|-live)?\s*$/m.test(blueprint),
+    "Do not create a World Intelligence service that is not present in the Ultron core workspace.");
   assert.ok(!blueprint.includes(retiredOrigin));
 });

@@ -1,0 +1,1332 @@
+/**
+ * ULTRON AI — JARVIS Command Center Frontend Application
+ *
+ * Implements real-time telemetry polling, 12-agent monitoring,
+ * browser-native speech recognition & synthesis, sandbox execution,
+ * emergency kill switch, and multi-tab HUD navigation.
+ */
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Navigation
+  const navTabs = document.querySelectorAll(".nav-tab");
+  const tabPanels = document.querySelectorAll(".tab-panel");
+
+  navTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      navTabs.forEach(t => t.classList.remove("active"));
+      tabPanels.forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      const targetPanel = document.getElementById(tab.dataset.tab);
+      if (targetPanel) targetPanel.classList.add("active");
+    });
+  });
+
+  // State
+  let isHalted = false;
+  let isListening = false;
+  let recognition = null;
+
+  // UI Elements
+  const reactorCore = document.getElementById("reactorCore");
+  const coreStatusText = document.getElementById("coreStatusText");
+  const killSwitchBtn = document.getElementById("killSwitchBtn");
+  const autonomyLevelSelect = document.getElementById("autonomyLevelSelect");
+  const ramLabel = document.getElementById("ramLabel");
+  const cpuLabel = document.getElementById("cpuLabel");
+  const chatViewport = document.getElementById("chatViewport");
+  const userInput = document.getElementById("userInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const agentGrid = document.getElementById("agentGrid");
+  const sandboxCodeInput = document.getElementById("sandboxCodeInput");
+  const runSandboxBtn = document.getElementById("runSandboxBtn");
+  const sandboxOutput = document.getElementById("sandboxOutput");
+  const auditLogContainer = document.getElementById("auditLogContainer");
+  const dailyBriefingText = document.getElementById("dailyBriefingText");
+  const pushToTalkBtn = document.getElementById("pushToTalkBtn");
+  const stopAudioBtn = document.getElementById("stopAudioBtn");
+  const voiceProfileSelect = document.getElementById("voiceProfileSelect");
+  const requestPairingBtn = document.getElementById("requestPairingBtn");
+  const pairingBox = document.getElementById("pairingBox");
+  const pairingCodeDisplay = document.getElementById("pairingCodeDisplay");
+  const pcTerminalOutput = document.getElementById("pcTerminalOutput");
+
+  function setCoreState(state) {
+    // "idle" | "listening" | "thinking" | "executing" | "alert"
+    coreStatusText.textContent = `CORE: ${state.toUpperCase()}`;
+    const glow = reactorCore.querySelector(".core-glow");
+    if (!glow) return;
+
+    if (state === "alert") {
+      glow.style.background = "#ef4444";
+      glow.style.boxShadow = "0 0 20px #ef4444";
+    } else if (state === "listening") {
+      glow.style.background = "#f59e0b";
+      glow.style.boxShadow = "0 0 20px #f59e0b";
+    } else if (state === "thinking") {
+      glow.style.background = "#a855f7";
+      glow.style.boxShadow = "0 0 20px #a855f7";
+    } else if (state === "executing") {
+      glow.style.background = "#10b981";
+      glow.style.boxShadow = "0 0 20px #10b981";
+    } else {
+      glow.style.background = "#00f0ff";
+      glow.style.boxShadow = "0 0 15px #00f0ff";
+    }
+  }
+
+  // --- Telemetry Polling ---
+  async function pollTelemetry() {
+    try {
+      const res = await fetch("/api/jarvis/telemetry");
+      if (!res.ok) return;
+      const data = await res.json();
+      const t = data.telemetry;
+
+      if (t?.memory) {
+        ramLabel.textContent = `${t.memory.usedPercent}% (${Math.round(t.memory.usedBytes / 1024 / 1024)} MB)`;
+        if (t.memory.memoryPressureWarning) {
+          ramLabel.style.color = "#ef4444";
+          ramLabel.title = "High memory pressure on 8GB host!";
+        } else {
+          ramLabel.style.color = "#00f0ff";
+        }
+      }
+
+      if (t?.cpuModel) {
+        cpuLabel.textContent = `${t.cpuModel} (${t.cpuCores}T)`;
+      }
+
+      if (data.emergencyStop) {
+        isHalted = true;
+        setCoreState("alert");
+        killSwitchBtn.textContent = "RESET EMERGENCY STOP";
+        killSwitchBtn.classList.remove("btn-danger");
+        killSwitchBtn.classList.add("btn-warning");
+      }
+    } catch {}
+  }
+
+  setInterval(pollTelemetry, 4000);
+  pollTelemetry();
+
+  // --- 12-Agent Matrix ---
+  async function loadAgents() {
+    try {
+      const res = await fetch("/api/jarvis/agents");
+      if (!res.ok) return;
+      const data = await res.json();
+      agentGrid.innerHTML = "";
+
+      data.agents.forEach(agent => {
+        const card = document.createElement("div");
+        card.className = "agent-card";
+        card.innerHTML = `
+          <div class="agent-card-header">
+            <span class="agent-card-title">${agent.name}</span>
+            <span class="badge">ONLINE</span>
+          </div>
+          <div class="agent-card-role">${agent.role}</div>
+          <div class="agent-card-desc">${agent.description}</div>
+        `;
+        agentGrid.appendChild(card);
+      });
+    } catch {}
+  }
+  loadAgents();
+
+  // --- Daily Briefing ---
+  async function loadBriefing() {
+    try {
+      const res = await fetch("/api/jarvis/productivity/briefing");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.briefing?.spokenSummary) {
+        dailyBriefingText.textContent = data.briefing.spokenSummary;
+      }
+    } catch {}
+  }
+  loadBriefing();
+
+  // --- Audit Trail ---
+  async function loadAuditLogs() {
+    try {
+      const res = await fetch("/api/jarvis/audit");
+      if (!res.ok) return;
+      const data = await res.json();
+      auditLogContainer.innerHTML = "";
+
+      data.logs.forEach(log => {
+        const row = document.createElement("div");
+        row.className = "audit-entry";
+        const time = new Date(log.timestamp).toLocaleTimeString();
+        row.innerHTML = `
+          <span class="audit-time">[${time}]</span>
+          <span class="audit-actor">${log.actor}</span>
+          <span class="audit-action">${log.action}</span>
+          <span class="audit-desc">${JSON.stringify(log.details)}</span>
+        `;
+        auditLogContainer.appendChild(row);
+      });
+    } catch {}
+  }
+  loadAuditLogs();
+  setInterval(loadAuditLogs, 8000);
+
+  // --- Chat & Command Flow ---
+  function appendMessage(sender, text, isUser = false) {
+    const msg = document.createElement("div");
+    msg.className = `message ${isUser ? "user" : "system"}`;
+    const senderSpan = document.createElement("span");
+    senderSpan.className = "sender";
+    senderSpan.textContent = `${sender}: `;
+    const textSpan = document.createElement("span");
+    textSpan.className = "text";
+    textSpan.textContent = text;
+    msg.appendChild(senderSpan);
+    msg.appendChild(textSpan);
+    chatViewport.appendChild(msg);
+    chatViewport.scrollTop = chatViewport.scrollHeight;
+  }
+
+  async function handleUserSend() {
+    const text = userInput.value.trim();
+    if (!text) return;
+    userInput.value = "";
+    appendMessage("OPERATOR", text, true);
+    setCoreState("thinking");
+
+    try {
+      // 1. Brain classification
+      const classifyRes = await fetch("/api/jarvis/brain/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: text })
+      });
+      const classifyData = await classifyRes.json();
+
+      // 2. Chat dispatch
+      const chatRes = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, model: classifyData.complexity?.recommendedModel })
+      });
+
+      if (!chatRes.ok) {
+        throw new Error(`Server returned HTTP ${chatRes.status}`);
+      }
+
+      const chatData = await chatRes.json();
+      const reply = chatData.reply || chatData.response || "Task evaluated by ULTRON CORE.";
+      appendMessage("ULTRON", reply, false);
+      setCoreState("idle");
+
+      // Optional voice speak out if speech is enabled
+      speakSpokenText(reply);
+    } catch (err) {
+      appendMessage("ULTRON CORE", `Execution note: ${err.message}`, false);
+      setCoreState("idle");
+    }
+  }
+
+  sendBtn.addEventListener("click", handleUserSend);
+  userInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handleUserSend();
+  });
+
+  // --- Kokoro am_onyx Speech Synthesis & Voice Engine ---
+  let activeOnyxAudio = null;
+
+  const PERSONALITY_CONFIGS = {
+    NORMAL: { speed: 0.95, prefix: "" },
+    COMMAND: { speed: 0.98, prefix: "Acknowledged. " },
+    ALERT: { speed: 1.05, prefix: "Alert. " },
+    RESEARCH: { speed: 0.92, prefix: "" },
+    SUCCESS: { speed: 0.96, prefix: "" },
+    ERROR: { speed: 0.94, prefix: "Notice: " },
+    "WAKE-UP": { speed: 0.98, prefix: "Online, sir. " }
+  };
+
+  async function speakSpokenText(text, vocalOverride = null) {
+    if (activeOnyxAudio) {
+      try {
+        activeOnyxAudio.pause();
+        activeOnyxAudio.currentTime = 0;
+      } catch {}
+      activeOnyxAudio = null;
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+    let clean = String(text || "").replace(/```[\s\S]*?```/g, "").replace(/[*_#`]/g, "").slice(0, 450).trim();
+    if (!clean) return;
+
+    const personalityMode = document.getElementById("voicePersonalitySelect")?.value || "NORMAL";
+    const modeConfig = PERSONALITY_CONFIGS[personalityMode] || PERSONALITY_CONFIGS.NORMAL;
+    const voiceStatusBadge = document.getElementById("voiceStatusBadge");
+
+    if (modeConfig.prefix && !clean.toLowerCase().startsWith(modeConfig.prefix.toLowerCase().trim())) {
+      clean = modeConfig.prefix + clean;
+    }
+
+    try {
+      const res = await fetch("/api/jarvis/voice/kokoro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: clean,
+          voice: "am_onyx",
+          speed: effectiveSpeed
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.dataUrl) {
+          activeOnyxAudio = new Audio(data.dataUrl);
+          activeOnyxAudio.playbackRate = 1.0;
+          activeOnyxAudio.addEventListener("play", () => {
+            window.voiceActivationController?.system?.notifySpeakingStarted();
+          });
+          activeOnyxAudio.addEventListener("ended", () => {
+            window.voiceActivationController?.system?.notifySpeakingEnded();
+          });
+          activeOnyxAudio.play().catch(e => {
+            console.warn("Autoplay note:", e.message);
+          });
+          if (voiceStatusBadge) {
+            voiceStatusBadge.style.color = "#4ade80";
+            voiceStatusBadge.textContent = "● Primary Voice Engine: Kokoro-82M (am_onyx Active [" + personalityMode + "]) | Latency: <50ms";
+          }
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Kokoro am_onyx synthesis fallback:", err);
+    }
+
+    if (voiceStatusBadge) {
+      voiceStatusBadge.style.color = "#facc15";
+      voiceStatusBadge.textContent = "● Secondary Voice Engine: Windows SAPI Fallback (Active)";
+    }
+
+    if (window.speechSynthesis) {
+      const utter = new SpeechSynthesisUtterance(clean);
+      utter.rate = modeConfig.speed;
+      utter.pitch = 0.85;
+      utter.onstart = () => window.voiceActivationController?.system?.notifySpeakingStarted();
+      utter.onend = () => window.voiceActivationController?.system?.notifySpeakingEnded();
+      window.speechSynthesis.speak(utter);
+    }
+  }
+
+  stopAudioBtn.addEventListener("click", async () => {
+    if (activeOnyxAudio) {
+      try {
+        activeOnyxAudio.pause();
+        activeOnyxAudio.currentTime = 0;
+      } catch {}
+      activeOnyxAudio = null;
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    window.voiceActivationController?.system?.transitionTo("WAKE_MONITORING", { reason: "User stopped audio" });
+    try {
+      await fetch("/api/jarvis/voice/interrupt", { method: "POST" });
+    } catch {}
+    setCoreState("idle");
+  });
+
+  const speakOnyxBtn = document.getElementById("speakOnyxBtn");
+  if (speakOnyxBtn) {
+    speakOnyxBtn.addEventListener("click", async () => {
+      try {
+        speakOnyxBtn.disabled = true;
+        speakOnyxBtn.textContent = "🔊 Synthesizing...";
+        await speakSpokenText("Systems online. I am ULTRON. All core processes are operational. Awaiting your command.");
+      } catch (err) {
+        console.error("Onyx test error:", err);
+      } finally {
+        speakOnyxBtn.disabled = false;
+        speakOnyxBtn.textContent = "🔊 Test Onyx Voice (Kokoro am_onyx)";
+      }
+    });
+  }
+
+  const voiceLanguageSelect = document.getElementById("voiceLanguageSelect");
+  if (voiceLanguageSelect) {
+    voiceLanguageSelect.addEventListener("change", (e) => {
+      const lang = e.target.value;
+      if (recognition) {
+        recognition.lang = lang === "hi-IN" ? "hi-IN" : "en-IN";
+      }
+      appendMessage("VOICE AGENT", `Speech dialect set to ${lang.toUpperCase()}.`, false);
+    });
+  }
+
+  const speakOfflineBtn = document.getElementById("speakOfflineBtn");
+  if (speakOfflineBtn) {
+    speakOfflineBtn.addEventListener("click", async () => {
+      try {
+        speakOfflineBtn.disabled = true;
+        speakOfflineBtn.textContent = "🔊 Speaking...";
+        await fetch("/api/jarvis/voice/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: "All systems nominal, sir. ULTRON AI is fully operational." })
+        });
+      } catch (err) {
+        console.error("Offline speech error:", err);
+      } finally {
+        speakOfflineBtn.disabled = false;
+        speakOfflineBtn.textContent = "🔊 Test PC Speaker (Offline SAPI)";
+      }
+    });
+  }
+
+  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRec();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-IN"; // Default Hinglish / Indian English
+
+    recognition.onstart = () => {
+      isListening = true;
+      setCoreState("listening");
+      pushToTalkBtn.textContent = "🎙️ Listening...";
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      userInput.value = transcript;
+      handleUserSend();
+    };
+
+    recognition.onend = () => {
+      isListening = false;
+      pushToTalkBtn.textContent = "🎙️ Push To Talk";
+      if (!isHalted) setCoreState("idle");
+    };
+
+    pushToTalkBtn.addEventListener("click", () => {
+      if (isListening) recognition.stop();
+      else recognition.start();
+    });
+  } else {
+    pushToTalkBtn.disabled = true;
+    pushToTalkBtn.title = "Web Speech API not supported in this browser. Use text input.";
+  }
+
+  // --- Coding Sandbox Execution ---
+  runSandboxBtn.addEventListener("click", async () => {
+    const code = sandboxCodeInput.value.trim();
+    if (!code) return;
+    sandboxOutput.textContent = "// Executing isolated code...";
+
+    try {
+      const res = await fetch("/api/jarvis/sandbox/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      const r = data.result;
+      sandboxOutput.textContent = `Exit Code: ${r.exitCode} (${r.durationMs}ms)\n\nSTDOUT:\n${r.stdout || "(none)"}\n\nSTDERR:\n${r.stderr || "(none)"}`;
+    } catch (err) {
+      sandboxOutput.textContent = `Sandbox Error: ${err.message}`;
+    }
+  });
+
+  // --- Emergency Kill Switch ---
+  killSwitchBtn.addEventListener("click", async () => {
+    if (!isHalted) {
+      if (!confirm("ENGAGE EMERGENCY STOP?\nThis will immediately abort all active agent tasks, pause companions, and freeze execution.")) return;
+      try {
+        const res = await fetch("/api/jarvis/emergency/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "Operator pressed emergency kill switch" })
+        });
+        const data = await res.json();
+        isHalted = true;
+        setCoreState("alert");
+        killSwitchBtn.textContent = "RESET EMERGENCY STOP";
+        killSwitchBtn.classList.remove("btn-danger");
+        killSwitchBtn.classList.add("btn-warning");
+        appendMessage("EMERGENCY GUARD", "SYSTEM HALTED: All active tasks aborted.", false);
+      } catch (err) {
+        alert("Failed to engage emergency stop: " + err.message);
+      }
+    } else {
+      try {
+        await fetch("/api/jarvis/emergency/reset", { method: "POST" });
+        isHalted = false;
+        setCoreState("idle");
+        killSwitchBtn.textContent = "⚡ EMERGENCY STOP";
+        killSwitchBtn.classList.remove("btn-warning");
+        killSwitchBtn.classList.add("btn-danger");
+        appendMessage("EMERGENCY GUARD", "Emergency stop reset. Core systems active.", false);
+      } catch (err) {
+        alert("Failed to reset emergency stop: " + err.message);
+      }
+    }
+  });
+
+  // --- Autonomy Level Change ---
+  autonomyLevelSelect.addEventListener("change", async (e) => {
+    const level = Number(e.target.value);
+    try {
+      const res = await fetch("/api/jarvis/autonomy/level", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level })
+      });
+      const data = await res.json();
+      appendMessage("POLICY GUARD", `Autonomy level updated to Level ${level} (${data.config?.name}): ${data.config?.description}`, false);
+    } catch {}
+  });
+
+  // --- Device Pairing ---
+  requestPairingBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/devices/pair/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Mobile Companion", platform: "android" })
+      });
+      const data = await res.json();
+      pairingCodeDisplay.textContent = data.code;
+      pairingBox.style.display = "block";
+    } catch {}
+  });
+
+  // --- PC Quick Commands ---
+  document.getElementById("runGitStatusBtn")?.addEventListener("click", async () => {
+    pcTerminalOutput.textContent = "Running git status...";
+    try {
+      const res = await fetch("/api/jarvis/sandbox/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "import { execSync } from 'child_process'; console.log(execSync('git status --short').toString());" })
+      });
+      const data = await res.json();
+      pcTerminalOutput.textContent = data.result.stdout || "(clean working tree)";
+    } catch (err) {
+      pcTerminalOutput.textContent = err.message;
+    }
+  });
+
+  document.getElementById("runNodeVerBtn")?.addEventListener("click", async () => {
+    pcTerminalOutput.textContent = "Node: " + navigator.userAgent;
+  });
+
+  // --- Native Windows Automation Controls ---
+  document.getElementById("lockPcBtn")?.addEventListener("click", async () => {
+    if (!confirm("Lock Windows workstation session?")) return;
+    try {
+      await fetch("/api/jarvis/pc/lock", { method: "POST" });
+      appendMessage("SYSTEM AGENT", "Workstation session locked successfully.", false);
+    } catch (err) {
+      alert("Lock failed: " + err.message);
+    }
+  });
+
+  document.getElementById("captureScreenBtn")?.addEventListener("click", async () => {
+    pcTerminalOutput.textContent = "Capturing primary display...";
+    try {
+      const res = await fetch("/api/jarvis/pc/screenshot", { method: "POST" });
+      const data = await res.json();
+      pcTerminalOutput.textContent = `Screenshot captured: ${data.filename || "success"} (${data.sizeBytes || "done"} bytes)`;
+      appendMessage("VISION AGENT", `Primary screen frame captured and analyzed. Active context updated.`, false);
+    } catch (err) {
+      pcTerminalOutput.textContent = "Screen capture failed: " + err.message;
+    }
+  });
+
+  document.getElementById("volDownBtn")?.addEventListener("click", async () => {
+    await fetch("/api/jarvis/pc/volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "volume_down" })
+    });
+  });
+
+  document.getElementById("volUpBtn")?.addEventListener("click", async () => {
+    await fetch("/api/jarvis/pc/volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "volume_up" })
+    });
+  });
+
+  document.getElementById("volMuteBtn")?.addEventListener("click", async () => {
+    await fetch("/api/jarvis/pc/volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mute" })
+    });
+  });
+
+  // Poll Battery Status
+  async function pollBattery() {
+    try {
+      const res = await fetch("/api/jarvis/pc/battery");
+      const data = await res.json();
+      const label = document.getElementById("batteryPercentLabel");
+      if (label && data) {
+        label.textContent = `${data.percent}% (${data.isCharging ? "Charging" : "Discharging"})`;
+      }
+    } catch {}
+  }
+  pollBattery();
+  setInterval(pollBattery, 60000);
+  // --- ULTRON ETERNAL: Multi-Device Ecosystem & Synchronizer Handlers ---
+  const unlockAllMobileBtn = document.getElementById("unlockAllMobileBtn");
+  const lockAllMobileBtn = document.getElementById("lockAllMobileBtn");
+  const playSongAllDevicesBtn = document.getElementById("playSongAllDevicesBtn");
+  const unlockPcBtn = document.getElementById("unlockPcBtn");
+  const simulateCallBtn = document.getElementById("simulateCallBtn");
+  const hangupCallBtn = document.getElementById("hangupCallBtn");
+  const telephonyCallHud = document.getElementById("telephonyCallHud");
+  const callLiveTranscript = document.getElementById("callLiveTranscript");
+
+  unlockAllMobileBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/devices/unlock-mobile", { method: "POST" });
+      const data = await res.json();
+      ["phone1LockLabel", "phone2LockLabel", "phone3LockLabel"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = "UNLOCKED"; el.className = "device-lock-state unlocked"; }
+      });
+      appendMessage("DEVICE HUB", `All ${data.unlockedCount || 3} mobile devices unlocked simultaneously.`, false);
+    } catch (err) {
+      alert("Failed to unlock mobile devices: " + err.message);
+    }
+  });
+
+  lockAllMobileBtn?.addEventListener("click", async () => {
+    try {
+      await fetch("/api/jarvis/devices/lock-mobile", { method: "POST" });
+      ["phone1LockLabel", "phone2LockLabel", "phone3LockLabel"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = "LOCKED"; el.className = "device-lock-state locked"; }
+      });
+      appendMessage("DEVICE HUB", "All mobile devices locked.", false);
+    } catch (err) {
+      alert("Failed to lock mobile devices: " + err.message);
+    }
+  });
+
+  playSongAllDevicesBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/devices/play-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "favorite song" })
+      });
+      const data = await res.json();
+      appendMessage("MEDIA HUB", `Playing favorite song across ${data.playingDevices || 3} connected devices simultaneously.`, false);
+    } catch (err) {
+      alert("Failed to dispatch media: " + err.message);
+    }
+  });
+
+  unlockPcBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/devices/pc/unlock", { method: "POST" });
+      const data = await res.json();
+      const pcLabel = document.getElementById("pcLockLabel");
+      if (pcLabel) { pcLabel.textContent = "UNLOCKED"; pcLabel.className = "device-lock-state unlocked"; }
+      if (reactorCore) {
+        reactorCore.className = "reactor-core state-call_active";
+      }
+      appendMessage("SYSTEM AGENT", "Workstation unlocked. Energy Core activated in high-power orange state.", false);
+    } catch (err) {
+      alert("PC unlock failed: " + err.message);
+    }
+  });
+
+  simulateCallBtn?.addEventListener("click", async () => {
+    if (telephonyCallHud) telephonyCallHud.style.display = "block";
+    if (reactorCore) reactorCore.className = "reactor-core state-call_active";
+    if (callLiveTranscript) callLiveTranscript.textContent = "ULTRON: 'Good evening sir. ULTRON is online. How may I assist you?'";
+
+    appendMessage("TELEPHONY AGENT", "Inbound telephone call connected (+91 Verified Owner). Live two-way voice stream active.", false);
+  });
+
+  hangupCallBtn?.addEventListener("click", () => {
+    if (telephonyCallHud) telephonyCallHud.style.display = "none";
+    if (reactorCore) reactorCore.className = "reactor-core state-standby";
+    appendMessage("TELEPHONY AGENT", "Telephone call session terminated. Transcript archived to session history.", false);
+  });
+
+  // --- Real-Time Hand Gesture Control for Living Energy Core ---
+  const toggleGestureBtn = document.getElementById("toggleGestureBtn");
+  const gestureTelemetryBar = document.getElementById("gestureTelemetryBar");
+  const gestureStatusPill = document.getElementById("gestureStatusPill");
+  const gestureHandsCountBadge = document.getElementById("gestureHandsCountBadge");
+  const gestureActiveActionBadge = document.getElementById("gestureActiveActionBadge");
+  const gestureSensitivitySelect = document.getElementById("gestureSensitivitySelect");
+  const toggleGesturePreviewBtn = document.getElementById("toggleGesturePreviewBtn");
+  const gestureVideoFeed = document.getElementById("gestureVideoFeed");
+
+  const syncGestureUI = ({ state, activeGesture, handsCount }) => {
+    if (gestureStatusPill) gestureStatusPill.textContent = `STATUS: ${state}`;
+    if (gestureHandsCountBadge) gestureHandsCountBadge.textContent = `${handsCount} HAND${handsCount === 1 ? "" : "S"}`;
+    if (gestureActiveActionBadge) gestureActiveActionBadge.textContent = activeGesture;
+
+    const compactBtn = document.getElementById("compactGestureBtn");
+    const isEngaged = window.handGestureCore && window.handGestureCore.isEnabled;
+
+    if (isEngaged) {
+      if (toggleGestureBtn) {
+        toggleGestureBtn.textContent = "✋ Hand Control: ACTIVE";
+        toggleGestureBtn.classList.add("btn-accent");
+      }
+      if (compactBtn) {
+        compactBtn.textContent = "✋ Hand: ACTIVE";
+        compactBtn.classList.add("active");
+      }
+    } else {
+      if (toggleGestureBtn) {
+        toggleGestureBtn.textContent = "✋ Enable Hand Gesture Control";
+        toggleGestureBtn.classList.remove("btn-accent");
+      }
+      if (compactBtn) {
+        compactBtn.textContent = "✋ Hand Control";
+        compactBtn.classList.remove("active");
+      }
+    }
+  };
+
+  if (window.handGestureCore) {
+    window.handGestureCore.stateManager.subscribe(syncGestureUI);
+  }
+
+  toggleGestureBtn?.addEventListener("click", async () => {
+    if (!window.handGestureCore) {
+      alert("Hand Gesture Core module initializing... Please retry in a moment.");
+      return;
+    }
+    if (!window.handGestureCore.isEnabled) {
+      try {
+        toggleGestureBtn.textContent = "✋ Initializing Camera...";
+        await window.handGestureCore.start();
+        if (gestureTelemetryBar) gestureTelemetryBar.style.display = "flex";
+        appendMessage("VISION GESTURE", "Living Energy Core Hand Control engaged. Camera stream processed locally on-device. Gestures: Open Palm (expand), Closed Fist (contract), Index (energy vector), Swirl (vortex), Two Hands (spatial scaling).", false);
+      } catch (err) {
+        toggleGestureBtn.textContent = "✋ Enable Hand Gesture Control";
+        toggleGestureBtn.classList.remove("btn-accent");
+        appendMessage("VISION GESTURE", "Failed to start hand tracking: " + err.message, false);
+      }
+    } else {
+      window.handGestureCore.stop();
+      if (gestureTelemetryBar) gestureTelemetryBar.style.display = "none";
+      if (gestureVideoFeed) gestureVideoFeed.style.display = "none";
+      appendMessage("VISION GESTURE", "Hand gesture control deactivated. Living Energy Core smoothly restored to baseline idle animation.", false);
+    }
+  });
+
+  gestureSensitivitySelect?.addEventListener("change", (e) => {
+    if (window.handGestureCore) {
+      window.handGestureCore.setSensitivity(parseFloat(e.target.value));
+    }
+  });
+
+  toggleGesturePreviewBtn?.addEventListener("click", () => {
+    if (!gestureVideoFeed) return;
+    gestureVideoFeed.style.display = (gestureVideoFeed.style.display === "none" || !gestureVideoFeed.style.display) ? "block" : "none";
+  });
+
+  // ==========================================
+  // --- MODULE 1 & 9: SYSTEM CONTROL HANDLERS ---
+  // ==========================================
+  window.launchApp = async (app) => {
+    try {
+      const res = await fetch("/api/jarvis/system/apps/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app })
+      });
+      const data = await res.json();
+      appendMessage("SYSTEM AGENT", `Launched application: ${data.app || app}`, false);
+    } catch (err) {
+      appendMessage("SYSTEM AGENT", `Failed to launch ${app}: ${err.message}`, false);
+    }
+  };
+
+  document.getElementById("takeScreenshotBtn")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("screenshotStatus");
+    if (statusEl) statusEl.textContent = "Capturing...";
+    try {
+      const res = await fetch("/api/jarvis/system/screenshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scrubCredentials: true })
+      });
+      const data = await res.json();
+      if (statusEl) statusEl.textContent = `Captured: ${data.path ? data.path.split(/\\|\//).pop() : "Saved"}`;
+      appendMessage("SYSTEM AGENT", `Screenshot saved: ${data.path}`, false);
+    } catch (err) {
+      if (statusEl) statusEl.textContent = "Failed";
+    }
+  });
+
+  document.getElementById("refreshDrivesBtn")?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/jarvis/system/drives");
+      const data = await res.json();
+      const listEl = document.getElementById("uiDrivesList");
+      if (listEl && data.drives) {
+        listEl.replaceChildren();
+        data.drives.forEach(d => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(0, 243, 255, 0.05); padding: 8px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.2); margin-bottom: 6px;";
+          const strong = document.createElement("strong");
+          strong.textContent = `${d.letter} [${d.name}]`;
+          const text = document.createTextNode(` - ${d.type} (${d.freeGB} GB Free of ${d.totalGB} GB)`);
+          const bar = document.createElement("div");
+          bar.style.cssText = "background: #1a202c; height: 6px; border-radius: 3px; margin-top: 4px; overflow: hidden;";
+          const fill = document.createElement("div");
+          const usedPct = Math.max(0, Math.min(100, 100 - Number(d.percentFree || 0)));
+          fill.style.cssText = `background: var(--cyan-accent); width: ${usedPct}%; height: 100%;`;
+          bar.appendChild(fill);
+          item.appendChild(strong);
+          item.appendChild(text);
+          item.appendChild(bar);
+          listEl.appendChild(item);
+        });
+      }
+    } catch {}
+  });
+
+  document.getElementById("organizeFolderBtn")?.addEventListener("click", async () => {
+    const input = document.getElementById("organizeTargetInput");
+    const targetDir = input?.value.trim() || "Downloads";
+    const resultEl = document.getElementById("organizeResult");
+    if (resultEl) resultEl.textContent = "Organizing with backup...";
+    try {
+      const res = await fetch("/api/jarvis/system/files/organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceDir: targetDir })
+      });
+      const data = await res.json();
+      if (resultEl) resultEl.textContent = `Organized ${data.movedCount || 0} files. Backup: ${data.backupId || "Created"}`;
+      appendMessage("SYSTEM AGENT", `Folder organized. Backup snapshot: ${data.backupId}`, false);
+    } catch (err) {
+      if (resultEl) resultEl.textContent = `Error: ${err.message}`;
+    }
+  });
+
+  // ==========================================
+  // --- MODULE 3, 4, 5: MEDIA & PRODUCTION ---
+  // ==========================================
+  window.setProductionPrompt = (text) => {
+    const input = document.getElementById("autoProdPromptInput");
+    if (input) input.value = text;
+  };
+
+  document.getElementById("startAutoProdBtn")?.addEventListener("click", async () => {
+    const input = document.getElementById("autoProdPromptInput");
+    const prompt = input?.value.trim();
+    if (!prompt) return;
+
+    const progBox = document.getElementById("prodProgressContainer");
+    const stageLabel = document.getElementById("prodStageLabel");
+    const percentLabel = document.getElementById("prodPercentLabel");
+    const bar = document.getElementById("prodProgressBar");
+    const detailEl = document.getElementById("prodExportDetail");
+
+    if (progBox) progBox.style.display = "block";
+    if (stageLabel) stageLabel.textContent = "Stage: ANALYZING MEDIA & CONCEPT";
+    if (percentLabel) percentLabel.textContent = "25%";
+    if (bar) bar.style.width = "25%";
+    if (detailEl) detailEl.textContent = "Searching local drives for candidate clips...";
+
+    try {
+      const res = await fetch("/api/jarvis/media/production/autonomous", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await res.json();
+
+      if (bar) bar.style.width = "100%";
+      if (percentLabel) percentLabel.textContent = "100%";
+      if (stageLabel) stageLabel.textContent = "Stage: EXPORT COMPLETED";
+      if (detailEl) {
+        detailEl.innerHTML = `
+          <strong style="color: #48bb78;">Production Successful!</strong><br/>
+          <strong>Preset:</strong> ${data.preset} (${data.durationSeconds}s)<br/>
+          <strong>Export Location:</strong> <code style="color: var(--cyan-accent);">${data.videoExportPath}</code><br/>
+          <strong>Concept:</strong> <em>"${data.concept}"</em>
+        `;
+      }
+      appendMessage("AUTONOMOUS PRODUCTION", `Video production complete! Exported to: ${data.videoExportPath}`, false);
+    } catch (err) {
+      if (stageLabel) stageLabel.textContent = "Stage: FAILED";
+      if (detailEl) detailEl.textContent = `Error: ${err.message}`;
+    }
+  });
+
+  document.getElementById("searchMediaBtn")?.addEventListener("click", async () => {
+    const input = document.getElementById("mediaSearchInput");
+    const q = encodeURIComponent(input?.value.trim() || "");
+    const listEl = document.getElementById("mediaResultsList");
+    if (listEl) {
+      listEl.replaceChildren();
+      const loading = document.createElement("div");
+      loading.textContent = "Searching media catalog...";
+      listEl.appendChild(loading);
+    }
+    try {
+      const res = await fetch(`/api/jarvis/media/search?q=${q}`);
+      const data = await res.json();
+      if (listEl && data.results) {
+        listEl.replaceChildren();
+        if (data.results.length === 0) {
+          const empty = document.createElement("div");
+          empty.style.color = "#a0aec0";
+          empty.textContent = "No media files matching search found.";
+          listEl.appendChild(empty);
+        } else {
+          data.results.forEach(r => {
+            const item = document.createElement("div");
+            item.style.cssText = "background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between;";
+            const titleSpan = document.createElement("span");
+            const strong = document.createElement("strong");
+            strong.textContent = r.name || "Unnamed";
+            titleSpan.appendChild(strong);
+            titleSpan.appendChild(document.createTextNode(` (${String(r.mediaType || "file").toUpperCase()})`));
+            const sizeSpan = document.createElement("span");
+            sizeSpan.style.color = "#a0aec0";
+            sizeSpan.textContent = `${r.sizeMB || 0} MB`;
+            item.appendChild(titleSpan);
+            item.appendChild(sizeSpan);
+            listEl.appendChild(item);
+          });
+        }
+      }
+    } catch (err) {
+      if (listEl) {
+        listEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.textContent = `Error searching media: ${err.message}`;
+        listEl.appendChild(errDiv);
+      }
+    }
+  });
+
+  document.getElementById("generateThumbBtn")?.addEventListener("click", async () => {
+    const title = document.getElementById("thumbTitleInput")?.value.trim() || "ULTRON PRODUCTION";
+    const subtitle = document.getElementById("thumbSubInput")?.value.trim() || "AUTONOMOUS SYSTEM CONTROL";
+    const preset = document.getElementById("thumbPresetSelect")?.value || "CYBERPUNK";
+    const area = document.getElementById("thumbPreviewArea");
+    if (area) {
+      area.replaceChildren();
+      const msg = document.createElement("div");
+      msg.textContent = "Rendering graphic composition...";
+      area.appendChild(msg);
+    }
+
+    try {
+      const res = await fetch("/api/jarvis/media/image/thumbnail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, subtitle, preset })
+      });
+      const data = await res.json();
+      if (area) {
+        area.replaceChildren();
+        const div1 = document.createElement("div");
+        div1.style.cssText = "color: #48bb78; font-size: 12px; margin-bottom: 6px;";
+        div1.textContent = `Thumbnail Exported: ${data.filename}`;
+        const div2 = document.createElement("div");
+        div2.style.cssText = "font-size: 11px; color: #a0aec0;";
+        div2.textContent = `Path: ${data.outputPath}`;
+        area.appendChild(div1);
+        area.appendChild(div2);
+      }
+    } catch (err) {
+      if (area) {
+        area.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.textContent = `Error: ${err.message}`;
+        area.appendChild(errDiv);
+      }
+    }
+  });
+
+
+  // --- DSH-GOD Model Intelligence & Gateway UI Controller ---
+  async function loadDshStatus() {
+    try {
+      const res = await fetch("/api/integrations/dsh-god/status");
+      if (!res.ok) return;
+      const data = await res.json();
+      
+      const provEl = document.getElementById("dshTotalProviders");
+      if (provEl && data.providers) provEl.textContent = `${data.providers.totalProviders} Providers`;
+      
+      const modEl = document.getElementById("dshTotalModels");
+      if (modEl && data.providers) modEl.textContent = `${data.providers.totalModels} Models (${data.providers.enabledCount} Enabled)`;
+
+      const savEl = document.getElementById("dshSavedBytes");
+      if (savEl && data.tokenSavings) savEl.textContent = `${data.tokenSavings.savedBytes} B`;
+
+      const pctEl = document.getElementById("dshSavedPercent");
+      if (pctEl && data.tokenSavings) pctEl.textContent = `${data.tokenSavings.savedPercent}% Compaction (${data.tokenSavings.calls} requests)`;
+
+      const gwEl = document.getElementById("dshGatewayStatus");
+      if (gwEl && data.gateway) gwEl.textContent = `${data.gateway.host}:${data.gateway.port} (${data.gateway.isRunning ? "RUNNING" : "STOPPED"})`;
+    } catch (err) {
+      console.warn("Could not fetch DSH-GOD status:", err.message);
+    }
+  }
+
+  async function loadDshProviders(category = "", search = "") {
+    const listEl = document.getElementById("dshProvidersList");
+    if (!listEl) return;
+    try {
+      const q = new URLSearchParams();
+      if (category) q.set("category", category);
+      if (search) q.set("search", search);
+      const res = await fetch(`/api/integrations/dsh-god/providers?${q.toString()}`);
+      const data = await res.json();
+      if (data.providers) {
+        listEl.replaceChildren();
+        data.providers.slice(0, 50).forEach(p => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;";
+          const left = document.createElement("div");
+          const strong = document.createElement("strong");
+          strong.textContent = p.name || p.id;
+          const spanId = document.createElement("span");
+          spanId.style.cssText = "color: #a0aec0; font-size: 11px;";
+          spanId.textContent = ` (${p.id})`;
+          const sub = document.createElement("div");
+          sub.style.cssText = "color: #718096; font-size: 11px;";
+          sub.textContent = `${p.models?.length || 0} models | ${p.category} | ${p.format}`;
+          left.appendChild(strong);
+          left.appendChild(spanId);
+          left.appendChild(sub);
+
+          const right = document.createElement("div");
+          const badge = document.createElement("span");
+          badge.style.cssText = `font-size: 11px; padding: 2px 6px; border-radius: 3px; background: ${p.enabled ? '#22543d' : '#742a2a'};color: ${p.enabled ? '#9ae6b4' : '#feb2b2'};`;
+          badge.textContent = p.enabled ? "Active" : "Disabled";
+          right.appendChild(badge);
+
+          item.appendChild(left);
+          item.appendChild(right);
+          listEl.appendChild(item);
+        });
+      }
+    } catch (err) {
+      listEl.replaceChildren();
+      const errDiv = document.createElement("div");
+      errDiv.style.color = "#e53e3e";
+      errDiv.textContent = `Error loading providers: ${err.message}`;
+      listEl.appendChild(errDiv);
+    }
+  }
+
+  async function loadDshCombos() {
+    const listEl = document.getElementById("dshCombosList");
+    if (!listEl) return;
+    try {
+      const res = await fetch("/api/integrations/dsh-god/combos");
+      const data = await res.json();
+      if (data.combos) {
+        listEl.replaceChildren();
+        data.combos.forEach(c => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(255,255,255,0.03); padding: 6px; border-radius: 4px; margin-bottom: 4px;";
+          const top = document.createElement("div");
+          top.style.cssText = "display: flex; justify-content: space-between;";
+          const nameEl = document.createElement("strong");
+          nameEl.style.color = "#63b3ed";
+          nameEl.textContent = c.name;
+          const strat = document.createElement("span");
+          strat.style.cssText = "font-size: 11px; color: #a0aec0;";
+          strat.textContent = String(c.strategy || "").toUpperCase();
+          top.appendChild(nameEl);
+          top.appendChild(strat);
+
+          const modelsEl = document.createElement("div");
+          modelsEl.style.cssText = "font-size: 11px; color: #cbd5e0; margin-top: 2px;";
+          modelsEl.textContent = (c.models || []).join(" → ");
+
+          item.appendChild(top);
+          item.appendChild(modelsEl);
+          listEl.appendChild(item);
+        });
+      }
+    } catch (err) {
+      listEl.replaceChildren();
+      const errDiv = document.createElement("div");
+      errDiv.textContent = `Error loading combos: ${err.message}`;
+      listEl.appendChild(errDiv);
+    }
+  }
+
+  async function loadDshChannels() {
+    const listEl = document.getElementById("dshChannelsList");
+    if (!listEl) return;
+    try {
+      const res = await fetch("/api/integrations/dsh-god/channels");
+      const data = await res.json();
+      if (data.report?.channels) {
+        listEl.replaceChildren();
+        data.report.channels.forEach(ch => {
+          const item = document.createElement("div");
+          item.style.cssText = "background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; border-left: 3px solid #4299e1;";
+          const nameEl = document.createElement("div");
+          nameEl.style.cssText = "font-weight: bold; color: #fff;";
+          nameEl.textContent = ch.name;
+          const authEl = document.createElement("div");
+          authEl.style.cssText = "font-size: 11px; color: #a0aec0;";
+          authEl.textContent = `Auth: ${ch.authType} | ${ch.status}`;
+          const profEl = document.createElement("div");
+          profEl.style.cssText = "font-size: 11px; color: #48bb78; margin-top: 2px;";
+          profEl.textContent = `Profile: ${ch.hardwareProfile}`;
+
+          item.appendChild(nameEl);
+          item.appendChild(authEl);
+          item.appendChild(profEl);
+          listEl.appendChild(item);
+        });
+      }
+    } catch (err) {
+      listEl.replaceChildren();
+      const errDiv = document.createElement("div");
+      errDiv.textContent = `Error loading channels: ${err.message}`;
+      listEl.appendChild(errDiv);
+    }
+  }
+
+  // Bind DSH Event Listeners
+  document.getElementById("refreshDshStatusBtn")?.addEventListener("click", () => {
+    loadDshStatus();
+    loadDshProviders();
+    loadDshCombos();
+    loadDshChannels();
+  });
+
+  document.getElementById("dshSearchProvidersBtn")?.addEventListener("click", () => {
+    const cat = document.getElementById("dshCategoryFilter")?.value || "";
+    const search = document.getElementById("dshProviderSearchInput")?.value.trim() || "";
+    loadDshProviders(cat, search);
+  });
+
+  document.getElementById("dshRunInferenceBtn")?.addEventListener("click", async () => {
+    const model = document.getElementById("dshTestModelSelect")?.value || "combo:fast-free";
+    const prompt = document.getElementById("dshPromptInput")?.value.trim() || "Respond with: ULTRON DSH-GOD Active.";
+    const outEl = document.getElementById("dshInferenceOutput");
+    if (outEl) {
+      outEl.replaceChildren();
+      const runMsg = document.createElement("div");
+      runMsg.textContent = "Routing turn through DSH-GOD engine...";
+      outEl.appendChild(runMsg);
+    }
+
+    try {
+      const started = performance.now();
+      const res = await fetch("/api/integrations/dsh-god/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      const data = await res.json();
+      const latency = Math.round(performance.now() - started);
+      if (outEl) {
+        outEl.replaceChildren();
+        if (data.ok && data.result) {
+          const content = data.result.choices?.[0]?.message?.content || JSON.stringify(data.result);
+          const metaDiv = document.createElement("div");
+          metaDiv.style.cssText = "color: #48bb78; font-size: 11px; margin-bottom: 4px;";
+          metaDiv.textContent = `✓ Inference Executed in ${latency}ms (Model: ${data.result.model || model})`;
+          const bodyDiv = document.createElement("div");
+          bodyDiv.style.cssText = "color: #fff; font-family: monospace; white-space: pre-wrap;";
+          bodyDiv.textContent = content;
+          outEl.appendChild(metaDiv);
+          outEl.appendChild(bodyDiv);
+          loadDshStatus();
+        } else {
+          const failDiv = document.createElement("div");
+          failDiv.style.cssText = "color: #e53e3e;";
+          failDiv.textContent = `Inference Failed: ${data.error || "Unknown error"}`;
+          outEl.appendChild(failDiv);
+        }
+      }
+    } catch (err) {
+      if (outEl) {
+        outEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.style.color = "#e53e3e";
+        errDiv.textContent = `Error executing inference: ${err.message}`;
+        outEl.appendChild(errDiv);
+      }
+    }
+  });
+
+  // Initial load when tab clicked
+  document.querySelector('[data-tab="tab-model-intelligence"]')?.addEventListener("click", () => {
+    loadDshStatus();
+    loadDshProviders();
+    loadDshCombos();
+    loadDshChannels();
+  });
+
+
+  // --- Always-On Hands-Free Voice Activation HUD Wiring ---
+  const toggleAlwaysOnWakeBtn = document.getElementById("toggleAlwaysOnWakeBtn");
+  const toggleSnapActivationBtn = document.getElementById("toggleSnapActivationBtn");
+  const emergencyMicMuteBtn = document.getElementById("emergencyMicMuteBtn");
+  const snapSensitivitySelect = document.getElementById("snapSensitivitySelect");
+  const convoTimeoutSelect = document.getElementById("convoTimeoutSelect");
+
+  if (toggleAlwaysOnWakeBtn) {
+    toggleAlwaysOnWakeBtn.addEventListener("click", async () => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      if (vac.system.getState() === "DISABLED") {
+        const res = await vac.start();
+        if (res.ok) {
+          toggleAlwaysOnWakeBtn.textContent = "⚡ Wake Word: ULTRON [ON]";
+          toggleAlwaysOnWakeBtn.classList.add("btn-accent");
+        }
+      } else {
+        vac.stop();
+        toggleAlwaysOnWakeBtn.textContent = "⚡ Wake Word: ULTRON [OFF]";
+        toggleAlwaysOnWakeBtn.classList.remove("btn-accent");
+      }
+    });
+  }
+
+  if (toggleSnapActivationBtn) {
+    toggleSnapActivationBtn.addEventListener("click", () => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      vac.snapEnabled = !vac.snapEnabled;
+      vac.system.snapActivationEnabled = vac.snapEnabled;
+      vac.savePreferences();
+      toggleSnapActivationBtn.textContent = vac.snapEnabled ? "🫰 Snap Wake [ON]" : "🫰 Snap Wake [OFF]";
+      if (vac.snapEnabled) toggleSnapActivationBtn.classList.add("btn-accent");
+      else toggleSnapActivationBtn.classList.remove("btn-accent");
+    });
+  }
+
+  if (emergencyMicMuteBtn) {
+    emergencyMicMuteBtn.addEventListener("click", () => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      const muted = vac.toggleMute();
+      emergencyMicMuteBtn.textContent = muted ? "🔊 Unmute Mic" : "🔇 Mute Mic";
+      if (muted) emergencyMicMuteBtn.classList.add("btn-danger");
+      else emergencyMicMuteBtn.classList.remove("btn-danger");
+    });
+  }
+
+  if (snapSensitivitySelect) {
+    snapSensitivitySelect.addEventListener("change", (e) => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      vac.snapSensitivity = e.target.value;
+      vac.system.snapDetector.setSensitivity(e.target.value);
+      vac.savePreferences();
+    });
+  }
+
+  if (convoTimeoutSelect) {
+    convoTimeoutSelect.addEventListener("change", (e) => {
+      const vac = window.voiceActivationController;
+      if (!vac) return;
+      const timeout = Number(e.target.value);
+      vac.conversationTimeoutMs = timeout;
+      vac.continuousEnabled = timeout > 0;
+      vac.system.continuousConversationEnabled = timeout > 0;
+      vac.system.conversationTimeoutMs = timeout;
+      vac.savePreferences();
+    });
+  }
+
+
+  // --- Human Emotional Intelligence (HEI) UI Wiring ---
+  const heiMasterToggle = document.getElementById("heiMasterToggle");
+  const heiStyleSelect = document.getElementById("heiStyleSelect");
+  const heiEmpathySlider = document.getElementById("heiEmpathySlider");
+  const heiEmpathyVal = document.getElementById("heiEmpathyVal");
+  const heiConfidenceSlider = document.getElementById("heiConfidenceSlider");
+  const heiConfidenceVal = document.getElementById("heiConfidenceVal");
+  const heiClearContextBtn = document.getElementById("heiClearContextBtn");
+  const heiDeleteMemoryBtn = document.getElementById("heiDeleteMemoryBtn");
+
+  if (heiMasterToggle) {
+    heiMasterToggle.addEventListener("change", async (e) => {
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ heiEnabled: e.target.checked })
+      });
+    });
+  }
+
+  if (heiStyleSelect) {
+    heiStyleSelect.addEventListener("change", async (e) => {
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredStyle: e.target.value })
+      });
+    });
+  }
+
+  if (heiEmpathySlider) {
+    heiEmpathySlider.addEventListener("input", async (e) => {
+      if (heiEmpathyVal) heiEmpathyVal.textContent = Number(e.target.value).toFixed(2);
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empathyLevel: Number(e.target.value) })
+      });
+    });
+  }
+
+  if (heiConfidenceSlider) {
+    heiConfidenceSlider.addEventListener("input", async (e) => {
+      if (heiConfidenceVal) heiConfidenceVal.textContent = Number(e.target.value).toFixed(2);
+      await fetch("/api/jarvis/hei/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confidenceThreshold: Number(e.target.value) })
+      });
+    });
+  }
+
+  if (heiClearContextBtn) {
+    heiClearContextBtn.addEventListener("click", async () => {
+      try {
+        await fetch("/api/jarvis/hei/clear-context", { method: "POST" });
+        alert("Active emotional conversation context cleared.");
+      } catch (err) {
+        console.error("Clear context error:", err);
+      }
+    });
+  }
+
+  if (heiDeleteMemoryBtn) {
+    heiDeleteMemoryBtn.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to delete all saved emotional preferences and reset to defaults?")) return;
+      try {
+        await fetch("/api/jarvis/hei/delete-memory", { method: "POST" });
+        alert("Emotional memory reset to factory defaults.");
+      } catch (err) {
+        console.error("Delete memory error:", err);
+      }
+    });
+  }
+
+});

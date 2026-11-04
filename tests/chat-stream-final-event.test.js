@@ -6,7 +6,7 @@ async function withAuthenticatedServer(run, providerStream) {
   const secret = "test-session-secret-that-is-at-least-32-characters";
   const app = createApp({
     env: {
-      APP_ACCESS_PASSWORD: "test-password",
+      APP_ACCESS_PASSWORD: "test-secret-password",
       SESSION_SECRET: secret,
       OPENROUTER_API_KEY: "synthetic-provider-key",
       OPENROUTER_DEFAULT_MODEL: "openrouter/free"
@@ -25,7 +25,7 @@ async function withAuthenticatedServer(run, providerStream) {
     const login = await fetch(base + "/api/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: "test-password" })
+      body: JSON.stringify({ password: "test-secret-password" })
     });
     assert.equal(login.status, 200);
     const cookie = login.headers.get("set-cookie")?.split(";")[0];

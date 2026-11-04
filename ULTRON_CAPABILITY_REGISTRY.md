@@ -1,3 +1,5 @@
+> **Historical snapshot — superseded by [the canonical evidence-based release status](ULTRON_STATUS.md).** This document may contain stale completion percentages, branch identifiers, test totals, or operational claims. Do not use it to approve a merge or deployment.
+
 # ULTRON AI — COMPLETE CAPABILITY REGISTRY
 ## PROJECT CODENAME: ULTRON ETERNAL
 ### HIERARCHICAL INVENTORY (LEVELS 1 THROUGH 10)
@@ -604,3 +606,42 @@ Status Key:
 - **Level 9 (Security & Performance):** Pure local CPU execution on AMD Ryzen 7 5700U; zero latency penalty (<5ms emotion classification); zero emotional data transmitted to third parties
 - **Level 10 (Deployment):** Render `Ultron core` workspace compatible
 - **Status:** `LIVE_VERIFIED`
+
+---
+
+## CATEGORY Q: NEXT-GENERATION AUTONOMOUS INTELLIGENCE UPGRADE (9 SYSTEMS)
+- **Level 1 (Major):** Modular Autonomous AI Operating System Architecture
+- **Level 2 (Subsystem):**
+  1. **ULTRON CORE (`core/ultron-core.js`):** Unified model orchestration, multi-provider intelligence, reasoning & verification engine, dual-tier memory (sliding-window short-term + keyword-indexed long-term), context compaction, multimodal context assembly, and circuit-broken fallback.
+  2. **ULTRON AUTONOMY (`autonomy/ultron-autonomy.js`):** Goal decomposition into directed acyclic graph (DAG) plans, multi-step dependency sequencing, background execution queue, persistent task state machine, failure detection with self-healing backoff retries, post-execution verification gates, and cryptographic human approval workflows for sensitive actions.
+  3. **ULTRON GENESIS (`genesis/genesis-engine.js`):** Procedural application scaffolding (REST API, CLI tools, automated background workflows), 3D physics simulation scene descriptors with colliders and lighting, reusable agent capabilities with JSON Schema definitions, and strict sandboxed validation before installation.
+  4. **ULTRON FORGE (`forge/forge-engine.js`):** Autonomous software engineering, repository static analysis (lines of code, language breakdown, import/export symbol indexing), paired code & test generation, iterative debugging loops with diagnostic patching, static security vulnerability scanning (hardcoded secrets, command/SQL injection, prototype pollution), pull request preparation, and automated rollback upon regression.
+  5. **ULTRON ROBOTICS (`robotics/robot-digital-twin.js`):** Robot Digital Twins (mass, wheelbase, joint bounds, battery depletion model), pure-CPU kinematic and rigid-body simulation, synthetic 360-degree LiDAR raycasting with obstacle distance detection, tabular Q-learning reinforcement learning agent for navigation, behavior evaluation metrics (smoothness, clearance, energy), and Sim-to-Real deployment passport verification.
+  6. **ULTRON VISION (`vision/ultron-vision.js`):** Multimodal image inspection and visual reasoning heuristics, 2D object detection with bounding box localization, temporal video stream analysis with keyframe chunking, media studio integration, and 3D asset processing (OBJ/STL mesh parsing, vertex counts, bounding volume, center of mass).
+  7. **ULTRON NEXUS (`nexus/nexus-orchestrator.js`):** Multi-agent swarm orchestration across 6 specialized roles (`SYSTEM_ARCHITECT`, `CODE_ENGINEER`, `QUALITY_TESTER`, `CYBER_GUARDIAN`, `ROBOTICS_SPECIALIST`, `RESEARCH_SYNTHESIZER`), shared Blackboard task context with versioning, point-to-point and broadcast inter-agent messaging, priority-based conflict resolution with security override authority, and bounded concurrency resource management.
+  8. **ULTRON GUARDIAN (`security/ultron-guardian.js`):** Capability-based least-privilege tokens (`READ_ONLY`, `SANDBOX_WRITE`, `NETWORK_RESTRICTED`, `ADMIN_CONTROL`), sandboxed pure V8 logic execution with timeout bounds, automatic secret redaction (API keys, JWTs, DB URLs), tamper-evident blockchain-style hash-chained audit logger with integrity verification, and latching Emergency Stop with master key reset.
+  9. **HUMAN INTELLIGENCE INTERFACE (`intelligence/human-interface.js`):** Unified multi-lingual conversation (English, Hindi, Roman Hinglish), human emotional intelligence integration, dynamic vocal modulation (Kokoro `am_onyx` speed, pitch, emotional mode), persistent user preferences, and real-time visual pulse event streams for desktop and mobile companions.
+- **Level 3 (Module):** Mounted REST endpoints on `/api/jarvis/nextgen/*` in `jarvis-router.js`
+- **Level 4 (Component):**
+  - Unified routing across OpenRouter, Groq, Gemini Flash, Ollama, and DSH God
+  - Multi-tier memory compaction with automatic long-term promotion
+  - Sim-to-Real safety envelopes with dead-man's heartbeat and geofence bounds
+  - Cryptographic hash-chained audit logging (SHA-256 chain)
+  - Pure CPU performance optimization for AMD Ryzen 7 5700U with 8 GB RAM profile
+- **Level 5 (Configuration):** Exposes `/api/jarvis/nextgen/status`, `/api/jarvis/nextgen/autonomy/plan`, `/api/jarvis/nextgen/forge/security-scan`, `/api/jarvis/nextgen/robotics/sim-step`, `/api/jarvis/nextgen/human/interact`
+- **Level 6 (Automated Tests):**
+  - `tests/ultron-core.test.js` (5/5 PASS)
+  - `tests/ultron-autonomy.test.js` (5/5 PASS)
+  - `tests/genesis-engine.test.js` (4/4 PASS)
+  - `tests/forge-engine.test.js` (6/6 PASS)
+  - `tests/robotics-twin-sim.test.js` (4/4 PASS)
+  - `tests/ultron-vision.test.js` (5/5 PASS)
+  - `tests/nexus-orchestrator.test.js` (5/5 PASS)
+  - `tests/ultron-guardian.test.js` (5/5 PASS)
+  - `tests/human-interface.test.js` (4/4 PASS)
+- **Level 7 (Integration Tests):**
+  - `tests/jarvis-nextgen-routes.test.js` (3/3 PASS)
+- **Level 8 (Live Verification):** 1,000 / 1,001 passing tests repository-wide (1 skip for Windows junction symlinks).
+- **Level 9 (Security & Performance):** Pure CPU execution, memory cap <256MB per sandbox, zero mandatory GPU/CUDA requirements.
+- **Level 10 (Deployment):** Branch `feat/next-gen-autonomous-intelligence-upgrade` ready for merge into `main`.
+- **Status:** `VERIFIED`

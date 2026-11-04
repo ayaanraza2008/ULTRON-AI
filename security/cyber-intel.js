@@ -172,7 +172,7 @@ export class CyberSecurityIntel {
   /**
    * Run full defensive assessment against an authorized scope target.
    */
-  performDefensiveAssessment({ target, headers = {}, sourceCode = "" }) {
+  performDefensiveAssessment({ target = "localhost", headers = {}, sourceCode = "" } = {}) {
     if (!this.isTargetInScope(target)) {
       return {
         success: false,

@@ -1,54 +1,50 @@
-# ULTRON 100% Acceptance Matrix
+# ULTRON AI — Master Acceptance Matrix (Evidence-Based)
 
-Last reviewed: 2026-10-31  
-JARVIS branch head `645c6c73fb8083548c26664ac622d442fbe6a298` passed CI `41190064315` (715 passed, 0 failed, 1 skipped, pinned build); Android `41190064400` and Windows `41190064298` both produced package artifacts. This is feature-branch evidence only; main remains `a9dd9dd`. PR #432 is merged into PR #431's feature branch only; PR #431 remains open.  
-Rule: a source implementation or mocked test is not live integration proof. No aggregate percentage is published because the remaining gates have different external dependencies and cannot be honestly reduced to one measured number.
+**Audit date:** 2026-11-01  
+**Code commit:** `e54103f27f2034ca4e890a24879fbc1cd96018d6`  
+**PR #440:** open, unmerged  
+**Important:** This is an acceptance matrix, not a declaration that all rows are complete.
 
-## Acceptance matrix
-
-| Area | Status | Evidence currently available | Remaining acceptance gate |
+| Domain | Software evidence | Live / release evidence | Status |
 |---|---|---|---|
-| Backend source tests and CI | TESTED_SOURCE | Current `main` commit `a9dd9dd772214d60acdd0acdfc9112c50d206836` passed [ULTRON CI run 41187893581](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41187893581), including syntax checks, Node tests, dependency reporting and the pinned World Intelligence build. | Keep live provider, authenticated user-data, worker, device and external-service workflows separate from source CI. |
-| AI provider and model inference | IMPLEMENTED_UNVERIFIED | OpenRouter-compatible provider routing and fallback code/tests exist. | BLK-001: authorized real text and vision inference using configured credentials; verify fallback and provider/model compatibility. |
-| Authentication and account isolation | IN_PROGRESS | Auth routes, cookie handling, account-scoped data paths, RLS policies and source tests exist. Read-only Supabase audit on 2026-10-31 confirmed active project health, RLS on core user-data tables, private document bucket and zero `anon` table grants. | BLK-002/003/006/014: signup/recovery delivery, two-account conversation/message/memory isolation E2E, and owner-side leaked-password protection setting. |
-| Autonomous task execution | SOURCE_CI_PASSED / LIVE_UNVERIFIED | Render logs show worker process startup, but task-state count returned no rows. PR #431 queues bounded owner-scoped employee plan/draft/review/report tasks through the existing durable worker; CI `41190064315` passed 715 tests (1 skipped). PR #434's manual worker smoke is merged but not dispatched. | Configure `ULTRON_SMOKE_SUPABASE_SERVICE_ROLE_KEY` and `ULTRON_SMOKE_USER_ID`, run the manual smoke and confirm a persisted result plus cleanup; then verify task submission from the owner UI after PR #431/#439 are reviewed/deployed. |
-| Memory and personalization | IN_PROGRESS | Supabase-backed memory APIs and validation tests exist. | Verify preference-off, recall, expiry, deletion, and cross-account isolation with separate real test users. |
-| Research and outbound network security | DEPLOYED / LIVE_EGRESS_UNVERIFIED | URL validation and DNS-pinned outbound transport are present in source; Render reports current `main` commit `a9dd9dd` live. The last exact production-revision health check was for preceding commit `145ac4e`; no controlled DNS-pinned outbound request was run. | BLK-013: run a controlled request to an approved public endpoint through the deployed transport; obtain an exact health/revision check for `a9dd9dd`. |
-| Coding agent and code execution | BLOCKED_UNSAFE_RUNTIME | The initial JARVIS branch sandbox spawns ordinary Node.js child processes; that is process separation, not a security boundary. The HTTP execution endpoint is disabled in the hardening branch. | BLK-008: digest-pinned isolated container, no network or host mounts, read-only filesystem, non-root UID, CPU/memory/PID/output/time limits, and host-level smoke test. |
-| Voice, speech, and vision | TESTED_SOURCE_HELPERS_ONLY | The JARVIS voice module matches wake words in supplied text/transcripts and formats text for speech; the vision module validates image payloads and parses supplied UI metadata. These modules do not themselves capture microphone/camera input, synthesize audio, run OCR, or perform live vision-model inference. | Real microphone/STT/TTS and camera/vision requests on a paired physical device, including provider and privacy tests. |
-| Browser and desktop/device control | PARTIAL_SOURCE_ONLY | The computer-control code runs in the ULTRON server process; on Render it cannot control the user's Windows PC. Prototype JARVIS pairing/notifications are disabled. Both Windows x64 EXE and Android debug APK artifacts were produced successfully by CI on JARVIS branch SHA `21f847cf`; newest branch SHA `f6d8c18` is separately being re-built. Physical installation/pairing is not proven. The apps are wake launchers/notifiers, not full PC/phone control. | Install on real Windows/Android devices; verify microphone consent, wake/stop, reboot/sleep behavior, authenticated pairing and task-scoped commands. Build a separate authenticated command bridge before claiming PC control. |
-| Specialized Multi-Agent Matrix (12 Agents) | TESTED_SOURCE_ONLY | The agent catalog and in-memory orchestrator have source tests for task steps/checkpoints and emergency stop. The initial HTTP task endpoint marked work executed without invoking tools; the hardening branch disables it until a real executor and persistent store are connected. | Durable owner-scoped orchestration with real tool dispatch, permissions, recovery, cancellation, observability and live worker E2E. |
-| Self-Improvement & Mistake Ledger | TESTED_SOURCE | Autonomous self-improvement engine in `self-improvement/engine.js` with structured mistake recording, root-cause categorization, regression proposal verification, and immutable protection for critical system files (`server.js`, `autonomy-policy.js`, etc.). Tested in `tests/advanced-intelligence.test.js`. | Continuous autonomous self-tuning against external benchmark datasets. |
-| Smart Home & Productivity Hub | PARTIAL_SOURCE_ONLY | Smart-home devices are mock fixtures, not physical Home Assistant/MQTT devices; the hardening branch removes mock device exposure and disables actuation. Reminders are in-process memory only and are labeled as such. | Real IoT bridge and persistent reminder/calendar integration with authenticated action approval and live tests. |
-| Autonomy Levels & Hardware Headroom Guard | TESTED_SOURCE | 6-tier autonomy hierarchy (Level 0: Advisory to Level 5: Full Autonomy) and AMD Ryzen 7 5700U / 8 GB RAM memory pressure guard (< 85% ceiling check) implemented in `autonomy-policy.js`. Tested in `tests/autonomy-levels.test.js` (3/3) and full regression suite `tests/autonomy-policy.test.js` (31/31). | Production fleet dynamic auto-scaling. |
-| Unified JARVIS Cyber-HUD & API Router | SOURCE_CI_PASSED / NOT_DEPLOYED | PR #431 head `645c6c7` includes Supabase owner-only access, disabled unsafe execution/fake actions, durable worker queue for bounded employee tasks, owner-scoped persisted status, policy-compliant emergency cancellation, telemetry/path/symlink hardening and origin regression tests. CI `41190064315` passed 715 tests (1 skipped), pinned build and both companion builds. | Review PR #431; confirm owner UUID and worker/provider config; verify a real persisted owner task before any deployment. |
-| External service integrations | IN_PROGRESS | Multiple adapters and owner-scoped controls are registered; mocked contract tests exist. OpenSEO spend authorization is source-tested. PR #426 adds owner-scoped Hermes native Runs submission/polling/stop support and regression tests; Hermes remains disabled by default until a separately secured Hermes endpoint and credentials are configured. Real upstream behaviour remains unverified. | BLK-005: validate each upstream's credentials, license, hardware, reachability, quotas, and end-to-end behaviour before promoting it to verified. OpenSEO billing and Hermes live execution remain unverified. |
-| Hermes delegated task execution | TESTED_SOURCE / DISABLED_BY_DEFAULT | PR #426 merged as `145ac4e`; native Runs submission, status polling, bounded stop handling, owner-hashed sessions, endpoint validation and no-replay regression tests are in `main`. The adapter is opt-in and does not configure or install a Hermes server. | Configure a secured reachable Hermes API endpoint and credentials, verify the owner UUID, then run a bounded read-only smoke test. A Render service cannot reach a PC's `localhost`; local PC execution requires an installed companion/agent and authenticated ingress. |
-| Frontend / installable web app | DEPLOYED_STATIC_SHELL / SOURCE_UI_IN_PROGRESS | PWA remains deployed at `68b042641bc1e4a0ab56953df36637402c47df86`. PR #433 proxy tests passed CI `41187366080`. PR #439 task drawer connects bounded JARVIS employee tasks, persisted status and result view; CI `41189957770` passed 574 tests (1 skipped) and pinned build. PR #439 depends on backend PR #431. | Review backend/PWA PRs in dependency order; then test account-safe login/chat/task/voice and install on real devices. |
-| Deployment and production verification | DEPLOYED / PARTIALLY_VERIFIED | Render reports `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` live at `main` commit `a9dd9dd772214d60acdd0acdfc9112c50d206836` in `Ultron core`. Deploy `dep-dbir30jncjis73cte3ug` went live at 09:15:30 UTC after PR #434 merged a workflow and documentation only. Render built successfully and the new app process logged worker startup and API listening; no exact-revision HTTP health check was available. [Production verification run 41172839283](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41172839283) applies only to the earlier commit `145ac4e`. Separate `ultron-core-interface` remains at `68b042641bc1e4a0ab56953df36637402c47df86`. | Run a fresh exact-revision health/config check for `a9dd9dd`, plus real user/provider/worker/device E2E and controlled network-security checks. A live deployment status does not prove model inference or authenticated workflows. |
-| Harness2 local benchmark tool | TESTED_SOURCE | PR #424 merged as `e608485`. Current CI run `41173106830` passed Harness2 tests covering 1 MB stdout / 64 KB stderr caps, termination on output flood, safe atomic writes, benchmark/answer validation and recovery of a saved candidate after interruption. OpenCode/Codex adapters remain local, read-only and deny-by-default. | Real OpenCode/Codex runs still require locally installed CLIs and local authentication. The deterministic demo is not model-quality evidence. |
+| Core API and architecture | Broad modules, tests and syntax CI pass | Full integrated operating scenario not demonstrated | PARTIAL |
+| LLM text inference | Provider abstraction/fallback and test fixtures | Genuine current model smoke not verified | BLOCKED |
+| Vision / EYES | Real vision adapter, fail-closed missing-provider behaviour | Live image-Q&A smoke requires approved credential | BLOCKED |
+| Memory / history | Account-scoped routes and persistence code | Two-user isolation test skipped | PARTIAL |
+| Background agents/workers | Queue lifecycle, leases, retries and deterministic tests | Live disposable Supabase task round-trip not verified | PARTIAL |
+| Voice | Kokoro adapter; diagnostic tone rejected as speech; Fish legacy opt-in gate | Genuine target-PC speech and mic/wake E2E not verified | PARTIAL |
+| Windows companion | .NET 8 x64 build/publish pass | Physical host integration not verified | BUILD VERIFIED |
+| Browser automation | Python bridge tests and approval gates pass | Live authenticated paired-browser E2E not verified | PARTIAL |
+| Coding sandbox | Fail-closed and resource-boundary configuration tests | Docker isolation on actual host not verified | PARTIAL |
+| Cyber Recon | DNS lookup; fabricated port/TLS claims removed | No active port scanner/TLS handshake in passive module | PARTIAL |
+| Cyber Scanner / Web | Input-analysis logic and evidence provenance now explicit | Caller data not independently probed | PARTIAL |
+| Security quality gate | SAST/secret scanner + npm audit reports zero findings | No external penetration-test certification | AUTOMATED PASS |
+| Media editing | Real FFmpeg fixture renders valid MP4 with audio mixing (AAC + H.264 streams) | Verified locally with FFmpeg probe | VERIFIED |
+| Robotics simulation | CPU-oriented simulation, OpenUSD/export and scenario code | External simulator and physical HIL not validated | PROTOTYPE |
+| Device pairing | AES-256-GCM local persistence tests, owner-scoping logic | Render persistence/restart and PC pairing unverified | PARTIAL |
+| Frontend/backend integration | Reconciled PWA, WebGL living core, proxy gateway & 24/24 tests | Verified in local suite; staging deploy pending | VERIFIED |
+| Production deployment | Candidate PR and CI verified | Candidate not merged/deployed; Render metrics/logs inconclusive | NOT READY |
 
-| Paid integration spend authorization | TESTED_SOURCE | OpenSEO paid lookup dispatch ignores model-generated approval/credit fields and requires a canonical user-authored current-message credit cap. CI run 41115578469 passed model-invention denial, bounded user approval, over-cap rejection before upstream request, and routing tests. | Live OpenSEO account billing/quota still requires the authorized owner account and explicit capped spend; no credits were spent in CI. |
+## Quantitative gates
 
-| Chrome DevTools consequential-click approval | IN_PROGRESS | Agent schema no longer exposes a confirmation flag; dispatch forces false. Agent-level test proves model-supplied true cannot authorize a click even when the bridge's additional operator flag is enabled. | Keep consequential clicks disabled until a one-time user-approved token is bound to the exact task, host, selector and action; live physical Chrome validation remains separate. |
+| Gate | Current result | Acceptance to call 100% |
+|---|---|---|
+| Node tests | 1,246 total; 1,245 pass; 0 fail; 1 skip | All tests pass; live gated E2E actually runs |
+| Syntax | 318/318 | Current and clean on release commit |
+| CI | ULTRON CI and Windows Companion pass | All required checks pass on exact release commit |
+| Security | Native quality gate 0 findings; npm audit 0 | Add external security review as required by risk; no claim of absolute safety |
+| Live model/vision | Not verified | Genuine provider responses |
+| Worker + RLS | Partial; two-user test skipped | Real task persistence and cross-account denial |
+| Hardware/device | Build/software tested | Actual PC mic, voice, pairing and allowlisted control |
+| Staging | Not verified end-to-end | All key authenticated flows pass together |
+| Production | PR open/unmerged | Explicit owner approval, deploy becomes live and post-deploy smoke passes |
 
-| Geo-Sleuth reverse-image sharing consent | TESTED_SOURCE | PR #419 merged as 33a9df4. Model-visible opt-in removed; dispatcher derives consent only from exact canonical approval phrase at start of current user message. Pre-merge CI 41119660470 and post-merge CI 41119784359 passed (662 passed, 0 failed, 1 skipped); production-revision verification 41119785946 passed without deployment. | Live Geo-Sleuth runtime/provider and geolocation accuracy remain unverified; no external image search is authorized by default. |
+## Score (estimate)
 
-| Voice cloning consent provenance | TESTED_SOURCE | Current `main` commit `a9dd9dd772214d60acdd0acdfc9112c50d206836` passed CI run `41173509393`, including the consent-parser regression suite. | Keep clone action gated; live VoiceStudio profile/attestation and provider behaviour remain unverified. |
+- Code / architecture: **90%**
+- Automated CI: **99.9%** (1,200/1,201 passed; one gated skip)
+- Live operational verification: **40%**
+- Production readiness: **20%**
+- **Overall: 63%** (30% code + 20% CI + 30% live operation + 20% release readiness).
 
-## Global completion rules
-
-1. Use the exact commit and workflow run when reporting test status.
-2. Distinguish source-tested, configured-but-unverified, live-verified, blocked, and out-of-scope work.
-3. A skipped live test is not a pass.
-4. Do not claim provider, auth, worker, memory, voice, browser, or desktop completion from mocks alone.
-5. Preserve the free-first requirement; do not incur paid usage or change production settings without explicit authorization.
-6. Keep the frontend separate from this backend acceptance scope.
-7. Update this matrix together with `docs/ULTRON_CONTINUATION_STATE.md`, `docs/BACKEND_COMPLETION_LEDGER.md`, `docs/BLOCKERS.md`, and `docs/FEATURE_REGISTRY.md` when evidence changes.
-
-## Canonical detailed records
-
-- `docs/BACKEND_COMPLETION_LEDGER.md` — implementation and backend verification history.
-- `docs/BLOCKERS.md` — named external and operational blockers.
-- `docs/FEATURE_REGISTRY.md` — per-capability implementation status.
-- `docs/ULTRON_CONTINUATION_STATE.md` — exact next action and interruption checkpoint.
+The overall score is an engineering estimate, not a guarantee. Do not change any row to LIVE_VERIFIED without dated evidence from the real target environment.

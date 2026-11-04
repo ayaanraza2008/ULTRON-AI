@@ -30,3 +30,20 @@ Windows must have an installed compatible English speech-recognition engine and 
 - Wake-word recognition is available only while the companion is running, the Windows session/audio device is available, and the installed speech recognizer works.
 - Automatic startup is off by default and only enabled by an explicit checkbox after microphone consent. It uses the current user's normal Windows Run registry entry and stays visible in the system tray; it does not create a hidden task or service.
 - It does not hide microphone activity, execute arbitrary commands, or perform consequential actions.
+
+
+## Paired-device remote commands
+
+The Windows companion can receive ULTRON device-queue commands after it has been paired with the server. Remote command polling is **off by default**. Enable the visible **Allow allowlisted remote commands from paired devices** checkbox in the companion window to opt in; unchecking it immediately stops polling.
+
+The device ID and device token returned by the pairing claim are stored together using Windows DPAPI with current-user scope. Every queued command's HMAC-SHA256 signature is checked locally before an action is executed. The companion does not accept arbitrary shell commands, PowerShell, executable paths supplied by a caller, or unsigned commands.
+
+Supported actions are deliberately limited:
+- Launch or gracefully close a small, hard-coded allowlist of desktop apps.
+- Set system volume, send basic media keys, or lock the workstation.
+- Read basic machine/runtime vitals and display a Windows tray notification.
+- List/read small text files under `Documents/ULTRON Shared` only. File reads are limited to 64 KB and common text formats.
+
+Screen capture is disabled for privacy. Unlocking Windows, waking a suspended/powered-off machine, arbitrary shell execution, and general filesystem browsing are not supported. A failed/unsupported action is reported back as a failed task rather than being marked complete.
+
+For remote file access, create `Documents/ULTRON Shared` and place only files you explicitly intend to expose to ULTRON there. Keep the companion running and leave the opt-in enabled to receive commands.

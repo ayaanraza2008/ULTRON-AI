@@ -89,7 +89,11 @@ def synthesize_to_wav_bytes(text, voice="am_onyx", speed=0.95, lang="en-us"):
             "durationSec": calc_duration,
             "generationTimeSec": 0.05,
             "voice": voice,
-            "speed": speed
+            "speed": speed,
+            "speechAvailable": False,
+            "audioKind": "diagnostic_tone",
+            "fallback": True,
+            "fallbackReason": "KOKORO_RUNTIME_UNAVAILABLE"
         }
 
     kokoro = get_kokoro_instance()
@@ -110,7 +114,10 @@ def synthesize_to_wav_bytes(text, voice="am_onyx", speed=0.95, lang="en-us"):
         "durationSec": round(duration, 2),
         "generationTimeSec": round(gen_time, 3),
         "voice": voice,
-        "speed": speed
+        "speed": speed,
+        "speechAvailable": True,
+        "audioKind": "speech",
+        "fallback": False
     }
 
 def play_audio_locally(wav_bytes):
@@ -167,7 +174,11 @@ def main():
                 "sampleRate": result["sampleRate"],
                 "durationSec": result["durationSec"],
                 "generationTimeSec": result["generationTimeSec"],
-                "dataUrl": data_url
+                "dataUrl": data_url,
+                "speechAvailable": result["speechAvailable"],
+                "audioKind": result["audioKind"],
+                "fallback": result["fallback"],
+                "fallbackReason": result.get("fallbackReason")
             }
             print(json.dumps(output))
         else:

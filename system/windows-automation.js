@@ -4,6 +4,10 @@
  * Implements direct PC and hardware control on Windows:
  * - Application launching and focus switching (VS Code, Chrome, Terminal, etc.)
  * - System audio control (volume up, volume down, mute, unmute via PowerShell/SAPI)
+ * - Display brightness control via WMI (Source B ULTRONMAIN adaptation)
+ * - Media playback controls (play/pause, next, prev, stop) (Source B adaptation)
+ * - Window state management (minimize, maximize, restore, close) (Source B adaptation)
+ * - GPU model and hardware telemetry via WMI (Source B adaptation)
  * - Display & session control (lock workstation, screen capture)
  * - Battery and power hardware telemetry (WMI CIM query)
  * - Active foreground window inspection
@@ -18,6 +22,13 @@ import path from "node:path";
 import os from "node:os";
 
 const execAsync = promisify(exec);
+
+export const HARDWARE_STATUS = {
+  SUPPORTED_AND_VERIFIED: "SUPPORTED_AND_VERIFIED",
+  COMMAND_SENT_BUT_UNVERIFIED: "COMMAND_SENT_BUT_UNVERIFIED",
+  UNSUPPORTED_HARDWARE: "UNSUPPORTED_HARDWARE",
+  FAILED: "FAILED"
+};
 
 export class WindowsAutomation {
   constructor(options = {}) {
@@ -98,7 +109,6 @@ export class WindowsAutomation {
     try {
       let psScript = "";
       if (action === "mute" || action === "unmute") {
-        // AppActivate and send volume mute key (VK 173 = 0xAD)
         psScript = `powershell -NoProfile -Command "(New-Object -ComObject WScript.Shell).SendKeys([char]173)"`;
       } else if (action === "volume_up") {
         psScript = `powershell -NoProfile -Command "1..5 | ForEach-Object { (New-Object -ComObject WScript.Shell).SendKeys([char]175) }"`;
@@ -109,12 +119,184 @@ export class WindowsAutomation {
         psScript = `powershell -NoProfile -Command "1..50 | ForEach-Object { (New-Object -ComObject WScript.Shell).SendKeys([char]174) }; 1..${Math.round(level / 2)} | ForEach-Object { (New-Object -ComObject WScript.Shell).SendKeys([char]175) }"`;
       }
 
-      await execAsync(psScript, { timeout: 3000 });
+      await execAsync(psScript, { timeout: 8000 });
       this.recordEvent("VOLUME", `${action} (${value ?? ""})`, "success");
       return { success: true, action, value };
     } catch (err) {
       this.recordEvent("VOLUME", `${action}`, "failed");
       throw new Error(`Failed to adjust volume: ${err.message}`);
+    }
+  }
+
+  /**
+   * Query Display Brightness via WMI (Source B ULTRONMAIN adaptation)
+   */
+  async getDisplayBrightness() {
+    if (process.platform !== "win32") {
+      return { supported: true, brightness: 100, simulated: true };
+    }
+    try {
+      const psScript = `powershell -NoProfile -Command "Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CurrentBrightness"`;
+      const { stdout } = await execAsync(psScript, { timeout: 3000 });
+      const val = parseInt(stdout ? stdout.trim() : "100", 10);
+      if (Number.isFinite(val)) {
+        return { supported: true, brightness: val };
+      }
+      return { supported: false, brightness: 100, note: "Display does not support WMI brightness." };
+    } catch {
+      return { supported: false, brightness: 100, note: "WMI brightness query unavailable." };
+    }
+  }
+
+  /**
+   * Set Display Brightness (0-100%) via WMI (Source B ULTRONMAIN adaptation)
+   */
+  async setDisplayBrightness(level) {
+    if (this.emergencyStop) throw new Error("Computer automation halted under Emergency Stop.");
+    const target = Math.max(0, Math.min(100, Math.round(Number(level) || 50)));
+
+    if (process.platform !== "win32") {
+      this.recordEvent("BRIGHTNESS", `level=${target}`, "mock_success");
+      // TRUTH TIER: WMI brightness control is unavailable on non-Windows platforms.
+      return { success: true, brightness: target, simulated: true, hardwareStatus: HARDWARE_STATUS.UNSUPPORTED_HARDWARE };
+    }
+
+    try {
+      const psScript = `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; \$w = Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods; if (-not \$w) { throw 'WmiMonitorBrightnessMethods not available' }; \$w.WmiSetBrightness(1, ${target}); 'OK'"`;
+      const { stdout } = await execAsync(psScript, { timeout: 4000 });
+      const ok = stdout && stdout.includes("OK");
+
+      // Verify read-back from hardware
+      const readback = await this.getDisplayBrightness();
+      const verified = Boolean(ok && readback.supported && readback.brightness === target);
+
+      let hardwareStatus;
+      if (!readback.supported) {
+        hardwareStatus = HARDWARE_STATUS.UNSUPPORTED_HARDWARE;
+      } else if (verified) {
+        hardwareStatus = HARDWARE_STATUS.SUPPORTED_AND_VERIFIED;
+      } else {
+        hardwareStatus = HARDWARE_STATUS.COMMAND_SENT_BUT_UNVERIFIED;
+      }
+
+      this.recordEvent("BRIGHTNESS", `level=${target}`, ok ? "success" : "unsupported");
+      return {
+        success: Boolean(ok),
+        brightness: target,
+        currentBrightness: readback.brightness,
+        verified,
+        supported: readback.supported,
+        hardwareStatus
+      };
+    } catch (err) {
+      this.recordEvent("BRIGHTNESS", `level=${target}`, "failed");
+      const isUnsupported = /not available|WmiMonitorBrightness/i.test(err.message);
+      return {
+        success: false,
+        brightness: target,
+        verified: false,
+        supported: false,
+        hardwareStatus: isUnsupported ? HARDWARE_STATUS.UNSUPPORTED_HARDWARE : HARDWARE_STATUS.FAILED,
+        error: err.message
+      };
+    }
+  }
+
+  /**
+   * Dispatch Virtual Media Key Controls (Source B adaptation)
+   * Actions: play_pause, next_track, prev_track, stop
+   */
+  async dispatchMediaKey(action) {
+    if (this.emergencyStop) throw new Error("Computer automation halted under Emergency Stop.");
+
+    const MEDIA_KEY_CODES = {
+      play_pause: 179, // VK_MEDIA_PLAY_PAUSE (0xB3)
+      next_track: 176, // VK_MEDIA_NEXT_TRACK (0xB0)
+      prev_track: 177, // VK_MEDIA_PREV_TRACK (0xB1)
+      stop: 178        // VK_MEDIA_STOP (0xB2)
+    };
+
+    const normalized = String(action || "").toLowerCase().trim();
+    const vkCode = MEDIA_KEY_CODES[normalized];
+    if (!vkCode) {
+      throw new Error(`Unsupported media action '${action}'. Allowed: ${Object.keys(MEDIA_KEY_CODES).join(", ")}`);
+    }
+
+    if (process.platform !== "win32") {
+      this.recordEvent("MEDIA_KEY", normalized, "mock_success");
+      return { success: true, action: normalized, simulated: true };
+    }
+
+    try {
+      const psScript = `powershell -NoProfile -Command "(New-Object -ComObject WScript.Shell).SendKeys([char]${vkCode})"`;
+      await execAsync(psScript, { timeout: 3000 });
+      this.recordEvent("MEDIA_KEY", normalized, "success");
+      return { success: true, action: normalized };
+    } catch (err) {
+      this.recordEvent("MEDIA_KEY", normalized, "failed");
+      throw new Error(`Failed to dispatch media key '${action}': ${err.message}`);
+    }
+  }
+
+  /**
+   * Manage Window State for Active Foreground Window (Source B adaptation)
+   * Actions: minimize, maximize, restore, close
+   */
+  async setWindowState(action) {
+    if (this.emergencyStop) throw new Error("Computer automation halted under Emergency Stop.");
+
+    const normalized = String(action || "").toLowerCase().trim();
+    const SHORTCUTS = {
+      minimize: "% n",    // Alt+Space, n
+      maximize: "% x",    // Alt+Space, x
+      restore: "% r",     // Alt+Space, r
+      close: "%{F4}"      // Alt+F4
+    };
+
+    const keys = SHORTCUTS[normalized];
+    if (!keys) {
+      throw new Error(`Unsupported window action '${action}'. Allowed: ${Object.keys(SHORTCUTS).join(", ")}`);
+    }
+
+    if (process.platform !== "win32") {
+      this.recordEvent("WINDOW_STATE", normalized, "mock_success");
+      return { success: true, action: normalized, simulated: true };
+    }
+
+    try {
+      const psScript = `powershell -NoProfile -Command "(New-Object -ComObject WScript.Shell).SendKeys('${keys}')"`;
+      await execAsync(psScript, { timeout: 3000 });
+      this.recordEvent("WINDOW_STATE", normalized, "success");
+      return { success: true, action: normalized };
+    } catch (err) {
+      this.recordEvent("WINDOW_STATE", normalized, "failed");
+      throw new Error(`Failed to change window state to '${action}': ${err.message}`);
+    }
+  }
+
+  /**
+   * Query GPU Model and Hardware Information (Source B adaptation)
+   */
+  async getGpuInfo() {
+    if (process.platform !== "win32") {
+      return { name: "Virtual / Non-Windows GPU", vramBytes: 0, simulated: true };
+    }
+    try {
+      const psScript = `powershell -NoProfile -Command "Get-CimInstance -ClassName Win32_VideoController | Select-Object -Property Name, AdapterRAM, DriverVersion, VideoProcessor | ConvertTo-Json"`;
+      const { stdout } = await execAsync(psScript, { timeout: 4000 });
+      if (!stdout || !stdout.trim()) {
+        return { name: "Integrated Graphics", vramBytes: 0 };
+      }
+      const raw = JSON.parse(stdout.trim());
+      const data = Array.isArray(raw) ? raw[0] : raw;
+      return {
+        name: data.Name || "Unknown GPU",
+        vramBytes: Number(data.AdapterRAM) || 0,
+        driverVersion: data.DriverVersion || null,
+        processor: data.VideoProcessor || null
+      };
+    } catch {
+      return { name: "Unknown GPU", vramBytes: 0 };
     }
   }
 
@@ -241,7 +423,7 @@ $title.ToString()
 
     try {
       const psScript = `powershell -NoProfile -Command "Get-Process -Name ${targetProcess} -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; exit 0"`;
-      await execAsync(psScript, { timeout: 3000 });
+      await execAsync(psScript, { timeout: 8000 });
       this.recordEvent("CLOSE_APP", appName, "success");
       return { success: true, app: appName, processName: targetProcess };
     } catch (err) {
@@ -251,11 +433,13 @@ $title.ToString()
   }
 
   /**
-   * Gathers comprehensive local PC vitals (battery, foreground window, memory load).
+   * Gathers comprehensive local PC vitals (battery, foreground window, memory load, brightness, GPU).
    */
   async getSystemVitals() {
     const battery = await this.getBatteryStatus();
     const activeWindow = await this.getActiveWindowTitle();
+    const brightness = await this.getDisplayBrightness();
+    const gpu = await this.getGpuInfo();
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const ramUsagePercent = Number((((totalMem - freeMem) / totalMem) * 100).toFixed(1));
@@ -265,6 +449,8 @@ $title.ToString()
       platform: process.platform,
       activeWindow: activeWindow.title,
       battery,
+      brightness,
+      gpu,
       ramUsagePercent,
       memoryHeadroomSafe: ramUsagePercent <= 85.0,
       timestamp: new Date().toISOString()

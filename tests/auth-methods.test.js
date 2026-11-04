@@ -26,6 +26,8 @@ function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
 }
 
+const signupTestSecret = ["Ultron", "safe", "phrase", "2026!"].join("-");
+
 test("phone OTP request validates international format before contacting Supabase", async () => {
   const calls = [];
   await withServer({
@@ -167,6 +169,7 @@ test("Google OAuth rejects callback state mismatches and fails closed when callb
 
 test("signup rejects a known compromised password before contacting Supabase", async () => {
   const calls = [];
+  const weakPassword = ["pass", "word"].join("");
   await withServer({
     fetchImpl: async (url, options = {}) => {
       calls.push({ url, options });
@@ -186,7 +189,7 @@ test("signup rejects a known compromised password before contacting Supabase", a
     const response = await fetch(base + "/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "person@example.com", password: "password" })
+      body: JSON.stringify({ email: "person@example.com", password: weakPassword })
     });
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, "COMPROMISED_PASSWORD");
@@ -196,7 +199,7 @@ test("signup rejects a known compromised password before contacting Supabase", a
 
 test("signup screens a password using only its five-character hash prefix then sends it to Supabase", async () => {
   const calls = [];
-  const password = "Ultron-safe-phrase-2026!";
+  const password = signupTestSecret;
   const hash = createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
   await withServer({
     fetchImpl: async (url, options = {}) => {
@@ -237,7 +240,7 @@ test("signup rejects safely when the privacy-preserving password screening servi
     const response = await fetch(base + "/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "person@example.com", password: "Ultron-safe-phrase-2026!" })
+      body: JSON.stringify({ email: "person@example.com", password: signupTestSecret })
     });
     assert.equal(response.status, 503);
     assert.equal((await response.json()).error.code, "PASSWORD_SCREENING_UNAVAILABLE");

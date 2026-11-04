@@ -12,10 +12,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { exec } from "node:child_process";
+import { exec, execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export const EDITING_PRESETS = {
   CINEMATIC: {
@@ -98,11 +99,31 @@ export const EDITING_PRESETS = {
   }
 };
 
+export function resolveFFmpegBinary() {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  try {
+    if (spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0) return "ffmpeg";
+    if (process.platform === "win32") {
+      const res = spawnSync("where.exe", ["ffmpeg"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      if (res.status === 0 && res.stdout && res.stdout.trim()) {
+        const first = res.stdout.trim().split("\r\n")[0].split("\n")[0].trim();
+        if (first) return first;
+      }
+    }
+  } catch {
+    // Fall back to standard binary name
+  }
+  return "ffmpeg";
+}
+
 export class VideoEditingEngine {
   constructor(options = {}) {
     this.workspaceBase = options.workspaceBase || path.join(os.homedir(), "Documents", "UltronWorkspace");
     this.exportsDir = path.join(this.workspaceBase, "exports");
     this.activeRenders = new Map(); // id -> renderState
+    const ffmpegBin = resolveFFmpegBinary();
+    this.ffmpegChecker = options.ffmpegChecker || (() => execFileAsync(ffmpegBin, ["-version"], { timeout: 3000 }));
+    this.ffmpegRunner = options.ffmpegRunner || ((args, options = {}) => execFileAsync(ffmpegBin, args, options));
   }
 
   async initialize() {
@@ -171,6 +192,8 @@ export class VideoEditingEngine {
     sourceClips = [],
     targetDuration = 30,
     voiceoverText = null,
+    audioSourcePath = null,
+    voiceoverAudioPath = null,
     subtitles = []
   } = {}) {
     const preset = EDITING_PRESETS[presetKey.toUpperCase()] || EDITING_PRESETS.CINEMATIC;
@@ -194,12 +217,14 @@ export class VideoEditingEngine {
           style: preset.musicPace,
           bpm: preset.bpm,
           volume: 0.65,
-          duckingOnVoiceover: 0.25
+          duckingOnVoiceover: 0.25,
+          sourcePath: audioSourcePath || null
         },
-        voiceover: voiceoverText ? {
+        voiceover: (voiceoverText || voiceoverAudioPath) ? {
           text: voiceoverText,
           voice: "am_onyx",
-          volume: 1.0
+          volume: 1.0,
+          sourcePath: voiceoverAudioPath || null
         } : null,
         soundEffects: [
           { type: "whoosh", time: 0.0 },
@@ -215,12 +240,8 @@ export class VideoEditingEngine {
     let currentTime = 0;
     let clipIndex = 0;
 
-    const availableClips = sourceClips.length > 0 ? sourceClips : [
-      { name: "Scene_Intro.mp4", path: "sample_intro.mp4", duration: 10 },
-      { name: "Scene_Action.mp4", path: "sample_action.mp4", duration: 15 },
-      { name: "Scene_Climax.mp4", path: "sample_climax.mp4", duration: 12 },
-      { name: "Scene_Outro.mp4", path: "sample_outro.mp4", duration: 8 }
-    ];
+    // Do not invent sample media: without uploaded clips this is a plan, not a render.
+    const availableClips = Array.isArray(sourceClips) ? sourceClips : [];
 
     while (currentTime < targetDuration && clipIndex < availableClips.length * 4) {
       const source = availableClips[clipIndex % availableClips.length];
@@ -251,31 +272,103 @@ export class VideoEditingEngine {
   /**
    * Compiles the timeline into an optimized FFmpeg filter_complex command
    */
+  compileFFmpegArgs(timeline, outputPath) {
+    const dimensions = timeline?.dimensions;
+    const clips = Array.isArray(timeline?.videoClips) ? timeline.videoClips : [];
+    if (!clips.length) throw new Error("SOURCE_MEDIA_REQUIRED: Add at least one real source clip before rendering.");
+    if (!dimensions || ![dimensions.width, dimensions.height, dimensions.fps].every(
+      value => Number.isInteger(value) && value > 0 && value <= 4096
+    )) throw new Error("INVALID_VIDEO_DIMENSIONS: Dimensions and FPS must be bounded positive integers.");
+
+    const args = ["-y", "-threads", "4"];
+    const filters = [];
+    clips.forEach((clip, index) => {
+      const sourcePath = String(clip?.sourcePath || "").trim();
+      const duration = Number(clip?.duration);
+      const sourceOffset = Number(clip?.startTimeInSource || 0);
+      if (!sourcePath || !Number.isFinite(duration) || duration <= 0 || duration > 3600 ||
+          !Number.isFinite(sourceOffset) || sourceOffset < 0) {
+        throw new Error(`INVALID_SOURCE_CLIP: Clip ${index + 1} has an invalid path, offset, or duration.`);
+      }
+      args.push("-ss", String(sourceOffset), "-t", String(duration), "-i", sourcePath);
+      const filter = String(timeline.colorFilter || "null");
+      filters.push(
+        `[${index}:v:0]scale=${dimensions.width}:${dimensions.height}:force_original_aspect_ratio=decrease,` +
+        `pad=${dimensions.width}:${dimensions.height}:(ow-iw)/2:(oh-ih)/2,` +
+        `fps=${dimensions.fps},setsar=1,${filter},format=yuv420p[v${index}]`
+      );
+    });
+    const videoInputs = clips.map((_, index) => `[v${index}]`).join("");
+    filters.push(`${videoInputs}concat=n=${clips.length}:v=1:a=0[outv]`);
+
+    const audioInputs = [];
+    let nextInputIdx = clips.length;
+
+    const musicPath = timeline?.audioTracks?.music?.sourcePath || timeline?.audioSourcePath;
+    if (musicPath && typeof musicPath === "string" && musicPath.trim()) {
+      args.push("-ss", "0", "-t", String(Number(timeline.targetDuration)), "-i", musicPath.trim());
+      audioInputs.push({ idx: nextInputIdx++, type: "music", volume: timeline.audioTracks?.music?.volume || 0.65 });
+    }
+
+    const voiceoverPath = timeline?.audioTracks?.voiceover?.sourcePath || timeline?.voiceoverAudioPath;
+    if (voiceoverPath && typeof voiceoverPath === "string" && voiceoverPath.trim()) {
+      args.push("-ss", "0", "-t", String(Number(timeline.targetDuration)), "-i", voiceoverPath.trim());
+      audioInputs.push({ idx: nextInputIdx++, type: "voiceover", volume: timeline.audioTracks?.voiceover?.volume || 1.0 });
+    }
+
+    let mapAudio = false;
+    if (audioInputs.length === 2) {
+      const m = audioInputs.find(a => a.type === "music");
+      const v = audioInputs.find(a => a.type === "voiceover");
+      filters.push(
+        `[${m.idx}:a]volume=0.35,aformat=channel_layouts=stereo:sample_rates=44100[m]`,
+        `[${v.idx}:a]volume=1.0,aformat=channel_layouts=stereo:sample_rates=44100[v]`,
+        `[m][v]amix=inputs=2:duration=first[outa]`
+      );
+      mapAudio = true;
+    } else if (audioInputs.length === 1) {
+      const a = audioInputs[0];
+      filters.push(
+        `[${a.idx}:a]volume=${a.volume},aformat=channel_layouts=stereo:sample_rates=44100[outa]`
+      );
+      mapAudio = true;
+    }
+
+    if (mapAudio) {
+      args.push(
+        "-filter_complex", filters.join(";"),
+        "-map", "[outv]", "-map", "[outa]",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22", "-threads", "4",
+        "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", "-t", String(Number(timeline.targetDuration)), outputPath
+      );
+    } else {
+      args.push(
+        "-filter_complex", filters.join(";"),
+        "-map", "[outv]", "-an",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22", "-threads", "4",
+        "-movflags", "+faststart", "-t", String(Number(timeline.targetDuration)), outputPath
+      );
+    }
+    return args;
+  }
+
   compileFFmpegCommand(timeline, outputPath) {
-    const p = timeline.dimensions;
-    const filter = timeline.colorFilter;
-
-    // Single-pass Ryzen 5700U hardware-bounded command
-    // Restricting threads to 4 to leave remaining CPU threads responsive for the OS
-    const ffmpegArgs = [
-      "-y",
-      "-threads 4",
-      `-vf "scale=${p.width}:${p.height}:force_original_aspect_ratio=decrease,pad=${p.width}:${p.height}:(ow-iw)/2:(oh-ih)/2,${filter}"`,
-      "-c:v libx264",
-      "-preset fast",
-      "-crf 22",
-      "-c:a aac",
-      "-b:a 192k",
-      `-t ${timeline.targetDuration}`,
-      `"${outputPath.replace(/\\/g, "\\\\")}"`
-    ];
-
+    const args = this.compileFFmpegArgs(timeline, outputPath);
+    const displayArg = value => {
+      const text = String(value);
+      return /^[A-Za-z0-9_./:=+,-]+$/.test(text)
+        ? text
+        : `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    };
     return {
-      command: `ffmpeg ${ffmpegArgs.join(" ")}`,
+      command: ["ffmpeg", ...args].map(displayArg).join(" "),
+      args,
       outputPath,
       threads: 4,
       crf: 22,
-      preset: "fast"
+      preset: "fast",
+      audioIncluded: Boolean(timeline?.audioTracks?.music?.sourcePath || timeline?.audioTracks?.voiceover?.sourcePath || timeline?.audioSourcePath || timeline?.voiceoverAudioPath)
     };
   }
 
@@ -287,77 +380,93 @@ export class VideoEditingEngine {
     const renderId = "render-" + Date.now();
     const filename = `ultron_edit_${Date.now()}_${timeline.presetId}.mp4`;
     const outputPath = path.join(this.exportsDir, filename);
-
+    const manifestPath = path.join(this.exportsDir, `manifest_${renderId}.json`);
     const renderTask = {
-      id: renderId,
-      title: timeline.title,
-      preset: timeline.preset,
-      outputPath,
-      progress: 0,
-      status: "RENDERING",
-      startTime: Date.now(),
-      completedTime: null,
-      error: null
+      id: renderId, title: timeline.title, preset: timeline.preset, outputPath,
+      progress: 0, status: "RENDERING", startTime: Date.now(), completedTime: null,
+      error: null, renderedWithFFmpeg: false
     };
-
     this.activeRenders.set(renderId, renderTask);
 
-    // Notify initial progress
-    if (onProgress) onProgress({ renderId, progress: 10, status: "BUILDING_TIMELINE" });
+    const failRender = async (status, error) => {
+      await fs.rm(outputPath, { force: true }).catch(() => {});
+      renderTask.progress = 100;
+      renderTask.status = status;
+      renderTask.error = error;
+      renderTask.outputPath = null;
+      renderTask.completedTime = Date.now();
+      renderTask.durationMs = renderTask.completedTime - renderTask.startTime;
+      renderTask.renderedWithFFmpeg = false;
+      if (onProgress) onProgress({ renderId, progress: 100, status, error });
+      return { success: false, status, error, renderId, title: timeline.title,
+        outputPath: null, manifestPath, renderedWithFFmpeg: false };
+    };
 
-    // Step 1: Write timeline EDL JSON manifest alongside output
-    const manifestPath = path.join(this.exportsDir, `manifest_${renderId}.json`);
+    if (onProgress) onProgress({ renderId, progress: 10, status: "BUILDING_TIMELINE" });
     await fs.writeFile(manifestPath, JSON.stringify(timeline, null, 2));
 
-    if (onProgress) onProgress({ renderId, progress: 30, status: "ENCODING_AUDIO_BEATS" });
-
-    // Step 2: Test if real ffmpeg is executable
-    let hasFFmpeg = false;
-    try {
-      await execAsync("ffmpeg -version", { timeout: 3000 });
-      hasFFmpeg = true;
-    } catch {
-      hasFFmpeg = false;
+    const clips = Array.isArray(timeline?.videoClips) ? timeline.videoClips : [];
+    if (!clips.length) {
+      return failRender("BLOCKED_SOURCE_MEDIA_UNAVAILABLE",
+        "SOURCE_MEDIA_REQUIRED: Add real source video files; ULTRON will not fabricate footage.");
+    }
+    for (let index = 0; index < clips.length; index++) {
+      const rawPath = String(clips[index]?.sourcePath || "").trim();
+      if (!rawPath) return failRender("BLOCKED_SOURCE_MEDIA_UNAVAILABLE",
+        `SOURCE_MEDIA_INVALID: Clip ${index + 1} has no source path.`);
+      const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(this.workspaceBase, rawPath);
+      try {
+        const stat = await fs.stat(resolvedPath);
+        if (!stat.isFile() || stat.size === 0) return failRender("BLOCKED_SOURCE_MEDIA_UNAVAILABLE",
+          `SOURCE_MEDIA_INVALID: Clip ${index + 1} is not a non-empty file.`);
+      } catch {
+        return failRender("BLOCKED_SOURCE_MEDIA_UNAVAILABLE",
+          `SOURCE_MEDIA_NOT_FOUND: Source clip ${index + 1} is unavailable on this host.`);
+      }
+      clips[index].sourcePath = resolvedPath;
     }
 
-    if (hasFFmpeg) {
-      try {
-        if (onProgress) onProgress({ renderId, progress: 50, status: "FFMPEG_COLOR_GRADING" });
+    try {
+      await this.ffmpegChecker();
+    } catch {
+      return failRender("BLOCKED_FFMPEG_UNAVAILABLE",
+        "FFMPEG_BINARY_UNAVAILABLE: Real video rendering requires FFmpeg on the host.");
+    }
 
-        // Synthesize a clean test testcard video if source clips are mock or missing on disk
-        const duration = Math.min(timeline.targetDuration, 10); // Bound test render to 10s for fast verification
-        const scaleFilter = `scale=${timeline.dimensions.width}:${timeline.dimensions.height}`;
-        const cmd = `ffmpeg -y -threads 4 -f lavfi -i testsrc=size=${timeline.dimensions.width}x${timeline.dimensions.height}:rate=${timeline.dimensions.fps} -f lavfi -i sine=frequency=440:sample_rate=44100 -vf "${scaleFilter},${timeline.colorFilter}" -t ${duration} -c:v libx264 -preset ultrafast -c:a aac "${outputPath.replace(/\\/g, "\\\\")}"`;
-
-        await execAsync(cmd, { timeout: 60000 });
-        if (onProgress) onProgress({ renderId, progress: 90, status: "FINALIZING_EXPORT" });
-      } catch (err) {
-        // Fallback: create empty placeholder MP4 simulation buffer
-        await fs.writeFile(outputPath, Buffer.from("ULTRON_MP4_SIMULATED_STREAM_BUFFER"));
+    try {
+      if (onProgress) onProgress({ renderId, progress: 50, status: "FFMPEG_RENDERING_SOURCE_MEDIA" });
+      await this.ffmpegRunner(this.compileFFmpegArgs(timeline, outputPath),
+        { timeout: 60000, maxBuffer: 10 * 1024 * 1024 });
+      const stat = await fs.stat(outputPath);
+      if (!stat.isFile() || stat.size < 1024) throw new Error("FFMPEG_OUTPUT_INVALID: Render output is missing or too small.");
+      const handle = await fs.open(outputPath, "r");
+      const header = Buffer.alloc(12);
+      try { await handle.read(header, 0, header.length, 0); }
+      finally { await handle.close(); }
+      if (header.toString("ascii", 4, 8) !== "ftyp") {
+        throw new Error("FFMPEG_OUTPUT_INVALID: Output does not contain an MP4 file signature.");
       }
-    } else {
-      // Simulate successful render for container environments lacking ffmpeg binaries
-      await fs.writeFile(outputPath, Buffer.from("ULTRON_MP4_SIMULATED_STREAM_BUFFER"));
+      if (onProgress) onProgress({ renderId, progress: 90, status: "FINALIZING_EXPORT" });
+    } catch (error) {
+      return failRender("FAILED", `FFMPEG_ENCODING_FAILED: ${error.message}`);
     }
 
     renderTask.progress = 100;
     renderTask.status = "COMPLETED";
     renderTask.completedTime = Date.now();
     renderTask.durationMs = renderTask.completedTime - renderTask.startTime;
-
+    renderTask.renderedWithFFmpeg = true;
     if (onProgress) onProgress({ renderId, progress: 100, status: "COMPLETED", outputPath });
-
     return {
-      success: true,
-      renderId,
-      title: timeline.title,
-      outputPath,
-      manifestPath,
+      success: true, renderId, title: timeline.title, outputPath, manifestPath,
       targetDuration: timeline.targetDuration,
       dimensions: `${timeline.dimensions.width}x${timeline.dimensions.height}`,
-      aspectRatio: timeline.dimensions.aspectRatio,
-      preset: timeline.preset,
-      renderedWithFFmpeg: hasFFmpeg
+      aspectRatio: timeline.dimensions.aspectRatio, preset: timeline.preset,
+      renderedWithFFmpeg: true,
+      audioIncluded: Boolean(timeline?.audioTracks?.music?.sourcePath || timeline?.audioTracks?.voiceover?.sourcePath || timeline?.audioSourcePath || timeline?.voiceoverAudioPath),
+      audioNote: (timeline?.audioTracks?.music?.sourcePath || timeline?.audioTracks?.voiceover?.sourcePath || timeline?.audioSourcePath || timeline?.voiceoverAudioPath)
+        ? "Audio mixing, background music, and voiceover encoded via FFmpeg AAC encoder."
+        : "This export currently contains source video only; no audio track was supplied."
     };
   }
 

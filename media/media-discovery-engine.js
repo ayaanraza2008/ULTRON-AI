@@ -211,7 +211,7 @@ export class MediaDiscoveryEngine {
           const metadata = await this.extractMetadata(fullPath, mediaType);
 
           const record = {
-            id: "media-" + crypto.createHash("md5").update(fullPath).digest("hex").slice(0, 10),
+            id: "media-" + crypto.createHash("sha256").update(fullPath).digest("hex").slice(0, 10),
             name: entry.name,
             path: fullPath,
             mediaType,

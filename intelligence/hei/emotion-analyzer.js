@@ -233,10 +233,11 @@ export class DeepEmotionalAnalyzer {
     // Initialize all 51 emotions
     Object.keys(EMOTIONS).forEach(k => { scores[k] = 0.0; });
 
-    // If sarcasm is detected, direct points to FRUSTRATION / BITTERNESS / ANGER
+    // If sarcasm is detected, direct points to FRUSTRATION / BITTERNESS / ANGER with SARCASM
     if (isSarcastic) {
       scores.FRUSTRATION += 0.85;
       scores.BITTERNESS += 0.65;
+      scores.SARCASM = (scores.SARCASM || 0) + 0.80;
       scores.ANGER += 0.50;
       return scores;
     }
@@ -293,10 +294,31 @@ export class DeepEmotionalAnalyzer {
       scores.SADNESS += 0.50;
     }
 
-    // 5. Short curt answers like "fine.", "whatever."
-    if (signals.isVeryShort && /^(fine\.?|whatever\.?|k\.?|theek hai\.?)$/i.test(lower.trim())) {
+    // 5. Short curt answers like "fine.", "whatever." -> SUBTLE_TONE_SHIFT
+    if (signals.isVeryShort && /^(fine\.?|whatever\.?|k\.?|sure\.?|theek hai\.?)$/i.test(lower.trim())) {
+      scores.SUBTLE_TONE_SHIFT = (scores.SUBTLE_TONE_SHIFT || 0) + 0.85;
       scores.APATHY += 0.50;
       scores.FRUSTRATION += 0.40;
+    }
+
+    // 6. Section 3.3 Contextual rules for specialized states
+    if (/\b(confused|dont understand|don't understand|samajh nahi aaya|makes no sense|what does this mean|puzzled|baffled)\b/i.test(lower)) {
+      scores.CONFUSION = (scores.CONFUSION || 0) + 0.85;
+    }
+    if (/\b(gabhrahat|jitters|darr lag raha hai|butterflies|sweating bullets)\b/i.test(lower)) {
+      scores.NERVOUSNESS = (scores.NERVOUSNESS || 0) + 0.85;
+    }
+    if (/\b(curious|how does it work|kaise kaam karta hai|under the hood|deep dive|explain the mechanism|fascinating)\b/i.test(lower)) {
+      scores.CURIOSITY = (scores.CURIOSITY || 0) + 0.85;
+    }
+    if (/\b(let's do this|let's build|chalo karte hain|motivated|pumped|crush it|unstoppable|locked in)\b/i.test(lower)) {
+      scores.MOTIVATION = (scores.MOTIVATION || 0) + 0.90;
+    }
+    if (/\b(exhausted|burnt out|thak gaya hoon|drained|no energy left|brain is fried|mentally tired)\b/i.test(lower)) {
+      scores.EMOTIONAL_EXHAUSTION = (scores.EMOTIONAL_EXHAUSTION || 0) + 0.90;
+    }
+    if (/\b(mixed feelings|bittersweet|khatte meethe|excited but terrified|happy and sad)\b/i.test(lower)) {
+      scores.MIXED_EMOTIONS = (scores.MIXED_EMOTIONS || 0) + 0.90;
     }
 
     // 6. Hesitation and ellipses with uncertain language -> ANXIETY, UNEASE, VULNERABILITY

@@ -2264,7 +2264,7 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 59, "the compound route should expose the current complete allowlist, including OpenSEO");
+    assert.equal(compoundTools.length, 60, "the compound route should expose the current complete allowlist, including HexStrike and OpenSEO");
   });
 });
 
@@ -2363,4 +2363,28 @@ test("voice cloning consent requires an exact own-voice or speaker-permission at
   assert.equal(parseVoiceCloneConsent("I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile. I no longer consent."), null);
   assert.equal(parseVoiceCloneConsent("I confirm this is my own voice and I approve you to clone the attached audio into a VoiceStudio profile. I changed my mind."), null);
   assert.equal(parseVoiceCloneConsent(undefined), null);
+});
+
+
+test("agent runtime routes to standalone Groq and Cerebras providers when OPENROUTER_API_KEY is absent", async () => {
+  let capturedUrl = "";
+  const env = {
+    GROQ_API_KEY: "gsk_standalone_groq_test_key"
+  };
+  await withServer(env, async (url, _options) => {
+    capturedUrl = url;
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Standalone Groq response." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Hello ULTRON" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.content, "Standalone Groq response.");
+    assert.equal(capturedUrl, "https://api.groq.com/openai/v1/chat/completions");
+  });
 });

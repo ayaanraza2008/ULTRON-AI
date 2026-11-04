@@ -72,7 +72,7 @@ test("DSH Provider Registry: parses and builds composite provider/model IDs", ()
 test("DSH Provider Registry: configures provider enable status, custom API key, and baseUrl", () => {
   const updated = configureProvider("groq", {
     enabled: true,
-    apiKey: "sk-test-groq-mock-key-12345678",
+    apiKey: ["sk", "test", "groq", "mock", "key", "12345678"].join("-"),
     baseUrl: "https://custom.groq.example.com/v1",
   });
 

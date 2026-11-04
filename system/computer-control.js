@@ -11,11 +11,12 @@
 import os from "node:os";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { constants as fsConstants } from "node:fs";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Allowed launch applications
 const ALLOWLISTED_APPS = {
@@ -127,7 +128,9 @@ export class WindowsComputerControl {
     }
 
     try {
-      exec(`start ${executable}`);
+      const shellCmd = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : executable;
+      const shellArgs = process.platform === "win32" ? ["/d", "/c", "start", "", executable] : [];
+      await execFileAsync(shellCmd, shellArgs);
       this.recordAction("LAUNCH_APP", executable, "success");
       return { success: true, app: normalized, executable, status: "launched" };
     } catch (err) {
@@ -142,8 +145,13 @@ export class WindowsComputerControl {
    */
   resolveSafePath(relativePath) {
     const root = path.resolve(this.sandboxBase);
-    const safeRel = String(relativePath || "").replace(/^[\\/]+/, "");
-    const resolved = path.resolve(root, safeRel);
+    const raw = String(relativePath || "");
+    const isAbs = path.isAbsolute(raw) || /^[\\/]/.test(raw);
+    const resolved = isAbs ? path.resolve(root, raw.replace(/^[\\/]+/, "")) : path.resolve(root, raw);
+    // If raw was absolute outside workspace root, reject
+    if (isAbs && path.isAbsolute(raw) && !path.resolve(raw).startsWith(root)) {
+      throw new Error("Path traversal violation: Access outside Ultron workspace is forbidden.");
+    }
     const relative = path.relative(root, resolved);
     if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
       throw new Error("Path traversal violation: Access outside Ultron workspace is forbidden.");
@@ -229,25 +237,141 @@ export class WindowsComputerControl {
   }
 
   /**
+   * Check whether a command string matches destructive patterns (Source A & B safety gate).
+   */
+  isDestructiveCommand(cmdString) {
+    const raw = String(cmdString || "").trim();
+    if (!raw) return false;
+    const lower = raw.toLowerCase();
+
+    // Catch encoded PowerShell invocations
+    if (/(?:powershell|pwsh).*(?:-(?:enc|encodedcommand)|\[system\.convert\]::frombase64string|invoke-expression|\biex\b)/i.test(lower)) {
+      return true;
+    }
+    // Catch process kills
+    if (/\btaskkill(?:\s|\/)/i.test(lower) || /\bstop-process\b/i.test(lower)) {
+      return true;
+    }
+    // Catch registry or service deletion
+    if (/\breg\s+delete\b/i.test(lower) || /\bsc\s+delete\b/i.test(lower)) {
+      return true;
+    }
+    // Catch database destruction
+    if (/\b(?:drop\s+(?:table|database|schema)|truncate\s+(?:table\s+)?[a-z0-9_]+|delete\s+from\b)/i.test(lower)) {
+      return true;
+    }
+
+    // Strip leading quotes or drive/path from executable
+    const normalized = lower
+      .replace(/^["']([^"']+)["']/, "$1")
+      .replace(/^[a-z]:\\[^ \t\n\r"']+\\/i, "");
+
+    const DESTRUCTIVE_PATTERNS = [
+      /^(?:rm|del|erase|rd|rmdir|format)(?:\s|\/|$)/i,
+      /(?:[\s;&|])(?:rm|del|erase|rd|rmdir|format)(?:\s|\/|$)/i,
+      /\bshutdown(?:\s|\/|$)/i,
+      /\bremove-item(?:property)?\b/i,
+      /\bclear-content\b/i,
+      /\bmkfs(?:\.[a-z0-9]+|\s)/i,
+      /\bdd\s+if=/i
+    ];
+
+    return DESTRUCTIVE_PATTERNS.some(regex => regex.test(normalized) || regex.test(lower));
+  }
+
+  /**
    * Approved Terminal Execution
    * Executes only non-destructive, read-only system queries.
+   * Destructive commands strictly require confirmation (Level 4 confirmation token).
    */
-  async runApprovedCommand(cmdString) {
+  async runApprovedCommand(cmdString, options = {}) {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
 
     const normalized = String(cmdString).trim();
+    if (this.isDestructiveCommand(normalized) && !options.confirmed) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        code: "DESTRUCTIVE_CONFIRMATION_REQUIRED",
+        reason: "Destructive command execution requires explicit human confirmation.",
+        command: normalized
+      };
+    }
+
+    // Reject any command containing shell chaining characters (&, |, ;, newline, backticks, $())
+    if (/[\r\n&|;`$]/.test(normalized)) {
+      throw new Error("Command contains forbidden shell metacharacters or chaining operators.");
+    }
+
     if (!ALLOWLISTED_TERMINAL_COMMANDS.has(normalized)) {
       throw new Error(`Command '${normalized}' is not in the approved command allowlist.`);
     }
 
     try {
-      const { stdout, stderr } = await execAsync(normalized, { timeout: 10_000, maxBuffer: 64 * 1024 });
+      // Map allowlisted commands to explicit executable + argv arrays (no shell interpolation)
+      let file;
+      let args = [];
+      const parts = normalized.split(/\s+/);
+      const prog = parts[0].toLowerCase();
+
+      if (prog === "node") {
+        file = process.execPath;
+        args = parts.slice(1);
+      } else if (prog === "npm") {
+        file = process.platform === "win32" ? "npm.cmd" : "npm";
+        args = parts.slice(1);
+      } else if (prog === "git") {
+        file = "git";
+        args = parts.slice(1);
+      } else if (prog === "python") {
+        file = process.platform === "win32" ? "python.exe" : "python";
+        args = parts.slice(1);
+      } else if (prog === "whoami") {
+        file = "whoami";
+        args = [];
+      } else if (prog === "hostname") {
+        file = "hostname";
+        args = [];
+      } else if (prog === "ipconfig") {
+        file = "ipconfig";
+        args = [];
+      } else if (prog === "dir" || prog === "echo") {
+        file = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "/bin/sh";
+        args = process.platform === "win32" ? ["/d", "/c", ...parts] : ["-c", parts.join(" ")];
+      } else {
+        file = parts[0];
+        args = parts.slice(1);
+      }
+
+      const { stdout, stderr } = await execFileAsync(file, args, { timeout: 10_000, maxBuffer: 64 * 1024, windowsHide: true });
       this.recordAction("EXEC_COMMAND", normalized, "success");
-      return { command: normalized, stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 };
+      return { command: normalized, stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: 0, success: true };
     } catch (err) {
       this.recordAction("EXEC_COMMAND", normalized, "failed");
-      return { command: normalized, error: err.message, exitCode: err.code || 1 };
+      return { command: normalized, error: err.message, exitCode: err.code || 1, success: false };
     }
+  }
+
+  /**
+   * Comprehensive System Telemetry: CPU, RAM, OS, Battery, GPU, and Display Brightness.
+   */
+  async getComprehensiveTelemetry() {
+    const basic = this.getSystemTelemetry();
+    let battery = null;
+    let gpu = null;
+    let brightness = null;
+    try {
+      const { windowsAutomation } = await import("./windows-automation.js");
+      battery = await windowsAutomation.getBatteryStatus();
+      gpu = await windowsAutomation.getGpuInfo();
+      brightness = await windowsAutomation.getDisplayBrightness();
+    } catch {}
+    return {
+      ...basic,
+      battery,
+      gpu,
+      brightness
+    };
   }
 
   getActionHistory(limit = 50) {
@@ -261,44 +385,95 @@ export class WindowsComputerControl {
   }
 
   /**
-   * Safe Clipboard Access: Write text to system clipboard.
+   * Run a fixed PowerShell executable with an encoded script. The script is
+   * passed as one argv value (never through cmd.exe); dynamic clipboard text
+   * is separately UTF-8/base64 encoded before it is embedded in the script.
+   */
+  async runClipboardPowerShell(script) {
+    const encodedScript = Buffer.from(String(script), "utf16le").toString("base64");
+    return execFileAsync("powershell.exe", [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodedScript
+    ], { timeout: 3000, maxBuffer: 64 * 1024, windowsHide: true });
+  }
+
+  /**
+   * Safe Clipboard Access: Write text to the OS clipboard when supported.
+   * In-memory fallback is explicitly reported as unavailable, never success.
    */
   async setClipboardText(text) {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
     const sanitized = String(text || "");
     this._inMemoryClipboard = sanitized;
+    const byteLength = Buffer.byteLength(sanitized);
+
     if (process.platform !== "win32") {
-      this.recordAction("SET_CLIPBOARD", "simulated", "mock_success");
-      return { success: true, byteLength: Buffer.byteLength(sanitized), simulated: true };
+      this.recordAction("SET_CLIPBOARD", "system_unavailable", "not_available");
+      return {
+        success: false,
+        available: false,
+        byteLength,
+        simulated: true,
+        fallbackStored: true,
+        errorCode: "SYSTEM_CLIPBOARD_UNAVAILABLE"
+      };
     }
+
     try {
-      const escaped = sanitized.replace(/'/g, "''");
-      const psCommand = `powershell -NoProfile -Command "Set-Clipboard -Value '${escaped}'"`;
-      await execAsync(psCommand, { timeout: 3000 });
+      const encodedText = Buffer.from(sanitized, "utf8").toString("base64");
+      const script = `$ErrorActionPreference = 'Stop'; $value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedText}')); Set-Clipboard -Value $value`;
+      await this.runClipboardPowerShell(script);
       this.recordAction("SET_CLIPBOARD", "windows_clipboard", "success");
-      return { success: true, byteLength: Buffer.byteLength(sanitized) };
-    } catch (err) {
-      this.recordAction("SET_CLIPBOARD", "in_memory_fallback", "success");
-      return { success: true, byteLength: Buffer.byteLength(sanitized), fallback: true };
+      return { success: true, available: true, byteLength, source: "system" };
+    } catch {
+      this.recordAction("SET_CLIPBOARD", "windows_clipboard", "failed");
+      return {
+        success: false,
+        available: false,
+        byteLength,
+        fallback: true,
+        fallbackStored: true,
+        source: "in_memory",
+        errorCode: "CLIPBOARD_WRITE_FAILED"
+      };
     }
   }
 
   /**
-   * Safe Clipboard Access: Read text from system clipboard.
+   * Safe Clipboard Access: Read from the OS clipboard; fallback reads are
+   * explicitly identified and are not represented as a system clipboard read.
    */
   async getClipboardText() {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
+
     if (process.platform !== "win32") {
-      this.recordAction("GET_CLIPBOARD", "simulated", "mock_success");
-      return { text: this._inMemoryClipboard || "mock_clipboard_content", simulated: true };
+      this.recordAction("GET_CLIPBOARD", "system_unavailable", "not_available");
+      return {
+        success: false,
+        available: false,
+        text: this._inMemoryClipboard,
+        simulated: true,
+        source: "in_memory",
+        errorCode: "SYSTEM_CLIPBOARD_UNAVAILABLE"
+      };
     }
+
     try {
-      const { stdout } = await execAsync('powershell -NoProfile -Command "Get-Clipboard"', { timeout: 3000 });
+      const { stdout } = await this.runClipboardPowerShell(
+        "$ErrorActionPreference = 'Stop'; Get-Clipboard -Raw | Write-Output"
+      );
+      const text = String(stdout || "").replace(/\r?\n$/, "");
       this.recordAction("GET_CLIPBOARD", "windows_clipboard", "success");
-      return { text: stdout ? stdout.trim() : (this._inMemoryClipboard || "") };
-    } catch (err) {
-      this.recordAction("GET_CLIPBOARD", "in_memory_fallback", "success");
-      return { text: this._inMemoryClipboard || "", fallback: true };
+      return { success: true, available: true, text, source: "system" };
+    } catch {
+      this.recordAction("GET_CLIPBOARD", "windows_clipboard", "failed");
+      return {
+        success: false,
+        available: false,
+        text: this._inMemoryClipboard,
+        fallback: true,
+        source: "in_memory",
+        errorCode: "CLIPBOARD_READ_FAILED"
+      };
     }
   }
 }

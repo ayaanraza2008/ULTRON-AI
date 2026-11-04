@@ -50,6 +50,8 @@ export class BrainRouter {
     let tierResult;
     if (hasMedia || COMPLEXITY_PATTERNS.multimodal.test(text)) {
       tierResult = { tier: "multimodal", modelClass: "vision", recommendedModel: "nvidia/nemotron-3.5-super-vl:free", priority: 1 };
+    } else if (/\b(room|3d|spatial|diorama|scene|furniture|nearest to|where is the (table|chair|desk|monitor))\b/i.test(text)) {
+      tierResult = { tier: "spatial_3d", modelClass: "spatial_reasoning", recommendedModel: "openrouter/free", priority: 2 };
     } else if (COMPLEXITY_PATTERNS.coding.test(text)) {
       tierResult = { tier: "coding", modelClass: "reasoning_code", recommendedModel: "cohere/north-mini-code:free", priority: 2 };
     } else if (COMPLEXITY_PATTERNS.complex.test(text)) {
@@ -176,15 +178,33 @@ export class BrainRouter {
     }
 
     if (this.env.GEMINI_API_KEY) {
+      const rawKey = String(this.env.GEMINI_API_KEY).trim();
+      const baseUrl = this.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai";
+      const isGoogleEndpoint = baseUrl.includes("generativelanguage.googleapis.com");
+      const isInternalToken = /^(AQ\.|ya29\.)/i.test(rawKey);
+      if (!isGoogleEndpoint || !isInternalToken) {
+        extraProviders.push({
+          name: "gemini-flash",
+          type: "cloud_multimodal",
+          model: "gemini-1.5-flash",
+          baseUrl,
+          apiKeyEnv: "GEMINI_API_KEY",
+          supportsTools: true,
+          supportsVision: true,
+          circuitOpen: this.isCircuitOpen("gemini-flash")
+        });
+      }
+    }
+
+if (this.env.CEREBRAS_API_KEY) {
       extraProviders.push({
-        name: "gemini-flash",
-        type: "cloud_multimodal",
-        model: "gemini-1.5-flash",
-        baseUrl: this.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai",
-        apiKeyEnv: "GEMINI_API_KEY",
+        name: "cerebras-cloud",
+        type: "cloud_ultra_fast",
+        model: taskComplexity.tier === "coding" ? "llama-3.3-70b" : "llama3.1-8b",
+        baseUrl: this.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
+        apiKeyEnv: "CEREBRAS_API_KEY",
         supportsTools: true,
-        supportsVision: true,
-        circuitOpen: this.isCircuitOpen("gemini-flash")
+        circuitOpen: this.isCircuitOpen("cerebras-cloud")
       });
     }
 
@@ -200,12 +220,15 @@ export class BrainRouter {
     extraProviders.push(dshProvider);
 
     let candidates = [];
-    if (taskComplexity.tier === "multimodal" && this.env.GEMINI_API_KEY) {
+    if ((taskComplexity.tier === "multimodal" || taskComplexity.tier === "spatial_3d") && this.env.GEMINI_API_KEY) {
       const gemini = extraProviders.find(p => p.name === "gemini-flash");
       candidates = [gemini, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "gemini-flash"), localCpu];
     } else if (taskComplexity.preferredProvider === "groq" && this.env.GROQ_API_KEY) {
       const groq = extraProviders.find(p => p.name === "groq-cloud");
       candidates = [groq, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "groq-cloud"), localCpu];
+    } else if (taskComplexity.preferredProvider === "cerebras" && this.env.CEREBRAS_API_KEY) {
+      const cerebras = extraProviders.find(p => p.name === "cerebras-cloud");
+      candidates = [cerebras, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "cerebras-cloud"), localCpu];
     } else if (taskComplexity.preferredProvider === "dsh" || taskComplexity.preferredProvider === "dsh-god") {
       candidates = [dshProvider, primaryCloud, secondaryCloud, ...extraProviders.filter(p => p.name !== "dsh-god-gateway"), localCpu];
     } else {
@@ -267,8 +290,15 @@ export class BrainRouter {
   async executeInference({ prompt, messages = null, context = {}, preferredProvider = null, fetchImpl = fetch } = {}) {
     const rawPrompt = typeof prompt === "string" ? prompt : "";
     const conversation = Array.isArray(messages) && messages.length > 0
-      ? messages
+      ? messages.slice()
       : [{ role: "user", content: rawPrompt }];
+
+    if (context?.spatialSummary) {
+      conversation.unshift({
+        role: "system",
+        content: `Active 3D Spatial World Model (Diorama):\n${context.spatialSummary}\nTreat this spatial model as ground truth for 3D coordinates, room boundaries, object positions, and spatial relationships.`
+      });
+    }
 
     const complexity = this.classifyComplexity(rawPrompt, context);
     if (preferredProvider) complexity.preferredProvider = preferredProvider;
@@ -345,7 +375,11 @@ export class BrainRouter {
         }
 
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || "";
+        const rawContent = data.choices?.[0]?.message?.content;
+        if (typeof rawContent !== "string" || !rawContent.trim()) {
+          throw new Error(`Provider ${provider.name} returned an empty completion`);
+        }
+        const content = rawContent.trim();
         const latencyMs = Date.now() - startTime;
         this.recordAttempt(provider.name, true, latencyMs);
 

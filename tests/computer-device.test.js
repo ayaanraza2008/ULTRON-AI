@@ -81,7 +81,7 @@ test("Computer Control: command allowlist permits safe commands and blocks arbit
   assert.ok(safe.stdout.startsWith("v"));
 
   await assert.rejects(async () => {
-    await ctrl.runApprovedCommand("powershell -Command Remove-Item -Force C:\\");
+    await ctrl.runApprovedCommand("curl http://malicious.site");
   }, /not in the approved command allowlist/);
 });
 
@@ -117,7 +117,8 @@ test("Device Hub: pairing workflow, telemetry, and notifications", () => {
     title: "JARVIS Task Complete",
     body: "System integrity scan finished with zero defects."
   });
-  assert.equal(notif.delivered, true);
+  assert.equal(notif.delivered, false);
+  assert.equal(notif.deliveryStatus, "NOT_DISPATCHED");
   assert.equal(hub.getNotifications().length, 1);
 });
 
@@ -182,18 +183,45 @@ test("Computer Control: launchApprovedApp verifies allowlist and emergency stop"
   }, /halted under Emergency Stop/);
 });
 
-test("Computer Control: clipboard read/write handles text safely and audits operations", async () => {
+test("Computer Control: clipboard never reports an in-memory fallback as an OS clipboard success", async () => {
   const ctrl = new WindowsComputerControl();
   const testText = "ULTRON-AUTOMATION-TEST-" + Date.now();
 
   const writeRes = await ctrl.setClipboardText(testText);
-  assert.equal(writeRes.success, true);
   assert.ok(writeRes.byteLength > 0);
-
   const readRes = await ctrl.getClipboardText();
   assert.equal(typeof readRes.text, "string");
 
-  // Verify action audit history
+  if (process.platform !== "win32") {
+    assert.equal(writeRes.success, false);
+    assert.equal(writeRes.available, false);
+    assert.equal(writeRes.simulated, true);
+    assert.equal(writeRes.fallbackStored, true);
+    assert.equal(readRes.success, false);
+    assert.equal(readRes.available, false);
+    assert.equal(readRes.simulated, true);
+    assert.equal(readRes.source, "in_memory");
+    assert.equal(readRes.text, testText);
+  } else {
+    // Windows may run without an interactive clipboard session (e.g. service CI).
+    // A system result is accepted only when the real PowerShell call succeeded.
+    if (writeRes.success) {
+      assert.equal(writeRes.available, true);
+      assert.equal(writeRes.source, "system");
+    } else {
+      assert.equal(writeRes.success, false);
+      assert.equal(writeRes.source === "in_memory" || writeRes.fallbackStored, true);
+    }
+    if (readRes.success) {
+      assert.equal(readRes.available, true);
+      assert.equal(readRes.source, "system");
+    } else {
+      assert.equal(readRes.success, false);
+      assert.equal(readRes.source, "in_memory");
+    }
+  }
+
+  // Verify action audit history, including honest unavailable/fallback outcomes.
   const history = ctrl.getActionHistory();
   assert.ok(history.some(h => h.action === "SET_CLIPBOARD"));
   assert.ok(history.some(h => h.action === "GET_CLIPBOARD"));
