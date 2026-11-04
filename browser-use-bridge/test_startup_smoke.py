@@ -72,6 +72,7 @@ class BrowserStartupSmokeTests(unittest.TestCase):
         failed = browser_readiness_status(True, runtime, {"enabled": True, "status": "failed", "reason": "BRIDGE_HTTP_502"})
         self.assertFalse(failed["ready"])
         self.assertEqual(failed["reason"], "STARTUP_SMOKE_FAILED")
+        self.assertEqual(failed["startupSmokeReason"], "BRIDGE_HTTP_502")
         passed = browser_readiness_status(True, runtime, {"enabled": True, "status": "passed"})
         self.assertTrue(passed["ready"])
         self.assertFalse(browser_readiness_status(False, runtime, {"enabled": False, "status": "disabled"})["ready"])
