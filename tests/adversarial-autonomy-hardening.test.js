@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { toolRegistry, PERMISSION_LEVELS } from "../core/tool-registry.js";
+import { toolRegistry, PERMISSION_LEVELS, TOOL_STATUS } from "../core/tool-registry.js";
 import { AutonomousOrchestrator, AGENT_ROLES } from "../core/autonomous-orchestrator.js";
 
 // ==========================================
@@ -484,7 +484,7 @@ test("Adversarial Security: Sanitizes malicious external tool output and prevent
 
 test("Real Tool Execution Audit: all 44 tool schemas validate and privileged tools fail closed", async () => {
   const allTools = toolRegistry.listTools();
-  assert.equal(allTools.length, 44);
+  assert.equal(allTools.length, 45);
 
   const testPayloads = {
     ai_chat_inference: { prompt: "Health check" },
@@ -505,6 +505,7 @@ test("Real Tool Execution Audit: all 44 tool schemas validate and privileged too
     knowledge_vault_query: { query: "cybersecurity" },
     multidevice_remote_dispatch: { targetPlatform: "windows", action: "get_system_vitals", dryRun: true },
     cybersecurity_defensive_scan: {},
+    hexstrike_defensive_scan: { tool: "trivy-fs", target: "." },
     mobile_device_discovery: { dryRun: true },
     mobile_screen_inspection: { dryRun: true },
     mobile_interaction_dispatch: { action: "press_key", keycode: 4, dryRun: true },
@@ -537,6 +538,10 @@ test("Real Tool Execution Audit: all 44 tool schemas validate and privileged too
     const payload = testPayloads[tool.id];
     assert.ok(payload !== undefined, `Missing test payload for tool: ${tool.id}`);
     assert.doesNotThrow(() => toolRegistry.validateParams(tool, payload), `Schema validation failed for tool: ${tool.id}`);
+    if (tool.id === "hexstrike_defensive_scan") {
+      assert.equal(tool.checkHealth(), TOOL_STATUS.REQUIRES_CONFIG);
+      continue;
+    }
     if (tool.requiresConfirmation === true || Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE) {
       await assert.rejects(
         () => toolRegistry.execute(tool.id, payload),

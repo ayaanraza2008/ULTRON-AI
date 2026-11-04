@@ -39,6 +39,7 @@ import { browserAutomationHelper as defaultBrowserAutomationHelper } from "../in
 import { AgentOrchestrator } from "../agents/orchestrator.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
 import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
+import { getHexStrikeReadiness, runHexStrikeScan } from "../integrations/hexstrike-ai.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -86,7 +87,8 @@ export class ToolRegistry {
       edgeTtsAdapter: defaultEdgeTtsAdapter,
       browserAutomationHelper: defaultBrowserAutomationHelper,
       agentOrchestrator: new AgentOrchestrator(),
-      egoBrowserAdapter: defaultEgoBrowserAdapter
+      egoBrowserAdapter: defaultEgoBrowserAdapter,
+      hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan }
     };
 
     const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
@@ -857,8 +859,8 @@ export class ToolRegistry {
       category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
       description: "Performs authorized dependency audits, secret scanning, and network vulnerability checks.",
       capabilities: ["vulnerability_scan", "cve_analysis", "secret_detection"],
-      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
-      requiresConfirmation: false,
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
       timeoutMs: 20000,
       inputSchema: { type: "object", properties: { scope: { type: "string" }, target: { type: "string" } } },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
@@ -871,6 +873,39 @@ export class ToolRegistry {
           return { success: true, assessment };
         }
         return { success: true, status: "CLEAN", findingsCount: 0, checkedItems: 14 };
+      }
+    });
+
+    this.registerTool({
+      id: "hexstrike_defensive_scan",
+      name: "HexStrike Defensive Static Scan",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Runs owner-authorized, bounded Trivy filesystem/configuration and Checkov IaC scans inside the configured shared workspace.",
+      capabilities: ["trivy_fs", "trivy_config", "checkov_iac"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
+      timeoutMs: 120000,
+      inputSchema: {
+        type: "object",
+        required: ["tool", "target"],
+        properties: {
+          tool: { type: "string", enum: ["trivy-fs", "trivy-config", "checkov"] },
+          target: { type: "string", maxLength: 240 }
+        }
+      },
+      checkHealth: () => this.adapters.hexStrike?.getReadiness?.().scanReady
+        ? TOOL_STATUS.OPERATIONAL
+        : TOOL_STATUS.REQUIRES_CONFIG,
+      execute: async (params = {}, context = {}) => {
+        if (!this.adapters.hexStrike?.runScan) {
+          throw Object.assign(new Error("HexStrike adapter is unavailable."), { code: "HEXSTRIKE_UNAVAILABLE" });
+        }
+        return this.adapters.hexStrike.runScan({
+          env: process.env,
+          userId: context.userId || context.actorId,
+          tool: params.tool,
+          target: params.target
+        });
       }
     });
 
@@ -944,8 +979,8 @@ export class ToolRegistry {
       category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
       description: "Dispatches touch gestures (tap, swipe), hardware keys, and text input to connected Android devices.",
       capabilities: ["touch_dispatch", "keyboard_input", "gesture_automation"],
-      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
-      requiresConfirmation: false,
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
       timeoutMs: 15000,
       inputSchema: {
         type: "object",
