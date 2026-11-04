@@ -30,7 +30,7 @@
 | 17 | `SudoHopeX/KaliGPT` | Defer / authorized security use only | No dedicated adapter identified. Do not grant unrestricted offensive tooling. |
 | 18 | `resemble-ai/chatterbox` | Keep optional voice adapter contract | `voice/neural-speech-adapters.js`; remote endpoint configuration and consent/labeling required. Not proof of a live Chatterbox model. |
 | 19 | `penpot/penpot` | Keep separate | No dedicated adapter identified. Penpot is a separate design application; do not merge the whole product into ULTRON. |
-| 20 | `immich-app/immich` | Keep read-only media connector | `integrations/immich.js`; owner-scoped, requires a real Immich URL/key and live permission test. |
+| 20 | `immich-app/immich` | Keep read-only media connector; agent tools proposed in draft PR #448 | `integrations/immich.js`; PR #448 adds owner-scoped status, album listing, and metadata search with explicit current-message approval for private reads. Requires a real Immich URL/key and live permission test; PR is unmerged. |
 | 21 | `elie222/rakazo` | Defer as separate agent workspace | No dedicated adapter identified. Do not merge a second autonomous-agent runtime into ULTRON core. |
 | 22 | `Orange-3DV-Team/MoCha` | Defer | No dedicated adapter identified. Video/3D model workloads are optional and hardware intensive. |
 | 23 | `codecrafters-io/build-your-own-x` | Engineering learning reference | Not a runtime dependency. Use tutorials selectively for tests and internal implementation work. |
