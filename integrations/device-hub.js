@@ -483,9 +483,10 @@ export class DeviceHub {
   /**
    * Push a notification to a specific device or broadcast to all paired devices.
    */
-  sendNotification({ deviceId, title, body, priority = "normal", type = "task_update" }) {
+  sendNotification({ ownerUserId = null, deviceId, title, body, priority = "normal", type = "task_update" }) {
     const notification = {
       id: "notif-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      ownerUserId,
       targetDeviceId: deviceId || "broadcast",
       title: String(title).slice(0, 120),
       body: String(body).slice(0, 500),
@@ -521,8 +522,11 @@ export class DeviceHub {
     }));
   }
 
-  getNotifications(limit = 20) {
-    return this.notifications.slice(0, limit);
+  getNotifications(limit = 20, filter = {}) {
+    const list = filter.ownerUserId
+      ? this.notifications.filter(notification => notification.ownerUserId === filter.ownerUserId)
+      : this.notifications;
+    return list.slice(0, Math.max(0, Math.min(100, Number(limit) || 20)));
   }
 
   unpairDevice(deviceId) {
