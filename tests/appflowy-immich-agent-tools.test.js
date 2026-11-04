@@ -226,3 +226,90 @@ test("Immich connector is owner-bound and returns only bounded metadata", async 
   assert.equal(JSON.stringify(assets).includes("/private/original.jpg"), false);
   assert.ok(requests.every(item => item.options.headers["x-api-key"] === "immich-test-key"));
 });
+
+
+test("private AppFlowy document reads require exact current-message approval", async () => {
+  const env = {
+    OPENROUTER_API_KEY: "provider-test-secret",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    APPFLOWY_BASE_URL: "https://appflowy.example.com",
+    APPFLOWY_API_TOKEN: "appflowy-private-token"
+  };
+  let providerCalls = 0;
+  let appflowyCalls = 0;
+
+  await withServer(env, ownerId, async (url, options = {}) => {
+    if (url === "https://appflowy.example.com/api/v1/document/doc-99") {
+      appflowyCalls += 1;
+      return new Response(JSON.stringify({ title: "Private note", content: "private body" }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      const payload = JSON.parse(options.body);
+      assert.ok(payload.tools.some(tool => tool.function?.name === "appflowy_get_document"));
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+          id: "appflowy-private-document",
+          type: "function",
+          function: { name: "appflowy_get_document", arguments: JSON.stringify({ documentId: "doc-99" }) }
+        }] } }]
+      }), { status: 200 });
+    }
+    const toolMessages = JSON.parse(options.body).messages.filter(message => message.role === "tool");
+    assert.equal(toolMessages.length, 1);
+    assert.equal(JSON.parse(toolMessages[0].content).error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "I need your explicit approval before reading that private AppFlowy document." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Read my AppFlowy document doc-99" })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(appflowyCalls, 0);
+    assert.equal(providerCalls, 2);
+  });
+
+  providerCalls = 0;
+  appflowyCalls = 0;
+  const approvedPrompt = "I approve reading my AppFlowy workspace and documents for this request. Read document doc-99.";
+  await withServer(env, ownerId, async (url, options = {}) => {
+    if (url === "https://appflowy.example.com/api/v1/document/doc-99") {
+      appflowyCalls += 1;
+      return new Response(JSON.stringify({ title: "Private note", content: "private body" }), { status: 200 });
+    }
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+          id: "appflowy-approved-document",
+          type: "function",
+          function: { name: "appflowy_get_document", arguments: JSON.stringify({ documentId: "doc-99" }) }
+        }] } }]
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Read the approved AppFlowy document." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: approvedPrompt })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.success, true);
+    assert.equal(body.toolResults[0].result.documentId, "doc-99");
+    assert.equal(appflowyCalls, 1);
+    assert.equal(providerCalls, 2);
+    assert.equal(JSON.stringify(body).includes("appflowy-private-token"), false);
+  });
+});
