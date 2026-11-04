@@ -1,5 +1,5 @@
 /**
- * ULTRON AI — Proactive Notification Policy (quiet hours + urgent bypass)
+ * ULTRON AI â€” Proactive Notification Policy (quiet hours + urgent bypass)
  *
  * Pure, clock-injectable policy evaluation used by the owner notification
  * transport (/jarvis/notifications). Fail-open by policy absence; explicit
@@ -7,8 +7,8 @@
  * urgent notifications may bypass quiet hours when the policy allows it.
  */
 
-const PRIORITIES = new Set(["LOW", "NORMAL", "HIGH", "URGENT", "CRITICAL"]);
-const URGENT_PRIORITIES = new Set(["HIGH", "URGENT", "CRITICAL"]);
+const PRIORITIES = new Set(["LOW", "NORMAL", "HIGH", "URGENT", "CRITICAL", "EMERGENCY"]);
+const URGENT_PRIORITIES = new Set(["HIGH", "URGENT", "CRITICAL", "EMERGENCY"]);
 
 function normalizePriority(value) {
   const key = String(value || "NORMAL").toUpperCase();

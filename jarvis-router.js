@@ -55,6 +55,7 @@ import { windowsAutomation } from "./system/windows-automation.js";
 import { windowsSpeechDaemon } from "./voice/windows-speech-daemon.js";
 import { kokoroEngine } from "./voice/kokoro-engine.js";
 import { proactiveDaemon } from "./system/proactive-daemon.js";
+import { proactiveCommunicationEngine } from "./system/proactive-communication.js";
 import { screenObserver } from "./vision/screen-observer.js";
 import { robotController } from "./robotics/robot-controller.js";
 import { connectionController } from "./system/connection-controller.js";
@@ -1210,6 +1211,53 @@ export function createJarvisRouter({
     const ownerId = req.supabaseUser?.id;
     if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
     res.json({ success: true, notifications: deviceHubInstance.getNotifications(limit, { ownerUserId: ownerId }) });
+  });
+
+  // --- Proactive Communication Engine (Phase 1: proactive contact channels) ---
+  router.post("/jarvis/communication/proactive", requireOwner, express.json(), async (req, res) => {
+    const ownerId = req.supabaseUser?.id;
+    if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner identity is required." } });
+    const outcome = await proactiveCommunicationEngine.dispatch({
+      ownerUserId: ownerId,
+      deviceId: req.body?.deviceId || null,
+      title: req.body?.title,
+      body: req.body?.body,
+      priority: req.body?.priority,
+      type: req.body?.type,
+      severity: req.body?.severity,
+      emergency: req.body?.emergency === true,
+      context: req.body?.context || {}
+    });
+    res.json({
+      success: outcome.status !== "BLOCKED",
+      status: outcome.status,
+      notification: outcome.notification,
+      deliveries: outcome.deliveries,
+      windowDecision: outcome.windowDecision,
+      delivered: Boolean(outcome.delivered)
+    });
+  });
+
+  router.get("/jarvis/communication/history", requireOwner, (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+    res.json({ success: true, dispatches: proactiveCommunicationEngine.getDispatchHistory(limit) });
+  });
+
+  router.post("/jarvis/communication/checkin/schedule", requireOwner, express.json(), (req, res) => {
+    const schedule = proactiveCommunicationEngine.scheduleCheckIn(req.body || {});
+    res.json({ success: true, checkIn: schedule.checkIn });
+  });
+
+  router.post("/jarvis/communication/checkin/cancel/:id", requireOwner, (req, res) => {
+    const result = proactiveCommunicationEngine.cancelCheckIn(req.params.id);
+    res.json({ success: true, ...result });
+  });
+
+  router.post("/jarvis/communication/outbound-call", requireOwner, express.json(), (req, res) => {
+    const ownerId = req.supabaseUser?.id;
+    const { to, reason, context, type = "PROACTIVE" } = req.body || {};
+    const outcome = telephonyGateway.placeCall({ ownerUserId: ownerId, to, reason, context, type });
+    res.json({ success: !outcome.blocked, ...outcome });
   });
 
   // --- Smart Home ---

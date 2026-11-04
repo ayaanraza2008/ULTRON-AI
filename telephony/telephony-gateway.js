@@ -43,6 +43,123 @@ export class TelephonyGateway {
     this.callHistory = [];
     this.maxHistory = 100;
     this.enableWebRTC = options.enableWebRTC ?? true;
+    // Owner-scoped outbound proactive calling policy (consent-gated).
+    // Owners must explicitly authorize outbound calls before ULTRON may place any.
+    this.outboundConsent = new Map();
+    // Owner-scoped emergency contact allowlist (destination numbers for EMERGENCY calls).
+    this.emergencyContacts = new Map();
+    this.ownerCallerId = this.normalizePhoneNumber(options.ownerCallerId || Array.from(this.ownerPhoneNumbers)[0] || "");
+  }
+
+  /**
+   * Owner-scoped outbound proactive calling policy.
+   * Owners must explicitly opt in before ULTRON may place outbound calls.
+   */
+  authorizeOutboundCalling(ownerUserId, { enabled = false, phoneNumbers = [], allowEmergency = false } = {}) {
+    const ownerKey = String(ownerUserId || "default-owner");
+    const normalizedNumbers = new Set(
+      (Array.isArray(phoneNumbers) ? phoneNumbers : [])
+        .map(p => this.normalizePhoneNumber(p))
+        .filter(p => p)
+    );
+    this.outboundConsent.set(ownerKey, {
+      enabled: Boolean(enabled),
+      phoneNumbers: normalizedNumbers,
+      allowEmergency: Boolean(allowEmergency),
+      updatedAt: new Date().toISOString()
+    });
+    return {
+      success: true,
+      ownerUserId: ownerKey,
+      enabled: Boolean(enabled),
+      phoneNumbers: Array.from(normalizedNumbers),
+      allowEmergency: Boolean(allowEmergency)
+    };
+  }
+
+  setEmergencyContacts(ownerUserId, contacts = []) {
+    const ownerKey = String(ownerUserId || "default-owner");
+    const normalized = new Set((Array.isArray(contacts) ? contacts : []).map(c => this.normalizePhoneNumber(c)).filter(c => c));
+    this.emergencyContacts.set(ownerKey, normalized);
+    const policy = this.outboundConsent.get(ownerKey) || { enabled: false, phoneNumbers: new Set(), allowEmergency: false };
+    return { success: true, ownerUserId: ownerKey, emergencyContacts: Array.from(normalized) };
+  }
+
+  getOutboundCallPolicy(ownerUserId) {
+    const ownerKey = String(ownerUserId || "default-owner");
+    const policy = this.outboundConsent.get(ownerKey) || { enabled: false, phoneNumbers: new Set(), allowEmergency: false };
+    return {
+      ownerUserId: ownerKey,
+      enabled: Boolean(policy.enabled),
+      phoneNumbers: Array.from(policy.phoneNumbers || new Set()),
+      allowEmergency: Boolean(policy.allowEmergency)
+    };
+  }
+
+  /**
+   * Places an outbound proactive call to an owner-authorized destination.
+   * Safety invariants:
+   * - Outbound calling requires explicit owner consent (opt-in).
+   * - Proactive destinations must be on the owner allowlist.
+   * - Emergency destinations additionally require emergency opt-in + emergency allowlist.
+   * Returns blocked outcomes honestly; never fabricates call success.
+   */
+  placeCall({ ownerUserId, to, reason, context, type = "PROACTIVE" } = {}) {
+    const ownerKey = String(ownerUserId || "default-owner");
+    const ownerPolicy = this.outboundConsent.get(ownerKey) || { enabled: false, phoneNumbers: new Set(), allowEmergency: false };
+    const destination = this.normalizePhoneNumber(to);
+    const normalizedType = String(type || "PROACTIVE").toUpperCase();
+    const isEmergency = normalizedType === "EMERGENCY";
+
+    if (!ownerPolicy.enabled) {
+      return { success: false, blocked: true, reason: "OUTBOUND_CALL_CONSENT_REQUIRED", ownerUserId: ownerKey, to: destination, type: normalizedType };
+    }
+
+    if (isEmergency && !ownerPolicy.allowEmergency) {
+      return { success: false, blocked: true, reason: "OUTBOUND_CALL_EMERGENCY_CONSENT_REQUIRED", ownerUserId: ownerKey, to: destination, type: normalizedType };
+    }
+
+    const isAuthorizedDestination = isEmergency
+      ? (this.emergencyContacts.get(ownerKey)?.has(destination) || ownerPolicy.phoneNumbers.has(destination))
+      : ownerPolicy.phoneNumbers.has(destination);
+
+    if (!isAuthorizedDestination) {
+      return { success: false, blocked: true, reason: "OUTBOUND_CALL_TARGET_NOT_AUTHORIZED", ownerUserId: ownerKey, to: destination, type: normalizedType };
+    }
+
+    const callId = "call-" + crypto.randomUUID();
+    const callRecord = {
+      callId,
+      direction: "OUTBOUND",
+      from: this.ownerCallerId,
+      to: destination,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      state: CALL_STATES.RINGING,
+      reason: String(reason || (isEmergency ? "EMERGENCY_ALERT" : "PROACTIVE_ALERT")),
+      context: context || {},
+      type: normalizedType,
+      authStatus: CALLER_AUTH_STATUS.VERIFIED_OWNER,
+      isOwner: true,
+      failedPinAttempts: 0,
+      transcript: [],
+      activeTask: null,
+      interrupted: false
+    };
+    this.activeCalls.set(callId, callRecord);
+
+    return {
+      success: true,
+      blocked: false,
+      callId,
+      direction: "OUTBOUND",
+      state: callRecord.state,
+      from: callRecord.from,
+      to: destination,
+      reason: callRecord.reason,
+      context: callRecord.context,
+      type: normalizedType
+    };
   }
 
   normalizePhoneNumber(phone) {

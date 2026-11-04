@@ -30,6 +30,7 @@ export class ProactiveDaemon {
     this.morningBriefingDelivered = false;
     this.isLoadShedding = false;
     this.alerts = [];
+    this.communicationEngine = options.communicationEngine || null;
   }
 
   start() {
@@ -93,6 +94,23 @@ export class ProactiveDaemon {
         this.alerts.unshift(a);
       }
       if (this.alerts.length > 50) this.alerts.length = 50;
+
+      // Route generated proactive alerts through the pluggable communication
+      // engine when one is wired in (quiet-hours aware, adapter backed).
+      if (this.communicationEngine) {
+        for (const alert of alerts) {
+          try {
+            await this.communicationEngine.sendProactiveAlert({
+              ownerUserId: "default-owner",
+              type: alert.type,
+              severity: alert.severity,
+              title: alert.message,
+              body: alert.message,
+              priority: alert.severity === "EMERGENCY" ? "EMERGENCY" : "NORMAL"
+            });
+          } catch { /* alert ledger remains authoritative */ }
+        }
+      }
 
       return { success: true, alertsGenerated: alerts.length, alerts };
     } catch (err) {
