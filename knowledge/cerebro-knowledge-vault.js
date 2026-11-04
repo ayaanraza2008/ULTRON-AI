@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 
 export class CerebroKnowledgeVault {
   constructor(options = {}) {
-    this.storageDir = options.storageDir || path.resolve(__dirname, "../../.local/cerebro");
+    this.storageDir = options.storageDir || path.resolve(process.cwd(), ".local", "cerebro");
     this.memoryGraphs = new Map(); // userId -> { nodes: Map, edges: [] }
     fs.mkdirSync(this.storageDir, { recursive: true });
   }

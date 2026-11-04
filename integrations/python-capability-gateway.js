@@ -27,7 +27,7 @@ export const GATEWAY_ERROR_CODES = {
 export class PythonCapabilityGateway {
   constructor(options = {}) {
     this.pythonPath = options.pythonPath || process.env.PYTHON_BIN || "python";
-    this.runtimeScript = options.runtimeScript || path.resolve(__dirname, "../system/python-capability-runtime/runtime_entry.py");
+    this.runtimeScript = options.runtimeScript || path.resolve(process.cwd(), "system", "python-capability-runtime", "runtime_entry.py");
     this.defaultTimeoutMs = options.defaultTimeoutMs || 15000;
     this.maxBufferBytes = options.maxBufferBytes || 2 * 1024 * 1024; // 2MB
   }

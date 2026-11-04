@@ -37,7 +37,7 @@ const FORBIDDEN_JS_PATTERNS = [
 
 export class PrometheusEvolutionEngine {
   constructor(options = {}) {
-    this.storageDir = options.storageDir || path.resolve(__dirname, "../../.local/evolved_tools");
+    this.storageDir = options.storageDir || path.resolve(process.cwd(), ".local", "evolved_tools");
     fs.mkdirSync(this.storageDir, { recursive: true });
     this.registryFile = path.join(this.storageDir, "prometheus_registry.json");
     this._loadRegistry();
