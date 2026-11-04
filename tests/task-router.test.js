@@ -47,6 +47,18 @@ test("routes OpenSEO-only requests to its owner-scoped tool", () => {
   assert.deepEqual(route.toolNames, ["openseo"]);
 });
 
+test("routes AppFlowy workspace and document requests to read-only owner-scoped tools", () => {
+  const workspaces = classifyTaskRoute("List my AppFlowy workspaces");
+  assert.equal(workspaces.tier, "medium");
+  assert.deepEqual(workspaces.categories, ["productivity"]);
+  assert.ok(workspaces.toolNames.includes("appflowy_list_workspaces"));
+  assert.ok(workspaces.toolNames.includes("appflowy_get_document"));
+  assert.ok(!workspaces.toolNames.includes("hermes_agent_task"));
+
+  const status = classifyTaskRoute("Check AppFlowy status");
+  assert.ok(status.toolNames.includes("check_appflowy"));
+});
+
 test("retains the full tool list for compound or uncertain actions", () => {
   const route = classifyTaskRoute("Research the topic and then create a YouTube production plan");
   assert.equal(route.tier, "complex");
