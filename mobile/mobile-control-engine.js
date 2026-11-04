@@ -27,6 +27,22 @@ const MOBILE_APP_APPROVAL_ACTIONS = new Set([
   "mobile_terminate_app",
   "mobile_clear_app_data"
 ]);
+const MOBILE_ACTION_ALIASES = Object.freeze({
+  tap: "mobile_click_on_screen_at_coordinates",
+  click: "mobile_click_on_screen_at_coordinates",
+  double_tap: "mobile_double_tap_on_screen",
+  long_press: "mobile_long_press_on_screen_at_coordinates",
+  swipe: "mobile_swipe_on_screen",
+  type: "mobile_type_keys",
+  type_text: "mobile_type_keys",
+  press: "mobile_press_button",
+  press_button: "mobile_press_button",
+  launch_app: "mobile_launch_app",
+  terminate_app: "mobile_terminate_app",
+  clear_app_data: "mobile_clear_app_data",
+  open_url: "mobile_open_url",
+  screenshot: "mobile_take_screenshot"
+});
 
 function hasVerifiedToolApproval(context, userId, actionName) {
   if (context?.mobileApprovalVerified !== true ||
@@ -215,14 +231,10 @@ export class MobileControlEngine extends EventEmitter {
       };
     }
 
-    // Normalize action name if missing mobile_ prefix
+    // Normalize common UI/agent aliases to the actual Mobile MCP tool names.
     if (typeof actionName === "string" && !actionName.startsWith("mobile_")) {
-      const candidate = "mobile_" + actionName;
-      if (this.permissions.constructor?.ACTION_PERMISSION_TIERS?.[candidate] || candidate in (this.permissions?.constructor?.ACTION_PERMISSION_TIERS || {})) {
-        actionName = candidate;
-      } else {
-        actionName = candidate;
-      }
+      const candidate = MOBILE_ACTION_ALIASES[actionName] || "mobile_" + actionName;
+      actionName = candidate;
     }
 
     let deviceId;
