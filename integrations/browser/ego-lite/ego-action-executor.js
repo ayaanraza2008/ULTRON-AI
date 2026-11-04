@@ -63,6 +63,12 @@ export class EgoActionExecutor {
   }
 
   async _authorizeAction(actionName, target, requiredLevel = PERMISSION_LEVELS.LEVEL_2_INTERACT, options = {}) {
+    if (this.driver && !this.securityGuard) {
+      throw Object.assign(
+        new Error("BROWSER_SECURITY_GUARD_REQUIRED: Live browser actions are disabled without the SSRF and emergency-stop guard."),
+        { code: "BROWSER_SECURITY_GUARD_REQUIRED" }
+      );
+    }
     if (this.securityGuard?.emergencyStopEngaged) {
       throw new Error(`BROWSER_ACTION_BLOCKED: Emergency Stop is engaged: ${this.securityGuard.emergencyStopReason || "operator stop"}`);
     }
