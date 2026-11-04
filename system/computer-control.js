@@ -145,8 +145,13 @@ export class WindowsComputerControl {
    */
   resolveSafePath(relativePath) {
     const root = path.resolve(this.sandboxBase);
-    const safeRel = String(relativePath || "").replace(/^[\\/]+/, "");
-    const resolved = path.resolve(root, safeRel);
+    const raw = String(relativePath || "");
+    const isAbs = path.isAbsolute(raw) || /^[\\/]/.test(raw);
+    const resolved = isAbs ? path.resolve(root, raw.replace(/^[\\/]+/, "")) : path.resolve(root, raw);
+    // If raw was absolute outside workspace root, reject
+    if (isAbs && path.isAbsolute(raw) && !path.resolve(raw).startsWith(root)) {
+      throw new Error("Path traversal violation: Access outside Ultron workspace is forbidden.");
+    }
     const relative = path.relative(root, resolved);
     if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
       throw new Error("Path traversal violation: Access outside Ultron workspace is forbidden.");
@@ -293,14 +298,54 @@ export class WindowsComputerControl {
       };
     }
 
+    // Reject any command containing shell chaining characters (&, |, ;, newline, backticks, $())
+    if (/[\r\n&|;`$]/.test(normalized)) {
+      throw new Error("Command contains forbidden shell metacharacters or chaining operators.");
+    }
+
     if (!ALLOWLISTED_TERMINAL_COMMANDS.has(normalized)) {
       throw new Error(`Command '${normalized}' is not in the approved command allowlist.`);
     }
 
     try {
-      const { stdout, stderr } = await execAsync(normalized, { timeout: 10_000, maxBuffer: 64 * 1024 });
+      // Map allowlisted commands to explicit executable + argv arrays (no shell interpolation)
+      let file;
+      let args = [];
+      const parts = normalized.split(/\s+/);
+      const prog = parts[0].toLowerCase();
+
+      if (prog === "node") {
+        file = process.execPath;
+        args = parts.slice(1);
+      } else if (prog === "npm") {
+        file = process.platform === "win32" ? "npm.cmd" : "npm";
+        args = parts.slice(1);
+      } else if (prog === "git") {
+        file = "git";
+        args = parts.slice(1);
+      } else if (prog === "python") {
+        file = process.platform === "win32" ? "python.exe" : "python";
+        args = parts.slice(1);
+      } else if (prog === "whoami") {
+        file = "whoami";
+        args = [];
+      } else if (prog === "hostname") {
+        file = "hostname";
+        args = [];
+      } else if (prog === "ipconfig") {
+        file = "ipconfig";
+        args = [];
+      } else if (prog === "dir" || prog === "echo") {
+        file = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "/bin/sh";
+        args = process.platform === "win32" ? ["/d", "/c", ...parts] : ["-c", parts.join(" ")];
+      } else {
+        file = parts[0];
+        args = parts.slice(1);
+      }
+
+      const { stdout, stderr } = await execFileAsync(file, args, { timeout: 10_000, maxBuffer: 64 * 1024, windowsHide: true });
       this.recordAction("EXEC_COMMAND", normalized, "success");
-      return { command: normalized, stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0, success: true };
+      return { command: normalized, stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: 0, success: true };
     } catch (err) {
       this.recordAction("EXEC_COMMAND", normalized, "failed");
       return { command: normalized, error: err.message, exitCode: err.code || 1, success: false };

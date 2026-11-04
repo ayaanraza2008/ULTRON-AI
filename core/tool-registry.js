@@ -1441,6 +1441,145 @@ export class ToolRegistry {
     });
 
     this.registerTool({
+      id: "browser_navigate",
+      name: "Browser Navigation",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Navigates the browser to a target URL with multi-layer SSRF validation, returns page metadata, status code, and driver attribution.",
+      capabilities: ["browser_goto", "url_navigation", "direct_cdp"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 25000,
+      inputSchema: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string" },
+          waitUntil: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.goto(params.url, params);
+        return { success: true, navigation: res, executionDriver: res?.executionDriver || adapter.getExecutionDriverType(), driverVerified: true };
+      }
+    });
+
+    this.registerTool({
+      id: "browser_screenshot",
+      name: "Browser Page Screenshot",
+      category: TOOL_CATEGORIES.VISION_PERCEPTION,
+      description: "Captures a screenshot of the currently active browser page via CDP or honest fallback.",
+      capabilities: ["screenshot_capture", "visual_preview", "cdp_screenshot"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          format: { type: "string" },
+          fullPage: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.screenshot(params);
+        return { success: true, screenshot: res, executionDriver: res?.executionDriver || adapter.getExecutionDriverType(), driverVerified: true };
+      }
+    });
+
+    this.registerTool({
+      id: "browser_interact",
+      name: "Browser Element Interaction",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Executes actions on page elements: click, fill, scroll, type, press, selectOption, or hover.",
+      capabilities: ["click", "fill", "scroll", "type", "press", "select"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 20000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string" },
+          selector: { type: "string" },
+          value: { type: "string" },
+          key: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const action = String(params.action || "").toLowerCase();
+        let res;
+        switch (action) {
+          case "click":
+            res = await adapter.click(params.selector || "body", params);
+            break;
+          case "fill":
+            res = await adapter.fill(params.selector, params.value || "", params);
+            break;
+          case "scroll":
+            res = await adapter.scroll(params);
+            break;
+          case "type":
+            res = await adapter.type(params.value || params.text || "", params);
+            break;
+          case "press":
+            res = await adapter.press(params.key || "Enter", params);
+            break;
+          case "hover":
+            res = await adapter.hover(params.selector, params);
+            break;
+          case "select":
+            res = await adapter.selectOption(params.selector, params.value, params);
+            break;
+          default:
+            throw new Error(`Unsupported browser_interact action: '${action}'`);
+        }
+        return { success: true, interaction: res, executionDriver: res?.executionDriver || adapter.getExecutionDriverType(), driverVerified: true };
+      }
+    });
+
+    this.registerTool({
+      id: "browser_tabs",
+      name: "Browser Tab Management",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Lists, creates, switches, or closes browser tabs/pages.",
+      capabilities: ["tab_management", "tab_list", "tab_create", "tab_switch", "tab_close"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          url: { type: "string" },
+          pageId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const action = String(params.action || "list").toLowerCase();
+        let res;
+        if (action === "create") {
+          res = await adapter.createTab(params.url || "about:blank");
+        } else if (action === "switch") {
+          res = await adapter.switchTab(params.pageId);
+        } else if (action === "close") {
+          res = await adapter.closeTaskSpace(params.pageId);
+        } else {
+          res = await adapter.listTabs();
+        }
+        return { success: true, tabs: res };
+      }
+    });
+
+    this.registerTool({
       id: "intelligent_browser_route",
       name: "Intelligent Browser Task Router",
       category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,

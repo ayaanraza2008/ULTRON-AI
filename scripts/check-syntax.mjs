@@ -50,6 +50,10 @@ const FILES_TO_CHECK = [
   "tests/network-safety.test.js",
   "integrations/desktop-companion.js",
   "tests/desktop-companion.test.js",
+  "system/desktop-companion-manager.js",
+  "tests/desktop-companion-manager.test.js",
+  "scripts/build-native-companion.mjs",
+  "tests/native-companion-lifecycle.test.js",
   "runtime-readiness.js",
   "tests/runtime-readiness.test.js",
   "integrations/voicestudio.js",
@@ -385,7 +389,11 @@ const FILES_TO_CHECK = [
   "tests/mobile-task-planner.test.js",
   "tests/mobile-control-engine.test.js",
   "tests/mobile-integration.test.js",
-  "tests/mobile-e2e-autonomy.test.js"
+  "tests/mobile-e2e-autonomy.test.js",
+  "tests/voice-pipeline-completion.test.js",
+  "tests/browser-automation-complete.test.js",
+  "tests/windows-control-and-security.test.js",
+  "tests/companion-api-security.test.js"
 ];
 
 let checked = 0;

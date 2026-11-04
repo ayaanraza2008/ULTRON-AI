@@ -336,6 +336,64 @@ export class EgoBrowserAdapter {
   }
 
   /**
+   * Capture screenshot of active page
+   * @param {Object} [options={}]
+   */
+  async screenshot(options = {}) {
+    const pageId = options?.pageId || this.activePageId;
+    if (!pageId) throw new Error("No active page for screenshot");
+    return await this.actionExecutor.screenshot(pageId, options);
+  }
+
+  /**
+   * Scroll active page viewport
+   * @param {Object} [options={}]
+   */
+  async scroll(options = {}) {
+    const pageId = options?.pageId || this.activePageId;
+    if (!pageId) throw new Error("No active page for scroll");
+    return await this.actionExecutor.scroll(pageId, options);
+  }
+
+  /**
+   * Create a new tab
+   * @param {string} [url="about:blank"]
+   */
+  async createTab(url = "about:blank") {
+    if (this.driver && typeof this.driver.createTab === "function") {
+      const res = await this.driver.createTab(url);
+      if (res?.pageId) this.activePageId = res.pageId;
+      return res;
+    }
+    return await this.newPage(this.activeTaskSpaceId, url);
+  }
+
+  /**
+   * List open tabs
+   */
+  async listTabs() {
+    if (this.driver && typeof this.driver.listTabs === "function") {
+      return await this.driver.listTabs();
+    }
+    const spaceId = this.activeTaskSpaceId;
+    return this.pageManager.listPages(spaceId);
+  }
+
+  /**
+   * Switch active tab
+   * @param {string} pageId
+   */
+  async switchTab(pageId) {
+    if (this.driver && typeof this.driver.switchTab === "function") {
+      const res = await this.driver.switchTab(pageId);
+      this.activePageId = pageId;
+      return res;
+    }
+    this.activePageId = pageId;
+    return { activeTabId: pageId };
+  }
+
+  /**
    * Hand off control of TaskSpace to user
    */
   handOff(options = {}) {
@@ -395,11 +453,16 @@ export class EgoBrowserAdapter {
 }
 
 // Export singleton
-export const egoBrowserAdapter = new EgoBrowserAdapter({
-  // Real Chromium/CDP fallback driver: launches the host browser lazily on the
-  // first navigation when available; degrades to honest HTTP_FETCH_PREVIEW and
-  // simulated:true interaction reports when no browser binary exists.
-  driver: new DirectChromiumCdpDriver({
-    securityGuard: new EgoSecurityGuard()
-  })
-});
+export const egoBrowserAdapter = new EgoBrowserAdapter(
+  process.env.ULTRON_ENABLE_REAL_CDP === "1"
+    ? {
+        // Real Chromium/CDP control is opt-in (env ULTRON_ENABLE_REAL_CDP=1).
+        // When enabled, the host browser launches lazily on first navigation.
+        // When disabled (default), navigation uses the honest HTTP_FETCH_PREVIEW
+        // path and interactions report simulated: true instead of fabricating.
+        driver: new DirectChromiumCdpDriver({
+          securityGuard: new EgoSecurityGuard()
+        })
+      }
+    : {}
+);

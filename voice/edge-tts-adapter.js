@@ -17,7 +17,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 export const EDGE_VOICES = Object.freeze({
   HINDI_MADHUR: {
@@ -322,12 +322,13 @@ export class EdgeTtsAdapter extends EventEmitter {
       .replace(/[\r\n]+/g, " ")
       .slice(0, 500);
 
-    const psCommand = `Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SetOutputToWaveFile('${tmpWav}'); $s.Speak('${sanitized}'); $s.Dispose();`;
+    const psCommand = `Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SetOutputToWaveFile('${tmpWav.replace(/'/g, "''")}'); $s.Speak('${sanitized}'); $s.Dispose();`;
 
     try {
-      execSync(`powershell -NoProfile -NonInteractive -Command "${psCommand}"`, {
+      execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", psCommand], {
         timeout: 4000,
-        stdio: "pipe"
+        stdio: "pipe",
+        windowsHide: true
       });
       if (fs.existsSync(tmpWav)) {
         const buf = fs.readFileSync(tmpWav);

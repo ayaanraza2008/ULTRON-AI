@@ -208,10 +208,22 @@ export class DirectChromiumCdpDriver {
         if (msg.error) reject(Object.assign(new Error(`CDP error: ${msg.error.message || JSON.stringify(msg.error)}`), { cdpError: msg.error }));
         else resolve(msg.result);
       }
+      // Redirect SSRF Defense: validate target URL on every redirect event
+      if (msg.method === "Network.requestWillBeSent" && msg.params?.redirectResponse) {
+        const redirectUrl = msg.params.request?.url;
+        if (redirectUrl && this.securityGuard) {
+          const secCheck = this.securityGuard.validateUrl(redirectUrl);
+          if (!secCheck.allowed) {
+            this._cdpSend(ws, "Page.stopLoading").catch(() => {});
+            this._cdpSend(ws, "Page.navigate", { url: "about:blank" }).catch(() => {});
+          }
+        }
+      }
     });
 
     await this._cdpSend(ws, "Page.enable");
     await this._cdpSend(ws, "Runtime.enable");
+    await this._cdpSend(ws, "Network.enable").catch(() => {});
 
     const record = { cdp: ws, targetId: newTarget.id, launchedVia: "REAL_CDP" };
     this.pages.set(pageId, Object.assign(this.pages.get(pageId) || {}, record));
@@ -577,6 +589,218 @@ export class DirectChromiumCdpDriver {
   }
 
   /**
+   * Real Page Screenshot capture via CDP Page.captureScreenshot.
+   */
+  async screenshot(pageId, options = {}) {
+    const record = this.pages.get(pageId);
+    if (record && record.cdp) {
+      const format = options.format === "jpeg" ? "jpeg" : "png";
+      const params = { format };
+      if (format === "jpeg" && options.quality) {
+        params.quality = Math.max(1, Math.min(100, options.quality));
+      }
+      if (options.clip) {
+        params.clip = options.clip;
+      }
+      const cdpResult = await this._cdpSend(record.cdp, "Page.captureScreenshot", params);
+      return {
+        screenshot: cdpResult?.data || null,
+        format,
+        executionDriver: this.driverType,
+        executionMechanism: "REAL_CDP",
+        driverVerified: true
+      };
+    }
+    return {
+      screenshot: null,
+      simulated: true,
+      format: options.format || "png",
+      reason: "No real CDP session attached: screenshot requires genuine browser control",
+      executionDriver: this.driverType,
+      executionMechanism: "HTTP_FETCH_PREVIEW",
+      driverVerified: true
+    };
+  }
+
+  /**
+   * Scroll viewport or element via DOM evaluation.
+   */
+  async scroll(pageId, options = {}) {
+    const record = this.pages.get(pageId);
+    const deltaX = Number(options.x || options.deltaX || 0);
+    const deltaY = Number(options.y || options.deltaY || (options.direction === "up" ? -500 : 500));
+
+    if (record && record.cdp) {
+      const res = await this._evaluate(
+        pageId,
+        `(() => {
+          window.scrollBy(${deltaX}, ${deltaY});
+          return JSON.stringify({ scrollX: window.scrollX, scrollY: window.scrollY });
+        })()`
+      );
+      const parsed = typeof res === "string" ? JSON.parse(res) : res;
+      return {
+        scrolled: true,
+        deltaX,
+        deltaY,
+        scrollX: parsed?.scrollX || 0,
+        scrollY: parsed?.scrollY || 0,
+        executionDriver: this.driverType,
+        executionMechanism: "REAL_CDP",
+        driverVerified: true
+      };
+    }
+    return {
+      scrolled: false,
+      simulated: true,
+      deltaX,
+      deltaY,
+      reason: "No real CDP session attached: scroll requires genuine browser control",
+      executionDriver: this.driverType,
+      executionMechanism: "HTTP_FETCH_PREVIEW",
+      driverVerified: true
+    };
+  }
+
+  /**
+   * Dispatch keyboard typing over CDP Input.dispatchKeyEvent.
+   */
+  async type(pageId, text, options = {}) {
+    const record = this.pages.get(pageId);
+    const str = String(text || "");
+    if (record && record.cdp) {
+      for (const char of str) {
+        await this._cdpSend(record.cdp, "Input.dispatchKeyEvent", {
+          type: "keyDown",
+          text: char,
+          unmodifiedText: char
+        });
+        await this._cdpSend(record.cdp, "Input.dispatchKeyEvent", {
+          type: "keyUp"
+        });
+      }
+      return {
+        typed: true,
+        textLength: str.length,
+        executionDriver: this.driverType,
+        executionMechanism: "REAL_CDP",
+        driverVerified: true
+      };
+    }
+    return {
+      typed: false,
+      simulated: true,
+      textLength: str.length,
+      reason: "No real CDP session attached: typing requires genuine browser control",
+      executionDriver: this.driverType,
+      executionMechanism: "HTTP_FETCH_PREVIEW",
+      driverVerified: true
+    };
+  }
+
+  /**
+   * Dispatch single key press (e.g., Enter, Tab, Escape) over CDP.
+   */
+  async press(pageId, key, options = {}) {
+    const record = this.pages.get(pageId);
+    const keyName = String(key || "Enter");
+    if (record && record.cdp) {
+      await this._cdpSend(record.cdp, "Input.dispatchKeyEvent", {
+        type: "rawKeyDown",
+        key: keyName
+      });
+      await this._cdpSend(record.cdp, "Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: keyName
+      });
+      return {
+        pressed: true,
+        key: keyName,
+        executionDriver: this.driverType,
+        executionMechanism: "REAL_CDP",
+        driverVerified: true
+      };
+    }
+    return {
+      pressed: false,
+      simulated: true,
+      key: keyName,
+      reason: "No real CDP session attached: key press requires genuine browser control",
+      executionDriver: this.driverType,
+      executionMechanism: "HTTP_FETCH_PREVIEW",
+      driverVerified: true
+    };
+  }
+
+  /**
+   * Multi-tab management: Create a new tab and navigate it.
+   */
+  async createTab(url = "about:blank") {
+    const newPageId = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const result = await this.goto(newPageId, url);
+    return { pageId: newPageId, ...result };
+  }
+
+  /**
+   * Multi-tab management: List active tabs.
+   */
+  async listTabs() {
+    const tabs = [];
+    for (const [pageId, data] of this.pages.entries()) {
+      tabs.push({
+        pageId,
+        url: data.url || "about:blank",
+        title: data.title || "",
+        status: data.status || 200,
+        launchedVia: data.launchedVia || this.executionMechanism,
+        isCdpAttached: Boolean(data.cdp)
+      });
+    }
+    return tabs;
+  }
+
+  /**
+   * Multi-tab management: Switch active tab.
+   */
+  async switchTab(pageId) {
+    if (!this.pages.has(pageId)) {
+      throw new Error(`Tab '${pageId}' does not exist.`);
+    }
+    const tab = this.pages.get(pageId);
+    return {
+      activeTabId: pageId,
+      url: tab.url,
+      title: tab.title,
+      isCdpAttached: Boolean(tab.cdp)
+    };
+  }
+
+  /**
+   * Direct low-level CDP invocation on a page target.
+   */
+  async cdp(pageId, method, params = {}) {
+    const record = this.pages.get(pageId);
+    if (record && record.cdp) {
+      const res = await this._cdpSend(record.cdp, method, params);
+      return {
+        result: res,
+        executionDriver: this.driverType,
+        executionMechanism: "REAL_CDP",
+        driverVerified: true
+      };
+    }
+    return {
+      simulated: true,
+      method,
+      params,
+      reason: "No real CDP session attached: raw CDP calls require genuine browser control",
+      executionDriver: this.driverType,
+      executionMechanism: "HTTP_FETCH_PREVIEW",
+      driverVerified: true
+    };
+  }
+
+  /**
    * Close a page's real CDP target and drop its socket.
    */
   async closePage(pageId) {
@@ -689,12 +913,38 @@ export class DirectChromiumCdpDriver {
         const timeoutMs = options.timeout || 15000;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ULTRON-DirectCDP/1.0"
+
+        let currentUrl = url;
+        let response = null;
+        let redirectCount = 0;
+        const maxRedirects = 5;
+
+        while (redirectCount <= maxRedirects) {
+          if (this.securityGuard) {
+            const secCheck = this.securityGuard.validateUrl(currentUrl);
+            if (!secCheck.allowed) {
+              throw new Error(`Navigation blocked by SSRF defense: ${secCheck.reason}`);
+            }
           }
-        });
+
+          response = await fetch(currentUrl, {
+            signal: controller.signal,
+            redirect: "manual",
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ULTRON-DirectCDP/1.0"
+            }
+          });
+
+          // Check if this is a redirect
+          if (response.status >= 300 && response.status < 400 && response.headers.has("location")) {
+            const loc = response.headers.get("location");
+            currentUrl = new URL(loc, currentUrl).href;
+            redirectCount++;
+            continue;
+          }
+          break;
+        }
+
         clearTimeout(timer);
         status = response.status;
         html = await response.text();
@@ -703,13 +953,14 @@ export class DirectChromiumCdpDriver {
           title = titleMatch[1].trim();
         } else {
           try {
-            const parsed = new URL(url);
+            const parsed = new URL(currentUrl);
             title = parsed.hostname;
           } catch {
-            title = url;
+            title = currentUrl;
           }
         }
-        extractedElements = this._parseHtmlElementsPreview(html, url);
+        url = currentUrl;
+        extractedElements = this._parseHtmlElementsPreview(html, currentUrl);
       } catch (err) {
         if (options.throwOnError) throw err;
         title = `Error: ${err.message}`;

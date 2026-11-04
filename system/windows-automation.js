@@ -23,6 +23,13 @@ import os from "node:os";
 
 const execAsync = promisify(exec);
 
+export const HARDWARE_STATUS = {
+  SUPPORTED_AND_VERIFIED: "SUPPORTED_AND_VERIFIED",
+  COMMAND_SENT_BUT_UNVERIFIED: "COMMAND_SENT_BUT_UNVERIFIED",
+  UNSUPPORTED_HARDWARE: "UNSUPPORTED_HARDWARE",
+  FAILED: "FAILED"
+};
+
 export class WindowsAutomation {
   constructor(options = {}) {
     this.sandboxBase = options.sandboxBase || path.join(os.homedir(), "Documents", "UltronWorkspace");
@@ -162,17 +169,35 @@ export class WindowsAutomation {
       const readback = await this.getDisplayBrightness();
       const verified = Boolean(ok && readback.supported && readback.brightness === target);
 
+      let hardwareStatus;
+      if (!readback.supported) {
+        hardwareStatus = HARDWARE_STATUS.UNSUPPORTED_HARDWARE;
+      } else if (verified) {
+        hardwareStatus = HARDWARE_STATUS.SUPPORTED_AND_VERIFIED;
+      } else {
+        hardwareStatus = HARDWARE_STATUS.COMMAND_SENT_BUT_UNVERIFIED;
+      }
+
       this.recordEvent("BRIGHTNESS", `level=${target}`, ok ? "success" : "unsupported");
       return {
         success: Boolean(ok),
         brightness: target,
         currentBrightness: readback.brightness,
         verified,
-        supported: readback.supported
+        supported: readback.supported,
+        hardwareStatus
       };
     } catch (err) {
       this.recordEvent("BRIGHTNESS", `level=${target}`, "failed");
-      return { success: false, brightness: target, verified: false, supported: false, error: err.message };
+      const isUnsupported = /not available|WmiMonitorBrightness/i.test(err.message);
+      return {
+        success: false,
+        brightness: target,
+        verified: false,
+        supported: false,
+        hardwareStatus: isUnsupported ? HARDWARE_STATUS.UNSUPPORTED_HARDWARE : HARDWARE_STATUS.FAILED,
+        error: err.message
+      };
     }
   }
 

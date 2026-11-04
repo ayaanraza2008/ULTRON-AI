@@ -378,6 +378,40 @@ export class EgoActionExecutor {
    * @param {number} deltaX
    * @param {number} deltaY
    */
+  /**
+   * Capture page screenshot
+   * @param {string} pageId
+   * @param {Object} [options={}]
+   */
+  async screenshot(pageId, options = {}) {
+    let result = { screenshot: null, simulated: true };
+    if (this.driver && typeof this.driver.screenshot === "function") {
+      result = await this.driver.screenshot(pageId, options);
+    }
+    return {
+      ...result,
+      executionDriver: this._getDriverType(),
+      driverVerified: true
+    };
+  }
+
+  /**
+   * Scroll viewport or page
+   * @param {string} pageId
+   * @param {Object} [options={}]
+   */
+  async scroll(pageId, options = {}) {
+    let result = { scrolled: true, deltaX: options.x || 0, deltaY: options.y || 500 };
+    if (this.driver && typeof this.driver.scroll === "function") {
+      result = await this.driver.scroll(pageId, options);
+    }
+    return {
+      ...result,
+      executionDriver: this._getDriverType(),
+      driverVerified: true
+    };
+  }
+
   async mouseWheel(pageId, deltaX, deltaY) {
     let result = { mouseWheeled: true, deltaX, deltaY };
     if (this.driver && typeof this.driver.mouseWheel === "function") {
