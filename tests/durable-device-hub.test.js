@@ -163,3 +163,70 @@ test("paired-device migration does not expose unapproved short pairing codes to 
   assert.doesNotMatch(sql, /using\s*\([^)]*approved\s*=\s*false/i);
   assert.match(sql, /revoke\s+insert\s*,\s*update\s*,\s*delete\s+on\s+table\s+public\.paired_devices\s+from\s+anon\s*,\s*authenticated/i);
 });
+
+
+test("DeviceHub enforces owner boundaries for explicit targets and task history", () => {
+  const hub = new DeviceHub({ env: { ULTRON_DEVICE_SIGNING_SECRET: "unit-test-device-signing-secret-at-least-32-chars" } });
+  const pair = (owner, name, platform = "windows") => {
+    const pending = hub.createPairingCode({ name, platform });
+    const result = hub.verifyPairingCode(pending.code, null, owner);
+    assert.equal(result.success, true);
+    return result;
+  };
+
+  const ownerAPc = pair("owner-a", "A PC");
+  const ownerAPhone = pair("owner-a", "A Phone", "android");
+  const ownerBPc = pair("owner-b", "B PC");
+
+  const crossOwner = hub.routeCommand({
+    callerDeviceId: ownerBPc.deviceId,
+    callerToken: ownerBPc.authToken,
+    targetDeviceId: ownerAPc.deviceId,
+    action: "launch_app",
+    payload: { app: "notepad" }
+  });
+  assert.equal(crossOwner.success, false);
+  assert.equal(crossOwner.error, "ACCESS_DENIED_NOT_DEVICE_OWNER");
+
+  const ownerACommand = hub.routeCommand({
+    callerDeviceId: ownerAPhone.deviceId,
+    callerToken: ownerAPhone.authToken,
+    targetDeviceId: ownerAPc.deviceId,
+    action: "launch_app",
+    payload: { app: "notepad" },
+    idempotencyKey: "same-key"
+  });
+  const ownerBCommand = hub.routeCommand({
+    callerDeviceId: ownerBPc.deviceId,
+    callerToken: ownerBPc.authToken,
+    targetDeviceId: ownerBPc.deviceId,
+    action: "launch_app",
+    payload: { app: "notepad" },
+    idempotencyKey: "same-key"
+  });
+
+  assert.equal(ownerACommand.success, true);
+  assert.equal(ownerBCommand.success, true);
+  assert.notEqual(ownerBCommand.deduplicated, true);
+  assert.equal(hub.getSharedTasks(20, { ownerUserId: "owner-a" }).length, 1);
+  assert.equal(hub.getSharedTasks(20, { ownerUserId: "owner-b" }).length, 1);
+  assert.equal(hub.getSharedTasks(20, { ownerUserId: "owner-c" }).length, 0);
+});
+
+test("DeviceHub imports only verified-format Supabase companion identities into memory", () => {
+  const hub = new DeviceHub({ env: {} });
+  const token = "ultron_dev_" + "a".repeat(64);
+  const invalid = hub.importPairedDevice({
+    id: "device-a", ownerUserId: "owner-a", authToken: "not-a-device-token", status: "active"
+  });
+  assert.equal(invalid, null);
+
+  const imported = hub.importPairedDevice({
+    id: "device-a", ownerUserId: "owner-a", authToken: token,
+    name: "Owner A Phone", platform: "android", status: "active"
+  });
+  assert.equal(imported.id, "device-a");
+  assert.equal(imported.ownerUserId, "owner-a");
+  assert.equal(hub.authenticateDevice("device-a", token)?.ownerUserId, "owner-a");
+  assert.equal(hub.isPersistent, false);
+});
