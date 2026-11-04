@@ -422,6 +422,10 @@ test("Adversarial Security: Rejects cross-user approval tampering and token hija
   const legitimateApprove = orchestrator.approveRequest(apprId, { userId: "user-alpha" });
   assert.equal(legitimateApprove.success, true);
 
+  // An anonymous/default-operator context must not consume a user-scoped approval.
+  const anonymousExec = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId: apprId });
+  assert.equal(anonymousExec.status, "CROSS_USER_ACCESS_DENIED");
+
   // 5. User B attempts to consume User A's approval token
   const hijackExec = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId: apprId, userId: "user-bravo" });
   assert.equal(hijackExec.status, "CROSS_USER_ACCESS_DENIED");
