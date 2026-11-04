@@ -7,6 +7,7 @@ import {
   createDevicePairingRouter,
   verifyPairedDeviceToken
 } from "../integrations/device-pairing-router.js";
+import { DeviceHub } from "../integrations/device-hub.js";
 
 const OWNER_A = "00000000-0000-4000-8000-000000000001";
 const OWNER_B = "00000000-0000-4000-8000-000000000002";
@@ -24,10 +25,10 @@ function ownerMiddleware(req, res, next) {
   next();
 }
 
-async function withRouter(fetchImpl, fn, env = ENV) {
+async function withRouter(fetchImpl, fn, env = ENV, deviceHub = new DeviceHub({ env: { ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET } })) {
   const app = express();
   app.use(express.json());
-  app.use(createDevicePairingRouter({ env, fetchImpl, requireSupabaseUser: ownerMiddleware, logger: { warn() {}, error() {} } }));
+  app.use(createDevicePairingRouter({ env, fetchImpl, requireSupabaseUser: ownerMiddleware, deviceHub, logger: { warn() {}, error() {} } }));
   const server = createServer(app);
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -234,7 +235,7 @@ test("paired-device token verifier accepts only active token hashes and never re
   const device = await verifyPairedDeviceToken({ token, env: ENV, fetchImpl: db.fetchImpl, logger: { warn() {} } });
   assert.equal(device.ownerUserId, OWNER_A);
   assert.equal(device.name, "Owner Android");
-  assert.equal(Object.hasOwn(device, "authToken"), false);
+  assert.equal(device.authToken, token);
   const revoked = db.devices.get(device.id);
   revoked.status = "revoked";
   assert.equal(await verifyPairedDeviceToken({ token, env: ENV, fetchImpl: db.fetchImpl, logger: { warn() {} } }), null);
@@ -278,4 +279,66 @@ test("device-pairing migration installs an atomic single-use claim function rest
   assert.match(migration, /delete from public\.pending_device_pairings/i);
   assert.match(migration, /revoke all on function public\.claim_pending_device_pairing\(text\) from public, anon, authenticated/i);
   assert.match(migration, /grant execute on function public\.claim_pending_device_pairing\(text\) to service_role/i);
+});
+
+
+test("paired device self status and heartbeat are owner-scoped and update durable telemetry", async () => {
+  const db = makeDatabase();
+  const hub = new DeviceHub({ env: { ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET } });
+  await withRouter(db.fetchImpl, async base => {
+    const pair = async (owner, deviceName, platform) => {
+      const created = await fetch(base + "/devices/pairings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-test-owner": owner },
+        body: JSON.stringify({ deviceName, platform })
+      });
+      assert.equal(created.status, 201);
+      const pairing = await created.json();
+      const claimed = await fetch(base + "/devices/pairings/claim", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: pairing.pairingCode })
+      });
+      assert.equal(claimed.status, 200);
+      return claimed.json();
+    };
+
+    const android = await pair(OWNER_A, "Owner Android", "android");
+    const windows = await pair(OWNER_A, "Owner Windows", "windows");
+    await pair(OWNER_B, "Other Owner Windows", "windows");
+
+    const statusResponse = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.deviceId, android.deviceId);
+    assert.equal(status.devices.length, 2);
+    assert.ok(status.devices.some(device => device.id === windows.deviceId));
+    assert.equal(status.devices.some(device => device.name === "Other Owner Windows"), false);
+
+    const heartbeatResponse = await fetch(base + "/devices/me/heartbeat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-device-token": android.deviceToken },
+      body: JSON.stringify({ batteryPercent: 73, isCharging: true })
+    });
+    assert.equal(heartbeatResponse.status, 200);
+    assert.equal((await heartbeatResponse.json()).success, true);
+    const stored = db.devices.get(android.deviceId);
+    assert.equal(stored.battery_percent, 73);
+    assert.equal(stored.is_charging, true);
+    assert.equal(hub.pairedDevices.size, 1);
+  }, ENV, hub);
+});
+
+test("paired-device runtime self endpoints require a valid active device token", async () => {
+  const db = makeDatabase();
+  await withRouter(db.fetchImpl, async base => {
+    const missing = await fetch(base + "/devices/me");
+    assert.equal(missing.status, 401);
+    const invalid = await fetch(base + "/devices/me/heartbeat", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-device-token": "invalid-token" },
+      body: JSON.stringify({ batteryPercent: 40 })
+    });
+    assert.equal(invalid.status, 401);
+  });
 });
