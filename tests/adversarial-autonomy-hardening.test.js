@@ -482,9 +482,13 @@ test("Adversarial Security: Sanitizes malicious external tool output and prevent
 // 10. REAL TOOL EXECUTION INVENTORY VERIFICATION
 // ==========================================
 
-test("Real Tool Execution Audit: All 23 tools execute real paths with schema validation", async () => {
+test("Real Tool Execution Audit: All 59 tools execute real paths with schema validation", async () => {
   const allTools = toolRegistry.listTools();
-  assert.equal(allTools.length, 23);
+  assert.equal(allTools.length, 59);
+
+  // Pre-seed Cerebro nodes so linking and multi-hop queries succeed
+  await toolRegistry.execute("cerebro_upsert_node", { nodeId: "audit_node", label: "Audit Node", content: "Test entity" });
+  await toolRegistry.execute("cerebro_upsert_node", { nodeId: "audit_node_2", label: "Audit Node 2", content: "Test entity 2" });
 
   const testPayloads = {
     ai_chat_inference: { prompt: "Health check" },
@@ -509,7 +513,43 @@ test("Real Tool Execution Audit: All 23 tools execute real paths with schema val
     mobile_screen_inspection: { dryRun: true },
     mobile_interaction_dispatch: { action: "press_key", keycode: 4, dryRun: true },
     mobile_app_lifecycle: { operation: "launch", packageName: "com.android.settings", dryRun: true },
-    mobile_autonomous_task: { goal: "test mobile task", dryRun: true }
+    mobile_autonomous_task: { goal: "test mobile task", dryRun: true },
+    ego_browser_status: {},
+    ego_taskspace_create: { name: "test-space" },
+    ego_taskspace_list: {},
+    ego_page_navigate: { url: "https://example.com" },
+    ego_page_snapshot: {},
+    ego_page_interact: { action: "click", target: "@1" },
+    ego_page_evaluate: { script: "return 1 + 1;" },
+    ego_site_learnings: { action: "list" },
+    ego_taskspace_close: {},
+    intelligent_browser_route: { url: "https://example.com" },
+    cerebro_upsert_node: { nodeId: "audit_node", label: "Audit Node", content: "Test entity" },
+    cerebro_link_entities: { sourceId: "audit_node", targetId: "audit_node_2" },
+    cerebro_semantic_query: { query: "audit" },
+    cerebro_multi_hop_recall: { startId: "audit_node" },
+    cerebro_get_metrics: {},
+    desktop_clipboard_control: { action: "get" },
+    desktop_audio_settings: { action: "get" },
+    desktop_display_settings: { action: "get" },
+    desktop_process_manager: { action: "list" },
+    desktop_purge_protocol: { dryRun: true },
+    desktop_lock_workstation: { dryRun: true },
+    workspace_matrix_mode: { mode: "WAR_ROOM" },
+    iot_smart_device_control: { action: "list" },
+    airspace_recon_scan: {},
+    network_infrastructure_audit: {},
+    voice_sfx_synthesize: { sfxType: "repulsor_blast" },
+    vision_biometric_auth: { action: "status" },
+    vision_spatial_gesture: {},
+    evolution_synthesize_tool: { toolId: "test_tool_synth", name: "Test Synth", sourceCode: "def run():\n    return {'success': True}" },
+    evolution_rollback_tool: { toolId: "test_tool_synth" },
+    evolution_list_tools: {},
+    travel_flight_search: { origin: "DEL", destination: "BOM", departureDate: "2026-12-01" },
+    bounty_price_tracker: { productUrl: "https://example.com/product", targetPrice: 50.0 },
+    meeting_audio_scribe: { title: "Team sync" },
+    gaming_library_manager: { action: "scan" },
+    remote_telegram_notify: { text: "Health check" }
   };
 
   for (const tool of allTools) {

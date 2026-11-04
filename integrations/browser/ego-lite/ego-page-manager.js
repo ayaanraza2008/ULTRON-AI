@@ -103,8 +103,12 @@ export class EgoPageManager {
     // If taskSpaceManager is wired, also reflect page label in taskSpace state
     if (this.taskSpaceManager) {
       const space = this.taskSpaceManager.getTaskSpace(taskSpaceId);
-      if (space && !space.pages.includes(label)) {
-        space.pages.push(label);
+      if (space && space.pages) {
+        if (Array.isArray(space.pages)) {
+          if (!space.pages.includes(label)) space.pages.push(label);
+        } else if (typeof space.pages.set === "function") {
+          space.pages.set(label, pageState);
+        }
       }
     }
 

@@ -110,7 +110,7 @@ export class EgoRuntimeManager {
         installed: false,
         found: false,
         path: null,
-        guidance: "Ego Lite desktop application is currently supported natively on Windows and macOS."
+        guidance: `Ego Lite desktop application is currently supported natively on Windows and macOS. Download installer from ${UPSTREAM_CONFIG.OFFICIAL_APP_URL}.`
       };
     }
 
