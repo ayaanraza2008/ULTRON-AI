@@ -433,7 +433,12 @@ export class EgoActionExecutor {
 
     let fileSize = 0;
     if (this.driver && typeof this.driver.downloadFile === "function") {
-      const res = await this.driver.downloadFile(pageId, downloadUrl, targetPath);
+      if (typeof this.driver.downloadFileWithRequestGuard !== "function") {
+        throw new Error("BROWSER_REDIRECT_GUARD_UNAVAILABLE: The live download driver must validate every request and redirect.");
+      }
+      const res = await this.driver.downloadFileWithRequestGuard(pageId, downloadUrl, targetPath, {
+        validateRequestUrl: candidate => this.securityGuard.validateUrlAsync(candidate)
+      });
       fileSize = res?.fileSize || 0;
     } else {
       // In standalone/mock mode: write dummy record verifying directory and file creation
@@ -495,7 +500,13 @@ export class EgoActionExecutor {
     await this._validateOutboundUrl(url, "Fetch");
 
     if (this.driver && typeof this.driver.fetch === "function") {
-      return await this.driver.fetch(pageId, url, options);
+      if (typeof this.driver.fetchWithRequestGuard !== "function") {
+        throw new Error("BROWSER_REDIRECT_GUARD_UNAVAILABLE: The live browser fetch driver must validate every request and redirect.");
+      }
+      return await this.driver.fetchWithRequestGuard(pageId, url, {
+        ...options,
+        validateRequestUrl: candidate => this.securityGuard.validateUrlAsync(candidate)
+      });
     }
 
     return {
