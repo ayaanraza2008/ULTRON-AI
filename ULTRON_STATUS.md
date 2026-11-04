@@ -5,8 +5,8 @@
 **Production Branch:** `main`  
 **Production Base:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
 **Release Candidate Branch:** `feat/ultron-final-100-completion`  
-**Exact Engineering Commit SHA:** `59720886be5a35c2e5ee67bd79b9e0c3f1a19807`  
-**Exact CI-Tested SHA:** `3399e87c5df08e5a832948741071db274b9fcd27`  
+**Exact Engineering Commit SHA:** `39eb955364177c3882798e2949fffcb291d90610`  
+**Exact CI-Tested SHA:** `39eb955364177c3882798e2949fffcb291d90610`  
 **Ego Browser Integration SHA:** `8ad486ef5ed62e325690138f82b4685d95d1a5bf`  
 **Candidate PR:** [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441)  
 **Render Workspace:** Ultron core  
@@ -29,7 +29,7 @@ All software-based digital-twin models, kinematic solvers, virtual device pairin
 
 **CANDIDATE HARDENED — LIVE CLOUD ACCEPTANCE GATED ON OWNER AUTHORIZATION (85.10% Independently Defensible Software Readiness)**
 
-The active candidate branch `feat/ultron-final-100-completion` on engineering SHA `59720886be5a35c2e5ee67bd79b9e0c3f1a19807` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
+The active candidate branch `feat/ultron-final-100-completion` on engineering SHA `39eb955364177c3882798e2949fffcb291d90610` has completed comprehensive local and remote verification with a 100% green automated CI baseline.
 
 The earlier claim of 97.25% has been corrected to an independently defensible score of **85.10%** after auditing live cloud operations (cloud AI provider keys, unpolled cloud workers, and unapplied cloud migrations) and acknowledging skipped tests.
 
@@ -37,11 +37,11 @@ The earlier claim of 97.25% has been corrected to an independently defensible sc
 
 ---
 
-## C. Evidence Baseline (Exact Engineering Candidate SHA `59720886`)
+## C. Evidence Baseline (Exact Engineering Candidate SHA `39eb9553`)
 
 | Verification Domain | Software Status | Evidence & Test Results |
 | :--- | :---: | :--- |
-| **Node.js Test Suite** | **PASS (100% file pass)** | 202 test files; **1,388 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,392 passed, 2 skipped) |
+| **Node.js Test Suite** | **PASS (100% file pass)** | 202 test files; **1,388 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,422 passed, 0 failed, 1 skipped) |
 | **Node.js Skipped Tests** | **PROTECTED** | 6 tests skipped locally: (1) `tests/supabase-isolation.e2e.test.js` to safeguard live production DB; (2) `tests/coding-sandbox.test.js` Docker test gracefully skipped when host lacks active Docker daemon; (3-6) 4 disposable PostgreSQL tests gracefully skipped locally when local PG container is unconfigured (in Linux CI with postgres service container, these 4 execute and pass 100%) |
 | **Python Test Suite Total** | **PASS (95.45% discovered)** | 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink privilege restriction in `test_harness2.py`) |
 | **Python Browser Policy** | **PASS (100%)** | 11 tests passed (`browser-use-bridge/test_navigation_policy.py`) |
@@ -58,10 +58,10 @@ The earlier claim of 97.25% has been corrected to an independently defensible sc
 | **World Intelligence Build** | **PASS (100%)** | GitHub Actions build succeeded; 870 modules transformed cleanly |
 
 ### GitHub Actions CI Verification Matrix (Run on Candidate Branch)
-- **`build-android-companion` (Run 41679626806):** ✅ **SUCCESS (1m 53s)**
-- **`build-windows-companion` (Run 41679626882):** ✅ **SUCCESS (1m 1s)**
-- **`test` (PR Run 41679626809 / Push Run 41679617151):** ✅ **SUCCESS (1m 40s / 1m 36s)**
-- **`world-intelligence-build` (PR Run 41679626809 / Push Run 41679617151):** ✅ **SUCCESS (2m 32s / 44s)**
+- **`build-android-companion` (Run 41783882652):** ✅ **SUCCESS (1m 38s)**
+- **`build-windows-companion` (Run 41783882578):** ✅ **SUCCESS (54s)**
+- **`test` (PR Run 41783882638 / Push Run 41783876959):** ✅ **SUCCESS (2m 9s / 2m 51s)**
+- **`world-intelligence-build` (PR Run 41783882638 / Push Run 41783876959):** ✅ **SUCCESS (32s / 40s)**
 - **All 6 PR #441 Checks:** ✅ **PASS (100% Green)**
 
 ---

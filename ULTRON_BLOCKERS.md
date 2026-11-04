@@ -5,9 +5,9 @@
 **Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, CONFLICT-FREE  
 **Target Render Workspace:** **Ultron core** (`https://ultron-ai-core.onrender.com`)  
 **Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
-**Candidate Engineering Commit SHA:** `59720886be5a35c2e5ee67bd79b9e0c3f1a19807`  
+**Candidate Engineering Commit SHA:** `39eb955364177c3882798e2949fffcb291d90610`  
 **Production Base SHA:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
-**Exact CI-Tested SHA:** `3399e87c5df08e5a832948741071db274b9fcd27`  
+**Exact CI-Tested SHA:** `39eb955364177c3882798e2949fffcb291d90610`  
 
 ---
 
@@ -51,7 +51,7 @@ The following items are **external human owner actions** that reside across the 
 
 ## 4. LATEST AUTOMATION EVIDENCE
 
-- **Node Test Suite:** 202 test files; **1,388 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,392 passed, 0 failed, 2 skipped)
+- **Node Test Suite:** 202 test files; **1,388 passed, 0 failed, 6 skipped** (Windows host; in Linux CI with Postgres service container: 1,422 passed, 0 failed, 1 skipped)
 - **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** (Windows non-admin symlink restrictions in `test_harness2.py`)
 - **Combined Automation Tests:** 1,438 discovered; **1,430 passed, 0 failed, 8 skipped** (Windows host; in Linux CI: 1,434 passed, 0 failed, 4 skipped) (99.44% pass rate across discovered; 100% on executed)
 - **Syntax Check:** **357 / 357 files clean** (`node scripts/check-syntax.mjs`)
