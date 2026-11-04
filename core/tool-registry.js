@@ -187,6 +187,7 @@ export class ToolRegistry {
         : 30000,
       inputSchema: toolMeta.inputSchema || { type: "object" },
       outputSchema: toolMeta.outputSchema || { type: "object" },
+      validate: typeof toolMeta.validate === "function" ? toolMeta.validate : null,
       safeAlternatives: Array.isArray(toolMeta.safeAlternatives) ? toolMeta.safeAlternatives : [],
       checkHealth: typeof toolMeta.checkHealth === "function" ? toolMeta.checkHealth : () => TOOL_STATUS.OPERATIONAL,
       execute: async (params, context = {}) => {
