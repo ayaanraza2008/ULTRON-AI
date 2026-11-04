@@ -65,7 +65,7 @@ The release candidate `feat/ultron-consolidated-release-candidate` integrates th
 | Subsystem | Readiness Level | Evidence & Verification Mechanism | Truthful Status |
 |---|---|---|---|
 | **Autonomous Brain** | Level 5 (Fully Integrated) | `AutonomousOrchestrator` decomposes user prompts into DAGs. 18 agents, 58 tests pass. | **LIVE_READY** |
-| **Tool Registry** | Level 5 (Fully Integrated) | 28 tools across 7 categories with single-use confirmation tokens. | **LIVE_READY** |
+| **Tool Registry** | Level 5 (Fully Integrated) | 40 tools across categories (live-verified registry size) with single-use confirmation tokens. | **LIVE_READY** |
 | **Direct CDP Browser** | Level 5 (Genuine Control) | Real WebSocket CDP driver controlling local headless Chromium/Edge. 25/25 browser tests pass. | **LIVE_READY** |
 | **Ego Lite Desktop App** | Blocked / External | Host lacks installed Ego Lite standalone Electron binary. System falls back cleanly to Direct CDP. | **BLOCKED / INSTALLATION_REQUIRED** |
 | **Mobile MCP Bridge** | Level 5 (Physical Verified) | Live OPPO CPH2127 / Android 12 verified over Wireless ADB TLS. 43/43 mobile tests pass. | **LIVE_READY** |
