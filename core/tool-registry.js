@@ -254,7 +254,6 @@ export class ToolRegistry {
               { code: "TOOL_TIMEOUT", toolId: tool.id, timeoutMs: tool.timeoutMs }
             ));
           }, tool.timeoutMs);
-          timer.unref?.();
         });
         try {
           const execution = Promise.resolve().then(() =>
