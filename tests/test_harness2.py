@@ -2,7 +2,9 @@ import json, subprocess, sys, tempfile, unittest
 from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools" / "harness2"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "system" / "python-capability-runtime"))
 import harness2
+from capabilities.self_evolution_sandbox import SelfEvolutionSandbox
 
 class Harness2Tests(unittest.TestCase):
     def setUp(self):
@@ -246,5 +248,34 @@ class Harness2Tests(unittest.TestCase):
         self.assertEqual(outside.read_text(encoding="utf-8"), "keep me")
         self.assertTrue(planted_component_tmp.is_symlink())
         self.assertEqual(component.read_text(encoding="utf-8"), "# Updated safely\n")
+
+    def test_python_self_evolution_stays_disabled_without_isolated_execution_sandbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sandbox = SelfEvolutionSandbox(tools_dir=directory)
+            source = "def calculate(value):\\n    return value * 2\\n"
+            result = sandbox.synthesize_tool(
+                tool_id="candidate_calculator",
+                name="Candidate calculator",
+                description="test source",
+                python_code=source,
+            )
+            self.assertFalse(result["success"])
+            self.assertEqual(result["code"], "SELF_EVOLUTION_SANDBOX_UNAVAILABLE")
+            self.assertEqual(result["security_verdict"], "BLOCKED_NO_ISOLATED_SANDBOX")
+            self.assertNotIn("candidate_calculator", sandbox.registry["tools"])
+            self.assertFalse((Path(directory) / "candidate_calculator_v1.py").exists())
+
+    def test_python_self_evolution_still_rejects_unsafe_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sandbox = SelfEvolutionSandbox(tools_dir=directory)
+            result = sandbox.synthesize_tool(
+                tool_id="unsafe_candidate",
+                name="Unsafe candidate",
+                description="test unsafe source",
+                python_code="import os\\nos.system('whoami')\\n",
+            )
+            self.assertFalse(result["success"])
+            self.assertEqual(result["security_verdict"], "REJECTED_UNSAFE")
+            self.assertNotIn("unsafe_candidate", sandbox.registry["tools"])
 
 if __name__ == "__main__": unittest.main()
