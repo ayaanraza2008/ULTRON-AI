@@ -37,6 +37,36 @@ export const AGENT_ROLES = {
 };
 
 const DANGEROUS_PROTOTYPE_KEYS = new Set(["_" + "_proto_" + "_", "constructor", "prototype"]);
+const APPROVAL_TTL_MS = 5 * 60 * 1000;
+
+function stableApprovalSerialize(value, seen = new WeakSet(), depth = 0) {
+  if (depth > 24) throw new TypeError("Approval parameter structure is too deep.");
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Approval parameters contain a non-finite number.");
+    return JSON.stringify(value);
+  }
+  if (typeof value !== "object") throw new TypeError("Approval parameters contain an unsupported value.");
+  if (seen.has(value)) throw new TypeError("Approval parameters contain a circular reference.");
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return "[" + value.map(item => stableApprovalSerialize(item, seen, depth + 1)).join(",") + "]";
+    }
+    const keys = Object.keys(value).sort();
+    return "{" + keys.map(key =>
+      JSON.stringify(key) + ":" + stableApprovalSerialize(value[key], seen, depth + 1)
+    ).join(",") + "}";
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function approvalParametersFingerprint(value) {
+  return crypto.createHash("sha256").update(stableApprovalSerialize(value)).digest("hex");
+}
 
 export function sanitizeToolOutcome(outcome) {
   if (outcome === null || outcome === undefined) return outcome;
@@ -342,7 +372,13 @@ export class AutonomousOrchestrator {
 
         let outcome = null;
         let lastErr = null;
-        const maxAttempts = step.maxRetries || 2;
+        // Approval proofs are single-use. Never retry a privileged action
+        // automatically after dispatch: a failed call may already have caused
+        // an external side effect and requires a fresh explicit approval.
+        const maxAttempts = (tool.requiresConfirmation === true ||
+          Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE)
+          ? 1
+          : (step.maxRetries || 2);
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           let timerId = null;
@@ -515,15 +551,53 @@ export class AutonomousOrchestrator {
               events: collectedEvents
             };
           }
+
+          const approvalExpiry = Date.parse(approval.expiresAt || "");
+          if (!Number.isFinite(approvalExpiry) || Date.now() > approvalExpiry) {
+            approval.consumed = true;
+            approval.status = "EXPIRED";
+            approval.expiredAt = new Date().toISOString();
+            return {
+              success: false,
+              workflowId,
+              status: "APPROVAL_EXPIRED",
+              error: "Approval has expired. Create a new request and approve the exact action again.",
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
+
+          let currentFingerprint;
+          try {
+            currentFingerprint = approvalParametersFingerprint(step.params);
+          } catch {
+            currentFingerprint = null;
+          }
+          if (approval.stepId !== step.id ||
+              Number(approval.permissionLevel) !== Number(tool.permissionLevel) ||
+              approval.actionDescription !== step.description ||
+              !approval.parametersFingerprint ||
+              approval.parametersFingerprint !== currentFingerprint) {
+            return {
+              success: false,
+              workflowId,
+              status: "APPROVAL_ACTION_MISMATCH",
+              error: "The current action does not exactly match the approved step, permission level, and parameter snapshot.",
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
+
           const requestingActor = typeof context.userId === "string" && context.userId.trim()
             ? context.userId.trim()
-            : "operator";
-          if (approval.userId && approval.userId !== requestingActor) {
+            : "";
+          if (!requestingActor || !approval.userId || approval.userId !== requestingActor ||
+              approval.approvedBy !== requestingActor) {
             return {
               success: false,
               workflowId,
               status: "CROSS_USER_ACCESS_DENIED",
-              error: "Cross-user security violation: approval token was granted to a different authenticated user.",
+              error: "Approval must be consumed by the same authenticated owner who requested and approved it.",
               intent: intentAnalysis.intent,
               events: collectedEvents
             };
@@ -1252,6 +1326,15 @@ export class AutonomousOrchestrator {
 
   createApprovalRequest({ workflowId, stepId, toolId, toolName, permissionLevel, actionDescription, parameters, userId = "operator" }) {
     const id = "appr-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex");
+    const createdAt = new Date();
+    let parametersSnapshot = null;
+    let parametersFingerprint = null;
+    try {
+      parametersSnapshot = JSON.parse(JSON.stringify(parameters ?? null));
+      parametersFingerprint = approvalParametersFingerprint(parameters);
+    } catch {
+      throw new TypeError("Approval parameters must be bounded, serializable JSON data.");
+    }
     const req = {
       id,
       userId,
@@ -1261,10 +1344,12 @@ export class AutonomousOrchestrator {
       toolName,
       permissionLevel,
       actionDescription,
-      parameters,
+      parameters: parametersSnapshot,
+      parametersFingerprint,
       status: "PENDING",
       consumed: false,
-      createdAt: new Date().toISOString()
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + APPROVAL_TTL_MS).toISOString()
     };
     this.pendingApprovals.set(id, req);
     return req;
@@ -1278,6 +1363,13 @@ export class AutonomousOrchestrator {
     if (!req) return { success: false, error: "APPROVAL_NOT_FOUND" };
     if (req.status === "INVALIDATED") {
       return { success: false, error: "APPROVAL_INVALIDATED", request: req };
+    }
+    const expiresAt = Date.parse(req.expiresAt || "");
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+      req.status = "EXPIRED";
+      req.consumed = true;
+      req.expiredAt = new Date().toISOString();
+      return { success: false, error: "APPROVAL_EXPIRED", request: req };
     }
     if (req.status === "APPROVED") {
       return { success: false, error: "APPROVAL_ALREADY_RESOLVED", request: req };
