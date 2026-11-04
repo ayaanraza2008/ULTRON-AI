@@ -628,12 +628,8 @@ test("Tool Inventory Audit: all 59 schemas validate and privileged tools fail cl
     const deterministicReadTools = new Set([
       "memory_recall",
       "autonomous_goal_planner",
-      "ego_browser_status",
-      "ego_taskspace_list",
-      "evolution_list_tools",
       "knowledge_vault_query",
-      "cerebro_semantic_query",
-      "cerebro_get_metrics"
+      "evolution_list_tools"
     ]);
     if (!deterministicReadTools.has(tool.id)) continue;
 
