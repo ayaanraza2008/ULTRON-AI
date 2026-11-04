@@ -114,9 +114,10 @@ export class EgoActionExecutor {
   async click(pageId, refOrSelector, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
-    const consequentialClick = /submit|send|pay|purchase|checkout|confirm|accept|authorize|delete|remove|book|reserve|publish|upload|share|invite|sign in|log in/i.test(
-      `${target.name || ""} ${target.text || ""} ${target.role || ""}`
-    );
+    const consequentialClick = target.role === "button" || target.role === "submit" ||
+      /submit|send|pay|purchase|checkout|confirm|accept|authorize|delete|remove|book|reserve|publish|upload|share|invite|sign in|log in/i.test(
+        `${target.name || ""} ${target.text || ""} ${target.role || ""}`
+      );
     await this._authorizeAction(
       EGO_ACTIONS.CLICK,
       target,
@@ -152,7 +153,8 @@ export class EgoActionExecutor {
   async dblclick(pageId, refOrSelector, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
-    await this._authorizeAction(EGO_ACTIONS.DBLCLICK, target, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
+    const level = target.role === "button" || target.role === "submit" ? PERMISSION_LEVELS.LEVEL_4_CRITICAL : PERMISSION_LEVELS.LEVEL_2_INTERACT;
+    await this._authorizeAction(EGO_ACTIONS.DBLCLICK, target, level, options);
 
     let result = { dblclicked: true, target: target.ref || target.selector };
 
@@ -316,7 +318,7 @@ export class EgoActionExecutor {
    * @param {Object} [options={}]
    */
   async mouseClick(pageId, x, y, options = {}) {
-    await this._authorizeAction("mouseClick", { x, y }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
+    await this._authorizeAction("mouseClick", { x, y }, PERMISSION_LEVELS.LEVEL_4_CRITICAL, options);
     if (this.driver && typeof this.driver.mouseClick === "function") {
       return await this.driver.mouseClick(pageId, x, y, options);
     }
@@ -372,10 +374,8 @@ export class EgoActionExecutor {
    * @param {Object} [options={}]
    */
   async press(pageId, key, options = {}) {
-    await this._authorizeAction(EGO_ACTIONS.PRESS, { key }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
-    if (/^(?:Enter|NumpadEnter)$/i.test(String(key)) && options.targetRole === "submit") {
-      await this._authorizeAction("formSubmit", { key }, PERMISSION_LEVELS.LEVEL_4_CRITICAL, options);
-    }
+    const maySubmit = /^(?:Enter|NumpadEnter)$/i.test(String(key));
+    await this._authorizeAction(EGO_ACTIONS.PRESS, { key }, maySubmit ? PERMISSION_LEVELS.LEVEL_4_CRITICAL : PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
     if (this.driver && typeof this.driver.press === "function") {
       return await this.driver.press(pageId, key, options);
     }
