@@ -197,6 +197,22 @@ export class MobileControlEngine extends EventEmitter {
     let result;
     try {
       const toolParams = { ...params, device: deviceId };
+      if (actionName === "mobile_launch_app" || actionName === "mobile_terminate_app") {
+        toolParams.packageName = toolParams.packageName || toolParams.package;
+      }
+      if (actionName === "mobile_swipe_on_screen" && !toolParams.direction) {
+        if (toolParams.startY > toolParams.endY) {
+          toolParams.direction = "up";
+        } else if (toolParams.startY < toolParams.endY) {
+          toolParams.direction = "down";
+        } else if (toolParams.startX > toolParams.endX) {
+          toolParams.direction = "left";
+        } else {
+          toolParams.direction = "right";
+        }
+        if (toolParams.startX !== undefined) toolParams.x = toolParams.startX;
+        if (toolParams.startY !== undefined) toolParams.y = toolParams.startY;
+      }
       result = await this.mcpClient.callTool(actionName, toolParams);
     } catch (err) {
       this.emit("action_failed", { action: actionName, deviceId, error: err.message });

@@ -313,22 +313,21 @@ export class AdbBridge {
    * Determine currently focused foreground package and activity.
    */
   async getForegroundApp(deviceId) {
-    const res = await this.execDevice(deviceId, ["shell", "dumpsys", "window", "windows"]);
-    if (!res.success) {
-      // Fallback to activity command
-      const actRes = await this.execDevice(deviceId, ["shell", "dumpsys", "activity", "activities"]);
-      if (actRes.success && actRes.stdout) {
-        const match = actRes.stdout.match(/mResumedActivity:\s*ActivityRecord\{[^}]+\s+([a-zA-Z0-9_.]+)\/([a-zA-Z0-9_.]+)/);
-        if (match) {
-          return { packageName: match[1], activity: match[2] };
-        }
+    const res = await this.execDevice(deviceId, ["shell", "dumpsys", "window"]);
+    if (res.success && res.stdout) {
+      const parsed = this.parseForegroundActivity(res.stdout);
+      if (parsed && parsed.package) {
+        return { packageName: parsed.package, activity: parsed.activity };
       }
-      return { packageName: "unknown", activity: "unknown" };
     }
 
-    const match = res.stdout.match(/mCurrentFocus=[^}]*\s+([a-zA-Z0-9_.]+)\/([a-zA-Z0-9_.]+)/);
-    if (match) {
-      return { packageName: match[1], activity: match[2] };
+    // Fallback to activity command
+    const actRes = await this.execDevice(deviceId, ["shell", "dumpsys", "activity", "activities"]);
+    if (actRes.success && actRes.stdout) {
+      const parsed = this.parseForegroundActivity(actRes.stdout);
+      if (parsed && parsed.package) {
+        return { packageName: parsed.package, activity: parsed.activity };
+      }
     }
 
     return { packageName: "unknown", activity: "unknown" };

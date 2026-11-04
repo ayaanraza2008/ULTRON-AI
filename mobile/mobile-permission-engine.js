@@ -180,10 +180,12 @@ export class MobilePermissionEngine extends EventEmitter {
   requestConfirmation(action, params = {}, reason = "") {
     const token = crypto.randomUUID();
     const expiresAt = Date.now() + this.tokenTtlMs;
+    const deviceId = params.device || params.deviceId || null;
     const req = {
       token,
       action,
       params,
+      deviceId,
       reason,
       expiresAt,
       requestedAt: Date.now()
@@ -222,7 +224,7 @@ export class MobilePermissionEngine extends EventEmitter {
    * Check whether a requested action on a device is permitted.
    */
   async checkPermission(actionName, params = {}, deviceId, userId = "system", confirmationToken = null) {
-    const requiredLevel = ACTION_PERMISSION_TIERS[actionName] || MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+    let requiredLevel = ACTION_PERMISSION_TIERS[actionName] || MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
 
     // 1. Device Authorization Check
     const auth = this.deviceAuthorizations.get(deviceId);
@@ -247,8 +249,7 @@ export class MobilePermissionEngine extends EventEmitter {
     if (targetPkg && SENSITIVE_PACKAGES.includes(targetPkg)) {
       if (requiredLevel < MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL) {
         // Upgrade to critical if interacting with sensitive application
-        return this._requireConfirmation(actionName, params, deviceId, userId,
-          `Interaction with sensitive application '${targetPkg}' requires explicit user confirmation.`);
+        requiredLevel = MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL;
       }
     }
 
@@ -275,8 +276,10 @@ export class MobilePermissionEngine extends EventEmitter {
     // 4. Critical Tier / Level 4: Requires Single-Use Confirmation Token
     if (requiredLevel === MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL || auth.maxLevel < requiredLevel) {
       if (!confirmationToken) {
-        return this._requireConfirmation(actionName, params, deviceId, userId,
-          `Action '${actionName}' is classified as Critical (Level 4) and requires human authorization.`);
+        const reason = (targetPkg && SENSITIVE_PACKAGES.includes(targetPkg))
+          ? `Interaction with sensitive application '${targetPkg}' requires explicit user confirmation.`
+          : `Action '${actionName}' is classified as Critical (Level 4) and requires human authorization.`;
+        return this._requireConfirmation(actionName, params, deviceId, userId, reason);
       }
 
       // Validate single-use confirmation token
@@ -367,7 +370,7 @@ export class MobilePermissionEngine extends EventEmitter {
       return { valid: false, reason: `Token action mismatch: expected '${expectedAction}', found '${pending.action}'` };
     }
 
-    if (pending.deviceId !== expectedDeviceId) {
+    if (pending.deviceId && pending.deviceId !== expectedDeviceId) {
       return { valid: false, reason: `Token device mismatch: expected '${expectedDeviceId}', found '${pending.deviceId}'` };
     }
 
