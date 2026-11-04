@@ -76,7 +76,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["integrations", /\b(?:integration status|check integrations|what integrations|connected services|capability status|provider status|list capabilities|which tools are available|tools available for|connector readiness|repository readiness)\b/i],
   ["planning", /\b(?:plan (?:my|the|a|an)|create a plan|multi[- ]step task|schedule (?:a|an|the) (?:task|employee|routine)|background task|enqueue task|queue (?:a |the |this )?(?:background )?(?:research |review |report |task|employee)|queue .*\b(?:background|research|review|report|task)\b|\b(?:background|queue|enqueue)\b.{0,80}\b(?:task|report|research|review|employee)\b|run this in the background)\b/i],
   ["browser", /\b(?:obscura|public web page snapshot|capture this public page)\b/i],
-  ["media", /\b(?:immich|photo library|video library|search my photos|search my videos|albums?|talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
+  ["media", /\b(?:immich|photo library|video library|search my photos|search my videos|photo albums|video albums|list my albums|talking avatar|synthetic voice|voice clone|generate media|make a video|create an image|image generation)\b/i]
 ]);
 
 const COMPLEX_PATTERN = /\b(?:then|after that|step by step|multi[- ]step|end to end|from scratch|complete project|across multiple|and also|and then|first .* then|workflow|autonomously|queue (?:a |the |an )?(?:task|report|research))\b/i;
