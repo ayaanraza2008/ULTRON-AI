@@ -138,6 +138,7 @@ const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
   "hexstrike_scan",
   "openviking_find_context",
   "openviking_read_context",
+  "check_appflowy",
   "appflowy_list_workspaces",
   "appflowy_get_document",
   "immich_check_status",
@@ -504,6 +505,7 @@ const SAFE_PREPARATION_TOOLS = new Set([
   "check_desktop_companion",
   "check_repository_capabilities",
   "check_openviking",
+  "check_appflowy",
   "check_hermes_agent",
   "check_comfyui",
   "obscura_inspect_public_page",
@@ -724,6 +726,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
 
   const tools = [
     { type: "function", function: { name: "chatwoot_list_conversations", description: "Read-only: list recent Chatwoot conversations for ULTRON's configured owner account. Does not send replies, change status, or expose contact email/phone.", parameters: { type: "object", properties: { status: { type: "string", enum: ["open", "pending", "resolved", "all"] }, limit: { type: "integer", minimum: 1, maximum: 20 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "check_appflowy", description: "Read-only: check the configured owner AppFlowy connection and authorization state. Does not read workspace content or contact the upstream service.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "appflowy_list_workspaces", description: "Private, read-only: list the signed-in owner's AppFlowy workspaces. Requires explicit user approval and the configured owner account. Never creates or changes workspace data.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
     { type: "function", function: { name: "appflowy_get_document", description: "Private, read-only: read one AppFlowy document by ID from the configured owner's workspace. Requires explicit user approval. Never edits or deletes documents.", parameters: { type: "object", properties: { documentId: { type: "string", minLength: 1, maxLength: 128 } }, required: ["documentId"], additionalProperties: false } } },
     { type: "function", function: { name: "immich_check_status", description: "Owner-scoped read-only: check the configured Immich server version and reachability. Does not read photo content.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
@@ -1100,6 +1103,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (name === "check_openviking") return getOpenVikingReadiness({ env, userId: req.supabaseUser?.id });
     if (name === "openviking_find_context") return findOpenVikingContext({ env, userId: req.supabaseUser?.id, query: args.query, limit: args.limit, targetUri: args.targetUri, fetchImpl });
     if (name === "openviking_read_context") return readOpenVikingContext({ env, userId: req.supabaseUser?.id, uri: args.uri, fetchImpl });
+    if (name === "check_appflowy") return getAppFlowyReadiness({ env, userId: req.supabaseUser?.id });
     if (name === "appflowy_list_workspaces") return appflowyListWorkspaces({ env, userId: req.supabaseUser?.id, fetchImpl });
     if (name === "appflowy_get_document") return appflowyGetDocument({ documentId: args.documentId, env, userId: req.supabaseUser?.id, fetchImpl });
     if (name.startsWith("immich_")) {
@@ -1533,6 +1537,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       tools: [
         { name: "agentmemory", available: agentMemoryReadiness(env).configured, execution: "automatic_task_relevant_recall_and_bounded_durable_capture" },
         { name: "openviking_context", available: getOpenVikingReadiness({ env, userId: req.supabaseUser?.id }).configured && getOpenVikingReadiness({ env, userId: req.supabaseUser?.id }).ownerAuthorized === true, execution: "owner_scoped_read_only_context_search_and_read_no_writes" },
+        { name: "check_appflowy", available: Boolean(appflowyReadiness.configured && appflowyReadiness.ownerAuthorized), state: appflowyReadiness.state, execution: "owner_scoped_configuration_status_no_private_data_read" },
         { name: "appflowy_list_workspaces", available: Boolean(appflowyReadiness.configured && appflowyReadiness.ownerAuthorized), state: appflowyReadiness.state, execution: "owner_scoped_private_read_requires_explicit_approval" },
         { name: "appflowy_get_document", available: Boolean(appflowyReadiness.configured && appflowyReadiness.ownerAuthorized), state: appflowyReadiness.state, execution: "owner_scoped_private_document_read_requires_explicit_approval" },
         { name: "immich_check_status", available: Boolean(immichReadiness.configured && integrationOwnerAuthorized), state: integrationOwnerAuthorized ? immichReadiness.state : "owner_only", execution: "owner_scoped_read_only_server_health" },
