@@ -574,6 +574,22 @@ export function parseOpenSeoSpendApproval(value) {
   return Number.isSafeInteger(ceiling) && ceiling >= 1 && ceiling <= 5000 ? ceiling : null;
 }
 
+/**
+ * Private workspace/media reads require a current-message attestation. The
+ * model cannot create consent through tool arguments or prior conversation.
+ */
+export function parsePrivateDataReadApproval(value, integration) {
+  const text = typeof value === "string" ? value.slice(0, 6000) : "";
+  const patterns = {
+    appflowy: /^\s*i approve reading my appflowy workspace and documents for this request(?:[.!?](?:\s|$)|$)/i,
+    immich: /^\s*i approve reading my immich photo and video metadata for this request(?:[.!?](?:\s|$)|$)/i
+  };
+  const pattern = patterns[integration];
+  const match = pattern?.exec(text);
+  if (!match) return false;
+  return !/\b(?:do not|don't|never|not anymore|withdraw\w*|revoke\w*|cancel\w*|hold off|wait|stop|changed my mind)\b/i.test(text.slice(match[0].length));
+}
+
 function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "browser_use") delegatedTask = args?.task;
@@ -585,12 +601,16 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   // Workspace documents and personal media are private data. Require an
   // explicit user approval even when the prompt itself is phrased casually.
   if (PRIVATE_DATA_READ_TOOLS.has(name)) {
+    const integration = name.startsWith("appflowy_") ? "appflowy" : "immich";
+    const approved = parsePrivateDataReadApproval(requestText, integration);
     return {
-      requiresConfirmation: true,
+      requiresConfirmation: !approved,
       risk: {
         level: "private_data",
-        reason: "Owner-scoped private workspace/media access requires explicit approval.",
-        requiresConfirmation: true
+        reason: approved
+          ? "The current user message contains the exact private-data read approval attestation."
+          : "Owner-scoped private workspace/media access requires an exact current-message approval attestation.",
+        requiresConfirmation: !approved
       }
     };
   }
