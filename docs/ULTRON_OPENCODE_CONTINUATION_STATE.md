@@ -46,7 +46,9 @@ Dozens of additional open/draft PRs exist (full list via `gh pr list`). None mer
 - Syntax verification: `npm run check` -> **367/367 files clean**.
 - Secret scan: `npm run security:secrets` -> **0 findings** (1,653 files, 1,396,807 lines, 30 commits).
 - SAST scan: `npm run security:sast` -> **0 findings** (239 files, 92,434 lines).
-- Test suite (before fixes): **1,460 tests, 1,453 pass, 2 fail**.
+- Test suite (after fixes): **1,460 tests, 1,455 pass, 0 fail, 5 skipped** (87.99s). Mobile tests 33/33 pass; edge-tts/companion/command-security 35/35 pass.
+- PR #441 CI: latest completed run `41820731210` = **failure** (security(windows): block symlink escape); newer pushes in progress. Candidate branch not merged.
+- Mobile MCP software tests pass (33/33); physical device acceptance blocked (no ADB/mobilecli binary on PATH).
   - Failure 1: `tests/adversarial-autonomy-hardening.test.js:485` — tool inventory expected 23, actual 30 (new desktop/browser/voice tools).
   - Failure 2: `tests/computer-device.test.js:76` — allowlist rejection masked by the new destructive-confirmation gate.
 - Fixes applied (uncommitted):

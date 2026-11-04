@@ -40,5 +40,10 @@
 - Apply least-privilege RLS review before production merge.
 - Do not merge PR #441 or deploy without owner authorization.
 
-## 8. Verdict
-Local repository is clean of secrets and SAST findings. No production changes made. Security posture unchanged from candidate baseline.
+## 8. Test evidence
+- Full suite: **1,460 tests, 1,455 pass, 0 fail, 5 skipped** (87.99s).
+- Syntax: 367/367 clean.
+- Secrets: 0 findings; SAST: 0 findings.
+
+## 9. Verdict
+Local repository is clean of secrets and SAST findings. No production changes made. Security posture unchanged from candidate baseline. All tests green.

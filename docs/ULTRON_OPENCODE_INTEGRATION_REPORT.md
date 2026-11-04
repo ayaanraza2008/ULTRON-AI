@@ -17,6 +17,7 @@
 - `gh` CLI installed and authenticated as `ayaanraza2008` (scopes: gist, read:org, repo, workflow).
 - Remote `origin` HTTPS; branches/PRs/CI readable.
 - Open PRs inspected (top: #443, #442, #441, #440, #439).
+- PR #441 CI: latest completed run `41820731210` = failure (security(windows) symlink escape); newer pushes in progress. Not merged.
 
 ### Render
 - No Render CLI or `RENDER_API_KEY` in local environment.
@@ -69,7 +70,7 @@ Not exercised from OpenCode in this session (no MCP tool calls made).
 | AppFlowy | Not configured |
 | Obscura | Not configured |
 | Cactus Compute | Not configured (local-first, no weights auto-download) |
-| Mobile MCP / Android | Implemented (software scope; physical device out of scope) |
+| Mobile MCP / Android | Implemented (software scope; 33/33 tests pass; physical device blocked: no ADB/mobilecli on PATH) |
 | Windows companion | Implemented (build verified in CI) |
 
 ## 4. Architecture preserved
