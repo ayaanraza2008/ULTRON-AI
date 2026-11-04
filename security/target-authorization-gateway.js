@@ -30,8 +30,8 @@ export const PERMITTED_ACTIVITIES = {
 function normalizeUrlPath(value = "/") {
   let decoded = String(value || "/");
   try { decoded = decodeURIComponent(decoded); } catch {}
-  const normalized = path.posix.normalize("/" + decoded.replace(/\\/g, "/").replace(/^\\/+/, ""));
-  return normalized.length > 1 ? normalized.replace(/\\/+$/, "") : "/";
+  const normalized = path.posix.normalize("/" + decoded.replace(/\\/g, "/").replace(/^\/+/, ""));
+  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : "/";
 }
 
 function isFilesystemTarget(value) {
@@ -57,16 +57,17 @@ function parseAuthorizedTarget(value) {
   }
 
   const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
-  let urlInput = raw;
-  if (!hasExplicitScheme) {
-    urlInput = raw === "::1" ? "http://[::1]" : raw.startsWith("[") ? "http://" + raw : "http://" + raw;
-  }
+  const urlInput = hasExplicitScheme
+    ? raw
+    : raw === "::1"
+      ? "http://[::1]"
+      : "http://" + raw;
   try {
     const parsed = new URL(urlInput);
     if (!parsed.hostname) return { kind: "opaque", value: raw };
     return {
       kind: "host",
-      hostname: parsed.hostname.replace(/^\\[|\\]$/g, "").replace(/\\.$/, ""),
+      hostname: parsed.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, ""),
       port: parsed.port || "",
       protocol: hasExplicitScheme ? parsed.protocol : "",
       pathname: normalizeUrlPath(parsed.pathname)
@@ -88,7 +89,7 @@ function targetMatches(scopeTarget, requestedTarget) {
   if (scope.kind === "path") return isWithinPath(requested.value, scope.value);
   if (scope.kind === "scheme") {
     if (scope.value === "memory://") return requested.value.startsWith("memory://");
-    return requested.value === scope.value || requested.value.startsWith(scope.value.replace(/\\/+$/, "") + "/");
+    return requested.value === scope.value || requested.value.startsWith(scope.value.replace(/\/+$/, "") + "/");
   }
   if (scope.kind === "opaque") return scope.value === requested.value;
   if (scope.kind !== "host") return false;
@@ -96,7 +97,7 @@ function targetMatches(scopeTarget, requestedTarget) {
   const hostMatches = requested.hostname === scope.hostname || requested.hostname.endsWith("." + scope.hostname);
   if (!hostMatches) return false;
   if (scope.port && requested.port !== scope.port) return false;
-  if (scope.protocol && requested.protocol && requested.protocol !== scope.protocol) return false;
+  if (scope.protocol && requested.protocol !== scope.protocol) return false;
   return scope.pathname === "/" || isWithinPath(requested.pathname, scope.pathname);
 }
 
