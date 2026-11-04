@@ -48,6 +48,8 @@ export class ProactiveCommunicationEngine {
     this.clock = options.clock || (() => new Date());
     this.outboundTelephony = options.outboundTelephony || null;
     this.emergencyContacts = new Map();
+    this.duplicateCooldownMs = options.duplicateCooldownMs ?? 5000;
+    this.recentDispatches = new Map();
     const envChannels = String(options.adapterIds || this.env.ULTRON_NOTIFICATION_ADAPTERS || "");
     this.defaultAdapterIds = envChannels.split(",").map(s => s.trim()).filter(Boolean);
   }
@@ -155,6 +157,29 @@ export class ProactiveCommunicationEngine {
       delivered: false,
       deliveryStatus: "NOT_DISPATCHED"
     };
+
+    // Deduplication check: Suppress identical non-emergency notifications within cooldown window
+    const dedupeKey = `${ownerUserId || "broadcast"}:${String(title || "").trim()}:${String(body || "").trim()}`;
+    const now = Date.now();
+    const lastDispatchedAt = this.recentDispatches.get(dedupeKey);
+    if (!isEmergency && lastDispatchedAt && (now - lastDispatchedAt < this.duplicateCooldownMs)) {
+      return {
+        status: "SUPPRESSED",
+        reason: "DUPLICATE_NOTIFICATION_COOLDOWN",
+        suppressed: true,
+        notification,
+        deliveries: [],
+        windowDecision: { allowed: true, policyActive: false, reason: "DUPLICATE_SUPPRESSED" },
+        effectivePriority,
+        isEmergency
+      };
+    }
+    this.recentDispatches.set(dedupeKey, now);
+    if (this.recentDispatches.size > 500) {
+      for (const [k, ts] of this.recentDispatches.entries()) {
+        if (now - ts > this.duplicateCooldownMs * 2) this.recentDispatches.delete(k);
+      }
+    }
 
     const channelIdsToUse = Array.isArray(channelIds)
       ? channelIds

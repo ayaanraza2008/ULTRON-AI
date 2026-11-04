@@ -25,6 +25,15 @@ export const CALL_STATES = {
   FAILED: "FAILED"
 };
 
+export const CALL_LIFECYCLE_TIERS = {
+  SIMULATED: "SIMULATED",
+  PROVIDER_ACCEPTED: "PROVIDER_ACCEPTED",
+  RINGING: "RINGING",
+  CONNECTED: "CONNECTED",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED"
+};
+
 export const CALLER_AUTH_STATUS = {
   VERIFIED_OWNER: "VERIFIED_OWNER",
   PIN_REQUIRED: "PIN_REQUIRED",
@@ -49,6 +58,12 @@ export class TelephonyGateway {
     // Owner-scoped emergency contact allowlist (destination numbers for EMERGENCY calls).
     this.emergencyContacts = new Map();
     this.ownerCallerId = this.normalizePhoneNumber(options.ownerCallerId || Array.from(this.ownerPhoneNumbers)[0] || "");
+    // Rate-limiting for outbound proactive calls (max 5 calls per minute by default)
+    this.rateLimitWindowMs = options.rateLimitWindowMs || 60000;
+    this.maxCallsPerWindow = options.maxCallsPerWindow || 5;
+    this.callTimestamps = [];
+    // Audit log for consent changes
+    this.consentAuditLog = [];
   }
 
   /**
@@ -68,6 +83,13 @@ export class TelephonyGateway {
       allowEmergency: Boolean(allowEmergency),
       updatedAt: new Date().toISOString()
     });
+    this.consentAuditLog.push({
+      timestamp: new Date().toISOString(),
+      ownerUserId: ownerKey,
+      action: enabled ? "GRANT_CONSENT" : "REVOKE_CONSENT",
+      phoneNumbers: Array.from(normalizedNumbers),
+      allowEmergency: Boolean(allowEmergency)
+    });
     return {
       success: true,
       ownerUserId: ownerKey,
@@ -75,6 +97,10 @@ export class TelephonyGateway {
       phoneNumbers: Array.from(normalizedNumbers),
       allowEmergency: Boolean(allowEmergency)
     };
+  }
+
+  getConsentAuditLog(limit = 50) {
+    return this.consentAuditLog.slice(-limit);
   }
 
   setEmergencyContacts(ownerUserId, contacts = []) {
@@ -127,6 +153,21 @@ export class TelephonyGateway {
       return { success: false, blocked: true, reason: "OUTBOUND_CALL_TARGET_NOT_AUTHORIZED", ownerUserId: ownerKey, to: destination, type: normalizedType };
     }
 
+    // Rate-limiting check (unless EMERGENCY)
+    const now = Date.now();
+    this.callTimestamps = this.callTimestamps.filter(t => now - t < this.rateLimitWindowMs);
+    if (!isEmergency && this.callTimestamps.length >= this.maxCallsPerWindow) {
+      return {
+        success: false,
+        blocked: true,
+        reason: "OUTBOUND_CALL_RATE_LIMIT_EXCEEDED",
+        ownerUserId: ownerKey,
+        to: destination,
+        type: normalizedType
+      };
+    }
+    this.callTimestamps.push(now);
+
     const callId = "call-" + crypto.randomUUID();
     const callRecord = {
       callId,
@@ -136,6 +177,7 @@ export class TelephonyGateway {
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       state: CALL_STATES.RINGING,
+      tier: CALL_LIFECYCLE_TIERS.RINGING,
       reason: String(reason || (isEmergency ? "EMERGENCY_ALERT" : "PROACTIVE_ALERT")),
       context: context || {},
       type: normalizedType,
@@ -154,12 +196,29 @@ export class TelephonyGateway {
       callId,
       direction: "OUTBOUND",
       state: callRecord.state,
+      tier: callRecord.tier,
       from: callRecord.from,
       to: destination,
       reason: callRecord.reason,
       context: callRecord.context,
       type: normalizedType
     };
+  }
+
+  /**
+   * Advances a ringing call to CONNECTED state.
+   */
+  answerCall(callId) {
+    const call = this.activeCalls.get(callId);
+    if (!call) return { success: false, reason: "CALL_NOT_FOUND" };
+    if (call.state !== CALL_STATES.RINGING) {
+      return { success: false, reason: "INVALID_CALL_STATE", state: call.state };
+    }
+    call.state = CALL_STATES.CONNECTED;
+    call.tier = CALL_LIFECYCLE_TIERS.CONNECTED;
+    call.connectedAt = new Date().toISOString();
+    call.updatedAt = call.connectedAt;
+    return { success: true, callId, state: call.state, tier: call.tier };
   }
 
   normalizePhoneNumber(phone) {
@@ -360,7 +419,9 @@ export class TelephonyGateway {
     if (!call) return { success: false, error: "CALL_NOT_FOUND" };
 
     call.state = CALL_STATES.COMPLETED;
+    call.tier = CALL_LIFECYCLE_TIERS.COMPLETED;
     call.endedAt = new Date().toISOString();
+    call.updatedAt = call.endedAt;
     call.terminationReason = reason;
 
     this.callHistory.unshift(call);
@@ -372,6 +433,9 @@ export class TelephonyGateway {
     return {
       success: true,
       callId,
+      state: call.state,
+      tier: call.tier,
+      reason,
       durationSeconds: Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000),
       transcriptCount: call.transcript.length
     };

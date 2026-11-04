@@ -59,6 +59,7 @@ export class ByoxTaskLeaseWorker {
       payload,
       status: 'PENDING',
       priority: options.priority || 1, // higher number = higher priority
+      dependencies: Array.isArray(options.dependencies) ? options.dependencies : [],
       retries: 0,
       maxRetries: options.maxRetries || this.maxRetries,
       leaseWorkerId: null,
@@ -99,7 +100,10 @@ export class ByoxTaskLeaseWorker {
         this.stats.reclaimed++;
       }
 
-      if (task.status === 'PENDING') {
+      const areDepsSatisfied = !task.dependencies || task.dependencies.length === 0 ||
+        task.dependencies.every(depId => this.completedTasks.has(depId));
+
+      if (task.status === 'PENDING' && areDepsSatisfied) {
         if (!bestCandidate || task.priority > bestCandidate.priority || 
            (task.priority === bestCandidate.priority && task.createdAt < bestCandidate.createdAt)) {
           bestCandidate = task;
@@ -202,6 +206,52 @@ export class ByoxTaskLeaseWorker {
     this.stats.redriven++;
 
     return { success: true, taskId, status: 'REDRIVEN' };
+  }
+
+  /**
+   * Cancel an active or pending task.
+   */
+  cancelTask(taskId, reason = 'USER_CANCELLED') {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      if (this.completedTasks.has(taskId)) {
+        return { success: false, reason: 'ALREADY_COMPLETED' };
+      }
+      return { success: false, reason: 'TASK_NOT_FOUND' };
+    }
+    task.status = 'CANCELLED';
+    task.cancelledAt = Date.now();
+    task.cancellationReason = reason;
+    this.tasks.delete(taskId);
+    this.completedTasks.set(taskId, task);
+    this.stats.cancelled = (this.stats.cancelled || 0) + 1;
+    return { success: true, taskId, status: 'CANCELLED', reason };
+  }
+
+  /**
+   * Export internal state for crash recovery persistence.
+   */
+  exportState() {
+    return {
+      tasks: Array.from(this.tasks.entries()),
+      idempotencyIndex: Array.from(this.idempotencyIndex.entries()),
+      dlq: Array.from(this.dlq.entries()),
+      completedTasks: Array.from(this.completedTasks.entries()),
+      stats: { ...this.stats }
+    };
+  }
+
+  /**
+   * Import recovered state from WAL or snapshot.
+   */
+  importState(state = {}) {
+    if (!state) return this;
+    if (Array.isArray(state.tasks)) this.tasks = new Map(state.tasks);
+    if (Array.isArray(state.idempotencyIndex)) this.idempotencyIndex = new Map(state.idempotencyIndex);
+    if (Array.isArray(state.dlq)) this.dlq = new Map(state.dlq);
+    if (Array.isArray(state.completedTasks)) this.completedTasks = new Map(state.completedTasks);
+    if (state.stats) this.stats = { ...this.stats, ...state.stats };
+    return this;
   }
 
   /**
