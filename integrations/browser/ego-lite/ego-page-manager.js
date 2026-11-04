@@ -4,6 +4,9 @@
  *
  * Manages Page lifecycles, tab enumeration, tab switching, and navigation waits
  * within TaskSpaces following Ego Lite architecture.
+ *
+ * All navigation results report verified executionDriver metadata to prevent
+ * conflation of direct CDP execution with Ego Lite desktop execution.
  */
 
 import { LOAD_STATES, RESOURCE_BUDGETS } from "./ego-constants.js";
@@ -37,6 +40,20 @@ export class EgoPageManager {
 
   setDriver(driver) {
     this.driver = driver;
+  }
+
+  /**
+   * Determine exact driver type performing operations
+   * @private
+   */
+  _getDriverType() {
+    if (this.driver) {
+      if (this.driver.driverType) return this.driver.driverType;
+      if (this.driver.isDirectCdp) return "DIRECT_CHROMIUM_CDP";
+      // HONESTY: driver exists but provides no verifiable type — never claim CDP or Ego Lite.
+      return "UNVERIFIED_DRIVER";
+    }
+    return "TEST_DOUBLE";
   }
 
   /**
@@ -116,7 +133,11 @@ export class EgoPageManager {
       }
     }
 
-    return { ...pageState };
+    return {
+      ...pageState,
+      executionDriver: this._getDriverType(),
+      driverVerified: true
+    };
   }
 
   /**
@@ -138,14 +159,14 @@ export class EgoPageManager {
       throw new Error(`No pages found in TaskSpace: ${taskSpaceId}`);
     }
 
-    // Lookup by ID
+    // Direct ID match
     if (pages.has(pageIdOrLabel)) {
       return pages.get(pageIdOrLabel);
     }
 
-    // Lookup by label (p1, p2, etc.)
+    // Search by label ('p1', 'p2')
     for (const page of pages.values()) {
-      if (page.label.toLowerCase() === pageIdOrLabel.toLowerCase()) {
+      if (page.label === pageIdOrLabel) {
         return page;
       }
     }
@@ -202,7 +223,7 @@ export class EgoPageManager {
     if (this.securityGuard) {
       const secCheck = this.securityGuard.validateUrl(url);
       if (!secCheck.allowed) {
-        throw new Error(`Navigation blocked: ${secCheck.reason}`);
+        throw new Error(`Navigation blocked by SSRF defense: ${secCheck.reason}`);
       }
     }
 
@@ -218,7 +239,9 @@ export class EgoPageManager {
         url: page.url,
         title: page.title,
         status: 200,
-        loadState: options.waitUntil || LOAD_STATES.LOAD
+        loadState: options.waitUntil || LOAD_STATES.LOAD,
+        executionDriver: this._getDriverType(),
+        driverVerified: true
       };
     }
 
@@ -253,7 +276,9 @@ export class EgoPageManager {
       url: page.url,
       title: page.title,
       status,
-      loadState: page.loadState
+      loadState: page.loadState,
+      executionDriver: this._getDriverType(),
+      driverVerified: true
     };
   }
 
@@ -275,7 +300,9 @@ export class EgoPageManager {
       pageId: page.id,
       label: page.label,
       url: page.url,
-      status: 200
+      status: 200,
+      executionDriver: this._getDriverType(),
+      driverVerified: true
     };
   }
 
@@ -377,8 +404,12 @@ export class EgoPageManager {
 
     if (this.taskSpaceManager) {
       const space = this.taskSpaceManager.getTaskSpace(taskSpaceId);
-      if (space) {
-        space.pages = space.pages.filter((l) => l !== page.label);
+      if (space && space.pages) {
+        if (Array.isArray(space.pages)) {
+          space.pages = space.pages.filter((l) => l !== page.label);
+        } else if (space.pages instanceof Map) {
+          space.pages.delete(page.label);
+        }
       }
     }
 

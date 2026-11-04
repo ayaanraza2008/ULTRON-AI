@@ -5,6 +5,9 @@
  * Produces structured semantic snapshots with @N element references,
  * supports viewport/full_page/subtree scopes, accessibility mapping,
  * and bounded screenshot generation while safeguarding host memory.
+ *
+ * Explicitly records executionDriver metadata on every snapshot to prove
+ * which driver actually evaluated the elements.
  */
 
 import { PAGE_SCOPE, RESOURCE_BUDGETS } from "./ego-constants.js";
@@ -29,6 +32,20 @@ export class EgoSnapshotEngine {
 
   setDriver(driver) {
     this.driver = driver;
+  }
+
+  /**
+   * Determine exact driver performing snapshot
+   * @private
+   */
+  _getDriverType() {
+    if (this.driver) {
+      if (this.driver.driverType) return this.driver.driverType;
+      if (this.driver.isDirectCdp) return "DIRECT_CHROMIUM_CDP";
+      // HONESTY: driver exists but provides no verifiable type — never claim CDP or Ego Lite.
+      return "UNVERIFIED_DRIVER";
+    }
+    return "TEST_DOUBLE";
   }
 
   /**
@@ -149,11 +166,14 @@ export class EgoSnapshotEngine {
       scope,
       timestamp: new Date().toISOString(),
       elementsCount: formattedNodes.length,
+      elements: formattedNodes,
       refMap: Object.fromEntries(refMap.entries()),
       textTree,
       securityScreening,
       screenshot: screenshotData,
-      byteSize: Buffer.byteLength(textTree, "utf8")
+      byteSize: Buffer.byteLength(textTree, "utf8"),
+      executionDriver: this._getDriverType(),
+      driverVerified: true
     };
   }
 

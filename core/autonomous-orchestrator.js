@@ -607,6 +607,14 @@ export class AutonomousOrchestrator {
   }
 
   /**
+   * Execute autonomous command end-to-end
+   * Alias for processUserRequest to support autonomous execution workflows
+   */
+  async executeAutonomousCommand(prompt, context = {}) {
+    return await this.processUserRequest(prompt, context);
+  }
+
+  /**
    * Intent Analysis: detects domain, command type, language, and required agent roles.
    */
   analyzeIntent(prompt, context = {}) {
@@ -664,6 +672,11 @@ export class AutonomousOrchestrator {
     // Cybersecurity Assessment
     if (/\b(security|vulnerability|audit|cve|threat|scan dependencies|secret scan)\b/i.test(text)) {
       return { intent: "SECURITY_DEFENSE_SCAN", domain: "SECURITY", language, confidence: 0.90 };
+    }
+
+    // Autonomous Browser Navigation & Research
+    if (/\b(browse|browser task|navigate to|open website|open url|snapshot page|web snapshot|inspect webpage|autonomous browse|ego browser)\b/i.test(text) || /^https?:\/\//i.test(text)) {
+      return { intent: "AUTONOMOUS_BROWSER_OPERATION", domain: "AUTONOMOUS_OPERATIONS", language, confidence: 0.94 };
     }
 
     // Cross-Device Mobile / PC Sync
@@ -860,6 +873,37 @@ export class AutonomousOrchestrator {
         break;
       }
 
+      case "AUTONOMOUS_BROWSER_OPERATION": {
+        const urlMatch = prompt.match(/https?:\/\/[^\s]+/i);
+        const targetUrl = urlMatch ? urlMatch[0] : "https://example.com";
+        plan.steps.push({
+          id: "step-1",
+          dependsOn: [],
+          toolId: "intelligent_browser_route",
+          agent: AGENT_ROLES.RESEARCH_SCHOLAR,
+          description: `Route browser task for ${targetUrl}`,
+          params: { type: "taskspace", url: targetUrl, description: prompt }
+        });
+        plan.steps.push({
+          id: "step-2",
+          dependsOn: ["step-1"],
+          toolId: "ego_page_navigate",
+          agent: AGENT_ROLES.RESEARCH_SCHOLAR,
+          description: `Navigate to target URL: ${targetUrl}`,
+          params: { url: targetUrl }
+        });
+        plan.steps.push({
+          id: "step-3",
+          dependsOn: ["step-2"],
+          toolId: "ego_page_snapshot",
+          agent: AGENT_ROLES.RESEARCH_SCHOLAR,
+          description: `Capture semantic snapshot with @N element refs for ${targetUrl}`,
+          params: {}
+        });
+        plan.estimatedTimeMs = 4000;
+        break;
+      }
+
       default: {
         plan.steps.push({
           id: "step-1",
@@ -939,6 +983,19 @@ export class AutonomousOrchestrator {
 
       case "SECURITY_DEFENSE_SCAN": {
         return "Defensive security scan completed. All scanned dependencies, secrets, and configurations passed with zero critical anomalies.";
+      }
+
+      case "AUTONOMOUS_BROWSER_OPERATION": {
+        const navStep = stepResults.find(s => s.toolId === "ego_page_navigate");
+        const snapStep = stepResults.find(s => s.toolId === "ego_page_snapshot");
+        const routeStep = stepResults.find(s => s.toolId === "intelligent_browser_route");
+        const targetUrl = navStep?.outcome?.navigation?.url || navStep?.outcome?.url || "the target page";
+        const title = navStep?.outcome?.navigation?.title || navStep?.outcome?.title || "";
+        const driver = navStep?.outcome?.executionDriver || snapStep?.outcome?.executionDriver || routeStep?.outcome?.route?.engineTier || "AUTONOMOUS_ROUTER";
+        const elementsCount = snapStep?.outcome?.snapshot?.elementsCount || snapStep?.outcome?.elementsCount || 0;
+        if (lang === "hinglish") return `Ji Ayaan, humne ${targetUrl} par navigate karke snapshot capture kar liya hai (${elementsCount} elements identified, driver: ${driver}).`;
+        if (lang === "hindi") return `हाँ अयान, ${targetUrl} पर नेविगेट करके स्नैपशॉट ले लिया गया है (${elementsCount} तत्व मिले, ड्राइवर: ${driver})।`;
+        return `Autonomous browser mission completed. Navigated to ${targetUrl}${title ? ` ("${title}")` : ""}, captured semantic snapshot with ${elementsCount} interactive elements using driver [${driver}].`;
       }
 
       default: {
