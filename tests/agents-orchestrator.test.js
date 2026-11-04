@@ -126,16 +126,25 @@ test("Agent Orchestrator: executeAgentAction routes across specialized agents", 
 
   const coreRes = await orchestrator.executeAgentAction("ultron-core", "synthesize", {});
   assert.equal(coreRes.agent, "ultron-core");
+  // Truth-tier: without a wired executor this path is a labeled test double.
+  assert.equal(coreRes.simulated, true);
+  assert.equal(coreRes.executionMechanism, "ORCHESTRATOR_TEST_DOUBLE");
+  assert.equal(coreRes.evidence, null);
+  assert.equal(coreRes.result, undefined);
 
   const researchRes = await orchestrator.executeAgentAction("research-agent", "search", { query: "Quantum AI" });
   assert.equal(researchRes.agent, "research-agent");
-  assert.ok(researchRes.sourcesCount > 0);
+  assert.equal(researchRes.simulated, true);
+  assert.equal(researchRes.sourcesCount, undefined);
+  assert.equal(researchRes.findings, undefined);
 
   const secRes = await orchestrator.executeAgentAction("security-agent", "audit", {});
-  assert.equal(secRes.safe, true);
+  assert.equal(secRes.simulated, true);
+  assert.equal(secRes.safe, undefined);
 
   const sysRes = await orchestrator.executeAgentAction("system-agent", "telemetry", {});
-  assert.equal(sysRes.hardwareNominal, true);
+  assert.equal(sysRes.simulated, true);
+  assert.equal(sysRes.hardwareNominal, undefined);
 });
 
 test("Agent Orchestrator: Dead Letter Queue (DLQ) captures failed tasks and supports recovery", async () => {

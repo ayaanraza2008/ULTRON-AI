@@ -31,6 +31,12 @@ test("AgentMatrix18: executeAgentAction routes across all 18 specialized agents"
     const res = await orchestrator.executeAgentAction(agent.id, "test_action", { sample: "payload" });
     assert.ok(res, `Action result for ${agent.id} must be non-null`);
     assert.ok(res.agent === agent.id || res.agent, `Response must record agent id`);
+    // Truth-tier regression: every executor-less action result must be a
+    // labeled test double — never a real-world success claim.
+    assert.equal(res.simulated, true, `${agent.id} executor-less result must be labeled simulated`);
+    assert.equal(res.executionMechanism, "ORCHESTRATOR_TEST_DOUBLE");
+    assert.equal(res.evidence, null);
+    assert.equal(res.status !== "completed" || agent.id === "completion-echo-guard", true, `${agent.id} must not claim completed status`);
   }
 });
 

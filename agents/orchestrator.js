@@ -280,16 +280,29 @@ export class AgentOrchestrator {
       throw new Error(`Agent '${agentId}' not found in catalog.`);
     }
 
-    this.recordAudit(agentId, "EXECUTE_ACTION", { action, payloadKeys: Object.keys(payload) });
+    this.recordAudit(agentId, "EXECUTE_ACTION_SIMULATED", { action, payloadKeys: Object.keys(payload) });
+
+    // Truth-tier: until a real executor is wired for a given agent lane
+    // (createTask/resumeTask with an executor, or worker.js durable tasks),
+    // this path MUST NOT report real-world outcomes. Every result carries
+    // simulated labels and no evidence field; fabricated operational claims
+    // (navigated, safe, hardwareNominal, telemetry percentages, scheduled
+    // job ids, ...) were removed.
+    const simulationStamp = {
+      simulated: true,
+      executionMechanism: "ORCHESTRATOR_TEST_DOUBLE",
+      evidence: null,
+      note: "No real executor wired for this lane; result is a labeled test double, not a real-world outcome."
+    };
 
     switch (agentId) {
       case "ultron-core":
         return {
           agent: "ultron-core",
           action,
-          result: "Strategic directive synthesized.",
           autonomyLevel: this.autonomyLevel,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          ...simulationStamp
         };
 
       case "research-agent":
@@ -297,161 +310,137 @@ export class AgentOrchestrator {
           agent: "research-agent",
           action,
           query: payload.query || "general",
-          findings: `Synthesized research for ${payload.query || "unspecified"}`,
-          sourcesCount: 3
+          ...simulationStamp
         };
 
       case "coding-agent":
         return {
           agent: "coding-agent",
           action,
-          codeValid: true,
-          sandboxed: true,
-          details: payload.task || "Code analysis completed"
+          ...simulationStamp
         };
 
       case "security-agent":
         return {
           agent: "security-agent",
           action,
-          safe: true,
-          isolationVerified: true,
-          auditApproved: true
+          ...simulationStamp
         };
 
       case "system-agent":
         return {
           agent: "system-agent",
           action,
-          hardwareNominal: true,
-          telemetryChecked: true
+          ...simulationStamp
         };
 
       case "memory-agent":
         return {
           agent: "memory-agent",
           action,
-          contextRetrieved: true,
-          recordsCount: 5
+          ...simulationStamp
         };
 
       case "voice-agent":
         return {
           agent: "voice-agent",
           action,
-          spokenCadence: true,
-          persona: "ultron_command"
+          ...simulationStamp
         };
 
       case "vision-agent":
         return {
           agent: "vision-agent",
           action,
-          screenAnalyzed: true,
-          detectedElements: ["window", "taskbar"]
+          ...simulationStamp
         };
 
       case "automation-agent":
         return {
           agent: "automation-agent",
           action,
-          taskScheduled: true,
-          jobId: "job-" + Date.now()
+          ...simulationStamp
         };
 
       case "planning-agent":
         return {
           agent: "planning-agent",
           action,
-          planCreated: true,
-          stages: ["init", "execute", "verify"]
+          proposedStages: ["understand", "plan", "check-permissions", "select-tools", "execute", "observe", "verify", "recover", "report"],
+          ...simulationStamp
         };
 
       case "execution-agent":
         return {
           agent: "execution-agent",
           action,
-          executionStatus: "success",
-          stepsRun: 1
+          ...simulationStamp
         };
 
       case "self-improvement-agent":
         return {
           agent: "self-improvement-agent",
           action,
-          diagnosticsReviewed: true,
-          optimizationsProposed: 0
+          ...simulationStamp
         };
 
       case "jarvis-assistant":
         return {
           agent: "jarvis-assistant",
           action,
-          response: "At your service, sir. All parameters are within optimal operational bounds.",
-          briefingPrepared: true,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          ...simulationStamp
         };
 
       case "software-engineering-agent":
         return {
           agent: "software-engineering-agent",
           action,
-          architectureValid: true,
-          diffPrepared: true,
-          filesAudited: 9
+          ...simulationStamp
         };
 
       case "browser-agent":
         return {
           agent: "browser-agent",
           action,
-          navigated: true,
-          domParsed: true,
-          elementsCount: 15
+          ...simulationStamp
         };
 
       case "android-agent":
         return {
           agent: "android-agent",
           action,
-          paired: true,
-          notificationSent: true,
-          deviceSync: "active"
+          ...simulationStamp
         };
 
       case "document-agent":
         return {
           agent: "document-agent",
           action,
-          documentsParsed: 1,
-          citationsFound: 2,
-          summary: "Document knowledge extracted and indexed."
+          ...simulationStamp
         };
 
       case "system-monitoring-agent":
         return {
           agent: "system-monitoring-agent",
           action,
-          headroomNominal: true,
-          ramUsagePercent: 45.2,
-          memoryAlert: false
+          ...simulationStamp
         };
 
       case "integration-agent":
         return {
           agent: "integration-agent",
           action,
-          bridgesActive: 5,
-          mcpServersReady: true,
-          openRouterProxy: "online"
+          ...simulationStamp
         };
 
       default:
         return {
           agent: agentId,
           action,
-          status: "completed",
-          data: payload
+          status: "not_executed",
+          data: payload,
+          ...simulationStamp
         };
     }
   }
