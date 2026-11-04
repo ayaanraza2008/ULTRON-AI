@@ -82,7 +82,7 @@ class UltronApiClient(private val context: Context) {
      * Fetches current Windows PC status from central brain.
      */
     fun fetchWindowsPcStatus(): JSONObject {
-        val conn = openConnection("/api/jarvis/devices", "GET")
+        val conn = openConnection("/api/devices/me", "GET")
         val res = executeJson(conn)
         val devices = res.optJSONArray("devices") ?: JSONArray()
         for (i in 0 until devices.length()) {
@@ -136,7 +136,7 @@ class UltronApiClient(private val context: Context) {
      */
     fun sendTelemetry(batteryPercent: Int, isCharging: Boolean): Boolean {
         val token = DeviceTokenStore.load(context) ?: return false
-        val conn = openConnection("/api/jarvis/devices/my/heartbeat", "POST")
+        val conn = openConnection("/api/devices/me/heartbeat", "POST")
         val body = JSONObject().apply {
             put("batteryPercent", batteryPercent)
             put("isCharging", isCharging)
