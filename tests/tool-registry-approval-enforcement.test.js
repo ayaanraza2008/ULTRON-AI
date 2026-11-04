@@ -87,3 +87,27 @@ test("ToolRegistry consumes orchestrator-minted proof objects exactly once", asy
   );
   assert.equal(calls, 1);
 });
+
+
+test("ToolRegistry enforces the configured execution timeout and abort signal", async () => {
+  const registry = new ToolRegistry();
+  let receivedSignal;
+  const tool = registry.registerTool({
+    id: "timeout-bound-tool",
+    name: "Timeout-bound test",
+    category: TOOL_CATEGORIES.INTELLIGENCE,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+    timeoutMs: 15,
+    execute: async (_params, context) => {
+      receivedSignal = context.signal;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return { ok: true };
+    }
+  });
+
+  await assert.rejects(
+    () => registry.execute(tool.id),
+    error => error.code === "TOOL_TIMEOUT" && error.timeoutMs === 15
+  );
+  assert.equal(receivedSignal?.aborted, true);
+});
