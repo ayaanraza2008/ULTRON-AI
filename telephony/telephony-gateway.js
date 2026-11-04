@@ -10,7 +10,7 @@
  * - TwiML and SIP session negotiation for carrier compatibility.
  * - Real-time call state management (RINGING, CONNECTED, LISTENING, PROCESSING, SPEAKING, HANGUP).
  * - Full call transcription logging with optional conversation history integration.
- * - WebRTC fallback voice bridge for free browser/mobile calling.
+ * - Carrier webhook session handling only; a browser/mobile WebRTC bridge is not implemented here.
  */
 
 import crypto from "node:crypto";
@@ -52,8 +52,8 @@ export class TelephonyGateway {
     this.activeCalls = new Map();
     this.callHistory = [];
     this.maxHistory = 100;
-    // A WebRTC bridge is not implemented by this gateway yet; never advertise it as enabled.
-    this.enableWebRTC = options.enableWebRTC === true;
+    // A WebRTC bridge is not implemented by this gateway; keep it unavailable even if misconfigured.
+    this.enableWebRTC = false;
   }
 
   normalizePhoneNumber(phone) {
