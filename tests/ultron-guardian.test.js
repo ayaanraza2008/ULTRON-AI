@@ -75,7 +75,8 @@ test("UltronGuardian: sandboxed code execution enforces safe evaluation and limi
 });
 
 test("UltronGuardian: latching Emergency Stop revokes tokens and enforces shutdown", () => {
-  const guardian = new UltronGuardian({ masterKey: "MY_SECRET_KEY" });
+  const operatorKey = "guardian-test-operator-key-at-least-32-characters";
+  const guardian = new UltronGuardian({ masterKey: operatorKey });
   const token = guardian.issueCapabilityToken("actor-1", [PERMISSION_SCOPES.ADMIN_CONTROL]);
 
   guardian.engageEmergencyStop("Unauthorized elevation detected");
@@ -92,7 +93,7 @@ test("UltronGuardian: latching Emergency Stop revokes tokens and enforces shutdo
   }, /Invalid or unconfigured operator key/);
 
   // Disengage with valid key restores
-  const restoreRes = guardian.disengageEmergencyStop("MY_SECRET_KEY");
+  const restoreRes = guardian.disengageEmergencyStop(operatorKey);
   assert.equal(restoreRes.latched, false);
   assert.equal(guardian.emergencyStopLatched, false);
 });
