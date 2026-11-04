@@ -191,6 +191,10 @@ export class ToolRegistry {
     return await tool.execute(params, context);
   }
 
+  async executeTool(toolId, params = {}, context = {}) {
+    return await this.execute(toolId, params, context);
+  }
+
   /**
    * Discovers and inventories all operational vs limited vs unconfigured capabilities.
    */
@@ -1256,3 +1260,5 @@ export class ToolRegistry {
 
   }
 }
+
+export const toolRegistry = new ToolRegistry();
