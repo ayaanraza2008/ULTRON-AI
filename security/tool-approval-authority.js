@@ -10,7 +10,7 @@ const approvedProofs = new WeakMap();
 export function createToolApprovalProof({ actorId, toolId, permissionLevel, approvalId } = {}) {
   if (typeof actorId !== "string" || !actorId.trim() ||
       typeof toolId !== "string" || !toolId.trim() ||
-      !Number.isInteger(Number(permissionLevel)) || Number(permissionLevel) < 3 ||
+      !Number.isInteger(Number(permissionLevel)) || Number(permissionLevel) < 1 ||
       typeof approvalId !== "string" || !approvalId.trim()) {
     throw new TypeError("A verified owner, tool, permission level, and approval ID are required to mint a tool proof.");
   }
