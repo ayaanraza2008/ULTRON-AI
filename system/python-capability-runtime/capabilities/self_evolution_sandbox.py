@@ -84,52 +84,31 @@ class SelfEvolutionSandbox:
         }
 
     def synthesize_tool(self, tool_id: str, name: str, description: str, python_code: str, author: str = "ChiefOfStaff") -> Dict[str, Any]:
-        clean_id = re.sub(r'[^a-zA-Z0-9_\-]', '', tool_id).lower()
-        if not clean_id:
-            return {"success": False, "error": "Invalid tool identifier."}
+        """Fail closed: static AST screening is not an execution sandbox.
 
-        # 1. AST Security Analysis
+        Do not write/register generated source until a separately provisioned
+        OS-isolated execution adapter can validate and stage it. This Python
+        runtime has no such adapter, so synthesis remains disabled.
+        """
+        clean_id = re.sub(r'[^a-zA-Z0-9_\\-]', '', str(tool_id or '')).lower()
+        if not clean_id:
+            return {"success": False, "error": "Invalid tool identifier.", "code": "INVALID_TOOL_ID"}
+
         analysis = self.analyze_source_ast(python_code)
-        if not analysis["safe"]:
+        if not analysis.get("safe"):
             return {
                 "success": False,
                 "security_verdict": "REJECTED_UNSAFE",
-                "violations": analysis["violations"],
-                "reason": "Code failed static AST security boundary."
+                "violations": analysis.get("violations", []),
+                "reason": "Code failed static AST security screening."
             }
 
-        # 2. Version determination
-        existing = self.registry["tools"].get(clean_id)
-        current_version = (existing["version"] + 1) if existing else 1
-
-        tool_path = os.path.join(self.tools_dir, f"{clean_id}_v{current_version}.py")
-        with open(tool_path, "w", encoding="utf-8") as f:
-            f.write(python_code)
-
-        meta = {
-            "id": clean_id,
-            "name": name,
-            "description": description,
-            "version": current_version,
-            "file": tool_path,
-            "author": author,
-            "status": "VALIDATED_SANDBOX"
-        }
-        self.registry["tools"][clean_id] = meta
-        self.registry["history"].append({
-            "action": "SYNTHESIZE",
-            "tool_id": clean_id,
-            "version": current_version,
-            "timestamp": 1730700000.0
-        })
-        self._save_registry()
-
         return {
-            "success": True,
-            "security_verdict": "ACCEPTED_SAFE",
-            "tool_id": clean_id,
-            "version": current_version,
-            "lines_analyzed": analysis["lines"]
+            "success": False,
+            "code": "SELF_EVOLUTION_SANDBOX_UNAVAILABLE",
+            "security_verdict": "BLOCKED_NO_ISOLATED_SANDBOX",
+            "reason": "AST screening is not an execution sandbox. Python tool synthesis is disabled until a verified OS-isolated validator/stager is provisioned.",
+            "proposed_tool_id": clean_id
         }
 
     def rollback_tool(self, tool_id: str) -> Dict[str, Any]:
