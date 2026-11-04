@@ -18,9 +18,12 @@ export class CyberReporter {
       scopeId = "scope-default",
       assessor = "ULTRON CYBER CORE v2.0",
       findings = [],
-      overallRisk = "LOW",
+      overallRisk = "NOT_ASSESSED",
       maxCvss = 0,
-      methodology = "OWASP Top 10, CWE/SANS Top 25, NIST SP 800-115"
+      methodology = "Module-specific passive checks and caller-supplied evidence analysis",
+      evidenceMode = "NOT_SPECIFIED",
+      verificationStatus = "NOT_INDEPENDENTLY_VERIFIED",
+      evidenceSummary = {}
     } = assessmentData;
 
     const criticalCount = findings.filter(f => f.severity === "CRITICAL").length;
