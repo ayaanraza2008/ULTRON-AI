@@ -33,6 +33,9 @@ import { ultronCore as defaultUltronCore } from "./ultron-core.js";
 import { zeroCostAiEngine as defaultZeroCostAiEngine } from "./zero-cost-ai.js";
 import { ultronAutonomy as defaultUltronAutonomy } from "../autonomy/ultron-autonomy.js";
 import { mobileControlEngine as defaultMobileControlEngine } from "../mobile/mobile-control-engine.js";
+import { desktopCompanionManager as defaultDesktopCompanionManager } from "../system/desktop-companion-manager.js";
+import { edgeTtsAdapter as defaultEdgeTtsAdapter } from "../voice/edge-tts-adapter.js";
+import { browserAutomationHelper as defaultBrowserAutomationHelper } from "../integrations/browser-automation-helper.js";
 import { AgentOrchestrator } from "../agents/orchestrator.js";
 
 export const PERMISSION_LEVELS = {
@@ -77,6 +80,9 @@ export class ToolRegistry {
       zeroCostAiEngine: defaultZeroCostAiEngine,
       ultronAutonomy: defaultUltronAutonomy,
       mobileControlEngine: defaultMobileControlEngine,
+      desktopCompanionManager: defaultDesktopCompanionManager,
+      edgeTtsAdapter: defaultEdgeTtsAdapter,
+      browserAutomationHelper: defaultBrowserAutomationHelper,
       agentOrchestrator: new AgentOrchestrator()
     };
 
@@ -966,6 +972,202 @@ export class ToolRegistry {
           return { success: res.success, workflow: res };
         }
         return { success: true, executed: false };
+      }
+    });
+
+    // Windows Display Brightness Controller (Source B adaptation)
+    this.registerTool({
+      id: "windows_display_brightness",
+      name: "Windows Display Brightness Control",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Queries or sets laptop/monitor display brightness (0-100%) via Windows WMI.",
+      capabilities: ["display_brightness", "wmi_hardware_control"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      timeoutMs: 5000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["get", "set"] },
+          level: { type: "number", minimum: 0, maximum: 100 }
+        },
+        required: ["action"]
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        if (params.action === "get") {
+          return this.adapters.windowsAutomation.getDisplayBrightness();
+        }
+        return this.adapters.windowsAutomation.setDisplayBrightness(params.level);
+      }
+    });
+
+    // Windows Media Playback Control (Source B adaptation)
+    this.registerTool({
+      id: "windows_media_control",
+      name: "Windows Media Playback Control",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Controls host system media playback: play/pause, next track, prev track, and stop.",
+      capabilities: ["media_play_pause", "media_skip", "media_stop"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      timeoutMs: 4000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["play_pause", "next_track", "prev_track", "stop"] }
+        },
+        required: ["action"]
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        return this.adapters.windowsAutomation.dispatchMediaKey(params.action);
+      }
+    });
+
+    // Windows Window State Manager (Source B adaptation)
+    this.registerTool({
+      id: "windows_window_manager",
+      name: "Windows Window State Manager",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Controls the active foreground window: minimize, maximize, restore, or close.",
+      capabilities: ["window_minimize", "window_maximize", "window_restore", "window_close"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      timeoutMs: 4000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["minimize", "maximize", "restore", "close"] }
+        },
+        required: ["action"]
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        return this.adapters.windowsAutomation.setWindowState(params.action);
+      }
+    });
+
+    // Desktop Companion HUD Controller (Source A JARVIS adaptation)
+    this.registerTool({
+      id: "desktop_companion_control",
+      name: "Desktop Companion HUD Controller",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Controls the floating ULTRON orb position, window anchoring, and system tray actions.",
+      capabilities: ["orb_positioning", "window_anchoring", "tray_actions", "companion_lifecycle"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      timeoutMs: 5000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["get_position", "set_position", "tray_action", "get_status"] },
+          x: { type: "number" },
+          y: { type: "number" },
+          trayAction: { type: "string" }
+        },
+        required: ["action"]
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const mgr = this.adapters.desktopCompanionManager;
+        if (!mgr.isInitialized) await mgr.initialize();
+        if (params.action === "get_position") {
+          return { success: true, position: mgr.getOrbPosition() };
+        }
+        if (params.action === "set_position") {
+          const pos = await mgr.setOrbPosition(params.x, params.y);
+          return { success: true, position: pos };
+        }
+        if (params.action === "tray_action") {
+          return mgr.handleTrayAction(params.trayAction);
+        }
+        return { success: true, status: mgr.getStatus() };
+      }
+    });
+
+    // Multilingual Neural Speech (Edge-TTS Adapter)
+    this.registerTool({
+      id: "edge_neural_tts",
+      name: "Edge Neural Multilingual TTS",
+      category: TOOL_CATEGORIES.VOICE_COMMUNICATION,
+      description: "Synthesizes high-quality neural speech in Hindi, English, and Hinglish with zero cloud cost.",
+      capabilities: ["neural_tts", "hindi_synthesis", "english_synthesis", "barge_in"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["synthesize", "list_voices", "stop"] },
+          text: { type: "string" },
+          voice: { type: "string" },
+          rate: { type: "string" },
+          pitch: { type: "string" }
+        },
+        required: ["action"]
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const tts = this.adapters.edgeTtsAdapter;
+        if (params.action === "list_voices") {
+          return { success: true, voices: tts.getVoices() };
+        }
+        if (params.action === "stop") {
+          return tts.stopSpeaking();
+        }
+        return tts.synthesize(params.text, {
+          voice: params.voice,
+          rate: params.rate,
+          pitch: params.pitch
+        });
+      }
+    });
+
+    // Enhanced System Hardware Telemetry
+    this.registerTool({
+      id: "system_hardware_monitor",
+      name: "Host System Hardware Telemetry",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Reports host CPU, RAM, GPU, Battery, and active foreground window metrics with zero subprocess polling.",
+      capabilities: ["hardware_telemetry", "gpu_inspection", "battery_status", "ram_headroom"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      timeoutMs: 5000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          forceRefresh: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async () => {
+        return this.adapters.windowsAutomation.getSystemVitals();
+      }
+    });
+
+    // Intelligent Browser URL Normalizer & Safety Filter
+    this.registerTool({
+      id: "browser_url_normalizer",
+      name: "Intelligent Browser URL Normalizer",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Normalizes user queries and bare terms into safe, validated HTTPS URLs with anti-SSRF protection.",
+      capabilities: ["url_normalization", "anti_ssrf", "profile_discovery"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      timeoutMs: 3000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          input: { type: "string" }
+        },
+        required: ["input"]
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const helper = this.adapters.browserAutomationHelper;
+        const normalized = helper.normalizeUrl(params.input);
+        const safety = helper.validateUrlSafety(normalized);
+        const profiles = await helper.findBrowserProfileDirs();
+        return {
+          input: params.input,
+          normalizedUrl: normalized,
+          safety,
+          discoveredProfiles: profiles
+        };
       }
     });
   }

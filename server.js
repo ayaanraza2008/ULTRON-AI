@@ -19,6 +19,7 @@ import { createJarvisRouter } from "./jarvis-router.js";
 import { createDevicePairingRouter, verifyPairedDeviceToken } from "./integrations/device-pairing-router.js";
 import { createSpatialRouter } from "./spatial/spatial-router.js";
 import { createMobileRouter } from "./mobile/mobile-router.js";
+import { createCompanionRouter } from "./system/companion-router.js";
 import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
 import { deviceNetworkingManager } from "./integrations/device-networking.js";
 
@@ -1996,6 +1997,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createSpatialRouter({ requireSupabaseUser, logger }));
   app.use("/api", createMobileRouter({ requireSupabaseUser, requireSession, logger }));
   app.use("/api/mobile", createMobileRouter({ requireSupabaseUser, requireSession, logger }));
+  app.use("/api/companion", createCompanionRouter({ logger }));
+  app.use("/api", createCompanionRouter({ logger }));
   app.use("/api", createJarvisRouter({
     env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger,
     authenticateDeviceToken: token => verifyPairedDeviceToken({ token, env, fetchImpl, logger })

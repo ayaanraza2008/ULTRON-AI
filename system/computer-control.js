@@ -232,13 +232,43 @@ export class WindowsComputerControl {
   }
 
   /**
+   * Check whether a command string matches destructive patterns (Source A & B safety gate).
+   */
+  isDestructiveCommand(cmdString) {
+    const lower = String(cmdString || "").toLowerCase().trim();
+    const DESTRUCTIVE_PATTERNS = [
+      /\brm\s/i,
+      /\bdel\s/i,
+      /\bformat\s/i,
+      /\bshutdown\b/i,
+      /\bremove-item\b/i,
+      /\bdrop\s+table\b/i,
+      /\bmkfs\b/i,
+      /\brd\s/i,
+      /\brmdir\s/i
+    ];
+    return DESTRUCTIVE_PATTERNS.some(regex => regex.test(lower));
+  }
+
+  /**
    * Approved Terminal Execution
    * Executes only non-destructive, read-only system queries.
+   * Destructive commands strictly require confirmation (Level 4 confirmation token).
    */
-  async runApprovedCommand(cmdString) {
+  async runApprovedCommand(cmdString, options = {}) {
     if (this.emergencyStop) throw new Error("Computer control is halted under Emergency Stop.");
 
     const normalized = String(cmdString).trim();
+    if (this.isDestructiveCommand(normalized) && !options.confirmed) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        code: "DESTRUCTIVE_CONFIRMATION_REQUIRED",
+        reason: "Destructive command execution requires explicit human confirmation.",
+        command: normalized
+      };
+    }
+
     if (!ALLOWLISTED_TERMINAL_COMMANDS.has(normalized)) {
       throw new Error(`Command '${normalized}' is not in the approved command allowlist.`);
     }
@@ -246,11 +276,33 @@ export class WindowsComputerControl {
     try {
       const { stdout, stderr } = await execAsync(normalized, { timeout: 10_000, maxBuffer: 64 * 1024 });
       this.recordAction("EXEC_COMMAND", normalized, "success");
-      return { command: normalized, stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 };
+      return { command: normalized, stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0, success: true };
     } catch (err) {
       this.recordAction("EXEC_COMMAND", normalized, "failed");
-      return { command: normalized, error: err.message, exitCode: err.code || 1 };
+      return { command: normalized, error: err.message, exitCode: err.code || 1, success: false };
     }
+  }
+
+  /**
+   * Comprehensive System Telemetry: CPU, RAM, OS, Battery, GPU, and Display Brightness.
+   */
+  async getComprehensiveTelemetry() {
+    const basic = this.getSystemTelemetry();
+    let battery = null;
+    let gpu = null;
+    let brightness = null;
+    try {
+      const { windowsAutomation } = await import("./windows-automation.js");
+      battery = await windowsAutomation.getBatteryStatus();
+      gpu = await windowsAutomation.getGpuInfo();
+      brightness = await windowsAutomation.getDisplayBrightness();
+    } catch {}
+    return {
+      ...basic,
+      battery,
+      gpu,
+      brightness
+    };
   }
 
   getActionHistory(limit = 50) {

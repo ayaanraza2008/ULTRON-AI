@@ -364,7 +364,17 @@ const FILES_TO_CHECK = [
   "tests/mobile-permissions.test.js",
   "tests/mobile-task-planner.test.js",
   "tests/mobile-control-engine.test.js",
-  "tests/mobile-integration.test.js"
+  "tests/mobile-integration.test.js",
+  "system/desktop-companion-manager.js",
+  "system/companion-router.js",
+  "voice/edge-tts-adapter.js",
+  "integrations/browser-automation-helper.js",
+  "tests/desktop-companion-manager.test.js",
+  "tests/windows-hardware-control.test.js",
+  "tests/edge-tts-adapter.test.js",
+  "tests/browser-automation-helper.test.js",
+  "tests/windows-command-security.test.js",
+  "tests/companion-api.test.js"
 ];
 
 let checked = 0;
