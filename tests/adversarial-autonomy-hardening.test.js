@@ -125,7 +125,7 @@ test("Emergency Stop Audit: Halts new commands, cancels active workflows, and pe
     const orchestrator1 = new AutonomousOrchestrator({ registry: toolRegistry, persistenceDir: testDir });
 
     // 1. Enqueue background workflow
-    const sub = orchestrator1.submitBackgroundTask("Assemble multi-agent team for GTM review");
+    const sub = orchestrator1.submitBackgroundTask("Check system vitals");
     assert.equal(sub.status, "RUNNING");
 
     // 2. Engage Emergency Stop
@@ -188,10 +188,10 @@ test("Autonomous Planning Audit: Executes independent DAG steps in parallel wave
       {
         id: "step-2",
         dependsOn: ["step-1"],
-        toolId: "cybersecurity_defensive_scan",
+        toolId: "system_hardware_monitor",
         agent: AGENT_ROLES.SECURITY_SENTINEL,
-        description: "Security scan",
-        params: { target: "localhost" }
+        description: "Security telemetry snapshot",
+        params: { forceRefresh: false }
       },
       {
         id: "step-3",
@@ -312,7 +312,7 @@ test("Background Reliability: Enforces idempotency to prevent duplicate task exe
 
     const key = "idem-order-sync-998811";
 
-    const sub1 = orchestrator.submitBackgroundTask("Assemble multi-agent team for sync", { idempotencyKey: key });
+    const sub1 = orchestrator.submitBackgroundTask("Check system vitals", { idempotencyKey: key });
     assert.equal(sub1.success, true);
     assert.equal(sub1.duplicatePrevented, undefined);
 
@@ -334,7 +334,7 @@ test("Adversarial Security: Rejects cross-user background task access and cancel
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
 
   // User A creates a workflow
-  const subA = orchestrator.submitBackgroundTask("Assemble multi-agent team for User A", { userId: "user-alpha" });
+  const subA = orchestrator.submitBackgroundTask("Check system vitals", { userId: "user-alpha" });
   assert.equal(subA.success, true);
 
   // User B attempts to pause User A's workflow
@@ -482,7 +482,7 @@ test("Adversarial Security: Sanitizes malicious external tool output and prevent
 // 10. REAL TOOL EXECUTION INVENTORY VERIFICATION
 // ==========================================
 
-test("Real Tool Execution Audit: all 44 tool schemas validate and privileged tools fail closed", async () => {
+test("Real Tool Execution Audit: all 45 tool schemas validate and privileged tools fail closed", async () => {
   const allTools = toolRegistry.listTools();
   assert.equal(allTools.length, 45);
 

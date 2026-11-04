@@ -171,25 +171,34 @@ test("AutonomousOrchestrator: Emits real-time visual events through lifecycle", 
   assert.ok(capturedEvents.includes("RESPONSE_SYNTHESIZED"));
 });
 
-test("AutonomousOrchestrator: Coordinates multi-agent team across specialized roles", async () => {
+test("AutonomousOrchestrator: Coordinates multi-agent team across specialized roles with explicit approvals", async () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
-  const result = await orchestrator.processUserRequest("Assemble multi-agent team for growth and code review");
+  const prompt = "Assemble multi-agent team for growth and code review";
+  const pending = await orchestrator.processUserRequest(prompt, { userId: "operator" });
+  let result = pending;
+  if (pending.status === "APPROVAL_REQUIRED") {
+    const approvalIds = {};
+    for (const request of (pending.approvalRequests || [pending.approvalRequest])) {
+      assert.equal(orchestrator.approveRequest(request.id, { userId: "operator" }).success, true);
+      approvalIds[request.stepId] = request.id;
+    }
+    result = await orchestrator.processUserRequest(prompt, { userId: "operator", approvalIds });
+  }
 
   assert.equal(result.intent, "MULTI_AGENT_COORDINATION");
   assert.ok(result.plan.steps.length >= 3);
-  const assignedAgents = result.plan.steps.map(s => s.agent);
+  const assignedAgents = result.plan.steps.map(step => step.agent);
   assert.ok(assignedAgents.includes(AGENT_ROLES.CHIEF_OF_STAFF));
   assert.ok(assignedAgents.includes(AGENT_ROLES.RESEARCH_SCHOLAR));
   assert.ok(assignedAgents.includes(AGENT_ROLES.FULLSTACK_ARCHITECT));
   assert.equal(result.verified, true);
   assert.ok(result.textResponse.includes("Multi-agent mission completed"));
 });
-
 test("AutonomousOrchestrator: Submits, pauses, resumes, and cancels persistent background workflows", async () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
 
   // 1. Submit background workflow
-  const sub = orchestrator.submitBackgroundTask("Research latest agent memory architectures");
+  const sub = orchestrator.submitBackgroundTask("Check system vitals");
   assert.equal(sub.success, true);
   assert.ok(sub.workflowId);
   assert.equal(sub.status, "RUNNING");
@@ -202,7 +211,7 @@ test("AutonomousOrchestrator: Submits, pauses, resumes, and cancels persistent b
   assert.ok(["RUNNING", "COMPLETED"].includes(found.status));
 
   // 3. Pause & Resume workflow
-  const sub2 = orchestrator.submitBackgroundTask("Assemble multi-agent team for GTM and security audit");
+  const sub2 = orchestrator.submitBackgroundTask("Check system vitals");
   const pauseRes = orchestrator.pauseWorkflow(sub2.workflowId);
   if (pauseRes.success) {
     assert.equal(pauseRes.status, "PAUSED");
@@ -212,7 +221,7 @@ test("AutonomousOrchestrator: Submits, pauses, resumes, and cancels persistent b
   }
 
   // 4. Cancel workflow
-  const sub3 = orchestrator.submitBackgroundTask("Assemble multi-agent team for test cancellation");
+  const sub3 = orchestrator.submitBackgroundTask("Check system vitals");
   const cancelRes = orchestrator.cancelWorkflow(sub3.workflowId, "Test cancellation");
   assert.equal(cancelRes.success, true);
   assert.equal(cancelRes.status, "CANCELLED");

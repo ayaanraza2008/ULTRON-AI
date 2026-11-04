@@ -152,6 +152,17 @@ export class ToolRegistry {
       }
     }
 
+    // Optional per-tool semantic validation runs before approval is requested.
+    if (typeof tool.validate === "function") {
+      const validationResult = tool.validate(params);
+      if (validationResult === false) {
+        throw new Error(`Custom validation failed for tool '${tool.id}'.`);
+      }
+      if (typeof validationResult === "string" && validationResult.trim()) {
+        throw new Error(validationResult);
+      }
+    }
+
     return true;
   }
 
@@ -520,6 +531,16 @@ export class ToolRegistry {
       requiresConfirmation: true,
       timeoutMs: 15000,
       inputSchema: { type: "object", required: ["app"], properties: { app: { type: "string" }, args: { type: "array" }, dryRun: { type: "boolean" } } },
+      validate: (params = {}) => {
+        const rawApp = String(params.app ?? "").trim();
+        if (!rawApp) throw new Error("Missing required parameter 'app' for tool 'windows_app_launch'.");
+        const app = rawApp.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+        const allowlist = ["browser", "chrome", "firefox", "notepad", "calculator", "explorer", "terminal", "cmd", "code", "vlc", "obs", "premiere", "editing"];
+        if (!allowlist.includes(app)) {
+          throw new Error(`APPLICATION_NOT_ALLOWLISTED: '${app}' is not in the safe launch allowlist.`);
+        }
+        return true;
+      },
       checkHealth: () => process.platform === "win32" ? TOOL_STATUS.OPERATIONAL : TOOL_STATUS.LIMITED,
       execute: async (params) => {
         const app = String(params.app || "").toLowerCase().replace(/[^a-z0-9_-]/g, "");

@@ -1359,7 +1359,7 @@ export class AutonomousOrchestrator {
     // Idempotency check: prevent duplicate submissions
     if (context.idempotencyKey) {
       const existing = Array.from(this.activeWorkflows.values()).find(
-        w => w.idempotencyKey === context.idempotencyKey && (w.status === "RUNNING" || w.status === "PAUSED")
+        w => w.idempotencyKey === context.idempotencyKey && (w.status === "RUNNING" || w.status === "PAUSED" || w.status === "COMPLETED")
       );
       if (existing) {
         return {
