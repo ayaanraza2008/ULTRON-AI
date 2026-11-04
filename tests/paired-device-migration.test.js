@@ -137,10 +137,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
     });
 
     await t.test("3. Schema constraints: enforces 6-digit codes and 64-char hex SHA-256 token hashes", async () => {
-      await harness.asRole("service_role", null, async (client) => {
-        const validHash = crypto.createHash("sha256").update("sample-token").digest("hex");
+      const validHash = crypto.createHash("sha256").update("sample-token").digest("hex");
 
-        // Invalid code (not 6 digits, e.g. 5 digits or letters) fails check constraint
+      // Invalid code (not 6 digits, e.g. 5 digits or letters) fails check constraint
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query(`
             INSERT INTO public.pending_device_pairings (code, device_name, platform, token_hash)
@@ -151,8 +151,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
             return true;
           }
         );
+      });
 
-        // Invalid token_hash (not 64-hex) fails check constraint
+      // Invalid token_hash (not 64-hex) fails check constraint
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query(`
             INSERT INTO public.pending_device_pairings (code, device_name, platform, token_hash)
@@ -163,8 +165,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
             return true;
           }
         );
+      });
 
-        // Invalid platform (e.g. 'solaris') fails check constraint
+      // Invalid platform (e.g. 'solaris') fails check constraint
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query(`
             INSERT INTO public.pending_device_pairings (code, device_name, platform, token_hash)
@@ -185,6 +189,7 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
       const tokenHash1 = crypto.createHash("sha256").update(token1).digest("hex");
       const tokenPrefix1 = token1.slice(0, 8);
 
+      // Part A: Register and successfully claim pending pairing
       await harness.asRole("service_role", null, async (client) => {
         // Insert pending challenge approved by User A
         await client.query(`
@@ -212,8 +217,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
         // Verify pairing code was atomically deleted from pending_device_pairings
         const pendingRes = await client.query("SELECT * FROM public.pending_device_pairings WHERE code = $1;", [code1]);
         assert.equal(pendingRes.rows.length, 0);
+      });
 
-        // Replay attack: calling claim again with same code MUST throw P0001
+      // Part B: Replay attack: calling claim again with same code MUST throw P0001 in isolated transaction
+      await harness.asRole("service_role", null, async (client) => {
         await assert.rejects(
           client.query("SELECT * FROM public.claim_pending_device_pairing($1);", [code1]),
           (err) => {
@@ -222,8 +229,10 @@ test("Real PostgreSQL: Durable Paired-Device Migration Execution & Lifecycle", a
             return true;
           }
         );
+      });
 
-        // Expired pairing code test
+      // Part C: Expired pairing code rejection in isolated transaction
+      await harness.asRole("service_role", null, async (client) => {
         const expiredCode = "111222";
         await client.query(`
           INSERT INTO public.pending_device_pairings (
