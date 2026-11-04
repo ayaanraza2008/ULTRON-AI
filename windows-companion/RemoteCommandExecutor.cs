@@ -27,7 +27,7 @@ internal static class RemoteCommandExecutor
             ["spotify"] = ("Spotify.exe", "Spotify")
         };
 
-    public static bool VerifySignature(string deviceToken, JsonElement command)
+    public static bool VerifySignature(string deviceToken, JsonElement command, string expectedDeviceId)
     {
         try
         {
@@ -35,6 +35,7 @@ internal static class RemoteCommandExecutor
                 !TryString(command, "signature", out var suppliedSignature) ||
                 !TryString(command, "id", out var id) ||
                 !TryString(command, "deviceId", out var deviceId) ||
+                !string.Equals(deviceId, expectedDeviceId, StringComparison.Ordinal) ||
                 !TryString(command, "action", out var action) ||
                 !command.TryGetProperty("payload", out var payload) ||
                 !command.TryGetProperty("createdAt", out var createdAtElement) ||
