@@ -127,7 +127,14 @@ export class ByoxTaskLeaseWorker {
    */
   renewLease(taskId, workerId) {
     const task = this.tasks.get(taskId);
-    if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
+    if (!task) {
+      if (this.completedTasks.has(taskId)) {
+        const c = this.completedTasks.get(taskId);
+        if (c.status === 'CANCELLED') return { success: false, reason: 'TASK_CANCELLED' };
+        return { success: false, reason: 'TASK_ALREADY_COMPLETED' };
+      }
+      return { success: false, reason: 'TASK_NOT_FOUND' };
+    }
     if (task.leaseWorkerId !== workerId) return { success: false, reason: 'WORKER_MISMATCH' };
     if (task.status !== 'RUNNING') return { success: false, reason: 'TASK_NOT_RUNNING' };
 
@@ -140,7 +147,14 @@ export class ByoxTaskLeaseWorker {
    */
   completeTask(taskId, workerId, result = null) {
     const task = this.tasks.get(taskId);
-    if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
+    if (!task) {
+      if (this.completedTasks.has(taskId)) {
+        const c = this.completedTasks.get(taskId);
+        if (c.status === 'CANCELLED') return { success: false, reason: 'TASK_CANCELLED', taskId };
+        return { success: false, reason: 'TASK_ALREADY_COMPLETED', taskId };
+      }
+      return { success: false, reason: 'TASK_NOT_FOUND' };
+    }
     if (task.leaseWorkerId !== workerId) return { success: false, reason: 'WORKER_MISMATCH' };
 
     task.status = 'COMPLETED';
