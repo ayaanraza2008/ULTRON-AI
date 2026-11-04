@@ -56,12 +56,12 @@ export function createJarvisRouter({ env = process.env, requireSupabaseUser, sup
     .split(",")
     .map(phone => telephonyGateway.normalizePhoneNumber(phone))
     .filter(Boolean);
-  const invalidOwnerNumber = configuredOwnerNumbers.find(phone => !/^\\+[1-9]\\d{7,14}$/.test(phone));
+  const invalidOwnerNumber = configuredOwnerNumbers.find(phone => !/^\+[1-9]\d{7,14}$/.test(phone));
   if (invalidOwnerNumber) {
     throw new Error("ULTRON_OWNER_PHONE_NUMBERS must contain only comma-separated E.164 phone numbers.");
   }
   const configuredTelephonyPin = String(env.ULTRON_TELEPHONY_PIN || "").trim();
-  if (configuredTelephonyPin && !/^\\d{4}$/.test(configuredTelephonyPin)) {
+  if (configuredTelephonyPin && !/^\d{4}$/.test(configuredTelephonyPin)) {
     throw new Error("ULTRON_TELEPHONY_PIN must be exactly four digits.");
   }
   telephonyGateway.ownerPhoneNumbers = new Set(configuredOwnerNumbers);
