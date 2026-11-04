@@ -27,6 +27,7 @@ const CATEGORY_TOOLS = Object.freeze({
   ],
   desktop: ["check_desktop_companion"],
   productivity: [
+    "check_appflowy", "appflowy_list_workspaces", "appflowy_get_document",
     "chatwoot_list_conversations", "openproject_list_projects",
     "openproject_list_work_packages", "caldiy_list_event_types",
     "caldiy_check_availability"
@@ -65,7 +66,7 @@ const CATEGORY_PATTERNS = Object.freeze([
   ["cactus", /\b(?:cactus model|cactus provider|local model service)\b/i],
   ["desktop", /\b(?:windows companion|desktop companion|pair (?:my )?(?:pc|computer)|is my pc connected|desktop pairing|local pc status)\b/i],
   ["google_workspace", /\b(?:google workspace|gmail|google calendar|google drive|google docs|google sheets|apps script bridge)\b/i],
-  ["productivity", /\b(?:chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
+  ["productivity", /\b(?:appflowy|app flowy|chatwoot|openproject|cal\.diy|cal\.com|work packages|meeting availability|event types)\b/i],
   ["coding", /\b(?:write code|coding assist|debug|fix (?:the )?(?:bug|error|test)|implement (?:this|the|a|an)|review (?:this|the) code|refactor|code review|programming task)\b/i],
   ["memory", /\b(?:memory vault|saved memory|recall (?:my|the|a)|what did we decide|we (?:decided|agreed|chose)|decision noted|remember (?:that|this)|prior project context|openviking|agentmemory)\b/i],
   ["open_seo", /\b(?:open\s*seo|openseo)\b/i],
