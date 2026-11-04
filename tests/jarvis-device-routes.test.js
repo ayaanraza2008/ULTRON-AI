@@ -8,7 +8,12 @@ import path from "node:path";
 import { createJarvisRouter } from "../jarvis-router.js";
 import { DeviceHub } from "../integrations/device-hub.js";
 
-async function withDeviceRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user", ULTRON_DEVICE_PAIRING_ENABLED: "true" }, userId = "owner-user", deviceHub } = {}, run) {
+async function withDeviceRouter({ env = {
+  NODE_ENV: "test",
+  ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "true",
+  ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+  ULTRON_DEVICE_PAIRING_ENABLED: "true"
+}, userId = "owner-user", deviceHub } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, res, next) => {
     if (req.headers["authorization"] || userId) {
