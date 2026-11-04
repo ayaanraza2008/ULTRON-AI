@@ -47,7 +47,7 @@ function buildPythonChildEnvironment() {
   const childEnv = {};
   for (const name of allowedNames) {
     const value = process.env[name];
-    if (typeof value === "string" && value.length <= 8192 && !/[\\0\\r\\n]/.test(value)) {
+    if (typeof value === "string" && value.length <= 8192 && !/[\0\r\n]/.test(value)) {
       childEnv[name] = value;
     }
   }
@@ -59,6 +59,8 @@ function buildPythonChildEnvironment() {
 export class PythonCapabilityGateway {
   constructor(options = {}) {
     this.pythonPath = options.pythonPath || process.env.PYTHON_BIN || "python";
+    // Injection is for deterministic tests only; production defaults to child_process.spawn.
+    this.spawnImpl = typeof options.spawnImpl === "function" ? options.spawnImpl : spawn;
     this.runtimeScript = options.runtimeScript || path.resolve(process.cwd(), "system", "python-capability-runtime", "runtime_entry.py");
     this.defaultTimeoutMs = Number.isFinite(Number(options.defaultTimeoutMs))
       ? Math.max(1000, Math.min(120000, Math.trunc(Number(options.defaultTimeoutMs))))
@@ -148,7 +150,7 @@ export class PythonCapabilityGateway {
 
       let proc;
       try {
-        proc = spawn(this.pythonPath, args, {
+        proc = this.spawnImpl(this.pythonPath, args, {
           cwd: runtimeDir,
           windowsHide: true,
           // Never invoke a shell: capability/method arguments must remain argv,
