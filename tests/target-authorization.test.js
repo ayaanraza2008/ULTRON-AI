@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TargetAuthorizationGateway, PERMITTED_ACTIVITIES, TARGET_TYPES } from "../security/target-authorization-gateway.js";
+import { UltronGuardian } from "../security/ultron-guardian.js";
 
 test("Target Authorization: Default local lab scope is seeded and active", () => {
   const gateway = new TargetAuthorizationGateway();
@@ -82,7 +83,8 @@ test("Target Authorization: Blocks non-permitted activity with ACTIVITY_NOT_PERM
 });
 
 test("Target Authorization: Emergency stop halts all security testing", () => {
-  const gateway = new TargetAuthorizationGateway();
+  const guardian = new UltronGuardian({ masterKey: "test-operator-master-key-at-least-32-chars" });
+  const gateway = new TargetAuthorizationGateway({ guardian });
 
   // Engage emergency stop
   gateway.engageEmergencyStop("Operator flagged anomalous traffic");
@@ -100,7 +102,7 @@ test("Target Authorization: Emergency stop halts all security testing", () => {
     /Invalid operator master authorization key/
   );
 
-  const resume = gateway.disengageEmergencyStop("ULTRON_OPERATOR_MASTER_KEY_SECRET");
+  const resume = gateway.disengageEmergencyStop("test-operator-master-key-at-least-32-chars");
   assert.equal(resume.success, true);
   assert.equal(gateway.emergencyStopEngaged, false);
 });
