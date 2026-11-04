@@ -15,7 +15,8 @@ A free app-to-app internet voice feature is a different product: it needs a clie
 - `ULTRON_OWNER_PHONE_NUMBERS`: comma-separated E.164 numbers explicitly authorized to control ULTRON.
 - `ULTRON_TELEPHONY_PIN`: optional four-digit fallback PIN for callers outside the allowlist. Keep it secret and rotate it if exposed.
 - `ULTRON_TELEPHONY_WEBHOOK_SECRET`: at least 32 random characters, sent in the `X-ULTRON-Telephony-Secret` header by a compatible private webhook sender.
-- For Twilio only: set `TWILIO_AUTH_TOKEN` and `TELEPHONY_PUBLIC_BASE_URL` to the exact public HTTPS base URL registered with Twilio. Twilio callbacks are validated against `X-Twilio-Signature`.
+- For Twilio only: set `TWILIO_AUTH_TOKEN` and `TELEPHONY_PUBLIC_BASE_URL` to the exact public HTTPS base URL registered with Twilio. Form-encoded callbacks are validated against `X-Twilio-Signature`; JSON callbacks are rejected because raw-body SHA-256 validation is not implemented.
+- Exotel is not yet a supported carrier adapter in this branch. Its call-flow payload format and provider-specific callback authentication must be implemented and tested before connecting an Exotel number. Do not assume Exotel will send the private shared-secret header.
 
 Never put these secrets in source control, client code, chat messages, or logs. Do not configure a default PIN. A missing webhook secret or invalid signature returns an error before call state is created.
 
