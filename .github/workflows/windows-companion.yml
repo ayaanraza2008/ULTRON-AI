@@ -2,7 +2,7 @@ name: ULTRON Windows Companion
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
     paths:
       - "windows-companion/**"
       - ".github/workflows/windows-companion.yml"
