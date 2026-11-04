@@ -230,3 +230,20 @@ test("DeviceHub imports only verified-format Supabase companion identities into 
   assert.equal(hub.authenticateDevice("device-a", token)?.ownerUserId, "owner-a");
   assert.equal(hub.isPersistent, false);
 });
+
+
+test("DeviceHub notification history is owner-scoped and does not claim unverified delivery", () => {
+  const hub = new DeviceHub({ env: {} });
+  const notificationA = hub.sendNotification({
+    ownerUserId: "owner-a", deviceId: "device-a", title: "A only", body: "Private notification"
+  });
+  hub.sendNotification({
+    ownerUserId: "owner-b", deviceId: "device-b", title: "B only", body: "Other account"
+  });
+
+  assert.equal(notificationA.delivered, false);
+  assert.equal(notificationA.deliveryStatus, "NOT_DISPATCHED");
+  assert.equal(hub.getNotifications(20, { ownerUserId: "owner-a" }).length, 1);
+  assert.equal(hub.getNotifications(20, { ownerUserId: "owner-a" })[0].title, "A only");
+  assert.equal(hub.getNotifications(20, { ownerUserId: "owner-b" }).length, 1);
+});
