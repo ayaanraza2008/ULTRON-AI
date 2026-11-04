@@ -377,7 +377,17 @@ const FILES_TO_CHECK = [
   "integrations/browser/ego-lite/ego-audit-logger.js",
   "integrations/browser/ego-lite/ego-browser-router.js",
   "integrations/browser/ego-lite/ego-adapter.js",
-  "tests/ego-browser-integration.test.js"
+  "tests/ego-browser-integration.test.js",
+  "integrations/python-capability-gateway.js",
+  "knowledge/cerebro-knowledge-vault.js",
+  "self-improvement/prometheus-evolution-engine.js",
+  "system/workspace-matrix.js",
+  "tools/bounty-hunter.js",
+  "tools/flight-finder.js",
+  "tools/meeting-scribe.js",
+  "integrations/telegram-bot.js",
+  "system/game-assistant.js",
+  "tests/ultron-eternal-integration.test.js"
 ];
 
 let checked = 0;

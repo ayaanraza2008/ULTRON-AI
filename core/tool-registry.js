@@ -1,3 +1,12 @@
+import { pythonCapabilityGateway as defaultPythonCapabilityGateway } from "../integrations/python-capability-gateway.js";
+import { cerebroKnowledgeVault as defaultCerebroKnowledgeVault } from "../knowledge/cerebro-knowledge-vault.js";
+import { prometheusEvolutionEngine as defaultPrometheusEvolutionEngine } from "../self-improvement/prometheus-evolution-engine.js";
+import { workspaceMatrix as defaultWorkspaceMatrix } from "../system/workspace-matrix.js";
+import { bountyHunter as defaultBountyHunter } from "../tools/bounty-hunter.js";
+import { flightFinder as defaultFlightFinder } from "../tools/flight-finder.js";
+import { meetingScribe as defaultMeetingScribe } from "../tools/meeting-scribe.js";
+import { gameAssistant as defaultGameAssistant } from "../system/game-assistant.js";
+import { telegramBotBridge as defaultTelegramBotBridge } from "../integrations/telegram-bot.js";
 /**
  * ULTRON AI — Centralized Tool Registry & Capabilities Inventory
  *
@@ -79,7 +88,16 @@ export class ToolRegistry {
       ultronAutonomy: defaultUltronAutonomy,
       mobileControlEngine: defaultMobileControlEngine,
       agentOrchestrator: new AgentOrchestrator(),
-      egoBrowserAdapter: defaultEgoBrowserAdapter
+      egoBrowserAdapter: defaultEgoBrowserAdapter,
+      pythonCapabilityGateway: defaultPythonCapabilityGateway,
+      cerebroKnowledgeVault: defaultCerebroKnowledgeVault,
+      prometheusEvolutionEngine: defaultPrometheusEvolutionEngine,
+      workspaceMatrix: defaultWorkspaceMatrix,
+      bountyHunter: defaultBountyHunter,
+      flightFinder: defaultFlightFinder,
+      meetingScribe: defaultMeetingScribe,
+      gameAssistant: defaultGameAssistant,
+      telegramBotBridge: defaultTelegramBotBridge,
     };
 
     this.adapters = { ...defaultAdapters, ...adapters };
@@ -1257,6 +1275,742 @@ export class ToolRegistry {
       }
     });
 
+
+
+    // ==========================================
+    // 9. CEREBRO KNOWLEDGE GRAPH TOOLS
+    // ==========================================
+    this.registerTool({
+      id: "cerebro_upsert_node",
+      name: "Cerebro Graph Upsert Entity Node",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Upserts an entity node with tokenized content and metadata into Project Cerebro neural knowledge graph.",
+      capabilities: ["knowledge_graph", "entity_storage", "neural_memory"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["nodeId", "label"],
+        properties: {
+          nodeId: { type: "string" },
+          label: { type: "string" },
+          content: { type: "string" },
+          type: { type: "string" },
+          metadata: { type: "object" },
+          userId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const userId = params.userId || "default_user";
+        const vault = this.adapters.cerebroKnowledgeVault;
+        const res = await vault.upsertNode(userId, {
+          id: params.nodeId,
+          label: params.label,
+          content: params.content,
+          type: params.type,
+          metadata: params.metadata
+        });
+        return { success: true, ...res };
+      }
+    });
+
+    this.registerTool({
+      id: "cerebro_link_entities",
+      name: "Cerebro Graph Link Entities",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Creates a weighted, directional or bidirectional relationship between two entity nodes.",
+      capabilities: ["knowledge_graph", "entity_linking", "relationship_mapping"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["sourceId", "targetId"],
+        properties: {
+          sourceId: { type: "string" },
+          targetId: { type: "string" },
+          relation: { type: "string" },
+          weight: { type: "number" },
+          bidirectional: { type: "boolean" },
+          userId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const userId = params.userId || "default_user";
+        const vault = this.adapters.cerebroKnowledgeVault;
+        const res = await vault.linkEntities(userId, {
+          sourceId: params.sourceId,
+          targetId: params.targetId,
+          relation: params.relation,
+          weight: params.weight,
+          bidirectional: params.bidirectional !== false
+        });
+        return { success: true, ...res };
+      }
+    });
+
+    this.registerTool({
+      id: "cerebro_semantic_query",
+      name: "Cerebro Graph TF-IDF Semantic Query",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Performs TF-IDF cosine similarity search across Cerebro entities and returns related graph neighbors.",
+      capabilities: ["knowledge_graph", "semantic_search", "tf_idf_recall"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["query"],
+        properties: {
+          query: { type: "string" },
+          topK: { type: "number" },
+          userId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const userId = params.userId || "default_user";
+        const vault = this.adapters.cerebroKnowledgeVault;
+        const res = await vault.semanticQuery(userId, params.query, params.topK || 5);
+        return { success: true, ...res };
+      }
+    });
+
+    this.registerTool({
+      id: "cerebro_multi_hop_recall",
+      name: "Cerebro Graph Multi-Hop Relationship Recall",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Traverses graph connections up to N hops between entities with cycle prevention.",
+      capabilities: ["knowledge_graph", "multi_hop_traversal", "subgraph_extraction"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["startId"],
+        properties: {
+          startId: { type: "string" },
+          targetId: { type: "string" },
+          maxHops: { type: "number" },
+          userId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const userId = params.userId || "default_user";
+        const vault = this.adapters.cerebroKnowledgeVault;
+        const res = await vault.multiHopRecall(userId, {
+          startId: params.startId,
+          targetId: params.targetId,
+          maxHops: params.maxHops || 3
+        });
+        return { success: true, ...res };
+      }
+    });
+
+    this.registerTool({
+      id: "cerebro_get_metrics",
+      name: "Cerebro Graph Topological Telemetry",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Calculates node count, edge count, graph density, and top central entities.",
+      capabilities: ["knowledge_graph", "graph_telemetry", "centrality_analysis"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 5000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const userId = params.userId || "default_user";
+        const vault = this.adapters.cerebroKnowledgeVault;
+        const res = await vault.getMetrics(userId);
+        return { success: true, ...res };
+      }
+    });
+
+    // ==========================================
+    // 10. DESKTOP OS & POWER AUTOMATION TOOLS
+    // ==========================================
+    this.registerTool({
+      id: "desktop_clipboard_control",
+      name: "Desktop OS Clipboard Manager",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Reads, writes, or clears the host OS clipboard with formatting safety.",
+      capabilities: ["clipboard_read", "clipboard_write", "desktop_control"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["get", "set", "clear"] },
+          text: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        if (params.action === "get") {
+          return await gw.desktopGetClipboard();
+        } else if (params.action === "set") {
+          return await gw.desktopSetClipboard(params.text || "");
+        } else if (params.action === "clear") {
+          return await gw.desktopClearClipboard();
+        }
+        throw new Error(`Unknown clipboard action: '${params.action}'`);
+      }
+    });
+
+    this.registerTool({
+      id: "desktop_audio_settings",
+      name: "Desktop Audio & Volume Controller",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Inspects master audio volume, sets volume level (0-100), or toggles mute.",
+      capabilities: ["volume_control", "audio_settings", "mute_toggle"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["get", "set", "mute"] },
+          level: { type: "number" },
+          mute: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        if (params.action === "get") {
+          return await gw.desktopGetVolume();
+        } else if (params.action === "set") {
+          return await gw.desktopSetVolume(params.level !== undefined ? params.level : 75);
+        } else if (params.action === "mute") {
+          return await gw.desktopMuteVolume(params.mute !== undefined ? params.mute : true);
+        }
+        throw new Error(`Unknown audio action: '${params.action}'`);
+      }
+    });
+
+    this.registerTool({
+      id: "desktop_display_settings",
+      name: "Desktop Display Brightness Controller",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Inspects and sets monitor display brightness via Windows WMI.",
+      capabilities: ["brightness_control", "display_settings"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["get", "set"] },
+          level: { type: "number" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        if (params.action === "get") {
+          return await gw.desktopGetBrightness();
+        } else if (params.action === "set") {
+          return await gw.desktopSetBrightness(params.level !== undefined ? params.level : 80);
+        }
+        throw new Error(`Unknown display action: '${params.action}'`);
+      }
+    });
+
+    this.registerTool({
+      id: "desktop_process_manager",
+      name: "Desktop Process Inspector & Manager",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Lists top running processes by CPU/memory, focuses application windows, or terminates processes.",
+      capabilities: ["process_inspection", "window_focus", "process_termination"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["list", "kill", "focus"] },
+          topN: { type: "number" },
+          sortBy: { type: "string", enum: ["memory", "cpu"] },
+          pid: { type: "number" },
+          name: { type: "string" },
+          windowTitle: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        if (params.action === "list") {
+          return await gw.desktopListProcesses(params.topN || 10, params.sortBy || "memory");
+        } else if (params.action === "kill") {
+          return await gw.desktopKillProcess(params.pid, params.name);
+        } else if (params.action === "focus") {
+          return await gw.desktopFocusWindow(params.windowTitle || "");
+        }
+        throw new Error(`Unknown process manager action: '${params.action}'`);
+      }
+    });
+
+    this.registerTool({
+      id: "desktop_purge_protocol",
+      name: "Deep Disk & Cache Purge Protocol",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Scans reclaimable disk caches (npm, pip, OS temp) and executes safe garbage collection.",
+      capabilities: ["disk_cleanup", "cache_purge", "storage_reclamation"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: false,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          dryRun: { type: "boolean" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        return await gw.desktopExecutePurge(params.dryRun !== false);
+      }
+    });
+
+    this.registerTool({
+      id: "desktop_lock_workstation",
+      name: "Lock Workstation Screen",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Instantly locks the Windows workstation desktop session for security.",
+      capabilities: ["lock_screen", "workstation_security"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+      requiresConfirmation: true,
+      timeoutMs: 5000,
+      inputSchema: { type: "object", properties: {} },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async () => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        return await gw.desktopLockWorkstation();
+      }
+    });
+
+    // ==========================================
+    // 11. WORKSPACE MATRIX & BATTLE MODES
+    // ==========================================
+    this.registerTool({
+      id: "workspace_matrix_mode",
+      name: "Workspace Matrix & Battle Mode Orchestrator",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Switches environment profiles: FOCUS | STEALTH | GAMING | CINEMA | WAR_ROOM | CODING | RESEARCH.",
+      capabilities: ["workspace_matrix", "battle_mode", "environment_orchestration"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["mode"],
+        properties: {
+          mode: { type: "string", enum: ["FOCUS", "STEALTH", "GAMING", "CINEMA", "WAR_ROOM", "CODING", "RESEARCH"] }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const wm = this.adapters.workspaceMatrix;
+        return await wm.activateMode(params.mode);
+      }
+    });
+
+    this.registerTool({
+      id: "iot_smart_device_control",
+      name: "IoT Smart Home & Ambient Lighting",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Inspects connected smart home devices and sets state, brightness, or color scenes.",
+      capabilities: ["iot_control", "smart_lighting", "home_automation"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["list", "set_state", "trigger_scene"] },
+          deviceKey: { type: "string" },
+          state: { type: "string" },
+          brightness: { type: "number" },
+          color: { type: "string" },
+          sceneName: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        if (params.action === "list") {
+          return await gw.iotListDevices();
+        } else if (params.action === "set_state") {
+          return await gw.iotSetDeviceState(params.deviceKey, params.state, params.brightness, params.color);
+        } else if (params.action === "trigger_scene") {
+          return await gw.iotTriggerScene(params.sceneName || "FOCUS");
+        }
+        throw new Error(`Unknown IoT action: '${params.action}'`);
+      }
+    });
+
+    this.registerTool({
+      id: "airspace_recon_scan",
+      name: "Airspace Sentinel & RF Recon",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Scans physical airspace for Bluetooth LE peripherals and WiFi access points.",
+      capabilities: ["rf_recon", "bluetooth_scan", "wifi_airspace"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 12000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          target: { type: "string", enum: ["bluetooth", "wifi", "all"] }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        const target = params.target || "all";
+        const results = {};
+        if (target === "bluetooth" || target === "all") {
+          results.bluetooth = await gw.airspaceScanBluetooth(5);
+        }
+        if (target === "wifi" || target === "all") {
+          results.wifi = await gw.airspaceScanWifi();
+        }
+        return { success: true, ...results };
+      }
+    });
+
+    this.registerTool({
+      id: "network_infrastructure_audit",
+      name: "Network Sentinel & Subnet Auditor",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Discovers active local subnet hosts via ARP and audits multi-resolver DNS health.",
+      capabilities: ["network_scan", "dns_audit", "arp_inspection"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          testDomain: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        const subnet = await gw.networkScanLocalSubnet();
+        const dns = await gw.networkAuditDnsResolvers(params.testDomain || "google.com");
+        return { success: true, subnet, dns };
+      }
+    });
+
+    // ==========================================
+    // 12. VISION, VOICE & BIOMETRIC TOOLS
+    // ==========================================
+    this.registerTool({
+      id: "voice_sfx_synthesize",
+      name: "Procedural Sci-Fi SFX Synthesizer",
+      category: TOOL_CATEGORIES.VOICE_COMMUNICATION,
+      description: "Synthesizes procedural acoustic feedback: repulsor, alarm, sonar, bass_drop, servo.",
+      capabilities: ["audio_synthesis", "procedural_sfx", "hud_audio"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        required: ["sfxType"],
+        properties: {
+          sfxType: { type: "string", enum: ["repulsor", "alarm", "sonar", "bass_drop", "servo"] },
+          durationSec: { type: "number" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        return await gw.voiceSynthSfx(params.sfxType, params.durationSec || 0.4);
+      }
+    });
+
+    this.registerTool({
+      id: "vision_biometric_auth",
+      name: "Biometric Sentinel & Face ID",
+      category: TOOL_CATEGORIES.VISION_PERCEPTION,
+      description: "Enrolls and authenticates user facial biometrics against local Haar cascade profile.",
+      capabilities: ["face_id", "biometric_auth", "boss_recognition"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["enroll", "authenticate", "status"] },
+          label: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        if (params.action === "enroll") {
+          return await gw.biometricsEnroll(params.label || "Boss");
+        } else if (params.action === "authenticate") {
+          return await gw.biometricsAuthenticate();
+        } else if (params.action === "status") {
+          return await gw.biometricsGetStatus();
+        }
+        throw new Error(`Unknown biometric action: '${params.action}'`);
+      }
+    });
+
+    this.registerTool({
+      id: "vision_spatial_gesture",
+      name: "Touchless Spatial Hand Gestures",
+      category: TOOL_CATEGORIES.VISION_PERCEPTION,
+      description: "Classifies spatial hand gestures (swipe, pinch, stop, thumbs_up, fist) into mapped actions.",
+      capabilities: ["gesture_control", "spatial_tracking", "minority_report"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          frameMetadata: { type: "object" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const gw = this.adapters.pythonCapabilityGateway;
+        return await gw.gesturesProcessFrame(params.frameMetadata || { gesture: "PALM_STOP" });
+      }
+    });
+
+    // ==========================================
+    // 13. SELF-EVOLUTION PROMETHEUS TOOLS
+    // ==========================================
+    this.registerTool({
+      id: "evolution_synthesize_tool",
+      name: "Prometheus Autonomous Tool Synthesizer",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Synthesizes a new tool with static AST verification, isolated sandbox testing, and version tracking.",
+      capabilities: ["self_evolution", "tool_synthesis", "sandbox_validation"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        required: ["toolId", "name", "sourceCode"],
+        properties: {
+          toolId: { type: "string" },
+          name: { type: "string" },
+          description: { type: "string" },
+          category: { type: "string" },
+          sourceCode: { type: "string" },
+          language: { type: "string", enum: ["javascript", "python"] },
+          confirmationToken: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const prom = this.adapters.prometheusEvolutionEngine;
+        return await prom.synthesizeTool({
+          toolId: params.toolId,
+          name: params.name,
+          description: params.description,
+          category: params.category,
+          sourceCode: params.sourceCode,
+          language: params.language || "javascript",
+          confirmationToken: params.confirmationToken
+        });
+      }
+    });
+
+    this.registerTool({
+      id: "evolution_rollback_tool",
+      name: "Prometheus Tool Rollback Controller",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Rolls back an evolved tool to its previous validated version.",
+      capabilities: ["self_evolution", "rollback", "version_reversion"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+      requiresConfirmation: true,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["toolId"],
+        properties: {
+          toolId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const prom = this.adapters.prometheusEvolutionEngine;
+        return await prom.rollbackTool(params.toolId);
+      }
+    });
+
+    this.registerTool({
+      id: "evolution_list_tools",
+      name: "Prometheus Evolved Tools Inventory",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Lists all dynamically evolved tools, their SHA-256 digests, versions, and security audit log.",
+      capabilities: ["self_evolution", "tool_inventory", "audit_log"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 5000,
+      inputSchema: { type: "object", properties: {} },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async () => {
+        const prom = this.adapters.prometheusEvolutionEngine;
+        return prom.listTools();
+      }
+    });
+
+    // ==========================================
+    // 14. EXTENDED ECOSYSTEM TOOLS
+    // ==========================================
+    this.registerTool({
+      id: "travel_flight_search",
+      name: "Travel Flight Itinerary Search",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Searches flight itineraries, layover durations, and estimates price options.",
+      capabilities: ["flight_search", "travel_concierge"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["origin", "destination", "departureDate"],
+        properties: {
+          origin: { type: "string" },
+          destination: { type: "string" },
+          departureDate: { type: "string" },
+          maxStops: { type: "number" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const ff = this.adapters.flightFinder;
+        return await ff.searchFlights(params);
+      }
+    });
+
+    this.registerTool({
+      id: "bounty_price_tracker",
+      name: "E-Commerce Bounty Price Tracker",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Monitors e-commerce product pricing, checks stock status, and logs price drops.",
+      capabilities: ["price_tracking", "bounty_hunter", "e_commerce_scraping"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        required: ["productUrl"],
+        properties: {
+          productUrl: { type: "string" },
+          targetPrice: { type: "number" },
+          currency: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const bh = this.adapters.bountyHunter;
+        return await bh.huntPrice(params);
+      }
+    });
+
+    this.registerTool({
+      id: "meeting_audio_scribe",
+      name: "Meeting Audio Scribe & Summarizer",
+      category: TOOL_CATEGORIES.VOICE_COMMUNICATION,
+      description: "Processes meeting audio recordings into executive summaries and action items.",
+      capabilities: ["meeting_transcription", "action_item_extraction", "black_box_protocol"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 12000,
+      inputSchema: {
+        type: "object",
+        required: ["title"],
+        properties: {
+          title: { type: "string" },
+          audioDurationSeconds: { type: "number" },
+          speakerCount: { type: "number" },
+          notes: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const ms = this.adapters.meetingScribe;
+        return await ms.processMeetingAudio(params);
+      }
+    });
+
+    this.registerTool({
+      id: "gaming_library_manager",
+      name: "Gaming Library Sentinel & Optimizer",
+      category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+      description: "Scans installed Steam / Epic Games libraries and launches titles with Radeon optimization.",
+      capabilities: ["gaming_assistant", "game_launcher", "hardware_priority"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["scan", "launch"] },
+          gameId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const ga = this.adapters.gameAssistant;
+        if (params.action === "scan") {
+          return await ga.scanLibrary();
+        } else if (params.action === "launch") {
+          return await ga.launchGame(params.gameId);
+        }
+        throw new Error(`Unknown gaming action: '${params.action}'`);
+      }
+    });
+
+    this.registerTool({
+      id: "remote_telegram_notify",
+      name: "Remote Telegram Notification & Alert Bridge",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Sends remote alerts, sentry breach notifications, or screenshots over Telegram.",
+      capabilities: ["telegram_alerts", "remote_notification", "sentry_alerts"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 8000,
+      inputSchema: {
+        type: "object",
+        required: ["text"],
+        properties: {
+          text: { type: "string" },
+          priority: { type: "string", enum: ["NORMAL", "HIGH", "EMERGENCY"] }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const tg = this.adapters.telegramBotBridge;
+        return await tg.sendAlert(params.text, params.priority || "NORMAL");
+      }
+    });
 
   }
 }
