@@ -78,7 +78,7 @@ const REPOSITORIES = [
   },
   {
     id: "immich", repo: "immich-app/immich", domain: "personal_media",
-    match: /\\b(immich|personal photo library|personal media library|search my photos|photo albums|video albums)\\b/i,
+    match: /\b(immich|personal photo library|personal media library|search my photos|photo albums|video albums)\b/i,
     integration: "owner_scoped_private_media_adapter", status: "adapter_present_unverified_live",
     abilities: ["owner-scoped server health check", "bounded read-only album listing", "bounded photo/video metadata search"],
     limits: ["Requires explicit approval for private media reads. Returns bounded metadata only; no original media downloads, uploads, deletes, or sharing actions are exposed."],
