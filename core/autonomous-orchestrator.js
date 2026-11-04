@@ -740,7 +740,7 @@ export class AutonomousOrchestrator {
             success: false,
             workflowId,
             status: "CROSS_USER_ACCESS_DENIED",
-            error: "Approval must be consumed by the same authenticated owner who requested and approved it.",
+            error: "Cross-user security violation: approval must be consumed by the same authenticated owner who requested and approved it.",
             intent: intentAnalysis.intent,
             events: collectedEvents
           };
@@ -764,7 +764,7 @@ export class AutonomousOrchestrator {
         approvalRequest: approvalRequestsNeeded[0],
         approvalRequests: approvalRequestsNeeded,
         intent: intentAnalysis.intent,
-        textResponse: `ULTRON requires authorization for ${approvalRequestsNeeded.length} sensitive action(s). Please approve each listed action in the Permission Center.`,
+        textResponse: `ULTRON requires authorization to proceed with ${approvalRequestsNeeded.length} sensitive action(s). Please approve each listed action in the Permission Center.`,
         events: collectedEvents
       };
     }

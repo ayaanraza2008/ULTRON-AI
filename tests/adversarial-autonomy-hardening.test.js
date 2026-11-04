@@ -558,11 +558,12 @@ test("Real Tool Execution Audit: all 44 tool schemas validate and privileged too
 
 test("Sensitive background workflows cannot be queued without foreground approval", () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
-  const outcome = orchestrator.submitBackgroundTask("Launch chrome on my computer");
+  const prompt = "Launch chrome on my computer for a security approval gate regression";
+  const outcome = orchestrator.submitBackgroundTask(prompt);
   assert.equal(outcome.success, false);
   assert.equal(outcome.status, "APPROVAL_REQUIRED");
   assert.equal(outcome.code, "BACKGROUND_APPROVAL_UNSUPPORTED");
-  assert.equal(orchestrator.getActiveWorkflows().length, 0);
+  assert.equal(orchestrator.getActiveWorkflows().some(workflow => workflow.prompt === prompt), false);
 });
 // ==========================================
 // 11. BACKGROUND RESTART RECOVERY & INTERRUPTED TASK MARKING

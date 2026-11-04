@@ -51,7 +51,7 @@ test("JARVIS control routes reject anonymous and non-owner users", async () => {
   for (const userId of [null, "attacker-user"]) {
     await withJarvis(userId, async base => {
       for (const [route, method] of routes) {
-        const response = await fetch(base + route, {
+        const response = await fetch(base + "/api" + route, {
           method,
           headers: { "Content-Type": "application/json" },
           body: method === "POST" ? JSON.stringify({

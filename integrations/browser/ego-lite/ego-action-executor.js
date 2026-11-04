@@ -489,6 +489,18 @@ export class EgoActionExecutor {
    * @param {string} script
    * @param  {...any} args
    */
+  async screenshot(pageId, options = {}) {
+    let result = { screenshot: null, simulated: true };
+    if (this.driver && typeof this.driver.screenshot === "function") {
+      result = await this.driver.screenshot(pageId, options);
+    }
+    return {
+      ...result,
+      executionDriver: this.driver?.constructor?.name || "simulated",
+      driverVerified: Boolean(this.driver && typeof this.driver.screenshot === "function")
+    };
+  }
+
   async evaluate(pageId, script, ...args) {
     const options = args.length && args[args.length - 1] &&
       typeof args[args.length - 1] === "object" &&
