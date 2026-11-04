@@ -2120,8 +2120,42 @@
               "warning"
             );
             drawerButton("APPROVE: " + req.toolName, async () => {
-              await apiRequest("/api/jarvis/permissions/approve", { method: "POST", body: { requestId: req.id } });
-              showToast("Approved " + req.toolName);
+              const result = await apiRequest("/api/jarvis/permissions/approve", {
+                method: "POST",
+                body: { requestId: req.id }
+              });
+              if (!result?.success) {
+                showToast("Approval failed: " + (result?.error || "request was not approved."), 6500);
+                return;
+              }
+
+              const workflowId = req.workflowId;
+              let approvedIds = {};
+              if (workflowId) {
+                approvedIds = approvedIdsByWorkflow.get(workflowId) || {};
+                if (req.stepId) approvedIds[req.stepId] = req.id;
+                approvedIdsByWorkflow.set(workflowId, approvedIds);
+
+                const latest = await apiRequest("/api/jarvis/permissions/pending");
+                const remaining = (latest?.pending || []).filter(item => item.workflowId === workflowId);
+                if (remaining.length === 0) {
+                  const savedRequest = approvalPromptByWorkflow.get(workflowId);
+                  if (savedRequest) {
+                    await resumeApprovedWorkflow(
+                      savedRequest.prompt,
+                      approvedIds,
+                      savedRequest.shouldSpeak,
+                      workflowId
+                    );
+                  } else {
+                    showToast("Approved. Re-enter the same command to resume; ULTRON will match only this exact approved action.", 6500);
+                  }
+                } else {
+                  showToast("Approved " + req.toolName + ". " + remaining.length + " approval(s) still required.", 5000);
+                }
+              } else {
+                showToast("Approved " + req.toolName + ". Re-enter the original command to resume.", 5500);
+              }
               void showDrawerView("permissions");
             }, false);
             drawerButton("REJECT: " + req.toolName, async () => {
