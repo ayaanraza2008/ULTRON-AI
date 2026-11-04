@@ -87,6 +87,25 @@ test("TelephonyGateway: Transcript recording and call termination", () => {
   assert.equal(gateway.getCallHistory().length, 1);
 });
 
+test("TelephonyGateway: rejects unknown callers when no owner allowlist or PIN is configured", () => {
+  const gateway = new TelephonyGateway();
+  const result = gateway.handleIncomingCall({
+    callSid: "CA_unconfigured",
+    from: "+911234567890"
+  });
+
+  assert.equal(gateway.ownerPhoneNumbers.size, 0);
+  assert.equal(gateway.securityPin, null);
+  assert.equal(result.authStatus, CALLER_AUTH_STATUS.UNAUTHORIZED);
+  assert.equal(result.isOwner, false);
+  assert.equal(result.state, CALL_STATES.FAILED);
+  assert.match(result.twiml, /<Hangup\/>/);
+});
+
+test("TelephonyGateway: rejects malformed PIN configuration", () => {
+  assert.throws(() => new TelephonyGateway({ securityPin: "1001" + "x" }), /exactly four digits/);
+});
+
 test("TelephonyGateway: G.711 mu-law audio transcoding produces valid 8kHz telephony buffers", () => {
   const gateway = new TelephonyGateway();
   // Generate 16-bit linear PCM test samples

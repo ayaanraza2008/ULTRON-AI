@@ -10,7 +10,7 @@
  * - TwiML and SIP session negotiation for carrier compatibility.
  * - Real-time call state management (RINGING, CONNECTED, LISTENING, PROCESSING, SPEAKING, HANGUP).
  * - Full call transcription logging with optional conversation history integration.
- * - WebRTC fallback voice bridge for free browser/mobile calling.
+ * - Carrier webhook session handling only; a browser/mobile WebRTC bridge is not implemented here.
  */
 
 import crypto from "node:crypto";
@@ -33,16 +33,27 @@ export const CALLER_AUTH_STATUS = {
 
 export class TelephonyGateway {
   constructor(options = {}) {
-    this.ownerPhoneNumbers = new Set(
-      (options.ownerPhoneNumbers || [options.ownerPhoneNumber || "+919999999999"])
-        .map(p => this.normalizePhoneNumber(p))
-    );
-    this.sipAddress = options.sipAddress || "sip:ultron@ai.local:5060";
-    this.securityPin = options.securityPin || "1001";
+    const configuredOwnerNumbers = Array.isArray(options.ownerPhoneNumbers)
+      ? options.ownerPhoneNumbers
+      : (options.ownerPhoneNumber ? [options.ownerPhoneNumber] : []);
+    const normalizedOwnerNumbers = configuredOwnerNumbers
+      .map(phone => this.normalizePhoneNumber(phone))
+      .filter(phone => /^\+[1-9]\d{7,14}$/.test(phone));
+    this.ownerPhoneNumbers = new Set(normalizedOwnerNumbers);
+
+    this.sipAddress = options.sipAddress ? String(options.sipAddress).trim() : null;
+    this.securityPin = options.securityPin == null || options.securityPin === ""
+      ? null
+      : String(options.securityPin).trim();
+    if (this.securityPin && !/^\d{4}$/.test(this.securityPin)) {
+      throw new RangeError("ULTRON_TELEPHONY_PIN must be exactly four digits.");
+    }
+
     this.activeCalls = new Map();
     this.callHistory = [];
     this.maxHistory = 100;
-    this.enableWebRTC = options.enableWebRTC ?? true;
+    // A WebRTC bridge is not implemented by this gateway; keep it unavailable even if misconfigured.
+    this.enableWebRTC = false;
   }
 
   normalizePhoneNumber(phone) {
@@ -55,12 +66,28 @@ export class TelephonyGateway {
    */
   authenticateCaller(callerNumber) {
     const normalized = this.normalizePhoneNumber(callerNumber);
+    if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
+      return {
+        status: CALLER_AUTH_STATUS.UNAUTHORIZED,
+        caller: normalized,
+        isOwner: false,
+        message: "A valid caller ID is required."
+      };
+    }
     if (this.ownerPhoneNumbers.has(normalized)) {
       return {
         status: CALLER_AUTH_STATUS.VERIFIED_OWNER,
         caller: normalized,
         isOwner: true,
         message: "Caller recognized as authorized owner."
+      };
+    }
+    if (!this.securityPin) {
+      return {
+        status: CALLER_AUTH_STATUS.UNAUTHORIZED,
+        caller: normalized,
+        isOwner: false,
+        message: "No PIN fallback is configured; unknown callers are rejected."
       };
     }
     return {
@@ -77,17 +104,35 @@ export class TelephonyGateway {
   verifyCallPin(callId, enteredPin) {
     const call = this.activeCalls.get(callId);
     if (!call) return { success: false, error: "CALL_NOT_FOUND" };
+    if (call.authStatus !== CALLER_AUTH_STATUS.PIN_REQUIRED) {
+      return { success: false, authorized: false, error: "PIN_CHALLENGE_NOT_ACTIVE", hangup: true };
+    }
+    if (!this.securityPin) {
+      call.authStatus = CALLER_AUTH_STATUS.UNAUTHORIZED;
+      call.isOwner = false;
+      return { success: false, authorized: false, error: "PIN_NOT_CONFIGURED", hangup: true };
+    }
 
     const cleanPin = String(enteredPin || "").trim();
-    if (cleanPin === this.securityPin) {
+    const expectedPin = Buffer.from(this.securityPin, "utf8");
+    const suppliedPin = Buffer.from(cleanPin, "utf8");
+    const matches = suppliedPin.length === expectedPin.length
+      && crypto.timingSafeEqual(suppliedPin, expectedPin);
+
+    if (matches) {
       call.authStatus = CALLER_AUTH_STATUS.VERIFIED_OWNER;
       call.isOwner = true;
+      call.state = CALL_STATES.CONNECTED;
+      call.updatedAt = new Date().toISOString();
       return { success: true, authorized: true, message: "Security PIN verified. Access granted." };
     }
 
     call.failedPinAttempts = (call.failedPinAttempts || 0) + 1;
     if (call.failedPinAttempts >= 3) {
       call.authStatus = CALLER_AUTH_STATUS.UNAUTHORIZED;
+      call.isOwner = false;
+      call.state = CALL_STATES.FAILED;
+      call.updatedAt = new Date().toISOString();
       return { success: false, authorized: false, error: "MAX_PIN_ATTEMPTS_EXCEEDED", hangup: true };
     }
 
@@ -122,8 +167,12 @@ export class TelephonyGateway {
     if (auth.status === CALLER_AUTH_STATUS.VERIFIED_OWNER) {
       callRecord.state = CALL_STATES.CONNECTED;
       twimlResponse = this.generateConnectedTwiML(callId, "Good evening sir. ULTRON is online. How may I assist you?");
-    } else {
+    } else if (auth.status === CALLER_AUTH_STATUS.PIN_REQUIRED) {
       twimlResponse = this.generatePinChallengeTwiML(callId);
+    } else {
+      callRecord.state = CALL_STATES.FAILED;
+      callRecord.updatedAt = new Date().toISOString();
+      twimlResponse = this.generateUnauthorizedTwiML();
     }
 
     return {
@@ -158,6 +207,17 @@ export class TelephonyGateway {
         <Say voice="Polly.Matthew" language="en-IN">Security authorization required. Please enter your four digit PIN on your keypad.</Say>
     </Gather>
     <Say voice="Polly.Matthew" language="en-IN">No input received. Terminating call.</Say>
+    <Hangup/>
+</Response>`.trim();
+  }
+
+  /**
+   * Rejects calls when no verified owner number or secure PIN fallback is configured.
+   */
+  generateUnauthorizedTwiML() {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Matthew" language="en-IN">Access denied. This ULTRON telephone endpoint is not configured for this caller. Goodbye.</Say>
     <Hangup/>
 </Response>`.trim();
   }
