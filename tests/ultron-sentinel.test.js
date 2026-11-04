@@ -11,6 +11,7 @@ import { SentinelAgent } from "../security/sentinel/sentinel-agent.js";
 import { SentinelMemory } from "../security/sentinel/sentinel-memory.js";
 import { SentinelMonitor } from "../security/sentinel/sentinel-monitor.js";
 import { targetAuthorizationGateway } from "../security/target-authorization-gateway.js";
+import { UltronGuardian } from "../security/ultron-guardian.js";
 
 async function withSentinelRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" }, userId = "owner-user" } = {}, run) {
   const app = express();
@@ -223,6 +224,9 @@ test("Sentinel Memory: records scan history and tracks drift", () => {
 
 test("Sentinel Controls & Monitor: pause, resume, stop, and emergency halt", async () => {
   const monitor = new SentinelMonitor();
+  const operatorKey = "sentinel-test-operator-key-at-least-32-chars";
+  const originalGuardian = targetAuthorizationGateway.guardian;
+  targetAuthorizationGateway.guardian = new UltronGuardian({ masterKey: operatorKey });
   const startResult = monitor.start(["localhost"], 60_000);
   assert.equal(startResult.running, true);
 
@@ -247,11 +251,12 @@ test("Sentinel Controls & Monitor: pause, resume, stop, and emergency halt", asy
     );
 
     // Resume operations
-    const resume = ultronSentinel.emergencyResume("ULTRON_OPERATOR_MASTER_KEY_SECRET");
+    const resume = ultronSentinel.emergencyResume(operatorKey);
     assert.equal(resume.emergencyStopEngaged, false);
     assert.equal(targetAuthorizationGateway.emergencyStopEngaged, false);
   } finally {
     targetAuthorizationGateway.emergencyStopEngaged = false;
+    targetAuthorizationGateway.guardian = originalGuardian;
   }
 });
 
