@@ -284,6 +284,17 @@ export class TargetAuthorizationGateway {
       throw new Error("ENDPOINT_EXCLUDED: Target endpoint is explicitly excluded from this authorization scope.");
     }
 
+    // Verify activity permission
+    if (!matchingScope.permittedActivities.includes(requestedActivity)) {
+      this.guardian.recordAudit("SECURITY_ACTIVITY_BLOCKED", matchingScope.owner, {
+        target: cleanTarget,
+        requestedActivity,
+        scopeId: matchingScope.scopeId,
+        reason: "ACTIVITY_NOT_PERMITTED"
+      });
+      throw new Error(`ACTIVITY_NOT_PERMITTED: Activity '${requestedActivity}' is not authorized under scope '${matchingScope.scopeId}'. Permitted: [${matchingScope.permittedActivities.join(", ")}].`);
+    }
+
     // Enforce the per-scope sliding-window request ceiling.
     const windowStart = now - 1000;
     const recentRequests = (this.rateLimitWindows.get(matchingScope.scopeId) || []).filter(timestamp => timestamp > windowStart);
@@ -298,17 +309,6 @@ export class TargetAuthorizationGateway {
     }
     recentRequests.push(now);
     this.rateLimitWindows.set(matchingScope.scopeId, recentRequests);
-
-    // Verify activity permission
-    if (!matchingScope.permittedActivities.includes(requestedActivity)) {
-      this.guardian.recordAudit("SECURITY_ACTIVITY_BLOCKED", matchingScope.owner, {
-        target: cleanTarget,
-        requestedActivity,
-        scopeId: matchingScope.scopeId,
-        reason: "ACTIVITY_NOT_PERMITTED"
-      });
-      throw new Error(`ACTIVITY_NOT_PERMITTED: Activity '${requestedActivity}' is not authorized under scope '${matchingScope.scopeId}'. Permitted: [${matchingScope.permittedActivities.join(", ")}].`);
-    }
 
     return {
       authorized: true,
