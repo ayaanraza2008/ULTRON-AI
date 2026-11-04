@@ -493,7 +493,8 @@ export class DeviceHub {
       priority,
       type,
       timestamp: new Date().toISOString(),
-      delivered: true
+      delivered: false,
+      deliveryStatus: "NOT_DISPATCHED"
     };
 
     this.notifications.unshift(notification);
