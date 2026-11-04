@@ -41,7 +41,7 @@ test("AppFlowy and Immich agent tools are visible only to the configured owner",
     assert.equal(response.status, 200);
     const body = await response.json();
     for (const name of [
-      "appflowy_list_workspaces", "appflowy_get_document",
+      "check_appflowy", "appflowy_list_workspaces", "appflowy_get_document",
       "immich_check_status", "immich_list_albums", "immich_search_assets"
     ]) {
       assert.equal(body.tools.find(item => item.name === name)?.available, true, name);
@@ -55,7 +55,7 @@ test("AppFlowy and Immich agent tools are visible only to the configured owner",
     assert.equal(response.status, 200);
     const body = await response.json();
     for (const name of [
-      "appflowy_list_workspaces", "appflowy_get_document",
+      "check_appflowy", "appflowy_list_workspaces", "appflowy_get_document",
       "immich_check_status", "immich_list_albums", "immich_search_assets"
     ]) {
       assert.equal(body.tools.find(item => item.name === name)?.available, false, name);
