@@ -408,6 +408,11 @@ test("Adversarial Security: Rejects cross-user approval tampering and token hija
   assert.equal(hijackApprove.success, false);
   assert.equal(hijackApprove.error, "CROSS_USER_APPROVAL_DENIED");
 
+  // A caller-supplied admin boolean must not override authenticated ownership.
+  const forgedAdminApprove = orchestrator.approveRequest(apprId, { userId: "user-bravo", isAdmin: true });
+  assert.equal(forgedAdminApprove.success, false);
+  assert.equal(forgedAdminApprove.error, "CROSS_USER_APPROVAL_DENIED");
+
   // 3. User B attempts to reject User A's request
   const hijackReject = orchestrator.rejectRequest(apprId, "Deny", { userId: "user-bravo" });
   assert.equal(hijackReject.success, false);
