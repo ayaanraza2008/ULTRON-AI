@@ -492,8 +492,10 @@ export class JarvisUltronCapabilityComparator {
     const verifMd = [
       `# ULTRON AI — VERIFICATION REPORT`,
       `**Verification Date:** ${evaluation.timestamp}  `,
-      `**Test Suite Execution:** 1,195 Tests (1,194 PASS, 0 FAIL, 1 SKIP)  `,
-      `**Syntax Verification:** 314 / 314 Files Clean (0 Errors)  `,
+      `**Test Suite Execution:** Linux CI: 1,467 Tests (1,466 PASS, 0 FAIL, 1 SKIP) | Windows Host: 1,438 Tests (1,430 PASS, 0 FAIL, 8 SKIP)  `,
+      `**Syntax Verification:** 357 / 357 Files Clean (0 Errors)  `,
+      `**Candidate Engineering Commit SHA:** 39eb955364177c3882798e2949fffcb291d90610  `,
+      `**Tool Registry:** 28 Production Tools Verified  `,
       ``,
       `---`,
       ``,

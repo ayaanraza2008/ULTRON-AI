@@ -1,11 +1,13 @@
 # ULTRON AI — Production Deployment Readiness (Software-Only Scope)
 
-**Audit Date:** 2026-11-03 (Asia/Kolkata)  
-**Document Status:** Canonical Production Deployment Readiness Assessment  
-**Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED  
-**Target Render Workspace:** **Ultron core**  
-**Candidate Commit SHA:** `0561f72eb90b06b4093f41419d972d8a984680b5`  
-**Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`  
+**Audit Date:** 2026-11-04 (Asia/Kolkata)
+**Document Status:** Canonical Production Deployment Readiness Assessment
+**Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, NOT MERGED
+**Target Render Workspace:** **Ultron core**
+**Candidate Engineering Commit SHA:** `39eb955364177c3882798e2949fffcb291d90610`
+**Current PR HEAD:** `8a268dc2aba8a3a342a97f67c1a3d8eddf4caca3`
+**PR CI Merge Ref Checkout:** `refs/remotes/pull/441/merge` (`94f4373`, merging `8a268dc2` into `b00c2e81`)
+**Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
 **Deployment Decision:** **CANDIDATE HARDENED — LIVE CLOUD ACCEPTANCE GATED ON OWNER AUTHORIZATION (85.10% Readiness)**
 
 ---
@@ -31,20 +33,28 @@ The target Render workspace `Ultron core` comprises four services, all mapped to
 
 ---
 
-## 3. COMPLETED EVIDENCE BASELINE (EXACT SHA `0561f72e`)
+## 3. COMPLETED EVIDENCE BASELINE (PR HEAD `8a268dc2` / ENGINEERING SHA `39eb9553`)
 
-- **Node.js Test Suite:** 199 test files; **1,366 passed, 0 failed, 5 skipped** (Windows host; in Linux CI with Postgres & Docker: 1,371 passed, 0 skipped) (`node --test`, 62.38s)
-- **Python Test Suites:** 44 discovered; **42 passed, 0 failed, 2 skipped** across browser policy, startup smoke, Harness2, and model lab
-- **Combined Test Metric:** 1,415 discovered; **1,408 passed, 0 failed, 7 skipped** (Windows host; in Linux CI: 1,413 passed, 0 failed, 2 skipped) (99.72% pass rate)
-- **Syntax Check:** **340 / 340 files clean** (`node scripts/check-syntax.mjs`)
-- **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
-- **GitHub Actions (All 6 Checks Passing on PR #441):**
-  - Android Companion: [Run 41679626806](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626806) — PASS (1m 53s)
-  - Windows Companion: [Run 41679626882](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626882) — PASS (1m 1s)
-  - Test Suite (PR): [Run 41679626809](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626809) — PASS (1m 40s)
-  - Test Suite (Push): [Run 41679617151](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679617151) — PASS (1m 36s)
-  - World Intelligence (PR): [Run 41679626809](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679626809) — PASS (2m 32s)
-  - World Intelligence (Push): [Run 41679617151](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41679617151) — PASS (44s)
+- **Node.js Test Suite:** 202 test files; Linux CI: **1,423 discovered: 1,422 passed, 0 failed, 1 skipped** (`tests/supabase-isolation.e2e.test.js:299` protecting live DB). On Windows host without PostgreSQL: 1,388 passed, 0 failed, 6 skipped.
+- **Python Test Suites:** 44 discovered; Linux CI: **44 passed, 0 failed, 0 skipped**. On Windows host: 42 passed, 0 failed, 2 skipped (Windows non-admin symlink restrictions in `test_harness2.py`).
+- **Combined Test Metric:** Linux CI: **1,467 discovered: 1,466 passed, 0 failed, 1 skipped** (99.93% discovered pass rate, 100% executed pass rate). Windows host: 1,438 discovered: 1,430 passed, 0 failed, 8 skipped.
+- **Syntax Check:** **357 / 357 files clean** (`node scripts/check-syntax.mjs`).
+- **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`).
+- **PostgreSQL CI Activation:** Disposable `postgres:15` service container, health checks, isolated test DB provisioner (`scripts/provision-test-databases.mjs`), and fail-closed CI assertions (`assert.fail` when `CI=true`).
+- **Four PostgreSQL Suites:**
+  1. Multi-Tenant RLS Security (`tests/supabase-isolation-real-pg.test.js`)
+  2. Paired Device Migration & Rollback (`tests/paired-device-migration.test.js`)
+  3. Worker Task Queue Lifecycle (`tests/worker-queue-lifecycle.test.js`)
+  4. Real Worker Runtime Process (`tests/worker-runtime-process.test.js`)
+- **GitHub Actions Workflows (All 6 Checks Passing on PR #441):**
+  - **4 PR-Triggered Checks:**
+    - `test`: [Run 41784592237](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592237) — PASS (3m 26s)
+    - `world-intelligence-build`: [Run 41784592237](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592237) — PASS (49s)
+    - `build-android-companion`: [Run 41784592162](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592162) — PASS (1m 39s)
+    - `build-windows-companion`: [Run 41784592133](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592133) — PASS (55s)
+  - **2 Push-Triggered Checks:**
+    - `test`: [Run 41784584970](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784584970) — PASS (2m 57s)
+    - `world-intelligence-build`: [Run 41784584970](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784584970) — PASS (41s)
 
 ---
 
@@ -54,6 +64,6 @@ The codebase is software-complete and locked against unapproved modifications. T
 
 1. **Owner PR Merge Authorization:** Merge candidate PR #441 into `main` (`gh pr merge 441 --merge`).
 2. **Owner Render Blueprint Sync:** In Render Dashboard -> Workspace `Ultron core` -> Blueprints, review the diff and apply candidate `render.yaml`.
-3. **Owner Supabase Migration:** Apply `supabase/migrations/20261101180000_durable_paired_devices.sql` in the Supabase SQL Editor.
+3. **Owner Supabase Migration:** Apply `supabase/migrations/20261101180000_durable_paired_devices.sql` in the Supabase SQL Editor. Note: companion rollback script is explicitly DESTRUCTIVE.
 4. **Owner Supabase Auth Setting:** Toggle **Leaked Password Protection** to Enabled in Supabase Dashboard (Authentication -> Attack Protection).
 5. **Production API Keys:** Populate production keys (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `AIzaSy...` `GEMINI_API_KEY`, `TAVILY_API_KEY`) in Render Dashboard environment variables.
