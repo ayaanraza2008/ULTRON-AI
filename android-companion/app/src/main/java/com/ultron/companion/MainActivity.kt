@@ -18,10 +18,17 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.ultron.companion.service.UltronSyncWorker
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
     private lateinit var status: TextView
@@ -34,6 +41,11 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         buildLayout()
         updatePairingStatus()
+        if (DeviceTokenStore.isPaired(this)) {
+            scheduleTelemetrySync()
+        } else {
+            cancelTelemetrySync()
+        }
     }
 
     private fun buildLayout() {
@@ -127,11 +139,30 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun scheduleTelemetrySync() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val request = PeriodicWorkRequestBuilder<UltronSyncWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            TELEMETRY_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    private fun cancelTelemetrySync() {
+        WorkManager.getInstance(applicationContext).cancelUniqueWork(TELEMETRY_WORK_NAME)
+    }
+
     private fun pairDevice() {
         val entered = pairingInput.text?.toString()?.trim().orEmpty()
         if (entered.matches(Regex("^ultron_dev_[a-f0-9]{64}$", RegexOption.IGNORE_CASE))) {
             try {
                 DeviceTokenStore.save(this, entered)
+                scheduleTelemetrySync()
                 pairingInput.setText("")
                 updatePairingStatus()
                 status.text = "Rotated device token protected with Android Keystore."
@@ -157,6 +188,7 @@ class MainActivity : Activity() {
                     throw IllegalStateException("ULTRON returned an invalid pairing credential.")
                 }
                 DeviceTokenStore.save(this, token)
+                scheduleTelemetrySync()
                 runOnUiThread {
                     pairingInput.setText("")
                     updatePairingStatus()
@@ -391,6 +423,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val TELEMETRY_WORK_NAME = "ultron-device-telemetry"
         private const val REQUEST_PERMISSIONS = 4701
         private const val REQUEST_SPEAK_PERMISSION = 4702
         private const val NETWORK_TIMEOUT_MS = 12000
