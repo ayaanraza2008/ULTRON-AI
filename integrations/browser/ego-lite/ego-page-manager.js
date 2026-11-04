@@ -100,8 +100,9 @@ export class EgoPageManager {
     };
 
     if (this.driver && typeof this.driver.createPage === "function") {
-      const guardedInitialUrl = initialUrl === "about:blank" ? "about:blank" : "about:blank";
-      const driverResult = await this.driver.createPage({ taskSpaceId, initialUrl: guardedInitialUrl });
+      // Create a blank page first; all non-blank destinations must pass the
+      // DNS-aware request guard in gotoWithRequestGuard below.
+      const driverResult = await this.driver.createPage({ taskSpaceId, initialUrl: "about:blank" });
       pageState.targetId = driverResult?.targetId || pageId;
       if (initialUrl !== "about:blank") {
         if (typeof this.driver.gotoWithRequestGuard !== "function") {
