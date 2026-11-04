@@ -77,6 +77,7 @@ def browser_readiness_status(
         "browserRuntimeReady": runtime_ready,
         "startupSmokeEnabled": smoke_enabled,
         "startupSmokeStatus": smoke_state,
+        "startupSmokeReason": str(smoke_status.get("reason") or "")[:80] or None,
         "reason": reason,
     }
 
