@@ -99,10 +99,21 @@ test("Windows companion supports one-time device pairing and DPAPI-protected tok
   assert.ok(source.includes("ProtectedData.Unprotect"));
   assert.ok(source.includes("DataProtectionScope.CurrentUser"));
   assert.ok(source.includes("LoadDeviceToken()"));
-  assert.ok(source.includes("SaveDeviceToken(token)"));
+  assert.ok(source.includes("SaveDeviceIdentity(deviceId, token)"));
+  assert.ok(source.includes("private static void SaveDeviceIdentity"));
+  assert.ok(source.includes("private static (string? DeviceId, string? Token) LoadDeviceIdentity()"));
+  assert.ok(source.includes("DataProtectionScope.CurrentUser"));
   assert.ok(source.includes("ultron_dev_[a-f0-9]{64}"));
   assert.ok(project.includes("System.Security.Cryptography.ProtectedData"));
   assert.ok(!source.includes("File.WriteAllText(DeviceTokenPath()"));
+  assert.ok(source.includes("Allow allowlisted remote commands from paired devices"));
+  assert.ok(source.includes("PollPendingCommandsAsync"));
+  const executor = await readFile(new URL("../windows-companion/RemoteCommandExecutor.cs", import.meta.url), "utf8");
+  assert.ok(executor.includes("HMACSHA256"));
+  assert.ok(executor.includes("FixedTimeEquals"));
+  assert.ok(executor.includes("Documents"));
+  assert.ok(executor.includes("SCREEN_CAPTURE_DISABLED_FOR_PRIVACY"));
+  assert.ok(executor.includes("APP_NOT_ALLOWLISTED"));
 });
 
 test("Android companion only captures a command after an explicit Speak button action", async () => {
