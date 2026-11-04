@@ -35,7 +35,7 @@ The real-world verification was executed against the developer's live Android de
 
 ## 3. Real-World Physical Device Workflow Execution
 
-Verification script `scripts/test-real-device-workflow.mjs` was executed against the physical device. Below is the step-by-step audit log:
+Verification script `scripts/real-device-workflow.mjs` was executed against the physical device. Below is the step-by-step audit log:
 
 ```
 === ULTRON MOBILE MCP REAL-WORLD VERIFICATION ===
