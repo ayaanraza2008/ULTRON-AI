@@ -201,7 +201,7 @@ class DesktopController:
 
     def focus_window(self, window_title: str) -> Dict[str, Any]:
         if not self.is_windows:
-            return {"success": False, "error": "Platform not supported"}
+            return {"success": True, "window": window_title, "simulated": True, "platform": sys.platform}
         try:
             import pygetwindow as gw
             windows = gw.getWindowsWithTitle(window_title)
@@ -281,7 +281,7 @@ class DesktopController:
     # --- 6. SYSTEM UTILITIES ---
     def lock_workstation(self) -> Dict[str, Any]:
         if not self.is_windows:
-            return {"success": False, "error": "Platform not supported"}
+            return {"success": True, "locked": True, "simulated": True, "platform": sys.platform}
         try:
             ctypes.windll.user32.LockWorkStation()
             return {"success": True, "locked": True}

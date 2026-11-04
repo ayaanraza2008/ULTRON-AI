@@ -85,6 +85,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   pairing public.pending_device_pairings%rowtype;
 begin
@@ -94,15 +95,15 @@ begin
 
   select *
     into pairing
-    from public.pending_device_pairings
-   where code = p_code
-     and approved = true
-     and approved_by is not null
-     and device_id is not null
-     and token_hash is not null
-     and token_prefix is not null
-     and encrypted_token is not null
-     and expires_at > now()
+    from public.pending_device_pairings pd
+   where pd.code = p_code
+     and pd.approved = true
+     and pd.approved_by is not null
+     and pd.device_id is not null
+     and pd.token_hash is not null
+     and pd.token_prefix is not null
+     and pd.encrypted_token is not null
+     and pd.expires_at > now()
    for update;
 
   if not found then

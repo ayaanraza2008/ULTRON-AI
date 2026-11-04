@@ -260,10 +260,14 @@ export class DisposablePgHarness {
           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
             CREATE ROLE postgres NOLOGIN;
           END IF;
+          EXECUTE format('GRANT %I TO service_role;', current_user);
         END $$;
 
         -- Grant schema usage to roles
         GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role, anon, authenticated;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role, anon, authenticated;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO service_role, anon, authenticated;
 
         -- Create auth schema and users table
         CREATE SCHEMA IF NOT EXISTS auth;
@@ -341,9 +345,9 @@ export class DisposablePgHarness {
       }
 
       await client.query(`
-        GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role, anon, authenticated;
-        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role, anon, authenticated;
-        GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role, anon, authenticated;
+        GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+        GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
 
         CREATE OR REPLACE FUNCTION public.ultron_recover_stale_tasks()
         RETURNS SETOF public.agent_tasks
@@ -405,8 +409,23 @@ export class DisposablePgHarness {
         await client.query("SET LOCAL \"request.jwt.claim.role\" = 'authenticated';");
       }
 
+      let savepointIdx = 0;
+      const originalQuery = client.query.bind(client);
+      client.query = async (...args) => {
+        const sp = `sp_${savepointIdx++}`;
+        await originalQuery(`SAVEPOINT ${sp};`);
+        try {
+          const res = await originalQuery(...args);
+          await originalQuery(`RELEASE SAVEPOINT ${sp};`);
+          return res;
+        } catch (err) {
+          await originalQuery(`ROLLBACK TO SAVEPOINT ${sp};`).catch(() => {});
+          throw err;
+        }
+      };
+
       const result = await callback(client);
-      await client.query("COMMIT;");
+      await originalQuery("COMMIT;");
       return result;
     } catch (err) {
       await client.query("ROLLBACK;").catch(() => {});

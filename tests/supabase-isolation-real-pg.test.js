@@ -186,7 +186,9 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
             return true;
           }
         );
+      });
 
+      await harness.asRole("authenticated", userA.id, async (client) => {
         // Attempting to insert a memory forged with user_id = userB.id
         await assert.rejects(
           client.query(
