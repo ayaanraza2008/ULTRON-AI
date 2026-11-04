@@ -124,7 +124,7 @@ export class DirectChromiumCdpDriver {
       "--no-first-run",
       "--no-default-browser-check",
       "--disable-gpu",
-      \`--user-data-dir=\${this.userDataDir}\`
+      `--user-data-dir=${this.userDataDir}`
     ];
     // GitHub-hosted CI runners may not provide the user-namespace sandbox
     // required by Chromium. Disable the sandbox only inside ephemeral CI jobs;
