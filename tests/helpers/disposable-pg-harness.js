@@ -340,6 +340,38 @@ export class DisposablePgHarness {
         }
       }
 
+      await client.query(`
+        GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role, anon, authenticated;
+        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role, anon, authenticated;
+        GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role, anon, authenticated;
+
+        CREATE OR REPLACE FUNCTION public.ultron_recover_stale_tasks()
+        RETURNS SETOF public.agent_tasks
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        SET search_path = public, pg_temp
+        AS $$
+        BEGIN
+          RETURN QUERY
+          UPDATE public.agent_tasks AS task
+             SET status = CASE WHEN task.attempts < 3 THEN 'QUEUED' ELSE 'FAILED' END,
+                 error_code = 'WORKER_LEASE_EXPIRED',
+                 result = jsonb_build_object(
+                   'message', 'The worker stopped before confirming task completion. The task was recovered according to its retry limit.',
+                   'retry', task.attempts < 3
+                 ),
+                 started_at = NULL,
+                 finished_at = CASE WHEN task.attempts < 3 THEN NULL ELSE now() END,
+                 updated_at = now()
+           WHERE task.status = 'RUNNING'
+             AND task.started_at IS NOT NULL
+             AND task.started_at < now() - INTERVAL '5 minutes'
+          RETURNING task.*;
+        END;
+        $$;
+        GRANT EXECUTE ON FUNCTION public.ultron_recover_stale_tasks() TO anon, authenticated, service_role;
+      `);
+
       this.isReady = true;
       return {
         ready: true,
@@ -389,5 +421,9 @@ export class DisposablePgHarness {
       await this.pool.end().catch(() => {});
       this.pool = null;
     }
+  }
+
+  async cleanup() {
+    return this.close();
   }
 }
