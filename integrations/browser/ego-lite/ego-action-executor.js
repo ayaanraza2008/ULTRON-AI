@@ -416,14 +416,15 @@ export class EgoActionExecutor {
    */
   async downloadFile(pageId, downloadUrl, filename, options = {}) {
     const startTime = Date.now();
-    await this._authorizeAction("download", { filename }, PERMISSION_LEVELS.LEVEL_3_SENSITIVE, options);
 
-    // Prevent path traversal
+    // Validate local destination before asking for an approval token so malformed
+    // paths are rejected deterministically and never reach the driver.
     const safeBasename = path.basename(filename || "downloaded_file");
     if (!safeBasename || safeBasename === "." || safeBasename === "..") {
       throw new Error("Invalid download filename");
     }
 
+    await this._authorizeAction("download", { filename: safeBasename }, PERMISSION_LEVELS.LEVEL_3_SENSITIVE, options);
     await this._validateOutboundUrl(downloadUrl, "Download");
 
     // Ensure download directory exists
