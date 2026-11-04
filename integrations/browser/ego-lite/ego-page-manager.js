@@ -68,10 +68,17 @@ export class EgoPageManager {
       );
     }
 
-    if (this.securityGuard && initialUrl !== "about:blank") {
-      const secCheck = this.securityGuard.validateUrl(initialUrl);
-      if (!secCheck.allowed) {
-        throw new Error(`Navigation blocked by security policy: ${secCheck.reason}`);
+    if (initialUrl !== "about:blank") {
+      if (this.driver && !this.securityGuard) {
+        throw new Error("BROWSER_SECURITY_GUARD_REQUIRED: Live navigation is disabled without the SSRF guard.");
+      }
+      if (this.securityGuard) {
+        const secCheck = typeof this.securityGuard.validateUrlAsync === "function"
+          ? await this.securityGuard.validateUrlAsync(initialUrl)
+          : this.securityGuard.validateUrl(initialUrl);
+        if (!secCheck.allowed) {
+          throw new Error(`Navigation blocked by security policy: ${secCheck.reason}`);
+        }
       }
     }
 
@@ -93,8 +100,23 @@ export class EgoPageManager {
     };
 
     if (this.driver && typeof this.driver.createPage === "function") {
-      const driverResult = await this.driver.createPage({ taskSpaceId, initialUrl });
+      const guardedInitialUrl = initialUrl === "about:blank" ? "about:blank" : "about:blank";
+      const driverResult = await this.driver.createPage({ taskSpaceId, initialUrl: guardedInitialUrl });
       pageState.targetId = driverResult?.targetId || pageId;
+      if (initialUrl !== "about:blank") {
+        if (typeof this.driver.gotoWithRequestGuard !== "function") {
+          throw new Error("BROWSER_REDIRECT_GUARD_UNAVAILABLE: The live browser driver must enforce validateRequestUrl on every request and redirect.");
+        }
+        const driverNav = await this.driver.gotoWithRequestGuard(pageId, initialUrl, {
+          validateRequestUrl: candidate => this.securityGuard.validateUrlAsync(candidate)
+        });
+        const finalUrl = driverNav?.url || initialUrl;
+        const finalCheck = await this.securityGuard.validateUrlAsync(finalUrl);
+        if (!finalCheck.allowed) {
+          throw new Error(`Navigation redirect blocked: ${finalCheck.reason}`);
+        }
+        pageState.title = driverNav?.title || pageState.title;
+      }
     }
 
     pages.set(pageId, pageState);
@@ -195,8 +217,13 @@ export class EgoPageManager {
       throw new Error("Target URL is required for goto");
     }
 
+    if (this.driver && !this.securityGuard) {
+      throw new Error("BROWSER_SECURITY_GUARD_REQUIRED: Live navigation is disabled without the SSRF guard.");
+    }
     if (this.securityGuard) {
-      const secCheck = this.securityGuard.validateUrl(url);
+      const secCheck = typeof this.securityGuard.validateUrlAsync === "function"
+        ? await this.securityGuard.validateUrlAsync(url)
+        : this.securityGuard.validateUrl(url);
       if (!secCheck.allowed) {
         throw new Error(`Navigation blocked: ${secCheck.reason}`);
       }
@@ -225,7 +252,18 @@ export class EgoPageManager {
     let status = 200;
 
     if (this.driver && typeof this.driver.goto === "function") {
-      const driverRes = await this.driver.goto(page.id, url, options);
+      if (typeof this.driver.gotoWithRequestGuard !== "function") {
+        throw new Error("BROWSER_REDIRECT_GUARD_UNAVAILABLE: The live browser driver must enforce validateRequestUrl on every request and redirect.");
+      }
+      const driverRes = await this.driver.gotoWithRequestGuard(page.id, url, {
+        ...options,
+        validateRequestUrl: candidate => this.securityGuard.validateUrlAsync(candidate)
+      });
+      const finalUrl = driverRes?.url || url;
+      const finalCheck = await this.securityGuard.validateUrlAsync(finalUrl);
+      if (!finalCheck.allowed) {
+        throw new Error(`Navigation redirect blocked: ${finalCheck.reason}`);
+      }
       if (driverRes?.title) title = driverRes.title;
       if (driverRes?.status) status = driverRes.status;
     } else {
