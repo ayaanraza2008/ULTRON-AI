@@ -168,15 +168,21 @@ export class MobileControlEngine extends EventEmitter {
    * Get active target device or throw actionable error.
    */
   _requireTargetDevice(deviceId = null) {
+    const devices = this.registry.getDevices();
     const target = deviceId || this.registry.selectedDeviceId;
-    if (!target) {
-      const devices = this.registry.getDevices();
-      if (devices.length === 0) {
-        throw new Error("No mobile devices connected. Please connect an Android device via USB or Wireless ADB.");
+    if (target) {
+      const online = devices.find(device => device.id === target && device.state === DEVICE_STATES.ONLINE);
+      if (!online) {
+        throw new Error(`No mobile devices connected or target device '${target}' is not currently online.`);
       }
-      return devices[0].id;
+      return online.id;
     }
-    return target;
+
+    const online = devices.find(device => device.state === DEVICE_STATES.ONLINE);
+    if (!online) {
+      throw new Error("No mobile devices connected. Please connect an Android device via USB or Wireless ADB.");
+    }
+    return online.id;
   }
 
   /**
