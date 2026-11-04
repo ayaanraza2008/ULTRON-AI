@@ -62,6 +62,49 @@ export class EgoActionExecutor {
     };
   }
 
+  async _authorizeAction(actionName, target, requiredLevel = PERMISSION_LEVELS.LEVEL_2_INTERACT, options = {}) {
+    if (this.securityGuard?.emergencyStopEngaged) {
+      throw new Error(`BROWSER_ACTION_BLOCKED: Emergency Stop is engaged: ${this.securityGuard.emergencyStopReason || "operator stop"}`);
+    }
+    if (requiredLevel >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE) {
+      if (!this.securityGuard ||
+          typeof this.securityGuard.verifySensitiveActionApproval !== "function" ||
+          !(await this.securityGuard.verifySensitiveActionApproval({
+            actionName,
+            target,
+            actorId: options.actorId,
+            approvalToken: options.approvalToken
+          }))) {
+        throw Object.assign(
+          new Error(`BROWSER_APPROVAL_REQUIRED: ${actionName} requires an authenticated owner-bound, single-use approval token.`),
+          { code: "BROWSER_APPROVAL_REQUIRED" }
+        );
+      }
+      return;
+    }
+    if (this.securityGuard) {
+      const result = this.securityGuard.checkActionPermission(actionName, target, requiredLevel);
+      if (!result.allowed) {
+        throw Object.assign(new Error(`Browser action blocked: ${result.reason}`), { code: "BROWSER_ACTION_BLOCKED" });
+      }
+    }
+  }
+
+  async _validateOutboundUrl(url, actionName) {
+    if (!this.securityGuard) {
+      throw Object.assign(new Error(`BROWSER_SECURITY_GUARD_REQUIRED: ${actionName} requires DNS-aware URL validation.`), {
+        code: "BROWSER_SECURITY_GUARD_REQUIRED"
+      });
+    }
+    const result = typeof this.securityGuard.validateUrlAsync === "function"
+      ? await this.securityGuard.validateUrlAsync(url)
+      : this.securityGuard.validateUrl(url);
+    if (!result.allowed) {
+      throw Object.assign(new Error(`${actionName} blocked by security: ${result.reason}`), { code: "BROWSER_URL_BLOCKED" });
+    }
+    return result;
+  }
+
   /**
    * Click element
    * @param {string} pageId
@@ -71,17 +114,15 @@ export class EgoActionExecutor {
   async click(pageId, refOrSelector, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
-
-    if (this.securityGuard) {
-      const secCheck = this.securityGuard.checkActionPermission(
-        EGO_ACTIONS.CLICK,
-        target,
-        PERMISSION_LEVELS.LEVEL_2_INTERACT
-      );
-      if (!secCheck.allowed) {
-        throw new Error(`Click blocked: ${secCheck.reason}`);
-      }
-    }
+    const consequentialClick = /submit|send|pay|purchase|checkout|confirm|accept|authorize|delete|remove|book|reserve|publish|upload|share|invite|sign in|log in/i.test(
+      `${target.name || ""} ${target.text || ""} ${target.role || ""}`
+    );
+    await this._authorizeAction(
+      EGO_ACTIONS.CLICK,
+      target,
+      consequentialClick ? PERMISSION_LEVELS.LEVEL_4_CRITICAL : PERMISSION_LEVELS.LEVEL_2_INTERACT,
+      options
+    );
 
     let result = { clicked: true, target: target.ref || target.selector };
 
@@ -111,6 +152,7 @@ export class EgoActionExecutor {
   async dblclick(pageId, refOrSelector, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
+    await this._authorizeAction(EGO_ACTIONS.DBLCLICK, target, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
 
     let result = { dblclicked: true, target: target.ref || target.selector };
 
@@ -140,6 +182,7 @@ export class EgoActionExecutor {
   async hover(pageId, refOrSelector, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
+    await this._authorizeAction(EGO_ACTIONS.HOVER, target, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
 
     let result = { hovered: true, target: target.ref || target.selector };
 
@@ -177,16 +220,12 @@ export class EgoActionExecutor {
       /password|secret|pin|cvv|token/i.test(target.name || "") ||
       /password|secret|pin|cvv|token/i.test(target.placeholder || "");
 
-    if (this.securityGuard && isSensitive) {
-      const secCheck = this.securityGuard.checkActionPermission(
-        EGO_ACTIONS.FILL,
-        target,
-        PERMISSION_LEVELS.LEVEL_4_CRITICAL
-      );
-      if (!secCheck.allowed) {
-        throw new Error(`Fill on sensitive field blocked: ${secCheck.reason}`);
-      }
-    }
+    await this._authorizeAction(
+      EGO_ACTIONS.FILL,
+      target,
+      isSensitive ? PERMISSION_LEVELS.LEVEL_4_CRITICAL : PERMISSION_LEVELS.LEVEL_2_INTERACT,
+      options
+    );
 
     let result = { filled: true, target: target.ref || target.selector };
 
@@ -219,6 +258,7 @@ export class EgoActionExecutor {
   async selectOption(pageId, refOrSelector, values, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
+    await this._authorizeAction(EGO_ACTIONS.SELECT_OPTION, target, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
 
     let result = { selected: true, target: target.ref || target.selector, values };
 
@@ -245,8 +285,9 @@ export class EgoActionExecutor {
    * @param {string} sourceRef
    * @param {string} targetRef
    */
-  async dragAndDrop(pageId, sourceRef, targetRef) {
+  async dragAndDrop(pageId, sourceRef, targetRef, options = {}) {
     const startTime = Date.now();
+    await this._authorizeAction(EGO_ACTIONS.DRAG_AND_DROP, { sourceRef, targetRef }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
     let result = { dragDropped: true, source: sourceRef, target: targetRef };
 
     if (this.driver && typeof this.driver.dragAndDrop === "function") {
@@ -275,6 +316,7 @@ export class EgoActionExecutor {
    * @param {Object} [options={}]
    */
   async mouseClick(pageId, x, y, options = {}) {
+    await this._authorizeAction("mouseClick", { x, y }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
     if (this.driver && typeof this.driver.mouseClick === "function") {
       return await this.driver.mouseClick(pageId, x, y, options);
     }
@@ -287,7 +329,8 @@ export class EgoActionExecutor {
    * @param {number} x
    * @param {number} y
    */
-  async mouseMove(pageId, x, y) {
+  async mouseMove(pageId, x, y, options = {}) {
+    await this._authorizeAction("mouseMove", { x, y }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
     if (this.driver && typeof this.driver.mouseMove === "function") {
       return await this.driver.mouseMove(pageId, x, y);
     }
@@ -300,7 +343,8 @@ export class EgoActionExecutor {
    * @param {number} deltaX
    * @param {number} deltaY
    */
-  async mouseWheel(pageId, deltaX, deltaY) {
+  async mouseWheel(pageId, deltaX, deltaY, options = {}) {
+    await this._authorizeAction("mouseWheel", { deltaX, deltaY }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
     if (this.driver && typeof this.driver.mouseWheel === "function") {
       return await this.driver.mouseWheel(pageId, deltaX, deltaY);
     }
@@ -314,6 +358,7 @@ export class EgoActionExecutor {
    * @param {Object} [options={}]
    */
   async type(pageId, text, options = {}) {
+    await this._authorizeAction("type", { textLength: String(text ?? "").length }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
     if (this.driver && typeof this.driver.type === "function") {
       return await this.driver.type(pageId, text, options);
     }
@@ -327,6 +372,10 @@ export class EgoActionExecutor {
    * @param {Object} [options={}]
    */
   async press(pageId, key, options = {}) {
+    await this._authorizeAction(EGO_ACTIONS.PRESS, { key }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
+    if (/^(?:Enter|NumpadEnter)$/i.test(String(key)) && options.targetRole === "submit") {
+      await this._authorizeAction("formSubmit", { key }, PERMISSION_LEVELS.LEVEL_4_CRITICAL, options);
+    }
     if (this.driver && typeof this.driver.press === "function") {
       return await this.driver.press(pageId, key, options);
     }
@@ -339,8 +388,9 @@ export class EgoActionExecutor {
    * @param {string} refOrSelector
    * @param {Array<string>} filePaths
    */
-  async setInputFiles(pageId, refOrSelector, filePaths) {
+  async setInputFiles(pageId, refOrSelector, filePaths, options = {}) {
     const target = this._resolveTarget(pageId, refOrSelector);
+    await this._authorizeAction(EGO_ACTIONS.INPUT_FILES, target, PERMISSION_LEVELS.LEVEL_3_SENSITIVE, options);
     // Verify file existence and security
     for (const fpath of filePaths) {
       const resolved = path.resolve(fpath);
@@ -364,8 +414,9 @@ export class EgoActionExecutor {
    * @param {string} filename
    * @returns {Promise<Object>}
    */
-  async downloadFile(pageId, downloadUrl, filename) {
+  async downloadFile(pageId, downloadUrl, filename, options = {}) {
     const startTime = Date.now();
+    await this._authorizeAction("download", { filename }, PERMISSION_LEVELS.LEVEL_3_SENSITIVE, options);
 
     // Prevent path traversal
     const safeBasename = path.basename(filename || "downloaded_file");
@@ -373,12 +424,7 @@ export class EgoActionExecutor {
       throw new Error("Invalid download filename");
     }
 
-    if (this.securityGuard) {
-      const secCheck = this.securityGuard.validateUrl(downloadUrl);
-      if (!secCheck.allowed) {
-        throw new Error(`Download blocked by security: ${secCheck.reason}`);
-      }
-    }
+    await this._validateOutboundUrl(downloadUrl, "Download");
 
     // Ensure download directory exists
     await fs.mkdir(this.downloadsDir, { recursive: true });
@@ -425,6 +471,12 @@ export class EgoActionExecutor {
    * @param  {...any} args
    */
   async evaluate(pageId, script, ...args) {
+    const options = args.length && args[args.length - 1] &&
+      typeof args[args.length - 1] === "object" &&
+      Object.prototype.hasOwnProperty.call(args[args.length - 1], "approvalToken")
+      ? args.pop()
+      : {};
+    await this._authorizeAction(EGO_ACTIONS.EVALUATE, { scriptLength: String(script ?? "").length }, PERMISSION_LEVELS.LEVEL_4_CRITICAL, options);
     if (this.driver && typeof this.driver.evaluate === "function") {
       return await this.driver.evaluate(pageId, script, ...args);
     }
@@ -438,12 +490,8 @@ export class EgoActionExecutor {
    * @param {Object} [options={}]
    */
   async fetch(pageId, url, options = {}) {
-    if (this.securityGuard) {
-      const secCheck = this.securityGuard.validateUrl(url);
-      if (!secCheck.allowed) {
-        throw new Error(`Fetch blocked: ${secCheck.reason}`);
-      }
-    }
+    await this._authorizeAction(EGO_ACTIONS.FETCH, { url }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
+    await this._validateOutboundUrl(url, "Fetch");
 
     if (this.driver && typeof this.driver.fetch === "function") {
       return await this.driver.fetch(pageId, url, options);
@@ -462,7 +510,8 @@ export class EgoActionExecutor {
    * @param {string} method
    * @param {Object} [params={}]
    */
-  async cdp(method, params = {}) {
+  async cdp(method, params = {}, options = {}) {
+    await this._authorizeAction(EGO_ACTIONS.CDP, { method }, PERMISSION_LEVELS.LEVEL_4_CRITICAL, options);
     if (this.driver && typeof this.driver.cdp === "function") {
       return await this.driver.cdp(method, params);
     }
