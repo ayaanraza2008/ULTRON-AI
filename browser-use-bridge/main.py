@@ -316,6 +316,7 @@ async def _schedule_opt_in_browser_smoke() -> None:
         return
 
     async def run_smoke() -> None:
+        global BROWSER_STARTUP_SMOKE_STATUS
         logger = __import__("logging").getLogger("ultron.browser.smoke")
         token = os.getenv("ULTRON_BROWSER_USE_TOKEN", "")
         if not token:
