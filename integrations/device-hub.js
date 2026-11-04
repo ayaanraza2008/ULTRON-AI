@@ -956,6 +956,7 @@ export class DeviceHub {
       source: message.source || "user",
       platform: message.platform || "unknown",
       role: message.role || "user",
+      ownerUserId: message.ownerUserId || null,
       content: String(message.content || "").slice(0, 4000),
       timestamp: new Date().toISOString()
     };
