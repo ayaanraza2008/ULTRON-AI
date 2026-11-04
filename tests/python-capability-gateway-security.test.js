@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import path from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { PythonCapabilityGateway, GATEWAY_ERROR_CODES } from "../integrations/python-capability-gateway.js";
@@ -22,7 +23,7 @@ function makeFakeChild({ stdoutPayload, stderrPayload = "", closeCode = 0 } = {}
     if (stderrPayload) child.stderr.end(Buffer.from(stderrPayload));
     if (stdoutPayload !== undefined) child.stdout.end(Buffer.from(stdoutPayload));
     else child.stdout.end();
-    child.emit("close", closeCode);
+    setImmediate(() => child.emit("close", closeCode));
   };
   return { child, stdinChunks, finish };
 }
