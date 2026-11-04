@@ -31,8 +31,7 @@ export class UltronGuardian {
     this.auditLogChain = [];
     this.lastBlockHash = "0000000000000000000000000000000000000000000000000000000000000000";
     const configuredMasterKey = options.masterKey ?? process.env.ULTRON_OPERATOR_MASTER_KEY ?? "";
-    this.operatorMasterKey = typeof configuredMasterKey === "string" &&
-      (options.masterKey !== undefined || configuredMasterKey.length >= 32)
+    this.operatorMasterKey = typeof configuredMasterKey === "string" && configuredMasterKey.length >= 32
       ? configuredMasterKey
       : "";
   }
