@@ -9,6 +9,7 @@ import { getStrataReadiness } from "./strata.js";
 import { getOpenVikingReadiness } from "./openviking.js";
 import { agentMemoryReadiness } from "../agentmemory-integration.js";
 import { getAppFlowyReadiness } from "./appflowy.js";
+import { getHexStrikeReadiness } from "./hexstrike-ai.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
 
@@ -40,6 +41,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const openvikingReadiness = getOpenVikingReadiness({ env });
   const agentMemReadiness = agentMemoryReadiness(env);
   const appflowyReadiness = getAppFlowyReadiness({ env });
+  const hexstrikeReadiness = getHexStrikeReadiness(env);
 
   return [
     {
@@ -325,6 +327,18 @@ export function buildIntegrationCatalog(env = process.env) {
       requiredEnv: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       apiRoutes: ["agent tool: appflowy_list_workspaces", "agent tool: appflowy_get_document"],
       note: appflowyReadiness.note
+    },
+    {
+      id: "hexstrike-ai",
+      name: "HexStrike AI Defensive Scanner",
+      capability: "Owner-only local Trivy filesystem/config and Checkov IaC scans through a separately hosted HexStrike service",
+      state: hexstrikeReadiness.state,
+      configured: Boolean(hexstrikeReadiness.configured),
+      mode: "owner_scoped_external_security_service",
+      requiredEnv: ["HEXSTRIKE_ENABLED=true", "HEXSTRIKE_BASE_URL", "HEXSTRIKE_SCAN_ROOT", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      optionalEnv: ["HEXSTRIKE_API_TOKEN", "HEXSTRIKE_REMOTE_GATEWAY_CONFIRMED"],
+      apiRoutes: ["/api/integrations/hexstrike/status", "/api/integrations/hexstrike/scan", "agent tool: hexstrike_scan"],
+      note: hexstrikeReadiness.note
     },
     {
       id: "youtube-production-planner",
