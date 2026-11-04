@@ -89,7 +89,7 @@ test("UltronGuardian: latching Emergency Stop revokes tokens and enforces shutdo
   // Disengage with wrong key fails
   assert.throws(() => {
     guardian.disengageEmergencyStop("wrong_key");
-  }, /Invalid operator key/);
+  }, /Invalid or unconfigured operator key/);
 
   // Disengage with valid key restores
   const restoreRes = guardian.disengageEmergencyStop("MY_SECRET_KEY");
