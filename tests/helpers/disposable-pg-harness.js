@@ -262,8 +262,11 @@ export class DisposablePgHarness {
           END IF;
         END $$;
 
-        -- Grant schema usage to roles
+        -- Grant schema usage and default table privileges to Supabase roles
         GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
 
         -- Create auth schema and users table
         CREATE SCHEMA IF NOT EXISTS auth;
@@ -339,6 +342,13 @@ export class DisposablePgHarness {
           throw new Error(`Failed to apply migration ${file}: ${mErr.message}`);
         }
       }
+
+      // Grant table, sequence, and routine privileges across public schema to Supabase roles
+      await client.query(`
+        GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+        GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+        GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+      `);
 
       this.isReady = true;
       return {
