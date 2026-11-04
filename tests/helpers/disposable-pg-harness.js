@@ -417,7 +417,16 @@ export class DisposablePgHarness {
           return await rawClient.query(...args);
         }
         const sp = `sp_${savepointIdx++}`;
-        await rawClient.query(`SAVEPOINT ${sp};`);
+        try {
+          await rawClient.query(`SAVEPOINT ${sp};`);
+        } catch (spErr) {
+          // If transaction block is not active (e.g. after commit), execute directly
+          if (spErr.code === "25P01") {
+            return await rawClient.query(...args);
+          }
+          throw spErr;
+        }
+
         try {
           const res = await rawClient.query(...args);
           await rawClient.query(`RELEASE SAVEPOINT ${sp};`);
