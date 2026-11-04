@@ -1,33 +1,29 @@
 {
   "metadata": {
-    "generatedAt": "2026-11-04T13:41:07.735Z",
+    "generatedAt": "2026-11-04T17:13:58.405Z",
     "targetRepository": "C:\\Users\\Ali Raza Zaidi\\.gemini\\antigravity\\scratch\\ULTRON-AI",
-    "elapsedSeconds": 10.43,
+    "elapsedSeconds": 12.21,
     "summary": {
-      "confirmedVulnerabilitiesCount": 2,
+      "confirmedVulnerabilitiesCount": 0,
       "potentialRisksCount": 0,
       "informationalFindingsCount": 0,
       "skippedToolsCount": 4,
-      "qualityGateBlockers": [
-        "SAST findings require review or remediation.",
-        "Git-history secret scan did not complete cleanly or found potential credentials.",
-        "Critical/high findings remain unresolved."
-      ],
-      "isQualityGatePassed": false
+      "qualityGateBlockers": [],
+      "isQualityGatePassed": true
     }
   },
   "metrics": {
     "sast": {
-      "filesScanned": 266,
-      "linesScanned": 112009,
-      "findingsCount": 1,
+      "filesScanned": 267,
+      "linesScanned": 114548,
+      "findingsCount": 0,
       "severityBreakdown": {
-        "CRITICAL": 1,
+        "CRITICAL": 0,
         "HIGH": 0,
         "MEDIUM": 0,
         "LOW": 0
       },
-      "maxCvssScore": 9.8
+      "maxCvssScore": 0
     },
     "dependencies": {
       "tool": "npm audit",
@@ -44,42 +40,13 @@
       }
     },
     "secrets": {
-      "filesScanned": 1735,
+      "filesScanned": 1753,
       "commitsScanned": 30,
-      "findingsCount": 1
+      "findingsCount": 0
     }
   },
   "findings": {
-    "confirmedVulnerabilities": [
-      {
-        "source": "SAST",
-        "category": "Code Vulnerability",
-        "findingId": "vuln-3a255afe",
-        "ruleId": "SAST-CWE-78",
-        "cwe": "CWE-78",
-        "title": "Command Injection",
-        "severity": "CRITICAL",
-        "cvss": 9.8,
-        "filePath": "voice\\edge-tts-adapter.js",
-        "lineNumber": 328,
-        "snippet": "execSync(`powershell -NoProfile -NonInteractive -Command \"${psCommand}\"`, {",
-        "description": "Untrusted input concatenated into system execution commands.",
-        "remediation": "Use parameterized execution arrays without shell invocation, or validate inputs against a strict allowlist.",
-        "confidence": 0.95
-      },
-      {
-        "source": "Secret Detection",
-        "category": "Exposed Credential",
-        "title": "GitHub Personal Access Token",
-        "cwe": "CWE-798",
-        "filePath": "docs/ULTRON_FINAL_SECURITY_AUDIT.md",
-        "lineNumber": "fb1798a1",
-        "severity": "CRITICAL",
-        "snippet": "- **Synthetic Test Fixtures:** Explicitly allowlisted fixtures in `test/` use dummy placeholders (`[REDACTED_SECRET:SEC-GITHUB-PAT:62bd92d59f]`) and are tagged wi",
-        "description": "Potential plaintext credential in repository or commit history.",
-        "remediation": "Revoke token via GitHub Security Settings and migrate to short-lived GitHub App tokens or secrets store."
-      }
-    ],
+    "confirmedVulnerabilities": [],
     "potentialRisks": [],
     "informationalFindings": []
   },
