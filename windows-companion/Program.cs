@@ -660,15 +660,22 @@ internal sealed class CompanionContext : ApplicationContext
             try
             {
                 var existingDeviceId = LoadDeviceId();
+                if (string.IsNullOrWhiteSpace(existingDeviceId))
+                    existingDeviceId = await ResolveDeviceIdAsync(entered);
+
                 if (!string.IsNullOrWhiteSpace(existingDeviceId))
-                    {
+                {
                     SaveDeviceIdentity(existingDeviceId, entered);
                     if (_remoteCommandsCheckBox.Checked) _commandPollTimer.Start();
+                    ShowStatus("Updated the paired device identity securely in this Windows user's profile.");
                 }
                 else
+                {
                     SaveDeviceToken(entered);
+                    _commandPollTimer.Stop();
+                    ShowStatus("Token protected with Windows DPAPI. Pair this device with a six-digit code to enable remote-task routing.");
+                }
                 _pairingCodeBox.Clear();
-                ShowStatus("Updated the paired device token securely in this Windows user's profile.");
             }
             catch
             {
@@ -753,6 +760,37 @@ internal sealed class CompanionContext : ApplicationContext
             _pairButton.Enabled = true;
             _pairButton.Text = "Pair / update token";
         }
+    }
+
+    private async Task<string?> ResolveDeviceIdAsync(string token)
+    {
+        try
+        {
+            var backendUrl = Environment.GetEnvironmentVariable("ULTRON_BACKEND_URL");
+            if (string.IsNullOrWhiteSpace(backendUrl))
+                backendUrl = "https://ultron-ai-core.onrender.com";
+            if (!Uri.TryCreate(backendUrl.TrimEnd('/'), UriKind.Absolute, out var backendUri) ||
+                !string.IsNullOrEmpty(backendUri.UserInfo) ||
+                !string.IsNullOrEmpty(backendUri.Query) ||
+                !string.IsNullOrEmpty(backendUri.Fragment) ||
+                !(backendUri.Scheme == Uri.UriSchemeHttps ||
+                  (backendUri.Scheme == Uri.UriSchemeHttp && backendUri.IsLoopback)))
+                return null;
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(backendUri, "/api/devices/me"));
+            request.Headers.Add("x-device-token", token);
+            using var response = await s_httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return null;
+            var raw = await response.Content.ReadAsStringAsync();
+            if (raw.Length > 256 * 1024) return null;
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
+            var deviceId = doc.RootElement.TryGetProperty("deviceId", out var node) ? node.GetString() : null;
+            return !string.IsNullOrWhiteSpace(deviceId) &&
+                Regex.IsMatch(deviceId, @"^[A-Za-z0-9-]{1,128}$")
+                ? deviceId
+                : null;
+        }
+        catch { return null; }
     }
 
     private static string DeviceTokenPath()
