@@ -84,6 +84,11 @@
   let panelTimer = null;
   let panelIsComplete = false;
   let history = [];
+  // Approval state remains in memory for the current UI session. The server also
+  // permits safe same-action re-entry after refresh by matching an unconsumed,
+  // owner-approved action fingerprint and expiry.
+  const approvalPromptByWorkflow = new Map();
+  const approvedIdsByWorkflow = new Map();
   let speechEpoch = 0;
   let audioContext = null;
   let micStream = null;
