@@ -393,45 +393,45 @@ export class DisposablePgHarness {
    */
   async asRole(role, userId, callback) {
     if (!this.pool) throw new Error("Database harness not initialized");
-    const client = await this.pool.connect();
+    const rawClient = await this.pool.connect();
     try {
-      await client.query("BEGIN;");
+      await rawClient.query("BEGIN;");
       if (role === "service_role") {
-        await client.query("SET LOCAL ROLE service_role;");
-        await client.query("SET LOCAL \"request.jwt.claim.role\" = 'service_role';");
+        await rawClient.query("SET LOCAL ROLE service_role;");
+        await rawClient.query("SET LOCAL \"request.jwt.claim.role\" = 'service_role';");
       } else if (role === "anon") {
-        await client.query("SET LOCAL ROLE anon;");
-        await client.query("SET LOCAL \"request.jwt.claim.role\" = 'anon';");
-        await client.query("RESET \"request.jwt.claim.sub\";");
+        await rawClient.query("SET LOCAL ROLE anon;");
+        await rawClient.query("SET LOCAL \"request.jwt.claim.role\" = 'anon';");
+        await rawClient.query("RESET \"request.jwt.claim.sub\";");
       } else if (role === "authenticated") {
-        await client.query("SET LOCAL ROLE authenticated;");
-        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${userId}';`);
-        await client.query("SET LOCAL \"request.jwt.claim.role\" = 'authenticated';");
+        await rawClient.query("SET LOCAL ROLE authenticated;");
+        await rawClient.query(`SET LOCAL "request.jwt.claim.sub" = '${userId}';`);
+        await rawClient.query("SET LOCAL \"request.jwt.claim.role\" = 'authenticated';");
       }
 
       let savepointIdx = 0;
-      const originalQuery = client.query.bind(client);
-      client.query = async (...args) => {
+      const proxyClient = Object.create(rawClient);
+      proxyClient.query = async (...args) => {
         const sp = `sp_${savepointIdx++}`;
-        await originalQuery(`SAVEPOINT ${sp};`);
+        await rawClient.query(`SAVEPOINT ${sp};`);
         try {
-          const res = await originalQuery(...args);
-          await originalQuery(`RELEASE SAVEPOINT ${sp};`);
+          const res = await rawClient.query(...args);
+          await rawClient.query(`RELEASE SAVEPOINT ${sp};`);
           return res;
         } catch (err) {
-          await originalQuery(`ROLLBACK TO SAVEPOINT ${sp};`).catch(() => {});
+          await rawClient.query(`ROLLBACK TO SAVEPOINT ${sp};`).catch(() => {});
           throw err;
         }
       };
 
-      const result = await callback(client);
-      await originalQuery("COMMIT;");
+      const result = await callback(proxyClient);
+      await rawClient.query("COMMIT;");
       return result;
     } catch (err) {
-      await client.query("ROLLBACK;").catch(() => {});
+      await rawClient.query("ROLLBACK;").catch(() => {});
       throw err;
     } finally {
-      client.release();
+      rawClient.release();
     }
   }
 
