@@ -181,7 +181,9 @@ export class ToolRegistry {
       capabilities: Array.isArray(toolMeta.capabilities) ? toolMeta.capabilities : [],
       permissionLevel: toolMeta.permissionLevel || PERMISSION_LEVELS.LEVEL_2_NORMAL,
       requiresConfirmation: toolMeta.requiresConfirmation ?? (toolMeta.permissionLevel >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE),
-      timeoutMs: toolMeta.timeoutMs || 30000,
+      timeoutMs: Number.isFinite(Number(toolMeta.timeoutMs))
+        ? Math.max(1, Math.min(120000, Math.trunc(Number(toolMeta.timeoutMs))))
+        : 30000,
       inputSchema: toolMeta.inputSchema || { type: "object" },
       outputSchema: toolMeta.outputSchema || { type: "object" },
       safeAlternatives: Array.isArray(toolMeta.safeAlternatives) ? toolMeta.safeAlternatives : [],
@@ -236,7 +238,32 @@ export class ToolRegistry {
           }
         }
 
-        return await toolMeta.execute(params, context);
+        const controller = new AbortController();
+        const suppliedContext = context && typeof context === "object" && !Array.isArray(context)
+          ? context
+          : {};
+        const signal = suppliedContext.signal
+          ? AbortSignal.any([suppliedContext.signal, controller.signal])
+          : controller.signal;
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort(new Error("Tool execution exceeded its configured timeout."));
+            reject(Object.assign(
+              new Error(`TOOL_TIMEOUT: Tool '${tool.id}' exceeded ${tool.timeoutMs}ms.`),
+              { code: "TOOL_TIMEOUT", toolId: tool.id, timeoutMs: tool.timeoutMs }
+            ));
+          }, tool.timeoutMs);
+          timer.unref?.();
+        });
+        try {
+          const execution = Promise.resolve().then(() =>
+            toolMeta.execute(params, { ...suppliedContext, signal })
+          );
+          return await Promise.race([execution, timeoutPromise]);
+        } finally {
+          clearTimeout(timer);
+        }
       }
     };
 
