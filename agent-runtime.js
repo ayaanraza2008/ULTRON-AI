@@ -23,6 +23,8 @@ import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./int
 import { getChromeDevToolsReadiness, runChromeDevToolsAction } from "./integrations/chrome-devtools.js";
 import { getOpenSeoReadiness, runOpenSeoTool } from "./integrations/openseo-mcp.js";
 import { getHexStrikeReadiness, runHexStrikeScan } from "./integrations/hexstrike-ai.js";
+import { appflowyListWorkspaces, appflowyGetDocument, getAppFlowyReadiness } from "./integrations/appflowy.js";
+import { ImmichConnector, getImmichReadiness } from "./integrations/immich.js";
 
 const ROLES = new Set(["gtm-engineer", "seo-aeo", "web-dev", "social-media", "ad-manager", "sales", "customer-satisfaction", "chief-of-staff"]);
 const MODES = new Set(["plan", "draft", "review", "report"]);
@@ -136,6 +138,11 @@ const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
   "hexstrike_scan",
   "openviking_find_context",
   "openviking_read_context",
+  "appflowy_list_workspaces",
+  "appflowy_get_document",
+  "immich_check_status",
+  "immich_list_albums",
+  "immich_search_assets",
   "google_gmail_list_unread",
   "google_gmail_search",
   "google_calendar_get_events",
@@ -157,6 +164,13 @@ const OWNER_SCOPED_SHARED_INTEGRATION_TOOLS = new Set([
   "rea_inspect_android_package",
   "rea_search_guidance",
   "rea_list_guided_workflows"
+]);
+
+const PRIVATE_DATA_READ_TOOLS = new Set([
+  "appflowy_list_workspaces",
+  "appflowy_get_document",
+  "immich_list_albums",
+  "immich_search_assets"
 ]);
 
 function sharedIntegrationOwnerDenial(env, userId) {
@@ -568,6 +582,19 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
     ? classifyAutonomyRisk(delegatedTask)
     : null;
 
+  // Workspace documents and personal media are private data. Require an
+  // explicit user approval even when the prompt itself is phrased casually.
+  if (PRIVATE_DATA_READ_TOOLS.has(name)) {
+    return {
+      requiresConfirmation: true,
+      risk: {
+        level: "private_data",
+        reason: "Owner-scoped private workspace/media access requires explicit approval.",
+        requiresConfirmation: true
+      }
+    };
+  }
+
   // A request such as "research this, then send it" should not block its safe
   // research/draft step. However, if the same request also requires reading
   // private data or controlling a device, no safe-tool exception applies.
@@ -677,6 +704,11 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
 
   const tools = [
     { type: "function", function: { name: "chatwoot_list_conversations", description: "Read-only: list recent Chatwoot conversations for ULTRON's configured owner account. Does not send replies, change status, or expose contact email/phone.", parameters: { type: "object", properties: { status: { type: "string", enum: ["open", "pending", "resolved", "all"] }, limit: { type: "integer", minimum: 1, maximum: 20 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "appflowy_list_workspaces", description: "Private, read-only: list the signed-in owner's AppFlowy workspaces. Requires explicit user approval and the configured owner account. Never creates or changes workspace data.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "appflowy_get_document", description: "Private, read-only: read one AppFlowy document by ID from the configured owner's workspace. Requires explicit user approval. Never edits or deletes documents.", parameters: { type: "object", properties: { documentId: { type: "string", minLength: 1, maxLength: 128 } }, required: ["documentId"], additionalProperties: false } } },
+    { type: "function", function: { name: "immich_check_status", description: "Owner-scoped read-only: check the configured Immich server version and reachability. Does not read photo content.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
+    { type: "function", function: { name: "immich_list_albums", description: "Private, read-only: list up to 50 albums from the configured owner's Immich media library. Requires explicit user approval. Does not download original media.", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false } } },
+    { type: "function", function: { name: "immich_search_assets", description: "Private, read-only: search metadata for the configured owner's Immich photos/videos. Requires explicit user approval. Never downloads high-resolution binaries.", parameters: { type: "object", properties: { query: { type: "string", maxLength: 80 }, limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
     { type: "function", function: { name: "openproject_list_projects", description: "Read-only: list projects from the configured OpenProject instance. Requires the signed-in user to match ULTRON_INTEGRATION_OWNER_USER_ID.", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
     { type: "function", function: { name: "openproject_list_work_packages", description: "Read-only: list OpenProject work packages, optionally filtered by numeric project ID. Does not create or edit tasks.", parameters: { type: "object", properties: { projectId: { type: "integer", minimum: 1 }, limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
     { type: "function", function: { name: "caldiy_list_event_types", description: "Read-only: list meeting event types from the configured Cal.diy/Cal.com-compatible API. Does not book meetings.", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 } }, additionalProperties: false } } },
@@ -1048,6 +1080,14 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     if (name === "check_openviking") return getOpenVikingReadiness({ env, userId: req.supabaseUser?.id });
     if (name === "openviking_find_context") return findOpenVikingContext({ env, userId: req.supabaseUser?.id, query: args.query, limit: args.limit, targetUri: args.targetUri, fetchImpl });
     if (name === "openviking_read_context") return readOpenVikingContext({ env, userId: req.supabaseUser?.id, uri: args.uri, fetchImpl });
+    if (name === "appflowy_list_workspaces") return appflowyListWorkspaces({ env, userId: req.supabaseUser?.id, fetchImpl });
+    if (name === "appflowy_get_document") return appflowyGetDocument({ documentId: args.documentId, env, userId: req.supabaseUser?.id, fetchImpl });
+    if (name.startsWith("immich_")) {
+      const immich = new ImmichConnector({ env, fetch: fetchImpl });
+      if (name === "immich_check_status") return immich.checkServerStatus(req.supabaseUser?.id);
+      if (name === "immich_list_albums") return immich.listAlbums(req.supabaseUser?.id, { limit: args.limit });
+      if (name === "immich_search_assets") return immich.searchAssets(req.supabaseUser?.id, { query: args.query, limit: args.limit });
+    }
     if (name === "paperclip_read_agent_governance") return getPaperclipAgentDashboard({ env, fetchImpl, userId: req.supabaseUser?.id });
     if (name === "check_hermes_agent") return checkHermesAgentService({ env, fetchImpl, userId: req.supabaseUser?.id });
     if (name === "hermes_agent_task") return runHermesAgentTask({ env, fetchImpl, userId: req.supabaseUser?.id, task: args.task, conversationId: args.conversationId });
@@ -1465,11 +1505,19 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
   router.get("/agent/tools", requireSupabaseUser, (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const desktopCompanionReadiness = getDesktopCompanionReadiness(env, req.supabaseUser?.id);
+    const appflowyReadiness = getAppFlowyReadiness({ env, userId: req.supabaseUser?.id });
+    const immichReadiness = getImmichReadiness(env);
+    const integrationOwnerAuthorized = Boolean(env.ULTRON_INTEGRATION_OWNER_USER_ID && req.supabaseUser?.id === env.ULTRON_INTEGRATION_OWNER_USER_ID);
     res.json({
       mode: "autonomous_multi_tool_with_safe_intent_fallback",
       tools: [
         { name: "agentmemory", available: agentMemoryReadiness(env).configured, execution: "automatic_task_relevant_recall_and_bounded_durable_capture" },
         { name: "openviking_context", available: getOpenVikingReadiness({ env, userId: req.supabaseUser?.id }).configured && getOpenVikingReadiness({ env, userId: req.supabaseUser?.id }).ownerAuthorized === true, execution: "owner_scoped_read_only_context_search_and_read_no_writes" },
+        { name: "appflowy_list_workspaces", available: Boolean(appflowyReadiness.configured && appflowyReadiness.ownerAuthorized), state: appflowyReadiness.state, execution: "owner_scoped_private_read_requires_explicit_approval" },
+        { name: "appflowy_get_document", available: Boolean(appflowyReadiness.configured && appflowyReadiness.ownerAuthorized), state: appflowyReadiness.state, execution: "owner_scoped_private_document_read_requires_explicit_approval" },
+        { name: "immich_check_status", available: Boolean(immichReadiness.configured && integrationOwnerAuthorized), state: integrationOwnerAuthorized ? immichReadiness.state : "owner_only", execution: "owner_scoped_read_only_server_health" },
+        { name: "immich_list_albums", available: Boolean(immichReadiness.configured && integrationOwnerAuthorized), state: integrationOwnerAuthorized ? immichReadiness.state : "owner_only", execution: "owner_scoped_private_media_read_requires_explicit_approval" },
+        { name: "immich_search_assets", available: Boolean(immichReadiness.configured && integrationOwnerAuthorized), state: integrationOwnerAuthorized ? immichReadiness.state : "owner_only", execution: "owner_scoped_private_media_search_requires_explicit_approval" },
         { name: "browser_use", available: Boolean(safeBase(env.ULTRON_BROWSER_USE_URL) && env.ULTRON_BROWSER_USE_TOKEN), execution: "optional_read_only_browser_bridge" },
         { name: "chrome_devtools", available: (() => { const readiness = getChromeDevToolsReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getChromeDevToolsReadiness(env, req.supabaseUser?.id).state, execution: "owner_scoped_live_chrome_cdp_console_network_screenshot_performance_trace" },
         { name: "openseo", available: (() => { const readiness = getOpenSeoReadiness(env, req.supabaseUser?.id); return readiness.configured && readiness.ownerAuthorized; })(), state: getOpenSeoReadiness(env, req.supabaseUser?.id).state, execution: "owner_scoped_open_seo_mcp_free_reads_and_explicitly_spend_gated_research" },
