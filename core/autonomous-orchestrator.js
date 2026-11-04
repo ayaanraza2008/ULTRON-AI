@@ -1020,6 +1020,28 @@ export class AutonomousOrchestrator {
     const intentAnalysis = this.analyzeIntent(rawPrompt, context);
     const plan = this.formulatePlan(intentAnalysis, rawPrompt, context);
 
+    // Background dispatch has no interactive approval handshake. Never enqueue
+    // plans that contain sensitive, confirmation-required, or above-autonomy tools.
+    const gatedStep = plan.steps.find(step => {
+      const candidate = this.registry.getTool(step.toolId);
+      return candidate && (
+        candidate.requiresConfirmation === true ||
+        Number(candidate.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE ||
+        Number(candidate.permissionLevel) > this.autonomyLevel
+      );
+    });
+    if (gatedStep) {
+      const candidate = this.registry.getTool(gatedStep.toolId);
+      return {
+        success: false,
+        workflowId,
+        status: "APPROVAL_REQUIRED",
+        code: "BACKGROUND_APPROVAL_UNSUPPORTED",
+        error: "This background workflow contains a sensitive action. Run it in the foreground approval flow before scheduling.",
+        approvalRequiredFor: candidate?.id || gatedStep.toolId
+      };
+    }
+
     const workflow = {
       id: workflowId,
       userId: context.userId || "operator",
