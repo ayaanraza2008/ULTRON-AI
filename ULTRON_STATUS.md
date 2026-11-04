@@ -1,4 +1,8 @@
-# ULTRON AI — Canonical Software Release Status
+# ULTRON AI — Historical Canonical Status Baseline (PR #441)
+
+> **HISTORICAL BASELINE — NOT CURRENT RELEASE EVIDENCE.** This document describes PR #441 at commit `3399e87c5df08e5a832948741071db274b9fcd27` (audit date 2026-11-03). It predates PR #443 and the 2026-11-04 security remediation work. Do not use its readiness score, PASS claims, or “ready for owner merge” wording to approve PR #443 or deployment. Current candidate state is recorded in [ULTRON_PR_443_REMEDIATION_STATUS.md](ULTRON_PR_443_REMEDIATION_STATUS.md) and [ULTRON_SECURITY_AUDIT.md](ULTRON_SECURITY_AUDIT.md).
+
+---
 
 **Audit Date:** 2026-11-03  
 **Canonical Status Document:** this file (`ULTRON_STATUS.md`)  
