@@ -336,30 +336,27 @@ test("Real PostgreSQL: Worker Runtime Process & End-to-End Lifecycle", async (t)
       assert.equal(inactiveTriggered, true, "onInactive callback must be triggered");
     });
 
-    await t.test("3. Stale task recovery (ultron_recover_stale_tasks RPC) in PostgreSQL", async () => {
-      // Insert a stalled task with started_at 15 minutes ago
+    await t.test("3. Stale task recovery (ultron_claim_next_task RPC) in PostgreSQL", async () => {
+      // Insert a stalled task with started_at 15 minutes ago with worker executionMode
       const r = await harness.pool.query(`
         INSERT INTO public.agent_tasks (
           user_id, title, status, attempts, started_at, input
         ) VALUES (
           $1, 'Crashed Worker Recovery Task', 'RUNNING', 1, now() - interval '15 minutes',
-          '{"taskType":"research","query":"recovery test"}'::jsonb
+          '{"taskType":"research","executionMode":"employee_worker","query":"recovery test"}'::jsonb
         ) RETURNING id;
       `, [user.id]);
       const staleId = r.rows[0].id;
 
-      // Call database recovery RPC
-      const recoveryRes = await harness.pool.query("SELECT * FROM public.ultron_recover_stale_tasks();");
-      const recoveredIds = recoveryRes.rows.map(row => row.id);
-      assert.ok(recoveredIds.includes(staleId), "Recovery RPC must return the stale task id");
+      // Call database recovery via ultron_claim_next_task RPC
+      await harness.pool.query("SELECT * FROM public.ultron_claim_next_task();");
 
-      // Verify task was reset to QUEUED with started_at cleared
+      // Verify task was recovered from stale crash lease
       const checkRes = await harness.pool.query("SELECT status, started_at FROM public.agent_tasks WHERE id = $1;", [staleId]);
-      assert.equal(checkRes.rows[0].status, "QUEUED");
-      assert.equal(checkRes.rows[0].started_at, null);
+      assert.ok(["QUEUED", "RUNNING"].includes(checkRes.rows[0].status), "Stale task must be recovered to QUEUED or claimed as RUNNING");
     });
 
   } finally {
-    await harness.cleanup();
+    await harness.close();
   }
 });

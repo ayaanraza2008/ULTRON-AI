@@ -390,4 +390,8 @@ export class DisposablePgHarness {
       this.pool = null;
     }
   }
+
+  async cleanup() {
+    return this.close();
+  }
 }
