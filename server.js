@@ -1997,8 +1997,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createSpatialRouter({ requireSupabaseUser, logger }));
   app.use("/api", createMobileRouter({ requireSupabaseUser, requireSession, logger }));
   app.use("/api/mobile", createMobileRouter({ requireSupabaseUser, requireSession, logger }));
-  app.use("/api/companion", createCompanionRouter({ logger }));
-  app.use("/api", createCompanionRouter({ logger }));
+  app.use("/api/companion", createCompanionRouter({ requireSession, logger }));
+  app.use("/api", createCompanionRouter({ requireSession, logger }));
   app.use("/api", createJarvisRouter({
     env, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger,
     authenticateDeviceToken: token => verifyPairedDeviceToken({ token, env, fetchImpl, logger })

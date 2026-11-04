@@ -235,19 +235,43 @@ export class WindowsComputerControl {
    * Check whether a command string matches destructive patterns (Source A & B safety gate).
    */
   isDestructiveCommand(cmdString) {
-    const lower = String(cmdString || "").toLowerCase().trim();
+    const raw = String(cmdString || "").trim();
+    if (!raw) return false;
+    const lower = raw.toLowerCase();
+
+    // Catch encoded PowerShell invocations
+    if (/(?:powershell|pwsh).*(?:-(?:enc|encodedcommand)|\[system\.convert\]::frombase64string|invoke-expression|\biex\b)/i.test(lower)) {
+      return true;
+    }
+    // Catch process kills
+    if (/\btaskkill(?:\s|\/)/i.test(lower) || /\bstop-process\b/i.test(lower)) {
+      return true;
+    }
+    // Catch registry or service deletion
+    if (/\breg\s+delete\b/i.test(lower) || /\bsc\s+delete\b/i.test(lower)) {
+      return true;
+    }
+    // Catch database destruction
+    if (/\b(?:drop\s+(?:table|database|schema)|truncate\s+(?:table\s+)?[a-z0-9_]+|delete\s+from\b)/i.test(lower)) {
+      return true;
+    }
+
+    // Strip leading quotes or drive/path from executable
+    const normalized = lower
+      .replace(/^["']([^"']+)["']/, "$1")
+      .replace(/^[a-z]:\\[^ \t\n\r"']+\\/i, "");
+
     const DESTRUCTIVE_PATTERNS = [
-      /\brm\s/i,
-      /\bdel\s/i,
-      /\bformat\s/i,
-      /\bshutdown\b/i,
-      /\bremove-item\b/i,
-      /\bdrop\s+table\b/i,
-      /\bmkfs\b/i,
-      /\brd\s/i,
-      /\brmdir\s/i
+      /^(?:rm|del|erase|rd|rmdir|format)(?:\s|\/|$)/i,
+      /(?:[\s;&|])(?:rm|del|erase|rd|rmdir|format)(?:\s|\/|$)/i,
+      /\bshutdown(?:\s|\/|$)/i,
+      /\bremove-item(?:property)?\b/i,
+      /\bclear-content\b/i,
+      /\bmkfs(?:\.[a-z0-9]+|\s)/i,
+      /\bdd\s+if=/i
     ];
-    return DESTRUCTIVE_PATTERNS.some(regex => regex.test(lower));
+
+    return DESTRUCTIVE_PATTERNS.some(regex => regex.test(normalized) || regex.test(lower));
   }
 
   /**

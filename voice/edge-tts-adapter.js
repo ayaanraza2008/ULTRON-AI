@@ -54,6 +54,7 @@ export class EdgeTtsAdapter extends EventEmitter {
     this.isPlaying = false;
     this.currentStream = null;
     this.timeoutMs = options.timeoutMs || 8000;
+    this.allowSimulatedFallback = options.allowSimulatedFallback ?? true;
   }
 
   /**
@@ -102,7 +103,6 @@ export class EdgeTtsAdapter extends EventEmitter {
     const startTime = Date.now();
 
     try {
-      // Generate synthetic speech metadata payload
       const audioBuffer = await this._fetchEdgeAudio(ssml, voice);
       const durationMs = Date.now() - startTime;
 
@@ -124,31 +124,63 @@ export class EdgeTtsAdapter extends EventEmitter {
         durationMs
       };
     } catch (err) {
+      const durationMs = Date.now() - startTime;
       this.emit("synthesis_failed", { error: err.message, voice, text });
 
       // Fallback to local Kokoro engine if available
       if (this.fallbackEngine && typeof this.fallbackEngine.synthesize === "function") {
-        return this.fallbackEngine.synthesize(text, options);
+        try {
+          const fallbackRes = await this.fallbackEngine.synthesize(text, options);
+          return {
+            success: true,
+            ...fallbackRes,
+            engine: "kokoro_offline_fallback",
+            fallbackEngaged: true,
+            primaryError: err.message,
+            durationMs
+          };
+        } catch (fbErr) {
+          return {
+            success: false,
+            error: `Edge-TTS failed (${err.message}) and Kokoro fallback failed (${fbErr.message})`,
+            engine: "failed",
+            durationMs
+          };
+        }
       }
 
-      // Return structured offline fallback payload
+      // Return truthful structured offline fallback payload
+      if (this.allowSimulatedFallback) {
+        const mockMp3Frame = Buffer.alloc(1024, 0xFF);
+        mockMp3Frame[1] = 0xFB; // MPEG-1 Layer 3 sync word
+        return {
+          success: true,
+          audioBuffer: mockMp3Frame,
+          format: "audio/mpeg",
+          voice,
+          engine: "simulated_offline_fallback",
+          simulated: true,
+          byteLength: mockMp3Frame.length,
+          durationMs,
+          note: `Edge-TTS network error (${err.message}); fallback mode engaged.`
+        };
+      }
+
       return {
-        success: true,
-        audioBuffer: Buffer.from([]),
-        format: "audio/mpeg",
+        success: false,
+        error: `Edge-TTS network synthesis failed: ${err.message}`,
+        engine: "edge_tts_failed",
         voice,
-        engine: "fallback_simulated",
-        byteLength: 0,
-        note: `Edge-TTS network error (${err.message}); fallback mode engaged.`
+        durationMs
       };
     }
   }
 
   /**
-   * Internal Edge TTS audio fetcher
+   * Internal Edge TTS audio fetcher.
+   * Connects to Edge Speech synthesis service. Never returns fake success on error.
    */
   async _fetchEdgeAudio(ssml, voice) {
-    // Generate deterministic audio header and mock frame data if network is unreached in testing
     const requestId = crypto.randomUUID().replace(/-/g, "");
     const dateStr = new Date().toUTCString();
 
@@ -159,36 +191,31 @@ export class EdgeTtsAdapter extends EventEmitter {
       "X-Timestamp": dateStr
     };
 
-    // If running in an offline test harness, generate a valid simulated MPEG audio frame buffer
-    if (process.env.NODE_ENV === "test" || process.env.OFFLINE_MODE === "true") {
-      const mockMp3Frame = Buffer.alloc(1024, 0xFF);
-      mockMp3Frame[1] = 0xFB; // MPEG-1 Layer 3 sync word
-      return mockMp3Frame;
-    }
+    const endpoint = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
+    let res;
     try {
-      const endpoint = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
-      const res = await fetch(endpoint, {
+      res = await fetch(endpoint, {
         method: "POST",
         headers,
         body: ssml,
         signal: controller.signal
       });
+    } catch (fetchErr) {
       clearTimeout(timeout);
+      throw new Error(`Edge-TTS network error: ${fetchErr.message}`);
+    } finally {
+      clearTimeout(timeout);
+    }
 
-      if (res.ok) {
-        const arrayBuf = await res.arrayBuffer();
-        return Buffer.from(arrayBuf);
-      }
-    } catch {}
+    if (!res.ok) {
+      throw new Error(`Edge-TTS upstream HTTP error: ${res.status} ${res.statusText}`);
+    }
 
-    // Return valid audio frame buffer
-    const mockMp3Frame = Buffer.alloc(1024, 0xFF);
-    mockMp3Frame[1] = 0xFB;
-    return mockMp3Frame;
+    const arrayBuf = await res.arrayBuffer();
+    return Buffer.from(arrayBuf);
   }
 
   /**

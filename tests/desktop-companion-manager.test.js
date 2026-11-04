@@ -49,6 +49,20 @@ describe("Desktop Companion Manager Suite", () => {
     assert.equal(over.y, 1080 - 100 - 10);
   });
 
+  test("supports multi-monitor custom bounds with negative virtual desktop coordinates", () => {
+    const mgr = new DesktopCompanionManager({ configDir: testDir, orbSize: 100 });
+    const bounds = { minX: -1920, minY: 0, maxX: 1920, maxY: 1080 };
+
+    // Clamps within secondary left monitor
+    const leftMonitor = mgr.clampToDisplay(-1000, 400, 1920, 1080, bounds);
+    assert.equal(leftMonitor.x, -1000);
+    assert.equal(leftMonitor.y, 400);
+
+    // Overflown left monitor coordinate clamped to minX + margin
+    const tooFarLeft = mgr.clampToDisplay(-2500, 400, 1920, 1080, bounds);
+    assert.equal(tooFarLeft.x, -1920 + 10);
+  });
+
   test("calculates optimal window anchor coordinates relative to floating orb", async () => {
     const mgr = new DesktopCompanionManager({ configDir: testDir, orbSize: 100 });
     await mgr.initialize();
@@ -125,5 +139,16 @@ describe("Desktop Companion Manager Suite", () => {
     // Unrecognized shortcut
     const res3 = mgr.handleGlobalShortcut("Ctrl+Alt+Del");
     assert.equal(res3.triggered, false);
+  });
+
+  test("truthfully declares headless REST state manager status without native window claim", async () => {
+    const mgr = new DesktopCompanionManager({ configDir: testDir });
+    await mgr.initialize();
+
+    const status = mgr.getStatus();
+    assert.equal(status.nativeWindowImplemented, false);
+    assert.equal(status.nativeTrayImplemented, false);
+    assert.equal(status.nativeGlobalShortcutsHooked, false);
+    assert.equal(status.implementationType, "headless_rest_state_manager");
   });
 });

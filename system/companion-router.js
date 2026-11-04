@@ -17,6 +17,7 @@ import { windowsAutomation } from "./windows-automation.js";
 export function createCompanionRouter(options = {}) {
   const router = express.Router();
   const logger = options.logger || console;
+  const requireSession = options.requireSession || options.requireAuth || ((_req, _res, next) => next());
 
   // Initialize companion manager on first route registration
   desktopCompanionManager.initialize().catch(err => {
@@ -38,7 +39,7 @@ export function createCompanionRouter(options = {}) {
    * POST /api/companion/position
    * Sets and persists floating orb physical screen coordinates.
    */
-  router.post("/position", express.json(), async (req, res) => {
+  router.post("/position", requireSession, express.json(), async (req, res) => {
     const { x, y, screenWidth, screenHeight } = req.body || {};
     if (typeof x !== "number" || typeof y !== "number") {
       return res.status(400).json({
@@ -78,7 +79,7 @@ export function createCompanionRouter(options = {}) {
    * POST /api/companion/tray-action
    * Dispatches tray context menu action.
    */
-  router.post("/tray-action", express.json(), (req, res) => {
+  router.post("/tray-action", requireSession, express.json(), (req, res) => {
     const { action, reason } = req.body || {};
     if (!action) {
       return res.status(400).json({ success: false, error: "Action is required." });
@@ -118,7 +119,7 @@ export function createCompanionRouter(options = {}) {
     }
   });
 
-  router.post("/brightness", express.json(), async (req, res) => {
+  router.post("/brightness", requireSession, express.json(), async (req, res) => {
     const { level } = req.body || {};
     if (typeof level !== "number") {
       return res.status(400).json({ success: false, error: "Numeric 'level' (0-100) is required." });
@@ -135,7 +136,7 @@ export function createCompanionRouter(options = {}) {
    * POST /api/companion/media
    * Dispatches virtual media keys (play_pause, next_track, prev_track, stop).
    */
-  router.post("/media", express.json(), async (req, res) => {
+  router.post("/media", requireSession, express.json(), async (req, res) => {
     const { action } = req.body || {};
     if (!action) {
       return res.status(400).json({ success: false, error: "Media 'action' is required." });
@@ -152,7 +153,7 @@ export function createCompanionRouter(options = {}) {
    * POST /api/companion/window
    * Sets active window state (minimize, maximize, restore, close).
    */
-  router.post("/window", express.json(), async (req, res) => {
+  router.post("/window", requireSession, express.json(), async (req, res) => {
     const { action } = req.body || {};
     if (!action) {
       return res.status(400).json({ success: false, error: "Window 'action' is required." });

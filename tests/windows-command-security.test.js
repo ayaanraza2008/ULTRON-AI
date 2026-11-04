@@ -20,6 +20,31 @@ describe("Windows Command Security & Telemetry Suite", () => {
     assert.equal(control.isDestructiveCommand("echo hello"), false);
   });
 
+  test("detects adversarial destructive command bypass attempts", () => {
+    // Slashes immediately following command name
+    assert.equal(control.isDestructiveCommand("del/f/q C:\\test.txt"), true);
+    assert.equal(control.isDestructiveCommand("rd/s/q folder"), true);
+    assert.equal(control.isDestructiveCommand("rmdir/s/q folder"), true);
+    assert.equal(control.isDestructiveCommand("format/fs:ntfs C:"), true);
+
+    // Quoted executable invocations
+    assert.equal(control.isDestructiveCommand('"del" /f /q C:\\test.txt'), true);
+    assert.equal(control.isDestructiveCommand("'rm' -rf /"), true);
+
+    // Encoded powershell payloads
+    assert.equal(control.isDestructiveCommand("powershell -enc aQBlAHgA"), true);
+    assert.equal(control.isDestructiveCommand("powershell -EncodedCommand aQBlAHgA"), true);
+
+    // Process killing
+    assert.equal(control.isDestructiveCommand("taskkill /f /im node.exe"), true);
+    assert.equal(control.isDestructiveCommand("Stop-Process -Name node"), true);
+
+    // SQL database destruction
+    assert.equal(control.isDestructiveCommand("DROP DATABASE ultron;"), true);
+    assert.equal(control.isDestructiveCommand("TRUNCATE TABLE audit_logs;"), true);
+    assert.equal(control.isDestructiveCommand("DELETE FROM credentials;"), true);
+  });
+
   test("requires confirmation for destructive command execution", async () => {
     const res = await control.runApprovedCommand("rm -rf temp", { confirmed: false });
     assert.equal(res.success, false);

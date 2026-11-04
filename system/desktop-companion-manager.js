@@ -106,17 +106,22 @@ export class DesktopCompanionManager extends EventEmitter {
   /**
    * Clamps orb coordinates within multi-monitor bounding area.
    */
-  clampToDisplay(x, y, screenWidth = 1920, screenHeight = 1080) {
-    const clampedX = Math.max(10, Math.min(screenWidth - this.orbSize - 10, Math.round(Number(x) || 0)));
-    const clampedY = Math.max(10, Math.min(screenHeight - this.orbSize - 10, Math.round(Number(y) || 0)));
+  clampToDisplay(x, y, screenWidth = 1920, screenHeight = 1080, bounds = null) {
+    const minX = (bounds && typeof bounds.minX === "number") ? bounds.minX : 0;
+    const minY = (bounds && typeof bounds.minY === "number") ? bounds.minY : 0;
+    const maxX = (bounds && typeof bounds.maxX === "number") ? bounds.maxX : screenWidth;
+    const maxY = (bounds && typeof bounds.maxY === "number") ? bounds.maxY : screenHeight;
+
+    const clampedX = Math.max(minX + 10, Math.min(maxX - this.orbSize - 10, Math.round(Number(x) || 0)));
+    const clampedY = Math.max(minY + 10, Math.min(maxY - this.orbSize - 10, Math.round(Number(y) || 0)));
     return { x: clampedX, y: clampedY };
   }
 
   /**
    * Update and persist floating orb physical position.
    */
-  async setOrbPosition(x, y, screenWidth = 1920, screenHeight = 1080) {
-    const clamped = this.clampToDisplay(x, y, screenWidth, screenHeight);
+  async setOrbPosition(x, y, screenWidth = 1920, screenHeight = 1080, bounds = null) {
+    const clamped = this.clampToDisplay(x, y, screenWidth, screenHeight, bounds);
     this.orbPosition = clamped;
     await this.saveConfig();
     this.emit("orb_moved", { position: this.orbPosition });
@@ -239,6 +244,10 @@ export class DesktopCompanionManager extends EventEmitter {
       orbSize: this.orbSize,
       orbPosition: this.orbPosition,
       registeredShortcuts: this.registeredShortcuts,
+      nativeWindowImplemented: false,
+      nativeTrayImplemented: false,
+      nativeGlobalShortcutsHooked: false,
+      implementationType: "headless_rest_state_manager",
       timestamp: new Date().toISOString()
     };
   }

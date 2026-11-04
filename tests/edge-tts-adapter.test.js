@@ -63,6 +63,45 @@ describe("Edge-TTS Neural Speech Adapter Suite", () => {
     assert.ok(Buffer.isBuffer(res.audioBuffer));
   });
 
+  test("delegates to fallback engine on upstream network error", async () => {
+    let fallbackCalled = false;
+    const mockKokoro = {
+      synthesize: async (text, options) => {
+        fallbackCalled = true;
+        return {
+          id: "mock-kokoro-123",
+          audioKind: "speech",
+          voice: "am_onyx",
+          dataUrl: "data:audio/wav;base64,UklGRg=="
+        };
+      }
+    };
+
+    const adapter = new EdgeTtsAdapter({
+      fallbackEngine: mockKokoro,
+      timeoutMs: 500
+    });
+
+    // Synthesize should fail upstream (404) and engage mockKokoro fallback
+    const res = await adapter.synthesize("Testing fallback delegation.");
+    assert.equal(fallbackCalled, true);
+    assert.equal(res.success, true);
+    assert.equal(res.engine, "kokoro_offline_fallback");
+    assert.equal(res.fallbackEngaged, true);
+  });
+
+  test("truthfully reports failure when allowSimulatedFallback is false and no engine available", async () => {
+    const adapter = new EdgeTtsAdapter({
+      allowSimulatedFallback: false,
+      timeoutMs: 500
+    });
+
+    const res = await adapter.synthesize("Testing strict error reporting.");
+    assert.equal(res.success, false);
+    assert.equal(res.engine, "edge_tts_failed");
+    assert.ok(res.error.includes("Edge-TTS"));
+  });
+
   test("supports barge-in interruption via stopSpeaking", () => {
     const adapter = new EdgeTtsAdapter();
     let interruptedFired = false;

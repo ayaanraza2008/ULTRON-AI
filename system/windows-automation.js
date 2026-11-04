@@ -154,14 +154,25 @@ export class WindowsAutomation {
     }
 
     try {
-      const psScript = `powershell -NoProfile -Command "(Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, ${target}); 'OK'"`;
+      const psScript = `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; \$w = Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods; if (-not \$w) { throw 'WmiMonitorBrightnessMethods not available' }; \$w.WmiSetBrightness(1, ${target}); 'OK'"`;
       const { stdout } = await execAsync(psScript, { timeout: 4000 });
       const ok = stdout && stdout.includes("OK");
+
+      // Verify read-back from hardware
+      const readback = await this.getDisplayBrightness();
+      const verified = Boolean(ok && readback.supported && readback.brightness === target);
+
       this.recordEvent("BRIGHTNESS", `level=${target}`, ok ? "success" : "unsupported");
-      return { success: true, brightness: target, verified: Boolean(ok) };
+      return {
+        success: Boolean(ok),
+        brightness: target,
+        currentBrightness: readback.brightness,
+        verified,
+        supported: readback.supported
+      };
     } catch (err) {
       this.recordEvent("BRIGHTNESS", `level=${target}`, "failed");
-      return { success: false, brightness: target, error: err.message };
+      return { success: false, brightness: target, verified: false, supported: false, error: err.message };
     }
   }
 

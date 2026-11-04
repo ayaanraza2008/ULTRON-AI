@@ -87,6 +87,9 @@ export class ToolRegistry {
     };
 
     this.adapters = { ...defaultAdapters, ...adapters };
+    if (this.adapters.edgeTtsAdapter && !this.adapters.edgeTtsAdapter.fallbackEngine && this.adapters.kokoroEngine) {
+      this.adapters.edgeTtsAdapter.fallbackEngine = this.adapters.kokoroEngine;
+    }
     this.tools = new Map();
     this.auditLogs = [];
     this.initializeDefaultTools();

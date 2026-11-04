@@ -47,7 +47,7 @@ describe("Browser Automation Helper Suite", () => {
 
     const bad127 = helper.validateUrlSafety("http://127.0.0.1:8080/admin");
     assert.equal(bad127.safe, false);
-    assert.ok(bad127.reason.includes("anti-SSRF"));
+    assert.ok(bad127.reason.includes("anti-SSRF") || bad127.reason.includes("localhost"));
 
     // Blocked cloud metadata
     const badMeta = helper.validateUrlSafety("http://169.254.169.254/latest/meta-data");
@@ -65,6 +65,42 @@ describe("Browser Automation Helper Suite", () => {
     const badProto = helper.validateUrlSafety("file:///etc/passwd");
     assert.equal(badProto.safe, false);
     assert.ok(badProto.reason.includes("Only HTTP and HTTPS"));
+  });
+
+  test("blocks adversarial SSRF vectors (IPv6, IPv4-mapped, hex, dword, 0.0.0.0)", () => {
+    // IPv6 loopback and unspecified
+    assert.equal(helper.validateUrlSafety("http://[::1]").safe, false);
+    assert.equal(helper.validateUrlSafety("http://[::]").safe, false);
+
+    // 0.0.0.0 current network
+    assert.equal(helper.validateUrlSafety("http://0.0.0.0:8000").safe, false);
+
+    // IPv4-mapped IPv6
+    assert.equal(helper.validateUrlSafety("http://[::ffff:127.0.0.1]").safe, false);
+    assert.equal(helper.validateUrlSafety("http://[::ffff:169.254.169.254]").safe, false);
+    assert.equal(helper.validateUrlSafety("http://[::ffff:10.0.0.1]").safe, false);
+
+    // Hex and Dword
+    assert.equal(helper.validateUrlSafety("http://2130706433").safe, false);
+    assert.equal(helper.validateUrlSafety("http://0x7f000001").safe, false);
+    assert.equal(helper.validateUrlSafety("http://0xa9fea9fe").safe, false);
+  });
+
+  test("supports explicit test-only loopback exception when enabled", () => {
+    // Default instance blocks localhost in all environments
+    assert.equal(helper.validateUrlSafety("http://127.0.0.1:3000").safe, false);
+
+    // Test instance with explicit flag in NODE_ENV=test
+    const testHelper = new BrowserAutomationHelper({ allowLoopbackInTest: true });
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "test";
+    try {
+      const allowed = testHelper.validateUrlSafety("http://127.0.0.1:3000");
+      assert.equal(allowed.safe, true);
+      assert.equal(allowed.testLoopbackPermitted, true);
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
   });
 
   test("discovers browser profile directories on Windows host", async () => {

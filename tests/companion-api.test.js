@@ -8,8 +8,11 @@ import { desktopCompanionManager } from "../system/desktop-companion-manager.js"
 describe("Desktop Companion API Route Suite", () => {
   let server;
   let baseUrl;
+  let authServer;
+  let authBaseUrl;
 
   before(async () => {
+    // Unauthenticated test instance
     const app = express();
     app.use("/api/companion", createCompanionRouter({ logger: { error: () => {} } }));
 
@@ -17,12 +20,27 @@ describe("Desktop Companion API Route Suite", () => {
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
     const port = server.address().port;
     baseUrl = `http://127.0.0.1:${port}/api/companion`;
+
+    // Authenticated test instance with mock session enforcement
+    const authApp = express();
+    const mockRequireSession = (req, res, next) => {
+      if (req.headers.authorization === "Bearer valid-ultron-session") return next();
+      return res.status(401).json({ success: false, error: "Authentication session required." });
+    };
+    authApp.use("/api/companion", createCompanionRouter({
+      requireSession: mockRequireSession,
+      logger: { error: () => {} }
+    }));
+
+    authServer = http.createServer(authApp);
+    await new Promise(resolve => authServer.listen(0, "127.0.0.1", resolve));
+    const authPort = authServer.address().port;
+    authBaseUrl = `http://127.0.0.1:${authPort}/api/companion`;
   });
 
   after(async () => {
-    if (server) {
-      await new Promise(resolve => server.close(resolve));
-    }
+    if (server) await new Promise(resolve => server.close(resolve));
+    if (authServer) await new Promise(resolve => authServer.close(resolve));
   });
 
   test("GET /status returns companion state and registered shortcuts", async () => {
@@ -131,5 +149,26 @@ describe("Desktop Companion API Route Suite", () => {
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.success, true);
+  });
+
+  test("enforces authentication on mutating routes when requireSession is active", async () => {
+    // Unauthenticated POST /tray-action rejected with 401
+    const unauthRes = await fetch(`${authBaseUrl}/tray-action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "emergency_stop" })
+    });
+    assert.equal(unauthRes.status, 401);
+
+    // Authenticated POST /tray-action succeeds
+    const authRes = await fetch(`${authBaseUrl}/tray-action`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer valid-ultron-session"
+      },
+      body: JSON.stringify({ action: "emergency_stop" })
+    });
+    assert.equal(authRes.status, 200);
   });
 });
