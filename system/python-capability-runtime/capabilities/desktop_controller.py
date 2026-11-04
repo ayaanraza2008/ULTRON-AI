@@ -12,10 +12,32 @@ import tempfile
 from typing import Dict, Any, List, Optional
 
 class DesktopController:
-    _clipboard_buffer = ""
     def __init__(self):
         self.is_windows = sys.platform == "win32"
-        self._clipboard_buffer = DesktopController._clipboard_buffer
+
+    @classmethod
+    def _get_buffer_file(cls) -> str:
+        return os.path.join(tempfile.gettempdir(), "ultron_clipboard_buffer.txt")
+
+    @classmethod
+    def _read_buffer(cls) -> str:
+        f = cls._get_buffer_file()
+        if os.path.exists(f):
+            try:
+                with open(f, "r", encoding="utf-8") as fp:
+                    return fp.read()
+            except Exception:
+                pass
+        return ""
+
+    @classmethod
+    def _write_buffer(cls, text: str) -> None:
+        f = cls._get_buffer_file()
+        try:
+            with open(f, "w", encoding="utf-8") as fp:
+                fp.write(text)
+        except Exception:
+            pass
 
     # --- 1. CLIPBOARD CONTROL ---
     def get_clipboard(self) -> Dict[str, Any]:
@@ -26,19 +48,21 @@ class DesktopController:
                 return {"success": True, "text": text, "length": len(text)}
         except Exception:
             pass
-        return {"success": True, "text": self._clipboard_buffer, "length": len(self._clipboard_buffer), "source": "buffer"}
+        buf = self._read_buffer()
+        return {"success": True, "text": buf, "length": len(buf), "source": "buffer"}
 
     def set_clipboard(self, text: str) -> Dict[str, Any]:
-        self._clipboard_buffer = str(text or "")
+        val = str(text or "")
+        self._write_buffer(val)
         try:
             import pyperclip
             pyperclip.copy(text)
         except Exception:
             pass
-        return {"success": True, "copied_length": len(self._clipboard_buffer)}
+        return {"success": True, "copied_length": len(val)}
 
     def clear_clipboard(self) -> Dict[str, Any]:
-        self._clipboard_buffer = ""
+        self._write_buffer("")
         try:
             import pyperclip
             pyperclip.copy("")

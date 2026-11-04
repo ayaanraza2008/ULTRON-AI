@@ -33,6 +33,12 @@ async function main() {
   await client.connect();
 
   try {
+    const roleCheck = await client.query("SELECT 1 FROM pg_roles WHERE rolname = 'postgres';");
+    if (roleCheck.rows.length === 0) {
+      console.log("[ULTRON-CI] Creating baseline postgres role for migration compatibility");
+      await client.query("CREATE ROLE postgres NOLOGIN;");
+    }
+
     for (const dbName of TARGET_DATABASES) {
       const checkRes = await client.query("SELECT 1 FROM pg_database WHERE datname = $1;", [dbName]);
       if (checkRes.rows.length === 0) {
