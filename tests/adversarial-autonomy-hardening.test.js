@@ -495,7 +495,7 @@ test("Adversarial Security: Sanitizes malicious external tool output and prevent
 // 10. REAL TOOL EXECUTION INVENTORY VERIFICATION
 // ==========================================
 
-test("Real Tool Execution Audit: All 59 tools execute real paths with schema validation", async () => {
+test("Tool Inventory Audit: all 59 schemas validate and privileged tools fail closed without approval", async () => {
   const allTools = toolRegistry.listTools();
   assert.equal(allTools.length, 59);
 
@@ -574,10 +574,32 @@ test("Real Tool Execution Audit: All 59 tools execute real paths with schema val
       toolRegistry.validateParams(tool, payload);
     }, `Schema validation failed for tool: ${tool.id}`);
 
-    // Execution path test
-    const outcome = await toolRegistry.execute(tool.id, payload);
-    assert.ok(outcome, `Tool '${tool.id}' returned null or undefined`);
-    assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: true (received: ${JSON.stringify(outcome)})`);
+    // Privileged execution must fail closed on the production singleton because
+    // this test intentionally supplies no authenticated owner approval.
+    const requiresApproval =
+      tool.requiresConfirmation === true ||
+      Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+    if (requiresApproval) {
+      await assert.rejects(
+        () => toolRegistry.execute(tool.id, payload),
+        error => error.code === "TOOL_APPROVAL_REQUIRED",
+        `Privileged tool '${tool.id}' must not execute without a consumed approval proof.`
+      );
+      continue;
+    }
+
+    // Exercise permitted routes. Browser actions that need a higher action-level
+    // approval or a live redirect-aware driver may also fail closed here.
+    try {
+      const outcome = await toolRegistry.execute(tool.id, payload);
+      assert.ok(outcome, `Tool '${tool.id}' returned null or undefined`);
+      assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: true (received: ${JSON.stringify(outcome)})`);
+    } catch (error) {
+      assert.ok(
+        ["BROWSER_APPROVAL_REQUIRED", "BROWSER_SECURITY_GUARD_REQUIRED", "BROWSER_REDIRECT_GUARD_UNAVAILABLE"].includes(error.code),
+        `Tool '${tool.id}' failed unexpectedly: ${error.stack || error.message}`
+      );
+    }
   }
 });
 
