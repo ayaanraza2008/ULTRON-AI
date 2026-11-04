@@ -42,6 +42,7 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _commandPollTimer;
     private int _commandPollInProgress;
     private bool _suppressAutoStartChange;
+    private bool _suppressRemoteCommandsChange;
     private SpeechRecognitionEngine? _recognizer;
     private SpeechRecognitionEngine? _commandRecognizer;
     private bool _commandCaptureActive;
@@ -261,9 +262,10 @@ internal sealed class CompanionContext : ApplicationContext
 
     private void HandleRemoteCommandsChanged()
     {
+        if (_suppressRemoteCommandsChange) return;
         try
         {
-            using var key = Registry.CurrentUser.CreateSubKey(@"Software\\ULTRON\\Companion", writable: true)
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\ULTRON\Companion", writable: true)
                 ?? throw new InvalidOperationException("Could not open ULTRON companion settings.");
             key.SetValue("AllowRemoteCommands", _remoteCommandsCheckBox.Checked ? 1 : 0, RegistryValueKind.DWord);
             if (_remoteCommandsCheckBox.Checked)
@@ -284,8 +286,9 @@ internal sealed class CompanionContext : ApplicationContext
         }
         catch
         {
-            _remoteCommandsCheckBox.CheckedChanged -= (_, _) => HandleRemoteCommandsChanged();
+            _suppressRemoteCommandsChange = true;
             _remoteCommandsCheckBox.Checked = false;
+            _suppressRemoteCommandsChange = false;
             _commandPollTimer.Stop();
             ShowStatus("Could not save the remote-command permission. Remote command polling remains disabled.");
         }
@@ -295,7 +298,7 @@ internal sealed class CompanionContext : ApplicationContext
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\\ULTRON\\Companion", writable: false);
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\ULTRON\Companion", writable: false);
             return key?.GetValue("AllowRemoteCommands") is int value && value == 1;
         }
         catch { return false; }
