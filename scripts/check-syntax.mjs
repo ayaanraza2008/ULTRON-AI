@@ -293,6 +293,8 @@ const FILES_TO_CHECK = [
   "tests/cyber-recon.test.js",
   "tests/cyber-scanner.test.js",
   "security/secret-scanner.js",
+  "system/notification-policy.js",
+  "tests/notification-quiet-hours.test.js",
   "scripts/security-sast.mjs",
   "scripts/security-dependencies.mjs",
   "scripts/security-secrets.mjs",

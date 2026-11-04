@@ -1,4 +1,5 @@
 import { ultronCore } from "./core/ultron-core.js";
+import { evaluateNotificationWindow, loadNotificationPolicy } from "./system/notification-policy.js";
 import { ultronAutonomy } from "./autonomy/ultron-autonomy.js";
 import { genesisEngine } from "./genesis/genesis-engine.js";
 import { forgeEngine } from "./forge/forge-engine.js";
@@ -1184,8 +1185,24 @@ export function createJarvisRouter({
         }
       });
     }
+    // Owner-controlled quiet hours: non-urgent proactive notifications inside
+    // the configured window are rejected with an explicit, actionable status
+    // (never silently dropped); urgent priorities may bypass when allowed.
+    const windowDecision = evaluateNotificationWindow({
+      policy: loadNotificationPolicy(env),
+      priority
+    });
+    if (!windowDecision.allowed) {
+      return res.status(409).json({
+        error: {
+          code: "QUIET_HOURS_ACTIVE",
+          message: "Proactive notification deferred by owner-configured quiet hours. Re-dispatch after the window ends or send with an urgent priority if a bypass is allowed.",
+          quietWindow: windowDecision.quietWindow
+        }
+      });
+    }
     const notification = deviceHubInstance.sendNotification({ ownerUserId: ownerId, deviceId, title, body, priority, type });
-    res.json({ success: true, notification });
+    res.json({ success: true, notification, windowDecision });
   });
 
   router.get("/jarvis/notifications", requireOwner, (req, res) => {
