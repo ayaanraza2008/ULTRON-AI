@@ -242,8 +242,14 @@ export class ToolRegistry {
         const suppliedContext = context && typeof context === "object" && !Array.isArray(context)
           ? context
           : {};
-        const signal = suppliedContext.signal
-          ? AbortSignal.any([suppliedContext.signal, controller.signal])
+        const callerSignal = suppliedContext.signal &&
+          typeof suppliedContext.signal === "object" &&
+          typeof suppliedContext.signal.addEventListener === "function" &&
+          typeof suppliedContext.signal.aborted === "boolean"
+          ? suppliedContext.signal
+          : null;
+        const signal = callerSignal
+          ? AbortSignal.any([callerSignal, controller.signal])
           : controller.signal;
         let timer;
         const timeoutPromise = new Promise((_, reject) => {
