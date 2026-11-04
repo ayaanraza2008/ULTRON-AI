@@ -51,6 +51,12 @@ function clean(value, max = 300) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function isShellSafePath(value) {
+  return typeof value === "string" && [...value].every(character =>
+    /[A-Za-z0-9._:-]/.test(character) || character === "/" || character === "\\"
+  );
+}
+
 function isLoopbackHost(hostname) {
   return LOOPBACK_HOSTS.has(String(hostname || "").toLowerCase().replace(/^\[|\]$/g, ""));
 }
@@ -107,14 +113,14 @@ export function getHexStrikeReadiness(env = process.env) {
 }
 
 export async function resolveHexStrikeScanTarget(target, scanRoot) {
-  const requested = clean(target, 240);
-  if (!requested || requested.includes("\0") || requested.startsWith("~") ||
+  const requested = typeof target === "string" ? target.trim() : "";
+  if (!requested || requested.length > 240 || requested.includes("\0") || requested.startsWith("~") ||
       path.isAbsolute(requested) || path.win32.isAbsolute(requested) ||
       /^[a-z][a-z0-9+.-]*:\/\//i.test(requested)) {
     throw Object.assign(new Error("Scan target must be a relative path beneath HEXSTRIKE_SCAN_ROOT."), { code: "INVALID_SCAN_TARGET" });
   }
   const segments = requested.replace(/\\/g, "/").split("/");
-  if (!/^[A-Za-z0-9._/-]+$/.test(requested.replace(/\\/g, "/")) ||
+  if (!isShellSafePath(requested) ||
       segments.some(segment => segment === ".." || segment === "")) {
     throw Object.assign(new Error("Scan target path traversal is not allowed."), { code: "INVALID_SCAN_TARGET" });
   }
@@ -123,7 +129,7 @@ export async function resolveHexStrikeScanTarget(target, scanRoot) {
   }
 
   const root = await fs.realpath(scanRoot);
-  if (!/^[A-Za-z0-9._:/\\-]+$/.test(root)) {
+  if (!isShellSafePath(root)) {
     throw Object.assign(new Error("HEXSTRIKE_SCAN_ROOT contains shell-unsafe path characters."), { code: "SCAN_ROOT_UNSAFE" });
   }
   const resolved = await fs.realpath(path.resolve(root, requested));

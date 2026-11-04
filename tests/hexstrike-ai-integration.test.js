@@ -83,6 +83,7 @@ test("scan targets must remain within the real shared workspace and reject trave
   assert.equal(await resolveHexStrikeScanTarget("project", root), await fs.realpath(path.join(root, "project")));
   await assert.rejects(() => resolveHexStrikeScanTarget("../", root), { code: "INVALID_SCAN_TARGET" });
   await assert.rejects(() => resolveHexStrikeScanTarget("project;whoami", root), { code: "INVALID_SCAN_TARGET" });
+  await assert.rejects(() => resolveHexStrikeScanTarget("a".repeat(241), root), { code: "INVALID_SCAN_TARGET" });
   await assert.rejects(() => resolveHexStrikeScanTarget(path.resolve(root, "project"), root), { code: "INVALID_SCAN_TARGET" });
   const outside = await makeWorkspace();
   await fs.symlink(outside, path.join(root, "escape"), "dir");
