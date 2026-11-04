@@ -38,6 +38,7 @@ import { edgeTtsAdapter as defaultEdgeTtsAdapter } from "../voice/edge-tts-adapt
 import { browserAutomationHelper as defaultBrowserAutomationHelper } from "../integrations/browser-automation-helper.js";
 import { AgentOrchestrator } from "../agents/orchestrator.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
+import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -88,7 +89,9 @@ export class ToolRegistry {
       egoBrowserAdapter: defaultEgoBrowserAdapter
     };
 
-    this.adapters = { ...defaultAdapters, ...adapters };
+    const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
+    this.approvalVerifier = typeof approvalVerifier === "function" ? approvalVerifier : null;
+    this.adapters = { ...defaultAdapters, ...runtimeAdapters };
     if (this.adapters.edgeTtsAdapter && !this.adapters.edgeTtsAdapter.fallbackEngine && this.adapters.kokoroEngine) {
       this.adapters.edgeTtsAdapter.fallbackEngine = this.adapters.kokoroEngine;
     }
@@ -166,14 +169,94 @@ export class ToolRegistry {
       capabilities: Array.isArray(toolMeta.capabilities) ? toolMeta.capabilities : [],
       permissionLevel: toolMeta.permissionLevel || PERMISSION_LEVELS.LEVEL_2_NORMAL,
       requiresConfirmation: toolMeta.requiresConfirmation ?? (toolMeta.permissionLevel >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE),
-      timeoutMs: toolMeta.timeoutMs || 30000,
+      timeoutMs: Number.isFinite(Number(toolMeta.timeoutMs))
+        ? Math.max(1, Math.min(120000, Math.trunc(Number(toolMeta.timeoutMs))))
+        : 30000,
       inputSchema: toolMeta.inputSchema || { type: "object" },
       outputSchema: toolMeta.outputSchema || { type: "object" },
       safeAlternatives: Array.isArray(toolMeta.safeAlternatives) ? toolMeta.safeAlternatives : [],
       checkHealth: typeof toolMeta.checkHealth === "function" ? toolMeta.checkHealth : () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params, context) => {
+      execute: async (params, context = {}) => {
         this.validateParams(tool, params);
-        return await toolMeta.execute(params, context);
+
+        // Enforce privilege at the actual tool boundary, including callers that
+        // obtain a tool via getTool() and invoke tool.execute() directly.
+        const requiresApproval =
+          tool.requiresConfirmation === true ||
+          Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+        if (requiresApproval) {
+          const actorId = typeof context?.actorId === "string" ? context.actorId.trim() : "";
+          let verified = consumeToolApprovalProof(context?.toolApprovalProof, {
+            actorId,
+            toolId: tool.id,
+            permissionLevel: tool.permissionLevel
+          });
+
+          // Optional host verifiers can support API-issued approvals. They must
+          // validate and atomically consume an action-bound token; plain booleans
+          // and caller-provided approval IDs are never accepted as proof.
+          if (!verified) {
+            const confirmationToken =
+              typeof context?.confirmationToken === "string" ? context.confirmationToken : "";
+            if (!actorId || !confirmationToken || !this.approvalVerifier) {
+              throw Object.assign(
+                new Error("TOOL_APPROVAL_REQUIRED: This action requires an authenticated owner and a verified one-time approval token."),
+                { code: "TOOL_APPROVAL_REQUIRED" }
+              );
+            }
+            try {
+              const result = await this.approvalVerifier({
+                actorId,
+                toolId: tool.id,
+                permissionLevel: tool.permissionLevel,
+                confirmationToken,
+                requestId: typeof context.requestId === "string" ? context.requestId : null
+              });
+              verified = result === true || result?.approved === true;
+            } catch {
+              verified = false;
+            }
+          }
+
+          if (!verified) {
+            throw Object.assign(
+              new Error("TOOL_APPROVAL_INVALID: Approval proof is invalid, expired, already used, or not authorized for this action."),
+              { code: "TOOL_APPROVAL_INVALID" }
+            );
+          }
+        }
+
+        const controller = new AbortController();
+        const suppliedContext = context && typeof context === "object" && !Array.isArray(context)
+          ? context
+          : {};
+        const callerSignal = suppliedContext.signal &&
+          typeof suppliedContext.signal === "object" &&
+          typeof suppliedContext.signal.addEventListener === "function" &&
+          typeof suppliedContext.signal.aborted === "boolean"
+          ? suppliedContext.signal
+          : null;
+        const signal = callerSignal
+          ? AbortSignal.any([callerSignal, controller.signal])
+          : controller.signal;
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort(new Error("Tool execution exceeded its configured timeout."));
+            reject(Object.assign(
+              new Error(`TOOL_TIMEOUT: Tool '${tool.id}' exceeded ${tool.timeoutMs}ms.`),
+              { code: "TOOL_TIMEOUT", toolId: tool.id, timeoutMs: tool.timeoutMs }
+            ));
+          }, tool.timeoutMs);
+        });
+        try {
+          const execution = Promise.resolve().then(() =>
+            toolMeta.execute(params, { ...suppliedContext, signal })
+          );
+          return await Promise.race([execution, timeoutPromise]);
+        } finally {
+          clearTimeout(timer);
+        }
       }
     };
 

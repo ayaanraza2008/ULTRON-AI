@@ -264,13 +264,13 @@ export function createJarvisRouter({
   });
 
   // --- Complete Feature Visibility & Capabilities Inventory ---
-  router.get("/jarvis/capabilities", (_req, res) => {
+  router.get("/jarvis/capabilities", requireOwner, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json(toolRegistry.getCapabilityInventory());
   });
 
   // --- Centralized Tool Registry ---
-  router.get("/jarvis/tools", (_req, res) => {
+  router.get("/jarvis/tools", requireOwner, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
       tools: toolRegistry.listTools().map(t => ({
@@ -288,9 +288,22 @@ export function createJarvisRouter({
   });
 
   // --- Autonomous Tool Router & JARVIS Orchestration ---
-  router.post("/jarvis/orchestrate", express.json(), async (req, res) => {
+  router.post("/jarvis/orchestrate", ...requireOwner, express.json(), async (req, res) => {
     try {
-      const { prompt, context = {} } = req.body || {};
+      const { prompt } = req.body || {};
+      const requestedContext = req.body?.context && typeof req.body.context === "object" && !Array.isArray(req.body.context)
+        ? req.body.context
+        : {};
+      // Trust identity only from the authenticated Supabase middleware. Never
+      // accept body-supplied user IDs, admin flags, or pre-approval booleans.
+      const context = {
+        ...requestedContext,
+        userId: req.supabaseUser.id,
+        actorId: req.supabaseUser.id,
+        isAdmin: false,
+        trustedInternalAdmin: false,
+        preApproved: false
+      };
       const outcome = await autonomousOrchestrator.processUserRequest(prompt, context);
       res.json(outcome);
     } catch (err) {
@@ -298,7 +311,7 @@ export function createJarvisRouter({
     }
   });
 
-  router.post("/jarvis/tools/:toolId/execute", express.json(), async (req, res) => {
+  router.post("/jarvis/tools/:toolId/execute", ...requireOwner, express.json(), async (req, res) => {
     try {
       const { toolId } = req.params;
       const tool = toolRegistry.getTool(toolId);
@@ -308,10 +321,16 @@ export function createJarvisRouter({
       if (autonomousOrchestrator.emergencyHalted) {
         return res.status(403).json({ success: false, error: "EMERGENCY_STOP_ACTIVE" });
       }
-      if (tool.permissionLevel >= 3 && !req.body?.approved) {
-        return res.status(403).json({ success: false, error: "APPROVAL_REQUIRED", permissionLevel: tool.permissionLevel });
+      if (tool.requiresConfirmation === true || Number(tool.permissionLevel) >= 3) {
+        return res.status(403).json({
+          success: false,
+          error: "APPROVAL_REQUIRED",
+          code: "APPROVAL_REQUIRED_USE_ORCHESTRATOR",
+          permissionLevel: tool.permissionLevel,
+          message: "Privileged actions must be requested through /jarvis/orchestrate and approved in the Permission Center. A request-body approved flag is never authorization."
+        });
       }
-      const userContext = { userId: req.user?.id || req.body?.userId || "operator", isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin) };
+      const userContext = { userId: req.supabaseUser.id, actorId: req.supabaseUser.id };
       const outcome = await toolRegistry.execute(toolId, req.body?.params || {}, userContext);
       res.json({ success: true, toolId, outcome });
     } catch (err) {
@@ -320,12 +339,12 @@ export function createJarvisRouter({
   });
 
   // --- Permission Center: Human Approval Gates ---
-  router.get("/jarvis/permissions/pending", (_req, res) => {
+  router.get("/jarvis/permissions/pending", requireOwner, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ pending: autonomousOrchestrator.getPendingApprovals() });
   });
 
-  router.post("/jarvis/permissions/approve", express.json(), (req, res) => {
+  router.post("/jarvis/permissions/approve", requireOwner, express.json(), (req, res) => {
     const { requestId } = req.body || {};
     const operatorContext = {
       userId: req.body?.userId || req.user?.id || "operator",
@@ -340,7 +359,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.post("/jarvis/permissions/reject", express.json(), (req, res) => {
+  router.post("/jarvis/permissions/reject", requireOwner, express.json(), (req, res) => {
     const { requestId, reason } = req.body || {};
     const operatorContext = {
       userId: req.body?.userId || req.user?.id || "operator",
@@ -356,7 +375,7 @@ export function createJarvisRouter({
   });
 
   // --- Autonomy Center & Emergency Controls ---
-  router.get("/jarvis/autonomy/state", (_req, res) => {
+  router.get("/jarvis/autonomy/state", requireOwner, (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
       autonomyLevel: autonomousOrchestrator.autonomyLevel,
@@ -367,21 +386,21 @@ export function createJarvisRouter({
     });
   });
 
-  router.post("/jarvis/autonomy/emergency-stop", express.json(), (req, res) => {
+  router.post("/jarvis/autonomy/emergency-stop", requireOwner, express.json(), (req, res) => {
     const reason = req.body?.reason || "Operator emergency stop invoked";
     const auth = { userId: req.user?.id || req.body?.userId || "operator" };
     const result = autonomousOrchestrator.setEmergencyStop(true, reason, auth);
     res.json(result);
   });
 
-  router.post("/jarvis/autonomy/emergency-reset", (req, res) => {
+  router.post("/jarvis/autonomy/emergency-reset", requireOwner, (req, res) => {
     const auth = { userId: req.user?.id || req.body?.userId || "operator" };
     const result = autonomousOrchestrator.setEmergencyStop(false, "Operator reset", auth);
     res.json(result);
   });
 
   // --- Background Workflows & Real-Time Event Stream ---
-  router.get("/jarvis/autonomy/workflows", (req, res) => {
+  router.get("/jarvis/autonomy/workflows", requireOwner, (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const userContext = {
       userId: req.query?.userId || req.user?.id,
@@ -390,7 +409,7 @@ export function createJarvisRouter({
     res.json({ workflows: autonomousOrchestrator.getActiveWorkflows(userContext) });
   });
 
-  router.post("/jarvis/autonomy/workflow/submit", express.json(), (req, res) => {
+  router.post("/jarvis/autonomy/workflow/submit", requireOwner, express.json(), (req, res) => {
     try {
       const { prompt, context = {} } = req.body || {};
       if (req.user?.id && !context.userId) {
@@ -406,7 +425,7 @@ export function createJarvisRouter({
     }
   });
 
-  router.post("/jarvis/autonomy/workflow/pause", express.json(), (req, res) => {
+  router.post("/jarvis/autonomy/workflow/pause", requireOwner, express.json(), (req, res) => {
     const { workflowId } = req.body || {};
     const userContext = {
       userId: req.body?.userId || req.user?.id || "operator",
@@ -421,7 +440,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.post("/jarvis/autonomy/workflow/resume", express.json(), (req, res) => {
+  router.post("/jarvis/autonomy/workflow/resume", requireOwner, express.json(), (req, res) => {
     const { workflowId } = req.body || {};
     const userContext = {
       userId: req.body?.userId || req.user?.id || "operator",
@@ -436,7 +455,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.post("/jarvis/autonomy/workflow/cancel", express.json(), (req, res) => {
+  router.post("/jarvis/autonomy/workflow/cancel", requireOwner, express.json(), (req, res) => {
     const { workflowId, reason } = req.body || {};
     const userContext = {
       userId: req.body?.userId || req.user?.id || "operator",
@@ -451,7 +470,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.get("/jarvis/autonomy/events", (req, res) => {
+  router.get("/jarvis/autonomy/events", requireOwner, (req, res) => {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -964,11 +983,11 @@ export function createJarvisRouter({
     res.json({ success: true, count: tasks.length, tasks });
   });
 
-  router.get("/jarvis/network/connectivity", (_req, res) => {
+  router.get("/jarvis/network/connectivity", requireOwner, (_req, res) => {
     res.json(deviceNetworkingManager.getConnectivityStatus());
   });
 
-  router.get("/jarvis/network/discovery", (_req, res) => {
+  router.get("/jarvis/network/discovery", requireOwner, (_req, res) => {
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
   });
 
