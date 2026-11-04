@@ -511,6 +511,16 @@ export class AutonomousOrchestrator {
               events: collectedEvents
             };
           }
+          if (approval.status === "EXPIRED") {
+            return {
+              success: false,
+              workflowId,
+              status: "APPROVAL_EXPIRED",
+              error: "Approval has expired. Create a new request and approve the exact action again.",
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
           if (approval.consumed || approval.status === "CONSUMED") {
             return {
               success: false,
