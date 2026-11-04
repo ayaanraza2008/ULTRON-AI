@@ -37,6 +37,7 @@ import { desktopCompanionManager as defaultDesktopCompanionManager } from "../sy
 import { edgeTtsAdapter as defaultEdgeTtsAdapter } from "../voice/edge-tts-adapter.js";
 import { browserAutomationHelper as defaultBrowserAutomationHelper } from "../integrations/browser-automation-helper.js";
 import { AgentOrchestrator } from "../agents/orchestrator.js";
+import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -83,7 +84,8 @@ export class ToolRegistry {
       desktopCompanionManager: defaultDesktopCompanionManager,
       edgeTtsAdapter: defaultEdgeTtsAdapter,
       browserAutomationHelper: defaultBrowserAutomationHelper,
-      agentOrchestrator: new AgentOrchestrator()
+      agentOrchestrator: new AgentOrchestrator(),
+      egoBrowserAdapter: defaultEgoBrowserAdapter
     };
 
     this.adapters = { ...defaultAdapters, ...adapters };
@@ -196,6 +198,11 @@ export class ToolRegistry {
     const tool = this.getTool(toolId);
     if (!tool) throw new Error(`Tool '${toolId}' not found in registry.`);
     return await tool.execute(params, context);
+  }
+
+  // Alias used by Ego Lite integration tests and adapters.
+  async executeTool(toolId, params = {}, context = {}) {
+    return this.execute(toolId, params, context);
   }
 
   /**
@@ -1176,6 +1183,288 @@ export class ToolRegistry {
         };
       }
     });
+    // ==========================================
+    // 8. EGO LITE AUTONOMOUS BROWSER TOOLS
+    // ==========================================
+    this.registerTool({
+      id: "ego_browser_status",
+      name: "Ego Lite Browser Runtime Status",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Inspects Ego Lite desktop application availability, CLI status, active TaskSpaces, and memory limits.",
+      capabilities: ["browser_runtime_health", "taskspace_inventory", "installation_check"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: { type: "object", properties: {} },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async () => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.getStatus();
+        return { success: true, ...res };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_taskspace_create",
+      name: "Create / Switch Browser TaskSpace",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Creates or switches to an isolated browser TaskSpace with tab budget management (max 3 spaces, max 5 pages).",
+      capabilities: ["taskspace_lifecycle", "tab_isolation", "context_switching"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          initialUrl: { type: "string" },
+          ownership: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.taskSpace(params.name || "default", params);
+        return { success: true, taskSpace: res };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_taskspace_list",
+      name: "List Browser TaskSpaces",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Lists active browser TaskSpaces, their ownership, labels, and page counts.",
+      capabilities: ["taskspace_list", "session_enumeration"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 5000,
+      inputSchema: { type: "object", properties: {} },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async () => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const list = adapter.listTaskSpaces();
+        return { success: true, count: list.length, taskSpaces: list };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_page_navigate",
+      name: "Autonomous Page Navigation",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Navigates active page to a target URL with SSRF protection, private-network checks, and load state monitoring.",
+      capabilities: ["browser_navigation", "load_state_wait", "ssrf_guard"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 30000,
+      inputSchema: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string" },
+          taskSpaceId: { type: "string" },
+          pageIdOrLabel: { type: "string" },
+          waitUntil: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.goto(params.url, params);
+        return { success: true, navigation: res };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_page_snapshot",
+      name: "Semantic Browser Snapshot (@N Refs)",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Captures structured accessibility/DOM snapshot with @N refs, viewport/full_page/subtree scopes, and prompt injection filtering.",
+      capabilities: ["semantic_snapshot", "at_refs", "accessibility_tree", "prompt_injection_defense"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          scope: { type: "string" },
+          subtreeRoot: { type: "string" },
+          includeScreenshot: { type: "boolean" },
+          taskSpaceId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.snapshot(params);
+        return { success: true, snapshot: res };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_page_interact",
+      name: "Browser Element Interaction",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Interacts with elements via @N ref or selector: click, fill, hover, select, type, press key, or drag-and-drop.",
+      capabilities: ["element_click", "form_fill", "keyboard_input", "hover_action"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 20000,
+      inputSchema: {
+        type: "object",
+        required: ["action", "target"],
+        properties: {
+          action: { type: "string" },
+          target: { type: "string" },
+          value: { type: "string" },
+          values: { type: "array" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const action = String(params.action || "click").toLowerCase();
+        let res;
+        switch (action) {
+          case "click":
+            res = await adapter.click(params.target, params.options);
+            break;
+          case "dblclick":
+            res = await adapter.dblclick(params.target, params.options);
+            break;
+          case "hover":
+            res = await adapter.hover(params.target, params.options);
+            break;
+          case "fill":
+            res = await adapter.fill(params.target, params.value || "", params.options);
+            break;
+          case "select":
+          case "selectoption":
+            res = await adapter.selectOption(params.target, params.values || [params.value], params.options);
+            break;
+          case "press":
+            res = await adapter.press(params.key || params.value || "Enter", params.options);
+            break;
+          case "type":
+            res = await adapter.type(params.value || "", params.options);
+            break;
+          default:
+            throw new Error(`Unsupported browser interaction action: '${action}'`);
+        }
+        return { success: true, result: res };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_page_evaluate",
+      name: "In-Page JavaScript Evaluation",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Safely evaluates JavaScript expressions within page context or performs authenticated browser fetches.",
+      capabilities: ["page_eval", "in_browser_fetch", "cdp_bridge"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        required: ["script"],
+        properties: {
+          script: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.evaluate(params.script);
+        return { success: true, evaluation: res };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_site_learnings",
+      name: "Domain Skills & Site Learnings",
+      category: TOOL_CATEGORIES.RESEARCH_KNOWLEDGE,
+      description: "Discovers and executes domain-specific skills (GitHub, Google, X-com) with zero credential storage and honest accumulation reporting.",
+      capabilities: ["domain_learning", "site_manifest", "specialized_extractor"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 15000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          siteId: { type: "string" },
+          toolName: { type: "string" },
+          url: { type: "string" },
+          args: { type: "object" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const action = params.action || "list";
+        if (action === "list") {
+          const list = await adapter.listLearnings();
+          return { success: true, siteLearnings: list };
+        }
+        if (action === "match" && params.url) {
+          const match = await adapter.getLearningForUrl(params.url);
+          return { success: true, matchedSite: match };
+        }
+        if (action === "execute" && params.siteId && params.toolName) {
+          const res = await adapter.executeSiteTool(params.siteId, params.toolName, params.args || {});
+          return { success: true, execution: res };
+        }
+        return { success: false, reason: `Unknown site learnings action: '${action}'` };
+      }
+    });
+
+    this.registerTool({
+      id: "ego_taskspace_close",
+      name: "Close Browser TaskSpace",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Safely terminates tabs and finishes a browser TaskSpace, releasing host memory.",
+      capabilities: ["taskspace_cleanup", "memory_reclamation"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
+      requiresConfirmation: false,
+      timeoutMs: 10000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskSpaceId: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.closeTaskSpace(params.taskSpaceId);
+        return { success: true, closed: res };
+      }
+    });
+
+    this.registerTool({
+      id: "intelligent_browser_route",
+      name: "Intelligent Browser Task Router",
+      category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
+      description: "Evaluates browser task requirements and selects best engine (Ego Lite vs browser-use vs HTTP search) with truthful diagnostics.",
+      capabilities: ["intelligent_routing", "engine_selection", "fallback_diagnostics"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
+      requiresConfirmation: false,
+      timeoutMs: 5000,
+      inputSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          url: { type: "string" },
+          description: { type: "string" }
+        }
+      },
+      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      execute: async (params = {}) => {
+        const adapter = this.adapters.egoBrowserAdapter;
+        const res = await adapter.routeTask(params);
+        return { success: true, route: res };
+      }
+    });
+
   }
 }
 
