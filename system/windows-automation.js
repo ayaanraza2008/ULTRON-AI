@@ -157,7 +157,8 @@ export class WindowsAutomation {
 
     if (process.platform !== "win32") {
       this.recordEvent("BRIGHTNESS", `level=${target}`, "mock_success");
-      return { success: true, brightness: target, simulated: true };
+      // TRUTH TIER: WMI brightness control is unavailable on non-Windows platforms.
+      return { success: true, brightness: target, simulated: true, hardwareStatus: HARDWARE_STATUS.UNSUPPORTED_HARDWARE };
     }
 
     try {
