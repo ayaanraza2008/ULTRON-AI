@@ -521,22 +521,22 @@ export class AutonomousOrchestrator {
               events: collectedEvents
             };
           }
-          if (approval.consumed || approval.status === "CONSUMED") {
-            return {
-              success: false,
-              workflowId,
-              status: "REPLAY_ATTACK_DETECTED",
-              error: "Approval token has already been consumed (replay attack rejected).",
-              intent: intentAnalysis.intent,
-              events: collectedEvents
-            };
-          }
           if (approval.status === "INVALIDATED") {
             return {
               success: false,
               workflowId,
               status: "UNAUTHORIZED",
               error: "Approval token was invalidated by emergency stop.",
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
+          if (approval.consumed || approval.status === "CONSUMED") {
+            return {
+              success: false,
+              workflowId,
+              status: "REPLAY_ATTACK_DETECTED",
+              error: "Approval token has already been consumed (replay attack rejected).",
               intent: intentAnalysis.intent,
               events: collectedEvents
             };
