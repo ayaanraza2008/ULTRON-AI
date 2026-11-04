@@ -589,10 +589,6 @@ export class AutonomousOrchestrator {
             events: collectedEvents
           };
         }
-        if (approval.status !== "APPROVED") {
-          approvalRequestsNeeded.push(approval);
-          continue;
-        }
         const approvalExpiry = Date.parse(approval.expiresAt || "");
         if (!Number.isFinite(approvalExpiry) || Date.now() > approvalExpiry) {
           approval.consumed = true;
@@ -603,6 +599,30 @@ export class AutonomousOrchestrator {
             workflowId,
             status: "APPROVAL_EXPIRED",
             error: "Approval has expired. Create a new request and approve the exact action again.",
+            intent: intentAnalysis.intent,
+            events: collectedEvents
+          };
+        }
+        if (approval.status === "REJECTED") {
+          return {
+            success: false,
+            workflowId,
+            status: "APPROVAL_REJECTED",
+            error: "This approval request was rejected. Start a new request to seek authorization again.",
+            intent: intentAnalysis.intent,
+            events: collectedEvents
+          };
+        }
+        if (approval.status === "PENDING") {
+          approvalRequestsNeeded.push(approval);
+          continue;
+        }
+        if (approval.status !== "APPROVED") {
+          return {
+            success: false,
+            workflowId,
+            status: "UNAUTHORIZED",
+            error: "Approval request is not in an approvable state.",
             intent: intentAnalysis.intent,
             events: collectedEvents
           };
