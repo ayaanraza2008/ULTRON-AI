@@ -1,3 +1,7 @@
+> **STATUS CORRECTION — 2026-11-05:** This document is a historical implementation snapshot. Its “100% implemented/tested” and “zero defects” statements are **not a current production-readiness verdict**. Use `docs/OVERNIGHT_AUDIT_2026-11-05.md` for current evidence. Key open blockers: Browser Use startup smoke currently receives HTTP 502 from ULTRON Core's model gateway; mobile authorization hardening (PR #447) and AppFlowy agent wiring (PR #449) are green in CI but remain draft/unmerged; provider diagnostics/readiness hardening is in PR #450; Supabase leaked-password protection is unavailable on the current Free plan; and the Render UI service still tracks a separate feature branch. No production deployment has been authorized.
+
+---
+
 # ULTRON AI — Canonical Software Release Status
 
 **Audit Date:** 2026-11-04
