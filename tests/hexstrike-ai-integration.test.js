@@ -151,6 +151,44 @@ test("scan exposes only Trivy filesystem/config and Checkov with fixed arguments
   });
 });
 
+test("Checkov scan maps to the fixed local IaC endpoint and arguments", async () => {
+  let request;
+  await withServer({}, async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ success: true, return_code: 0, stdout: "checkov complete", stderr: "" }), { status: 200 });
+  }, async (base, env) => {
+    await fs.mkdir(path.join(env.HEXSTRIKE_SCAN_ROOT, "iac"));
+    const response = await fetch(base + "/api/integrations/hexstrike/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool: "checkov", target: "iac" })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(request.url, "http://127.0.0.1:8888/api/tools/checkov");
+    const payload = JSON.parse(request.options.body);
+    assert.equal(payload.directory, path.join(env.HEXSTRIKE_SCAN_ROOT, "iac"));
+    assert.equal(payload.output_format, "json");
+    assert.equal(payload.additional_args, "");
+  });
+});
+
+test("path validation rejects shell metacharacters before contacting HexStrike", async () => {
+  let called = false;
+  await withServer({}, async () => {
+    called = true;
+    throw new Error("unsafe path must not reach HexStrike");
+  }, async base => {
+    const response = await fetch(base + "/api/integrations/hexstrike/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool: "trivy-fs", target: "project;whoami" })
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_SCAN_TARGET");
+    assert.equal(called, false);
+  });
+});
+
 test("scan rejects arbitrary tool names and caller-supplied command arguments", async () => {
   let called = false;
   await withServer({}, async () => {

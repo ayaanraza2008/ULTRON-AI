@@ -279,8 +279,10 @@ export function createHexStrikeRouter({
       target = await resolveHexStrikeScanTarget(body.target, env.HEXSTRIKE_SCAN_ROOT);
       authRecord = authGateway.assertAuthorization(target, PERMITTED_ACTIVITIES.VULNERABILITY_SCAN);
     } catch (error) {
-      const code = error?.code || "TARGET_AUTHORIZATION_DENIED";
-      const status = code === "RATE_LIMIT_EXCEEDED" ? 429 : code === "SCAN_ROOT_NOT_CONFIGURED" ? 503 : 403;
+      const code = error?.code || (["ENOENT", "ENOTDIR"].includes(error?.cause?.code || error?.code) ? "INVALID_SCAN_TARGET" : "TARGET_AUTHORIZATION_DENIED");
+      const status = code === "RATE_LIMIT_EXCEEDED" ? 429
+        : ["SCAN_ROOT_NOT_CONFIGURED", "SCAN_ROOT_UNSAFE"].includes(code) ? 503
+        : code === "INVALID_SCAN_TARGET" ? 400 : 403;
       return res.status(status).json({ error: { code, message: status === 403 ? "The scan target is outside the active authorized scope or failed path validation." : "HexStrike scan prerequisites are not satisfied." } });
     }
 
