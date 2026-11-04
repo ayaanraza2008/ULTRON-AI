@@ -51,7 +51,13 @@ No blocker is auto-resolvable from this environment.
 8. Run `npm run diagnose:auth` and `npm run smoke:worker` with service-role key.
 9. Only then issue `DEPLOY`.
 
-## 7. Safe next engineering steps (no approval needed)
+## 7. Phase 10 evidence
+- PR #441 latest completed run `41820731210` failure root cause: `tests/companion-endpoint.test.js` expected `SaveDeviceToken(token)` in `windows-companion/Program.cs`; at that commit the source lacked it. Current candidate HEAD `aa3e845b` and local audit branch both contain `SaveDeviceToken(token)`; the assertion is satisfied. No local code change required.
+- Full suite re-run: **1,460 tests, 1,455 pass, 0 fail, 5 skipped**.
+- Branches preserved: 17 local branches + 1 stash intact. Working tree clean.
+- Candidate branch continues to receive pushes; its CI is not yet green (notification/companion assertions). This does not affect the audit branch.
+
+## 8. Safe next engineering steps (no approval needed)
 - Configure a valid OpenRouter key locally for provider smoke tests.
 - Install ADB only if physical device testing is desired.
 - Continue integration work on feature branches; keep `main` protected.
