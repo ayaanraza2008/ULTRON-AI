@@ -279,7 +279,7 @@ export class DisposablePgHarness {
         $$;
 
         CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
-          COALESCE(NULLIF(current_setting('request.jwt.claim.role', true), ''), 'anon');
+          SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.role', true), ''), 'anon');
         $$;
 
         GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
