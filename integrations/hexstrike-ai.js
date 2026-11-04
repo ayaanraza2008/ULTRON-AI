@@ -203,6 +203,93 @@ function redactOutput(value) {
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED_AWS_KEY]");
 }
 
+export async function runHexStrikeScan({
+  env = process.env,
+  fetchImpl = safePinnedFetch,
+  userId,
+  tool,
+  target,
+  authGateway = targetAuthorizationGateway,
+  guardian = ultronGuardian
+} = {}) {
+  const ownerId = clean(env.ULTRON_INTEGRATION_OWNER_USER_ID, 100);
+  if (!ownerId) throw Object.assign(new Error("Configure the ULTRON integration owner before enabling HexStrike."), { code: "INTEGRATION_OWNER_NOT_CONFIGURED", status: 503 });
+  if (!clean(userId, 100)) throw Object.assign(new Error("Sign in to use HexStrike."), { code: "AUTH_REQUIRED", status: 401 });
+  if (clean(userId, 100) !== ownerId) throw Object.assign(new Error("HexStrike is restricted to the configured ULTRON owner."), { code: "INTEGRATION_OWNER_ONLY", status: 403 });
+
+  const readiness = getHexStrikeReadiness(env);
+  if (!readiness.configured || !readiness.scanReady) {
+    throw Object.assign(new Error(readiness.note), { code: "HEXSTRIKE_SCAN_NOT_CONFIGURED", status: 503 });
+  }
+
+  const selectedTool = clean(tool, 40);
+  const scan = HEXSTRIKE_SAFE_SCANS[selectedTool];
+  if (!scan) throw Object.assign(new Error("Only approved local static-analysis tools are available."), { code: "HEXSTRIKE_TOOL_NOT_ALLOWED", status: 400 });
+
+  let resolvedTarget;
+  let authRecord;
+  try {
+    resolvedTarget = await resolveHexStrikeScanTarget(target, env.HEXSTRIKE_SCAN_ROOT);
+    authRecord = authGateway.assertAuthorization(resolvedTarget, PERMITTED_ACTIVITIES.VULNERABILITY_SCAN);
+  } catch (error) {
+    const code = ["ENOENT", "ENOTDIR"].includes(error?.code)
+      ? "INVALID_SCAN_TARGET"
+      : error?.code || "TARGET_AUTHORIZATION_DENIED";
+    const status = code === "RATE_LIMIT_EXCEEDED" ? 429
+      : ["SCAN_ROOT_NOT_CONFIGURED", "SCAN_ROOT_UNSAFE"].includes(code) ? 503
+      : code === "INVALID_SCAN_TARGET" ? 400 : 403;
+    throw Object.assign(new Error(status === 400
+      ? "The requested scan directory does not exist or is invalid."
+      : status === 403
+        ? "The scan target is outside the active authorized scope or failed path validation."
+        : "HexStrike scan prerequisites are not satisfied."), { code, status });
+  }
+
+  const base = resolveBase(env);
+  const token = clean(env.HEXSTRIKE_API_TOKEN, 500);
+  const relativeTarget = path.relative(await fs.realpath(env.HEXSTRIKE_SCAN_ROOT), resolvedTarget) || ".";
+  try {
+    const result = await requestJson(fetchImpl, base + scan.endpoint, {
+      method: "POST",
+      token,
+      body: scan.buildPayload(resolvedTarget),
+      timeoutMs: 120000
+    });
+    const success = result?.success === true;
+    guardian?.recordAudit?.("HEXSTRIKE_DEFENSIVE_SCAN_COMPLETED", ownerId, {
+      tool: selectedTool,
+      target: relativeTarget,
+      scopeId: authRecord?.scopeId || null,
+      success
+    });
+    return {
+      provider: "hexstrike-ai",
+      tool: selectedTool,
+      status: success ? "completed" : "failed",
+      success,
+      target: relativeTarget,
+      returnCode: Number.isInteger(result?.return_code) ? result.return_code : undefined,
+      executionTimeSeconds: Number.isFinite(Number(result?.execution_time)) ? Number(result.execution_time) : undefined,
+      stdout: redactOutput(result?.stdout),
+      stderr: redactOutput(result?.stderr),
+      note: "A completed scan is not proof that a target is secure; review the findings."
+    };
+  } catch (error) {
+    guardian?.recordAudit?.("HEXSTRIKE_DEFENSIVE_SCAN_FAILED", ownerId, {
+      tool: selectedTool,
+      target: relativeTarget,
+      scopeId: authRecord?.scopeId || null,
+      code: clean(error?.code, 80) || "UPSTREAM_FAILURE"
+    });
+    const status = error?.name === "TimeoutError" || error?.name === "AbortError" ? 504
+      : error?.code === "UPSTREAM_RATE_LIMITED" ? 429 : 502;
+    throw Object.assign(new Error("The defensive scan did not complete successfully."), {
+      code: "HEXSTRIKE_SCAN_FAILED",
+      status
+    });
+  }
+}
+
 export function createHexStrikeRouter({
   env = process.env,
   fetchImpl = safePinnedFetch,
@@ -263,67 +350,29 @@ export function createHexStrikeRouter({
   });
 
   router.post("/integrations/hexstrike/scan", auth, requireOwner, async (req, res) => {
-    const settings = configured(res, { scans: true });
-    if (!settings) return;
     const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
     if (Object.keys(body).some(key => !["tool", "target"].includes(key))) {
       return res.status(400).json({ error: { code: "INVALID_HEXSTRIKE_REQUEST", message: "Only tool and target are accepted." } });
     }
-    const tool = clean(body.tool, 40);
-    const scan = HEXSTRIKE_SAFE_SCANS[tool];
-    if (!scan) return res.status(400).json({ error: { code: "HEXSTRIKE_TOOL_NOT_ALLOWED", message: "Only the approved local static-analysis tools are available." } });
-
-    let target;
-    let authRecord;
     try {
-      target = await resolveHexStrikeScanTarget(body.target, env.HEXSTRIKE_SCAN_ROOT);
-      authRecord = authGateway.assertAuthorization(target, PERMITTED_ACTIVITIES.VULNERABILITY_SCAN);
+      const result = await runHexStrikeScan({
+        env,
+        fetchImpl,
+        userId: req.supabaseUser?.id,
+        tool: body.tool,
+        target: body.target,
+        authGateway,
+        guardian
+      });
+      return res.status(result.success ? 200 : 502).json(result);
     } catch (error) {
-      const code = ["ENOENT", "ENOTDIR"].includes(error?.code)
-        ? "INVALID_SCAN_TARGET"
-        : error?.code || "TARGET_AUTHORIZATION_DENIED";
-      const status = code === "RATE_LIMIT_EXCEEDED" ? 429
-        : ["SCAN_ROOT_NOT_CONFIGURED", "SCAN_ROOT_UNSAFE"].includes(code) ? 503
-        : code === "INVALID_SCAN_TARGET" ? 400 : 403;
-      return res.status(status).json({ error: { code, message: status === 403 ? "The scan target is outside the active authorized scope or failed path validation." : "HexStrike scan prerequisites are not satisfied." } });
-    }
-
-    try {
-      const result = await requestJson(fetchImpl, settings.base + scan.endpoint, {
-        method: "POST",
-        token: settings.token,
-        body: scan.buildPayload(target),
-        timeoutMs: 120000
+      const status = Number(error?.status);
+      return res.status(status >= 400 && status <= 599 ? status : 502).json({
+        error: {
+          code: clean(error?.code, 80) || "HEXSTRIKE_SCAN_FAILED",
+          message: clean(error?.message, 300) || "The defensive scan did not complete successfully."
+        }
       });
-      const success = result?.success === true;
-      guardian?.recordAudit?.("HEXSTRIKE_DEFENSIVE_SCAN_COMPLETED", clean(req.supabaseUser?.id, 100) || "unknown", {
-        tool,
-        target: path.relative(env.HEXSTRIKE_SCAN_ROOT, target) || ".",
-        scopeId: authRecord?.scopeId || null,
-        success
-      });
-      res.status(success ? 200 : 502).json({
-        provider: "hexstrike-ai",
-        tool,
-        status: success ? "completed" : "failed",
-        success,
-        target: path.relative(env.HEXSTRIKE_SCAN_ROOT, target) || ".",
-        returnCode: Number.isInteger(result?.return_code) ? result.return_code : undefined,
-        executionTimeSeconds: Number.isFinite(Number(result?.execution_time)) ? Number(result.execution_time) : undefined,
-        stdout: redactOutput(result?.stdout),
-        stderr: redactOutput(result?.stderr),
-        note: "A completed scan is not proof that the target is secure; review the findings."
-      });
-    } catch (error) {
-      guardian?.recordAudit?.("HEXSTRIKE_DEFENSIVE_SCAN_FAILED", clean(req.supabaseUser?.id, 100) || "unknown", {
-        tool,
-        target: path.relative(env.HEXSTRIKE_SCAN_ROOT, target) || ".",
-        scopeId: authRecord?.scopeId || null,
-        code: clean(error?.code, 80) || "UPSTREAM_FAILURE"
-      });
-      const status = error?.name === "TimeoutError" || error?.name === "AbortError" ? 504
-        : error?.code === "UPSTREAM_RATE_LIMITED" ? 429 : 502;
-      res.status(status).json({ error: { code: "HEXSTRIKE_SCAN_FAILED", message: "The defensive scan did not complete successfully." } });
     }
   });
 
