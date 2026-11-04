@@ -82,7 +82,7 @@ test("Approval requests expire after five minutes and cannot be approved or cons
     userId: "owner-a",
     approvalId: approval.id
   });
-  assert.equal(result.status, "UNAUTHORIZED");
+  assert.equal(result.status, "APPROVAL_EXPIRED");
   assert.equal(calls(), 0);
 });
 
