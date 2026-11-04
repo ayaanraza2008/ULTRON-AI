@@ -38,14 +38,14 @@ export class TelephonyGateway {
       : (options.ownerPhoneNumber ? [options.ownerPhoneNumber] : []);
     const normalizedOwnerNumbers = configuredOwnerNumbers
       .map(phone => this.normalizePhoneNumber(phone))
-      .filter(phone => /^\\+[1-9]\\d{7,14}$/.test(phone));
+      .filter(phone => /^\+[1-9]\d{7,14}$/.test(phone));
     this.ownerPhoneNumbers = new Set(normalizedOwnerNumbers);
 
     this.sipAddress = options.sipAddress ? String(options.sipAddress).trim() : null;
     this.securityPin = options.securityPin == null || options.securityPin === ""
       ? null
       : String(options.securityPin).trim();
-    if (this.securityPin && !/^\\d{4}$/.test(this.securityPin)) {
+    if (this.securityPin && !/^\d{4}$/.test(this.securityPin)) {
       throw new RangeError("ULTRON_TELEPHONY_PIN must be exactly four digits.");
     }
 
@@ -66,7 +66,7 @@ export class TelephonyGateway {
    */
   authenticateCaller(callerNumber) {
     const normalized = this.normalizePhoneNumber(callerNumber);
-    if (!/^\\+[1-9]\\d{7,14}$/.test(normalized)) {
+    if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
       return {
         status: CALLER_AUTH_STATUS.UNAUTHORIZED,
         caller: normalized,
