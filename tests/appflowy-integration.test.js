@@ -37,6 +37,7 @@ test("AppFlowy: readiness enforces owner matching", () => {
   const ownerReadiness = getAppFlowyReadiness({ env: VALID_ENV, userId: "owner-uuid-42" });
   assert.equal(ownerReadiness.state, "configured_unverified");
   assert.equal(ownerReadiness.ownerAuthorized, true);
+  assert.deepEqual(ownerReadiness.capabilities, ["read_only_workspace_listing", "read_only_document_read"]);
 });
 
 test("AppFlowy: listWorkspaces fails closed if caller is not the owner or has no authenticated identity", async () => {
