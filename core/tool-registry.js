@@ -44,6 +44,7 @@ import { ultronAutonomy as defaultUltronAutonomy } from "../autonomy/ultron-auto
 import { mobileControlEngine as defaultMobileControlEngine } from "../mobile/mobile-control-engine.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
 import { AgentOrchestrator } from "../agents/orchestrator.js";
+import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -195,30 +196,41 @@ export class ToolRegistry {
           Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
         if (requiresApproval) {
           const actorId = typeof context?.actorId === "string" ? context.actorId.trim() : "";
-          const confirmationToken =
-            typeof context?.confirmationToken === "string" ? context.confirmationToken : "";
-          if (!actorId || !confirmationToken || !this.approvalVerifier) {
-            throw Object.assign(
-              new Error("TOOL_APPROVAL_REQUIRED: This action requires an authenticated owner and a verified one-time approval token."),
-              { code: "TOOL_APPROVAL_REQUIRED" }
-            );
+          let verified = consumeToolApprovalProof(context?.toolApprovalProof, {
+            actorId,
+            toolId: tool.id,
+            permissionLevel: tool.permissionLevel
+          });
+
+          // Optional host verifiers can support API-issued approvals. They must
+          // validate and atomically consume an action-bound token; plain booleans
+          // and caller-provided approval IDs are never accepted as proof.
+          if (!verified) {
+            const confirmationToken =
+              typeof context?.confirmationToken === "string" ? context.confirmationToken : "";
+            if (!actorId || !confirmationToken || !this.approvalVerifier) {
+              throw Object.assign(
+                new Error("TOOL_APPROVAL_REQUIRED: This action requires an authenticated owner and a verified one-time approval token."),
+                { code: "TOOL_APPROVAL_REQUIRED" }
+              );
+            }
+            try {
+              const result = await this.approvalVerifier({
+                actorId,
+                toolId: tool.id,
+                permissionLevel: tool.permissionLevel,
+                confirmationToken,
+                requestId: typeof context.requestId === "string" ? context.requestId : null
+              });
+              verified = result === true || result?.approved === true;
+            } catch {
+              verified = false;
+            }
           }
-          let verified = false;
-          try {
-            const result = await this.approvalVerifier({
-              actorId,
-              toolId: tool.id,
-              permissionLevel: tool.permissionLevel,
-              confirmationToken,
-              requestId: typeof context.requestId === "string" ? context.requestId : null
-            });
-            verified = result === true || result?.approved === true;
-          } catch {
-            verified = false;
-          }
+
           if (!verified) {
             throw Object.assign(
-              new Error("TOOL_APPROVAL_INVALID: Approval token is invalid, expired, already used, or not authorized for this action."),
+              new Error("TOOL_APPROVAL_INVALID: Approval proof is invalid, expired, already used, or not authorized for this action."),
               { code: "TOOL_APPROVAL_INVALID" }
             );
           }
