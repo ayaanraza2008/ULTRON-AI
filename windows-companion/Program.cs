@@ -38,6 +38,8 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly CheckBox _autoStartCheckBox;
     private readonly TextBox _pairingCodeBox;
     private readonly Button _pairButton;
+    private readonly System.Windows.Forms.Timer _commandPollTimer;
+    private int _commandPollInProgress;
     private bool _suppressAutoStartChange;
     private SpeechRecognitionEngine? _recognizer;
     private SpeechRecognitionEngine? _commandRecognizer;
@@ -164,6 +166,10 @@ internal sealed class CompanionContext : ApplicationContext
             Visible = true
         };
         _tray.DoubleClick += (_, _) => ShowWindow();
+
+        _commandPollTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+        _commandPollTimer.Tick += async (_, _) => await PollPendingCommandsAsync();
+        _commandPollTimer.Start();
 
         _window.FormClosing += (_, e) =>
         {
@@ -592,7 +598,11 @@ internal sealed class CompanionContext : ApplicationContext
         {
             try
             {
-                SaveDeviceToken(entered);
+                var existingDeviceId = LoadDeviceId();
+                if (!string.IsNullOrWhiteSpace(existingDeviceId))
+                    SaveDeviceIdentity(existingDeviceId, entered);
+                else
+                    SaveDeviceToken(entered);
                 _pairingCodeBox.Clear();
                 ShowStatus("Updated the paired device token securely in this Windows user's profile.");
             }
@@ -650,14 +660,18 @@ internal sealed class CompanionContext : ApplicationContext
             }
 
             var token = doc.RootElement.TryGetProperty("deviceToken", out var tokenNode) ? tokenNode.GetString() : null;
+            var deviceId = doc.RootElement.TryGetProperty("deviceId", out var idNode) ? idNode.GetString() : null;
             var deviceName = doc.RootElement.TryGetProperty("deviceName", out var nameNode) ? nameNode.GetString() : null;
-            if (string.IsNullOrWhiteSpace(token) || !Regex.IsMatch(token, @"^ultron_dev_[a-f0-9]{64}$", RegexOptions.IgnoreCase))
+            if (string.IsNullOrWhiteSpace(token) ||
+                !Regex.IsMatch(token, @"^ultron_dev_[a-f0-9]{64}$", RegexOptions.IgnoreCase) ||
+                string.IsNullOrWhiteSpace(deviceId) ||
+                !Regex.IsMatch(deviceId, @"^[A-Za-z0-9-]{1,128}$"))
             {
-                ShowStatus("ULTRON returned an invalid device token. Pairing was not saved.");
+                ShowStatus("ULTRON returned an invalid device identity. Pairing was not saved.");
                 return;
             }
 
-            SaveDeviceToken(token);
+            SaveDeviceIdentity(deviceId, token);
             _pairingCodeBox.Clear();
             ShowStatus("Paired securely" + (string.IsNullOrWhiteSpace(deviceName) ? "." : " as " + deviceName + ".") + " Token protected with Windows DPAPI.");
         }
@@ -682,6 +696,71 @@ internal sealed class CompanionContext : ApplicationContext
         return Path.Combine(root, "ULTRON", "device-token.bin");
     }
 
+    private static string DeviceIdentityPath()
+    {
+        var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(root, "ULTRON", "device-identity.bin");
+    }
+
+    private static void SaveDeviceIdentity(string deviceId, string token)
+    {
+        if (!Regex.IsMatch(deviceId ?? "", @"^[A-Za-z0-9-]{1,128}$") ||
+            !Regex.IsMatch(token ?? "", @"^ultron_dev_[a-f0-9]{64}$", RegexOptions.IgnoreCase))
+            throw new ArgumentException("Invalid ULTRON device identity.");
+
+        var identity = System.Text.Json.JsonSerializer.Serialize(new { deviceId, deviceToken = token });
+        var entropy = Encoding.UTF8.GetBytes("ULTRON.WindowsCompanion.DeviceIdentity.v1");
+        var clear = Encoding.UTF8.GetBytes(identity);
+        var protectedBytes = ProtectedData.Protect(clear, entropy, DataProtectionScope.CurrentUser);
+        var path = DeviceIdentityPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporaryPath = path + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temporaryPath, protectedBytes);
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(clear);
+            try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); } catch { }
+        }
+        Environment.SetEnvironmentVariable("ULTRON_DEVICE_ID", deviceId);
+        Environment.SetEnvironmentVariable("ULTRON_DEVICE_TOKEN", token);
+    }
+
+    private static (string? DeviceId, string? Token) LoadDeviceIdentity()
+    {
+        try
+        {
+            var fromEnvironmentId = Environment.GetEnvironmentVariable("ULTRON_DEVICE_ID");
+            var fromEnvironmentToken = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
+            if (!string.IsNullOrWhiteSpace(fromEnvironmentId) && !string.IsNullOrWhiteSpace(fromEnvironmentToken))
+                return (fromEnvironmentId, fromEnvironmentToken);
+
+            var path = DeviceIdentityPath();
+            if (!File.Exists(path)) return (null, null);
+            var protectedBytes = File.ReadAllBytes(path);
+            var entropy = Encoding.UTF8.GetBytes("ULTRON.WindowsCompanion.DeviceIdentity.v1");
+            var clear = ProtectedData.Unprotect(protectedBytes, entropy, DataProtectionScope.CurrentUser);
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(clear);
+                var root = doc.RootElement;
+                var id = root.TryGetProperty("deviceId", out var idNode) ? idNode.GetString() : null;
+                var token = root.TryGetProperty("deviceToken", out var tokenNode) ? tokenNode.GetString() : null;
+                if (string.IsNullOrWhiteSpace(id) || !Regex.IsMatch(id, @"^[A-Za-z0-9-]{1,128}$") ||
+                    string.IsNullOrWhiteSpace(token) || !Regex.IsMatch(token, @"^ultron_dev_[a-f0-9]{64}$", RegexOptions.IgnoreCase))
+                    return (null, null);
+                return (id, token);
+            }
+            finally { CryptographicOperations.ZeroMemory(clear); }
+        }
+        catch { return (null, null); }
+    }
+
+    private static string? LoadDeviceId() => LoadDeviceIdentity().DeviceId;
+
     private static void SaveDeviceToken(string token)
     {
         var entropy = Encoding.UTF8.GetBytes("ULTRON.WindowsCompanion.DeviceToken.v1");
@@ -698,6 +777,8 @@ internal sealed class CompanionContext : ApplicationContext
 
     private static string? LoadDeviceToken()
     {
+        var identity = LoadDeviceIdentity();
+        if (!string.IsNullOrWhiteSpace(identity.Token)) return identity.Token;
         var fromEnvironment = Environment.GetEnvironmentVariable("ULTRON_DEVICE_TOKEN");
         if (!string.IsNullOrWhiteSpace(fromEnvironment)) return fromEnvironment;
         try
@@ -801,6 +882,92 @@ internal sealed class CompanionContext : ApplicationContext
         }
     }
 
+    private async Task PollPendingCommandsAsync()
+    {
+        if (_allowExit || Interlocked.Exchange(ref _commandPollInProgress, 1) != 0) return;
+        try
+        {
+            var identity = LoadDeviceIdentity();
+            if (string.IsNullOrWhiteSpace(identity.DeviceId) || string.IsNullOrWhiteSpace(identity.Token))
+                return;
+
+            var backendUrl = Environment.GetEnvironmentVariable("ULTRON_BACKEND_URL");
+            if (string.IsNullOrWhiteSpace(backendUrl))
+                backendUrl = "https://ultron-ai-core.onrender.com";
+
+            if (!Uri.TryCreate(backendUrl.TrimEnd('/'), UriKind.Absolute, out var backendUri) ||
+                !string.IsNullOrEmpty(backendUri.UserInfo) ||
+                !string.IsNullOrEmpty(backendUri.Query) ||
+                !string.IsNullOrEmpty(backendUri.Fragment) ||
+                !(backendUri.Scheme == Uri.UriSchemeHttps ||
+                  (backendUri.Scheme == Uri.UriSchemeHttp && backendUri.IsLoopback)))
+                return;
+
+            var route = $"/api/jarvis/devices/{Uri.EscapeDataString(identity.DeviceId)}/commands/pending";
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(backendUri, route));
+            request.Headers.Add("x-device-token", identity.Token);
+            using var response = await s_httpClient.SendAsync(request);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                ShowStatus("Windows companion authentication expired. Re-pair this device to resume remote commands.");
+                return;
+            }
+            if (!response.IsSuccessStatusCode) return;
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            if (!doc.RootElement.TryGetProperty("commands", out var commands) ||
+                commands.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return;
+
+            foreach (var command in commands.EnumerateArray())
+            {
+                if (_allowExit) break;
+                var commandId = command.TryGetProperty("id", out var idNode) ? idNode.GetString() : null;
+                if (string.IsNullOrWhiteSpace(commandId) ||
+                    !Regex.IsMatch(commandId, @"^[A-Za-z0-9-]{1,128}$"))
+                    continue;
+
+                object result;
+                if (!RemoteCommandExecutor.VerifySignature(identity.Token, command))
+                {
+                    result = new { success = false, error = "COMMAND_SIGNATURE_INVALID", output = "The command signature could not be verified. No action was executed." };
+                }
+                else
+                {
+                    result = RemoteCommandExecutor.Execute(command, _tray);
+                }
+
+                var completionPath = $"/api/jarvis/devices/{Uri.EscapeDataString(identity.DeviceId)}/commands/{Uri.EscapeDataString(commandId)}/complete";
+                using var completion = new HttpRequestMessage(HttpMethod.Post, new Uri(backendUri, completionPath))
+                {
+                    Content = new StringContent(
+                        System.Text.Json.JsonSerializer.Serialize(result),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+                completion.Headers.Add("x-device-token", identity.Token);
+                using var completionResponse = await s_httpClient.SendAsync(completion);
+                if (!completionResponse.IsSuccessStatusCode)
+                {
+                    ShowStatus("A Windows task ran, but ULTRON could not record its result. Check the connection.");
+                    continue;
+                }
+
+                ShowStatus("ULTRON remote task: " + commandId + " processed.");
+            }
+        }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+            ShowStatus("Remote command sync is unavailable: " + ex.GetType().Name);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _commandPollInProgress, 0);
+        }
+    }
+
     private void OpenAssistant()
     {
         try
@@ -840,6 +1007,8 @@ internal sealed class CompanionContext : ApplicationContext
     private void ExitApplication()
     {
         _allowExit = true;
+        _commandPollTimer.Stop();
+        _commandPollTimer.Dispose();
         StopListening();
         _tray.Visible = false;
         _tray.Dispose();
@@ -852,6 +1021,8 @@ internal sealed class CompanionContext : ApplicationContext
     {
         if (disposing)
         {
+            _commandPollTimer.Stop();
+            _commandPollTimer.Dispose();
             StopListening();
             _tray.Visible = false;
             _tray.Dispose();
@@ -876,6 +1047,13 @@ internal static class NativeMethods
 
     [DllImport("winmm.dll", SetLastError = true)]
     public static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool LockWorkStation();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 }
 
 internal sealed class FloatingCoreOverlayForm : Form
