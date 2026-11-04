@@ -41,7 +41,7 @@
 | 28 | `darkzOGx/youtube-automation-agent` | Defer | No dedicated adapter identified. Publishing/uploading must be explicit user-approved and platform-policy compliant. |
 | 29 | `CapSoftware/Cap` | Keep separate | No dedicated adapter identified. Screen recording is an optional desktop app, not a core AI dependency. |
 | 30 | `chatwoot/chatwoot` | Keep read-only productivity connector | `integrations/productivity-services.js`; owner allowlist and external service credentials required. No autonomous outbound messaging implied. |
-| 31 | `calcom/cal.diy` | Not verified as integrated | No dedicated Cal.com adapter path was found in the inspected main tree. Do not count generic calendar features as a Cal.diy integration. |
+| 31 | `calcom/cal.diy` | Keep read-only calendar availability adapter | `integrations/productivity-services.js` plus `caldiy_list_event_types` and `caldiy_check_availability` agent tools. Owner-scoped; availability only, no booking/cancellation. Requires `CALDIY_BASE_URL` and `CALDIY_API_TOKEN`; live service access remains unverified. |
 | 32 | `opf/openproject` | Keep read-only productivity connector | `integrations/productivity-services.js`; external URL/token and owner allowlist required. |
 | 33 | `OpenWhispr/openwhispr` | Defer | No dedicated adapter path identified. Keep existing browser/OS voice input until a real local bridge is tested. |
 | 34 | `AppFlowy-IO/AppFlowy` | Keep adapter; agent wiring proposed in draft PR #449 | `integrations/appflowy.js` and integration tests exist; PR #449 adds owner-scoped agent tools and fail-closed missing-identity checks. Requires an actual AppFlowy instance/token; live sync remains unverified and PR #449 is not merged. |
