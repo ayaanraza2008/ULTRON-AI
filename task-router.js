@@ -27,7 +27,7 @@ const CATEGORY_TOOLS = Object.freeze({
   ],
   desktop: ["check_desktop_companion"],
   productivity: [
-    "appflowy_list_workspaces", "appflowy_get_document",
+    "check_appflowy", "appflowy_list_workspaces", "appflowy_get_document",
     "chatwoot_list_conversations", "openproject_list_projects",
     "openproject_list_work_packages", "caldiy_list_event_types",
     "caldiy_check_availability"
