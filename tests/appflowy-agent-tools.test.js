@@ -80,7 +80,7 @@ test("deterministic agent fallback routes AppFlowy status without contacting the
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.ok(body.toolsUsed.some(item => item.name === "check_appflowy" && item.ok));
-    assert.equal(body.toolsUsed.find(item => item.name === "check_appflowy").result.state, "configured_unverified");
+    assert.equal(body.toolResults.find(item => item.name === "check_appflowy").result.state, "configured_unverified");
     assert.equal(appflowyCalls, 0);
     assert.equal(providerCalls, 2);
     assert.equal(JSON.stringify(body).includes(TOKEN), false);
