@@ -85,6 +85,17 @@ class MockMcpClient {
   }
 }
 
+async function authorizeTestDevice(baseUrl, deviceId = "device-test-1") {
+  const res = await fetch(`${baseUrl}/authorize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deviceId, maxLevel: MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION })
+  });
+  const data = await res.json();
+  assert.equal(res.status, 200, data.error?.message || "Device authorization failed");
+  assert.equal(data.success, true);
+}
+
 async function withMobileServer(options = {}, fn) {
   const mockAdb = new MockAdbBridge();
   const mockMcp = new MockMcpClient();
@@ -162,8 +173,77 @@ test("MobileIntegration: GET /api/mobile/devices lists connected Android devices
   });
 });
 
+test("MobileIntegration: newly discovered devices are not implicitly authorized", async () => {
+  await withMobileServer({}, async ({ baseUrl }) => {
+    const res = await fetch(`${baseUrl}/devices`);
+    const data = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(data.devices[0].authorized, false);
+  });
+});
+
+test("MobileIntegration: unauthenticated caller cannot use internal-call header to authorize a device", async () => {
+  const mockAdb = new MockAdbBridge();
+  const mockMcp = new MockMcpClient();
+  const registry = new MobileDeviceRegistry({ adbBridge: mockAdb });
+  const permissions = new MobilePermissionEngine();
+  const controlEngine = new MobileControlEngine({
+    adbBridge: mockAdb,
+    mcpClient: mockMcp,
+    deviceRegistry: registry,
+    permissionEngine: permissions,
+    autoStartMcp: false
+  });
+  await controlEngine.initialize();
+
+  const app = express();
+  app.use("/api/mobile", createMobileRouter({ controlEngine, taskAgent: new MobileTaskAgent({ controlEngine }) }));
+  const server = createServer(app);
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    const res = await fetch(`http://127.0.0.1:${address.port}/api/mobile/authorize`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-ultron-internal-call": "true"
+      },
+      body: JSON.stringify({ deviceId: "device-test-1", maxLevel: 2 })
+    });
+    const data = await res.json();
+    assert.equal(res.status, 401);
+    assert.equal(data.error.code, "AUTHENTICATED_USER_REQUIRED");
+    assert.equal(permissions.deviceAuthorizations.size, 0);
+  } finally {
+    await controlEngine.shutdown();
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test("MobileIntegration: unpaired device cannot receive control actions", async () => {
+  await withMobileServer({}, async ({ baseUrl }) => {
+    const res = await fetch(`${baseUrl}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceId: "device-test-1",
+        action: "mobile_click_on_screen_at_coordinates",
+        params: { x: 100, y: 100 }
+      })
+    });
+    const data = await res.json();
+    assert.equal(res.status, 403);
+    assert.equal(data.error.code, "DEVICE_UNAUTHORIZED");
+  });
+});
+
 test("MobileIntegration: POST /api/mobile/action executes touch and navigation actions", async () => {
   await withMobileServer({}, async ({ baseUrl }) => {
+    await authorizeTestDevice(baseUrl);
     const res = await fetch(`${baseUrl}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -183,6 +263,7 @@ test("MobileIntegration: POST /api/mobile/action executes touch and navigation a
 
 test("MobileIntegration: POST /api/mobile/screenshot returns valid image data", async () => {
   await withMobileServer({}, async ({ baseUrl }) => {
+    await authorizeTestDevice(baseUrl);
     const res = await fetch(`${baseUrl}/screenshot`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -199,6 +280,7 @@ test("MobileIntegration: POST /api/mobile/screenshot returns valid image data", 
 
 test("MobileIntegration: POST /api/mobile/elements returns UI accessibility hierarchy", async () => {
   await withMobileServer({}, async ({ baseUrl }) => {
+    await authorizeTestDevice(baseUrl);
     const res = await fetch(`${baseUrl}/elements`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -213,6 +295,7 @@ test("MobileIntegration: POST /api/mobile/elements returns UI accessibility hier
 
 test("MobileIntegration: Level 4 actions require single-use confirmation token", async () => {
   await withMobileServer({}, async ({ baseUrl }) => {
+    await authorizeTestDevice(baseUrl);
     // 1. Critical action without token must return 403 CONFIRMATION_REQUIRED
     const rejectRes = await fetch(`${baseUrl}/action`, {
       method: "POST",
@@ -259,6 +342,7 @@ test("MobileIntegration: Level 4 actions require single-use confirmation token",
 
 test("MobileIntegration: End-to-End Autonomous Mobile Task (goal -> plan -> execute -> summary)", async () => {
   await withMobileServer({}, async ({ baseUrl }) => {
+    await authorizeTestDevice(baseUrl);
     const res = await fetch(`${baseUrl}/workflow`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
