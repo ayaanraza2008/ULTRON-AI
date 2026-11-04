@@ -65,7 +65,29 @@ No blocker is auto-resolvable from this environment.
 - Full local suite: **1,460 tests, 1,455 pass, 0 fail, 5 skipped**.
 - Branches preserved: 17 local + 1 stash; working tree clean.
 
-## 9. Safe next engineering steps (no approval needed)
+## 9. Owner manual execution steps (exact)
+
+### Supabase
+1. Dashboard → SQL Editor → paste `supabase/migrations/20261101180000_durable_paired_devices.sql` → Run.
+2. Verify tables `paired_devices`, `pending_device_pairings` exist and RLS enabled.
+3. Authentication → Attack Protection → enable "Leaked Password Protection".
+4. Rollback (if needed): run `supabase/migrations/20261101180000_durable_paired_devices.rollback.sql` (destructive; backup first).
+
+### Render (workspace "Ultron core" only)
+1. Service `ultron-ai-core` → Environment → add `OPENROUTER_API_KEY` (and optional `GROQ_API_KEY`, `GEMINI_API_KEY`).
+2. Save; service redeploys automatically.
+3. Blueprint sync: Render Dashboard → Blueprint → sync `render.yaml` after PR merge.
+4. Verify `https://ultron-ai-core.onrender.com` health endpoint.
+
+### GitHub
+1. Owner reviews PR #441 diff (351 files).
+2. Merge PR #441 to `main` (explicit authorization).
+3. Post-merge: re-run CI on `main`.
+
+## 10. GO/NO-GO recommendation
+**CONDITIONAL GO** — all local software checks and candidate CI are green. Production GO requires owner completion of the 5 owner-gated actions above plus explicit `DEPLOY` instruction. No automatic deployment.
+
+## 11. Safe next engineering steps (no approval needed)
 - Configure a valid OpenRouter key locally for provider smoke tests.
 - Install ADB only if physical device testing is desired.
 - Continue integration work on feature branches; keep `main` protected.
