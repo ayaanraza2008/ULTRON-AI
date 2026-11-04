@@ -33,9 +33,11 @@ class UltronSyncWorker(
             val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == BatteryManager.BATTERY_STATUS_FULL
 
-            client.sendTelemetry(batteryPct, isCharging)
-
-            Result.success()
+            if (client.sendTelemetry(batteryPct, isCharging)) {
+                Result.success()
+            } else {
+                Result.retry()
+            }
         } catch (_: Exception) {
             Result.retry()
         }
