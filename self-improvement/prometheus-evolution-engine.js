@@ -11,7 +11,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -126,7 +125,7 @@ export class PrometheusEvolutionEngine {
     confirmationToken = null,
     actorId = null
   }) {
-    const cleanId = String(toolId || "").toLowerCase().replace(/[^a-z0-9_\\-]/g, "");
+    const cleanId = String(toolId || "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
     if (!cleanId) throw new Error("Tool ID must contain valid alphanumeric characters");
 
     const security = this.validateSourceSecurity(sourceCode, language);
