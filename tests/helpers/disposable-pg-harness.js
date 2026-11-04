@@ -1,15 +1,21 @@
 /**
- * ULTRON AI — Disposable Real PostgreSQL & Supabase RLS Test Harness
+ * ULTRON AI — Production-Safe Disposable PostgreSQL & Supabase Test Harness
  * Module: tests/helpers/disposable-pg-harness.js
  *
- * Connects to a real PostgreSQL database (e.g. Docker container or CI service container),
- * initializes Supabase auth/storage schemas, roles, and functions, and applies all
- * project migrations sequentially to test genuine PostgreSQL Row-Level Security (RLS).
+ * Implements strict, production-safe PostgreSQL testing on disposable infrastructure:
+ * 1. ZERO fallback to generic production environment variables (DATABASE_URL, POSTGRES_URL).
+ * 2. Only accepts designated test variables (ULTRON_TEST_DATABASE_URL, suite-specific URLs).
+ * 3. Enforces strict Host Allowlist (localhost, 127.0.0.1, ::1, postgres, docker container names).
+ * 4. Hard-rejects Supabase production and pooler endpoints (*.supabase.co, *.supabase.com).
+ * 5. Requires database names containing 'test' or 'disposable'.
+ * 6. Requires explicit migration authorization flag (ULTRON_ALLOW_TEST_MIGRATIONS=true).
+ * 7. Verifies database identity via `SELECT current_database()` before any DDL or migration.
+ * 8. Never exposes credentials or passwords in error messages or logs.
+ * 9. Isolates test suites (RLS, migration, worker) into separate disposable databases.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 
 let pgModule = null;
 try {
@@ -27,35 +33,145 @@ export const TEST_USERS = {
   }
 };
 
+const ALLOWED_TEST_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  "[::1]",
+  "postgres",
+  "database",
+  "db",
+  "docker"
+]);
+
+/**
+ * Redacts passwords and sensitive tokens from connection strings for safe logging.
+ */
+export function sanitizeConnectionString(rawUrl) {
+  if (typeof rawUrl !== "string") return "";
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.password) {
+      parsed.password = "******";
+    }
+    return parsed.toString();
+  } catch {
+    return "[MALFORMED_URL]";
+  }
+}
+
+/**
+ * Validates that a connection target is strictly a local/test-container disposable database.
+ */
+export function validateTestDatabaseTarget(target, options = {}) {
+  let host = "";
+  let database = "";
+
+  if (typeof target === "string") {
+    let parsed;
+    try {
+      parsed = new URL(target);
+    } catch {
+      throw new Error("UNSAFE_DATABASE_CONFIG: Target connection string is malformed.");
+    }
+    host = parsed.hostname.toLowerCase();
+    database = parsed.pathname.replace(/^\/+/, "").toLowerCase();
+  } else if (target && typeof target === "object") {
+    host = String(target.host || "").toLowerCase();
+    database = String(target.database || "").toLowerCase();
+  } else {
+    throw new Error("UNSAFE_DATABASE_CONFIG: No database target configuration provided.");
+  }
+
+  // 1. Hard-reject Supabase cloud & pooler hosts
+  if (/(^|\.)supabase\.(co|com)$/i.test(host) || /pooler\.supabase/i.test(host)) {
+    throw new Error(`UNSAFE_DATABASE_HOST: Connecting to Supabase production or pooler hosts ('${host}') is strictly prohibited in test harness.`);
+  }
+
+  // 2. Reject remote/unknown hosts
+  const isAllowedHost = ALLOWED_TEST_HOSTS.has(host) ||
+    host.endsWith(".local") ||
+    /^127\.\d+\.\d+\.\d+$/.test(host);
+
+  if (!isAllowedHost) {
+    throw new Error(`UNSAFE_DATABASE_HOST: Real database testing is prohibited against remote or unknown host '${host}'. Only local/test-container hosts are permitted.`);
+  }
+
+  // 3. Require database name containing 'test' or 'disposable'
+  if (!database || (!database.includes("test") && !database.includes("disposable"))) {
+    throw new Error(`UNSAFE_DATABASE_NAME: Target database name '${database}' must contain 'test' or 'disposable' to prevent accidental execution against production databases.`);
+  }
+
+  // 4. Require explicit test migration authorization
+  const isAuthorized = options.allowTestMigrations === true ||
+    process.env.ULTRON_ALLOW_TEST_MIGRATIONS === "true" ||
+    process.env.CI === "true";
+
+  if (!isAuthorized) {
+    throw new Error("MIGRATION_AUTH_REQUIRED: Test migrations require explicit authorization via ULTRON_ALLOW_TEST_MIGRATIONS=true or allowTestMigrations option.");
+  }
+
+  return { safe: true, host, database };
+}
+
 export class DisposablePgHarness {
   constructor(options = {}) {
     this.options = options;
+    this.suiteName = options.suiteName || "default"; // 'rls' | 'migration' | 'worker' | 'default'
     this.pool = null;
     this.isReady = false;
+    this.activeDatabaseName = null;
   }
 
+  /**
+   * Resolves connection configuration strictly from designated test variables.
+   * NEVER falls back to DATABASE_URL or POSTGRES_URL.
+   */
   getPoolConfig() {
+    let rawUrl = null;
+
+    // 1. Direct option passed to harness
     if (this.options.connectionString) {
-      return { connectionString: this.options.connectionString };
+      rawUrl = this.options.connectionString;
     }
-    if (process.env.DATABASE_URL) {
-      return { connectionString: process.env.DATABASE_URL };
+    // 2. Suite-specific environment variables
+    else if (this.suiteName === "rls" && process.env.ULTRON_TEST_RLS_DATABASE_URL) {
+      rawUrl = process.env.ULTRON_TEST_RLS_DATABASE_URL;
+    } else if (this.suiteName === "migration" && process.env.ULTRON_TEST_MIGRATION_DATABASE_URL) {
+      rawUrl = process.env.ULTRON_TEST_MIGRATION_DATABASE_URL;
+    } else if (this.suiteName === "worker" && process.env.ULTRON_TEST_WORKER_DATABASE_URL) {
+      rawUrl = process.env.ULTRON_TEST_WORKER_DATABASE_URL;
+    } else if (this.suiteName === "runtime" && process.env.ULTRON_TEST_RUNTIME_DATABASE_URL) {
+      rawUrl = process.env.ULTRON_TEST_RUNTIME_DATABASE_URL;
     }
-    if (process.env.POSTGRES_URL) {
-      return { connectionString: process.env.POSTGRES_URL };
+    // 3. Primary test database URL
+    else if (process.env.ULTRON_TEST_DATABASE_URL) {
+      rawUrl = process.env.ULTRON_TEST_DATABASE_URL;
     }
-    if (process.env.ULTRON_TEST_DATABASE_URL) {
-      return { connectionString: process.env.ULTRON_TEST_DATABASE_URL };
+
+    if (rawUrl) {
+      // Validate target safety before returning
+      validateTestDatabaseTarget(rawUrl, this.options);
+      return { connectionString: rawUrl };
     }
-    if (process.env.PGHOST) {
-      return {
+
+    // 4. Structured PG host config (strictly for test environments)
+    if (process.env.PGHOST && (process.env.ULTRON_ALLOW_TEST_MIGRATIONS === "true" || process.env.CI === "true")) {
+      const dbName = this.options.database ||
+        (this.suiteName !== "default" ? `ultron_test_${this.suiteName}` : (process.env.PGDATABASE || "ultron_test"));
+
+      const config = {
         host: process.env.PGHOST,
         port: Number(process.env.PGPORT) || 5432,
         user: process.env.PGUSER || "postgres",
         password: process.env.PGPASSWORD || "",
-        database: process.env.PGDATABASE || "ultron_disposable_test"
+        database: dbName
       };
+
+      validateTestDatabaseTarget(config, this.options);
+      return config;
     }
+
     return null;
   }
 
@@ -64,27 +180,39 @@ export class DisposablePgHarness {
       return { available: false, reason: "pg driver (node-postgres) is not installed." };
     }
 
-    const config = this.getPoolConfig();
-    if (!config) {
-      return { available: false, reason: "No PostgreSQL connection configuration found (PGHOST or DATABASE_URL not set)." };
+    let config;
+    try {
+      config = this.getPoolConfig();
+    } catch (err) {
+      return { available: false, reason: err.message };
     }
 
-    const probePool = new pgModule.Pool({
-      ...config,
-      connectionTimeoutMillis: 2000
-    });
+    if (!config) {
+      return {
+        available: false,
+        reason: "No valid test database configuration found. Set ULTRON_TEST_DATABASE_URL and ULTRON_ALLOW_TEST_MIGRATIONS=true."
+      };
+    }
 
+    let probePool;
     try {
+      probePool = new pgModule.Pool({
+        ...config,
+        connectionTimeoutMillis: 2000
+      });
+
       const client = await probePool.connect();
       await client.query("SELECT 1;");
       client.release();
       await probePool.end();
       return { available: true };
     } catch (err) {
-      await probePool.end().catch(() => {});
+      if (probePool) {
+        await probePool.end().catch(() => {});
+      }
       return {
         available: false,
-        reason: `Real PostgreSQL database is not reachable: ${err.message}`
+        reason: `Real PostgreSQL test database is not reachable at ${sanitizeConnectionString(config.connectionString || config.host)}: ${err.message}`
       };
     }
   }
@@ -103,6 +231,16 @@ export class DisposablePgHarness {
 
     const client = await this.pool.connect();
     try {
+      // 0. Verify identity against PostgreSQL engine
+      const identityRes = await client.query("SELECT current_database(), current_user;");
+      const currentDb = identityRes.rows[0].current_database;
+      this.activeDatabaseName = currentDb;
+
+      // Fail-closed verification: database name MUST contain 'test' or 'disposable'
+      if (!currentDb.includes("test") && !currentDb.includes("disposable")) {
+        throw new Error(`CRITICAL SECURITY ABORT: Connected database '${currentDb}' does not contain 'test' or 'disposable'. Halting before DDL.`);
+      }
+
       // 1. Initialize Supabase baseline environment (auth, roles, storage, functions)
       await client.query(`
         -- Enable pgcrypto if present
@@ -200,7 +338,11 @@ export class DisposablePgHarness {
       }
 
       this.isReady = true;
-      return { ready: true, migrationCount: migrationFiles.length };
+      return {
+        ready: true,
+        database: currentDb,
+        migrationCount: migrationFiles.length
+      };
     } finally {
       client.release();
     }

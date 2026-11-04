@@ -109,7 +109,7 @@ export class WindowsAutomation {
         psScript = `powershell -NoProfile -Command "1..50 | ForEach-Object { (New-Object -ComObject WScript.Shell).SendKeys([char]174) }; 1..${Math.round(level / 2)} | ForEach-Object { (New-Object -ComObject WScript.Shell).SendKeys([char]175) }"`;
       }
 
-      await execAsync(psScript, { timeout: 3000 });
+      await execAsync(psScript, { timeout: 8000 });
       this.recordEvent("VOLUME", `${action} (${value ?? ""})`, "success");
       return { success: true, action, value };
     } catch (err) {
@@ -241,7 +241,7 @@ $title.ToString()
 
     try {
       const psScript = `powershell -NoProfile -Command "Get-Process -Name ${targetProcess} -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; exit 0"`;
-      await execAsync(psScript, { timeout: 3000 });
+      await execAsync(psScript, { timeout: 8000 });
       this.recordEvent("CLOSE_APP", appName, "success");
       return { success: true, app: appName, processName: targetProcess };
     } catch (err) {

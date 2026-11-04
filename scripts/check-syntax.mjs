@@ -364,7 +364,20 @@ const FILES_TO_CHECK = [
   "tests/mobile-permissions.test.js",
   "tests/mobile-task-planner.test.js",
   "tests/mobile-control-engine.test.js",
-  "tests/mobile-integration.test.js"
+  "tests/mobile-integration.test.js",
+  "integrations/browser/ego-lite/ego-constants.js",
+  "integrations/browser/ego-lite/ego-runtime-manager.js",
+  "integrations/browser/ego-lite/ego-taskspace-manager.js",
+  "integrations/browser/ego-lite/ego-session-manager.js",
+  "integrations/browser/ego-lite/ego-page-manager.js",
+  "integrations/browser/ego-lite/ego-snapshot-engine.js",
+  "integrations/browser/ego-lite/ego-action-executor.js",
+  "integrations/browser/ego-lite/ego-learning-manager.js",
+  "integrations/browser/ego-lite/ego-security-guard.js",
+  "integrations/browser/ego-lite/ego-audit-logger.js",
+  "integrations/browser/ego-lite/ego-browser-router.js",
+  "integrations/browser/ego-lite/ego-adapter.js",
+  "tests/ego-browser-integration.test.js"
 ];
 
 let checked = 0;
