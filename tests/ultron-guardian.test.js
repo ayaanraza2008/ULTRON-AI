@@ -96,3 +96,16 @@ test("UltronGuardian: latching Emergency Stop revokes tokens and enforces shutdo
   assert.equal(restoreRes.latched, false);
   assert.equal(guardian.emergencyStopLatched, false);
 });
+
+
+test("UltronGuardian: emergency stop fails closed without a configured operator key", () => {
+  const guardian = new UltronGuardian();
+  const token = guardian.issueCapabilityToken("actor", [PERMISSION_SCOPES.READ_ONLY]);
+  const stopped = guardian.engageEmergencyStop("test");
+  assert.equal(stopped.revokedTokensCount, 1);
+  assert.equal(guardian.activeCapabilityTokens.size, 0);
+  assert.throws(() => guardian.disengageEmergencyStop("ULTRON_OPERATOR_MASTER_KEY_SECRET"), /Invalid or unconfigured operator key/);
+  assert.throws(() => guardian.disengageEmergencyStop("OVERRIDE_AUTH_KEY_2026"), /Invalid or unconfigured operator key/);
+  assert.equal(guardian.emergencyStopLatched, true);
+  assert.notEqual(token, "");
+});
