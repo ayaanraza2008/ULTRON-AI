@@ -19,17 +19,53 @@ export const GATEWAY_ERROR_CODES = {
   RUNTIME_NOT_FOUND: "PYTHON_RUNTIME_NOT_FOUND",
   TIMEOUT: "PYTHON_RPC_TIMEOUT",
   INVALID_PAYLOAD: "INVALID_RPC_PAYLOAD",
+  INVALID_METHOD: "PYTHON_RPC_METHOD_NOT_ALLOWED",
   EXECUTION_FAILED: "PYTHON_EXECUTION_FAILED",
   PERMISSION_DENIED: "PERMISSION_DENIED",
   PARSING_ERROR: "RPC_PARSING_ERROR"
 };
 
+const MAX_RPC_OUTPUT_BYTES = 2 * 1024 * 1024;
+const MAX_RPC_STDERR_BYTES = 64 * 1024;
+const MAX_RPC_INPUT_BYTES = 1024 * 1024;
+const ALLOWED_RPC_METHODS = Object.freeze({
+  cerebro: new Set(["upsert_node", "link_entities", "semantic_query", "multi_hop_recall", "get_metrics"]),
+  desktop: new Set(["get_volume", "set_volume", "mute_volume", "get_brightness", "set_brightness", "get_clipboard", "set_clipboard", "clear_clipboard", "list_processes", "kill_process", "focus_window", "scan_purge_targets", "execute_purge", "lock_workstation", "get_system_telemetry"]),
+  airspace: new Set(["scan_bluetooth", "scan_wifi_airspace"]),
+  network: new Set(["scan_local_subnet", "audit_dns_resolvers"]),
+  voice_dsp: new Set(["synth_sfx", "apply_warp"]),
+  biometrics: new Set(["enroll_boss_face", "authenticate_face", "get_status"]),
+  gestures: new Set(["list_supported_gestures", "process_gesture_frame"]),
+  iot: new Set(["list_devices", "set_device_state", "trigger_scene"]),
+  self_evolution: new Set(["analyze_source_ast", "synthesize_tool", "rollback_tool", "list_tools"])
+});
+
+function buildPythonChildEnvironment() {
+  const allowedNames = process.platform === "win32"
+    ? ["PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "PROGRAMDATA", "ProgramFiles", "ProgramFiles(x86)", "ComSpec"]
+    : ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER"];
+  const childEnv = {};
+  for (const name of allowedNames) {
+    const value = process.env[name];
+    if (typeof value === "string" && value.length <= 8192 && !/[\\0\\r\\n]/.test(value)) {
+      childEnv[name] = value;
+    }
+  }
+  childEnv.PYTHONUNBUFFERED = "1";
+  childEnv.PYTHONIOENCODING = "utf-8";
+  return childEnv;
+}
+
 export class PythonCapabilityGateway {
   constructor(options = {}) {
     this.pythonPath = options.pythonPath || process.env.PYTHON_BIN || "python";
     this.runtimeScript = options.runtimeScript || path.resolve(process.cwd(), "system", "python-capability-runtime", "runtime_entry.py");
-    this.defaultTimeoutMs = options.defaultTimeoutMs || 15000;
-    this.maxBufferBytes = options.maxBufferBytes || 2 * 1024 * 1024; // 2MB
+    this.defaultTimeoutMs = Number.isFinite(Number(options.defaultTimeoutMs))
+      ? Math.max(1000, Math.min(120000, Math.trunc(Number(options.defaultTimeoutMs))))
+      : 15000;
+    this.maxBufferBytes = Number.isFinite(Number(options.maxBufferBytes))
+      ? Math.max(1024, Math.min(MAX_RPC_OUTPUT_BYTES, Math.trunc(Number(options.maxBufferBytes))))
+      : MAX_RPC_OUTPUT_BYTES;
   }
 
   /**
@@ -56,8 +92,47 @@ export class PythonCapabilityGateway {
    * Core RPC dispatcher with timeout, memory buffer bounds, and error encapsulation.
    */
   async invokeRpc(capability, method, payload = {}, options = {}) {
-    const timeoutMs = options.timeoutMs || this.defaultTimeoutMs;
+    const timeoutMs = Number.isFinite(Number(options.timeoutMs))
+      ? Math.max(1000, Math.min(120000, Math.trunc(Number(options.timeoutMs))))
+      : this.defaultTimeoutMs;
     const isHealth = Boolean(options.isHealthProbe);
+    if (!isHealth && (
+      typeof capability !== "string" ||
+      typeof method !== "string" ||
+      !/^[a-z][a-z0-9_]{0,40}$/.test(capability) ||
+      !/^[a-z][a-z0-9_]{0,60}$/.test(method) ||
+      !ALLOWED_RPC_METHODS[capability]?.has(method)
+    )) {
+      return Promise.reject(Object.assign(
+        new Error(`${GATEWAY_ERROR_CODES.INVALID_METHOD}: Unknown or disallowed capability method.`),
+        { code: GATEWAY_ERROR_CODES.INVALID_METHOD }
+      ));
+    }
+
+    if (!isHealth && (payload === null || typeof payload !== "object" || Array.isArray(payload))) {
+      return Promise.reject(Object.assign(
+        new Error(`${GATEWAY_ERROR_CODES.INVALID_PAYLOAD}: RPC payload must be a JSON object.`),
+        { code: GATEWAY_ERROR_CODES.INVALID_PAYLOAD }
+      ));
+    }
+
+    let serializedPayload = "";
+    if (!isHealth) {
+      try {
+        serializedPayload = JSON.stringify(payload);
+      } catch {
+        return Promise.reject(Object.assign(
+          new Error(`${GATEWAY_ERROR_CODES.INVALID_PAYLOAD}: RPC payload is not serializable JSON.`),
+          { code: GATEWAY_ERROR_CODES.INVALID_PAYLOAD }
+        ));
+      }
+      if (Buffer.byteLength(serializedPayload, "utf8") > MAX_RPC_INPUT_BYTES) {
+        return Promise.reject(Object.assign(
+          new Error(`${GATEWAY_ERROR_CODES.INVALID_PAYLOAD}: RPC payload exceeds 1MB.`),
+          { code: GATEWAY_ERROR_CODES.INVALID_PAYLOAD }
+        ));
+      }
+    }
 
     return new Promise((resolve, reject) => {
       if (!fs.existsSync(this.runtimeScript)) {
@@ -71,50 +146,80 @@ export class PythonCapabilityGateway {
         ? [scriptFile, "--health"]
         : [scriptFile, "--capability", capability, "--method", method, "--stdin"];
 
-      const proc = spawn(this.pythonPath, args, {
-        cwd: runtimeDir,
-        windowsHide: true,
-        shell: process.platform === "win32",
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          PYTHONUNBUFFERED: "1",
-          PYTHONIOENCODING: "utf-8"
-        }
-      });
+      let proc;
+      try {
+        proc = spawn(this.pythonPath, args, {
+          cwd: runtimeDir,
+          windowsHide: true,
+          // Never invoke a shell: capability/method arguments must remain argv,
+          // and the child must not inherit the backend's API keys/session secrets.
+          shell: false,
+          stdio: ["pipe", "pipe", "pipe"],
+          env: buildPythonChildEnvironment()
+        });
+      } catch (error) {
+        return reject(new Error(`${GATEWAY_ERROR_CODES.EXECUTION_FAILED}: Process spawn failed: ${error.message}`));
+      }
 
-      let stdout = "";
-      let stderr = "";
+      const stdoutChunks = [];
+      const stderrChunks = [];
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
       let timedOut = false;
+      let settled = false;
+
+      const rejectOnce = error => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      const resolveOnce = value => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
 
       const timer = setTimeout(() => {
         timedOut = true;
         proc.kill("SIGKILL");
-        reject(new Error(`${GATEWAY_ERROR_CODES.TIMEOUT}: Call to '${capability}.${method}' exceeded ${timeoutMs}ms`));
+        rejectOnce(Object.assign(
+          new Error(`${GATEWAY_ERROR_CODES.TIMEOUT}: Call to '${capability}.${method}' exceeded ${timeoutMs}ms`),
+          { code: GATEWAY_ERROR_CODES.TIMEOUT }
+        ));
       }, timeoutMs);
 
-      proc.stdout.on("data", (chunk) => {
-        if (stdout.length + chunk.length > this.maxBufferBytes) {
+      proc.stdout.on("data", chunk => {
+        stdoutBytes += chunk.length;
+        if (stdoutBytes > this.maxBufferBytes) {
           proc.kill("SIGKILL");
           clearTimeout(timer);
-          return reject(new Error("RPC_BUFFER_OVERFLOW: Output exceeded 2MB limit"));
+          return rejectOnce(Object.assign(
+            new Error("RPC_BUFFER_OVERFLOW: Output exceeded the configured byte limit."),
+            { code: "RPC_BUFFER_OVERFLOW" }
+          ));
         }
-        stdout += chunk.toString("utf8");
+        stdoutChunks.push(Buffer.from(chunk));
       });
 
-      proc.stderr.on("data", (chunk) => {
-        stderr += chunk.toString("utf8");
+      proc.stderr.on("data", chunk => {
+        const remaining = MAX_RPC_STDERR_BYTES - stderrBytes;
+        if (remaining <= 0) return;
+        const kept = chunk.subarray(0, remaining);
+        stderrChunks.push(Buffer.from(kept));
+        stderrBytes += kept.length;
       });
 
       proc.on("error", (err) => {
         clearTimeout(timer);
-        reject(new Error(`${GATEWAY_ERROR_CODES.EXECUTION_FAILED}: Process spawn failed: ${err.message}`));
+        rejectOnce(new Error(`${GATEWAY_ERROR_CODES.EXECUTION_FAILED}: Process spawn failed: ${err.message}`));
       });
 
       proc.on("close", (code) => {
         clearTimeout(timer);
         if (timedOut) return;
 
+        const stdout = Buffer.concat(stdoutChunks, stdoutBytes).toString("utf8");
+        const stderr = Buffer.concat(stderrChunks, stderrBytes).toString("utf8");
         if (code !== 0) {
           let errMsg = stderr.trim() || `Process exited with code ${code}`;
           try {
@@ -125,7 +230,7 @@ export class PythonCapabilityGateway {
           } catch (_) {
             // keep raw errMsg
           }
-          return reject(new Error(`${GATEWAY_ERROR_CODES.EXECUTION_FAILED}: ${errMsg}`));
+          return rejectOnce(new Error(`${GATEWAY_ERROR_CODES.EXECUTION_FAILED}: ${errMsg}`));
         }
 
         try {
@@ -133,21 +238,21 @@ export class PythonCapabilityGateway {
           if (parsed && parsed.success === false) {
             const code = parsed.error?.code || GATEWAY_ERROR_CODES.EXECUTION_FAILED;
             const msg = parsed.error?.message || "Unknown RPC error";
-            return reject(new Error(`${code}: ${msg}`));
+            return rejectOnce(new Error(`${code}: ${msg}`));
           }
-          resolve(parsed.data !== undefined ? parsed.data : parsed);
+          resolveOnce(parsed.data !== undefined ? parsed.data : parsed);
         } catch (parseErr) {
-          reject(new Error(`${GATEWAY_ERROR_CODES.PARSING_ERROR}: ${parseErr.message} (output: ${stdout.slice(0, 200)})`));
+          rejectOnce(new Error(`${GATEWAY_ERROR_CODES.PARSING_ERROR}: ${parseErr.message} (output: ${stdout.slice(0, 200)})`));
         }
       });
 
       if (!isHealth) {
         try {
-          proc.stdin.write(JSON.stringify(payload), "utf8");
+          proc.stdin.write(serializedPayload, "utf8");
           proc.stdin.end();
         } catch (writeErr) {
           clearTimeout(timer);
-          reject(new Error(`${GATEWAY_ERROR_CODES.INVALID_PAYLOAD}: ${writeErr.message}`));
+          rejectOnce(new Error(`${GATEWAY_ERROR_CODES.INVALID_PAYLOAD}: ${writeErr.message}`));
         }
       }
     });
