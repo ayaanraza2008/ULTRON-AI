@@ -279,6 +279,10 @@ test("device-pairing migration installs an atomic single-use claim function rest
   assert.match(migration, /delete from public\.pending_device_pairings/i);
   assert.match(migration, /revoke all on function public\.claim_pending_device_pairing\(text\) from public, anon, authenticated/i);
   assert.match(migration, /grant execute on function public\.claim_pending_device_pairing\(text\) to service_role/i);
+  const telemetryMigration = await readFile(new URL("../supabase/migrations/20261104110000_paired_device_telemetry.sql", import.meta.url), "utf8");
+  assert.match(telemetryMigration, /add column if not exists battery_percent smallint/i);
+  assert.match(telemetryMigration, /battery_percent between 0 and 100/i);
+  assert.match(telemetryMigration, /add column if not exists is_charging boolean/i);
 });
 
 
