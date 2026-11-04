@@ -556,6 +556,14 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
           signal: AbortSignal.timeout(timeoutMs)
         });
       } catch (error) {
+        const errorName = typeof error?.name === "string" ? error.name.slice(0, 40) : "Error";
+        logger.warn?.("Browser Use model gateway provider transport failed", {
+          provider: String(provider.name || "unknown").slice(0, 40),
+          model: String(model || "").slice(0, 120),
+          attempt: index + 1,
+          attempts: attempts.length,
+          errorName
+        });
         if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
           lastStatus = 502;
           if (index + 1 < attempts.length) continue;
@@ -566,6 +574,13 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       let raw;
       try { raw = await readResponseTextLimited(upstream, 2_000_000); }
       catch {
+        logger.warn?.("Browser Use model gateway provider response rejected", {
+          provider: String(provider.name || "unknown").slice(0, 40),
+          model: String(model || "").slice(0, 120),
+          attempt: index + 1,
+          attempts: attempts.length,
+          reason: "response_too_large_or_unreadable"
+        });
         return res.status(502).json({ error: { message: "Model provider response exceeded the size limit or was not safely streamable", type: "provider_response_too_large" } });
       }
       if (upstream.ok) {
@@ -595,11 +610,25 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
           return res.status(200).type("application/json").send(raw);
         }
         lastStatus = 502;
+        logger.warn?.("Browser Use model gateway provider returned an unusable completion", {
+          provider: String(provider.name || "unknown").slice(0, 40),
+          model: String(model || "").slice(0, 120),
+          attempt: index + 1,
+          attempts: attempts.length,
+          reason: "empty_or_invalid_completion"
+        });
         if (index + 1 < attempts.length) continue;
         break;
       }
 
       lastStatus = upstream.status;
+      logger.warn?.("Browser Use model gateway provider returned non-success status", {
+        provider: String(provider.name || "unknown").slice(0, 40),
+        model: String(model || "").slice(0, 120),
+        status: upstream.status,
+        attempt: index + 1,
+        attempts: attempts.length
+      });
       const fallbackEligible = [401, 402, 403, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
       if (!fallbackEligible || index + 1 >= attempts.length) break;
     }
