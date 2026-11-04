@@ -138,3 +138,16 @@ test("Ego browser emergency stop overrides even an otherwise valid approval toke
     /Emergency Stop is engaged/
   );
 });
+
+
+test("Ego browser refuses live driver actions when no security guard is injected", async () => {
+  let clicks = 0;
+  const executor = new EgoActionExecutor({
+    driver: { click: async () => { clicks += 1; return { clicked: true }; } }
+  });
+  await assert.rejects(
+    () => executor.click("page-1", "a[href='/profile']"),
+    error => error.code === "BROWSER_SECURITY_GUARD_REQUIRED"
+  );
+  assert.equal(clicks, 0);
+});
