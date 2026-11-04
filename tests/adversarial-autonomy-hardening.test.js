@@ -86,6 +86,19 @@ test("Adversarial Security: Execution with invalid approval token fails with UNA
   assert.ok(outcome.error.includes("Invalid or non-existent approval ID"));
 });
 
+test("Adversarial Security: caller-supplied preApproved/admin booleans never authorize privileged tools", async () => {
+  const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
+  const outcome = await orchestrator.processUserRequest("Lock workstation immediately", {
+    preApproved: true,
+    trustedInternalAdmin: true,
+    isAdmin: true,
+    userId: "attacker"
+  });
+  assert.equal(outcome.status, "APPROVAL_REQUIRED");
+  assert.equal(outcome.approvalRequest.toolId, "windows_lock_workstation");
+});
+
+
 test("Adversarial Security: Replay attack with already-consumed approval token is rejected", async () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry, strictApprovalGates: true });
 
@@ -129,6 +142,17 @@ test("Adversarial Security: Tool mismatch on approval token is rejected", async 
 // ==========================================
 // 3. EMERGENCY STOP AUDIT & RESTART PERSISTENCE
 // ==========================================
+
+test("Adversarial Security: sensitive work cannot be queued in the background without an approval handshake", () => {
+  const testDir = path.join(os.tmpdir(), "ultron-test-background-approval-" + Date.now());
+  const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry, persistenceDir: testDir });
+  const outcome = orchestrator.submitBackgroundTask("Launch chrome on my computer");
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.status, "APPROVAL_REQUIRED");
+  assert.equal(outcome.code, "BACKGROUND_APPROVAL_UNSUPPORTED");
+  assert.equal(orchestrator.getActiveWorkflows().length, 0);
+  fs.rmSync(testDir, { recursive: true, force: true });
+});
 
 test("Emergency Stop Audit: Halts new commands, cancels active workflows, and persists across restarts", async () => {
   const testDir = path.join(os.tmpdir(), "ultron-test-estop-" + Date.now());
