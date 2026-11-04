@@ -51,7 +51,7 @@ Automated scanning was executed across all files and git commit history using `c
 - **Database Connection Strings with Passwords:** 0 instances found.
 - **Private Key Blocks (`BEGIN RSA/OPENSSH PRIVATE KEY`):** 0 instances found.
 - **Slack / Telegram / Discord Webhooks:** 0 instances found.
-- **Synthetic Test Fixtures:** Explicitly allowlisted fixtures in `test/` use dummy placeholders (`ghp_fakeToken1234567890123456789012345678`) and are tagged with `nosec` suppression comments.
+- **Synthetic Test Fixtures:** Explicitly allowlisted fixtures in `test/` use dummy placeholders (`ghp_example_placeholder_token_for_tests`) and are tagged with `nosec` suppression comments.
 - **Memory Retention:** Scanner enforces a zero-retention policy—detected candidate strings are redacted immediately before logging.
 
 ---

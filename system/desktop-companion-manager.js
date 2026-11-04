@@ -8,12 +8,16 @@
  * - Global shortcut registration metadata (Ctrl+Shift+U primary, Ctrl+Shift+J alias).
  * - Close interception: prevents accidental backend shutdown by minimizing to tray.
  * - Emergency stop circuit breaker and health telemetry.
+ * - Native Win32 floating overlay & tray icon daemon lifecycle management.
  */
 
 import EventEmitter from "node:events";
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { spawn } from "node:child_process";
+import readline from "node:readline";
 
 export const COMPANION_STATES = Object.freeze({
   STANDBY: "STANDBY",
@@ -51,6 +55,13 @@ export class DesktopCompanionManager extends EventEmitter {
       { combo: "Ctrl+Shift+J", action: "toggle_hud", role: "jarvis_compat_alias" }
     ];
     this.isInitialized = false;
+
+    // Native companion process lifecycle
+    this.nativeProcess = null;
+    this.nativePid = null;
+    this.nativeProcessActive = false;
+    this.repoRoot = options.repoRoot || path.resolve(import.meta.dirname, "..");
+    this.autoLaunchNative = Boolean(options.autoLaunchNative);
   }
 
   async initialize() {
@@ -61,6 +72,11 @@ export class DesktopCompanionManager extends EventEmitter {
     } catch {
       this.orbPosition = this.getDefaultPosition();
     }
+
+    if (this.autoLaunchNative && os.platform() === "win32") {
+      await this.launchNativeCompanion().catch(() => {});
+    }
+
     this.isInitialized = true;
     this.emit("initialized", { state: this.state, orbPosition: this.orbPosition });
   }
@@ -124,6 +140,7 @@ export class DesktopCompanionManager extends EventEmitter {
     const clamped = this.clampToDisplay(x, y, screenWidth, screenHeight, bounds);
     this.orbPosition = clamped;
     await this.saveConfig();
+    this.sendIpcCommand({ action: "setPosition", x: clamped.x, y: clamped.y });
     this.emit("orb_moved", { position: this.orbPosition });
     return this.orbPosition;
   }
@@ -166,39 +183,46 @@ export class DesktopCompanionManager extends EventEmitter {
       case TRAY_ACTIONS.TOGGLE:
         this.isWindowVisible = !this.isWindowVisible;
         this.state = this.isWindowVisible ? COMPANION_STATES.STANDBY : COMPANION_STATES.MINIMIZED_TO_TRAY;
+        this.sendIpcCommand({ action: "setVisibility", visible: this.isWindowVisible });
         this.emit("visibility_changed", { visible: this.isWindowVisible, state: this.state });
         return { success: true, action, visible: this.isWindowVisible };
 
       case TRAY_ACTIONS.SHOW:
         this.isWindowVisible = true;
         this.state = COMPANION_STATES.STANDBY;
+        this.sendIpcCommand({ action: "setVisibility", visible: true });
         this.emit("visibility_changed", { visible: true, state: this.state });
         return { success: true, action, visible: true };
 
       case TRAY_ACTIONS.HIDE:
         this.isWindowVisible = false;
         this.state = COMPANION_STATES.MINIMIZED_TO_TRAY;
+        this.sendIpcCommand({ action: "setVisibility", visible: false });
         this.emit("visibility_changed", { visible: false, state: this.state });
         return { success: true, action, visible: false };
 
       case TRAY_ACTIONS.SETTINGS:
         this.isWindowVisible = true;
+        this.sendIpcCommand({ action: "setVisibility", visible: true });
         this.emit("navigate_settings", { view: "settings" });
         return { success: true, action, navigated: "settings" };
 
       case TRAY_ACTIONS.EMERGENCY_STOP:
         this.emergencyHalted = true;
         this.state = COMPANION_STATES.HALTED;
+        this.sendIpcCommand({ action: "setState", state: "HALTED" });
         this.emit("emergency_stop", { reason: context.reason || "Operator tray halt", timestamp: Date.now() });
         return { success: true, action, halted: true };
 
       case TRAY_ACTIONS.RESET_EMERGENCY_STOP:
         this.emergencyHalted = false;
         this.state = COMPANION_STATES.STANDBY;
+        this.sendIpcCommand({ action: "setState", state: "STANDBY" });
         this.emit("emergency_stop_reset", { timestamp: Date.now() });
         return { success: true, action, halted: false };
 
       case TRAY_ACTIONS.QUIT:
+        this.sendIpcCommand({ action: "quit" });
         this.emit("shutdown_requested", { reason: "Tray quit invoked", timestamp: Date.now() });
         return { success: true, action, shuttingDown: true };
 
@@ -214,6 +238,7 @@ export class DesktopCompanionManager extends EventEmitter {
   handleWindowCloseRequest() {
     this.isWindowVisible = false;
     this.state = COMPANION_STATES.MINIMIZED_TO_TRAY;
+    this.sendIpcCommand({ action: "setVisibility", visible: false });
     this.emit("minimized_to_tray", { timestamp: Date.now() });
     return { preventDefault: true, action: "minimized_to_tray" };
   }
@@ -233,9 +258,178 @@ export class DesktopCompanionManager extends EventEmitter {
   }
 
   /**
+   * Launch the real native Win32 floating companion daemon.
+   */
+  async launchNativeCompanion(options = {}) {
+    if (os.platform() !== "win32") {
+      return {
+        launched: false,
+        reason: "Native Win32 floating companion requires Windows host OS",
+        platform: os.platform()
+      };
+    }
+
+    if (this.nativeProcess && !this.nativeProcess.killed) {
+      return {
+        launched: true,
+        alreadyRunning: true,
+        pid: this.nativeProcess.pid
+      };
+    }
+
+    const binPath = options.binaryPath || path.join(this.repoRoot, "bin", "ultron-native-companion.exe");
+
+    if (!fsSync.existsSync(binPath)) {
+      try {
+        const { buildNativeCompanion } = await import("../scripts/build-native-companion.mjs");
+        const buildRes = buildNativeCompanion();
+        if (!buildRes.success) {
+          return {
+            launched: false,
+            reason: `Native companion binary not found and compilation failed: ${buildRes.reason || buildRes.error}`
+          };
+        }
+      } catch (err) {
+        return {
+          launched: false,
+          reason: `Compilation error: ${err.message}`
+        };
+      }
+    }
+
+    try {
+      const proc = spawn(binPath, [], {
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: false
+      });
+
+      this.nativeProcess = proc;
+      this.nativePid = proc.pid;
+      this.nativeProcessActive = true;
+
+      const rl = readline.createInterface({ input: proc.stdout });
+      rl.on("line", (line) => {
+        try {
+          const evt = JSON.parse(line.trim());
+          this.handleNativeIpcEvent(evt);
+        } catch {
+          // Ignore non-JSON line
+        }
+      });
+
+      proc.on("exit", (code) => {
+        this.nativeProcess = null;
+        this.nativePid = null;
+        this.nativeProcessActive = false;
+        this.emit("native_exit", { code });
+      });
+
+      // Synchronize initial state
+      this.sendIpcCommand({ action: "setState", state: this.state });
+      this.sendIpcCommand({ action: "setVisibility", visible: this.isWindowVisible });
+
+      return {
+        launched: true,
+        pid: proc.pid,
+        binaryPath: binPath
+      };
+    } catch (err) {
+      this.nativeProcess = null;
+      this.nativeProcessActive = false;
+      return {
+        launched: false,
+        error: err.message
+      };
+    }
+  }
+
+  handleNativeIpcEvent(event) {
+    if (!event || !event.event) return;
+    switch (event.event) {
+      case "ready":
+        this.nativePid = event.pid || this.nativePid;
+        this.nativeProcessActive = true;
+        this.emit("native_ready", event);
+        break;
+      case "position_changed":
+        if (typeof event.x === "number" && typeof event.y === "number") {
+          this.orbPosition = { x: event.x, y: event.y };
+          this.emit("orb_moved", { position: this.orbPosition });
+        }
+        break;
+      case "visibility_changed":
+        this.isWindowVisible = Boolean(event.visible);
+        this.emit("visibility_changed", { visible: this.isWindowVisible, state: this.state });
+        break;
+      case "tray_action":
+        if (event.action) {
+          this.handleTrayAction(event.action, { source: "native_tray" });
+        }
+        break;
+      case "state_changed":
+        if (event.state && COMPANION_STATES[event.state]) {
+          this.state = event.state;
+          this.emit("state_changed", { state: this.state });
+        }
+        break;
+      case "already_running":
+        this.emit("native_already_running", event);
+        break;
+    }
+  }
+
+  sendIpcCommand(command) {
+    if (this.nativeProcess && !this.nativeProcess.killed && this.nativeProcess.stdin?.writable) {
+      try {
+        this.nativeProcess.stdin.write(JSON.stringify(command) + "\n");
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  setOrbState(state) {
+    if (COMPANION_STATES[state]) {
+      this.state = state;
+      this.sendIpcCommand({ action: "setState", state });
+      this.emit("state_changed", { state: this.state });
+      return true;
+    }
+    return false;
+  }
+
+  async stopNativeCompanion() {
+    if (this.nativeProcess && !this.nativeProcess.killed) {
+      this.sendIpcCommand({ action: "quit" });
+      await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          try {
+            if (this.nativeProcess && !this.nativeProcess.killed) {
+              this.nativeProcess.kill();
+            }
+          } catch {}
+          resolve();
+        }, 1500);
+        this.nativeProcess.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      this.nativeProcess = null;
+      this.nativePid = null;
+      this.nativeProcessActive = false;
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Companion health & telemetry snapshot
    */
   getStatus() {
+    const isNativeActive = Boolean(this.nativeProcess && !this.nativeProcess.killed);
     return {
       service: "desktop-companion-manager",
       state: this.state,
@@ -244,10 +438,12 @@ export class DesktopCompanionManager extends EventEmitter {
       orbSize: this.orbSize,
       orbPosition: this.orbPosition,
       registeredShortcuts: this.registeredShortcuts,
-      nativeWindowImplemented: false,
-      nativeTrayImplemented: false,
-      nativeGlobalShortcutsHooked: false,
-      implementationType: "headless_rest_state_manager",
+      nativeWindowImplemented: isNativeActive,
+      nativeTrayImplemented: isNativeActive,
+      nativeGlobalShortcutsHooked: isNativeActive,
+      nativeProcessActive: isNativeActive,
+      nativePid: isNativeActive ? this.nativePid : null,
+      implementationType: isNativeActive ? "native_win32_floating_overlay" : "headless_rest_state_manager",
       timestamp: new Date().toISOString()
     };
   }
