@@ -498,6 +498,14 @@ export class AutonomousOrchestrator {
       !Array.isArray(context.approvalIds)
       ? context.approvalIds
       : {};
+    const sensitiveStepCount = plan.steps.filter(candidateStep => {
+      const candidateTool = this.registry.getTool(candidateStep.toolId);
+      return candidateTool && (
+        candidateTool.requiresConfirmation === true ||
+        Number(candidateTool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE ||
+        Number(candidateTool.permissionLevel) > this.autonomyLevel
+      );
+    }).length;
 
     for (const step of plan.steps) {
       const tool = this.registry.getTool(step.toolId);
@@ -511,8 +519,38 @@ export class AutonomousOrchestrator {
           ? suppliedApprovalIds[step.id]
           : null;
         if (!requestedApprovalId && typeof context.approvalId === "string" && context.approvalId) {
+          if (sensitiveStepCount !== 1) {
+            return {
+              success: false,
+              workflowId,
+              status: "UNAUTHORIZED",
+              error: "A single approval ID cannot authorize a multi-action plan. Supply one approval ID per step.",
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
           const legacyCandidate = this.pendingApprovals.get(context.approvalId);
-          if (legacyCandidate?.stepId === step.id) requestedApprovalId = context.approvalId;
+          if (!legacyCandidate) {
+            return {
+              success: false,
+              workflowId,
+              status: "UNAUTHORIZED",
+              error: "Invalid or non-existent approval ID.",
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
+          if (legacyCandidate.stepId !== step.id || legacyCandidate.toolId !== tool.id) {
+            return {
+              success: false,
+              workflowId,
+              status: "UNAUTHORIZED",
+              error: `Tool mismatch: approval token was granted for '${legacyCandidate.toolId}', not '${tool.id}'.`,
+              intent: intentAnalysis.intent,
+              events: collectedEvents
+            };
+          }
+          requestedApprovalId = context.approvalId;
         }
 
         let approval = requestedApprovalId
@@ -669,9 +707,17 @@ export class AutonomousOrchestrator {
         } catch {
           currentFingerprint = null;
         }
-        if (approval.stepId !== step.id ||
-            approval.toolId !== tool.id ||
-            Number(approval.permissionLevel) !== Number(tool.permissionLevel) ||
+        if (approval.stepId !== step.id || approval.toolId !== tool.id) {
+          return {
+            success: false,
+            workflowId,
+            status: "UNAUTHORIZED",
+            error: `Tool mismatch: approval token was granted for '${approval.toolId}', not '${tool.id}'.`,
+            intent: intentAnalysis.intent,
+            events: collectedEvents
+          };
+        }
+        if (Number(approval.permissionLevel) !== Number(tool.permissionLevel) ||
             approval.actionDescription !== step.description ||
             !approval.parametersFingerprint ||
             approval.parametersFingerprint !== currentFingerprint) {
@@ -679,7 +725,7 @@ export class AutonomousOrchestrator {
             success: false,
             workflowId,
             status: "APPROVAL_ACTION_MISMATCH",
-            error: "The current action does not exactly match the approved step, permission level, and parameter snapshot.",
+            error: "The current action does not exactly match the approved permission level and parameter snapshot.",
             intent: intentAnalysis.intent,
             events: collectedEvents
           };
@@ -1329,6 +1375,28 @@ export class AutonomousOrchestrator {
     const workflowId = "wf-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex");
     const intentAnalysis = this.analyzeIntent(rawPrompt, context);
     const plan = this.formulatePlan(intentAnalysis, rawPrompt, context);
+
+    // Background dispatch has no interactive approval handshake. Never enqueue
+    // plans that contain sensitive, confirmation-required, or above-autonomy tools.
+    const gatedStep = plan.steps.find(step => {
+      const candidate = this.registry.getTool(step.toolId);
+      return candidate && (
+        candidate.requiresConfirmation === true ||
+        Number(candidate.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE ||
+        Number(candidate.permissionLevel) > this.autonomyLevel
+      );
+    });
+    if (gatedStep) {
+      const candidate = this.registry.getTool(gatedStep.toolId);
+      return {
+        success: false,
+        workflowId,
+        status: "APPROVAL_REQUIRED",
+        code: "BACKGROUND_APPROVAL_UNSUPPORTED",
+        error: "This background workflow contains a sensitive action. Run it in the foreground approval flow before scheduling.",
+        approvalRequiredFor: candidate?.id || gatedStep.toolId
+      };
+    }
 
     const workflow = {
       id: workflowId,

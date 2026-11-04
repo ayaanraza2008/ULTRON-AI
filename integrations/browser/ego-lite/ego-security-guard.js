@@ -88,7 +88,14 @@ export class EgoSecurityGuard {
    * @param {number} [options.autonomyLevel=2] - Maximum autonomous execution level
    */
   constructor(options = {}) {
-    this.allowLocal = Boolean(options.allowLocal);
+    const isProduction = process.env.NODE_ENV === "production";
+    this.allowLocal = !isProduction && Boolean(options.allowLocal);
+    this.allowTestLoopback = !isProduction && process.env.NODE_ENV === "test" && options.allowTestLoopback === true;
+    this.testAllowedPorts = new Set(
+      Array.isArray(options.testAllowedPorts)
+        ? options.testAllowedPorts.filter(port => Number.isInteger(port) && port > 0 && port <= 65535)
+        : []
+    );
     this.dnsLookup = typeof options.dnsLookup === "function" ? options.dnsLookup : dnsLookup;
     this.approvalVerifier = typeof options.approvalVerifier === "function" ? options.approvalVerifier : null;
     this.blockedDomains = new Set(
@@ -110,7 +117,7 @@ export class EgoSecurityGuard {
    */
   async validateUrlAsync(urlString) {
     const basic = this.validateUrl(urlString);
-    if (!basic.allowed || urlString === "about:blank") return basic;
+    if (!basic.allowed || basic.isTestLoopbackException || urlString === "about:blank") return basic;
 
     let parsed;
     try { parsed = new URL(urlString); }
@@ -196,6 +203,27 @@ export class EgoSecurityGuard {
       return { allowed: false, reason: "URLs containing embedded credentials are blocked" };
     }
     const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const family = isIP(hostname);
+    const ipv6 = family === 6 ? ipv6Groups(hostname) : null;
+    const loopback = hostname === "localhost" || hostname.endsWith(".localhost") ||
+      (family === 4 && Number(hostname.split(".")[0]) === 127) ||
+      (family === 6 && ipv6?.slice(0, 7).every(part => part === 0) && ipv6?.[7] === 1);
+    if (loopback) {
+      const port = parsed.port ? Number(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
+      if (this.allowTestLoopback && process.env.NODE_ENV === "test" && this.testAllowedPorts.has(port) &&
+          (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1")) {
+        return { allowed: true, isTestLoopbackException: true };
+      }
+      return {
+        allowed: false,
+        reason: process.env.NODE_ENV === "production"
+          ? "Loopback access is strictly forbidden in production"
+          : "Loopback destinations are blocked"
+      };
+    }
+    if (family && !this.allowLocal && isNonPublicAddress(hostname)) {
+      return { allowed: false, reason: "Access to non-public IP destinations is blocked" };
+    }
 
     // Check explicit blocklist
     if (this.blockedDomains.has(hostname)) {

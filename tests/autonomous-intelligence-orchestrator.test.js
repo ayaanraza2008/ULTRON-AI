@@ -89,7 +89,10 @@ test("AutonomousOrchestrator: enforces Level 3 Sensitive Confirmation Gates for 
   const approveRes = orchestrator.approveRequest(outcome.approvalRequest.id);
   assert.equal(approveRes.success, true);
 
-  const approvedOutcome = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId: outcome.approvalRequest.id });
+  const approvedOutcome = await orchestrator.processUserRequest("Organize my downloads folder", {
+    approvalId: outcome.approvalRequest.id,
+    userId: "operator"
+  });
   assert.equal(approvedOutcome.verified, true);
   assert.ok(approvedOutcome.textResponse.includes("File organization completed"));
 });
@@ -130,18 +133,20 @@ test("AutonomousOrchestrator: Multilingual persona responses (English, Hindi, Hi
 
   const enPending = await orchestrator.processUserRequest("Launch chrome on my computer");
   assert.equal(enPending.status, "APPROVAL_REQUIRED");
-  assert.equal(orchestrator.approveRequest(enPending.approvalRequest.id).success, true);
+  assert.equal(orchestrator.approveRequest(enPending.approvalRequest.id, { userId: "operator" }).success, true);
   const enRes = await orchestrator.processUserRequest("Launch chrome on my computer", {
-    approvalId: enPending.approvalRequest.id
+    approvalId: enPending.approvalRequest.id,
+    userId: "operator"
   });
   assert.ok(enRes.verified || enRes.status === "FAILED");
   assert.ok(enRes.textResponse.includes("Ayaan") || enRes.textResponse.toLowerCase().includes("chrome"));
 
   const hiPending = await orchestrator.processUserRequest("Chrome shuru karo bhai");
   assert.equal(hiPending.status, "APPROVAL_REQUIRED");
-  assert.equal(orchestrator.approveRequest(hiPending.approvalRequest.id).success, true);
+  assert.equal(orchestrator.approveRequest(hiPending.approvalRequest.id, { userId: "operator" }).success, true);
   const hiRes = await orchestrator.processUserRequest("Chrome shuru karo bhai", {
-    approvalId: hiPending.approvalRequest.id
+    approvalId: hiPending.approvalRequest.id,
+    userId: "operator"
   });
   assert.ok(hiRes.verified || hiRes.status === "FAILED");
   assert.ok(hiRes.textResponse.includes("Ayaan") || hiRes.textResponse.toLowerCase().includes("chrome"));
