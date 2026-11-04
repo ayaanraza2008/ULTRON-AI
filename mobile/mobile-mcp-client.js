@@ -535,6 +535,23 @@ export class MobileMcpClient extends EventEmitter {
         };
       }
 
+      case "mobile_list_elements_on_screen": {
+        try {
+          const xml = await adbBridge.dumpHierarchy(deviceId);
+          return {
+            success: true,
+            text: typeof xml === "string" ? xml : JSON.stringify(xml),
+            fallback: true
+          };
+        } catch (err) {
+          return {
+            success: false,
+            error: err.message,
+            fallback: true
+          };
+        }
+      }
+
       case "mobile_click_on_screen_at_coordinates": {
         const x = args.x || args.coordinate?.[0] || 0;
         const y = args.y || args.coordinate?.[1] || 0;

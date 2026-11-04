@@ -152,7 +152,22 @@ export class MobileControlEngine extends EventEmitter {
    * Execute an atomic mobile action with strict pre-flight permission check,
    * before/after state verification, and audit trail logging.
    */
-  async executeAction(actionName, params = {}, context = {}) {
+  async executeAction(actionNameOrDeviceId, paramsOrAction = {}, contextOrParams = {}) {
+    let actionName;
+    let params;
+    let context;
+
+    if (typeof paramsOrAction === "string") {
+      const explicitDeviceId = actionNameOrDeviceId;
+      actionName = paramsOrAction;
+      params = { ...(contextOrParams || {}), device: (contextOrParams && (contextOrParams.device || contextOrParams.deviceId)) || explicitDeviceId };
+      context = contextOrParams || {};
+    } else {
+      actionName = actionNameOrDeviceId;
+      params = { ...(paramsOrAction || {}) };
+      context = contextOrParams || {};
+    }
+
     if (this.emergencyHalted) {
       return {
         success: false,
@@ -163,9 +178,36 @@ export class MobileControlEngine extends EventEmitter {
       };
     }
 
-    const deviceId = this._requireTargetDevice(params.device || params.deviceId);
+    // Normalize action name if missing mobile_ prefix
+    if (typeof actionName === "string" && !actionName.startsWith("mobile_")) {
+      const candidate = "mobile_" + actionName;
+      if (this.permissions.constructor?.ACTION_PERMISSION_TIERS?.[candidate] || candidate in (this.permissions?.constructor?.ACTION_PERMISSION_TIERS || {})) {
+        actionName = candidate;
+      } else {
+        actionName = candidate;
+      }
+    }
+
+    let deviceId;
+    try {
+      deviceId = this._requireTargetDevice(params.device || params.deviceId);
+    } catch (err) {
+      return {
+        success: false,
+        action: actionName,
+        code: "NO_TARGET_DEVICE",
+        error: err.message,
+        reason: err.message
+      };
+    }
     const userId = context.userId || "operator";
     const confirmationToken = context.confirmationToken || params.confirmationToken || null;
+
+    // Normalize app package parameters
+    if (actionName === "mobile_launch_app" || actionName === "mobile_terminate_app") {
+      params.packageName = params.packageName || params.package || params.app;
+      params.package = params.package || params.packageName;
+    }
 
     // 1. Permission & Safety Evaluation
     const perm = await this.permissions.checkPermission(actionName, params, deviceId, userId, confirmationToken);
@@ -252,11 +294,13 @@ export class MobileControlEngine extends EventEmitter {
     } catch {}
 
     const output = {
-      success: result.success,
+      success: result.success && verified,
       action: actionName,
       deviceId,
       result: result.text || "",
       image: result.image || null,
+      data: result.image?.data || result.data || null,
+      mimeType: result.image?.mimeType || result.mimeType || "image/png",
       verification: {
         verified,
         preState,

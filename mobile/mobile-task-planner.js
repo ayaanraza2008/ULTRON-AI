@@ -236,10 +236,29 @@ export class MobileTaskPlanner {
       };
     }
 
-    // Intent 5: App Launch: "open [app]" or "launch [app]"
-    const launchMatch = lower.match(/(?:open|launch)\s+([a-z0-9_.-]+)/i);
-    if (launchMatch) {
-      const appName = launchMatch[1].toLowerCase();
+    // Intent 5: App Launch: "open [app]", "launch [app]", or "[app] open karo"
+    let targetApp = null;
+    const knownApps = Object.keys(this.packageMap);
+    for (const app of knownApps) {
+      const reg = new RegExp(`\\b${app}\\b`, "i");
+      if (reg.test(lower) && /\b(open|launch|kholo|chalao|start)\b/i.test(lower)) {
+        targetApp = app;
+        break;
+      }
+    }
+    if (!targetApp) {
+      const launchMatch = lower.match(/(?:open|launch)\s+([a-z0-9_.-]+)/i);
+      if (launchMatch && !["karo", "kijiye", "karna", "please"].includes(launchMatch[1].toLowerCase())) {
+        targetApp = launchMatch[1].toLowerCase();
+      } else {
+        const reverseMatch = lower.match(/([a-z0-9_.-]+)\s+(?:open|kholo|chalao)/i);
+        if (reverseMatch && !["phone", "par", "pe", "mein"].includes(reverseMatch[1].toLowerCase())) {
+          targetApp = reverseMatch[1].toLowerCase();
+        }
+      }
+    }
+    if (targetApp) {
+      const appName = targetApp;
       const packageName = this.resolvePackageName(appName);
       return {
         goal: rawGoal,

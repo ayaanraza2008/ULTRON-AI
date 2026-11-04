@@ -368,7 +368,23 @@ const FILES_TO_CHECK = [
   "integrations/browser/ego-lite/ego-adapter.js",
   "integrations/browser/ego-lite/direct-chromium-driver.js",
   "tests/ego-browser-integration.test.js",
-  "tests/ego-browser-real-world.test.js"
+  "tests/ego-browser-real-world.test.js",
+  "mobile/adb-bridge.js",
+  "mobile/mobile-mcp-client.js",
+  "mobile/mobile-device-registry.js",
+  "mobile/mobile-permission-engine.js",
+  "mobile/mobile-task-planner.js",
+  "mobile/mobile-control-engine.js",
+  "mobile/mobile-router.js",
+  "agents/mobile-task-agent.js",
+  "public/mobile-control.js",
+  "tests/mobile-adb-bridge.test.js",
+  "tests/mobile-mcp-client.test.js",
+  "tests/mobile-permissions.test.js",
+  "tests/mobile-task-planner.test.js",
+  "tests/mobile-control-engine.test.js",
+  "tests/mobile-integration.test.js",
+  "tests/mobile-e2e-autonomy.test.js"
 ];
 
 let checked = 0;

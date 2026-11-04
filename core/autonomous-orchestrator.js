@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { toolRegistry, PERMISSION_LEVELS } from "./tool-registry.js";
+import { mobileTaskPlanner } from "../mobile/mobile-task-planner.js";
 
 export const AGENT_ROLES = {
   GTM_GROWTH: "gtm-growth-strategist",
@@ -676,8 +677,13 @@ export class AutonomousOrchestrator {
     }
 
     // Native Mobile Device Automation & Control
-    if (/\b(mobile mcp|android device|phone screenshot|phone screen|mobile phone|connected phone|screen on phone)\b/i.test(text)) {
-      return { intent: "MOBILE_DEVICE_CONTROL", domain: "INTEGRATIONS", language, confidence: 0.93 };
+    if (
+      /\b(mobile mcp|android device|phone screenshot|phone screen|mobile phone|connected phone|screen on phone|on (?:my )?(?:phone|android|mobile)|from (?:my )?(?:phone|android|mobile))\b/i.test(text) ||
+      /\b(open|launch|close|terminate|search)\b.*\b(?:on (?:my )?(?:phone|android|mobile))\b/i.test(text) ||
+      /\b(?:phone|mobile|android)\s+(?:par|pe|mein|me)\b/i.test(text) ||
+      /\b(?:phone|mobile|android)\s+.*(?:open|kholo|chalao|start)\b/i.test(text)
+    ) {
+      return { intent: "MOBILE_DEVICE_CONTROL", domain: "INTEGRATIONS", language, confidence: 0.95 };
     }
 
     // Autonomous Browser Navigation & Research
@@ -868,23 +874,79 @@ export class AutonomousOrchestrator {
       }
 
       case "MOBILE_DEVICE_CONTROL": {
-        plan.steps.push({
-          id: "step-1",
-          dependsOn: [],
-          toolId: "mobile_device_discovery",
-          agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
-          description: "Discover connected mobile devices and verify status",
-          params: {}
-        });
-        if (/screenshot|screen|capture|inspect/i.test(prompt)) {
+        let mobilePlan = null;
+        try {
+          mobilePlan = mobileTaskPlanner.plan(prompt, context);
+        } catch {}
+
+        if (mobilePlan && mobilePlan.intent === "APP_LAUNCH") {
+          plan.steps.push({
+            id: "step-1",
+            dependsOn: [],
+            toolId: "mobile_app_lifecycle",
+            agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
+            description: `Launch application ${mobilePlan.targetApp || "app"} (${mobilePlan.targetPackage}) on mobile device`,
+            params: {
+              operation: "launch",
+              packageName: mobilePlan.targetPackage,
+              deviceId: mobilePlan.deviceId || context.deviceId
+            }
+          });
           plan.steps.push({
             id: "step-2",
             dependsOn: ["step-1"],
             toolId: "mobile_screen_inspection",
             agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
+            description: "Verify foreground application and capture screen evidence on mobile device",
+            params: {
+              deviceId: mobilePlan.deviceId || context.deviceId,
+              includeHierarchy: false
+            }
+          });
+        } else if (mobilePlan && mobilePlan.intent === "APP_SEARCH_WORKFLOW") {
+          plan.steps.push({
+            id: "step-1",
+            dependsOn: [],
+            toolId: "mobile_autonomous_task",
+            agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
+            description: `Execute multi-step app search workflow for '${prompt}' on mobile device`,
+            params: {
+              goal: prompt,
+              plan: mobilePlan,
+              deviceId: mobilePlan.deviceId || context.deviceId
+            }
+          });
+        } else if (mobilePlan && mobilePlan.intent === "SCREEN_INSPECTION") {
+          plan.steps.push({
+            id: "step-1",
+            dependsOn: [],
+            toolId: "mobile_screen_inspection",
+            agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
             description: "Capture mobile screen and inspect UI hierarchy",
+            params: {
+              deviceId: mobilePlan.deviceId || context.deviceId,
+              includeHierarchy: true
+            }
+          });
+        } else {
+          plan.steps.push({
+            id: "step-1",
+            dependsOn: [],
+            toolId: "mobile_device_discovery",
+            agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
+            description: "Discover connected mobile devices and verify status",
             params: {}
           });
+          if (/screenshot|screen|capture|inspect/i.test(prompt)) {
+            plan.steps.push({
+              id: "step-2",
+              dependsOn: ["step-1"],
+              toolId: "mobile_screen_inspection",
+              agent: AGENT_ROLES.MOBILE_DEVICE_AGENT,
+              description: "Capture mobile screen and inspect UI hierarchy",
+              params: {}
+            });
+          }
         }
         break;
       }
@@ -1025,6 +1087,39 @@ export class AutonomousOrchestrator {
         if (lang === "hindi") return `हाँ अयान, ${targetUrl} पर नेविगेट करके स्नैपशॉट ले लिया गया है (${elementsCount} तत्व मिले, ड्राइवर: ${driver})।`;
         return `Autonomous browser mission completed. Navigated to ${targetUrl}${title ? ` ("${title}")` : ""}, captured semantic snapshot with ${elementsCount} interactive elements using driver [${driver}].`;
       }
+
+      case "MOBILE_DEVICE_CONTROL": {
+        const appStep = stepResults.find(s => s.toolId === "mobile_app_lifecycle" || s.action === "mobile_launch_app");
+        const screenStep = stepResults.find(s => s.toolId === "mobile_screen_inspection" || s.action === "mobile_take_screenshot");
+        const discStep = stepResults.find(s => s.toolId === "mobile_device_discovery");
+
+        if (appStep) {
+          const outcome = appStep.outcome?.outcome || appStep.outcome || {};
+          const pkg = outcome.verification?.postState?.packageName || appStep.params?.packageName || "target application";
+          const isVerified = outcome.verification?.verified !== false;
+          const hasImage = Boolean(screenStep?.outcome?.screen?.data || screenStep?.outcome?.image);
+
+          if (lang === "hinglish") {
+            return `Ji Ayaan, aapke phone par ${pkg} launch kar diya gaya hai. Foreground state ${isVerified ? "verify ho chuki hai" : "unverified hai"}${hasImage ? " aur screen capture verify ho gaya hai." : "."}`;
+          }
+          if (lang === "hindi") {
+            return `हाँ अयान, आपके फोन पर ${pkg} शुरू कर दिया गया है। ऐप की स्थिति ${isVerified ? "सत्यापित" : "असत्यापित"} है।`;
+          }
+          return `Affirmative, Ayaan. ${pkg} has been launched on your phone. Foreground state verified: ${isVerified ? "YES" : "NO"}.${hasImage ? " Verification screenshot captured." : ""}`;
+        }
+
+        if (screenStep) {
+          return "Mobile screen captured and visual hierarchy evaluated.";
+        }
+
+        if (discStep) {
+          const count = discStep.outcome?.count || 0;
+          return `Mobile device discovery completed: ${count} device(s) online.`;
+        }
+
+        return first.outcome?.text || "Affirmative, Ayaan. Mobile action completed.";
+      }
+
 
       default: {
         return first.outcome?.text || "Affirmative, Ayaan. Request processed.";

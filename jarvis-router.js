@@ -1297,6 +1297,34 @@ export function createJarvisRouter({
         });
       }
 
+      // 1.4. Mobile Device Autonomy Intent (Phone / Android)
+      const isMobileRequest = /\b(on (?:my )?phone|on (?:my )?android|on (?:my )?mobile|phone screenshot|capture phone screen)\b/i.test(lower) ||
+        (/\b(phone|android|mobile)\b/i.test(lower) && /\b(open|launch|close|terminate|search|inspect)\b/i.test(lower));
+
+      if (isMobileRequest) {
+        const orchOutcome = await autonomousOrchestrator.processUserRequest(raw, {
+          source,
+          userId: req.supabaseUser?.id || req.device?.ownerUserId || "operator",
+          approvalId: req.body?.approvalId,
+          confirmationToken: req.body?.confirmationToken
+        });
+
+        const voiceResponse = voice.formatSpokenUpdate(orchOutcome.textResponse, detectedLang);
+
+        return res.json({
+          success: orchOutcome.success,
+          status: orchOutcome.status,
+          intent: "MOBILE_DEVICE_CONTROL",
+          textResponse: orchOutcome.textResponse,
+          voiceResponse,
+          actionTaken: orchOutcome.status || "MOBILE_ACTION_PROCESSED",
+          approvalRequest: orchOutcome.approvalRequest || null,
+          workflowId: orchOutcome.workflowId,
+          language: detectedLang,
+          outcome: orchOutcome
+        });
+      }
+
       // 1.5. Cross-Device Remote Control Intent (Android <-> Windows PC)
       const isCrossDeviceRequest = lower.includes("pc") || lower.includes("computer") || lower.includes("windows") ||
         lower.includes("laptop") || lower.includes("desktop");
