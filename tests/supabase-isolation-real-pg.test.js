@@ -230,9 +230,13 @@ test("Real PostgreSQL & Supabase RLS Multi-Tenant Isolation Suite", async (t) =>
 
     await t.test("7. Unauthenticated callers (anon role) are rejected", async () => {
       await harness.asRole("anon", null, async (client) => {
-        // Reading conversations: returns 0 rows (anon has no auth.uid())
-        const anonSelect = await client.query("SELECT * FROM public.conversations;");
-        assert.equal(anonSelect.rows.length, 0);
+        // Reading conversations: either rejected by table privilege (42501) or returns 0 rows via RLS
+        try {
+          const anonSelect = await client.query("SELECT * FROM public.conversations;");
+          assert.equal(anonSelect.rows.length, 0);
+        } catch (err) {
+          assert.equal(err.code, "42501", "Unauthenticated read must be rejected by table privilege or RLS");
+        }
 
         // Inserting without authentication fails
         await assert.rejects(

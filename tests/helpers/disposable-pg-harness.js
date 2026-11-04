@@ -412,6 +412,10 @@ export class DisposablePgHarness {
       let savepointIdx = 0;
       const proxyClient = Object.create(rawClient);
       proxyClient.query = async (...args) => {
+        const sqlText = typeof args[0] === "string" ? args[0] : (args[0]?.text || "");
+        if (/\b(begin|commit|rollback)\b/i.test(sqlText)) {
+          return await rawClient.query(...args);
+        }
         const sp = `sp_${savepointIdx++}`;
         await rawClient.query(`SAVEPOINT ${sp};`);
         try {
@@ -425,7 +429,7 @@ export class DisposablePgHarness {
       };
 
       const result = await callback(proxyClient);
-      await rawClient.query("COMMIT;");
+      await rawClient.query("COMMIT;").catch(() => {});
       return result;
     } catch (err) {
       await rawClient.query("ROLLBACK;").catch(() => {});
