@@ -114,7 +114,10 @@ export class EgoActionExecutor {
   async click(pageId, refOrSelector, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
-    const consequentialClick = target.role === "button" || target.role === "submit" ||
+    const consequentialClick =
+      target.role === "unknown" ||
+      target.role === "button" ||
+      target.role === "submit" ||
       /submit|send|pay|purchase|checkout|confirm|accept|authorize|delete|remove|book|reserve|publish|upload|share|invite|sign in|log in/i.test(
         `${target.name || ""} ${target.text || ""} ${target.role || ""}`
       );
@@ -153,7 +156,9 @@ export class EgoActionExecutor {
   async dblclick(pageId, refOrSelector, options = {}) {
     const startTime = Date.now();
     const target = this._resolveTarget(pageId, refOrSelector);
-    const level = target.role === "button" || target.role === "submit" ? PERMISSION_LEVELS.LEVEL_4_CRITICAL : PERMISSION_LEVELS.LEVEL_2_INTERACT;
+    const level = ["unknown", "button", "submit"].includes(target.role)
+      ? PERMISSION_LEVELS.LEVEL_4_CRITICAL
+      : PERMISSION_LEVELS.LEVEL_2_INTERACT;
     await this._authorizeAction(EGO_ACTIONS.DBLCLICK, target, level, options);
 
     let result = { dblclicked: true, target: target.ref || target.selector };
@@ -225,7 +230,9 @@ export class EgoActionExecutor {
     await this._authorizeAction(
       EGO_ACTIONS.FILL,
       target,
-      isSensitive ? PERMISSION_LEVELS.LEVEL_4_CRITICAL : PERMISSION_LEVELS.LEVEL_2_INTERACT,
+      (isSensitive || target.role === "unknown")
+        ? PERMISSION_LEVELS.LEVEL_4_CRITICAL
+        : PERMISSION_LEVELS.LEVEL_2_INTERACT,
       options
     );
 
@@ -289,7 +296,7 @@ export class EgoActionExecutor {
    */
   async dragAndDrop(pageId, sourceRef, targetRef, options = {}) {
     const startTime = Date.now();
-    await this._authorizeAction(EGO_ACTIONS.DRAG_AND_DROP, { sourceRef, targetRef }, PERMISSION_LEVELS.LEVEL_2_INTERACT, options);
+    await this._authorizeAction(EGO_ACTIONS.DRAG_AND_DROP, { sourceRef, targetRef }, PERMISSION_LEVELS.LEVEL_4_CRITICAL, options);
     let result = { dragDropped: true, source: sourceRef, target: targetRef };
 
     if (this.driver && typeof this.driver.dragAndDrop === "function") {
