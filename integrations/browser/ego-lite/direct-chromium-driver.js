@@ -33,6 +33,47 @@ import os from "node:os";
 
 const CDP_COMMAND_TIMEOUT_MS = 15000;
 
+const BROWSER_EXECUTABLE_NAMES = ["chrome", "headless_shell", "chromium", "chromium-browser"];
+
+function findChromiumBinaryInMsPlaywright() {
+  const home = os.homedir();
+  const bases = [
+    path.join(home, ".cache", "ms-playwright"),
+    path.join(home, "Library", "Caches", "ms-playwright"),
+    path.join(home, "AppData", "Local", "ms-playwright")
+  ];
+  for (const base of bases) {
+    let browserDirs = [];
+    try {
+      browserDirs = fs.readdirSync(base, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => path.join(base, e.name));
+    } catch { continue; }
+    for (const browserDir of browserDirs) {
+      let platformDirs = [];
+      try {
+        platformDirs = fs.readdirSync(browserDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => path.join(browserDir, e.name));
+      } catch { continue; }
+      for (const platformDir of platformDirs) {
+        const candidates = [
+          path.join(platformDir, "chrome"),
+          path.join(platformDir, "headless_shell"),
+          path.join(platformDir, "chromium"),
+          path.join(platformDir, "chrome.exe"),
+          path.join(platformDir, "headless_shell.exe"),
+          path.join(platformDir, "chromium.exe")
+        ].filter((p) => fs.existsSync(p));
+        if (candidates.length > 0) {
+          return { installed: true, found: true, path: candidates[0], name: path.basename(candidates[0]) };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export class DirectChromiumCdpDriver {
   /**
    * @param {Object} [options={}]
@@ -72,6 +113,10 @@ export class DirectChromiumCdpDriver {
   detectBrowserBinary() {
     if (this.executablePath && fs.existsSync(this.executablePath)) {
       return { installed: true, found: true, path: this.executablePath, name: "Custom (executablePath)" };
+    }
+    const playwrightHit = findChromiumBinaryInMsPlaywright();
+    if (playwrightHit) {
+      return { installed: true, found: true, path: playwrightHit.path, name: playwrightHit.name };
     }
     const candidates = this.candidatePaths || (process.platform === "win32" ? [
       path.join(process.env.ProgramFiles || "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
@@ -130,23 +175,24 @@ export class DirectChromiumCdpDriver {
     let stderrBuffer = "";
     this.process = spawn(detection.path, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     this.process.stderr.setEncoding?.("utf8");
+    const procRef = this.process;
+    const stderrRef = procRef ? procRef.stderr : null;
     const devtoolsLine = await new Promise((resolve) => {
       const timer = setTimeout(() => resolve(null), 12000);
       const onData = (chunk) => {
+        if (!procRef || !stderrRef) return;
         stderrBuffer += chunk;
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
         if (match) {
           clearTimeout(timer);
-          this.process.stderr.removeListener("data", onData);
-          this.process.stderr.removeListener("data", onData2);
+          stderrRef.removeListener("data", onData);
           resolve(match[1]);
         }
       };
-      const onData2 = () => {};
-      this.process.stderr.on("data", onData);
+      stderrRef?.on?.("data", onData);
     });
 
-    if (!devtoolsLine || !this.process.pid) {
+    if (!devtoolsLine || !this.process?.pid) {
       await this._killProcess();
       return { launched: false, reason: "Browser launch failed or DevTools endpoint not observed", stderrPreview: stderrBuffer.slice(0, 300) };
     }
