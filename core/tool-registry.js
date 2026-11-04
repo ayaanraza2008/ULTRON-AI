@@ -100,7 +100,12 @@ export class ToolRegistry {
       telegramBotBridge: defaultTelegramBotBridge,
     };
 
-    this.adapters = { ...defaultAdapters, ...adapters };
+    // Approval verification is a trusted host dependency, never inferred from
+    // caller-supplied booleans. The verifier must validate and atomically consume
+    // a single-use, action-bound token for the authenticated actor.
+    const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
+    this.approvalVerifier = typeof approvalVerifier === "function" ? approvalVerifier : null;
+    this.adapters = { ...defaultAdapters, ...runtimeAdapters };
     this.tools = new Map();
     this.auditLogs = [];
     this.initializeDefaultTools();
@@ -180,8 +185,45 @@ export class ToolRegistry {
       outputSchema: toolMeta.outputSchema || { type: "object" },
       safeAlternatives: Array.isArray(toolMeta.safeAlternatives) ? toolMeta.safeAlternatives : [],
       checkHealth: typeof toolMeta.checkHealth === "function" ? toolMeta.checkHealth : () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params, context) => {
+      execute: async (params, context = {}) => {
         this.validateParams(tool, params);
+
+        // Enforce privilege at the actual tool boundary, including callers that
+        // obtain a tool via getTool() and invoke tool.execute() directly.
+        const requiresApproval =
+          tool.requiresConfirmation === true ||
+          Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+        if (requiresApproval) {
+          const actorId = typeof context?.actorId === "string" ? context.actorId.trim() : "";
+          const confirmationToken =
+            typeof context?.confirmationToken === "string" ? context.confirmationToken : "";
+          if (!actorId || !confirmationToken || !this.approvalVerifier) {
+            throw Object.assign(
+              new Error("TOOL_APPROVAL_REQUIRED: This action requires an authenticated owner and a verified one-time approval token."),
+              { code: "TOOL_APPROVAL_REQUIRED" }
+            );
+          }
+          let verified = false;
+          try {
+            const result = await this.approvalVerifier({
+              actorId,
+              toolId: tool.id,
+              permissionLevel: tool.permissionLevel,
+              confirmationToken,
+              requestId: typeof context.requestId === "string" ? context.requestId : null
+            });
+            verified = result === true || result?.approved === true;
+          } catch {
+            verified = false;
+          }
+          if (!verified) {
+            throw Object.assign(
+              new Error("TOOL_APPROVAL_INVALID: Approval token is invalid, expired, already used, or not authorized for this action."),
+              { code: "TOOL_APPROVAL_INVALID" }
+            );
+          }
+        }
+
         return await toolMeta.execute(params, context);
       }
     };
