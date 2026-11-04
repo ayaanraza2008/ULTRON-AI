@@ -328,10 +328,7 @@ export function createJarvisRouter({
 
   router.post("/jarvis/permissions/reject", ...requireOwner, express.json(), (req, res) => {
     const { requestId, reason } = req.body || {};
-    const operatorContext = {
-      userId: req.body?.userId || req.user?.id || "operator",
-      isAdmin: Boolean(req.user?.isAdmin || req.body?.isAdmin)
-    };
+    const operatorContext = { userId: req.supabaseUser.id, isAdmin: false };
     const result = autonomousOrchestrator.rejectRequest(requestId, reason, operatorContext);
     if (!result.success) {
       if (result.error === "CROSS_USER_APPROVAL_DENIED") return res.status(403).json(result);
@@ -361,7 +358,7 @@ export function createJarvisRouter({
   });
 
   router.post("/jarvis/autonomy/emergency-reset", ...requireOwner, (req, res) => {
-    const auth = { userId: req.user?.id || req.body?.userId || "operator" };
+    const auth = { userId: req.supabaseUser.id };
     const result = autonomousOrchestrator.setEmergencyStop(false, "Operator reset", auth);
     res.json(result);
   });
