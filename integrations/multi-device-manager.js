@@ -13,6 +13,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { deviceHub as defaultDeviceHub } from "./device-hub.js";
+import { deviceWebSocketGateway as defaultDeviceGateway } from "./device-websocket-gateway.js";
 
 export const DEVICE_TYPES = {
   WINDOWS_PC: "windows_pc",
@@ -29,7 +31,8 @@ export class MultiDeviceManager {
   constructor(options = {}) {
     this.devices = new Map();
     this.androidBridge = options.androidBridge || null;
-    this.deviceHub = options.deviceHub || null;
+    this.deviceHub = options.deviceHub || defaultDeviceHub;
+    this.deviceGateway = options.deviceGateway || defaultDeviceGateway;
     this.commandHistory = [];
     this.sharedState = new Map();
     this.subscribers = new Map();
@@ -470,7 +473,7 @@ export class MultiDeviceManager {
   /**
    * Synchronizes shared ecosystem state across devices with conflict resolution.
    */
-  syncStateAcrossDevices({ stateKey, payload, originDeviceId = null, expectedVersion = null, targetDevices = null } = {}) {
+  syncStateAcrossDevices({ stateKey, payload, originDeviceId = null, ownerUserId = null, expectedVersion = null, targetDevices = null } = {}) {
     if (!stateKey || typeof stateKey !== "string") {
       return { success: false, error: "STATE_KEY_REQUIRED" };
     }
@@ -483,6 +486,16 @@ export class MultiDeviceManager {
         success: false,
         error: "SENSITIVE_DATA_BLOCKED",
         message: "Private authentication credentials must not be broadcast as shared ecosystem state."
+      };
+    }
+
+    const originDevice = originDeviceId ? this.deviceHub?.pairedDevices?.get(originDeviceId) : null;
+    const resolvedOwnerUserId = String(ownerUserId || originDevice?.ownerUserId || "").trim() || null;
+    if (this.isPersistent && !resolvedOwnerUserId) {
+      return {
+        success: false,
+        error: "OWNER_CONTEXT_REQUIRED",
+        message: "Persistent multi-device synchronization requires a verified owner identity."
       };
     }
 
@@ -527,29 +540,33 @@ export class MultiDeviceManager {
     };
     this.sharedState.set(cleanKey, stateEntry);
 
-    const targetList = targetDevices || Array.from(this.devices.keys()).filter(id => id !== originDeviceId);
-    const deliveredTo = [];
+    const requestedTargets = targetDevices || (
+      resolvedOwnerUserId && typeof this.deviceHub?.listPairedDevices === "function"
+        ? this.deviceHub.listPairedDevices(resolvedOwnerUserId).map(device => device.id)
+        : Array.from(this.devices.keys()).filter(id => id !== originDeviceId)
+    );
+    const targetList = [...new Set(requestedTargets.map(id => String(id || "").trim()).filter(id => {
+      if (!id || id === originDeviceId || this.revokedDevices.has(id)) return false;
+      if (!resolvedOwnerUserId) return true;
+      const paired = this.deviceHub?.pairedDevices?.get(id);
+      return Boolean(paired && paired.status !== "revoked" && paired.ownerUserId === resolvedOwnerUserId);
+    }))];
+    const locallyNotified = [];
     const queuedFor = [];
+    const eventsByTarget = new Map();
 
     for (const targetId of targetList) {
-      if (this.revokedDevices.has(targetId)) continue;
       const deliveryEvent = {
         deliveryId: "del_" + crypto.randomUUID(),
         eventId: "evt_" + crypto.randomUUID(),
         type: "STATE_SYNC",
+        ownerUserId: resolvedOwnerUserId,
         stateKey: cleanKey,
         version: nextVersion,
         payload,
         timestamp
       };
-
-      const subs = this.subscribers.get(targetId);
-      if (subs && subs.size > 0) {
-        for (const cb of subs) {
-          try { cb(deliveryEvent); } catch {}
-        }
-        deliveredTo.push(targetId);
-      }
+      eventsByTarget.set(targetId, deliveryEvent);
 
       const queue = this.pendingDeliveries.get(targetId) || [];
       queue.push(deliveryEvent);
@@ -558,18 +575,57 @@ export class MultiDeviceManager {
       queuedFor.push(targetId);
     }
 
-    this.saveToDisk();
+    // Persist state and delivery records before notifying remote clients.
+    // A failed local persistence write must never be reported as success.
+    if (this.isPersistent && !this.saveToDisk()) {
+      if (existing) this.sharedState.set(cleanKey, existing);
+      else this.sharedState.delete(cleanKey);
+      for (const [targetId, evt] of eventsByTarget.entries()) {
+        const queue = this.pendingDeliveries.get(targetId) || [];
+        this.pendingDeliveries.set(targetId, queue.filter(item => item.deliveryId !== evt.deliveryId));
+      }
+      return { success: false, error: "STATE_PERSISTENCE_FAILED", message: "Shared state could not be durably recorded." };
+    }
 
+    for (const targetId of targetList) {
+      const deliveryEvent = eventsByTarget.get(targetId);
+      const subs = this.subscribers.get(targetId);
+      if (subs && subs.size > 0) {
+        let notified = false;
+        for (const cb of subs) {
+          try { cb(deliveryEvent); notified = true; } catch {}
+        }
+        if (notified) locallyNotified.push(targetId);
+      }
+    }
+
+    let websocketSent = [];
+    if (resolvedOwnerUserId && typeof this.deviceGateway?.dispatchStateSync === "function") {
+      const sendResults = await Promise.all(targetList.map(async targetId => {
+        const result = this.deviceGateway.dispatchStateSync({
+          ownerUserId: resolvedOwnerUserId,
+          deviceIds: [targetId],
+          event: eventsByTarget.get(targetId)
+        });
+        return result?.success && result.deliveredDeviceIds?.includes(targetId) ? targetId : null;
+      }));
+      websocketSent = sendResults.filter(Boolean);
+    }
+
+    const deliveredTo = [...new Set([...locallyNotified, ...websocketSent])];
     return {
       success: true,
       syncedKey: cleanKey,
       version: nextVersion,
       updatedAt: timestamp,
       synchronizedDevices: targetList,
-      deliveredDevices: deliveredTo,
+      deliveredDevices: websocketSent,
+      locallyNotifiedDevices: locallyNotified,
       queuedDevices: queuedFor,
-      deliveredCount: deliveredTo.length,
-      queuedCount: queuedFor.length
+      deliveredCount: websocketSent.length,
+      queuedCount: queuedFor.length,
+      transport: resolvedOwnerUserId ? "authenticated_websocket_sse_with_ack_queue" : "in_process_test_callbacks",
+      ownerUserId: resolvedOwnerUserId
     };
   }
 
