@@ -346,3 +346,32 @@ test("paired-device runtime self endpoints require a valid active device token",
     assert.equal(invalid.status, 401);
   });
 });
+
+
+test("paired-device middleware accepts standard Authorization Bearer tokens", async () => {
+  const db = makeDatabase();
+  await withRouter(db.fetchImpl, async base => {
+    const created = await fetch(base + "/devices/pairings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
+      body: JSON.stringify({ deviceName: "Bearer Test Device", platform: "android" })
+    });
+    assert.equal(created.status, 201);
+    const pairing = await created.json();
+
+    const claimedResponse = await fetch(base + "/devices/pairings/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pairing.pairingCode })
+    });
+    assert.equal(claimedResponse.status, 200);
+    const claimed = await claimedResponse.json();
+
+    const bearerResponse = await fetch(base + "/devices/me", {
+      headers: { Authorization: "Bearer " + claimed.deviceToken }
+    });
+    assert.equal(bearerResponse.status, 200);
+    const status = await bearerResponse.json();
+    assert.equal(status.deviceId, claimed.deviceId);
+  });
+});
