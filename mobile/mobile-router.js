@@ -75,10 +75,10 @@ export function createMobileRouter({
    * 1. GET /api/mobile/status
    * Returns Mobile MCP daemon status, ADB path, transport type, connected devices count.
    */
-  registerRoute("get", "/status", enforceAccess, requireOwner, async (_req, res) => {
+  registerRoute("get", "/status", enforceAccess, requireOwner, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try {
-      const status = await controlEngine.getStatus();
+      const status = await controlEngine.getStatus(req.ultronMobileUserId);
       res.json({
         success: true,
         status: status.status || (status.initialized ? "ONLINE" : "STANDBY"),
