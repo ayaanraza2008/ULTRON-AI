@@ -1,6 +1,6 @@
 # ULTRON AI — Current Release Blockers & External Dependencies
 
-**Audit timestamp:** 2026-11-05 10:40 UTC (16:10 Asia/Kolkata)  
+**Latest follow-up:** 2026-11-05 11:45 UTC (17:15 Asia/Kolkata); earlier evidence snapshot retained below  
 **Production source:** `main` — `573f31f953997cb0e546ef599f77e66cf8f7775b`  
 **Render workspace:** `Ultron core`  
 **Supabase project:** `opdjfhwepmcprbqojpat` (Mumbai / `ap-south-1`)  
@@ -8,7 +8,18 @@
 
 > **Release verdict: NOT PRODUCTION-READY.** The primary candidate PR #441 has already merged, but merge status is not production acceptance. Current work remains in review branches and live acceptance gates remain open. No deployment or production migration was performed during this audit.
 
-## 1. Mainline and integration state
+## Current follow-up — 2026-11-05 11:45 UTC (17:15 Asia/Kolkata)
+
+- Current `main` remains `573f31f953997cb0e546ef599f77e66cf8f7775b`. Consolidated review candidate [PR #473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) is open, mergeable, and unmerged at `c311781cbf5fada3324837055ffbfe4f75a4e836` (47 changed files). Exact-head GitHub Actions [42021217492](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42021217492) passed both `test` and `world-intelligence-build`; syntax 386/386; dependency audit 0 vulnerabilities; 3 tests skipped.
+- Changes from PRs #457, #460, #461, #467, #470 and #471 have been consolidated in #473. Those six source PRs are closed **without merge** and link to the consolidated candidate. The candidate includes device Bearer-token parsing and fail-closed pairing storage handling; opaque Supabase `sb_secret_` worker-smoke headers; redacted Browser Use gateway diagnostics and startup readiness; truthful owner-scoped memory-delete semantics; worker error/review counters; and the Render Blueprint's existing UI-branch pin plus `/healthz` endpoint.
+- Targeted code review confirmed mobile approval markers are attached only after ToolRegistry consumes an unforgeable, single-use server-side proof. Critical Level-4 actions remain separately confirmation-gated. No real phone or private upstream AppFlowy/Immich account was exercised; upstream calls are mocked in CI.
+- PR #456 remains open for migration-ledger reconciliation and rollback-file isolation. The candidate only reorganizes the Render Blueprint source; the change has **not** been synced to Render. The four live Render services still report blank health-check paths; live Browser Use still lacks the Blueprint's Playwright/Chromium install step.
+- Supabase remains `ACTIVE_HEALTHY`, with 15 migrations applied and no `public.paired_devices` or `public.pending_device_pairings` tables. Supabase Security Advisor still warns that Leaked Password Protection is disabled. No schema migration, secret change, or production data write was performed.
+- The live worker process starting is not task acceptance. The read-only audit showed no durable task completion evidence; a safe authenticated test task still needs an approved isolated/test account and proof of enqueue, claim, execution, persisted result and audit readback. Live text/vision model inference and two-account row-isolation acceptance also remain open.
+- Repository `main` is unprotected. Branch protection/required checks still need to be established before release.
+- No PR merge, Render deployment, Blueprint sync, production Supabase migration, secret/configuration mutation, or production data mutation was performed.
+
+## 1. Historical mainline and integration snapshot — 2026-11-05 10:40 UTC (superseded where conflicting by the current follow-up above)
 
 - PR [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441), previously described in older status documents as an open candidate, was **merged** on 2026-11-04 20:39:39 UTC as merge commit `ad3e6a4326ccbfc1a898855827e937b8b89a4847`.
 - Current `main` is `573f31f953997cb0e546ef599f77e66cf8f7775b`. Older references to `b00c2e81...` as current production base and #441 as still open are stale.
