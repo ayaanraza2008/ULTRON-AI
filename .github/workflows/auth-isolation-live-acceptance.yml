@@ -1,0 +1,62 @@
+name: ULTRON Live Auth Isolation Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Run temporary two-account Supabase writes and cleanup for ULTRON auth/RLS verification'
+        required: true
+        type: choice
+        default: 'NO'
+        options:
+          - 'NO'
+          - 'YES'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ultron-live-auth-isolation
+  cancel-in-progress: false
+
+jobs:
+  auth-isolation:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'YES'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate dedicated E2E secrets without printing them
+        env:
+          ULTRON_E2E_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.ULTRON_E2E_SUPABASE_PUBLISHABLE_KEY }}
+          ULTRON_E2E_USER_A_EMAIL: ${{ secrets.ULTRON_E2E_USER_A_EMAIL }}
+          ULTRON_E2E_USER_A_PASSWORD: ${{ secrets.ULTRON_E2E_USER_A_PASSWORD }}
+          ULTRON_E2E_USER_B_EMAIL: ${{ secrets.ULTRON_E2E_USER_B_EMAIL }}
+          ULTRON_E2E_USER_B_PASSWORD: ${{ secrets.ULTRON_E2E_USER_B_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$ULTRON_E2E_SUPABASE_PUBLISHABLE_KEY"
+          test -n "$ULTRON_E2E_USER_A_EMAIL"
+          test -n "$ULTRON_E2E_USER_A_PASSWORD"
+          test -n "$ULTRON_E2E_USER_B_EMAIL"
+          test -n "$ULTRON_E2E_USER_B_PASSWORD"
+          test "$ULTRON_E2E_USER_A_EMAIL" != "$ULTRON_E2E_USER_B_EMAIL"
+          echo "Dedicated test-account secret presence checks passed."
+      - name: Install backend test dependencies
+        run: npm install --ignore-scripts
+      - name: Run explicitly confirmed two-account auth and RLS isolation test
+        env:
+          ULTRON_E2E_ALLOW_WRITES: CONFIRM_ULTRON_E2E_WRITES
+          ULTRON_E2E_SUPABASE_URL: https://opdjfhwepmcprbqojpat.supabase.co
+          ULTRON_E2E_SUPABASE_PROJECT_REF: opdjfhwepmcprbqojpat
+          ULTRON_E2E_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.ULTRON_E2E_SUPABASE_PUBLISHABLE_KEY }}
+          ULTRON_E2E_USER_A_EMAIL: ${{ secrets.ULTRON_E2E_USER_A_EMAIL }}
+          ULTRON_E2E_USER_A_PASSWORD: ${{ secrets.ULTRON_E2E_USER_A_PASSWORD }}
+          ULTRON_E2E_USER_B_EMAIL: ${{ secrets.ULTRON_E2E_USER_B_EMAIL }}
+          ULTRON_E2E_USER_B_PASSWORD: ${{ secrets.ULTRON_E2E_USER_B_PASSWORD }}
+        run: npm run test:supabase:e2e
