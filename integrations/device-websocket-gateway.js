@@ -490,6 +490,46 @@ export class DeviceWebSocketGateway {
   }
 
   /**
+   * Delivers a state synchronization event only to authenticated, paired
+   * sessions belonging to the supplied owner. Returns actual delivery
+   * acknowledgements from the local WebSocket/SSE transport.
+   */
+  dispatchStateSync({ ownerUserId, deviceIds = [], event } = {}) {
+    if (typeof ownerUserId !== "string" || !ownerUserId.trim() || !Array.isArray(deviceIds) || !event) {
+      return { success: false, error: "STATE_SYNC_ARGUMENTS_INVALID", deliveredDeviceIds: [] };
+    }
+
+    const deliveredDeviceIds = [];
+    const uniqueIds = [...new Set(deviceIds.map(id => String(id || "").trim()).filter(Boolean))];
+    for (const deviceId of uniqueIds) {
+      const paired = this.deviceHub.pairedDevices.get(deviceId);
+      if (!paired || paired.status === "revoked" || paired.ownerUserId !== ownerUserId) continue;
+
+      const client = this.clients.get(deviceId);
+      if (client?.authenticated && client.device?.ownerUserId === ownerUserId && client.socket) {
+        if (this.sendFrame(client.socket, { type: "STATE_SYNC", event })) {
+          deliveredDeviceIds.push(deviceId);
+          continue;
+        }
+      }
+
+      const sseSet = this.sseClients.get(deviceId);
+      if (sseSet && sseSet.size > 0) {
+        let sent = false;
+        for (const res of sseSet) {
+          try {
+            res.write(`event: state-sync\ndata: ${JSON.stringify({ type: "STATE_SYNC", event })}\n\n`);
+            sent = true;
+          } catch {}
+        }
+        if (sent) deliveredDeviceIds.push(deviceId);
+      }
+    }
+
+    return { success: true, deliveredDeviceIds };
+  }
+
+  /**
    * Broadcasts presence changes to all connected owner devices.
    */
   broadcastPresence(deviceId, online) {
