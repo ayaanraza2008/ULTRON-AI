@@ -26,7 +26,7 @@ PR #441 has since been merged to `main`. PRs #444 (guarded HexStrike) and #445 (
 - PR #450 Browser Use gateway branch: exact-head CI passed 1,611 tests (1,608 passed, 0 failed, 3 skipped) and World Intelligence build passed. A read-only Render log query for 2026-10-29 through 2026-11-04 found 71 Browser Use startup-smoke outcomes: 67 failed with `BRIDGE_HTTP_502` and 4 passed. The latest observed smoke failed on 2026-11-04 21:46 UTC; individual starts showed bursts of 5–6 consecutive 502s. PR #450 adds redacted diagnostics/readiness gating but does not fix upstream provider availability.
 - PR #453 Chromium/CDP HTTP status fix: exact head `ac915fb5b5ec7eb072c727fc628b32fb49e7aec1`; CI run 41977929754 passed 1,610 tests (1,607 passed, 0 failed, 3 skipped) and World Intelligence build.
 - PR #454 approval-proof and truthful memory/inference hardening: exact head `8eae1eeaa83327d79d6644ddc95bbd30e8a76fc1`; CI run 41980867968 passed 1,621 tests (1,618 passed, 0 failed, 3 skipped), with World Intelligence build and repository security gate passing. It is ready for review.
-- Latest observed main commit is `81dd9b9e81bf35c5e49e152113e0991fe7362010` (2026-11-04 21:40:40 UTC). Render backend services last recorded successful deploys from this commit on 2026-11-04 around 21:41 UTC. Feature-branch PRs below are not part of deployed main. No GitHub Actions run for that exact main SHA was returned by the current workflow-run lookup, so current-main CI is **not independently verified**.
+- Latest observed main commit is `81dd9b9e81bf35c5e49e152113e0991fe7362010` (2026-11-04 21:40:40 UTC). Render backend services last recorded successful deploys from this commit on 2026-11-04 around 21:41 UTC. Feature-branch PRs below are not part of deployed main. Exact-main CI was independently verified: [run 41918313167](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41918313167) passed on `81dd9b9e81bf35c5e49e152113e0991fe7362010`.
 - A 2026-11-05 repository audit found 882 tracked paths at the preceding main commit, including the existing command-center frontend, core, agents, voice, vision, Windows/Android companion source, and integration adapters.
 
 ## Current live operational observations
@@ -78,3 +78,20 @@ The three backend services last recorded successful deploys from commit 81dd9b9e
 Read-only metrics returned no HTTP request-count/latency samples and no CPU samples for the queried 2026-11-04 06:00 UTC to 2026-11-05 06:30 UTC interval. Three services returned some memory samples; the interface returned none. Render logs for the final hour queried returned no app/request entries. These empty observations do not prove the services are down, but they also do not prove live user traffic or end-to-end operation. Keep live acceptance BLOCKED / UNVERIFIED until health endpoints and authenticated synthetic flows are confirmed.
 
 No Render configuration, environment variable, deploy, or service was modified during this inspection.
+
+
+## 2026-11-05 12:50 IST independent engineering addendum
+
+This addendum supersedes any older observation above where the live audit differs.
+
+- **Main CI:** exact main commit `81dd9b9e81bf35c5e49e152113e0991fe7362010` passed GitHub Actions run [41918313167](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41918313167).
+- **Main protection:** GitHub reports `main` is not protected. Render backend services are configured to auto-deploy on commits. No direct main commits, merges, Blueprint sync, or deployments were performed during this audit.
+- **Render live state:** the three backend services were live on `main` commit `81dd9b9e`; the UI service remains live on `feature/ultron-live-core-interface-20261029` commit `32e19e56`. All four service records are Free-plan, Singapore-region services with auto-deploy enabled and empty live `healthCheckPath` settings.
+- **Render Blueprint drift:** current `render.yaml` proposed moving the UI service to `main`. PR #457 corrects the branch to the existing live UI branch and uses the code's dedicated `/healthz` endpoint. Blueprint sync remains intentionally unperformed.
+- **Browser Use:** Render logs show repeated model-gateway HTTP 502 failures. The prior 71-smoke sample recorded 67 failures and 4 passes; a later observed attempt returned 502 and a subsequent request returned 200. The upstream provider/root cause is not yet isolated. PR #450 adds redacted provider diagnostics and startup-readiness gating; it is not merged or deployed.
+- **Supabase:** organization plan is Free; the live project reports 15 applied migrations and RLS enabled on all eight inspected public tables. The native leaked-password protection setting is Pro+ only. ULTRON's application signup path already uses a k-anonymity Pwned Passwords range check and fails closed when unavailable. Do not upgrade solely to clear the advisor warning.
+- **Device pairing:** the live database does not contain `paired_devices` or `pending_device_pairings`; the two device migrations are present in source but unapplied. PR #456 aligns the 15 historical migration filenames to the live ledger, moves destructive rollback scripts outside the active migration directory, and adds a ledger regression test. It does not apply production SQL.
+- **Recent exact-head CI:** PR #455 passed 1,620/1,623 tests (0 failed, 3 skipped); PR #456 passed 1,610/1,613 (0 failed, 3 skipped). Skipped tests remain unverified. PR #457 is awaiting exact-head CI.
+- **Release percentage:** no new weighted completion score is issued by this addendum. The historical 85.10% remains historical only and must not be presented as a fresh current score.
+
+No production schema, secrets, accounts, Render configuration, or deployments were changed.
