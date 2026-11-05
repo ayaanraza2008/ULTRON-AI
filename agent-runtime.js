@@ -592,7 +592,7 @@ export function parsePrivateDataReadApproval(value, integration) {
   return !/\b(?:do not|don't|never|not anymore|withdraw\w*|revoke\w*|cancel\w*|hold off|wait|stop|changed my mind)\b/i.test(text.slice(match[0].length));
 }
 
-function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
+function classifyToolDispatchRisk(name, args, requestRisk, requestText = "", currentUserMessage = requestText) {
   let delegatedTask = "";
   if (name === "hermes_agent_task" || name === "browser_use") delegatedTask = args?.task;
   else if (name === "enqueue_employee_task") delegatedTask = args?.goal;
@@ -604,7 +604,7 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "") {
   // explicit user approval even when the prompt itself is phrased casually.
   if (PRIVATE_DATA_READ_TOOLS.has(name)) {
     const integration = name.startsWith("appflowy_") ? "appflowy" : "immich";
-    const approved = parsePrivateDataReadApproval(requestText, integration);
+    const approved = parsePrivateDataReadApproval(currentUserMessage, integration);
     return {
       requiresConfirmation: !approved,
       risk: {
@@ -1627,6 +1627,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     // the full allowlist for a compound or uncertain task.
     const routeAllowsTools = !taskRoute.filtered || taskRoute.toolNames.length > 0;
     const autonomyIntent = resolveAutonomyIntent(prompt, history);
+    const currentUserMessage = prompt || history.filter(message => message?.role === "user" && typeof message.content === "string").at(-1)?.content || "";
     const autonomyPlan = buildAutonomyPlan(autonomyIntent);
     const taskSkillsGuidance = buildTaskSkillsGuidance(autonomyIntent);
     const messages = [
@@ -1815,7 +1816,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
           // Enforce the autonomy policy at the dispatch boundary, not just in
           // response metadata. High-impact tasks must not execute tools until
           // an explicit approval flow exists for the specific action.
-          const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
+          const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent, currentUserMessage);
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
           } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name) && call?._ultronDeterministicFallback !== true) {
@@ -1868,7 +1869,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
             executedToolCalls.add(dedupeKey);
             let result;
             try {
-              const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent);
+              const dispatchRisk = classifyToolDispatchRisk(name, args, autonomyPlan.risk, autonomyIntent, currentUserMessage);
           if (dispatchRisk.requiresConfirmation) {
             result = { error: { code: "AUTONOMY_APPROVAL_REQUIRED", message: "This request or delegated tool task includes a consequential action. ULTRON has not executed it; a task-specific approval flow is required first." }, approvalRequired: true, risk: dispatchRisk.risk };
               } else if (taskRoute.filtered && !taskRoute.toolNames.includes(name)) {
