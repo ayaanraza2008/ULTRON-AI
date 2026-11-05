@@ -169,3 +169,63 @@ test("ToolRegistry rejects an approval proof when execution parameters change", 
   );
   assert.equal(calls, 0);
 });
+
+
+test("ToolRegistry canonicalizes sparse array slots as JSON null in approval fingerprints", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "sparse-array-proof-tool",
+    name: "Sparse array proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+
+  const sparse = new Array(1);
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-sparse-array",
+    params: { values: sparse }
+  });
+
+  assert.deepEqual(
+    await registry.execute(tool.id, { values: [null] }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    { ok: true }
+  );
+  assert.equal(calls, 1);
+});
+
+test("ToolRegistry does not collapse a sparse array approval into an empty array", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "sparse-versus-empty-proof-tool",
+    name: "Sparse versus empty proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-sparse-versus-empty",
+    params: { values: new Array(1) }
+  });
+
+  await assert.rejects(
+    () => registry.execute(tool.id, { values: [] }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    error => error.code === "TOOL_APPROVAL_REQUIRED"
+  );
+  assert.equal(calls, 0);
+});
