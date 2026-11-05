@@ -169,3 +169,55 @@ test("ToolRegistry rejects an approval proof when execution parameters change", 
   );
   assert.equal(calls, 0);
 });
+
+
+test("ToolRegistry does not equate sparse approved arrays with empty execution arrays", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "sparse-array-proof-tool",
+    name: "Sparse array proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+  const sparse = new Array(1);
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-sparse-array",
+    params: { items: sparse }
+  });
+
+  await assert.rejects(
+    () => registry.execute(tool.id, { items: [] }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    error => error.code === "TOOL_APPROVAL_REQUIRED"
+  );
+  assert.equal(calls, 0);
+});
+
+test("Tool approval fingerprints reject non-plain object parameter values", async () => {
+  const registry = new ToolRegistry();
+  const tool = registry.registerTool({
+    id: "non-json-proof-tool",
+    name: "Non-JSON proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => ({ ok: true })
+  });
+
+  assert.throws(
+    () => createToolApprovalProof({
+      actorId: "owner-a",
+      toolId: tool.id,
+      permissionLevel: tool.permissionLevel,
+      approvalId: "appr-date-parameter",
+      params: { timestamp: new Date(0) }
+    }),
+    /plain objects/
+  );
+});
