@@ -21,10 +21,11 @@ PR #441 has since been merged to `main`. PRs #444 (guarded HexStrike) and #445 (
 ## Verified software and CI evidence
 
 - PR #441 candidate baseline: 1,467 discovered tests; 1,466 passed, 0 failed, 1 intentionally skipped; 357/357 syntax checks clean; 44 Python tests passed; Windows and Android companion builds passed; World Intelligence build passed; repository security gate reported zero findings.
-- PR #447 mobile authorization branch: latest reported CI passed 1,613 tests, 0 failed, 3 skipped; World Intelligence build passed. The PR remains draft/unmerged; do not treat its fixes as present in production.
+- PR #447 mobile authorization + Chromium startup hardening: exact-head CI passed 1,617 tests (1,614 passed, 0 failed, 3 skipped); World Intelligence build and repository security quality gate passed. The PR is ready for review and remains unmerged.
 - PR #448 AppFlowy/Immich branch: latest reported CI passed 1,622 tests, 0 failed, 3 skipped; World Intelligence build passed. It remains dependent on PR #447 and unmerged.
 - PR #450 Browser Use gateway branch: latest reported CI passed 1,608 tests, 0 failed, 3 skipped; World Intelligence build passed. The bridge had one HTTP 502 followed by a successful retry and read-only smoke; this is recovery evidence, not reliability certification.
-- Latest observed main commit `d7562b7` had a GitHub Actions run still in progress at audit time. Do not mark that exact commit fully green until its run completes successfully.
+- PR #454 approval-proof and truthful memory/inference hardening: current head `009b79eb0e05453fc108e903d16d7310513f7a41` is in draft while expanded owner-scoped memory changes run through CI. Earlier exact head `51dbf693` passed 1,613 tests, 0 failed, 3 skipped; do not transfer that pass result to the newer head.
+- Latest observed main commit is `81dd9b9e81bf35c5e49e152113e0991fe7362010` (2026-11-04 21:40:40 UTC). Render backend services last recorded successful deploys from this commit on 2026-11-04 around 21:41 UTC. Feature-branch PRs below are not part of deployed main.
 - A 2026-11-05 repository audit found 882 tracked paths at the preceding main commit, including the existing command-center frontend, core, agents, voice, vision, Windows/Android companion source, and integration adapters.
 
 ## Current live operational observations
