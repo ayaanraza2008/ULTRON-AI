@@ -2371,7 +2371,9 @@ test("voice cloning consent requires an exact own-voice or speaker-permission at
 test("agent runtime routes to standalone Groq and Cerebras providers when OPENROUTER_API_KEY is absent", async () => {
   let capturedUrl = "";
   const env = {
-    GROQ_API_KEY: "gsk_standalone_groq_test_key"
+    GROQ_API_KEY: "gsk_standalone_groq_test_key",
+    // The test explicitly opts into the potentially billable Groq fallback.
+    GROQ_PAID_FALLBACK_ENABLED: "true"
   };
   await withServer(env, async (url, _options) => {
     capturedUrl = url;
