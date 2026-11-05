@@ -404,5 +404,11 @@ test("device pairing endpoints fail closed with a clear 503 while durable storag
     });
     assert.equal(claim.status, 503);
     assert.equal((await claim.json()).error.code, "DEVICE_STORAGE_NOT_READY");
+
+    const deviceStatus = await fetch(base + "/devices/me", {
+      headers: { Authorization: "Bearer ultron_dev_" + "a".repeat(64) }
+    });
+    assert.equal(deviceStatus.status, 503);
+    assert.equal((await deviceStatus.json()).error.code, "DEVICE_STORAGE_NOT_READY");
   }, ENV);
 });
