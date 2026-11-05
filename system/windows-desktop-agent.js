@@ -332,15 +332,22 @@ export class WindowsDesktopAgent {
         }
 
         case "get_task_output": {
-          const queryId = payload.taskId || this.activeTask;
-          const task = this.activeTasks.get(queryId);
-          const matched = this.executionHistory.find(h => h.result?.taskId === queryId || h.action === queryId);
-          result = {
-            success: true,
-            taskId: queryId,
-            status: task?.status || (matched ? "completed" : "not_found"),
-            output: task?.output || matched?.result || (this.activeTask ? "Task in progress" : "No task output found")
-          };
+          const queryId = String(payload.taskId || this.activeTask || "").trim();
+          const task = queryId ? this.activeTasks.get(queryId) : null;
+          const matched = queryId
+            ? this.executionHistory.find(h => h.taskId === queryId || h.result?.taskId === queryId)
+            : null;
+          const status = task?.status || (matched ? "completed" : "not_found");
+          if (status === "not_found") {
+            result = { success: false, error: "TASK_NOT_FOUND", taskId: queryId || null };
+          } else {
+            result = {
+              success: true,
+              taskId: queryId,
+              status,
+              output: task?.output ?? matched?.result ?? null
+            };
+          }
           break;
         }
 
@@ -369,17 +376,26 @@ export class WindowsDesktopAgent {
         }
       }
 
+      const operationSucceeded = Boolean(
+        result !== null &&
+        result !== undefined &&
+        !(typeof result === "object" && result.success === false)
+      );
       if (managedTask && managedTask.status === "running") {
-        managedTask.status = "completed";
+        managedTask.status = operationSucceeded ? "completed" : "failed";
+        managedTask.completedAt = new Date().toISOString();
+        managedTask.output.push(result);
       }
       if (this.activeTask === taskId) {
         this.activeTask = null;
       }
 
       const outcome = {
-        success: true,
+        success: operationSucceeded,
+        taskId,
         action: cleanAction,
         result,
+        ...(operationSucceeded ? {} : { error: result?.error || "COMMAND_FAILED" }),
         executionTimeMs: Date.now() - startTime,
         executedAt: new Date().toISOString()
       };
@@ -388,8 +404,15 @@ export class WindowsDesktopAgent {
       if (this.executionHistory.length > 100) this.executionHistory.pop();
       return outcome;
     } catch (err) {
+      if (managedTask) {
+        managedTask.status = managedTask.abortController.signal.aborted ? "aborted" : "failed";
+        managedTask.completedAt = new Date().toISOString();
+        managedTask.error = String(err?.message || "COMMAND_FAILED").slice(0, 500);
+      }
+      if (this.activeTask === taskId) this.activeTask = null;
       const errorOutcome = {
         success: false,
+        taskId,
         action: cleanAction,
         error: err.message,
         executionTimeMs: Date.now() - startTime,
