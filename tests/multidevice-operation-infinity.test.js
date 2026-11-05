@@ -27,6 +27,7 @@ import { MultiDeviceManager, DEVICE_TYPES } from "../integrations/multi-device-m
 import { DeviceHub, APPROVED_REMOTE_ACTIONS } from "../integrations/device-hub.js";
 import { WindowsDesktopAgent, DESKTOP_SCREEN_STATE } from "../system/windows-desktop-agent.js";
 import { RemoteTaskOrchestrator } from "../system/remote-task-orchestrator.js";
+import { DeviceWebSocketGateway } from "../integrations/device-websocket-gateway.js";
 import { createApp } from "../server.js";
 
 async function withServer({ env = {}, fetchImpl = async () => new Response("{}", { status: 200 }) } = {}, run) {
@@ -518,4 +519,54 @@ test("12. Single-owner exclusivity and fail-closed when owner is unconfigured", 
     assert.equal(body.error.code, "OWNER_NOT_CONFIGURED");
     assert.match(body.error.message, /owner user ID is not configured/);
   });
+});
+
+
+test("13. WebSocket/SSE state sync delivers only to authenticated devices owned by the target owner", () => {
+  const writes = [];
+  const deviceHub = {
+    pairedDevices: new Map([
+      ["phone-owner-a", { id: "phone-owner-a", ownerUserId: "owner-a", status: "active" }],
+      ["phone-owner-b", { id: "phone-owner-b", ownerUserId: "owner-b", status: "active" }],
+      ["phone-revoked", { id: "phone-revoked", ownerUserId: "owner-a", status: "revoked" }],
+      ["browser-owner-a", { id: "browser-owner-a", ownerUserId: "owner-a", status: "active" }]
+    ]),
+    registerEventListener() { return () => {}; }
+  };
+  const gateway = new DeviceWebSocketGateway({ deviceHub, logger: { warn() {} } });
+  gateway.sendFrame = (socket, payload) => {
+    writes.push({ socket, payload });
+    return true;
+  };
+  gateway.clients.set("phone-owner-a", {
+    authenticated: true,
+    device: { id: "phone-owner-a", ownerUserId: "owner-a" },
+    socket: { id: "phone-owner-a" }
+  });
+  gateway.clients.set("phone-owner-b", {
+    authenticated: true,
+    device: { id: "phone-owner-b", ownerUserId: "owner-b" },
+    socket: { id: "phone-owner-b" }
+  });
+  gateway.clients.set("phone-revoked", {
+    authenticated: true,
+    device: { id: "phone-revoked", ownerUserId: "owner-a" },
+    socket: { id: "phone-revoked" }
+  });
+  const sseWrites = [];
+  gateway.sseClients.set("browser-owner-a", new Set([{ write(value) { sseWrites.push(value); } }]));
+
+  const result = gateway.dispatchStateSync({
+    ownerUserId: "owner-a",
+    deviceIds: ["phone-owner-a", "phone-owner-b", "phone-revoked", "browser-owner-a"],
+    event: { stateKey: "project-context", version: 3, payload: { project: "ULTRON" } }
+  });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(result.deliveredDeviceIds, ["phone-owner-a", "browser-owner-a"]);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].payload.type, "STATE_SYNC");
+  assert.equal(writes[0].payload.event.stateKey, "project-context");
+  assert.equal(sseWrites.length, 1);
+  assert.match(sseWrites[0], /STATE_SYNC/);
 });
