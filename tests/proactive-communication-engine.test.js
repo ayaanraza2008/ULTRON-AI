@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ProactiveCommunicationEngine } from "../system/proactive-communication.js";
 
-function createEngine({ env = {}, adapters = [] } = {}) {
-  const engine = new ProactiveCommunicationEngine({ env });
+function createEngine({ env = {}, adapters = [], clock } = {}) {
+  const options = { env };
+  if (clock) options.clock = clock;
+  const engine = new ProactiveCommunicationEngine(options);
   for (const adapter of adapters) engine.registerAdapter(adapter);
   return engine;
 }
@@ -48,7 +50,8 @@ test("ProactiveCommunicationEngine: dispatch without adapters is an honest NOT_D
 test("ProactiveCommunicationEngine: quiet hours defer normal priority; emergency bypasses via emergency channel", async () => {
   const engine = createEngine({
     env: quietEnv(true, "23:00", "07:00", true),
-    adapters: [deliveredAdapter, emergencyVoiceAdapter]
+    adapters: [deliveredAdapter, emergencyVoiceAdapter],
+    clock: () => new Date(2026, 10, 4, 2, 0, 0) // 02:00 local, inside 23:00-07:00 quiet window
   });
 
   const deferred = await engine.dispatch({ ownerUserId: "owner-user", title: "T", body: "B", priority: "NORMAL" });
