@@ -34,6 +34,8 @@ PR #441 has since been merged to `main`. PRs #444 (guarded HexStrike) and #445 (
 - All four Render service records returned an empty health-check path. A live deploy state alone does not prove authenticated chat, model inference, voice, browser interaction, or worker completion.
 - Supabase project `opdjfhwepmcprbqojpat` was observed `ACTIVE_HEALTHY`, region `ap-south-1`, PostgreSQL 17, with 15 applied migrations and RLS enabled on all eight inspected public tables.
 - Supabase Security Advisor still reports **Leaked Password Protection Disabled**.
+- Supabase organization is confirmed on the Free plan; current Supabase documentation says leaked-password protection is Pro+ only. ULTRON signup already calls the HaveIBeenPwned k-anonymity range API and fails closed if screening is unavailable, so no paid upgrade is required for this mitigation. The warning remains a documented platform limitation.
+- A fresh read-only table inspection confirmed RLS enabled on all eight public tables; `memory_items` and `agent_tasks` each showed 0 rows at inspection time. Schema/RLS presence is not proof of live memory or worker persistence.
 - Live model inference is blocked/unverified: the evidence refresh reports no valid OpenRouter/Groq/Cerebras credentials and a configured Gemini credential returning HTTP 401. Never claim real inference until the explicit provider smoke passes.
 - Durable worker execution and persistence remain unverified until a guarded smoke test completes against a disposable test user and confirms cleanup.
 - Mobile device authorization fixes in PR #447 must be reviewed and merged before relying on the old main-branch mobile-control path.
