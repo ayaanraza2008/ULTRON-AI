@@ -26,6 +26,12 @@
 - PR #473 remains open, mergeable, and unmerged. Source PRs #448 and #469 are closed as superseded (not merged); use #473 as the single review target to avoid partial or duplicate integration.
 - The corrected `ULTRON_BLOCKERS.md` now replaces the stale PR #441-open / old-main statements with current merge and release-gate evidence.
 
+## 0.2 Integration source-PR consolidation — 2026-11-05 10:54 UTC
+
+- PRs #469 and #448 were closed without merge after comparing exact Git blob SHAs for the mobile permission engine, mobile control engine, mobile permission tests, AppFlowy connector, Immich connector, agent runtime, and AppFlowy integration tests against #473. Those source PRs remain available in history but are no longer independent merge targets.
+- PR #473 is the single consolidated review target for these changes. Its exact-head CI remains green at 1,640 passed, 0 failed, 3 skipped; syntax 386/386; dependency audit 0 vulnerabilities; World Intelligence build passed.
+- Closing the source PRs did not merge code into `main`, trigger Render deployments, or modify production state.
+
 ## 1. Current evidence
 
 ### Repository and CI
