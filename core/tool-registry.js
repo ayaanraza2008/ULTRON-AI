@@ -203,7 +203,8 @@ export class ToolRegistry {
           let verified = consumeToolApprovalProof(context?.toolApprovalProof, {
             actorId,
             toolId: tool.id,
-            permissionLevel: tool.permissionLevel
+            permissionLevel: tool.permissionLevel,
+            params
           });
 
           // Optional host verifiers can support API-issued approvals. They must
@@ -223,6 +224,7 @@ export class ToolRegistry {
                 actorId,
                 toolId: tool.id,
                 permissionLevel: tool.permissionLevel,
+                params,
                 confirmationToken,
                 requestId: typeof context.requestId === "string" ? context.requestId : null
               });
@@ -398,7 +400,7 @@ export class ToolRegistry {
           const res = await zeroCostAiEngine.completeWithFallback(params.prompt || "Hello");
           return { success: true, text: res.text || "", model: res.model || "zero_cost_fallback", provider: res.provider, tier: res.tier };
         }
-        return { success: true, text: "Inference completed via ULTRON Core.", provider: "local_heuristic" };
+        return { success: false, status: "UNAVAILABLE", error: { code: "AI_PROVIDER_UNAVAILABLE", message: "No configured AI provider completed inference. Configure a valid provider and retry." }, provider: "none" };
       }
     });
 
@@ -432,9 +434,14 @@ export class ToolRegistry {
       inputSchema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tags: { type: "array" } } },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
       execute: async (params) => {
-        const record = ultronCore?.storeMemory ? ultronCore.storeMemory(params.content, params.tags || ["user_noted"]) : { id: "mem-" + Date.now() };
-        const id = record?.id || record || "mem-" + Date.now();
-        return { success: true, memoryId: id, content: params.content };
+        if (typeof ultronCore?.storeMemory !== "function") {
+          return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_STORE_UNAVAILABLE", message: "Persistent memory storage is not configured; no memory was saved." } };
+        }
+        const record = await ultronCore.storeMemory(params.content, params.tags || ["user_noted"]);
+        if (!record || typeof record !== "object" || !(record.id || record.memoryId)) {
+          return { success: false, status: "FAILED", error: { code: "MEMORY_STORE_NOT_CONFIRMED", message: "Memory adapter did not confirm a persisted record." } };
+        }
+        return { success: true, memoryId: record.id || record.memoryId, content: params.content };
       }
     });
 
