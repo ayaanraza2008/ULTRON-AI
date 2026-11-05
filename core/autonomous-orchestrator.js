@@ -573,7 +573,7 @@ export class AutonomousOrchestrator {
           // unconsumed approval matches the same authenticated owner, step,
           // tool, permission, description and canonical parameter snapshot.
           // This keeps UI refresh/re-entry usable without weakening approval.
-          const fingerprint = approvalParametersFingerprint(step.params);
+          const fingerprint = approvalParametersFingerprint(step.params ?? {});
           const requestingActor = typeof context.userId === "string" && context.userId.trim()
             ? context.userId.trim()
             : "operator";
@@ -604,7 +604,7 @@ export class AutonomousOrchestrator {
 
         if (!approval) {
           // Reuse a matching pending request rather than creating duplicates.
-          const fingerprint = approvalParametersFingerprint(step.params);
+          const fingerprint = approvalParametersFingerprint(step.params ?? {});
           const existingPending = Array.from(this.pendingApprovals.values()).find(candidate =>
             candidate.status === "PENDING" &&
             candidate.userId === (context.userId || "operator") &&
@@ -703,7 +703,7 @@ export class AutonomousOrchestrator {
 
         let currentFingerprint;
         try {
-          currentFingerprint = approvalParametersFingerprint(step.params);
+          currentFingerprint = approvalParametersFingerprint(step.params ?? {});
         } catch {
           currentFingerprint = null;
         }
@@ -751,7 +751,7 @@ export class AutonomousOrchestrator {
           toolId: tool.id,
           permissionLevel: tool.permissionLevel,
           approvalId: approval.id,
-          params: step.params
+          params: step.params ?? {}
         });
         approvalsToConsume.set(step.id, approval);
       }
@@ -1610,8 +1610,8 @@ export class AutonomousOrchestrator {
     let parametersSnapshot = null;
     let parametersFingerprint = null;
     try {
-      parametersSnapshot = JSON.parse(JSON.stringify(parameters ?? null));
-      parametersFingerprint = approvalParametersFingerprint(parameters);
+      parametersSnapshot = JSON.parse(JSON.stringify(parameters ?? {}));
+      parametersFingerprint = approvalParametersFingerprint(parameters ?? {});
     } catch {
       throw new TypeError("Approval parameters must be bounded, serializable JSON data.");
     }
