@@ -53,6 +53,7 @@ class MockAdbBridge {
 class MockMcpClient {
   constructor() {
     this.status = "CONNECTED";
+    this.calls = [];
     this.discoveredTools = new Map([
       ["mobile_list_available_devices", {}],
       ["mobile_click_on_screen_at_coordinates", {}],
@@ -73,6 +74,7 @@ class MockMcpClient {
   }
 
   async callTool(name, args) {
+    this.calls.push({ name, args });
     return { success: true, text: "Mock MCP Tool Executed", name, args };
   }
 }
@@ -248,7 +250,7 @@ test("MobileControlEngine: Level-3 tool approval cannot bypass Level-4 sensitive
   assert.equal(result.requiresConfirmation, true);
   assert.equal(result.code, "CONFIRMATION_REQUIRED");
   assert.ok(result.confirmationToken);
-  assert.equal(mockMcp.commandLog?.length || 0, 0);
+  assert.equal(mockMcp.calls.length, 0, "the critical action must not reach Mobile MCP before Level-4 confirmation");
 
   await engine.shutdown();
 });
