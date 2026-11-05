@@ -152,7 +152,8 @@ export class DirectChromiumCdpDriver {
         cleanup();
         resolve(value);
       };
-      const timer = setTimeout(() => finish(null), 12000);
+      const launchTimeoutMs = process.env.CI === "true" ? 20000 : 12000;
+      const timer = setTimeout(() => finish(null), launchTimeoutMs);
       const onData = (chunk) => {
         stderrBuffer += String(chunk);
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
