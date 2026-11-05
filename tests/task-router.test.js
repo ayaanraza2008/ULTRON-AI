@@ -47,6 +47,18 @@ test("routes OpenSEO-only requests to its owner-scoped tool", () => {
   assert.deepEqual(route.toolNames, ["openseo"]);
 });
 
+test("routes AppFlowy and Immich requests to their owner-scoped tools", () => {
+  const appflowy = classifyTaskRoute("List my AppFlowy workspaces");
+  assert.deepEqual(appflowy.categories, ["productivity"]);
+  assert.ok(appflowy.toolNames.includes("appflowy_list_workspaces"));
+  assert.ok(appflowy.toolNames.includes("appflowy_get_document"));
+
+  const immich = classifyTaskRoute("Search my Immich photo library for beach pictures");
+  assert.deepEqual(immich.categories, ["media"]);
+  assert.ok(immich.toolNames.includes("immich_search_assets"));
+  assert.ok(immich.toolNames.includes("immich_list_albums"));
+});
+
 test("retains the full tool list for compound or uncertain actions", () => {
   const route = classifyTaskRoute("Research the topic and then create a YouTube production plan");
   assert.equal(route.tier, "complex");
