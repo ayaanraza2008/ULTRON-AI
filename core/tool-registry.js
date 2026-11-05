@@ -40,6 +40,7 @@ import { AgentOrchestrator } from "../agents/orchestrator.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
 import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
 import { getHexStrikeReadiness, runHexStrikeScan } from "../integrations/hexstrike-ai.js";
+import { captureAgentMemory as defaultAgentMemoryCapture } from "../agentmemory-integration.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -88,7 +89,8 @@ export class ToolRegistry {
       browserAutomationHelper: defaultBrowserAutomationHelper,
       agentOrchestrator: new AgentOrchestrator(),
       egoBrowserAdapter: defaultEgoBrowserAdapter,
-      hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan }
+      hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan },
+      agentMemoryStore: { capture: defaultAgentMemoryCapture }
     };
 
     const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
@@ -444,7 +446,17 @@ export class ToolRegistry {
       timeoutMs: 5000,
       inputSchema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tags: { type: "array" } } },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params) => {
+      execute: async (params, context = {}) => {
+        const ownerId = String(context.userId || context.actorId || "").trim();
+        if (ownerId && typeof this.adapters.agentMemoryStore?.capture === "function") {
+          const durableResult = await this.adapters.agentMemoryStore.capture(
+            "Remember this: " + String(params.content || ""),
+            { userId: ownerId }
+          );
+          if (durableResult?.state === "captured") {
+            return { success: true, durable: true, storage: "agentmemory", content: params.content };
+          }
+        }
         if (typeof ultronCore?.storeMemory !== "function") {
           return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_STORE_UNAVAILABLE", message: "Persistent memory storage is not configured; no memory was saved." } };
         }
