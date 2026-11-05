@@ -126,15 +126,37 @@ export class DirectChromiumCdpDriver {
       "--disable-gpu",
       `--user-data-dir=${this.userDataDir}`
     ];
-    // GitHub-hosted CI runners may not provide the user-namespace sandbox
-    // required by Chromium. Disable the sandbox only inside ephemeral CI jobs;
-    // normal ULTRON hosts retain Chromium's default sandbox protections.
-    if (process.env.CI === "true") {
-      args.push("--no-sandbox", "--disable-dev-shm-usage");
+    const launchEnv = { ...process.env };
+    const inCi = process.env.CI === "true";
+    if (inCi) {
+      // CI runners can inherit desktop-session variables from unrelated setup
+      // steps. A malformed DBus address can prevent headless Chrome from
+      // starting even though no desktop session is needed.
+      for (const key of [
+        "DBUS_SESSION_BUS_ADDRESS",
+        "DBUS_SYSTEM_BUS_ADDRESS",
+        "SESSION_MANAGER",
+        "WAYLAND_DISPLAY",
+        "XDG_SESSION_TYPE"
+      ]) delete launchEnv[key];
+      args.push(
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-background-networking",
+        "--disable-extensions",
+        "--disable-breakpad",
+        "--disable-crash-reporter",
+        "--password-store=basic"
+      );
     }
 
     let stderrBuffer = "";
-    const child = spawn(detection.path, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let exitDetails = null;
+    const child = spawn(detection.path, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: launchEnv
+    });
     this.process = child;
     child.stderr.setEncoding?.("utf8");
     const devtoolsLine = await new Promise((resolve) => {
@@ -143,6 +165,7 @@ export class DirectChromiumCdpDriver {
         clearTimeout(timer);
         child.stderr.removeListener("data", onData);
         child.removeListener("error", onError);
+        child.removeListener("exit", onExit);
       };
       const finish = (value) => {
         if (settled) return;
@@ -150,22 +173,34 @@ export class DirectChromiumCdpDriver {
         cleanup();
         resolve(value);
       };
-      const timer = setTimeout(() => finish(null), 12000);
+      const timeoutMs = inCi ? 20000 : 12000;
+      const timer = setTimeout(() => finish(null), timeoutMs);
       const onData = (chunk) => {
-        stderrBuffer += chunk;
+        stderrBuffer = (stderrBuffer + String(chunk)).slice(-6000);
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
         if (match) finish(match[1]);
       };
       const onError = (error) => {
-        stderrBuffer += String(error?.message || error).slice(0, 300);
+        exitDetails = { error: String(error?.message || error).slice(0, 240) };
+        finish(null);
+      };
+      const onExit = (code, signal) => {
+        exitDetails = { code, signal };
         finish(null);
       };
       child.once("error", onError);
+      child.once("exit", onExit);
       child.stderr.on("data", onData);
     });
     if (!devtoolsLine || !this.process.pid) {
       await this._killProcess();
-      return { launched: false, reason: "Browser launch failed or DevTools endpoint not observed", stderrPreview: stderrBuffer.slice(0, 300) };
+      return {
+        launched: false,
+        reason: "Browser launch failed or DevTools endpoint not observed",
+        stderrPreview: stderrBuffer.slice(-1200),
+        exit: exitDetails,
+        timeoutMs: inCi ? 20000 : 12000
+      };
     }
 
     this.browserWsUrl = devtoolsLine;
