@@ -1,7 +1,8 @@
 # ULTRON AI Architecture
 
-## Current phase: backend only
-- Full frontend/UI work remains deferred until the final phase. A minimal source-controlled Windows wake-word companion and an Android on-device wake-word companion now exist; their CI builds do not constitute physical-device verification.
+## Current phase: integrated command-center frontend and backend; physical-device acceptance pending
+- The cinematic ULTRON Living Core command-center frontend exists in source and is served by the separate Render service `ultron-core-interface`. As of 2026-11-05, that service is deployed from branch `feature/ultron-live-core-interface-20261029`, commit `32e19e563cd791bdd55db7b668b12101d7a13c6f`; its frontend-to-backend acceptance still needs verification.
+- Source-controlled Windows and Android wake companions exist. CI build success does not establish physical-device pairing, microphone, background, or desktop-control behavior.
 - API server: server-side provider adapter, validation, rate limits, timeout/cancellation handling, health/readiness endpoints, structured logs.
 - Provider gateway: OpenAI-compatible OpenRouter API; keep API keys exclusively server-side.
 - Persistence: dedicated Supabase project `ULTRON-AI`, ref `opdjfhwepmcprbqojpat`, region `ap-south-1`.
@@ -28,4 +29,10 @@
 - A cloud-hosted backend cannot use its own `localhost` to reach the developer PC. Remote use requires an explicitly configured authenticated HTTPS gateway and should not expose the Chrome CDP port itself.
 
 ## Deployment
-The Render service `ultron-ai` is hosted at https://ultron-ai-zvd7.onrender.com. Render Blueprint contains only the backend API service in this phase.
+Read-only Render inspection on 2026-11-05 found these services in workspace `Ultron core`:
+- `ultron-ai-core` — https://ultron-ai-core.onrender.com, tracks `main`; latest deployment is live at `573f31f953997cb0e546ef599f77e66cf8f7775b`.
+- `ultron-browser-use-core` — https://ultron-browser-use-core.onrender.com, tracks `main`; latest deployment is live at the same main commit. A startup smoke at 2026-11-05 07:50:26 UTC received HTTP 200 from the ULTRON model gateway using `openrouter/free` and returned a non-empty response. This is one successful Browser Use inference smoke, not proof of sustained availability or general chat/vision quality.
+- `ultron-rea-gateway` — https://ultron-rea-gateway.onrender.com, tracks `main`; latest deployment is live at the same main commit.
+- `ultron-core-interface` — https://ultron-core-interface.onrender.com, tracks `feature/ultron-live-core-interface-20261029`; latest deployment is live at `32e19e563cd791bdd55db7b668b12101d7a13c6f`.
+
+All four services were observed on Render free plans with auto-deploy enabled. This document records observed state only; do not trigger deployments or change service configuration as part of an audit.
