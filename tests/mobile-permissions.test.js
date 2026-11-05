@@ -159,3 +159,41 @@ test("MobilePermissions: records tamper-resistant audit logs", () => {
   assert.ok(logs.some(l => l.type === "CONFIRMATION_REQUESTED"));
   assert.ok(logs[0].id && logs[0].timestamp);
 });
+
+
+test("MobilePermissions: confirmation fingerprints normalize sparse slots to JSON null", async () => {
+  const engine = new MobilePermissionEngine();
+  engine.authorizeDevice("phone-1", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION, "owner-a");
+  const approvedParams = { device: "phone-1", values: [null] };
+  const pending = await engine.checkPermission("mobile_install_app", approvedParams, "phone-1", "owner-a");
+  assert.equal(pending.requiresConfirmation, true);
+
+  const sparseExpected = { device: "phone-1", values: new Array(1) };
+  const verified = engine.verifyConfirmationToken(
+    pending.confirmationToken,
+    "mobile_install_app",
+    "phone-1",
+    "owner-a",
+    sparseExpected
+  );
+  assert.equal(verified.valid, true);
+});
+
+test("MobilePermissions: confirmation fingerprints do not collapse sparse slots into empty arrays", async () => {
+  const engine = new MobilePermissionEngine();
+  engine.authorizeDevice("phone-1", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION, "owner-a");
+  const approvedParams = { device: "phone-1", values: [] };
+  const pending = await engine.checkPermission("mobile_install_app", approvedParams, "phone-1", "owner-a");
+  assert.equal(pending.requiresConfirmation, true);
+
+  const sparseExpected = { device: "phone-1", values: new Array(1) };
+  const verified = engine.verifyConfirmationToken(
+    pending.confirmationToken,
+    "mobile_install_app",
+    "phone-1",
+    "owner-a",
+    sparseExpected
+  );
+  assert.equal(verified.valid, false);
+  assert.match(verified.reason, /parameters do not match/i);
+});
