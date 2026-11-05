@@ -7,6 +7,66 @@
 
 > **Evidence boundary:** This is a source-tree and adapter-presence review, not a complete upstream source audit, license audit, or live acceptance test. “Adapter/code present” means a matching ULTRON source path exists; it does not prove that external credentials are configured or that a real provider/device action succeeded. Verify each upstream license and exact commit before copying third-party code.
 
+## Upstream provenance snapshot — 2026-11-05
+
+The following 51 entries are the exact reference repositories in this decision matrix. For each one, GitHub repository metadata and the latest commit on its declared default branch were queried on 2026-11-05. All 51 repository endpoints resolved and returned a default-branch commit. This verifies repository existence, default branch and a commit pointer only; it does **not** constitute source-code review, dependency security review, license/legal approval, model-weight license review, or proof that ULTRON has a working integration.
+
+`GitHub license` is the SPDX value detected by GitHub. `NOASSERTION` means GitHub did not provide a detected SPDX license; treat that entry as **license unresolved / no code reuse approved** until the actual LICENSE file and terms are reviewed. The upstream SHA is the full SHA returned by `GET /repos/{owner}/{repo}/commits/{default_branch}`. “Last push” is repository metadata and may refer to another branch; use the recorded default-branch SHA for source pinning. None of these repositories was reported archived by GitHub at query time.
+
+| # | Upstream repository | Default branch | Default-branch HEAD SHA | GitHub license | Last push (UTC) |
+|---:|---|---|---|---|---|
+| 1 | `0x4m4/hexstrike-ai` | `master` | `d689933ff579d839c676c82b231f8e98326c5f04` | MIT | 2026-08-03 |
+| 2 | `mohammedayanrafiq/JARVIS-ULTIMATE` | `main` | `a1aea5cbc3b92831b51de2b01e07d7e1b26cd6aa` | MIT | 2026-08-16 |
+| 3 | `AbuZar-Ansarii/Ultron` | `main` | `1f16aa19e15e160fd434132c965aded489029a9d` | NOASSERTION | 2026-10-24 |
+| 4 | `citrolabs/ego-lite` | `main` | `bacaece43900e8ca68eea3b6f1663835ea38df9e` | MIT | 2026-11-05 |
+| 5 | `3dlg-hcvc/diorama` | `main` | `ec54d826cf6b39c6daf88947da897ff9626e5d61` | MIT | 2026-01-22 |
+| 6 | `mobile-next/mobile-mcp` | `main` | `57efc27d96971f96caba69b62665fa057ebc65ac` | Apache-2.0 | 2026-11-02 |
+| 7 | `garagehq/nightcrawler` | `main` | `4d1ed0fdf3a4ddf4d6afcacf4487894c51b55f1b` | NOASSERTION | 2026-08-19 |
+| 8 | `crackerghost/DSH-GOD` | `main` | `c67271f42141dc1afc5d371e313ead7b8e35bfdd` | MIT | 2026-10-30 |
+| 9 | `tashfeenahmed/freellmapi` | `main` | `fb07845faf7cf986ea9f3692e055076035dd8739` | MIT | 2026-11-04 |
+| 10 | `mnfst/awesome-free-llm-apis` | `main` | `095e35e10f33d7ba32ebb86e1dd0ff604dea9c1a` | CC0-1.0 | 2026-11-04 |
+| 11 | `lyogavin/airllm` | `main` | `66eeaf17d1c06fb3c16eaad2d12ea311905a5568` | Apache-2.0 | 2026-11-05 |
+| 12 | `Conway-Research/automaton` | `main` | `d8f816881fd24b6f5e3d616e59edec387a447667` | MIT | 2026-08-26 |
+| 13 | `google-research/harness2` | `main` | `6868817518876de8fd170c6a8354daca273b6191` | Apache-2.0 | 2026-11-02 |
+| 14 | `elder-plinius/G0DM0D3` | `main` | `f6301765fb90eb7b336bdf365319cd2fe44b1187` | AGPL-3.0 | 2026-07-15 |
+| 15 | `bilawalsidhu/gods-eye-view` | `main` | `7d8b80db0acd9daa4af0364f9ef3aa8ac46b0b69` | NOASSERTION | 2026-11-05 |
+| 16 | `public-apis/public-apis` | `master` | `1e354d1bd0facb63f48c1d68841a6b61dc620bd1` | MIT | 2026-11-04 |
+| 17 | `SudoHopeX/KaliGPT` | `hackerx` | `ee0a21d392d0e19e1c4f390dbaeb225f8e329caf` | NOASSERTION | 2026-11-04 |
+| 18 | `resemble-ai/chatterbox` | `master` | `ab55923c27757c90cfcc407baa57dc25a7d25217` | MIT | 2026-11-04 |
+| 19 | `penpot/penpot` | `develop` | `9d898b8b31f8313b93d1f1f34b601f4d4e65ebf7` | MPL-2.0 | 2026-11-05 |
+| 20 | `immich-app/immich` | `main` | `0fe21a3e0c980be1549ec22304bac09c034fda93` | AGPL-3.0 | 2026-11-05 |
+| 21 | `elie222/rakazo` | `main` | `e66c54edab941c89d80d995b052ede0849fcd7a6` | Apache-2.0 | 2026-11-05 |
+| 22 | `Orange-3DV-Team/MoCha` | `main` | `aa503085c3b985e1c44ae4f7786c2a9402df53c1` | NOASSERTION | 2026-04-30 |
+| 23 | `codecrafters-io/build-your-own-x` | `master` | `aa17439b62f384511a5561ce308e9598b94d8989` | NOASSERTION | 2026-07-14 |
+| 24 | `SailikNanda/ERA-System-Prompts` | `main` | `46c310adc12388ca80ab3d3b73e53b1eacf6a6a8` | NOASSERTION | 2026-10-02 |
+| 25 | `p-e-w/heretic` | `master` | `6fc6074c61f739dc4ed2ce95ac16898024f074ce` | AGPL-3.0 | 2026-11-05 |
+| 26 | `NousResearch/hermes-agent` | `main` | `c5f347ebe9b840c3dbe5ec99bbe8e36871f24393` | MIT | 2026-11-05 |
+| 27 | `morluto/rea` | `main` | `c7fce66035a4eba490157b4ec3f43b1a7515aa99` | MIT | 2026-11-05 |
+| 28 | `darkzOGx/youtube-automation-agent` | `master` | `e973d515aef90c467da2289144df737a3bd03859` | MIT | 2026-10-27 |
+| 29 | `CapSoftware/Cap` | `main` | `4d6853fcef2a9bafaadf97ba02331c55f8ac760c` | NOASSERTION | 2026-11-05 |
+| 30 | `chatwoot/chatwoot` | `develop` | `ac544b2f1e7cf857a3b8cfddc50168d06c54a275` | NOASSERTION | 2026-11-05 |
+| 31 | `calcom/cal.diy` | `main` | `2eb48eccd8aca8a0c0ffabf28cf92e298b33ecee` | MIT | 2026-11-03 |
+| 32 | `opf/openproject` | `dev` | `9ae6b5cc50ba3b675661f751d2ca9f361cb1f0b3` | GPL-3.0 | 2026-11-05 |
+| 33 | `OpenWhispr/openwhispr` | `main` | `1fdbe7e4cc7a4a0bbc876dc5339ac643d0de98c9` | MIT | 2026-11-05 |
+| 34 | `AppFlowy-IO/AppFlowy` | `main` | `8fcee27d9bd93aad4ee0191d5d8d915d6a9a4e93` | AGPL-3.0 | 2026-11-02 |
+| 35 | `every-app/open-seo` | `main` | `0749caf15796888dd9034cd52e8d344e2b44e09f` | MIT | 2026-11-05 |
+| 36 | `wide-trace/open-higgsfield` | `main` | `b16a0efe4d7e2707b56f8ccb02387fd2a9d2eddf` | NOASSERTION | 2026-09-17 |
+| 37 | `Oldcircle/geo-sleuth` | `main` | `5aeec412c5496136b4b36259679f79b8a2d09cec` | MIT | 2026-11-05 |
+| 38 | `suifeng9203/HeyGem.ai` | `main` | `cb5ff4266a182a8eb3ee7d91c5c72a4d74060768` | NOASSERTION | 2025-04-27 |
+| 39 | `Comfy-Org/ComfyUI` | `master` | `fb2b26fdac507b7da81277c7becaf54c5e46ac6b` | GPL-3.0 | 2026-11-05 |
+| 40 | `k2-fsa/OmniVoice` | `master` | `08be0b4ccbac3e13e374e86fbfead4b4cac343e2` | Apache-2.0 | 2026-11-02 |
+| 41 | `cjpais/Handy` | `main` | `82dfab9fda18c4bc24e1f6e56d36474d38eca0bc` | MIT | 2026-11-02 |
+| 42 | `volcengine/OpenViking` | `main` | `739e17f9172b9f595bfe4cc95293ec52d4686120` | AGPL-3.0 | 2026-11-05 |
+| 43 | `cathrynlavery/diagram-design` | `main` | `f24d98b05e2d7a5e68c2dedfe46e5b7173f50118` | MIT | 2026-11-03 |
+| 44 | `K-Dense-AI/scientific-agent-skills` | `main` | `a25cf9ec00e2745d03f8704acf6f6919694ccd9a` | MIT | 2026-11-02 |
+| 45 | `rohitg00/agentmemory` | `main` | `f0f7378ac42849b863fcc5c8e753f120d5ec6f9d` | Apache-2.0 | 2026-11-05 |
+| 46 | `browser-use/browser-use` | `main` | `b49a68e4060acb226da8f784194fef301c53a6d7` | MIT | 2026-11-05 |
+| 47 | `nexu-io/open-design` | `main` | `5fb1a68f2af27f0a1c0fdefc04858c2f092359ae` | Apache-2.0 | 2026-11-05 |
+| 48 | `1jehuang/jcode` | `master` | `cedcdee71b721d0c053ee930d6f8ddbf9192e880` | MIT | 2026-11-05 |
+| 49 | `msitarzewski/agency-agents` | `main` | `b37b5bb33b78f2c1d6567d98e25ca818e3259219` | MIT | 2026-10-25 |
+| 50 | `dramaclaw/dramaclaw` | `main` | `c7d9f0e459496b7d0b1251b3d9c95a3484d409bc` | NOASSERTION | 2026-11-05 |
+| 51 | `TechyCSR/OpenCluely` | `main` | `0a9da75135f5aade3a067d86a7c8bb73f372f014` | Apache-2.0 | 2026-11-02 |
+
 ## Decisions
 
 | # | Reference repository | ULTRON decision | Evidence / integration boundary |
