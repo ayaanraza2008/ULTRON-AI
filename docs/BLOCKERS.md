@@ -10,6 +10,7 @@
 - Exact-head CI is green for current-main PRs #453, #454, #456 (after retry), #458, #460, #461 and #462. They are still open/unmerged; do not count PR-only changes as part of deployed `main`.
 
 | BLK-016 | Main branch has no reported branch protection | A direct push can bypass review and required CI; Render services auto-deploy from `main` | Repository API reports `protected: false`. Owner should review and configure required PR review, required CI checks, and restrictions on direct pushes in GitHub settings. Do not change protection automatically. | Yes: continue branch-based fixes and CI while owner decides |
+| BLK-017 | Render health-check paths are unset on the four observed services | Deploy status and process startup logs do not continuously verify the app-level health contract | Render service metadata showed an empty `healthCheckPath` for `ultron-ai-core`, `ultron-browser-use-core`, `ultron-rea-gateway`, and `ultron-core-interface`. Source exposes `/api/health`, `/health`, `/healthz`, and `/healthz` respectively. Owner should review and configure the matching paths; do not change Render configuration automatically. | Yes: source and CI work continue; platform-level health checks remain absent |
 
 | ID | Blocker | Impact | Required resolution | Can independent work continue? |
 |---|---|---|---|---|
