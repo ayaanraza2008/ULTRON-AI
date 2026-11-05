@@ -2,8 +2,8 @@
   {
     "id": "kaligpt",
     "upstream": "SudoHopeX/KaliGPT",
-    "upstreamCommit": "a8b1c2d3e4f50123456789abcdef0123456789ab",
-    "license": "MIT",
+    "upstreamCommit": "ee0a21d392d0e19e1c4f390dbaeb225f8e329caf",
+    "license": "NOASSERTION",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
     "capabilities": [
@@ -29,7 +29,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Educational and defensive guidance only; no automated exploitation or offensive tooling."
-    ]
+    ],
+    "upstreamDefaultBranch": "hackerx",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-04T18:44:51Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-04T18:44:50Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "strata",
@@ -101,7 +109,7 @@
   {
     "id": "freellmapi",
     "upstream": "tashfeenahmed/freellmapi",
-    "upstreamCommit": "f3a4b5c6d7e80123456789abcdef0123456789de",
+    "upstreamCommit": "fb07845faf7cf986ea9f3692e055076035dd8739",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -126,12 +134,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Subject to provider free-tier availability and rate limits; does not promise infinite quota."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-04T17:03:31Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-04T16:55:06Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "awesome-free-llm-apis",
     "upstream": "mnfst/awesome-free-llm-apis",
-    "upstreamCommit": "b9c8d7e6f5a40123456789abcdef0123456789ef",
+    "upstreamCommit": "095e35e10f33d7ba32ebb86e1dd0ff604dea9c1a",
     "license": "CC0-1.0",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -161,12 +177,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Static verified registry with dynamic environment key detection; never calls unverified host."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-04T15:19:38Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-04T15:19:35Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "airllm",
     "upstream": "lyogavin/airllm",
-    "upstreamCommit": "d4e5f6a7b8c90123456789abcdef0123456789fa",
+    "upstreamCommit": "66eeaf17d1c06fb3c16eaad2d12ea311905a5568",
     "license": "Apache-2.0",
     "integrationMode": "reference_or_skill_only",
     "status": "REFERENCE_OR_SKILL_ONLY",
@@ -186,7 +210,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Evaluated for Ryzen 7 5700U CPU (7 GB RAM). 70B layer offloading induces severe SSD thrashing (0.1 tok/s). ULTRON uses ONNX/Kokoro and remote cloud routing instead."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T06:14:15Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T06:14:14Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "spark-x2-6",
@@ -216,8 +248,8 @@
   {
     "id": "rakazo",
     "upstream": "elie222/rakazo",
-    "upstreamCommit": "1a2b3c4d5e6f0123456789abcdef012345678902",
-    "license": "MIT",
+    "upstreamCommit": "e66c54edab941c89d80d995b052ede0849fcd7a6",
+    "license": "Apache-2.0",
     "integrationMode": "adapter_only",
     "status": "ADAPTER_ONLY",
     "capabilities": [
@@ -242,13 +274,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Requires separate Grok proxy daemon; unofficial endpoints that bypass access controls are prohibited."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:45:22Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T09:45:22Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "heretic",
     "upstream": "p-e-w/heretic",
-    "upstreamCommit": "2b3c4d5e6f7a0123456789abcdef012345678903",
-    "license": "GPL-3.0",
+    "upstreamCommit": "6fc6074c61f739dc4ed2ce95ac16898024f074ce",
+    "license": "AGPL-3.0",
     "integrationMode": "reference_or_skill_only",
     "status": "REFERENCE_OR_SKILL_ONLY",
     "capabilities": [
@@ -267,7 +307,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Research reference only; modifying weights to bypass safety gates or remove authorization is prohibited."
-    ]
+    ],
+    "upstreamDefaultBranch": "master",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:17:52Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T09:17:51Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "free-claude-code",
@@ -304,7 +352,7 @@
   {
     "id": "dsh-god",
     "upstream": "crackerghost/DSH-GOD",
-    "upstreamCommit": "4d5e6f7a8b9c0123456789abcdef012345678905",
+    "upstreamCommit": "c67271f42141dc1afc5d371e313ead7b8e35bfdd",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -338,7 +386,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Requires explicit provider keys for live completions; local token optimization operates offline."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-10-30T12:25:17Z",
+    "upstreamDefaultBranchCommitDate": "2026-10-30T12:25:16Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "godmode3",
@@ -406,7 +462,7 @@
   {
     "id": "agency-agents",
     "upstream": "msitarzewski/agency-agents",
-    "upstreamCommit": "7a8b9c0d1e2f0123456789abcdef012345678908",
+    "upstreamCommit": "b37b5bb33b78f2c1d6567d98e25ca818e3259219",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -434,7 +490,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Roles mapped to existing 18-agent orchestrator with strict review gates before external action."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-10-25T01:43:20Z",
+    "upstreamDefaultBranchCommitDate": "2026-10-25T00:37:22Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "awesome-harness-engineering",
@@ -491,9 +555,13 @@
       "Runs in Python 3.11/3.12 environment with 17 automated tests passing."
     ],
     "upstreamDefaultBranch": "main",
-    "upstreamMetadataVerifiedAt": "2026-11-05T09:39:14.386Z",
-    "upstreamMetadataSource": "GitHub repository metadata and GET /commits/main",
-    "upstreamCodeReviewedAt": null
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamCodeReviewedAt": null,
+    "upstreamLastPushedAt": "2026-11-02T02:17:27Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-02T02:17:27Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW"
   },
   {
     "id": "ecc",
@@ -527,7 +595,7 @@
   {
     "id": "automaton",
     "upstream": "Conway-Research/automaton",
-    "upstreamCommit": "1e2f3a4b5c6d0123456789abcdef01234567890c",
+    "upstreamCommit": "d8f816881fd24b6f5e3d616e59edec387a447667",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -556,7 +624,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Strictly confines self-modification to low-risk targets; immutable system paths blocked; requires operator HMAC token."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-08-26T16:28:14Z",
+    "upstreamDefaultBranchCommitDate": "2026-08-26T16:28:14Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "openviking",
@@ -594,9 +670,13 @@
       "Read-only context adapter; requires owner UUID guard to prevent cross-account memory leakage."
     ],
     "upstreamDefaultBranch": "main",
-    "upstreamMetadataVerifiedAt": "2026-11-05T09:39:14.386Z",
-    "upstreamMetadataSource": "GitHub repository metadata and GET /commits/main",
-    "upstreamCodeReviewedAt": null
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamCodeReviewedAt": null,
+    "upstreamLastPushedAt": "2026-11-05T09:42:21Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T08:34:56Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW"
   },
   {
     "id": "agentmemory",
@@ -637,9 +717,13 @@
       "Requires separate AgentMemory service instance and shared secret."
     ],
     "upstreamDefaultBranch": "main",
-    "upstreamMetadataVerifiedAt": "2026-11-05T09:39:14.386Z",
-    "upstreamMetadataSource": "GitHub repository metadata and GET /commits/main",
-    "upstreamCodeReviewedAt": null
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamCodeReviewedAt": null,
+    "upstreamLastPushedAt": "2026-11-05T08:04:29Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T08:04:29Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW"
   },
   {
     "id": "hermes-agent",
@@ -681,15 +765,19 @@
       "Requires separately installed and reachable Hermes Agent daemon; tool sandbox must be enforced on Hermes server."
     ],
     "upstreamDefaultBranch": "main",
-    "upstreamMetadataVerifiedAt": "2026-11-05T09:39:14.386Z",
-    "upstreamMetadataSource": "GitHub repository metadata and GET /commits/main",
-    "upstreamCodeReviewedAt": null
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamCodeReviewedAt": null,
+    "upstreamLastPushedAt": "2026-11-05T09:45:51Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T09:18:04Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW"
   },
   {
     "id": "era-system-prompts",
     "upstream": "SailikNanda/ERA-System-Prompts",
-    "upstreamCommit": "5c6d7e8f9a0b0123456789abcdef012345678910",
-    "license": "MIT",
+    "upstreamCommit": "46c310adc12388ca80ab3d3b73e53b1eacf6a6a8",
+    "license": "NOASSERTION",
     "integrationMode": "skill_pack",
     "status": "INTEGRATED_VERIFIED",
     "capabilities": [
@@ -711,13 +799,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Adapted into intelligence/adaptive-personality.js preserving ULTRON and NAYA core identities."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-10-02T18:24:55Z",
+    "upstreamDefaultBranchCommitDate": "2026-10-02T18:24:45Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "build-your-own-x",
     "upstream": "codecrafters-io/build-your-own-x",
-    "upstreamCommit": "6d7e8f9a0b1c0123456789abcdef012345678911",
-    "license": "CC0-1.0",
+    "upstreamCommit": "aa17439b62f384511a5561ce308e9598b94d8989",
+    "license": "NOASSERTION",
     "integrationMode": "reference_or_skill_only",
     "status": "REFERENCE_OR_SKILL_ONLY",
     "capabilities": [
@@ -737,12 +833,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Educational reference catalog; architecture patterns informed local lightweight implementations."
-    ]
+    ],
+    "upstreamDefaultBranch": "master",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-07-14T19:25:58Z",
+    "upstreamDefaultBranchCommitDate": "2026-07-14T19:25:58Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "omnivoice",
     "upstream": "k2-fsa/OmniVoice",
-    "upstreamCommit": "7e8f9a0b1c2d0123456789abcdef012345678912",
+    "upstreamCommit": "08be0b4ccbac3e13e374e86fbfead4b4cac343e2",
     "license": "Apache-2.0",
     "integrationMode": "adapter",
     "status": "INTEGRATED_PARTIAL",
@@ -771,12 +875,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Requires separate OmniVoice inference server; falls back automatically to on-device Kokoro-82M ONNX."
-    ]
+    ],
+    "upstreamDefaultBranch": "master",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-02T23:48:05Z",
+    "upstreamDefaultBranchCommitDate": "2026-08-24T03:03:01Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "handy",
     "upstream": "cjpais/Handy",
-    "upstreamCommit": "8f9a0b1c2d3e0123456789abcdef012345678913",
+    "upstreamCommit": "82dfab9fda18c4bc24e1f6e56d36474d38eca0bc",
     "license": "MIT",
     "integrationMode": "desktop_companion",
     "status": "ADAPTER_ONLY",
@@ -804,7 +916,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Desktop app; cloud Render server cannot connect to local microphone directly."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-02T23:56:50Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-02T12:40:42Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "voicestudio",
@@ -847,7 +967,7 @@
   {
     "id": "chatterbox",
     "upstream": "resemble-ai/chatterbox",
-    "upstreamCommit": "0b1c2d3e4f5a0123456789abcdef012345678915",
+    "upstreamCommit": "ab55923c27757c90cfcc407baa57dc25a7d25217",
     "license": "MIT",
     "integrationMode": "adapter",
     "status": "INTEGRATED_PARTIAL",
@@ -875,12 +995,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Voice cloning strictly gated behind verified speaker consent record; synthetic media watermarking mandatory."
-    ]
+    ],
+    "upstreamDefaultBranch": "master",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-04T18:48:12Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-04T18:48:10Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "openwhispr",
     "upstream": "OpenWhispr/openwhispr",
-    "upstreamCommit": "1c2d3e4f5a6b0123456789abcdef012345678916",
+    "upstreamCommit": "1fdbe7e4cc7a4a0bbc876dc5339ac643d0de98c9",
     "license": "MIT",
     "integrationMode": "desktop_companion",
     "status": "ADAPTER_ONLY",
@@ -905,13 +1033,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Integrated via Windows companion SpeechRecognitionEngine; microphone audio remains strictly local."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:46:48Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T09:46:48Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "heygem",
     "upstream": "suifeng9203/HeyGem.ai",
-    "upstreamCommit": "2d3e4f5a6b7c0123456789abcdef012345678917",
-    "license": "Community / Review Required",
+    "upstreamCommit": "cb5ff4266a182a8eb3ee7d91c5c72a4d74060768",
+    "license": "NOASSERTION",
     "integrationMode": "separate_service",
     "status": "ADAPTER_ONLY",
     "capabilities": [
@@ -938,7 +1074,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Requires separate GPU inference service and verified commercial likeness permissions."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2025-04-27T09:43:28Z",
+    "upstreamDefaultBranchCommitDate": "2025-04-27T09:43:23Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "atticus-mac",
@@ -971,8 +1115,8 @@
   {
     "id": "mocha",
     "upstream": "Orange-3DV-Team/MoCha",
-    "upstreamCommit": "4f5a6b7c8d9e0123456789abcdef012345678919",
-    "license": "Research / Non-Commercial",
+    "upstreamCommit": "aa503085c3b985e1c44ae4f7786c2a9402df53c1",
+    "license": "NOASSERTION",
     "integrationMode": "reference_or_skill_only",
     "status": "REFERENCE_OR_SKILL_ONLY",
     "capabilities": [
@@ -995,7 +1139,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Requires separate high-end GPU service and verified likeness rights for source/target videos."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-04-30T09:37:16Z",
+    "upstreamDefaultBranchCommitDate": "2026-03-02T14:07:53Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "browser-use",
@@ -1035,9 +1187,13 @@
       "Consequential actions (purchases, email dispatch, authentication) require explicit user confirmation."
     ],
     "upstreamDefaultBranch": "main",
-    "upstreamMetadataVerifiedAt": "2026-11-05T09:39:14.386Z",
-    "upstreamMetadataSource": "GitHub repository metadata and GET /commits/main",
-    "upstreamCodeReviewedAt": null
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamCodeReviewedAt": null,
+    "upstreamLastPushedAt": "2026-11-05T09:04:15Z",
+    "upstreamDefaultBranchCommitDate": "2026-10-30T04:28:48Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW"
   },
   {
     "id": "obscura",
@@ -1077,7 +1233,7 @@
   {
     "id": "rea",
     "upstream": "morluto/rea",
-    "upstreamCommit": "7c8d9e0f1a2b0123456789abcdef012345678922",
+    "upstreamCommit": "c7fce66035a4eba490157b4ec3f43b1a7515aa99",
     "license": "MIT",
     "integrationMode": "mcp_tool",
     "status": "INTEGRATED_VERIFIED",
@@ -1111,12 +1267,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Confined to REA_ANALYSIS_ROOT for authorized software artifacts owned or licensed by operator."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:43:24Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T09:38:14Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "geo-sleuth",
     "upstream": "Oldcircle/geo-sleuth",
-    "upstreamCommit": "8d9e0f1a2b3c0123456789abcdef012345678923",
+    "upstreamCommit": "5aeec412c5496136b4b36259679f79b8a2d09cec",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -1146,13 +1310,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Prepares evidence heuristics; never claims definitive location proof without ground-truth confirmation; tracking private individuals prohibited."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T08:11:52Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T08:11:52Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "gods-eye-view",
     "upstream": "bilawalsidhu/gods-eye-view",
-    "upstreamCommit": "9e0f1a2b3c4d0123456789abcdef012345678924",
-    "license": "MIT",
+    "upstreamCommit": "7d8b80db0acd9daa4af0364f9ef3aa8ac46b0b69",
+    "license": "NOASSERTION",
     "integrationMode": "separate_service",
     "status": "INTEGRATED_VERIFIED",
     "capabilities": [
@@ -1182,7 +1354,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Public open datasets only (ADS-B, AIS, satellite TLEs, Open-Meteo). Private surveillance, face recognition, and stalking prohibited."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:32:46Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-04T19:58:19Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "anthropic-cybersecurity-skills",
@@ -1219,8 +1399,8 @@
   {
     "id": "open-design",
     "upstream": "nexu-io/open-design",
-    "upstreamCommit": "1a2b3c4d5e6f0123456789abcdef012345678926",
-    "license": "MIT",
+    "upstreamCommit": "5fb1a68f2af27f0a1c0fdefc04858c2f092359ae",
+    "license": "Apache-2.0",
     "integrationMode": "reference_or_skill_only",
     "status": "REFERENCE_OR_SKILL_ONLY",
     "capabilities": [
@@ -1241,13 +1421,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Patterns mapped to ULTRON frontend component generation; standalone app not embedded."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T08:22:00Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T07:22:30Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "opencluely",
     "upstream": "TechyCSR/OpenCluely",
-    "upstreamCommit": "2b3c4d5e6f7a0123456789abcdef012345678927",
-    "license": "MIT",
+    "upstreamCommit": "0a9da75135f5aade3a067d86a7c8bb73f372f014",
+    "license": "Apache-2.0",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
     "capabilities": [
@@ -1271,12 +1459,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Requires explicit user activation; static credential scrubbers redact JWTs, PATs, and private keys before inference."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-02T09:18:58Z",
+    "upstreamDefaultBranchCommitDate": "2026-07-29T17:11:01Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "diagram-design",
     "upstream": "cathrynlavery/diagram-design",
-    "upstreamCommit": "3c4d5e6f7a8b0123456789abcdef012345678928",
+    "upstreamCommit": "f24d98b05e2d7a5e68c2dedfe46e5b7173f50118",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -1303,13 +1499,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Self-contained deterministic generation; outputs valid Mermaid syntax and sanitized SVG."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-03T18:31:42Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-03T18:31:41Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "cap",
     "upstream": "CapSoftware/Cap",
-    "upstreamCommit": "4d5e6f7a8b9c0123456789abcdef012345678929",
-    "license": "AGPL-3.0",
+    "upstreamCommit": "4d6853fcef2a9bafaadf97ba02331c55f8ac760c",
+    "license": "NOASSERTION",
     "integrationMode": "desktop_companion",
     "status": "ADAPTER_ONLY",
     "capabilities": [
@@ -1332,12 +1536,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Requires local desktop companion and visible OS recording state; covert recording is strictly prevented."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T02:13:38Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T00:35:13Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "penpot",
     "upstream": "penpot/penpot",
-    "upstreamCommit": "5e6f7a8b9c0d0123456789abcdef01234567892a",
+    "upstreamCommit": "9d898b8b31f8313b93d1f1f34b601f4d4e65ebf7",
     "license": "MPL-2.0",
     "integrationMode": "reference_or_skill_only",
     "status": "REFERENCE_OR_SKILL_ONLY",
@@ -1361,12 +1573,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Design tokens and component schemas adopted; full multi-container Penpot instance kept separate."
-    ]
+    ],
+    "upstreamDefaultBranch": "develop",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:49:49Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T07:45:01Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "immich",
     "upstream": "immich-app/immich",
-    "upstreamCommit": "6f7a8b9c0d1e0123456789abcdef01234567892b",
+    "upstreamCommit": "0fe21a3e0c980be1549ec22304bac09c034fda93",
     "license": "AGPL-3.0",
     "integrationMode": "adapter",
     "status": "INTEGRATED_PARTIAL",
@@ -1396,13 +1616,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Read-only personal media connector; automatic external upload and deletion disabled."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:00:56Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-04T22:25:26Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "open-higgsfield",
     "upstream": "wide-trace/open-higgsfield",
-    "upstreamCommit": "7a8b9c0d1e2f0123456789abcdef01234567892c",
-    "license": "Apache-2.0",
+    "upstreamCommit": "b16a0efe4d7e2707b56f8ccb02387fd2a9d2eddf",
+    "license": "NOASSERTION",
     "integrationMode": "skill_pack",
     "status": "INTEGRATED_VERIFIED",
     "capabilities": [
@@ -1425,13 +1653,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Skill templates integrated into Media Studio; inference uses configured media backend."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-09-17T01:53:26Z",
+    "upstreamDefaultBranchCommitDate": "2026-09-17T01:49:28Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "dramaclaw",
     "upstream": "dramaclaw/dramaclaw",
-    "upstreamCommit": "8b9c0d1e2f3a0123456789abcdef01234567892d",
-    "license": "MIT",
+    "upstreamCommit": "c7d9f0e459496b7d0b1251b3d9c95a3484d409bc",
+    "license": "NOASSERTION",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
     "capabilities": [
@@ -1455,12 +1691,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Generates structured video scene composition packages; automated media rendering requires ffmpeg or cloud service."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T02:53:47Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-03T10:19:48Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "youtube-automation-agent",
     "upstream": "darkzOGx/youtube-automation-agent",
-    "upstreamCommit": "9c0d1e2f3a4b0123456789abcdef01234567892e",
+    "upstreamCommit": "e973d515aef90c467da2289144df737a3bd03859",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -1486,7 +1730,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Native ULTRON tool drafts complete production package; automated channel publishing strictly requires human approval."
-    ]
+    ],
+    "upstreamDefaultBranch": "master",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-10-27T00:50:41Z",
+    "upstreamDefaultBranchCommitDate": "2026-10-27T00:49:51Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "comfyui",
@@ -1526,7 +1778,7 @@
   {
     "id": "open-seo",
     "upstream": "every-app/open-seo",
-    "upstreamCommit": "1e2f3a4b5c6d0123456789abcdef012345678930",
+    "upstreamCommit": "0749caf15796888dd9034cd52e8d344e2b44e09f",
     "license": "MIT",
     "integrationMode": "mcp_tool",
     "status": "INTEGRATED_VERIFIED",
@@ -1559,13 +1811,21 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Paid third-party SEO data providers require explicit operator budget authorization."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T08:09:29Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T07:53:16Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "chatwoot",
     "upstream": "chatwoot/chatwoot",
-    "upstreamCommit": "2f3a4b5c6d7e0123456789abcdef012345678931",
-    "license": "AGPL-3.0",
+    "upstreamCommit": "ac544b2f1e7cf857a3b8cfddc50168d06c54a275",
+    "license": "NOASSERTION",
     "integrationMode": "adapter",
     "status": "INTEGRATED_PARTIAL",
     "capabilities": [
@@ -1594,7 +1854,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Read-only listing; automatic customer replies and status changes disabled."
-    ]
+    ],
+    "upstreamDefaultBranch": "develop",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:49:32Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T09:23:14Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "NOASSERTION_UNRESOLVED",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "cal-diy",
@@ -1633,14 +1901,18 @@
       "Read-only availability checks; booking or canceling calendar slots requires explicit operator approval."
     ],
     "upstreamDefaultBranch": "main",
-    "upstreamMetadataVerifiedAt": "2026-11-05T09:39:14.386Z",
-    "upstreamMetadataSource": "GitHub repository metadata and GET /commits/main",
-    "upstreamCodeReviewedAt": null
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamCodeReviewedAt": null,
+    "upstreamLastPushedAt": "2026-11-03T21:35:09Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-03T21:35:06Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW"
   },
   {
     "id": "openproject",
     "upstream": "opf/openproject",
-    "upstreamCommit": "4b5c6d7e8f9a0123456789abcdef012345678933",
+    "upstreamCommit": "9ae6b5cc50ba3b675661f751d2ca9f361cb1f0b3",
     "license": "GPL-3.0",
     "integrationMode": "adapter",
     "status": "INTEGRATED_PARTIAL",
@@ -1670,12 +1942,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Read-only work package queries; creating or deleting tickets disabled."
-    ]
+    ],
+    "upstreamDefaultBranch": "dev",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T09:49:33Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T09:23:38Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "appflowy",
     "upstream": "AppFlowy-IO/AppFlowy",
-    "upstreamCommit": "5c6d7e8f9a0b0123456789abcdef012345678934",
+    "upstreamCommit": "8fcee27d9bd93aad4ee0191d5d8d915d6a9a4e93",
     "license": "AGPL-3.0",
     "integrationMode": "adapter",
     "status": "INTEGRATED_PARTIAL",
@@ -1705,12 +1985,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Read-only workspace inspection; 64 KiB payload size limit enforced."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-02T23:40:52Z",
+    "upstreamDefaultBranchCommitDate": "2026-10-28T06:07:24Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "public-apis",
     "upstream": "public-apis/public-apis",
-    "upstreamCommit": "6d7e8f9a0b1c0123456789abcdef012345678935",
+    "upstreamCommit": "1e354d1bd0facb63f48c1d68841a6b61dc620bd1",
     "license": "MIT",
     "integrationMode": "native_module",
     "status": "INTEGRATED_VERIFIED",
@@ -1736,7 +2024,15 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Only includes vetted public APIs (weather, geocoding, FX, science, CVEs); arbitrary external URLs rejected."
-    ]
+    ],
+    "upstreamDefaultBranch": "master",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-04T19:11:59Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-04T19:11:58Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "not-ai",
@@ -1772,8 +2068,8 @@
   {
     "id": "jcode",
     "upstream": "1jehuang/jcode",
-    "upstreamCommit": "8f9a0b1c2d3e0123456789abcdef012345678937",
-    "license": "Apache-2.0",
+    "upstreamCommit": "cedcdee71b721d0c053ee930d6f8ddbf9192e880",
+    "license": "MIT",
     "integrationMode": "reference_or_skill_only",
     "status": "REFERENCE_OR_SKILL_ONLY",
     "capabilities": [
@@ -1792,12 +2088,20 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Rust agent patterns evaluated; heavy native cargo runtime dependencies avoided to preserve lightweight deployment."
-    ]
+    ],
+    "upstreamDefaultBranch": "master",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-05T07:23:00Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-05T07:22:59Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   },
   {
     "id": "scientific-agent-skills",
     "upstream": "K-Dense-AI/scientific-agent-skills",
-    "upstreamCommit": "9a0b1c2d3e4f0123456789abcdef012345678938",
+    "upstreamCommit": "a25cf9ec00e2745d03f8704acf6f6919694ccd9a",
     "license": "MIT",
     "integrationMode": "skill_pack",
     "status": "INTEGRATED_VERIFIED",
@@ -1822,6 +2126,14 @@
     "lastVerifiedAt": "2026-11-01T16:15:00.000Z",
     "limitations": [
       "Integrated into knowledge engine for academic research workflows with mandatory DOI/citation tracking."
-    ]
+    ],
+    "upstreamDefaultBranch": "main",
+    "upstreamMetadataVerifiedAt": "2026-11-05T09:54:00Z",
+    "upstreamMetadataSource": "GitHub REST repository metadata and default-branch commit lookup; checked 2026-11-05",
+    "upstreamLastPushedAt": "2026-11-02T09:23:27Z",
+    "upstreamDefaultBranchCommitDate": "2026-11-02T09:23:26Z",
+    "upstreamArchived": false,
+    "upstreamLicenseStatus": "GITHUB_SPDX_DETECTED_NOT_LEGAL_REVIEW",
+    "upstreamCodeReviewedAt": null
   }
 ]
