@@ -53,6 +53,7 @@ class MockAdbBridge {
 class MockMcpClient {
   constructor() {
     this.status = "CONNECTED";
+    this.calls = [];
     this.discoveredTools = new Map([
       ["mobile_list_available_devices", {}],
       ["mobile_click_on_screen_at_coordinates", {}],
@@ -73,6 +74,7 @@ class MockMcpClient {
   }
 
   async callTool(name, args) {
+    this.calls.push({ name, args });
     return { success: true, text: "Mock MCP Tool Executed", name, args };
   }
 }
@@ -214,3 +216,58 @@ test("MobileControlEngine: emergency stop halts all actions immediately", async 
 
   await engine.shutdown();
 });
+
+test("MobileControlEngine: Level-3 tool approval cannot bypass Level-4 sensitive-app confirmation", async () => {
+  const mockAdb = new MockAdbBridge();
+  const mockMcp = new MockMcpClient();
+  const registry = new MobileDeviceRegistry({ adbBridge: mockAdb });
+  const permissions = new MobilePermissionEngine();
+  const engine = new MobileControlEngine({
+    adbBridge: mockAdb,
+    mcpClient: mockMcp,
+    deviceRegistry: registry,
+    permissionEngine: permissions,
+    autoStartMcp: false
+  });
+
+  await engine.initialize();
+  engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
+  mockAdb.foregroundApp = { package: "com.google.android.apps.walletnfcrel", activity: "WalletActivity" };
+
+  const result = await engine.executeAction("tap", {
+    device: "emulator-5554",
+    x: 10,
+    y: 20,
+    package: "com.google.android.calculator"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_interaction_dispatch",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.requiresConfirmation, true);
+  assert.equal(result.code, "CONFIRMATION_REQUIRED");
+  assert.ok(result.confirmationToken);
+
+  const launchResult = await engine.executeAction("mobile_launch_app", {
+    device: "emulator-5554",
+    packageName: "com.google.android.apps.walletnfcrel"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_app_lifecycle",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+  assert.equal(launchResult.success, false);
+  assert.equal(launchResult.requiresConfirmation, true);
+  assert.equal(launchResult.code, "CONFIRMATION_REQUIRED");
+  assert.ok(launchResult.confirmationToken);
+  assert.equal(mockMcp.calls.length, 0, "sensitive app actions must not reach Mobile MCP before Level-4 confirmation");
+
+  await engine.shutdown();
+});
+
