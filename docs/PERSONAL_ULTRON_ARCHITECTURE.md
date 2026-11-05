@@ -106,3 +106,55 @@ The repository's open review candidates describe:
 - Documentation PR #466: refreshed release evidence and outstanding operational blockers.
 
 These are review candidates, not merged or deployed capabilities. Re-check their live PR state and exact heads before acting on them.
+
+
+## Expanded owner requirement: PC + Android + phone-call presence
+
+The owner explicitly wants the same personal ULTRON identity available on both their Windows PC and Android phone, with the ability to contact the owner and perform approved work across devices.
+
+### Cross-device system shape
+
+- **ULTRON Core:** the existing backend remains the source of truth for identity, memory, task orchestration, policy, audit events and device sessions.
+- **Windows companion:** a signed, least-privilege local agent for approved desktop actions, screen/context capture only during an explicitly enabled session, local wake-word handling where feasible, and secure pairing to ULTRON Core.
+- **Android companion:** a native Android app for voice/text, push notifications, secure pairing, approved device actions, foreground microphone sessions and visible privacy controls.
+- **Shared session and task model:** conversations and task state synchronize through authenticated owner-bound APIs. Each device has revocable credentials and a device-specific capability grant. A phone must not inherit unrestricted PC permissions, or vice versa.
+- **Reachability:** use push notifications for reliable wake-up/alerts and a persistent foreground service only for user-visible, user-enabled real-time functions. Do not promise that a normal Android app can silently run an always-on microphone in the background under all OEM/OS conditions.
+
+### Owner-initiated and ULTRON-initiated calls
+
+- The owner should be able to call ULTRON from Android using an in-app voice session; a supported telephony/VoIP route may be added for calling ULTRON like a normal contact.
+- ULTRON may place outbound calls to the owner's verified number for explicitly configured reasons (for example, a scheduled briefing or urgent task alert). Every outbound call must be rate-limited, logged and controllable with quiet hours, a do-not-call switch and immediate revocation.
+- Where a real telephone call is required, use a lawful telephony provider or supported device calling integration. Do not assume a web app can place carrier calls by itself, and do not make paid telephony accounts or incur per-minute charges without owner approval.
+- For incoming SIM calls, Android integration must be evaluated against the actual device and Android release. The supported route is a user-approved default dialer implementation using Android Telecom `RoleManager.ROLE_DIALER` and `InCallService`, or a user-approved call-screening integration where that is sufficient. These roles have OS-defined requirements and must not be bypassed.
+- Automated answering/conversation is an explicit opt-in mode, initially restricted to an owner-selected allowlist and clear rules (for example, answer only selected contacts when the owner is busy). Unknown callers should follow a safe default such as ring normally or go to voicemail, not be autonomously engaged.
+- If ULTRON speaks to another person, it must identify itself as the owner's AI assistant when the context could otherwise mislead the caller. It must not impersonate the owner, make commitments, disclose private data, authenticate as the owner, or record/transcribe calls without appropriate notice and consent.
+- Before enabling live call audio, verify applicable telecom provider terms, Android/OEM support, recording/transcription consent rules and local law. If any required capability is unavailable, provide an honest fallback (notification, missed-call summary, or ask the owner to answer).
+
+### Call handling policy
+
+1. **Owner calls ULTRON:** authenticate the owner through the paired app/session; start voice interaction and allow the owner to assign tasks.
+2. **ULTRON calls owner:** only from a configured event or schedule; announce itself and the reason; provide an immediate stop/opt-out path.
+3. **Incoming contact call:** apply the owner's explicit per-contact rule; no silent answering by default.
+4. **Incoming unknown/urgent/service call:** do not auto-answer or share owner information by default; notify the owner.
+5. **Emergency calls:** always leave emergency calling to the system dialer and never intercept or automate emergency calls.
+
+### Revised implementation order
+
+1. Build/verify owner-only device registration, per-device revocation and cross-device task/session synchronization.
+2. Deliver a working Android companion for authenticated voice/text and push alerts.
+3. Deliver Windows companion pairing and bounded desktop-control actions.
+4. Add owner-initiated in-app calling to ULTRON.
+5. Add optional outbound calls to the owner's verified number using an approved telephony provider, with costs and consent controls.
+6. Prototype incoming-call integration on the owner's actual Android device; request default dialer/call-screening roles only if the implementation fully satisfies Android requirements.
+7. Add tightly scoped, opt-in AI call answering for selected contacts only after live device/provider/legal verification.
+
+### Acceptance tests for this expanded requirement
+
+- Owner can sign in on PC and Android; a second account cannot access either device session or shared data.
+- Revoking a device invalidates its tokens and stops future task execution from that device.
+- A task started on one device is visible on the other and has a consistent, auditable lifecycle.
+- Owner can initiate a live voice session with ULTRON from Android.
+- Outbound ULTRON call reaches only the verified owner number, obeys quiet hours/rate limits and can be stopped/revoked.
+- Incoming-call behavior is tested on the actual Android model and OS version; unsupported states fall back safely.
+- AI answering is off by default, limited to explicitly approved contacts/rules, identifies itself as AI and never impersonates the owner.
+- No call recordings or transcripts are retained unless separately enabled with appropriate notice, consent and retention controls.
