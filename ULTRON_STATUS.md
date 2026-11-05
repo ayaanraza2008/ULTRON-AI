@@ -1,5 +1,149 @@
 # ULTRON AI — Canonical Software Release Status
 
+**Audit date:** 2026-11-05  
+**Production source branch:** `main`  
+**Audited main SHA:** `573f31f953997cb0e546ef599f77e66cf8f7775b`  
+**Render workspace:** `Ultron core`  
+**Supabase project:** `opdjfhwepmcprbqojpat` (Mumbai / `ap-south-1`)  
+**Status:** Current evidence-based checkpoint. The 2026-11-04 snapshot below is retained as history and is superseded by this section.
+
+> **Release verdict: NOT RELEASE-COMPLETE.** The software contains substantial implemented and CI-tested subsystems, but current live acceptance is incomplete. A green source CI run, service process, or configuration flag is not proof of end-to-end capability. No current overall completion percentage is asserted: the previous 85.10% used a prior candidate and operational evidence and must not be carried forward as today's score.
+
+## 0. Fresh mainline reconciliation — 2026-11-05 10:40 UTC
+
+- **Correction:** PR [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) is not open; it merged on 2026-11-04 20:39:39 UTC as `ad3e6a4326ccbfc1a898855827e937b8b89a4847`. The old 2026-11-04 blocker register incorrectly continued to list it as pending. Current main remains `573f31f953997cb0e546ef599f77e66cf8f7775b`.
+- **Current consolidated integration candidate:** PR [#473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473), head `f5d409a986b208a3687ce23408afa2f126a47efd`, base current main, mergeable, 47 changed files. It carries mobile/core authorization, owner-scoped AppFlowy/Immich read-only adapters, one-use approval proof enforcement, paired-device fail-closed handling, opaque Supabase key support, redacted Browser Use diagnostics, truthful memory deletion, worker readiness counters, and the Render interface branch/health-check Blueprint correction. Exact-head workflow [42022174570](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42022174570) passed both `test` and `world-intelligence-build`; syntax verification passed 386/386 files, dependency audit found 0 vulnerabilities, and 3 tests were skipped. AppFlowy/Immich upstream calls remain mocked; this is not live private-data acceptance.
+- **Mobile authorization security:** PR #469's changes were carried into consolidated PR #473, whose exact-head CI passed. PR #469 is now closed as superseded (not merged); review #473 as the single integration target. It includes confirmation-token redaction and owner-scoped mobile audit history.
+- **Migration history:** PR [#456](https://github.com/ayaanraza2008/ULTRON-AI/pull/456) remains open/mergeable and aligns active migration filenames with the 15-version live ledger while moving destructive rollback SQL outside active migrations. It does not apply production SQL.
+- **Other exact-head review evidence:** #466 documentation CI passed (1,607/0/3, syntax 386/386, 0 dependency vulnerabilities); #471 worker-smoke CI passed (1,608/0/3, syntax 386/386, 0 dependency vulnerabilities); #460 Browser Use diagnostics, #467 worker readiness, and #470 device pairing regression checks were reported green. These remain unmerged.
+- **Governance:** current main is reported unprotected, with no rulesets observed. Require branch protection and review gates before production release.
+- The full corrected owner-dependency and software blocker register is in `ULTRON_BLOCKERS.md`. It replaces the stale #441-open / old-main claims.
+
+## 0.1 Consolidated integration CI completed — 2026-11-05 10:44 UTC
+
+- PR [#473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) exact head `708ea44f4f2556ea39190a5b412aca49f12441b0` completed workflow [42012707211](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42012707211): **1,640 passed, 0 failed, 3 skipped**; syntax **386/386**; dependency audit **0 vulnerabilities**; `world-intelligence-build` passed.
+- The workflow preloaded `node:20-alpine` and ran the Docker sandbox isolation battery as part of the test job. This is CI evidence; it does not establish live AppFlowy/Immich credentials or access any private user data.
+- PR #473 remains open, mergeable, and unmerged. Source PRs #448 and #469 are closed as superseded (not merged); use #473 as the single review target to avoid partial or duplicate integration.
+- The corrected `ULTRON_BLOCKERS.md` now replaces the stale PR #441-open / old-main statements with current merge and release-gate evidence.
+
+## 0.2 Integration source-PR consolidation — 2026-11-05 10:54 UTC
+
+- PRs #469 and #448 were closed without merge after comparing exact Git blob SHAs for the mobile permission engine, mobile control engine, mobile permission tests, AppFlowy connector, Immich connector, agent runtime, and AppFlowy integration tests against #473. Those source PRs remain available in history but are no longer independent merge targets.
+- PR #473 is the single consolidated review target for these changes. Its exact-head CI remains green at 1,640 passed, 0 failed, 3 skipped; syntax 386/386; dependency audit 0 vulnerabilities; World Intelligence build passed.
+- Closing the source PRs did not merge code into `main`, trigger Render deployments, or modify production state.
+
+## 0.3 Fresh consolidated-branch follow-up — 2026-11-05 11:45 UTC (17:15 Asia/Kolkata)
+
+- PR #473 remains **open, mergeable and unmerged** at `f5d409a986b208a3687ce23408afa2f126a47efd`, based on current `main` `573f31f953997cb0e546ef599f77e66cf8f7775b`. Exact-head workflow [42022174570](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42022174570) completed successfully: both jobs passed; syntax **386/386**; dependency audit **0 vulnerabilities**; 3 tests skipped.
+- The candidate now includes the fixes formerly reviewed separately in #457, #460, #461, #467, #470 and #471. Those six source PRs were closed **without merge** as superseded; their changes are present in #473. This avoids merging partial or duplicate fixes.
+- New review-branch behavior: standard Bearer-token parsing for device pairing; fail-closed `503 DEVICE_STORAGE_NOT_READY` when pairing tables are missing; worker smoke support for opaque `sb_secret_` keys; redacted model-gateway diagnostics; Browser Use startup-smoke readiness; truthful owner-scoped memory deletion; bounded worker error/review counters; Render Blueprint pinning of the already-live UI feature branch and its `/healthz` endpoint.
+- A targeted source review confirmed that mobile tool-approval markers are set only after the server-side ToolRegistry consumes a single-use proof. Critical Level-4 mobile operations still require their separate confirmation. This is code review, not real-device acceptance.
+- PR #456 (migration-ledger reconciliation) and PR #466 (this evidence refresh) remain separate, open review PRs. No migration file was applied to production.
+- Live evidence is unchanged: Supabase has 15 applied migrations and no `paired_devices` / `pending_device_pairings` tables; Leaked Password Protection remains disabled. The worker still lacks an authenticated end-to-end persisted task acceptance. Render live service metadata still reports blank health-check paths, and the live Browser Use build command does not yet install Playwright Chromium; the Blueprint correction is not synced.
+- `main` remains unprotected. No PR was merged, no production data/schema/secrets were modified, and no Render deployment or Blueprint sync was performed.
+
+## 0.4 Latest Browser Use / Chromium candidate verification — 2026-11-05 11:52 UTC (17:22 Asia/Kolkata)
+
+- Candidate PR #473 head is `f5d409a986b208a3687ce23408afa2f126a47efd`, based on main `573f31f953997cb0e546ef599f77e66cf8f7775b`, open/mergeable/unmerged.
+- Exact-head run [42022174570](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42022174570) passed both `test` and `world-intelligence-build`; syntax passed **386/386**; dependency audit confirmed **0 vulnerabilities**; 3 tests skipped.
+- CDP navigation now observes the actual main-document HTTP response via Chromium `Network.responseReceived`; it reports real status codes, reports browser-internal URLs as status 0, and fails closed when an HTTP document status is missing. Focused tests cover 404, `about:blank`, missing evidence, and listener cleanup.
+- Browser diagnostics changes from source PRs #450/#453/#462 are present in #473; all three source PRs are closed **without merge** as superseded. Previous source PRs #457/#460/#461/#467/#470/#471 are likewise closed without merge.
+- #473's candidate changes are still not in `main`; therefore the current Render deployment and Supabase production state have not changed.
+
+## 0.5 Current exact-head verification — 2026-11-05 12:15 UTC (17:45 Asia/Kolkata)
+
+- Backend candidate PR #473 is open, mergeable and unmerged at `0fcca7f65b00d306e993eb307d0b00d20c8284bc`, based on `main` `573f31f953997cb0e546ef599f77e66cf8f7775b`. Exact-head Actions [42024635761](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42024635761) completed successfully: `test` and `world-intelligence-build` both passed. Chromium/CDP live launch, Browser Use checks, isolated PostgreSQL tests and repository security quality gate passed; syntax verification 386/386; dependency audit 0 vulnerabilities.
+- #473 now includes authenticated owner-scoped employee task list/create/detail APIs. Creation validates supported role/mode, requires the employee worker and server-side model provider, inserts an owner-bound queued task, and attempts an audit event. Draft/review/report only; no side-effect tools are exposed through the drawer API. Route tests cover account scoping, auth, bounds, not-found, feature/provider gates and audit behavior.
+- Manual-only live model/text+vision and two-account RLS acceptance workflows are included. They default to `NO`; neither was run. These require explicitly approved synthetic inputs / disposable test accounts.
+- UI PR #474 is open, mergeable and unmerged at `58c99c2b620e0437422c4740eb69f1655b679d43`, against the currently deployed interface branch at `32e19e563cd791bdd55db7b668b12101d7a13c6f`. Exact-head Actions [42025331336](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42025331336) passed both `test` and `world-intelligence-build`. It adds the account-scoped task drawer; it must not merge until #473 backend API is available and the owner separately authorizes the interface release, as its base branch auto-deploys on merge.
+- Source PRs #435/#438 (manual model/RLS workflows), #450/#453/#462 (browser diagnostics/CDP), #457 (Render Blueprint), #460 (Browser Use readiness), #461 (memory delete), #467 (worker readiness counters), #470 (pairing auth) and #471 (worker smoke key) are closed **without merge**; their changes are consolidated in #473. PR #439 is closed as superseded by #474.
+- PR #456 (migration ledger) and PR #466 (this evidence update) remain separate review branches. PR #456 is a database-history-only source change and must not be applied or synced to production without explicit owner review.
+- Live blockers remain: Supabase has 15 applied migrations and no paired-device tables; Leaked Password Protection disabled; authenticated persisted task acceptance not yet demonstrated against a live isolated account; live model inference and two-account RLS workflows not run; live Render service health-check paths remain blank and the Browser Use service's deployed build still needs Chromium; main has no branch protection.
+- No PR was merged, no Render Blueprint sync/deployment occurred, no production Supabase schema/data/secrets were changed, and no live acceptance workflow was triggered.
+
+## 0.6 Latest exact-head verification — 2026-11-05 12:36 UTC (18:06 Asia/Kolkata)
+
+- Consolidated backend [PR #473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) is open, mergeable, unmerged at `7118b7e3e6de97eaf4c46a77e7e6fd96b0559874`, based on main `573f31f953997cb0e546ef599f77e66cf8f7775b`. Exact-head GitHub Actions [42027892320](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42027892320) passed both `test` and `world-intelligence-build`. The run included the browser/CDP smoke, isolated PostgreSQL tests, security quality gate and dependency audit (0 confirmed vulnerabilities).
+- Backend changes in #473 include account-scoped mobile and employee-task APIs, fail-closed device pairing, `sb_secret_` worker-smoke support, truthful memory-delete behavior, Browser Use/CDP diagnostics, bounded worker readiness, Render Blueprint corrections, manual-only live acceptance workflows, and configurable Groq/Gemini fallback.
+- Cost safety: Groq remains behind a separate `GROQ_PAID_FALLBACK_ENABLED` flag; the candidate defaults it to `false`. An API key/model alone will not enable Groq. OpenRouter free candidates remain ahead. The previous provider-only PR #366 was closed **without merge** as superseded by #473.
+- Living Core task drawer [PR #474](https://github.com/ayaanraza2008/ULTRON-AI/pull/474) remains open, mergeable and unmerged at `58c99c2b620e0437422c4740eb69f1655b679d43`; exact-head Actions [42025331336](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42025331336) passed both `test` and `world-intelligence-build`. Its base is the separately deployed UI branch, so merging it requires explicit interface release authorization and backend #473 availability.
+- Migration-ledger PR #456 and evidence-documentation PR #466 remain separate open reviews. No SQL was applied and no document change was merged.
+- Live gates are unchanged: Supabase still has 15 applied migrations and no paired-device tables; leaked-password protection is disabled; persisted live task lifecycle, live model inference, two-account RLS and actual paired-device acceptance are not verified. Render still reports blank live health-check paths and its deployed Browser Use build still needs Chromium because the corrected Blueprint is not synced. Main remains unprotected.
+- No PR was merged. No Render sync/deployment, production Supabase migration, production secret/configuration write, production data mutation, or manual live acceptance workflow was performed.
+
+## 1. Historical evidence snapshot — 2026-11-05 10:40–10:54 UTC (superseded where conflicting by section 0.3)
+
+### Repository and CI
+- `main` is `573f31f953997cb0e546ef599f77e66cf8f7775b` at this audit.
+- GitHub reports `main` as **unprotected**; the repository rulesets query returned no rulesets. Required checks and enforced review gates are therefore not established.
+- PR [#470](https://github.com/ayaanraza2008/ULTRON-AI/pull/470) consolidates the paired-device Bearer-token fix and the fail-closed `503 DEVICE_STORAGE_NOT_READY` regression coverage. Exact-head workflow [#42008781735](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42008781735) passed both `test` and `world-intelligence-build`; the combined PR is open, mergeable, and not merged. Original PRs #458 and #465 were closed as superseded, not merged. No production pairing migration was applied.
+- PR [#471](https://github.com/ayaanraza2008/ULTRON-AI/pull/471) fixes the worker smoke script to match production Supabase authentication headers for opaque `sb_secret_` API keys and legacy JWT-style service-role keys. Exact-head workflow [#42009417854](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42009417854) passed both jobs, including the repository security gate. Open, mergeable, not merged; tests use mocked requests only.
+- PR [#467](https://github.com/ayaanraza2008/ULTRON-AI/pull/467) adds worker readiness diagnostics (`lastErrorAt`, consecutive cycle failures, and tasks needing review); exact-head workflow [#42004496892](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004496892) passed. It remains open and unmerged.
+- PR [#469](https://github.com/ayaanraza2008/ULTRON-AI/pull/469) integrates mobile device authorization with parameter-bound core approvals, owner-scoped AgentMemory, and truthful inference status. Latest exact-head SHA `5a4095c00fd7e75c8eaaee44b0dc3e7988338ae9`; workflow [#42009392401](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42009392401) passed: 1,629 passed, 0 failed, 3 skipped; syntax 386/386; dependency audit 0 vulnerabilities; `world-intelligence-build` passed. Open, mergeable, not merged.
+- Duplicate PR [#468](https://github.com/ayaanraza2008/ULTRON-AI/pull/468) was closed without merge after full patch comparison confirmed its Bearer-parser correction duplicated #458. PR #458 and #465 were subsequently closed as superseded by the combined, CI-green PR #470.
+- PR [#460](https://github.com/ayaanraza2008/ULTRON-AI/pull/460) contains Browser Use readiness gating and redacted model-gateway diagnostics; its recorded exact-head CI passed. It remains unmerged.
+- PR [#458](https://github.com/ayaanraza2008/ULTRON-AI/pull/458) was closed without merge after its Bearer-token parser fix and #465's missing-storage test were consolidated in #470. PR #470 passed both exact-head CI jobs.
+- PR [#454](https://github.com/ayaanraza2008/ULTRON-AI/pull/454) was closed without merging to `main` after its changes were integrated with #447 in PR #469. Combined exact-head workflow [#42008340637](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42008340637) passed both jobs; #469 remains open for review.
+- PR [#447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) was merged into the non-production staging branch `integration/mobile-security-core-approval-20261105`, not into `main`. Its mobile authorization code is integrated with #454's action-bound approval and owner-scoped memory changes in PR #469; combined exact-head CI passed.
+- Duplicate Browser Use PR #464 was closed without merge because PR #460 already covers the same readiness change.
+
+### Render production state
+- Render control-plane metadata reports `ultron-ai-core`, `ultron-browser-use-core`, and `ultron-rea-gateway` deployed from `main` at `573f31f953997cb0e546ef599f77e66cf8f7775b`.
+- The separate `ultron-core-interface` service is deployed from `feature/ultron-live-core-interface-20261029` at `32e19e563cd791bdd55db7b668b12101d7a13c6f`; it is not the same revision as backend `main`.
+- All four services currently report an empty live `healthCheckPath`, despite the repository Blueprint specifying `/api/health`, `/health`, `/healthz`, and `/` respectively.
+- The live Browser Use build command is only `pip install -r browser-use-bridge/requirements.txt`; the repository Blueprint also installs Playwright Chromium with OS dependencies. This is configuration drift and needs a reviewed Render Blueprint sync.
+- Earlier on 2026-11-05, a single Browser Use smoke against `example.com` and a REA gateway startup smoke passed. Render's retained Browser Use error logs from 2026-11-04 also show missing local Chromium, `FileNotFoundError`, and unstable CDP-session recovery. A filtered Render query for app errors/warnings from 2026-11-05 07:30–10:10Z returned no rows, but this does not validate a new browser task or prove sustained health.
+- The API worker startup log confirms that the worker process started on 2026-11-05 at approximately `07:46:33Z`. This proves process startup only.
+
+### Supabase live state
+- Live migration history contains 15 applied migrations, ending at `20261027185203_private_document_storage`.
+- Read-only checks show that `public.paired_devices` and `public.pending_device_pairings` are absent. The follow-on migration's `battery_percent` and `is_charging` telemetry columns therefore are not live either; the durable paired-device and telemetry migrations exist in source but are not applied to production.
+- `public.agent_tasks`, `public.memory_items`, schedules, and audit tables exist, but the audited counts were: **0 tasks** (0 queued, 0 running, 0 completed, 0 failed, 0 blocked), **0 employee schedules**, **0 memory items**, and **0 task audit events in the preceding 24 hours**. A running worker with an empty queue is not evidence of task completion.
+- Supabase Security Advisor still reports **Leaked Password Protection Disabled**. The available integration can inspect this warning but does not expose the Auth dashboard setting needed to enable it.
+
+### What remains unverified
+- A real authenticated text-model completion and vision inference through the deployed ULTRON API.
+- A real task inserted by an authenticated test user, claimed by the live worker, completed, and read back with its result and audit events.
+- Live two-account conversation, memory, task, and document isolation E2E.
+- Durable device pairing after the pending migrations are applied and the configured signing secret is verified.
+- Auth signup, confirmation, recovery, OAuth/phone flows; voice/STT/TTS in the deployed UI; and account-safe UI/chat/voice E2E.
+- Sustained Browser Use success, actual end-user browser tasks, and live desktop/phone companion protocol acceptance.
+- Render's 2026-11-04 10:22Z–2026-11-05 10:22Z metrics query returned CPU, memory, and bandwidth samples for all four services; HTTP request counts, HTTP latency, and instance-count series were empty. Resource telemetry is therefore partial, not wholly unavailable.
+
+### Fresh read-only follow-up — 2026-11-05 10:22Z
+
+- **PR #469** current exact head `5a4095c00fd7e75c8eaaee44b0dc3e7988338ae9`: workflow [42009392401](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42009392401) passed **1,629 tests, 0 failed, 3 skipped**; syntax 386/386; dependency audit found 0 vulnerabilities; World Intelligence build passed. It remains open and unmerged.
+- **PR #471** exact head `526e770f45d8bebbb431a49b992baf7669654d9f`: workflow [42009417854](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42009417854) passed **1,608 tests, 0 failed, 3 skipped**; syntax 386/386; dependency audit found 0 vulnerabilities; World Intelligence build passed. The change aligns worker-smoke authentication with the live worker for opaque `sb_secret_` keys. It remains open and unmerged.
+- **PR #470** (paired-device bearer parsing and fail-closed missing-storage regression coverage) and **PR #467** (worker-cycle diagnostics) both have successful exact-head `test` and `world-intelligence-build` jobs. Neither is merged.
+- Render's read-only 24-hour metrics query returned CPU, memory, and bandwidth samples for each of the four services. HTTP request-count, HTTP-latency, and instance-count series were empty for all four. These missing series limit HTTP-level observability; they do not mean the services had no traffic or resource use.
+- Supabase Security Advisor reports one warning: **Leaked Password Protection Disabled**. Performance Advisor reports three informational unused indexes (`memory_items_expiry_idx`, `agent_tasks_user_created_idx`, and `documents_user_created_idx`). With the current tiny row counts, do not drop these indexes solely because they are unused.
+- A fresh read-only count query returned: `agent_tasks=0`, `memory_items=0`, `employee_schedules=0`, `audit_events` in the preceding 24 hours = 0, `conversations=1`, and `messages=8`. The worker process-start log is not evidence of a completed live task.
+- Existing RLS remains enabled on `agent_tasks`, `conversations`, `memory_items`, and `messages`, with owner-scoped policies observed. The durable paired-device tables remain absent, and the production migration ledger remains at 15 applied versions.
+
+## 2. Required release actions
+
+1. Add repository branch protection/rulesets for `main`, including required CI status checks and a review policy. The current GitHub integration available to this audit can inspect protection but cannot configure repository settings.
+2. Review the exact diffs and merge only selected, conflict-free PRs after explicit owner authorization. Do not bulk-merge stale or dependent PRs.
+3. Apply the durable paired-device migrations only after the owner authorizes the production schema change; then verify table/RPC presence, grants, RLS, and a complete owner-scoped pairing/claim/revoke flow.
+4. Enable Supabase Auth leaked-password protection in Authentication → Attack Protection, then rerun the Security Advisor.
+5. Review and sync the existing Render Blueprint in the `Ultron core` workspace to reconcile health-check paths and the Browser Use Chromium install command. Confirm the complete service/secret diff before applying.
+6. Run a controlled authenticated production acceptance test with a dedicated test user: model inference, task enqueue/claim/complete/readback, audit persistence, and two-user isolation. Clean up only test-owned records.
+7. Validate browser, voice, vision, and companion flows against real configured providers and authorized test accounts; record each separately as implemented, CI-tested, deployed, or live-verified.
+
+## 3. Scope and safety boundary
+
+- The near-term release target is the **software ULTRON assistant/runtime**. Robotics simulation, digital-twin capabilities, and physical robot integration remain future roadmap work; they are not silently declared permanently out of scope.
+- Preserve the existing repository, account data, NAYA/ULTRON behavior, and separate interface service. Do not replace the project with a demo or rewrite.
+- Maintain free-first operation. Do not enable paid plans, purchase build minutes, or add paid providers without owner approval.
+- Consequential actions (external communication, account changes, purchases, publication, destructive operations, production data/schema changes, and device control) remain behind authenticated, action-bound approval. Autonomy does not mean bypassing consent or safety boundaries.
+- Until the owner explicitly authorizes release, keep code on reviewed feature branches and do not merge to `main`, sync production Blueprint changes, apply production migrations, rotate production credentials, or trigger deployments.
+
+---
+
+## Historical checkpoint — 2026-11-04 (superseded)
+
+The section below is preserved as a historical snapshot only. Its candidate SHAs, PR references, percentages, and assertions are not current release evidence.
+
 **Audit Date:** 2026-11-04
 **Canonical Status Document:** this file (`ULTRON_STATUS.md`)
 **Production Branch:** `main`

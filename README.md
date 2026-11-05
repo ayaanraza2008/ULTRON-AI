@@ -1,16 +1,21 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON web frontend has been removed from this service. No static web application is served at the root URL.
+ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations; the user-facing ULTRON interface is operated as a separate Render service in the `Ultron core` workspace. The backend root URL is not the static web application.
 
 ## Current status
 
-- **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-core.onrender.com. Render reports `ultron-ai-core`, `ultron-rea-gateway` and `ultron-browser-use-core` live at `main` commit `e608485b609e7d8f51d93dd4d033e636efd44975` in the `Ultron core` workspace. Main CI run `41173106830` passed. Production-revision workflow `41172839283` verified health, required configuration and exact revision for the preceding commit `145ac4e648b0ce4bd7805e3420d4ddc92345b665`; a fresh exact-revision health check for `e608485` remains open. This is not a real model-inference or user-data E2E test.
-- **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
-- **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
-- **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
-- **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** the backend service does not serve the web UI. The separate `ultron-core-interface` service in the `Ultron core` Render workspace is live at https://ultron-core-interface.onrender.com on branch `feature/ultron-live-core-interface-20261029`, at commit `68b042641bc1e4a0ab56953df36637402c47df86`. It now includes an installable PWA shell for Android/iOS/desktop with static-only offline caching; authenticated API, chat, memory and world-intelligence calls remain network-only. This interface is separate from backend `main`; account-safe browser-to-API, voice and physical-device E2E are still pending.
+The **canonical, evidence-based live release record** is [ULTRON_STATUS.md](ULTRON_STATUS.md). Consult it before treating a feature, service, integration, or score as production-ready. Older status snapshots and percentages are retained only as history.
+
+- **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`, audited at `573f31f953997cb0e546ef599f77e66cf8f7775b` on 2026-11-05.
+- **Render:** the backend API, Browser Use bridge, and REA gateway report the audited `main` revision live. The separate interface service remains on `feature/ultron-live-core-interface-20261029` at `32e19e563cd791bdd55db7b668b12101d7a13c6f`; it must be verified independently.
+- **Live configuration drift:** all four services report empty health-check paths. The live Browser Use build command omits the Playwright Chromium installation step present in `render.yaml`. Review the Blueprint diff before syncing it.
+- **Supabase:** 15 migrations are applied through `20261027185203_private_document_storage`. Durable paired-device tables and telemetry are not yet present. The current task, schedule, memory, and task-audit counts were zero during the 2026-11-05 read-only audit.
+- **Worker:** the API log confirms worker process startup, but no live queued-task completion has been demonstrated.
+- **Security:** Supabase Security Advisor still reports Leaked Password Protection disabled; GitHub `main` also has no branch protection/rulesets configured.
+- **CI:** consolidated PR #473 (mobile/core authorization + AppFlowy/Immich) passed exact-head CI: 1,640 passed, 0 failed, 3 skipped; syntax 386/386; dependency audit 0 vulnerabilities; World Intelligence build passed. Source PRs #448 and #469 are closed as superseded, not merged. PRs #470 and #471 also have green exact-head CI; #460 and #467 remain separate green review branches. None is merged to `main`. CI success is not production acceptance.
+- **Not yet live-verified:** real authenticated model/vision inference, two-account production RLS flows, durable device pairing, live task completion, and deployed UI voice/chat/companion acceptance.
+
+**Release boundary:** preserve the existing project and data, remain free-first, and do not merge to `main`, apply production migrations, sync Render settings, change production secrets, or deploy until the owner explicitly authorizes those release actions.
 
 ## Backend-only capability integration phase
 
