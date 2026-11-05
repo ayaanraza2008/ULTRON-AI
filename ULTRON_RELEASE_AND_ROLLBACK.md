@@ -114,7 +114,6 @@ git push origin main
 If database migrations require rollback, apply the non-destructive rollback scripts located in `supabase/rollback/`:
 - `supabase/rollback/20261104110000_paired_device_telemetry.rollback.sql`
 - `supabase/rollback/20261101180000_durable_paired_devices.rollback.sql`
-- `supabase/rollback/20261106000000_multidevice_state_persistence.rollback.sql`
 
 > [!WARNING]
 > Database rollbacks are explicitly labeled DESTRUCTIVE if they drop tables. Rollback scripts must NEVER use `DROP TABLE ... CASCADE` to prevent collateral data loss in linked user records.
