@@ -713,16 +713,30 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.append("Set-Cookie", `ultron_sb_refresh=${encodeURIComponent(refresh)}; ${cookieOptions(60 * 60 * 24 * 30)}`);
     return true;
   }
+  function configuredOwnerUserId() {
+    return String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+  }
+  function personalAiModeEnabled() {
+    return ["true", "1"].includes(String(env.ULTRON_PERSONAL_AI_MODE || "").toLowerCase()) ||
+      ["true", "1"].includes(String(env.ULTRON_SINGLE_OWNER || "").toLowerCase()) ||
+      ["true", "1"].includes(String(env.ULTRON_DISABLE_PUBLIC_SIGNUP || "").toLowerCase());
+  }
+  function ownerAuthorizationError(userId) {
+    const ownerUserId = configuredOwnerUserId();
+    if (ownerUserId && userId !== ownerUserId) {
+      return { status: 403, body: { error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } } };
+    }
+    if (personalAiModeEnabled() && !ownerUserId) {
+      return { status: 503, body: { error: { code: "OWNER_NOT_CONFIGURED", message: "Personal AI mode is active but owner user ID is not configured." } } };
+    }
+    return null;
+  }
+
   async function requireSupabaseUser(req, res, next) {
     const user = await getSupabaseUser(req, res);
     if (!user) return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Sign in to your ULTRON account to use saved data." } });
-    if (env.ULTRON_OWNER_USER_ID) {
-      if (user.id !== env.ULTRON_OWNER_USER_ID) {
-        return res.status(403).json({ error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } });
-      }
-    } else if (env.ULTRON_PERSONAL_AI_MODE === "true" || env.ULTRON_SINGLE_OWNER === "true") {
-      return res.status(503).json({ error: { code: "OWNER_NOT_CONFIGURED", message: "Personal AI mode is active but owner user ID is not configured." } });
-    }
+    const ownerError = ownerAuthorizationError(user.id);
+    if (ownerError) return res.status(ownerError.status).json(ownerError.body);
     req.supabaseUser = user;
     next();
   }
@@ -822,13 +836,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
 
     const user = await getSupabaseUser(req, res);
     if (user) {
-      if (env.ULTRON_OWNER_USER_ID) {
-        if (user.id !== env.ULTRON_OWNER_USER_ID) {
-          return res.status(403).json({ error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } });
-        }
-      } else if (env.ULTRON_PERSONAL_AI_MODE === "true" || env.ULTRON_SINGLE_OWNER === "true") {
-        return res.status(503).json({ error: { code: "OWNER_NOT_CONFIGURED", message: "Personal AI mode is active but owner user ID is not configured." } });
-      }
+      const ownerError = ownerAuthorizationError(user.id);
+      if (ownerError) return res.status(ownerError.status).json(ownerError.body);
       req.supabaseUser = user;
       return next();
     }
@@ -926,7 +935,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   const authRateLimiter = createAuthRateLimiter();
 
   app.post("/api/auth/signup", authRateLimiter, async (req, res) => {
-    if (env.ULTRON_DISABLE_PUBLIC_SIGNUP === "true" || env.ULTRON_DISABLE_PUBLIC_SIGNUP === "1" || env.ULTRON_PERSONAL_AI_MODE === "true" || env.ULTRON_OWNER_BOOTSTRAP_TOKEN) {
+    if (personalAiModeEnabled() || configuredOwnerUserId() || env.ULTRON_OWNER_BOOTSTRAP_TOKEN) {
       const bootstrapToken = String(req.headers["x-ultron-bootstrap-token"] || req.body?.bootstrapToken || "").trim();
       const expectedToken = String(env.ULTRON_OWNER_BOOTSTRAP_TOKEN || "").trim();
       if (!expectedToken || !bootstrapToken || !safeTimingCompare(bootstrapToken, expectedToken)) {
