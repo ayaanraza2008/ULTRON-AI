@@ -98,3 +98,29 @@ test("AppFlowy: getDocument rejects invalid documentId and retrieves valid docum
   assert.equal(result.documentId, "doc-99");
   assert.equal(result.content.title, "Architecture Spec");
 });
+
+
+test("AppFlowy: listWorkspaces requires an authenticated owner identity", async () => {
+  let called = false;
+  await assert.rejects(
+    () => appflowyListWorkspaces({
+      env: VALID_ENV,
+      fetchImpl: async () => { called = true; throw new Error("must not call upstream"); }
+    }),
+    { code: "APPFLOWY_OWNER_MISMATCH" }
+  );
+  assert.equal(called, false);
+});
+
+test("AppFlowy: getDocument requires an authenticated owner identity", async () => {
+  let called = false;
+  await assert.rejects(
+    () => appflowyGetDocument({
+      documentId: "doc-99",
+      env: VALID_ENV,
+      fetchImpl: async () => { called = true; throw new Error("must not call upstream"); }
+    }),
+    { code: "APPFLOWY_OWNER_MISMATCH" }
+  );
+  assert.equal(called, false);
+});
