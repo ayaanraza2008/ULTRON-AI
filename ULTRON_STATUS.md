@@ -15,10 +15,12 @@
 - `main` is `573f31f953997cb0e546ef599f77e66cf8f7775b` at this audit.
 - GitHub reports `main` as **unprotected**; the repository rulesets query returned no rulesets. Required checks and enforced review gates are therefore not established.
 - Regression PR [#465](https://github.com/ayaanraza2008/ULTRON-AI/pull/465) adds a test proving the device-pairing API returns `503 DEVICE_STORAGE_NOT_READY` when its required Supabase relation/RPC is missing. Head: `1f9bd5d7ba45d2122b9e62b12f9350089b45838c`. Exact-head workflow [#42002789026](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42002789026) passed both `test` and `world-intelligence-build`. PR #465 is open, ready for review, and **not merged**.
+- PR [#467](https://github.com/ayaanraza2008/ULTRON-AI/pull/467) adds worker readiness diagnostics (`lastErrorAt`, consecutive cycle failures, and tasks needing review); exact-head workflow [#42004496892](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004496892) passed. It remains open and unmerged.
+- PR [#468](https://github.com/ayaanraza2008/ULTRON-AI/pull/468) fixes a second Bearer-header extraction defect in `integrations/device-pairing-router.js` and adds an end-to-end regression test. Exact-head workflow [#42006981180](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42006981180) passed both jobs. It remains open and unmerged.
 - PR [#460](https://github.com/ayaanraza2008/ULTRON-AI/pull/460) contains Browser Use readiness gating and redacted model-gateway diagnostics; its recorded exact-head CI passed. It remains unmerged.
 - PR [#458](https://github.com/ayaanraza2008/ULTRON-AI/pull/458) contains the paired-device Bearer-token parsing correction and regression coverage; its recorded exact-head CI passed. It remains unmerged.
 - PR [#454](https://github.com/ayaanraza2008/ULTRON-AI/pull/454) contains action-bound, single-use approval proofs and truthful memory/model capability reporting; its recorded exact-head CI passed. It remains unmerged.
-- PR [#447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) is a larger mobile/pairing change. Its head is 24 commits ahead and 7 commits behind the audited `main`, with a diverged merge base. It requires an owner/team-controlled refresh and exact-head retest before merge.
+- PR [#447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) is a larger mobile/pairing change. Its current head `20f3cadd536729bd6f9e3200782f4bd24ca8467c` is 25 commits ahead and 0 behind the audited `main` (merge base equals `main`); it is mergeable and exact-head workflow [#42004618304](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004618304) passed. It remains open and unmerged.
 - Duplicate Browser Use PR #464 was closed without merge because PR #460 already covers the same readiness change.
 
 ### Render production state
@@ -26,7 +28,7 @@
 - The separate `ultron-core-interface` service is deployed from `feature/ultron-live-core-interface-20261029` at `32e19e563cd791bdd55db7b668b12101d7a13c6f`; it is not the same revision as backend `main`.
 - All four services currently report an empty live `healthCheckPath`, despite the repository Blueprint specifying `/api/health`, `/health`, `/healthz`, and `/` respectively.
 - The live Browser Use build command is only `pip install -r browser-use-bridge/requirements.txt`; the repository Blueprint also installs Playwright Chromium with OS dependencies. This is configuration drift and needs a reviewed Render Blueprint sync.
-- Earlier on 2026-11-05, a single Browser Use smoke against `example.com` and a REA gateway startup smoke passed. These are point-in-time checks, not sustained availability or user-workflow acceptance.
+- Earlier on 2026-11-05, a single Browser Use smoke against `example.com` and a REA gateway startup smoke passed. Render's retained Browser Use error logs from 2026-11-04 also show missing local Chromium, `FileNotFoundError`, and unstable CDP-session recovery. A filtered Render query for app errors/warnings from 2026-11-05 07:30–10:10Z returned no rows, but this does not validate a new browser task or prove sustained health.
 - The API worker startup log confirms that the worker process started on 2026-11-05 at approximately `07:46:33Z`. This proves process startup only.
 
 ### Supabase live state
