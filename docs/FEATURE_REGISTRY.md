@@ -1,5 +1,20 @@
 # ULTRON AI Feature Registry
 
+## Evidence refresh — 2026-11-05
+
+This dated snapshot supersedes older verification statements below when they conflict. It does not silently promote a capability to fully verified.
+
+- Current `main`: `573f31f953997cb0e546ef599f77e66cf8f7775b`. Exact-main GitHub Actions run [41989534064](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41989534064) passed: 1,607 tests passed, 0 failed, 3 skipped; syntax verification 386/386; World Intelligence build passed; repository security quality gate passed with 0 confirmed dependency vulnerabilities.
+- Browser Use: Render startup smoke [evidence in service logs](https://dashboard.render.com/web/srv-dbhjre0ae00c73dv6ke0) at 2026-11-05 07:50:26 UTC returned HTTP 200 through the ULTRON model gateway using `openrouter/free`, with a non-empty result. This is a single live smoke, not sustained uptime or a general chat/vision quality evaluation. The service later shut down cleanly at 08:05:02 UTC; the service is on Render free plan, so idle suspension is expected.
+- Supabase: read-only inspection found 15 applied migration versions through `20261027185203_private_document_storage`; RLS is enabled on the inspected public tables. The source tree contains forward migrations for durable device pairing and paired-device telemetry, but the live database does not yet expose `paired_devices` or `pending_device_pairings`. Do not apply migrations without explicit release authorization.
+- Supabase memory/task data: `memory_items` and `agent_tasks` each contained zero rows during the read-only inspection. This is not evidence of broken code; live capture/retrieval and task lifecycle acceptance still require dedicated test identities and a real task.
+- Supabase Security Advisor: `auth_leaked_password_protection` remains WARN / disabled. Only the project owner can enable this dashboard setting.
+- PRs #453, #454, #456, #458, #460, #461 and #462 have current-main bases and successful exact-head CI as of this snapshot. They remain open and unmerged. PR #456's first test attempt hit one real-Chromium launch failure; retry passed. PR #447 and older feature PRs still require separate stale-base/conflict review.
+- GitHub reports the `main` branch as unprotected. The GitHub branch-protection endpoint is not accessible to the connected integration, so no detailed rule configuration was verified. Do not change settings without owner authorization.
+- Physical Windows/Android pairing, camera/gesture acceptance, voice wake behavior, cross-account live isolation, real chat/vision acceptance, and production task completion remain unverified.
+
+Verification labels: source present, automated CI passed, one-off live smoke passed, and deployment observed are separate evidence levels. Never infer one from another.
+
 Statuses: `NOT_STARTED`, `IN_PROGRESS`, `BLOCKED`, `IMPLEMENTED`, `TESTED`, `VERIFIED_IN_DEPLOYMENT`.
 
 | ID | Capability | Dependencies | Status | Verification / blocker | Next action |
