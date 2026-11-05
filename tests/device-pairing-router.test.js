@@ -346,3 +346,31 @@ test("paired-device runtime self endpoints require a valid active device token",
     assert.equal(invalid.status, 401);
   });
 });
+
+test("paired-device bearer Authorization header is parsed with standard whitespace", async () => {
+  const db = makeDatabase();
+  await withRouter(db.fetchImpl, async base => {
+    const createdResponse = await fetch(base + "/devices/pairings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
+      body: JSON.stringify({ deviceName: "Bearer Auth Device", platform: "android" })
+    });
+    assert.equal(createdResponse.status, 201);
+    const created = await createdResponse.json();
+
+    const claimResponse = await fetch(base + "/devices/pairings/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: created.pairingCode })
+    });
+    assert.equal(claimResponse.status, 200);
+    const claim = await claimResponse.json();
+
+    const statusResponse = await fetch(base + "/devices/me", {
+      headers: { Authorization: "Bearer " + claim.deviceToken }
+    });
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.deviceId, claim.deviceId);
+  });
+});
