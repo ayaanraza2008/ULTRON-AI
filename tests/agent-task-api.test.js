@@ -150,3 +150,24 @@ test("employee task endpoints require a signed-in Supabase user", async () => {
     assert.equal(response.status, 401);
   });
 });
+
+test("research-to-report employee tasks are explicitly typed as the autonomous report path", async () => {
+  let storedInput;
+  const supabaseRest = async (_req, table, method, _query, body) => {
+    if (table === "agent_tasks" && method === "POST") {
+      storedInput = body.input;
+      return [{ id: taskId, title: body.title, status: body.status, created_at: "2026-11-05T00:00:00.000Z" }];
+    }
+    return [];
+  };
+  await withApi({ supabaseRest, privilegedSupabaseRest: async () => [] }, async base => {
+    const response = await fetch(base + "/api/agent/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: "Research agent security and prepare a report", role: "chief-of-staff", mode: "plan" })
+    });
+    assert.equal(response.status, 202);
+    assert.equal(storedInput.taskType, "autonomous");
+    assert.equal(storedInput.mode, "report");
+  });
+});

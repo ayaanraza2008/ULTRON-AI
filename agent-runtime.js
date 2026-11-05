@@ -1726,8 +1726,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
       !env.SUPABASE_SERVICE_ROLE_KEY || !hasEmployeeModelProvider(env)) {
       return res.status(503).json({ error: { code: "EMPLOYEE_WORKER_NOT_CONFIGURED", message: "The employee worker, durable task storage, and a server-side model provider must be configured before tasks can be queued." } });
     }
-    const autonomousWorkflow = /\\b(research|investigate|look into|find sources)\\b/i.test(goal) &&
-      /\\b(report|summary|recommendations|brief)\\b/i.test(goal);
+    const autonomousWorkflow = /\b(research|investigate|look into|find sources)\b/i.test(goal) &&
+      /\b(report|summary|recommendations|brief)\b/i.test(goal);
     const input = {
       taskType: autonomousWorkflow ? "autonomous" : "employee",
       executionMode: "employee_worker",
