@@ -429,7 +429,7 @@ export class ToolRegistry {
       inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" }, limit: { type: "number" } } },
       checkHealth: () => {
         try {
-          return this.adapters.agentMemoryStore?.readiness?.().configured === true
+          return this.adapters.agentMemoryStore?.readiness?.().automaticRecall === true
             ? TOOL_STATUS.OPERATIONAL
             : TOOL_STATUS.REQUIRES_CONFIG;
         } catch {
@@ -467,7 +467,7 @@ export class ToolRegistry {
       inputSchema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tags: { type: "array" } } },
       checkHealth: () => {
         try {
-          return this.adapters.agentMemoryStore?.readiness?.().configured === true
+          return this.adapters.agentMemoryStore?.readiness?.().automaticCapture === true
             ? TOOL_STATUS.OPERATIONAL
             : TOOL_STATUS.REQUIRES_CONFIG;
         } catch {
