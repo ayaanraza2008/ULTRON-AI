@@ -1,9 +1,22 @@
 # Model-provider fallback
 
-ULTRON can route normal chat and agent requests through an ordered registry of OpenAI-compatible providers. Set `ULTRON_MODEL_PROVIDERS_JSON` in the server environment to a JSON array. Each entry needs a unique `name`, an HTTPS `baseUrl`, an `apiKeyEnv` naming a separate server-side environment variable, a `model` ID, and optionally numeric `priority`. Keep credentials out of this registry and repository.
+ULTRON keeps OpenRouter as the primary provider. Configured OpenRouter free-model candidates are attempted before optional direct Groq and Google Gemini providers. Additional OpenAI-compatible providers can be registered through `ULTRON_MODEL_PROVIDERS_JSON`.
 
-The OpenRouter provider is attempted first when configured. Other providers are tried by ascending priority. Entries with invalid URLs or missing credentials are ignored. Alternative providers receive image attachments only when explicitly marked `supportsVision: true` and their model supports images.
+## Optional direct providers
 
-Each model-routing call has a shared total time budget across its provider fallback chain. `ULTRON_MODEL_TOTAL_TIMEOUT_MS` defaults to `90000` and is clamped to 15,000–120,000 ms; each individual provider attempt retains its 45-second timeout. When the total budget expires, ULTRON stops fallback attempts instead of restarting the budget in plain-chat mode. This bounds provider routing, not the full duration of every tool or multi-step agent request.
+| Provider | Variables | Default endpoint | Activation |
+|---|---|---|---|
+| Groq | `GROQ_API_KEY`, `GROQ_BASE_URL`, `GROQ_DEFAULT_MODEL`, `GROQ_PAID_FALLBACK_ENABLED` | `https://api.groq.com/openai/v1` | Requires the explicit flag `GROQ_PAID_FALLBACK_ENABLED=true` |
+| Google Gemini | `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_DEFAULT_MODEL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Enabled when its server-side key is present |
 
-A configuration entry does not prove provider access or availability. Model IDs, account entitlements, quotas, endpoint compatibility, and live responses still require verification. Free model access and rate limits are controlled by the provider. For a live check, make a safe authenticated chat request after configuring the keys; use sanitized Render logs for diagnosis. Streaming failover can only occur before response data has been sent to the client.
+Groq fallback is deliberately disabled by default because the selected model may incur charges. A Groq key and model name alone are insufficient; explicitly enable it only after checking model and account pricing. The Render Blueprint defaults the flag to `false`. OpenRouter's free candidates are attempted before Groq.
+
+Gemini defaults to `gemini-3.8-flash` when configured. Availability and quota depend on the Google account and region. Provider URLs are validated as HTTPS before use.
+
+## Security and privacy
+
+Keep all provider keys in the private backend environment; never send them in chat payloads or expose them to browser code. Fallback may send the same prompt/context to the next provider. Only enable providers approved to receive that data.
+
+## Verification
+
+Automated tests use mocked HTTP responses and verify server-side Authorization headers, provider order, model selection, and that Groq is skipped unless explicitly enabled. They do not call real provider APIs; live smoke tests remain separate.

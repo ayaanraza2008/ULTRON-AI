@@ -59,6 +59,7 @@ test("durable capture uses supported remember API and can be disabled", async ()
   assert.equal(captured.state, "captured");
   assert.equal(call.url, "https://memory.example.com/agentmemory/remember");
   assert.equal(JSON.parse(call.options.body).project, "ultron-ai-user-user-123");
+  assert.equal(JSON.parse(call.options.body).type, "workflow");
   assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
 
@@ -208,4 +209,44 @@ test("AgentMemory refuses private, loopback HTTPS, and metadata endpoints", asyn
     assert.deepEqual(result, { state: "not_configured", memories: [] }, url);
     assert.equal(called, false, url);
   }
+});
+
+
+test("AgentMemory recall honors a bounded requested result limit", async () => {
+  let requestBody;
+  const result = await recallAgentMemory("Continue the previous repository implementation", {
+    env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "test-secret" },
+    userId: "user-123",
+    limit: 2,
+    fetchImpl: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ results: [{ text: "one" }, { text: "two" }, { text: "three" }] }), { status: 200 });
+    }
+  });
+  assert.equal(requestBody.limit, 2);
+  assert.equal(result.memories.length, 2);
+});
+
+test("AgentMemory durable capture includes only bounded safe tags", async () => {
+  let requestBody;
+  await captureAgentMemory("We decided: the project uses a separate worker for queued jobs.", {
+    env: { AGENTMEMORY_URL: "https://memory.example.com", AGENTMEMORY_SECRET: "test-secret" },
+    userId: "user-123",
+    tags: ["worker", "safe_tag", "invalid tag", "x".repeat(100)],
+    fetchImpl: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  assert.deepEqual(requestBody.concepts, ["ultron-agent", "durable-context", "worker", "safe_tag"]);
+});
+
+
+test("AgentMemory capture reports not_configured instead of claiming a durable write", async () => {
+  const result = await captureAgentMemory("We decided: this project uses an isolated worker.", {
+    env: {},
+    userId: "user-123",
+    fetchImpl: async () => { throw new Error("unconfigured AgentMemory must not be contacted"); }
+  });
+  assert.deepEqual(result, { state: "not_configured" });
 });

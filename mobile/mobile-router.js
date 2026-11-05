@@ -26,24 +26,41 @@ export function createMobileRouter({
   const router = express.Router();
   router.use(express.json({ limit: "10mb" }));
 
-  // Loopback / Auth Guard Middleware
+  // Loopback is sufficient for read-only discovery, but never substitutes for an
+  // authenticated owner on device control or private screen data. A caller-supplied
+  // x-ultron-internal-call header is not an authentication credential.
+  const getUserId = req => {
+    const value = req.supabaseUser?.id || req.session?.user?.id;
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  };
+
   const enforceAccess = (req, res, next) => {
     const isLoopback = req.ip === "127.0.0.1" || req.ip === "::1" || req.ip === "::ffff:127.0.0.1";
-    const hasAuthUser = Boolean(req.supabaseUser || req.session?.user || req.headers["x-ultron-internal-call"]);
+    if (isLoopback || getUserId(req)) return next();
+    if (typeof requireSupabaseUser === "function") return requireSupabaseUser(req, res, next);
+    if (typeof requireSession === "function") return requireSession(req, res, next);
+    return res.status(401).json({
+      error: { code: "UNAUTHORIZED", message: "Mobile control API requires an authenticated session." }
+    });
+  };
 
-    // If neither loopback nor authenticated user, require authentication
-    if (!isLoopback && !hasAuthUser) {
-      if (typeof requireSupabaseUser === "function") {
-        return requireSupabaseUser(req, res, next);
+  const requireOwner = (req, res, next) => {
+    const acceptAuthenticatedOwner = err => {
+      if (err) return next(err);
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          error: { code: "AUTHENTICATED_USER_REQUIRED", message: "Sign in before controlling a paired device or viewing its screen." }
+        });
       }
-      if (typeof requireSession === "function") {
-        return requireSession(req, res, next);
-      }
-      return res.status(401).json({
-        error: { code: "UNAUTHORIZED", message: "Mobile control API requires authenticated session or local loopback access." }
-      });
-    }
-    next();
+      req.ultronMobileUserId = userId;
+      return next();
+    };
+
+    if (getUserId(req)) return acceptAuthenticatedOwner();
+    if (typeof requireSupabaseUser === "function") return requireSupabaseUser(req, res, acceptAuthenticatedOwner);
+    if (typeof requireSession === "function") return requireSession(req, res, acceptAuthenticatedOwner);
+    return acceptAuthenticatedOwner();
   };
 
   // Helper for registering endpoints matching both `/path` and `/mobile/path`
@@ -58,10 +75,10 @@ export function createMobileRouter({
    * 1. GET /api/mobile/status
    * Returns Mobile MCP daemon status, ADB path, transport type, connected devices count.
    */
-  registerRoute("get", "/status", enforceAccess, async (_req, res) => {
+  registerRoute("get", "/status", enforceAccess, requireOwner, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try {
-      const status = await controlEngine.getStatus();
+      const status = await controlEngine.getStatus(req.ultronMobileUserId);
       res.json({
         success: true,
         status: status.status || (status.initialized ? "ONLINE" : "STANDBY"),
@@ -82,7 +99,7 @@ export function createMobileRouter({
    * 2. GET /api/mobile/devices
    * Lists all connected Android devices with ID, model, connection type, capabilities.
    */
-  registerRoute("get", "/devices", enforceAccess, async (req, res) => {
+  registerRoute("get", "/devices", enforceAccess, requireOwner, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try {
       const forceRefresh = req.query.refresh === "true" || req.query.refresh === "1";
@@ -92,7 +109,10 @@ export function createMobileRouter({
         count: discovery.count,
         connected: discovery.connected,
         activeDeviceId: discovery.activeDeviceId,
-        devices: discovery.devices,
+        devices: discovery.devices.map(device => ({
+          ...device,
+          authorized: controlEngine.permissionEngine.deviceAuthorizations.get(device.id)?.authorizedBy === req.ultronMobileUserId
+        })),
         platformDiagnostics: discovery.platformDiagnostics
       });
     } catch (err) {
@@ -102,74 +122,56 @@ export function createMobileRouter({
   });
 
   /**
-   * 3. POST /api/mobile/action
-   * Dispatches a single action (tap, swipe, keypress, type, launch, terminate).
-   * Enforces 4-tier permissions. Returns HTTP 403 / 401 if unauthorized.
+   * 3. POST /api/mobile/authorize
+   * Explicitly pairs an online device with the signed-in owner. Routine permissions
+   * are capped at Level 2; sensitive and critical actions still require fresh approval.
    */
-  registerRoute("post", "/action", enforceAccess, async (req, res) => {
+  registerRoute("post", "/authorize", enforceAccess, requireOwner, async (req, res) => {
     try {
-      const { deviceId, action, params = {}, confirmationToken = null } = req.body;
+      const { deviceId, maxLevel = 2 } = req.body || {};
+      if (typeof deviceId !== "string" || !deviceId.trim()) {
+        return res.status(400).json({ error: { code: "DEVICE_ID_REQUIRED", message: "A discovered device ID is required." } });
+      }
+      const result = controlEngine.authorizeDevice(deviceId.trim(), req.ultronMobileUserId, Number(maxLevel));
+      return res.json({ success: true, ...result });
+    } catch (err) {
+      return res.status(400).json({ error: { code: "DEVICE_AUTHORIZATION_FAILED", message: err.message } });
+    }
+  });
+
+  /**
+   * 4. POST /api/mobile/action
+   * Dispatches a single action through the owner-bound permission engine.
+   */
+  registerRoute("post", "/action", enforceAccess, requireOwner, async (req, res) => {
+    try {
+      const { deviceId, action, params = {}, confirmationToken = null } = req.body || {};
       if (!action || typeof action !== "string") {
         return res.status(400).json({ error: { code: "INVALID_ACTION", message: "Action name is required." } });
       }
 
-      // Check permissions
-      const permCheck = controlEngine.permissionEngine.checkAction(action, {
-        package: params.package || params.packageName,
-        url: params.url,
-        autonomyLevel: req.body.autonomyLevel ?? 2
-      });
-
-      if (!permCheck.allowed && !permCheck.requiresConfirmation) {
-        return res.status(403).json({
+      const outcome = await controlEngine.executeAction(
+        action,
+        { ...params, device: deviceId || params.device || params.deviceId },
+        { userId: req.ultronMobileUserId, confirmationToken }
+      );
+      if (!outcome.success) {
+        const status = outcome.requiresConfirmation || outcome.code === "DEVICE_UNAUTHORIZED" ? 403 : 400;
+        return res.status(status).json({
           error: {
-            code: "PERMISSION_DENIED",
-            message: permCheck.reason,
-            level: permCheck.level
+            code: outcome.code || "ACTION_FAILED",
+            message: outcome.reason || outcome.error || "The mobile action did not complete.",
+            confirmationToken: outcome.confirmationToken || null,
+            expiresAt: outcome.expiresAt || null,
+            requiresConfirmation: Boolean(outcome.requiresConfirmation)
           }
         });
       }
 
-      if (permCheck.requiresConfirmation) {
-        if (!confirmationToken) {
-          const reqToken = controlEngine.permissionEngine.requestConfirmation(
-            action,
-            params,
-            `REST Action: ${action}`
-          );
-          return res.status(403).json({
-            error: {
-              code: "CONFIRMATION_REQUIRED",
-              message: `Action '${action}' requires human confirmation. Single-use token generated.`,
-              confirmationToken: reqToken.token,
-              expiresAt: reqToken.expiresAt,
-              level: permCheck.level
-            }
-          });
-        }
-
-        // Verify token
-        const validation = controlEngine.permissionEngine.consumeConfirmation(confirmationToken, action);
-        if (!validation.valid) {
-          return res.status(403).json({
-            error: {
-              code: "INVALID_CONFIRMATION_TOKEN",
-              message: validation.reason
-            }
-          });
-        }
-      }
-
-      const outcome = await controlEngine.executeAction(deviceId, action, params);
-      res.json({
-        success: outcome.success,
-        action,
-        deviceId: deviceId || "active",
-        result: outcome
-      });
+      return res.json({ success: true, action, deviceId: deviceId || "active", result: outcome });
     } catch (err) {
       logger.error?.("[MobileRouter] Action error:", err.message);
-      res.status(500).json({ error: { code: "ACTION_EXECUTION_ERROR", message: err.message } });
+      return res.status(500).json({ error: { code: "ACTION_EXECUTION_ERROR", message: err.message } });
     }
   });
 
@@ -177,10 +179,10 @@ export function createMobileRouter({
    * 4. POST /api/mobile/screenshot
    * Takes a screenshot of the specified (or default) connected device.
    */
-  registerRoute("post", "/screenshot", enforceAccess, async (req, res) => {
+  registerRoute("post", "/screenshot", enforceAccess, requireOwner, async (req, res) => {
     try {
       const { deviceId, format = "base64" } = req.body || {};
-      const screenshot = await controlEngine.captureScreen(deviceId);
+      const screenshot = await controlEngine.captureScreen(deviceId, {}, { userId: req.ultronMobileUserId });
       const imgData = screenshot.data || screenshot.image?.data;
 
       if (!screenshot.success || !imgData) {
@@ -215,10 +217,10 @@ export function createMobileRouter({
    * 5. POST /api/mobile/elements
    * Dumps UI hierarchy / accessibility tree of the foreground screen.
    */
-  registerRoute("post", "/elements", enforceAccess, async (req, res) => {
+  registerRoute("post", "/elements", enforceAccess, requireOwner, async (req, res) => {
     try {
       const { deviceId } = req.body || {};
-      const hierarchy = await controlEngine.getHierarchy(deviceId);
+      const hierarchy = await controlEngine.getHierarchy(deviceId, { userId: req.ultronMobileUserId });
 
       res.json({
         success: hierarchy.success,
@@ -238,7 +240,7 @@ export function createMobileRouter({
    * 6. POST /api/mobile/workflow
    * Accepts a multi-step mobile workflow or natural language task.
    */
-  registerRoute("post", "/workflow", enforceAccess, async (req, res) => {
+  registerRoute("post", "/workflow", enforceAccess, requireOwner, async (req, res) => {
     try {
       const { goal, plan, deviceId, confirmationToken, autonomyLevel = 2 } = req.body || {};
       if (!goal && !plan) {
@@ -252,7 +254,8 @@ export function createMobileRouter({
         const result = await taskAgent.executeGoal(goal, {
           deviceId,
           confirmationToken,
-          autonomyLevel
+          autonomyLevel,
+          userId: req.ultronMobileUserId
         });
         return res.json(result);
       }
@@ -260,7 +263,8 @@ export function createMobileRouter({
       // Explicit plan execution
       const execution = await controlEngine.executeWorkflow(plan, {
         deviceId,
-        confirmationToken
+        confirmationToken,
+        userId: req.ultronMobileUserId
       });
       res.json({
         success: execution.success,
@@ -278,26 +282,26 @@ export function createMobileRouter({
    * 7. POST /api/mobile/confirm
    * Accepts single-use confirmation token for Level 3/4 sensitive actions.
    */
-  registerRoute("post", "/confirm", enforceAccess, async (req, res) => {
+  registerRoute("post", "/confirm", enforceAccess, requireOwner, async (req, res) => {
     try {
-      const { token, action } = req.body || {};
+      const { token } = req.body || {};
       if (!token) {
         return res.status(400).json({ error: { code: "TOKEN_REQUIRED", message: "Confirmation token is required." } });
       }
 
-      const result = controlEngine.permissionEngine.consumeConfirmation(token, action);
-      if (!result.valid) {
+      const result = await controlEngine.confirmAction(token, req.ultronMobileUserId);
+      if (!result.success) {
         return res.status(403).json({
           success: false,
-          error: { code: "CONFIRMATION_FAILED", reason: result.reason }
+          error: { code: result.code || "CONFIRMATION_FAILED", reason: result.reason || result.error || "Confirmation failed." }
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
         confirmed: true,
-        action: result.request.action,
-        requestedAt: result.request.requestedAt
+        action: result.action,
+        result
       });
     } catch (err) {
       logger.error?.("[MobileRouter] Confirmation error:", err.message);

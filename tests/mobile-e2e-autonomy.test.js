@@ -192,7 +192,8 @@ test("MobileE2E: Natural language voice/chat 'Ultron, open YouTube on my phone.'
 
 test("MobileE2E: Enforces human confirmation gate (APPROVAL_REQUIRED with single-use token)", async () => {
   const { orchestrator, controlEngine } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "operator-ayaan", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   const prompt = "Ultron, open YouTube on my phone.";
   const res = await orchestrator.processUserRequest(prompt, { userId: "operator-ayaan" });
@@ -208,7 +209,8 @@ test("MobileE2E: Enforces human confirmation gate (APPROVAL_REQUIRED with single
 
 test("MobileE2E: Approval token consumption launches YouTube, verifies foreground, and captures screenshot", async () => {
   const { orchestrator, controlEngine, mockAdb, voice } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "operator-ayaan", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   const prompt = "Ultron, open YouTube on my phone.";
 
@@ -245,7 +247,8 @@ test("MobileE2E: Approval token consumption launches YouTube, verifies foregroun
 
 test("MobileE2E: Multilingual voice response synthesis (English, Hinglish, Hindi)", async () => {
   const { orchestrator, controlEngine } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "operator-ayaan", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   // English
   // English: require a real, actor-bound approval rather than caller flags.
@@ -272,7 +275,8 @@ test("MobileE2E: Multilingual voice response synthesis (English, Hinglish, Hindi
 
 test("MobileE2E: Workflow cancellation immediately halts execution and preserves state", async () => {
   const { controlEngine } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "operator-ayaan", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   let stepStartedCount = 0;
   controlEngine.on("workflow_step_started", () => {
@@ -287,7 +291,7 @@ test("MobileE2E: Workflow cancellation immediately halts execution and preserves
     ]
   };
 
-  const execPromise = controlEngine.executeWorkflow(wf);
+  const execPromise = controlEngine.executeWorkflow(wf, { userId: "operator-ayaan" });
   const activeWfId = Array.from(controlEngine.activeWorkflows.keys())[0];
   if (activeWfId) {
     controlEngine.cancelWorkflow(activeWfId);
@@ -300,7 +304,8 @@ test("MobileE2E: Workflow cancellation immediately halts execution and preserves
 
 test("MobileE2E: Global Emergency Stop halts actions, invalidates approvals, and blocks subsequent requests", async () => {
   const { orchestrator, controlEngine } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "operator-ayaan", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   // 1. Create a pending approval
   const gateRes = await orchestrator.processUserRequest("open youtube on my phone", { userId: "operator-ayaan" });
@@ -329,7 +334,8 @@ test("MobileE2E: Global Emergency Stop halts actions, invalidates approvals, and
 
 test("MobileE2E: Cross-user authorization isolation prevents approval token theft", async () => {
   const { orchestrator, controlEngine } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "user-alpha", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   // User Alpha requests approval
   const reqRes = await orchestrator.processUserRequest("open youtube on my phone", { userId: "user-alpha" });
@@ -351,7 +357,8 @@ test("MobileE2E: Cross-user authorization isolation prevents approval token thef
 
 test("MobileE2E: Anti-replay protection prevents duplicate consumption of approval tokens", async () => {
   const { orchestrator, controlEngine } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "user-alpha", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   const reqRes = await orchestrator.processUserRequest("open youtube on my phone", { userId: "user-alpha" });
   const approvalId = reqRes.approvalRequest.id;
@@ -378,7 +385,8 @@ test("MobileE2E: Anti-replay protection prevents duplicate consumption of approv
 
 test("MobileE2E: Device disconnect and reconnect recovery handling", async () => {
   const { controlEngine, mockAdb } = createTestHarness();
-  await controlEngine.initialize();
+await controlEngine.initialize();
+  controlEngine.authorizeDevice("mock-oppo-cph2127", "operator-ayaan", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   // Simulate device going offline
   mockAdb.isOffline = true;
@@ -386,7 +394,7 @@ test("MobileE2E: Device disconnect and reconnect recovery handling", async () =>
   assert.equal(controlEngine.registry.getDevices().length, 0);
 
   // Attempting action while disconnected must fail gracefully
-  const failRes = await controlEngine.executeAction("mobile_press_button", { button: "HOME" });
+  const failRes = await controlEngine.executeAction("mobile_press_button", { device: "mock-oppo-cph2127", button: "HOME" }, { userId: "operator-ayaan" });
   assert.equal(failRes.success, false);
   assert.ok(failRes.error.includes("No mobile devices connected"));
 
@@ -397,7 +405,7 @@ test("MobileE2E: Device disconnect and reconnect recovery handling", async () =>
   assert.equal(reconnected.connected, true);
 
   // Operations resume normally
-  const successRes = await controlEngine.executeAction("mobile_press_button", { button: "HOME" });
+  const successRes = await controlEngine.executeAction("mobile_press_button", { device: "mock-oppo-cph2127", button: "HOME" }, { userId: "operator-ayaan" });
   assert.equal(successRes.success, true);
 });
 

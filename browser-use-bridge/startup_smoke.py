@@ -50,6 +50,37 @@ def configure_browser_logging() -> None:
     logging.getLogger("browser_use").setLevel(logging.WARNING)
     logging.getLogger("bubus").setLevel(logging.WARNING)
 
+
+def browser_readiness_status(
+    configured: bool,
+    runtime_status: Mapping[str, Any],
+    smoke_status: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Require an opted-in startup smoke to pass before reporting the bridge ready."""
+    runtime_ready = runtime_status.get("ready") is True
+    smoke_enabled = smoke_status.get("enabled") is True
+    smoke_state = str(smoke_status.get("status") or "not_run")[:40]
+    smoke_ready = not smoke_enabled or smoke_state == "passed"
+    ready = configured is True and runtime_ready and smoke_ready
+
+    if not configured:
+        reason = "MODEL_GATEWAY_NOT_CONFIGURED"
+    elif not runtime_ready:
+        reason = str(runtime_status.get("reason") or "BROWSER_RUNTIME_NOT_READY")[:80]
+    elif not smoke_ready:
+        reason = "STARTUP_SMOKE_" + smoke_state.upper()
+    else:
+        reason = None
+
+    return {
+        "ready": ready,
+        "browserRuntimeReady": runtime_ready,
+        "startupSmokeEnabled": smoke_enabled,
+        "startupSmokeStatus": smoke_state,
+        "startupSmokeReason": str(smoke_status.get("reason") or "")[:80] or None,
+        "reason": reason,
+    }
+
 def browser_runtime_status() -> dict[str, Any]:
     """Ensure Chromium is present, then launch it once to verify the runtime."""
     try:

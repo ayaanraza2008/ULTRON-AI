@@ -74,6 +74,8 @@ jobs:
           ffprobe -version
       - name: Provision isolated disposable PostgreSQL test databases
         run: node scripts/provision-test-databases.mjs
+      - name: Preload the real Node sandbox image used by the Docker isolation battery
+        run: docker pull node:20-alpine
       - run: npm test
       - name: Run ULTRON repository security quality gate
         run: npm run security:report

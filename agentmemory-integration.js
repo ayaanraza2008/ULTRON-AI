@@ -121,14 +121,16 @@ export async function recallAgentMemory(task, options = {}) {
   // expose durable context across accounts if the caller forgot to pass userId.
   if (!bounded(options.userId, 500)) return { state: "skipped", memories: [] };
   const project = scopedProject(options.env, options.userId);
-  const data = await requestMemory("/agentmemory/smart-search", { query, project, limit: 5 }, options);
+  const requestedLimit = Number(options.limit);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(10, Math.trunc(requestedLimit))) : 5;
+  const data = await requestMemory("/agentmemory/smart-search", { query, project, limit }, options);
   // Do not label a disabled or unsafe endpoint as a successful empty recall.
   if (data?.state === "not_configured") return { state: "not_configured", memories: [] };
   const candidates = Array.isArray(data.results) ? data.results
     : Array.isArray(data.memories) ? data.memories
     : Array.isArray(data.items) ? data.items
     : Array.isArray(data.matches) ? data.matches : [];
-  const memories = candidates.map(safeMemoryText).filter(Boolean).slice(0, 5);
+  const memories = candidates.map(safeMemoryText).filter(Boolean).slice(0, limit);
   const direct = safeMemoryText(data.context || data.answer || data.text);
   if (!memories.length && direct) memories.push(direct);
   return { state: "completed", memories };
@@ -142,12 +144,22 @@ export async function captureAgentMemory(task, options = {}) {
   const env = options.env || process.env;
   if (env.ULTRON_AGENTMEMORY_CAPTURE === "false") return { state: "disabled" };
   const project = scopedProject(env, options.userId);
-  await requestMemory("/agentmemory/remember", {
+  const result = await requestMemory("/agentmemory/remember", {
     content: text,
-    type: "decision",
-    concepts: ["ultron-agent", "durable-context"],
+    type: "workflow",
+    concepts: [
+      "ultron-agent",
+      "durable-context",
+      ...(Array.isArray(options.tags) ? options.tags : [])
+        .filter(tag => typeof tag === "string" && /^[a-zA-Z0-9._-]{1,48}$/.test(tag))
+        .slice(0, 8)
+    ],
     project,
     agentId: "ultron-ai"
   }, options);
+  if (result?.state === "not_configured") return { state: "not_configured" };
+  if (result?.success === false || result?.ok === false || ["failed", "error"].includes(result?.state)) {
+    return { state: "failed" };
+  }
   return { state: "captured" };
 }

@@ -53,6 +53,7 @@ class MockAdbBridge {
 class MockMcpClient {
   constructor() {
     this.status = "CONNECTED";
+    this.calls = [];
     this.discoveredTools = new Map([
       ["mobile_list_available_devices", {}],
       ["mobile_click_on_screen_at_coordinates", {}],
@@ -73,6 +74,7 @@ class MockMcpClient {
   }
 
   async callTool(name, args) {
+    this.calls.push({ name, args });
     return { success: true, text: "Mock MCP Tool Executed", name, args };
   }
 }
@@ -97,6 +99,7 @@ test("MobileControlEngine: initializes lifecycle and discovers devices", async (
   assert.equal(initRes.initialized, true);
   assert.equal(initRes.devicesCount, 1);
   assert.equal(initRes.activeDevice.id, "emulator-5554");
+  assert.equal(permissions.deviceAuthorizations.size, 0, "Discovery must not silently authorize a device.");
 
   const status = await engine.getStatus();
   assert.equal(status.initialized, true);
@@ -121,15 +124,17 @@ test("MobileControlEngine: executes single action with pre/post state capture", 
   });
 
   await engine.initialize();
+  engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
-  // Execute tap
-  const tapRes = await engine.executeAction("mobile_click_on_screen_at_coordinates", {
+  // Execute tap only after explicit owner authorization.
+  const tapRes = await engine.executeAction("tap", {
     device: "emulator-5554",
     x: 500,
     y: 800
-  });
+  }, { userId: "test-owner" });
 
   assert.equal(tapRes.success, true);
+  assert.equal(tapRes.action, "mobile_click_on_screen_at_coordinates", "UI aliases must resolve to real Mobile MCP tool names.");
   assert.ok(tapRes.verification);
   assert.ok(tapRes.verification.preState);
   assert.ok(tapRes.verification.postState);
@@ -154,6 +159,7 @@ test("MobileControlEngine: executes multi-step workflow with cancellation suppor
   });
 
   await engine.initialize();
+  engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
 
   const plan = {
     id: "wf-test-1",
@@ -163,7 +169,7 @@ test("MobileControlEngine: executes multi-step workflow with cancellation suppor
     ]
   };
 
-  const wfResult = await engine.executeWorkflow(plan, { deviceId: "emulator-5554" });
+  const wfResult = await engine.executeWorkflow(plan, { deviceId: "emulator-5554", userId: "test-owner" });
   assert.equal(wfResult.success, true);
   assert.equal(wfResult.totalSteps, 2);
   assert.equal(wfResult.stepResults.length, 2);
@@ -210,3 +216,73 @@ test("MobileControlEngine: emergency stop halts all actions immediately", async 
 
   await engine.shutdown();
 });
+
+test("MobileControlEngine: Level-3 tool approval cannot bypass Level-4 sensitive-app confirmation", async () => {
+  const mockAdb = new MockAdbBridge();
+  const mockMcp = new MockMcpClient();
+  const registry = new MobileDeviceRegistry({ adbBridge: mockAdb });
+  const permissions = new MobilePermissionEngine();
+  const engine = new MobileControlEngine({
+    adbBridge: mockAdb,
+    mcpClient: mockMcp,
+    deviceRegistry: registry,
+    permissionEngine: permissions,
+    autoStartMcp: false
+  });
+
+  await engine.initialize();
+  engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
+  mockAdb.foregroundApp = { package: "com.google.android.apps.walletnfcrel", activity: "WalletActivity" };
+
+  const result = await engine.executeAction("tap", {
+    device: "emulator-5554",
+    x: 10,
+    y: 20,
+    package: "com.google.android.calculator"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_interaction_dispatch",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.requiresConfirmation, true);
+  assert.equal(result.code, "CONFIRMATION_REQUIRED");
+  assert.ok(result.confirmationToken);
+
+  const screenshotResult = await engine.executeAction("screenshot", {
+    device: "emulator-5554",
+    package: "com.google.android.calculator"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_interaction_dispatch",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+  assert.equal(screenshotResult.success, false);
+  assert.equal(screenshotResult.requiresConfirmation, true);
+  assert.equal(screenshotResult.code, "CONFIRMATION_REQUIRED");
+  assert.ok(screenshotResult.confirmationToken);
+
+  const launchResult = await engine.executeAction("mobile_launch_app", {
+    device: "emulator-5554",
+    packageName: "com.google.android.apps.walletnfcrel"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_app_lifecycle",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+  assert.equal(launchResult.success, false);
+  assert.equal(launchResult.requiresConfirmation, true);
+  assert.equal(launchResult.code, "CONFIRMATION_REQUIRED");
+  assert.ok(launchResult.confirmationToken);
+  assert.equal(mockMcp.calls.length, 0, "sensitive app actions must not reach Mobile MCP before Level-4 confirmation");
+
+  await engine.shutdown();
+});
+

@@ -74,7 +74,8 @@ test("ToolRegistry consumes orchestrator-minted proof objects exactly once", asy
     actorId: "owner-a",
     toolId: tool.id,
     permissionLevel: tool.permissionLevel,
-    approvalId: "appr-test-one"
+    approvalId: "appr-test-one",
+    params: {}
   });
 
   assert.deepEqual(
@@ -110,4 +111,113 @@ test("ToolRegistry enforces the configured execution timeout and abort signal", 
     error => error.code === "TOOL_TIMEOUT" && error.timeoutMs === 15
   );
   assert.equal(receivedSignal?.aborted, true);
+});
+
+
+test("ToolRegistry treats undefined optional object fields consistently in approval fingerprints", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "undefined-optional-proof-tool",
+    name: "Undefined optional proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-undefined-optional",
+    params: { destination: "/approved/path", optionalFlag: undefined }
+  });
+
+  assert.deepEqual(
+    await registry.execute(tool.id, { destination: "/approved/path" }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    { ok: true }
+  );
+  assert.equal(calls, 1);
+});
+
+test("ToolRegistry rejects an approval proof when execution parameters change", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "parameter-bound-proof-tool",
+    name: "Parameter-bound proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-parameter-bound",
+    params: { destination: "/approved/path", overwrite: false }
+  });
+
+  await assert.rejects(
+    () => registry.execute(tool.id, { destination: "/different/path", overwrite: false }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    error => error.code === "TOOL_APPROVAL_REQUIRED"
+  );
+  assert.equal(calls, 0);
+});
+
+
+test("ToolRegistry does not equate sparse approved arrays with empty execution arrays", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "sparse-array-proof-tool",
+    name: "Sparse array proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+  const sparse = new Array(1);
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-sparse-array",
+    params: { items: sparse }
+  });
+
+  await assert.rejects(
+    () => registry.execute(tool.id, { items: [] }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    error => error.code === "TOOL_APPROVAL_REQUIRED"
+  );
+  assert.equal(calls, 0);
+});
+
+test("Tool approval fingerprints reject non-plain object parameter values", async () => {
+  const registry = new ToolRegistry();
+  const tool = registry.registerTool({
+    id: "non-json-proof-tool",
+    name: "Non-JSON proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => ({ ok: true })
+  });
+
+  assert.throws(
+    () => createToolApprovalProof({
+      actorId: "owner-a",
+      toolId: tool.id,
+      permissionLevel: tool.permissionLevel,
+      approvalId: "appr-date-parameter",
+      params: { timestamp: new Date(0) }
+    }),
+    /plain objects/
+  );
 });

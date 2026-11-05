@@ -79,6 +79,17 @@ export class MobileTaskAgent {
   async executeGoal(goalText, options = {}) {
     const startTime = Date.now();
     const executionId = "mobile-exec-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+    const userId = typeof options.userId === "string" ? options.userId.trim() : "";
+    if (!userId) {
+      return {
+        success: false,
+        executionId,
+        agent: this.metadata.id,
+        error: "AUTHENTICATED_USER_REQUIRED",
+        message: "Sign in before ULTRON can inspect or control a paired mobile device.",
+        elapsedMs: Date.now() - startTime
+      };
+    }
 
     try {
       // 1. Device Discovery & Health Check
@@ -129,10 +140,12 @@ export class MobileTaskAgent {
         }
 
         if (permCheck.requiresConfirmation && !options.confirmationToken) {
+          const pendingParams = { ...step.params, device: targetDeviceId };
           const token = this.controlEngine.permissionEngine.requestConfirmation(
             step.action,
-            step.params,
-            `Mobile Task Agent: ${step.description}`
+            pendingParams,
+            `Mobile Task Agent: ${step.description}`,
+            userId
           );
           return {
             success: false,
@@ -141,7 +154,9 @@ export class MobileTaskAgent {
             requiresConfirmation: true,
             confirmationToken: token.token,
             expiresAt: token.expiresAt,
-            message: `Level ${permCheck.level} action requires user confirmation: ${step.description}`,
+            pendingAction: step.action,
+            pendingParams,
+            message: `Level ${permCheck.level} action requires your confirmation: ${step.description}. Confirm this step, then submit the task again to continue the remaining workflow.`,
             blockedStep: step.id
           };
         }
@@ -153,7 +168,7 @@ export class MobileTaskAgent {
 
       if (isPerceptionTask) {
         // Take screenshot
-        const screenshotRes = await this.controlEngine.captureScreen(targetDeviceId);
+        const screenshotRes = await this.controlEngine.captureScreen(targetDeviceId, {}, { userId });
         if (screenshotRes.success && screenshotRes.data) {
           const dataUrl = screenshotRes.data.startsWith("data:")
             ? screenshotRes.data
@@ -177,7 +192,8 @@ export class MobileTaskAgent {
       // 5. Execute Plan via Control Engine
       const workflowResult = await this.controlEngine.executeWorkflow(plan, {
         deviceId: targetDeviceId,
-        confirmationToken: options.confirmationToken
+        confirmationToken: options.confirmationToken,
+        userId
       });
 
       // 6. Post-Step Assertion & JARVIS Summary Generation
@@ -222,7 +238,9 @@ export class MobileTaskAgent {
     }
 
     const deviceId = options.deviceId || discovery.activeDeviceId || discovery.devices[0].id;
-    return this.controlEngine.executeAction(deviceId, action, params, options);
+    const userId = typeof options.userId === "string" ? options.userId.trim() : "";
+    if (!userId) return { success: false, code: "AUTHENTICATED_USER_REQUIRED", error: "An authenticated user identity is required." };
+    return this.controlEngine.executeAction(action, { ...params, device: deviceId }, { ...options, userId });
   }
 
   /**

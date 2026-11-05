@@ -5,13 +5,51 @@
  * The proof object is held only in a WeakMap. JSON, caller-supplied booleans,
  * IDs, and copied object shapes cannot recreate it.
  */
+import crypto from "node:crypto";
+
 const approvedProofs = new WeakMap();
 
-export function createToolApprovalProof({ actorId, toolId, permissionLevel, approvalId } = {}) {
+function stableSerialize(value, seen = new WeakSet(), depth = 0) {
+  if (depth > 24) throw new TypeError("Approval parameters are too deeply nested.");
+  // Match JSON semantics: undefined object properties are omitted below,
+  // while undefined array slots serialize as null.
+  if (value === undefined) return "null";
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Approval parameters contain a non-finite number.");
+    return JSON.stringify(value);
+  }
+  if (typeof value !== "object") throw new TypeError("Approval parameters must be JSON-compatible.");
+  if (seen.has(value)) throw new TypeError("Approval parameters contain a circular reference.");
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      // Array.from visits sparse slots, matching JSON.stringify's null handling.
+      return "[" + Array.from(value, item => stableSerialize(item, seen, depth + 1)).join(",") + "]";
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("Approval parameters must contain plain objects.");
+    }
+    const keys = Object.keys(value).filter(key => value[key] !== undefined).sort();
+    return "{" + keys.map(key =>
+      JSON.stringify(key) + ":" + stableSerialize(value[key], seen, depth + 1)
+    ).join(",") + "}";
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function parametersFingerprint(params) {
+  return crypto.createHash("sha256").update(stableSerialize(params ?? {})).digest("hex");
+}
+
+export function createToolApprovalProof({ actorId, toolId, permissionLevel, approvalId, params } = {}) {
   if (typeof actorId !== "string" || !actorId.trim() ||
       typeof toolId !== "string" || !toolId.trim() ||
       !Number.isInteger(Number(permissionLevel)) || Number(permissionLevel) < 1 ||
-      typeof approvalId !== "string" || !approvalId.trim()) {
+      typeof approvalId !== "string" || !approvalId.trim() || params === undefined) {
     throw new TypeError("A verified owner, tool, permission level, and approval ID are required to mint a tool proof.");
   }
 
@@ -21,12 +59,13 @@ export function createToolApprovalProof({ actorId, toolId, permissionLevel, appr
     toolId: toolId.trim(),
     permissionLevel: Number(permissionLevel),
     approvalId: approvalId.trim(),
+    parametersFingerprint: parametersFingerprint(params),
     createdAt: Date.now()
   });
   return proof;
 }
 
-export function consumeToolApprovalProof(proof, { actorId, toolId, permissionLevel } = {}) {
+export function consumeToolApprovalProof(proof, { actorId, toolId, permissionLevel, params } = {}) {
   if (!proof || (typeof proof !== "object" && typeof proof !== "function")) return false;
   const record = approvedProofs.get(proof);
   if (!record) return false;
@@ -37,5 +76,6 @@ export function consumeToolApprovalProof(proof, { actorId, toolId, permissionLev
   return record.actorId === actorId &&
     record.toolId === toolId &&
     record.permissionLevel === Number(permissionLevel) &&
+    record.parametersFingerprint === parametersFingerprint(params ?? {}) &&
     Date.now() - record.createdAt <= 5 * 60 * 1000;
 }

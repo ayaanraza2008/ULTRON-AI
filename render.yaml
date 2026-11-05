@@ -47,6 +47,20 @@ services:
         value: "60"
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: GROQ_DEFAULT_MODEL
+        value: openai/gpt-oss-120b
+      - key: GROQ_PAID_FALLBACK_ENABLED
+        value: "false"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: GEMINI_DEFAULT_MODEL
+        value: gemini-3.8-flash
       - key: OPENVIKING_BASE_URL
         sync: false
       - key: OPENVIKING_API_TOKEN
@@ -136,15 +150,16 @@ services:
         value: .runtime/geo-sleuth/skills/geo-sleuth
 
   # 2. ULTRON Living Core interface + same-origin API proxy
+  # Preserve the separately deployed live UI branch; do not move this service to backend main.
   - type: web
     name: ultron-core-interface
     runtime: node
     plan: free
     region: singapore
-    branch: main
+    branch: feature/ultron-live-core-interface-20261029
     buildCommand: npm install --ignore-scripts
     startCommand: node core-ui-proxy.mjs
-    healthCheckPath: /
+    healthCheckPath: /healthz
     autoDeployTrigger: commit
     buildFilter:
       paths:

@@ -29,9 +29,12 @@ test("readiness reports configured integrations as unverified and never exposes 
     modelProviderConfigured: true,
     supabaseConfigured: true,
     workerStatus: {
-      state: "running", tasksCompleted: 3, tasksRetried: 2, tasksFailed: 1, tasksBlocked: 4,
-      tasksDiscarded: 5, taskStateUpdateFailures: 6, taskLeaseRenewalFailures: 7,
-      lastErrorCode: "SYNTHETIC_TEST_ERROR", internalToken: secret
+      state: "running", startedAt: "2026-11-05T08:00:00.000Z",
+      lastCycleAt: "2026-11-05T08:01:00.000Z", lastCycleSuccessAt: "2026-11-05T08:00:30.000Z",
+      lastErrorAt: "2026-11-05T08:00:45.000Z", lastErrorCode: "SYNTHETIC_TEST_ERROR",
+      consecutiveCycleFailures: 2, tasksCompleted: 3, tasksNeedingReview: 9,
+      tasksRetried: 2, tasksFailed: 1, tasksBlocked: 4, tasksDiscarded: 5,
+      taskStateUpdateFailures: 6, taskLeaseRenewalFailures: 7, internalToken: secret
     }
   });
   const output = JSON.stringify(result);
@@ -40,7 +43,13 @@ test("readiness reports configured integrations as unverified and never exposes 
   assert.equal(result.components.find((item) => item.id === "browser_automation").state, "configured_unverified");
   assert.equal(result.components.find((item) => item.id === "windows_companion").state, "configured_unverified");
   assert.equal(result.worker.state, "running");
+  assert.equal(result.worker.startedAt, "2026-11-05T08:00:00.000Z");
+  assert.equal(result.worker.lastCycleAt, "2026-11-05T08:01:00.000Z");
+  assert.equal(result.worker.lastCycleSuccessAt, "2026-11-05T08:00:30.000Z");
+  assert.equal(result.worker.lastErrorAt, "2026-11-05T08:00:45.000Z");
+  assert.equal(result.worker.consecutiveCycleFailures, 2);
   assert.equal(result.worker.tasksCompleted, 3);
+  assert.equal(result.worker.tasksNeedingReview, 9);
   assert.equal(result.worker.tasksRetried, 2);
   assert.equal(result.worker.tasksBlocked, 4);
   assert.equal(result.worker.tasksDiscarded, 5);

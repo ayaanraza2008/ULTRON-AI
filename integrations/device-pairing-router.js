@@ -109,6 +109,33 @@ function mapDatabaseError(response, payload) {
   });
 }
 
+function mapPairedDeviceDatabaseError(response, payload) {
+  const rawCode = bounded(payload?.code, 32);
+  if (response.status === 404) {
+    return Object.assign(new Error("Paired-device storage is not installed yet. Apply the reviewed ULTRON device-pairing migration first."), {
+      status: 503, code: "DEVICE_STORAGE_NOT_READY"
+    });
+  }
+  if (response.status === 409 || rawCode === "23505") {
+    return Object.assign(new Error("A pairing request with that code already exists. Retry the request."), {
+      status: 409, code: "PAIRING_CODE_COLLISION"
+    });
+  }
+  if (rawCode === "P0001" || response.status === 400) {
+    return Object.assign(new Error("The pairing code is invalid, expired, already claimed, or not approved."), {
+      status: 400, code: "PAIRING_CODE_INVALID"
+    });
+  }
+  if (response.status === 401 || response.status === 403) {
+    return Object.assign(new Error("Supabase denied the server-side device operation. Check the service-role credential."), {
+      status: 503, code: "DEVICE_STORAGE_FORBIDDEN"
+    });
+  }
+  return Object.assign(new Error("Supabase could not complete the device operation."), {
+    status: 502, code: "DEVICE_STORAGE_FAILED"
+  });
+}
+
 export function createDevicePairingRouter({
   env = process.env,
   fetchImpl = safePinnedFetch,
@@ -193,7 +220,7 @@ export function createDevicePairingRouter({
     const headerToken = req.headers["x-device-token"];
     const authHeader = req.headers.authorization;
     const bearerToken = typeof authHeader === "string" && /^Bearer\s+/i.test(authHeader)
-      ? authHeader.replace(/^Bearer\\s+/i, "").trim()
+      ? authHeader.replace(/^Bearer\s+/i, "").trim()
       : "";
     const token = typeof headerToken === "string" && headerToken.trim() ? headerToken.trim() : bearerToken;
     if (!token) {
@@ -455,11 +482,13 @@ export async function verifyPairedDeviceToken({ token, env = process.env, fetchI
       }
     );
     const rows = await readJsonLimited(response);
-    if (!response.ok || !Array.isArray(rows) || !rows[0]?.id) return null;
+    if (!response.ok) throw mapPairedDeviceDatabaseError(response, rows);
+    if (!Array.isArray(rows) || !rows[0]?.id) return null;
     const row = rows[0];
     return { id: row.id, ownerUserId: row.owner_user_id, name: row.device_name, platform: row.platform, status: row.status, authToken: token };
   } catch (error) {
     logger.warn?.("Paired device token verification failed", { name: error?.name || "Error" });
+    if (Number(error?.status) >= 500) throw error;
     return null;
   }
 }
