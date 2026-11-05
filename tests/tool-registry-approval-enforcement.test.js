@@ -137,7 +137,7 @@ test("ToolRegistry rejects an approval proof when execution parameters change", 
       actorId: "owner-a",
       toolApprovalProof: proof
     }),
-    error => error.code === "TOOL_APPROVAL_INVALID"
+    error => error.code === "TOOL_APPROVAL_REQUIRED"
   );
   assert.equal(calls, 0);
 });
