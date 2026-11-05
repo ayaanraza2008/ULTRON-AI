@@ -59,6 +59,7 @@ test("durable capture uses supported remember API and can be disabled", async ()
   assert.equal(captured.state, "captured");
   assert.equal(call.url, "https://memory.example.com/agentmemory/remember");
   assert.equal(JSON.parse(call.options.body).project, "ultron-ai-user-user-123");
+  assert.equal(JSON.parse(call.options.body).type, "workflow");
   assert.equal(JSON.parse(call.options.body).content, "We decided: the project uses a separate worker for queued jobs.");
 });
 
