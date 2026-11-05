@@ -158,13 +158,30 @@ export class MultiDeviceManager {
     if (!queue) return { success: false, error: "NO_PENDING_QUEUE" };
     const initialLen = queue.length;
     const updated = queue.filter(item => item.deliveryId !== deliveryId);
+    if (initialLen === updated.length) {
+      return {
+        success: true,
+        deviceId,
+        acknowledgedDeliveryId: deliveryId,
+        acknowledged: false,
+        remainingCount: updated.length
+      };
+    }
     this.pendingDeliveries.set(deviceId, updated);
-    this.saveToDisk();
+    if (this.isPersistent && !this.saveToDisk()) {
+      this.pendingDeliveries.set(deviceId, queue);
+      return {
+        success: false,
+        error: "STATE_PERSISTENCE_FAILED",
+        deviceId,
+        acknowledgedDeliveryId: deliveryId
+      };
+    }
     return {
       success: true,
       deviceId,
       acknowledgedDeliveryId: deliveryId,
-      acknowledged: initialLen > updated.length,
+      acknowledged: true,
       remainingCount: updated.length
     };
   }
@@ -180,7 +197,16 @@ export class MultiDeviceManager {
     this.revokedDevices.add(deviceId);
     this.pendingDeliveries.delete(deviceId);
     this.unsubscribeDevice(deviceId);
-    this.saveToDisk();
+    if (this.isPersistent && !this.saveToDisk()) {
+      return {
+        success: false,
+        error: "DEVICE_PERSISTENCE_FAILED",
+        deviceId,
+        status: "revoked_in_memory",
+        reason,
+        revokedAt: dev.revokedAt
+      };
+    }
     return { success: true, deviceId, status: "revoked", reason, revokedAt: dev.revokedAt };
   }
 
@@ -675,11 +701,22 @@ export class MultiDeviceManager {
    * Clears shared ecosystem state.
    */
   clearSharedState(stateKey = null) {
+    const previous = new Map(this.sharedState);
     if (stateKey) {
-      const deleted = this.sharedState.delete(String(stateKey).trim());
-      return { success: deleted, stateKey };
+      const key = String(stateKey).trim();
+      const deleted = this.sharedState.delete(key);
+      if (!deleted) return { success: false, stateKey: key };
+      if (this.isPersistent && !this.saveToDisk()) {
+        this.sharedState = previous;
+        return { success: false, error: "STATE_PERSISTENCE_FAILED", stateKey: key };
+      }
+      return { success: true, stateKey: key };
     }
     this.sharedState.clear();
+    if (this.isPersistent && !this.saveToDisk()) {
+      this.sharedState = previous;
+      return { success: false, error: "STATE_PERSISTENCE_FAILED" };
+    }
     return { success: true, clearedAll: true };
   }
 

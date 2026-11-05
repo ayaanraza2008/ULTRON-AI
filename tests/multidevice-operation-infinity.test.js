@@ -246,6 +246,22 @@ test("4. Real message delivery: active subscriber, offline queueing, and deliver
   assert.equal(mdm.pollPendingEvents("tablet-beta").length, 0);
 });
 
+test("State queue acknowledgement is not reported successful when durable write fails", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-mdm-ack-"));
+  try {
+    const invalidStorePath = path.join(tempDir, "existing-directory");
+    fs.mkdirSync(invalidStorePath);
+    const mdm = new MultiDeviceManager({ storagePath: invalidStorePath, persist: true, seedDefaultFleet: false });
+    mdm.pendingDeliveries.set("phone-ack-fail", [{ deliveryId: "del-ack-fail" }]);
+    const ack = mdm.acknowledgeDelivery("phone-ack-fail", "del-ack-fail");
+    assert.equal(ack.success, false);
+    assert.equal(ack.error, "STATE_PERSISTENCE_FAILED");
+    assert.equal(mdm.pollPendingEvents("phone-ack-fail").length, 1);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("Authenticated WebSocket state-sync ACK is bound to the paired device owner", async () => {
   let ackInput = null;
   const fakeHub = {

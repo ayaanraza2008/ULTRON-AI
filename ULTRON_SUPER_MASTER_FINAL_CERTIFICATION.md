@@ -128,4 +128,14 @@ Under the audited 14-domain personal AI evaluation model:
 - **Fake-Success Elimination:** CERTIFIED (Honest fail-closed reporting)
 - **Robotics Decoupling:** COMPLETE (0% weight)
 
-**OVERALL SCORE: 100% PRODUCTION READY**
+**OVERALL STATUS: RELEASE CANDIDATE — NOT CERTIFIED FOR PRODUCTION DEPLOYMENT**
+
+
+## Final verification caveats — 2026-11-05
+
+- PR #478 remains **open and unmerged**. Its latest code must pass CI on the exact head SHA before review/merge.
+- Render backend is configured to auto-deploy from `main`; do not merge PR #478 until the owner explicitly authorizes deployment with `DEPLOY`.
+- The multi-device manager's JSON state store is local filesystem persistence. The current Render service is on the free plan and has no persistent-disk attachment in the inspected Blueprint; therefore that store is **not certified durable across service replacement/redeploy**. A Supabase-backed state/event store or an approved persistent disk is still required for durable cloud sync.
+- Authenticated device polling/ACK routes and WebSocket ACK handling are implemented in the candidate branch, but they still require client-side integration/acceptance on actual Android and Windows clients.
+- A passing CI run does not prove real authenticated AI-provider inference, real connected device messaging, actual Windows process cancellation, or live Android operation. Those are operational acceptance gates and must remain marked unverified until exercised.
+- The current document is a release-candidate dossier, not a 100% production certification.
