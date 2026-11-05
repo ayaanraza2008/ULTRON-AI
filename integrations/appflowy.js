@@ -189,7 +189,9 @@ export async function appflowyGetDocument({ documentId, env = process.env, userI
     headers: {
       "Authorization": `Bearer ${settings.token}`,
       "Accept": "application/json"
-    }
+    },
+    redirect: "error",
+    signal: AbortSignal.timeout(8000)
   });
 
   if (!response.ok) {
