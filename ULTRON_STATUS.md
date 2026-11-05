@@ -46,7 +46,17 @@
 - Durable device pairing after the pending migrations are applied and the configured signing secret is verified.
 - Auth signup, confirmation, recovery, OAuth/phone flows; voice/STT/TTS in the deployed UI; and account-safe UI/chat/voice E2E.
 - Sustained Browser Use success, actual end-user browser tasks, and live desktop/phone companion protocol acceptance.
-- Render metrics currently return empty datasets; this is unavailable telemetry, not evidence of zero resource usage.
+- Render's 2026-11-04 10:22Z–2026-11-05 10:22Z metrics query returned CPU, memory, and bandwidth samples for all four services; HTTP request counts, HTTP latency, and instance-count series were empty. Resource telemetry is therefore partial, not wholly unavailable.
+
+### Fresh read-only follow-up — 2026-11-05 10:22Z
+
+- **PR #469** current exact head `5a4095c00fd7e75c8eaaee44b0dc3e7988338ae9`: workflow [42009392401](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42009392401) passed **1,629 tests, 0 failed, 3 skipped**; syntax 386/386; dependency audit found 0 vulnerabilities; World Intelligence build passed. It remains open and unmerged.
+- **PR #471** exact head `526e770f45d8bebbb431a49b992baf7669654d9f`: workflow [42009417854](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42009417854) passed **1,608 tests, 0 failed, 3 skipped**; syntax 386/386; dependency audit found 0 vulnerabilities; World Intelligence build passed. The change aligns worker-smoke authentication with the live worker for opaque `sb_secret_` keys. It remains open and unmerged.
+- **PR #470** (paired-device bearer parsing and fail-closed missing-storage regression coverage) and **PR #467** (worker-cycle diagnostics) both have successful exact-head `test` and `world-intelligence-build` jobs. Neither is merged.
+- Render's read-only 24-hour metrics query returned CPU, memory, and bandwidth samples for each of the four services. HTTP request-count, HTTP-latency, and instance-count series were empty for all four. These missing series limit HTTP-level observability; they do not mean the services had no traffic or resource use.
+- Supabase Security Advisor reports one warning: **Leaked Password Protection Disabled**. Performance Advisor reports three informational unused indexes (`memory_items_expiry_idx`, `agent_tasks_user_created_idx`, and `documents_user_created_idx`). With the current tiny row counts, do not drop these indexes solely because they are unused.
+- A fresh read-only count query returned: `agent_tasks=0`, `memory_items=0`, `employee_schedules=0`, `audit_events` in the preceding 24 hours = 0, `conversations=1`, and `messages=8`. The worker process-start log is not evidence of a completed live task.
+- Existing RLS remains enabled on `agent_tasks`, `conversations`, `memory_items`, and `messages`, with owner-scoped policies observed. The durable paired-device tables remain absent, and the production migration ledger remains at 15 applied versions.
 
 ## 2. Required release actions
 
