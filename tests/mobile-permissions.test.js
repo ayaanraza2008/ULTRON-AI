@@ -147,17 +147,45 @@ test("MobilePermissions: refuses persistent sensitive-level device grants and an
   assert.throws(() => engine.authorizeDevice("phone-1", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION), /authenticated owner ID/);
 });
 
-test("MobilePermissions: records tamper-resistant audit logs", () => {
+test("MobilePermissions: audit events redact confirmation tokens and remain owner-scoped", () => {
   const engine = new MobilePermissionEngine();
+  const emitted = [];
+  engine.on("audit", record => emitted.push(record));
 
-  engine.authorizeDevice("emulator-5554", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION, "admin");
-  engine.requestConfirmation("mobile_install_app", { device: "emulator-5554" }, "Audit test", "admin");
+  engine.authorizeDevice("emulator-5554", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION, "owner-a");
+  const confirmation = engine.requestConfirmation(
+    "mobile_install_app",
+    { device: "emulator-5554" },
+    "Audit test",
+    "owner-a"
+  );
 
-  const logs = engine.getAuditLogs();
-  assert.ok(logs.length >= 2);
-  assert.ok(logs.some(l => l.type === "DEVICE_AUTHORIZED"));
-  assert.ok(logs.some(l => l.type === "CONFIRMATION_REQUESTED"));
-  assert.ok(logs[0].id && logs[0].timestamp);
+  const ownerLogs = engine.getAuditLogs(null, 100, "owner-a");
+  assert.ok(ownerLogs.length >= 2);
+  assert.ok(ownerLogs.some(l => l.type === "DEVICE_AUTHORIZED"));
+  assert.ok(ownerLogs.some(l => l.type === "CONFIRMATION_REQUESTED"));
+  assert.ok(ownerLogs.every(l => l.userId === "owner-a"));
+  assert.ok(ownerLogs[0].id && ownerLogs[0].timestamp);
+  assert.equal(JSON.stringify(ownerLogs).includes(confirmation.token), false);
+  assert.equal(JSON.stringify(emitted).includes(confirmation.token), false);
+  assert.deepEqual(engine.getAuditLogs(), [], "unscoped audit reads must return no account data");
+});
+
+test("MobilePermissions: audit history cannot be read across account boundaries", () => {
+  const engine = new MobilePermissionEngine();
+  engine.authorizeDevice("phone-a", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION, "owner-a");
+  engine.authorizeDevice("phone-b", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION, "owner-b");
+  engine.requestConfirmation("mobile_install_app", { device: "phone-a" }, "A", "owner-a");
+  engine.requestConfirmation("mobile_install_app", { device: "phone-b" }, "B", "owner-b");
+
+  const ownerALogs = engine.getAuditLogs(null, 100, "owner-a");
+  const ownerBLogs = engine.getAuditLogs(null, 100, "owner-b");
+  assert.ok(ownerALogs.length > 0);
+  assert.ok(ownerBLogs.length > 0);
+  assert.ok(ownerALogs.every(log => log.userId === "owner-a"));
+  assert.ok(ownerBLogs.every(log => log.userId === "owner-b"));
+  assert.equal(ownerALogs.some(log => log.deviceId === "phone-b"), false);
+  assert.equal(ownerBLogs.some(log => log.deviceId === "phone-a"), false);
 });
 
 
