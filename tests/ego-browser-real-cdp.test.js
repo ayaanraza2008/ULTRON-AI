@@ -44,7 +44,7 @@ describe("ULTRON AI — Real Chromium/CDP Live Control", { skip: suiteAvailable 
     const driver = new DirectChromiumCdpDriver({ securityGuard: guard, executablePath: realBrowserPath });
 
     const launch = await driver.launch();
-    assert.equal(launch.launched, true, `launch must succeed: ${launch.reason || ""}`);
+    assert.equal(launch.launched, true, `launch must succeed: ${launch.reason || ""}; stderr=${launch.stderrPreview || "no diagnostic output"}`);
     assert.equal(fs.existsSync(launch.isolatedProfile), true, "isolated temp profile must exist");
     assert.equal(driver.capabilityStatus, "REAL_CHROMIUM_CDP");
 
