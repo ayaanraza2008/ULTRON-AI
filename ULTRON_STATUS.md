@@ -19,6 +19,13 @@
 - **Governance:** current main is reported unprotected, with no rulesets observed. Require branch protection and review gates before production release.
 - The full corrected owner-dependency and software blocker register is in `ULTRON_BLOCKERS.md`. It replaces the stale #441-open / old-main claims.
 
+## 0.1 Consolidated integration CI completed — 2026-11-05 10:44 UTC
+
+- PR [#473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) exact head `708ea44f4f2556ea39190a5b412aca49f12441b0` completed workflow [42012707211](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42012707211): **1,640 passed, 0 failed, 3 skipped**; syntax **386/386**; dependency audit **0 vulnerabilities**; `world-intelligence-build` passed.
+- The workflow preloaded `node:20-alpine` and ran the Docker sandbox isolation battery as part of the test job. This is CI evidence; it does not establish live AppFlowy/Immich credentials or access any private user data.
+- PR #473 remains open and unmerged. It is the preferred single review target for the mobile/core authorization and AppFlowy/Immich integration; do not merge #469 or #448 independently if #473 is selected.
+- The corrected `ULTRON_BLOCKERS.md` now replaces the stale PR #441-open / old-main statements with current merge and release-gate evidence.
+
 ## 1. Current evidence
 
 ### Repository and CI
