@@ -858,11 +858,12 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     }
 
     const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
-    if (groqKey && !seen.has("groq")) {
+    const groqBaseUrl = safeBase(env.GROQ_BASE_URL || "https://api.groq.com/openai/v1");
+    if (groqKey && groqBaseUrl && !seen.has("groq")) {
       seen.add("groq");
       providers.push({
         name: "groq",
-        baseUrl: "https://api.groq.com/openai/v1",
+        baseUrl: groqBaseUrl,
         apiKey: groqKey,
         model: bounded(env.GROQ_DEFAULT_MODEL, 120) || "llama-3.3-70b-versatile",
         priority: 20,
@@ -871,13 +872,14 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     }
 
     const geminiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
-    if (geminiKey && !/^(AQ\.|ya29\.)/i.test(geminiKey) && !seen.has("gemini")) {
+    const geminiBaseUrl = safeBase(env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai");
+    if (geminiKey && geminiBaseUrl && !/^(AQ\.|ya29\.)/i.test(geminiKey) && !seen.has("gemini")) {
       seen.add("gemini");
       providers.push({
         name: "gemini",
-        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+        baseUrl: geminiBaseUrl,
         apiKey: geminiKey,
-        model: bounded(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-1.5-flash",
+        model: bounded(env.GEMINI_DEFAULT_MODEL, 120) || "gemini-3.8-flash",
         priority: 30,
         supportsTools: true
       });
