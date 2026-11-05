@@ -27,7 +27,7 @@ import crypto from "node:crypto";
 import { DisposablePgHarness, TEST_USERS } from "./helpers/disposable-pg-harness.js";
 
 const migrationPath = path.join(process.cwd(), "supabase/migrations/20261101180000_durable_paired_devices.sql");
-const rollbackPath = path.join(process.cwd(), "supabase/migrations/20261101180000_durable_paired_devices.rollback.sql");
+const rollbackPath = path.join(process.cwd(), "supabase/rollback/20261101180000_durable_paired_devices.rollback.sql");
 
 // Part 1: Static Architecture & Safety Policies
 test("paired-device SECURITY DEFINER RPC uses an empty search_path", () => {
