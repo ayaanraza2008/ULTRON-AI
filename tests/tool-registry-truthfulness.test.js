@@ -41,6 +41,10 @@ test("memory store does not claim durability for process-local memory records", 
   const registry = new ToolRegistry({
     ultronCore: {
       storeMemory: async () => ({ id: "mem-process-local-1" })
+    },
+    agentMemoryStore: {
+      capture: async () => ({ state: "not_configured" }),
+      readiness: () => ({ configured: false, automaticCapture: false })
     }
   });
 
