@@ -1,0 +1,90 @@
+# ULTRON AI autonomy and backend verification audit
+
+**Audit date:** 2026-10-28  
+**Reviewed branch:** `main`  
+**Exact source revision:** `435431d42f02f2bcff992ba666bf6fe719bf2e06`  
+**Scope:** backend, AI routing, task execution, memory, integrations, security and CI. Frontend redesign and deployment are frozen.
+
+## Evidence snapshot
+
+- Repository metadata confirms `main` is the default branch and the connected GitHub identity has repository push/admin permissions.
+- [Source CI run 40575000510](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40575000510) succeeded on the exact source revision. The test job completed `npm run check`, `npm test`, and dependency audits; output reported **554 tests, 553 passed, 0 failed, 1 skipped**, and both audit invocations reported **0 vulnerabilities**. The pinned World Intelligence build job also succeeded.
+- [Production revision check 40575000455](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40575000455) failed because `/api/health` did not expose `build.commit`. This means the current hosted revision is **not verified**; it is not evidence that the source CI failed, nor authorization to deploy.
+- The successful source CI and mocked tests do not prove live model inference, two-user isolation, live task completion, external integration reachability, or physical device operation.
+
+## Requirements matrix
+
+| Requirement | Current implementation | Verification evidence | Remaining gap / blocker | Status |
+|---|---|---|---|---|
+| Provider interface and model routing | OpenAI-compatible provider routing, OpenRouter free-model defaults, bounded provider fallbacks and response limits | Source CI passed; PR #310 is merged and includes 401/403 provider/model-access fallback regression tests | No current authorized live text request with a configured key/model is evidenced by this audit | Implemented, not live-verified |
+| Vision routing | Image input validation, capability-aware routing and an opt-in free-model vision smoke script | PR #311 merged; source CI and vision smoke tests passed | Live vision request requires explicit smoke confirmation, valid provider credentials and an available vision-capable free model | Implemented, not live-verified |
+| Autonomous task lifecycle | Supabase-backed task records, allowlisted worker workflows, retries/backoff, cancellation/state checks and progress/audit support | Worker and task regression tests are part of passing CI | No real queue → worker → provider → persisted-result smoke run is evidenced; needs dedicated test user, service-role credential in trusted environment, running worker and model access | Implemented, not live-verified |
+| Authentication and session lifecycle | Supabase auth routes, cookie/token handling, rate limiting and an opt-in two-user isolation test; current-main session revocation candidate is in draft PR #315 | PR #315 CI run 40581394011 passed: 561 tests (560 pass, 0 fail, 1 skipped), `npm run check`, both dependency audits at zero vulnerabilities | Live signup/recovery/session revocation and account isolation remain unverified without an authorized Supabase test project; migration is unapplied | Candidate code/CI verified in draft PR; live verification blocked |
+| Persistent memory and ownership | User-scoped memory API/retrieval and row-level security contract tests | Memory/user-scope tests pass in source CI | Need two dedicated test accounts to prove live retrieval, preference-off behavior, correction/deletion and cross-account denial | Implemented, not live-verified |
+| SSRF / DNS-rebinding protection | `network-safety.js` includes `safePinnedFetch`, validates DNS answers and pins the validated address for the outbound socket; redirects are blocked by default | Network-safety regression tests run under source CI | Current hosted revision is unverified until the deployed commit can be read; external egress controls remain recommended | Source implemented; production protection unverified |
+| External integration adapters | Modular, capability/readiness-aware adapters exist for multiple optional services | Deterministic adapter tests pass where included in CI | Each upstream service still requires independent license/compatibility review, credentials, reachability and a real workflow check; readiness is not connection proof | Partly implemented; integration-dependent |
+| Voice and device control | Browser speech support and optional speech adapters exist; owner-approved Windows action queue is in current-main draft PR #317 | [PR #317 Node CI](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40655915156) passed 578 tests (577 pass, 0 fail, 1 skipped); [Windows workflow](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40655915139) passed build, network-policy self-test and x64 publish | PR #317 is unmerged; migration is unapplied. Live Supabase queue behavior, paired-device operation and microphone/wake-word behavior require authorized test resources | Candidate code/CI verified on rebased draft PR; not mainline or live-verified |
+| Safe coding agent | Draft PR #318 adds a default-off owner-only Docker sandbox for Node/Python snippets; execution requires source to match a single code fence in the current user message, with no repo mounts, app secrets, network, shell fallback or image pulls | [CI run 40657255735](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40657255735) passed 563 tests (562 pass, 0 fail, 1 skipped), syntax checks, both zero-vulnerability audits and the auxiliary build | PR is unmerged; tests use a fake Docker adapter only. A trusted sandbox host, cached reviewed image digests and a harmless live smoke test remain required | Candidate code/CI verified in current-main draft PR; real execution blocked/unverified |
+| Automated CI and test reproducibility | Syntax preflight, Node tests, dependency audits and pinned auxiliary build | Exact main CI run 40575000510 passed: 554 tests, 553 pass, 0 fail, 1 skip; both jobs green | Keep the skipped live E2E clearly separate from deterministic CI; run it only with explicitly approved disposable accounts | Source CI verified; live E2E remains blocked |
+| Frontend contract | Existing API/capability interface remains in repository | Existing shell/API tests are part of source CI | No frontend redesign or new UI work is authorized in this phase | Frozen by scope |
+| Production revision | Read-only health/revision workflow exists | Run 40575000455 failed because health output lacked `build.commit` | Do not deploy to make the check pass. Revisit only in the separately authorized final release phase | Blocked by deployment freeze and missing revision evidence |
+
+## Open pull-request safety notes
+
+- **PR #309 — Supabase session revocation:** closed unmerged as superseded by PR #315. Both used the same timestamped migration; only PR #315 remains the current review candidate, and its migration remains unapplied.
+- **PR #286 — DNS-pinned outbound transport:** open; 53 commits ahead and 18 behind `main` in the observed compare. Its branch's `network-safety.js` is the older URL-shape validator, whereas current `main` already contains `safePinnedFetch`. A review comment was added warning against a blind merge. Do not merge this branch; compare each remaining change against current `main` and port only independently necessary improvements with regression tests.
+- **Windows action queue — PRs #263, #276 and #285:** the current mainline has the Windows companion project but no `desktop_actions` queue/API/migration. These PRs are stacked on older branches (the observed #285 compare is 141 commits ahead and 20 behind `main`). A review comment on #285 asks for a minimal port and migration-version/privilege review, rather than wholesale merging historical code.
+- **PR #317 — owner-approved Windows action queue (rebased):** current-main draft, head `2b7111f6b8373f92783f9d25dfac330db9951f4a`. [Node CI](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40655915156) passed 578 tests (577 pass, 0 fail, 1 opt-in live E2E skipped), syntax checks, zero-vulnerability dependency audits and the auxiliary build. [Windows workflow](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40655915139) passed companion compile, DNS/network policy self-test and standalone x64 publish. The candidate also now uses absolute Windows system executable paths with shell execution disabled and enforces stronger database action lease/attempt invariants. Tests verify these contracts. These are branch checks only: the PR is draft/unmerged, migration unapplied, and no live Windows device or Supabase queue was exercised. Browser URL launching stays disabled because the browser's actual DNS connection cannot be pinned by this integration.
+- **PR #314 — stale Windows action queue branch:** closed unmerged as superseded by PR #317 after the rebased branch passed CI. No migration/deployment resulted from closing it.
+
+- **PR #315 — current-main Supabase session revocation:** draft; head `4ed2eccf7ef1f557d043cf15e54efeb99c53dd06`. [CI run 40581394011](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40581394011) passed with 561 tests (560 passed, 0 failed, 1 opt-in live E2E skipped), `npm run check`, both dependency audits at zero vulnerabilities, and the auxiliary build. The migration is still unapplied and live auth/session behavior remains unverified. Do not merge PR #309 and #315 together.
+- **PR #318 — restricted coding sandbox (rebased):** current-main draft branch `feature/coding-sandbox-rebased-20261028`, head `17e2beeae88d863c5ea425f6098c62346b799ed3`. [CI run 40657255735](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/40657255735) passed: 563 tests (562 pass, 0 fail, 1 opt-in live E2E skipped), `npm run check`, both dependency audits at zero vulnerabilities, and the pinned auxiliary build. Execution authorization now requires exact source in the current prompt; generated-source shortcut removed. Tests use fake Docker; no real container ran. Execution remains default-off and needs a trusted worker plus cached digest-pinned image.
+- Merged PRs #310 and #311 are present on current `main`; do not reapply their provider-fallback or vision-smoke changes.
+
+## Owner-dependent live verification
+
+Keep credentials out of chat and source control. To complete authorized live checks, configure them only in a trusted test environment:
+1. **Provider text/vision:** valid test OpenRouter key and an available compatible free model; run `npm run smoke:model` and, after setting `ULTRON_CONFIRM_VISION_SMOKE=YES`, `npm run smoke:vision`. Each intentionally makes a real provider request.
+2. **Auth/isolation:** two disposable, confirmed Supabase test accounts and a test-environment publishable key; set `ULTRON_E2E_ALLOW_WRITES=CONFIRM_ULTRON_E2E_WRITES` plus `ULTRON_E2E_SUPABASE_URL`, `ULTRON_E2E_SUPABASE_PROJECT_REF`, `ULTRON_E2E_SUPABASE_PUBLISHABLE_KEY`, and the two disposable test-account email/password pairs before `npm run test:supabase:e2e`. Review cleanup even on failure.
+3. **Worker:** a dedicated test user, trusted `SUPABASE_SERVICE_ROLE_KEY`, valid provider credentials and a running test worker; set `ULTRON_CONFIRM_WORKER_SMOKE=YES` and run `npm run smoke:worker`. Confirm the report verifies a persisted result and cleanup.
+4. **Owner dashboard:** enable Supabase leaked-password protection in Auth password-security settings and recheck it; source code cannot change that setting.
+5. **Devices/integrations:** install/pair required companions and configure services separately before calling their workflows live-verified.
+
+## Safety and release boundary
+
+No changes to this audit intentionally deploy, merge a pull request, mutate production secrets, apply a production migration, or alter Render/Supabase settings. Continue backend work on isolated branches. Deployment remains explicitly excluded until owner authorization.
+
+## Operational scope incident and containment
+
+During this audit, six test/config-only changes were briefly committed to `main` because one GitHub update batch omitted its target branch. The six files (`tests/chat-model-fallback.test.js`, `tests/conversation-api-user-scope.test.js`, `tests/document-storage.test.js`, `tests/memory-api-user-scope.test.js`, `tests/message-write-conversation-ownership.test.js`, and `package.json`) were restored to their exact pre-edit contents in six follow-up commits. The server implementation and migration were never changed on `main` by that incident. Render's service history confirms automatic attempts for these commits because `ultron-ai` has auto-deploy-on-commit enabled; every attempt observed in the 20:46–20:47 UTC window failed with `pipeline_minutes_exhausted`, and no successful deployment appeared in that window. No manual deploy or rollback was triggered, and Render settings were not changed. All ongoing feature changes are on isolated branches: Windows action queue `feature/windows-action-queue-rebased-20261028` / draft PR #317, session revocation `security/session-revocation-mainline-20261028` / draft PR #315, and coding sandbox `feature/coding-sandbox-rebased-20261028` / draft PR #318. Duplicate/stale PRs #309, #314 and #316 are closed unmerged as superseded.
+
+## Read-only Supabase environment snapshot (2026-10-28)
+
+The connected Supabase account exposes one active project named \`ULTRON-AI\` in the Mumbai region. The available metadata does not identify it as a disposable test project, and no separate test project is visible in the connected account. Treat it as protected until the owner confirms its purpose. No SQL was executed and no project settings were changed during this inspection.
+
+- The project's recorded migrations include \`durable_task_retry_backoff\`, \`recover_stale_running_tasks\`, \`scope_stale_task_recovery\`, and \`private_document_storage\`.
+- The recorded migration list does **not** include the session guard migration from PR #315 or the desktop action queue migration from PR #317. Both remain unapplied.
+- The Supabase security advisor returned \`auth_leaked_password_protection\` at warning level: leaked-password protection is disabled. Enable it through the project owner's Auth password-security settings after confirming the project and checking the expected user impact. This audit did not alter that setting.
+- The performance advisor reported three unused indexes: \`memory_items_expiry_idx\`, \`agent_tasks_user_created_idx\`, and \`documents_user_created_idx\`. This is informational on a low-traffic project, not justification for dropping indexes without workload evidence.
+
+- Supabase `get_cost` for creating a project in organization `Ayaan` returned a monthly amount of `0`. No project was created: provisioned resources remain an owner-confirmed action, and the only currently visible project has not been designated as a disposable test target.
+
+### Safe next steps for the owner
+
+1. Identify or create a dedicated non-production Supabase test environment only after confirming its quoted cost is ₹0. Do not use the only visible project for opt-in write/E2E tests unless the owner explicitly designates it as the test target.
+2. Supply valid disposable-account credentials directly to the trusted test environment, not to chat, then run the documented live auth/isolation tests.
+3. Apply PR #315's additive session migration only to that authorized test environment, then verify revocation and fail-closed behavior there.
+4. Apply PR #317's desktop-action migration only to the authorized test environment after the action bridge receives review; verify request, approval, execution acknowledgement, cancellation, ownership, and cleanup with a paired Windows device.
+5. Enable leaked-password protection through the owner dashboard and rerun the security advisor. Do not claim the warning is fixed before the advisor confirms it.
+
+## Second branch-isolation incident and containment (2026-10-28)
+
+A subsequent audit detected two files accidentally present on \`main\` after branch-target arguments were omitted in update calls: \`docs/audits/2026-10-28-autonomy-verification-audit.md\` and \`tests/coding-sandbox.test.js\`. Both files were absent at the clean baseline revision \`435431d42f02f2bcff992ba666bf6fe719bf2e06\`; the sandbox module and sandbox docs were not on \`main\`, making the test file an orphaned test that could fail CI.
+
+Containment:
+- Deleted the accidental test file from \`main\` in commit \`a3f7646372050c32a24b1ec685ae4f7c906ddc7e\`.
+- Deleted the accidental audit document from \`main\` in commit \`c71929d33fc71e4a06556bf27d99c430472dae8b\`.
+- Verified the deleted paths now return 404 on \`main\`, while the audit document still exists on \`audit/autonomy-verification-20261028\` and the coding sandbox module/test/docs still exist on \`feature/coding-sandbox-rebased-20261028\`.
+- Verified the six earlier test/package paths from the first incident remain byte-identical to their baseline blobs.
+
+Render's read-only event history shows automatic build/deploy attempts for the two removal commits. Both failed with \`pipeline_minutes_exhausted\`; no successful deployment was observed for these commits. No manual deployment, rollback, Render configuration change, production secret change, SQL execution, or live migration was initiated. This second incident is a clear process failure: all further GitHub writes must specify a literal branch parameter and verify the resulting ref/content immediately.
