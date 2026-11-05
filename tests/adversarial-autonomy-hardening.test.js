@@ -564,11 +564,6 @@ test("Real Tool Execution Audit: all 45 tool schemas validate and privileged too
         assert.equal(outcome.error?.code, "MEMORY_OWNER_REQUIRED");
         continue;
       }
-      if (tool.id === "memory_store" && outcome.success !== true) {
-        // The default memory map is process-local, not durable persistence.
-        assert.equal(outcome.error?.code, "MEMORY_OWNER_REQUIRED");
-        continue;
-      }
       assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: ${JSON.stringify(outcome)}`);
       }
     }
