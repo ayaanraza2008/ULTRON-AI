@@ -591,6 +591,26 @@ export function parsePrivateDataReadApproval(value, integration) {
   if (!match) return false;
   return !/\b(?:do not|don't|never|not anymore|withdraw\w*|revoke\w*|cancel\w*|hold off|wait|stop|changed my mind)\b/i.test(text.slice(match[0].length));
 }
+/**
+ * Bind private-data consent to the resource/query named in the same current
+ * user message. A generic approval phrase must not let a model substitute a
+ * different document ID or media-search query in its generated tool call.
+ */
+export function privateDataReadApprovalMatchesAction(value, toolName, args = {}) {
+  if (!PRIVATE_DATA_READ_TOOLS.has(toolName)) return false;
+  const integration = toolName.startsWith("appflowy_") ? "appflowy" : "immich";
+  if (!parsePrivateDataReadApproval(value, integration)) return false;
+  const text = typeof value === "string" ? value.slice(0, 6000).toLowerCase() : "";
+  if (toolName === "appflowy_get_document") {
+    const documentId = bounded(args?.documentId, 128).toLowerCase();
+    return Boolean(documentId && text.includes(documentId));
+  }
+  if (toolName === "immich_search_assets") {
+    const query = bounded(args?.query, 80).toLowerCase();
+    return Boolean(query && text.includes(query));
+  }
+  return true;
+}
 
 function classifyToolDispatchRisk(name, args, requestRisk, requestText = "", currentUserMessage = requestText) {
   let delegatedTask = "";
@@ -603,8 +623,7 @@ function classifyToolDispatchRisk(name, args, requestRisk, requestText = "", cur
   // Workspace documents and personal media are private data. Require an
   // explicit user approval even when the prompt itself is phrased casually.
   if (PRIVATE_DATA_READ_TOOLS.has(name)) {
-    const integration = name.startsWith("appflowy_") ? "appflowy" : "immich";
-    const approved = parsePrivateDataReadApproval(currentUserMessage, integration);
+    const approved = privateDataReadApprovalMatchesAction(currentUserMessage, name, args);
     return {
       requiresConfirmation: !approved,
       risk: {
