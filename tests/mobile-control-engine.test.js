@@ -232,12 +232,13 @@ test("MobileControlEngine: Level-3 tool approval cannot bypass Level-4 sensitive
 
   await engine.initialize();
   engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
+  mockAdb.foregroundApp = { package: "com.google.android.apps.walletnfcrel", activity: "WalletActivity" };
 
   const result = await engine.executeAction("tap", {
     device: "emulator-5554",
     x: 10,
     y: 20,
-    package: "com.google.android.apps.walletnfcrel"
+    package: "com.google.android.calculator"
   }, {
     userId: "test-owner",
     mobileApprovalVerified: true,
