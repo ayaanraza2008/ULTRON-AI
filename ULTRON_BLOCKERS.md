@@ -55,3 +55,25 @@ Read-only inspection of the confirmed Ultron core workspace found four existing 
 The three backend services have recent successful deploy events from 81dd9b9e81bf35c5e49e152113e0991fe7362010 (2026-11-04 around 21:41 UTC). The queried 24.5-hour Render metrics returned no HTTP request or latency samples; the final-hour app/request log query returned no entries. Three services showed some memory samples. Empty metrics/logs are not proof of an outage, but do not establish live usage or end-to-end acceptance either.
 
 Required closure: review the candidate Blueprint diff and secrets, then obtain explicit owner authorization before syncing Render settings. After authorized sync, verify each health endpoint and run authenticated synthetic tests for sign-in, chat/inference, persistence, browser read-only navigation, and gateway authentication. No Render settings or deployments were changed in this audit.
+
+
+## 2026-11-05 12:50 IST live-audit additions
+
+| Priority | Area | Verified state | Closure |
+|---|---|---|---|
+| P0 | Main branch governance | GitHub reports `main` unprotected; Render backend services auto-deploy on commits. | Configure required PR review and exact-head CI checks in GitHub branch protection/rulesets before enabling normal merges. This settings surface is not available through the connected GitHub actions in this session. |
+| P0 | Supabase migration ledger | Live ledger has 15 applied versions; repository main has mismatched historical filenames and rollback SQL in the active migration directory. | PR #456 aligns the 15 filenames, moves rollback SQL to `supabase/rollback/`, archives the obsolete task-worker scaffold, and adds regression coverage. Exact-head CI passed 1,610/1,613 tests; 3 skipped. Do not run production SQL as part of this code fix. |
+| P0 | Device pairing database | `paired_devices` and `pending_device_pairings` are absent from live Supabase; two additive device migrations are pending in source. | Review migration and required server-side secrets, then apply only in an authorized release with backup/rollback review. |
+| P0 | Render Blueprint source preservation | Live UI service uses `feature/ultron-live-core-interface-20261029`; current Blueprint previously proposed `main`. | PR #457 preserves the live UI branch and dedicated `/healthz` check. Do not sync Blueprint until exact-head CI and service/secret diff review pass. |
+| P1 | Render health monitoring | Four live service records have empty health-check paths although the Blueprint declares endpoints. | Review and sync health paths only after validating each endpoint and the corrected UI branch. |
+| P1 | Browser Use upstream inference | Repeated `BRIDGE_HTTP_502` responses; a subsequent request sometimes succeeds. | Review/land PR #450 diagnostics and readiness gate, then collect provider/model/status metadata and run repeated read-only smoke tests. Diagnostics do not themselves fix provider availability. |
+| P1 | Supabase leaked-password advisor | Free plan cannot enable Supabase-native leaked-password protection; official docs list Pro+ availability. Application-side HIBP k-anonymity screening is implemented and fails closed. | Keep the free application mitigation. Do not incur Pro charges solely to clear this warning without owner approval. |
+
+Current exact-main CI: [run 41918313167](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41918313167) passed on `81dd9b9e81bf35c5e49e152113e0991fe7362010`.
+
+Recent PR verification:
+- #455: 1,620/1,623 passed, 0 failed, 3 skipped.
+- #456: 1,610/1,613 passed, 0 failed, 3 skipped.
+- #457: exact-head CI pending at the time of this update.
+
+No production migrations, merges, Blueprint synchronization, or deployments were performed.
