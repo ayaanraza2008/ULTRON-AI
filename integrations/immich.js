@@ -8,6 +8,44 @@
  */
 
 import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
+const MAX_RESPONSE_BYTES = 256 * 1024;
+
+function boundedLimit(value, fallback, maximum) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(maximum, Math.trunc(parsed))) : fallback;
+}
+
+async function readJsonLimited(response) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("Immich response exceeded the size limit."), { code: "IMMICH_RESPONSE_TOO_LARGE" });
+  }
+  if (!response.body?.getReader) {
+    throw Object.assign(new Error("Immich response cannot be safely size-limited."), { code: "IMMICH_RESPONSE_UNBOUNDED" });
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("Immich response exceeded the size limit."), { code: "IMMICH_RESPONSE_TOO_LARGE" });
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+  } finally {
+    try { reader.releaseLock?.(); } catch {}
+  }
+  try { return raw ? JSON.parse(raw) : {}; }
+  catch { throw Object.assign(new Error("Immich returned invalid JSON."), { code: "IMMICH_INVALID_RESPONSE" }); }
+}
 
 export function getImmichReadiness(env = process.env) {
   const ownerUserId = String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
@@ -129,7 +167,7 @@ export class ImmichConnector {
 
       return { success: true, count: sanitized.length, albums: sanitized };
     } catch (err) {
-      return { success: false, error: err.message, albums: [] };
+      return { success: false, error: err.code || err.message, albums: [] };
     }
   }
 
@@ -174,7 +212,7 @@ export class ImmichConnector {
 
       return { success: true, count: assets.length, assets };
     } catch (err) {
-      return { success: false, error: err.message, assets: [] };
+      return { success: false, error: err.code || err.message, assets: [] };
     }
   }
 }
