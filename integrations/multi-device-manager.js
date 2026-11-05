@@ -599,17 +599,16 @@ export class MultiDeviceManager {
       }
     }
 
-    let websocketSent = [];
+    const websocketSent = [];
     if (resolvedOwnerUserId && typeof this.deviceGateway?.dispatchStateSync === "function") {
-      const sendResults = await Promise.all(targetList.map(async targetId => {
+      for (const targetId of targetList) {
         const result = this.deviceGateway.dispatchStateSync({
           ownerUserId: resolvedOwnerUserId,
           deviceIds: [targetId],
           event: eventsByTarget.get(targetId)
         });
-        return result?.success && result.deliveredDeviceIds?.includes(targetId) ? targetId : null;
-      }));
-      websocketSent = sendResults.filter(Boolean);
+        if (result?.success && result.deliveredDeviceIds?.includes(targetId)) websocketSent.push(targetId);
+      }
     }
 
     const deliveredTo = [...new Set([...locallyNotified, ...websocketSent])];
