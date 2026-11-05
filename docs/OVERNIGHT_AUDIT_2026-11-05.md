@@ -5,6 +5,19 @@
 **Audit branch:** `audit/overnight-evidence-refresh-20261105`  
 **Purpose:** Record observed repository, CI, Render, and Supabase state without treating documentation or configuration as proof of live capability.
 
+## 0. Follow-up refresh — 2026-11-05 09:45 UTC
+
+This section supersedes the earlier repository/PR snapshot below where the two disagree. The Render and Supabase observations later in this document have **not** been re-queried in this follow-up and remain observations from the earlier audit window.
+
+- **Current main:** `573f31f953997cb0e546ef599f77e66cf8f7775b` (`ci(security): install audited tree without lifecycle scripts`, 2026-11-05 07:45:59 UTC). Exact-head GitHub Actions run [41989534064](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41989534064) completed successfully: both `test` and `world-intelligence-build` jobs passed.
+- **Repository size:** the recursive Git tree for this main commit returned 885 paths and was not truncated.
+- **PR #447 — mobile authorization:** branch `fix/mobile-device-authorization-20261105` is now at `20f3cadd536729bd6f9e3200782f4bd24ca8467c`, with current `main` as its merge base (25 commits ahead, 0 behind). The merge commit brings in the latest mainline Browser Use bridge/workflow/docs updates while preserving the mobile screenshot/sensitive-app and confirmation hardening. Fresh exact-head run [42004618304](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004618304) is in progress; PR remains open and unmerged.
+- **PR #448 — AppFlowy/Immich:** draft branch `feat/appflowy-immich-agent-tools-20261105` is now at `51a49f421802ea6b344fa0630216a77202a2e0fa`, stacked on the updated #447 head (46 commits ahead, 0 behind). The merge commit synchronizes the previously missing five parent commits and current mainline changes. Fresh exact-head runs [42004705488](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004705488) and [42004694255](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004694255) are in progress. Earlier green runs refer to pre-sync SHA `c209ac2f...` and are not proof for the new head.
+- **51-repository reuse matrix:** `docs/REFERENCE_REPOSITORY_DECISIONS_2026-11-05.md` now distinguishes the core `ToolRegistry` from the separate `/api/agent/tools` agent-runtime catalogue. Source inspection confirms agent-runtime schemas and dispatch for OpenViking search/read, OpenSEO, Chatwoot, OpenProject and Cal.diy; AgentMemory is used internally for task-aware recall/capture. AppFlowy and Immich private-data tools remain in draft PR #448 and require exact current-message consent, owner scope and a passing exact-head CI run before merge.
+- **Upstream provenance and license correction:** GitHub API rejected six sampled placeholder upstream SHAs in the prior 56-repository registry. Seven priority entries now carry observed real `main`-branch commits and GitHub-declared license metadata in `reports/repository-integration-registry.json`; OpenViking is AGPL-3.0, AgentMemory Apache-2.0, and Hermes Agent MIT according to current GitHub metadata. The other 49 of 56 entries remain explicitly unverified. This is repository metadata validation, not a complete license/legal review or source-code audit.
+- **Changes made in this follow-up:** only documentation/report files and two feature branches were updated. No changes were pushed to `main`; no PR was merged; no Render deployment, Supabase write/migration, secret change, or production data mutation was performed.
+
+
 ## 1. Repository and release state
 
 - `main` was observed at `d7562b7f79fbc3c3ce76ea5bf7eb6fc285fab8f8` (`fix(browser): install missing Chromium on bridge startup`).
