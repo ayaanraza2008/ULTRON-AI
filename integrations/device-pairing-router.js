@@ -455,11 +455,13 @@ export async function verifyPairedDeviceToken({ token, env = process.env, fetchI
       }
     );
     const rows = await readJsonLimited(response);
-    if (!response.ok || !Array.isArray(rows) || !rows[0]?.id) return null;
+    if (!response.ok) throw mapDatabaseError(response, rows);
+    if (!Array.isArray(rows) || !rows[0]?.id) return null;
     const row = rows[0];
     return { id: row.id, ownerUserId: row.owner_user_id, name: row.device_name, platform: row.platform, status: row.status, authToken: token };
   } catch (error) {
     logger.warn?.("Paired device token verification failed", { name: error?.name || "Error" });
+    if (Number(error?.status) >= 500) throw error;
     return null;
   }
 }
