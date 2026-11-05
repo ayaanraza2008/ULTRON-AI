@@ -380,7 +380,7 @@ test("direct Groq and Gemini keys use configured endpoints after OpenRouter free
     ULTRON_AVAILABLE_MODELS: "openrouter/free",
     GROQ_API_KEY: "groq-test-secret",
     GROQ_BASE_URL: "https://api.groq.com/openai/v1",
-    GROQ_DEFAULT_MODEL: "llama-3.3-70b-versatile",
+    GROQ_DEFAULT_MODEL: "openai/gpt-oss-120b",
     GEMINI_API_KEY: "gemini-test-secret",
     GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai",
     GEMINI_DEFAULT_MODEL: "gemini-3.8-flash"
@@ -398,7 +398,7 @@ test("direct Groq and Gemini keys use configured endpoints after OpenRouter free
     assert.match(await response.text(), /Gemini fallback completed/);
     assert.deepEqual(calls.map(call => call.url), ["https://openrouter.ai/api/v1/chat/completions", "https://api.groq.com/openai/v1/chat/completions", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"]);
     assert.deepEqual(calls.map(call => call.authorization), ["Bearer primary-test-secret", "Bearer groq-test-secret", "Bearer gemini-test-secret"]);
-    assert.deepEqual(calls.map(call => call.model), ["openrouter/free", "llama-3.3-70b-versatile", "gemini-3.8-flash"]);
+    assert.deepEqual(calls.map(call => call.model), ["openrouter/free", "openai/gpt-oss-120b", "gemini-3.8-flash"]);
     assert.equal(JSON.stringify(calls.map(call => call.body)).includes("untrusted-client-key"), false);
   });
 });
