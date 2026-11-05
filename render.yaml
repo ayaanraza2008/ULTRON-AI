@@ -136,6 +136,7 @@ services:
         value: .runtime/geo-sleuth/skills/geo-sleuth
 
   # 2. ULTRON Living Core interface + same-origin API proxy
+  # Preserve the separately deployed live UI branch; do not move this service to backend main.
   - type: web
     name: ultron-core-interface
     runtime: node
