@@ -250,7 +250,22 @@ test("MobileControlEngine: Level-3 tool approval cannot bypass Level-4 sensitive
   assert.equal(result.requiresConfirmation, true);
   assert.equal(result.code, "CONFIRMATION_REQUIRED");
   assert.ok(result.confirmationToken);
-  assert.equal(mockMcp.calls.length, 0, "the critical action must not reach Mobile MCP before Level-4 confirmation");
+
+  const launchResult = await engine.executeAction("mobile_launch_app", {
+    device: "emulator-5554",
+    packageName: "com.google.android.apps.walletnfcrel"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_app_lifecycle",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+  assert.equal(launchResult.success, false);
+  assert.equal(launchResult.requiresConfirmation, true);
+  assert.equal(launchResult.code, "CONFIRMATION_REQUIRED");
+  assert.ok(launchResult.confirmationToken);
+  assert.equal(mockMcp.calls.length, 0, "sensitive app actions must not reach Mobile MCP before Level-4 confirmation");
 
   await engine.shutdown();
 });
