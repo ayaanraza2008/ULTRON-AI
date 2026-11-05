@@ -252,6 +252,21 @@ test("MobileControlEngine: Level-3 tool approval cannot bypass Level-4 sensitive
   assert.equal(result.code, "CONFIRMATION_REQUIRED");
   assert.ok(result.confirmationToken);
 
+  const screenshotResult = await engine.executeAction("screenshot", {
+    device: "emulator-5554",
+    package: "com.google.android.calculator"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_interaction_dispatch",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+  assert.equal(screenshotResult.success, false);
+  assert.equal(screenshotResult.requiresConfirmation, true);
+  assert.equal(screenshotResult.code, "CONFIRMATION_REQUIRED");
+  assert.ok(screenshotResult.confirmationToken);
+
   const launchResult = await engine.executeAction("mobile_launch_app", {
     device: "emulator-5554",
     packageName: "com.google.android.apps.walletnfcrel"
