@@ -12,7 +12,7 @@ The **canonical, evidence-based live release record** is [ULTRON_STATUS.md](ULTR
 - **Supabase:** 15 migrations are applied through `20261027185203_private_document_storage`. Durable paired-device tables and telemetry are not yet present. The current task, schedule, memory, and task-audit counts were zero during the 2026-11-05 read-only audit.
 - **Worker:** the API log confirms worker process startup, but no live queued-task completion has been demonstrated.
 - **Security:** Supabase Security Advisor still reports Leaked Password Protection disabled; GitHub `main` also has no branch protection/rulesets configured.
-- **CI:** PR #465's exact-head test and world-intelligence build passed, but it remains unmerged. CI success on a feature branch is not production acceptance.
+- **CI:** exact-head CI passed for the integrated mobile/core-approval PR #469, paired-device regression PR #470, and worker-smoke compatibility PR #471. Browser readiness PR #460 and worker diagnostics PR #467 also have green exact-head runs. These changes remain on review branches; none is merged to `main`. CI success is not production acceptance.
 - **Not yet live-verified:** real authenticated model/vision inference, two-account production RLS flows, durable device pairing, live task completion, and deployed UI voice/chat/companion acceptance.
 
 **Release boundary:** preserve the existing project and data, remain free-first, and do not merge to `main`, apply production migrations, sync Render settings, change production secrets, or deploy until the owner explicitly authorizes those release actions.
