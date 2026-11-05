@@ -287,8 +287,26 @@ test("Immich connector is owner-bound and returns only bounded metadata", async 
   assert.equal(assets.assets[0].originalFileName, "beach.jpg");
   assert.equal(JSON.stringify(assets).includes("/private/original.jpg"), false);
   assert.ok(requests.every(item => item.options.headers["x-api-key"] === "immich-test-key"));
+  assert.ok(requests.every(item => item.options.redirect === "error"), "private API keys must not follow cross-origin redirects");
 });
 
+
+test("Immich connector bounds upstream metadata response bodies and rejects oversized payloads", async () => {
+  const connector = new ImmichConnector({
+    env: {
+      ULTRON_INTEGRATION_OWNER_USER_ID: ownerId,
+      IMMICH_BASE_URL: "https://immich.example.com",
+      IMMICH_API_KEY: "immich-test-key"
+    },
+    fetch: async () => new Response(JSON.stringify({
+      assets: { items: [{ id: "asset-oversized", originalFileName: "x".repeat(270 * 1024) }] }
+    }), { status: 200 })
+  });
+  const result = await connector.searchAssets(ownerId, { query: "test", limit: 10 });
+  assert.equal(result.success, false);
+  assert.equal(result.error, "IMMICH_RESPONSE_TOO_LARGE");
+  assert.deepEqual(result.assets, []);
+});
 
 test("private AppFlowy document reads require exact current-message approval", async () => {
   const env = {
