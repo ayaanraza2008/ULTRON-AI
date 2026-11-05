@@ -11,6 +11,9 @@ const approvedProofs = new WeakMap();
 
 function stableSerialize(value, seen = new WeakSet(), depth = 0) {
   if (depth > 24) throw new TypeError("Approval parameters are too deeply nested.");
+  // Match JSON semantics: undefined object properties are omitted below,
+  // while undefined array slots serialize as null.
+  if (value === undefined) return "null";
   if (value === null) return "null";
   if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
   if (typeof value === "number") {
@@ -22,7 +25,8 @@ function stableSerialize(value, seen = new WeakSet(), depth = 0) {
   seen.add(value);
   try {
     if (Array.isArray(value)) return "[" + value.map(item => stableSerialize(item, seen, depth + 1)).join(",") + "]";
-    return "{" + Object.keys(value).sort().map(key =>
+    const keys = Object.keys(value).filter(key => value[key] !== undefined).sort();
+    return "{" + keys.map(key =>
       JSON.stringify(key) + ":" + stableSerialize(value[key], seen, depth + 1)
     ).join(",") + "}";
   } finally {
