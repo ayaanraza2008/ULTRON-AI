@@ -716,8 +716,12 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   async function requireSupabaseUser(req, res, next) {
     const user = await getSupabaseUser(req, res);
     if (!user) return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Sign in to your ULTRON account to use saved data." } });
-    if (env.ULTRON_OWNER_USER_ID && user.id !== env.ULTRON_OWNER_USER_ID) {
-      return res.status(403).json({ error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } });
+    if (env.ULTRON_OWNER_USER_ID) {
+      if (user.id !== env.ULTRON_OWNER_USER_ID) {
+        return res.status(403).json({ error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } });
+      }
+    } else if (env.ULTRON_PERSONAL_AI_MODE === "true" || env.ULTRON_SINGLE_OWNER === "true") {
+      return res.status(503).json({ error: { code: "OWNER_NOT_CONFIGURED", message: "Personal AI mode is active but owner user ID is not configured." } });
     }
     req.supabaseUser = user;
     next();
@@ -789,6 +793,18 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       throw Object.assign(new Error(status === 503 ? "Server-side database operation was denied or not configured." : "Could not complete the task database operation."), { status, code: "PRIVILEGED_DATABASE_REQUEST_FAILED" });
     }
     return payload;
+  }
+
+  function safeTimingCompare(a, b) {
+    if (typeof a !== "string" || typeof b !== "string") return false;
+    try {
+      const bufA = Buffer.from(a);
+      const bufB = Buffer.from(b);
+      if (bufA.length !== bufB.length) return false;
+      return crypto.timingSafeEqual(bufA, bufB);
+    } catch {
+      return false;
+    }
   }
 
   function sessionSecret() {
@@ -894,10 +910,10 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   const authRateLimiter = createAuthRateLimiter();
 
   app.post("/api/auth/signup", authRateLimiter, async (req, res) => {
-    if (env.ULTRON_DISABLE_PUBLIC_SIGNUP === "true" || env.ULTRON_DISABLE_PUBLIC_SIGNUP === "1") {
+    if (env.ULTRON_DISABLE_PUBLIC_SIGNUP === "true" || env.ULTRON_DISABLE_PUBLIC_SIGNUP === "1" || env.ULTRON_PERSONAL_AI_MODE === "true" || env.ULTRON_OWNER_BOOTSTRAP_TOKEN) {
       const bootstrapToken = String(req.headers["x-ultron-bootstrap-token"] || req.body?.bootstrapToken || "").trim();
       const expectedToken = String(env.ULTRON_OWNER_BOOTSTRAP_TOKEN || "").trim();
-      if (!expectedToken || !bootstrapToken || bootstrapToken !== expectedToken) {
+      if (!expectedToken || !bootstrapToken || !safeTimingCompare(bootstrapToken, expectedToken)) {
         return res.status(403).json({
           error: {
             code: "SIGNUP_DISABLED",

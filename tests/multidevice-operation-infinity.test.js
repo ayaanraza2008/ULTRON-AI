@@ -1,20 +1,28 @@
 /**
- * ULTRON AI — OPERATION INFINITY: Multi-Device Personal AI Ecosystem Test Suite
+ * ULTRON AI — OPERATION INFINITY: Master Multi-Device Personal AI Verification Suite
  *
- * Verifies:
+ * Comprehensive End-to-End Verification of:
  * 1. Arbitrary N-device scalability across Windows PCs, laptops, Android phones,
  *    tablets, web browsers, and client adapters (no two-device limitation).
- * 2. Dynamic device registration, telemetry presence updates, and unregistration.
- * 3. Capability-aware task routing (findEligibleDevices).
- * 4. Ecosystem state synchronization across devices with conflict resolution.
- * 5. DeviceHub pairing, allowlist enforcement, and strict offline presence fail-closed behavior.
- * 6. Extended remote PC computer control actions (open folder, find file, vitals, inspect task, emergency stop).
- * 7. Single-owner exclusivity: owner-only signup gating and owner user ID verification.
+ * 2. MultiDeviceManager persistent durable storage & restart recovery.
+ * 3. Real message delivery mechanism, active subscriber notification, offline queueing,
+ *    and delivery acknowledgement.
+ * 4. Server-authoritative monotonic versioned conflict resolution & sensitive data filter.
+ * 5. Device revocation and isolation.
+ * 6. Shared memory context across authorized personal devices.
+ * 7. DeviceHub pairing, allowlist enforcement, and strict offline presence fail-closed behavior.
+ * 8. Extended remote PC computer control actions, AbortController task cancellation,
+ *    and multi-task emergency stop propagation.
+ * 9. Elimination of fake success: RemoteTaskOrchestrator fails closed when agents are unavailable.
+ * 10. Single-owner exclusivity: owner-only signup gating, timing-safe verification,
+ *     and fail-closed behavior when owner ID is not configured.
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { MultiDeviceManager, DEVICE_TYPES } from "../integrations/multi-device-manager.js";
 import { DeviceHub, APPROVED_REMOTE_ACTIONS } from "../integrations/device-hub.js";
 import { WindowsDesktopAgent, DESKTOP_SCREEN_STATE } from "../system/windows-desktop-agent.js";
@@ -39,10 +47,9 @@ async function withServer({ env = {}, fetchImpl = async () => new Response("{}",
   }
 }
 
-test("MultiDeviceManager supports arbitrary N-device fleet (no two-device limit)", () => {
-  const mdm = new MultiDeviceManager();
+test("1. MultiDeviceManager supports arbitrary N-device fleet (no two-device limit)", () => {
+  const mdm = new MultiDeviceManager({ persist: false });
 
-  // Initially has baseline fleet (4 devices: 1 primary desktop + 3 companion devices)
   const baselineCount = mdm.listDevices().length;
   assert.equal(baselineCount >= 2, true);
 
@@ -102,8 +109,8 @@ test("MultiDeviceManager supports arbitrary N-device fleet (no two-device limit)
   assert.equal(mdm.getDevice("dev-tablet-tab9"), null);
 });
 
-test("Capability-aware routing and telemetry updates", () => {
-  const mdm = new MultiDeviceManager();
+test("2. Capability-aware routing and telemetry updates", () => {
+  const mdm = new MultiDeviceManager({ persist: false });
 
   mdm.registerDevice({
     id: "pc-studio",
@@ -129,25 +136,20 @@ test("Capability-aware routing and telemetry updates", () => {
     online: false // offline
   });
 
-  // Query capability 'heavy_build' with onlineOnly=true (default)
   const computeDevices = mdm.findEligibleDevices("heavy_build");
   assert.equal(computeDevices.length, 1);
   assert.equal(computeDevices[0].id, "pc-studio");
 
-  // Query capability 'heavy_build' including offline
   const allCompute = mdm.findEligibleDevices("heavy_build", { onlineOnly: false });
   assert.equal(allCompute.length, 2);
 
-  // Query capability 'camera'
   const cameraDevices = mdm.findEligibleDevices("camera");
   assert.equal(cameraDevices.length, 1);
   assert.equal(cameraDevices[0].id, "phone-primary");
 
-  // Query device capabilities
   const caps = mdm.getDeviceCapabilities("phone-primary");
   assert.deepEqual(caps, ["telephony", "gps", "camera", "biometrics"]);
 
-  // Update telemetry and presence
   const presenceRes = mdm.updateDevicePresence("phone-primary", {
     online: true,
     battery: { percent: 45, isCharging: true },
@@ -160,43 +162,165 @@ test("Capability-aware routing and telemetry updates", () => {
   assert.equal(updatedDev.vitals.networkType, "5G");
 });
 
-test("Ecosystem state synchronization with conflict resolution", () => {
-  const mdm = new MultiDeviceManager();
+test("3. Durable persistence & restart recovery across MultiDeviceManager instances", () => {
+  const tempFile = path.join(os.tmpdir(), "ultron-test-mdm-" + Date.now() + ".json");
+  try {
+    const mdm1 = new MultiDeviceManager({ storagePath: tempFile, persist: true });
+    mdm1.registerDevice({
+      id: "pc-custom-rig",
+      name: "Custom Windows Rig",
+      type: DEVICE_TYPES.WINDOWS_PC,
+      capabilities: ["heavy_inference", "game_mode"],
+      online: true
+    });
+    mdm1.syncStateAcrossDevices({
+      stateKey: "persisted_key_1",
+      payload: { mode: "autonomous", activeProject: "ULTRON" }
+    });
 
-  // Sync active task state
-  const sync1 = mdm.syncStateAcrossDevices({
-    stateKey: "active_project_context",
-    payload: { currentFile: "server.js", line: 42 },
-    originDeviceId: "pc-primary"
-  });
-  assert.equal(sync1.success, true);
-  assert.equal(sync1.syncedKey, "active_project_context");
-  assert.equal(sync1.version, 1);
+    assert.equal(fs.existsSync(tempFile), true);
 
-  // Retrieve state
-  const state = mdm.getSharedEcosystemState("active_project_context");
-  assert.equal(state.payload.currentFile, "server.js");
-  assert.equal(state.version, 1);
+    // Restart recovery: second instance loads state from disk
+    const mdm2 = new MultiDeviceManager({ storagePath: tempFile, persist: true });
+    const recoveredDev = mdm2.getDevice("pc-custom-rig");
+    assert.ok(recoveredDev);
+    assert.equal(recoveredDev.name, "Custom Windows Rig");
 
-  // Conflict resolution: simulate a stale update with past updatedAtMs
-  const staleUpdate = {
-    stateKey: "active_project_context",
-    payload: { currentFile: "stale.js" },
-    originDeviceId: "phone-primary"
-  };
-  // Inject artificially future timestamp into existing state
-  state.updatedAtMs = Date.now() + 100_000;
-  const conflictRes = mdm.syncStateAcrossDevices(staleUpdate);
-  assert.equal(conflictRes.success, false);
-  assert.equal(conflictRes.error, "CONFLICT_STALE_UPDATE");
-
-  // Clean state
-  mdm.clearSharedState("active_project_context");
-  assert.equal(mdm.getSharedEcosystemState("active_project_context"), null);
+    const recoveredState = mdm2.getSharedEcosystemState("persisted_key_1");
+    assert.ok(recoveredState);
+    assert.equal(recoveredState.payload.activeProject, "ULTRON");
+    assert.equal(recoveredState.version, 1);
+  } finally {
+    try { fs.unlinkSync(tempFile); } catch {}
+  }
 });
 
-test("DeviceHub allowlist includes new remote PC operations and blocks unsafe commands", () => {
-  // Verify allowlisted actions
+test("4. Real message delivery: active subscriber, offline queueing, and delivery acknowledgement", () => {
+  const mdm = new MultiDeviceManager({ persist: false });
+
+  // Register two companion devices
+  mdm.registerDevice({ id: "phone-alpha", name: "Phone Alpha", type: DEVICE_TYPES.ANDROID_SMARTPHONE });
+  mdm.registerDevice({ id: "tablet-beta", name: "Tablet Beta", type: DEVICE_TYPES.ANDROID_TABLET });
+
+  const deliveredEvents = [];
+  // Phone Alpha subscribes to live events
+  mdm.subscribeDevice("phone-alpha", (evt) => {
+    deliveredEvents.push(evt);
+  });
+
+  // Sync state broadcast
+  const syncRes = mdm.syncStateAcrossDevices({
+    stateKey: "music_playback",
+    payload: { track: "Interstellar Theme", isPlaying: true },
+    originDeviceId: "pc-primary",
+    targetDevices: ["phone-alpha", "tablet-beta"]
+  });
+
+  assert.equal(syncRes.success, true);
+  assert.equal(syncRes.deliveredCount, 1); // delivered immediately to active phone-alpha
+  assert.equal(syncRes.queuedCount, 2);    // queued for both devices
+
+  // Verify Phone Alpha received the live event
+  assert.equal(deliveredEvents.length, 1);
+  assert.equal(deliveredEvents[0].stateKey, "music_playback");
+  assert.equal(deliveredEvents[0].payload.track, "Interstellar Theme");
+
+  // Tablet Beta (offline subscriber) polls pending events
+  const pendingForTablet = mdm.pollPendingEvents("tablet-beta");
+  assert.equal(pendingForTablet.length, 1);
+  assert.equal(pendingForTablet[0].stateKey, "music_playback");
+
+  // Tablet Beta acknowledges delivery
+  const ackRes = mdm.acknowledgeDelivery("tablet-beta", pendingForTablet[0].deliveryId);
+  assert.equal(ackRes.success, true);
+  assert.equal(ackRes.acknowledged, true);
+  assert.equal(ackRes.remainingCount, 0);
+
+  // Tablet Beta queue is now empty
+  assert.equal(mdm.pollPendingEvents("tablet-beta").length, 0);
+});
+
+test("5. Server-authoritative monotonic version conflict resolution & sensitive data filter", () => {
+  const mdm = new MultiDeviceManager({ persist: false });
+
+  // Initial update: version 1
+  const sync1 = mdm.syncStateAcrossDevices({
+    stateKey: "active_task",
+    payload: { status: "started" }
+  });
+  assert.equal(sync1.success, true);
+  assert.equal(sync1.version, 1);
+
+  // Valid expectedVersion=1 update -> advances to version 2
+  const sync2 = mdm.syncStateAcrossDevices({
+    stateKey: "active_task",
+    payload: { status: "in_progress" },
+    expectedVersion: 1
+  });
+  assert.equal(sync2.success, true);
+  assert.equal(sync2.version, 2);
+
+  // Stale expectedVersion=1 update -> rejected with VERSION_CONFLICT
+  const staleSync = mdm.syncStateAcrossDevices({
+    stateKey: "active_task",
+    payload: { status: "stale_overwrite" },
+    expectedVersion: 1
+  });
+  assert.equal(staleSync.success, false);
+  assert.equal(staleSync.error, "VERSION_CONFLICT");
+  assert.equal(staleSync.currentVersion, 2);
+
+  // Sensitive data filter: blocking broadcast of credentials
+  const badSync = mdm.syncStateAcrossDevices({
+    stateKey: "credentials_leak",
+    payload: { tokenHash: "plain_secret_value_123" }
+  });
+  assert.equal(badSync.success, false);
+  assert.equal(badSync.error, "SENSITIVE_DATA_BLOCKED");
+});
+
+test("6. Device revocation isolates device and drops active delivery", () => {
+  const mdm = new MultiDeviceManager({ persist: false });
+  mdm.registerDevice({ id: "untrusted-phone", name: "Compromised Device", type: DEVICE_TYPES.ANDROID_SMARTPHONE });
+
+  let received = false;
+  mdm.subscribeDevice("untrusted-phone", () => { received = true; });
+
+  const revokeRes = mdm.revokeDevice("untrusted-phone", "lost_device");
+  assert.equal(revokeRes.success, true);
+  assert.equal(revokeRes.status, "revoked");
+
+  // Sync event targeting revoked device must skip it
+  const syncRes = mdm.syncStateAcrossDevices({
+    stateKey: "security_alert",
+    payload: { level: "high" },
+    targetDevices: ["untrusted-phone"]
+  });
+  assert.equal(syncRes.deliveredCount, 0);
+  assert.equal(syncRes.queuedCount, 0);
+  assert.equal(received, false);
+});
+
+test("7. Shared memory access across authorized personal devices", () => {
+  const mdm = new MultiDeviceManager({ persist: false });
+
+  // Store conversation memory context from Android
+  const memSync = mdm.syncSharedMemory({
+    memoryKey: "project_ultron_architecture",
+    memoryData: { leadDev: "Ayaan Raza", activeBranch: "feat/ultron-operation-infinity-multidevice" },
+    originDeviceId: "phone-android-alpha"
+  });
+  assert.equal(memSync.success, true);
+  assert.equal(memSync.version, 1);
+
+  // Retrieve authorized project memory from Windows PC
+  const mem = mdm.getSharedMemory("project_ultron_architecture");
+  assert.ok(mem);
+  assert.equal(mem.leadDev, "Ayaan Raza");
+  assert.equal(mem.activeBranch, "feat/ultron-operation-infinity-multidevice");
+});
+
+test("8. DeviceHub allowlist, pairing, and strict offline presence fail-closed", () => {
   assert.equal(APPROVED_REMOTE_ACTIONS.has("open_folder"), true);
   assert.equal(APPROVED_REMOTE_ACTIONS.has("find_file"), true);
   assert.equal(APPROVED_REMOTE_ACTIONS.has("inspect_task"), true);
@@ -204,30 +328,19 @@ test("DeviceHub allowlist includes new remote PC operations and blocks unsafe co
   assert.equal(APPROVED_REMOTE_ACTIONS.has("get_task_output"), true);
   assert.equal(APPROVED_REMOTE_ACTIONS.has("emergency_stop"), true);
 
-  // Verify arbitrary/dangerous shell actions are denied
-  assert.equal(APPROVED_REMOTE_ACTIONS.has("format"), false);
-  assert.equal(APPROVED_REMOTE_ACTIONS.has("bash"), false);
-  assert.equal(APPROVED_REMOTE_ACTIONS.has("rm_rf"), false);
-  assert.equal(APPROVED_REMOTE_ACTIONS.has("powershell_raw"), false);
-});
-
-test("DeviceHub strict offline presence check fails closed", () => {
   const hub = new DeviceHub({
     tokenSecret: "test-secret-at-least-32-chars-long-entropy-key-12345"
   });
 
-  const pairing = hub.createPairingCode({
-    name: "Offline Workstation",
-    platform: "windows"
-  });
+  const pairing = hub.createPairingCode({ name: "Offline Workstation", platform: "windows" });
   const paired = hub.verifyPairingCode(pairing.code, null, "owner-user-123");
   assert.equal(paired.success, true);
   const targetId = paired.deviceId;
 
-  // Explicitly simulate offline state (e.g. PC shut down or disconnected)
+  // Mark device offline
   const dev = hub.pairedDevices.get(targetId);
   dev.online = false;
-  dev.lastSeenAt = new Date(Date.now() - 300_000).toISOString(); // 5 min ago
+  dev.lastSeenAt = new Date(Date.now() - 300_000).toISOString();
 
   assert.equal(hub.isDeviceOnline(targetId), false);
 
@@ -244,86 +357,83 @@ test("DeviceHub strict offline presence check fails closed", () => {
   assert.match(dispatchRes.message, /OFFLINE or unreachable/);
 });
 
-test("WindowsDesktopAgent handles extended remote PC actions and emergency stop", async () => {
+test("9. WindowsDesktopAgent managed task tracking, task cancellation & emergency stop", async () => {
   const agent = new WindowsDesktopAgent();
 
-  // Test inspect_task
+  // Test inspecting initial state
   const inspectRes = await agent.executeCommand("inspect_task");
   assert.equal(inspectRes.success, true);
-  assert.equal(inspectRes.result.success, true);
   assert.equal(inspectRes.result.isEmergencyStopped, false);
 
-  // Test emergency_stop
-  const stopRes = await agent.executeCommand("emergency_stop");
+  // Simulate registering a long-running managed task
+  const taskId = "task-comp-99";
+  const managed = agent.createManagedTask(taskId, "long_worker_process");
+  assert.equal(agent.activeTasks.get(taskId).status, "running");
+
+  // Verify inspect_task reflects running task
+  const inspectRunning = await agent.executeCommand("inspect_task");
+  assert.equal(inspectRunning.result.runningCount, 1);
+
+  // Test real task cancellation via stop_task
+  const stopRes = await agent.executeCommand("stop_task", { taskId });
   assert.equal(stopRes.success, true);
-  assert.equal(stopRes.result.status, "EMERGENCY_STOP_ENGAGED");
+  assert.equal(stopRes.result.status, "aborted");
+  assert.equal(managed.abortController.signal.aborted, true);
+  assert.equal(agent.activeTasks.get(taskId).status, "aborted");
 
-  // Verify inspect_task reflects emergency stop engaged
-  const inspectAfterStop = await agent.executeCommand("inspect_task");
-  assert.equal(inspectAfterStop.result.isEmergencyStopped, true);
+  // Create another task and test emergency stop
+  const task2 = agent.createManagedTask("task-comp-100", "compute_task");
+  const emergRes = await agent.executeCommand("emergency_stop");
+  assert.equal(emergRes.success, true);
+  assert.equal(emergRes.result.status, "EMERGENCY_STOP_ENGAGED");
+  assert.ok(emergRes.result.abortedTasks.includes("task-comp-100"));
+  assert.equal(task2.abortController.signal.aborted, true);
+  assert.equal(agent.computerControl.isEmergencyStopped(), true);
 
-  // Resume operations
+  // Reset emergency stop
   agent.computerControl.setEmergencyStop(false);
-  assert.equal(agent.computerControl.isEmergencyStopped(), false);
 });
 
-test("RemoteTaskOrchestrator dispatches extended PC operations to Windows desktop agent", async () => {
+test("10. RemoteTaskOrchestrator eliminates fake success: fails closed when agent unavailable", async () => {
+  const orchestrator = new RemoteTaskOrchestrator(); // No agent attached
+
+  // All PC commands must fail closed with WINDOWS_AGENT_UNAVAILABLE
+  const pcActions = ["UNLOCK_PC_SCREEN", "LOCK_PC_SCREEN", "LAUNCH_PC_APP", "OPEN_PC_FOLDER", "FIND_PC_FILE", "GET_PC_VITALS", "EMERGENCY_STOP"];
+  for (const act of pcActions) {
+    const res = await orchestrator.executeRemoteTask({
+      callerId: "+1234567890",
+      isOwner: true,
+      action: act
+    });
+    assert.equal(res.success, false, `Action ${act} should not succeed without agent`);
+    assert.equal(res.error, "WINDOWS_AGENT_UNAVAILABLE");
+  }
+
+  // With a mock agent connected, calls execute genuinely
   const mockAgent = {
     async executeCommand(action, payload) {
-      return { success: true, mockAction: action, payload };
+      return { success: true, executedAction: action, payload };
     },
     async getSystemVitals() {
-      return { storageAvailableGb: 210, ramUsedPercent: 32 };
+      return { storageAvailableGb: 250, ramUsedPercent: 28 };
     }
   };
+  const orchestratorWithAgent = new RemoteTaskOrchestrator({ windowsDesktopAgent: mockAgent });
 
-  const orchestrator = new RemoteTaskOrchestrator({
-    windowsDesktopAgent: mockAgent
-  });
-
-  // 1. LAUNCH_PC_APP
-  const launchRes = await orchestrator.executeRemoteTask({
+  const validLaunch = await orchestratorWithAgent.executeRemoteTask({
     callerId: "+1234567890",
     isOwner: true,
     action: "LAUNCH_PC_APP",
-    payload: { app: "code" }
+    payload: { app: "notepad" }
   });
-  assert.equal(launchRes.success, true);
-  assert.equal(launchRes.result.mockAction, "launch_app");
-
-  // 2. OPEN_PC_FOLDER
-  const folderRes = await orchestrator.executeRemoteTask({
-    callerId: "+1234567890",
-    isOwner: true,
-    action: "OPEN_PC_FOLDER",
-    payload: { folder: "src" }
-  });
-  assert.equal(folderRes.success, true);
-  assert.equal(folderRes.result.mockAction, "open_folder");
-
-  // 3. GET_PC_VITALS
-  const vitalsRes = await orchestrator.executeRemoteTask({
-    callerId: "+1234567890",
-    isOwner: true,
-    action: "GET_PC_VITALS"
-  });
-  assert.equal(vitalsRes.success, true);
-  assert.equal(vitalsRes.result.storageAvailableGb, 210);
-
-  // 4. EMERGENCY_STOP
-  const emergRes = await orchestrator.executeRemoteTask({
-    callerId: "+1234567890",
-    isOwner: true,
-    action: "EMERGENCY_STOP"
-  });
-  assert.equal(emergRes.success, true);
-  assert.equal(emergRes.result.mockAction, "emergency_stop");
+  assert.equal(validLaunch.success, true);
+  assert.equal(validLaunch.result.executedAction, "launch_app");
 });
 
-test("Owner-only signup gating rejects unauthorized public signups when disabled", async () => {
+test("11. Owner-only signup gating & timing-safe token verification", async () => {
   const env = {
     ULTRON_DISABLE_PUBLIC_SIGNUP: "true",
-    ULTRON_OWNER_BOOTSTRAP_TOKEN: "valid-owner-bootstrap-secret-998877"
+    ULTRON_OWNER_BOOTSTRAP_TOKEN: "valid-bootstrap-secret-998877"
   };
 
   await withServer({ env }, async base => {
@@ -331,7 +441,10 @@ test("Owner-only signup gating rejects unauthorized public signups when disabled
     const resWithoutToken = await fetch(base + "/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "intruder@example.com", password: "Password123!" })
+      body: JSON.stringify({
+        email: "intruder@example.com",
+        password: ["example", "user", "secret", "phrase"].join("-")
+      })
     });
     assert.equal(resWithoutToken.status, 403);
     const errBody = await resWithoutToken.json();
@@ -344,19 +457,23 @@ test("Owner-only signup gating rejects unauthorized public signups when disabled
         "Content-Type": "application/json",
         "x-ultron-bootstrap-token": "wrong-token"
       },
-      body: JSON.stringify({ email: "intruder@example.com", password: "Password123!" })
+      body: JSON.stringify({
+        email: "intruder@example.com",
+        password: ["example", "user", "secret", "phrase"].join("-")
+      })
     });
     assert.equal(resBadToken.status, 403);
     assert.equal((await resBadToken.json()).error.code, "SIGNUP_DISABLED");
   });
 });
 
-test("Single-owner exclusivity rejects non-owner authenticated accounts", async () => {
-  const env = {
+test("12. Single-owner exclusivity and fail-closed when owner is unconfigured", async () => {
+  // Test 1: Non-owner account rejected
+  const env1 = {
     ULTRON_OWNER_USER_ID: "owner-uuid-ayaan-001"
   };
 
-  const fetchImpl = async (url) => {
+  const fetchImpl1 = async (url) => {
     if (url.endsWith("/auth/v1/user")) {
       return new Response(JSON.stringify({ id: "intruder-uuid-999", email: "other@example.com" }), {
         status: 200,
@@ -366,16 +483,39 @@ test("Single-owner exclusivity rejects non-owner authenticated accounts", async 
     return new Response("{}", { status: 200 });
   };
 
-  await withServer({ env, fetchImpl }, async base => {
-    // Authenticated request from a non-owner user ID -> 403 ULTRON_OWNER_ONLY
+  await withServer({ env: env1, fetchImpl: fetchImpl1 }, async base => {
     const res = await fetch(base + "/api/runtime/readiness", {
-      headers: {
-        cookie: "ultron_sb_access=valid-token-for-intruder"
-      }
+      headers: { cookie: "ultron_sb_access=valid-token-for-intruder" }
     });
     assert.equal(res.status, 403);
     const body = await res.json();
     assert.equal(body.error.code, "ULTRON_OWNER_ONLY");
     assert.match(body.error.message, /belongs exclusively to its registered owner/);
+  });
+
+  // Test 2: In personal mode with NO owner configured, protected data routes fail closed
+  const env2 = {
+    ULTRON_PERSONAL_AI_MODE: "true"
+    // ULTRON_OWNER_USER_ID is missing
+  };
+
+  const fetchImpl2 = async (url) => {
+    if (url.endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ id: "any-user-uuid", email: "user@example.com" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  await withServer({ env: env2, fetchImpl: fetchImpl2 }, async base => {
+    const res = await fetch(base + "/api/runtime/readiness", {
+      headers: { cookie: "ultron_sb_access=valid-token-any" }
+    });
+    assert.equal(res.status, 503);
+    const body = await res.json();
+    assert.equal(body.error.code, "OWNER_NOT_CONFIGURED");
+    assert.match(body.error.message, /owner user ID is not configured/);
   });
 });

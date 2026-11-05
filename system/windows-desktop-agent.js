@@ -36,6 +36,7 @@ export class WindowsDesktopAgent {
     this.registered = false;
     this.authToken = null;
     this.activeTask = null;
+    this.activeTasks = new Map();
     this.executionHistory = [];
     this.onStateChangeCallback = options.onStateChange || null;
     this.computerControl = new WindowsComputerControl();
@@ -201,9 +202,30 @@ export class WindowsDesktopAgent {
    * Executes an authorized remote command received from the central ULTRON brain.
    * Strictly enforces allowlists; unrestricted terminal/shell is denied.
    */
+  createManagedTask(taskId, action, payload = {}) {
+    const abortController = new AbortController();
+    const taskRecord = {
+      id: taskId,
+      action,
+      payload,
+      abortController,
+      childProcess: null,
+      status: "running",
+      output: [],
+      startedAt: new Date().toISOString(),
+      stoppedAt: null
+    };
+    this.activeTasks.set(taskId, taskRecord);
+    this.activeTask = taskId;
+    return taskRecord;
+  }
+
   async executeCommand(action, payload = {}) {
     const cleanAction = String(action || "").toLowerCase().trim();
     const startTime = Date.now();
+    const taskId = payload.taskId || "task_" + crypto.randomUUID();
+    const isMetaAction = ["inspect_task", "status", "get_system_vitals", "get_task_output", "stop_task", "emergency_stop"].includes(cleanAction);
+    const managedTask = isMetaAction ? null : this.createManagedTask(taskId, cleanAction, payload);
 
     try {
       let result = null;
@@ -276,9 +298,13 @@ export class WindowsDesktopAgent {
         }
 
         case "inspect_task": {
+          const current = this.activeTask ? this.activeTasks.get(this.activeTask) : null;
+          const running = Array.from(this.activeTasks.values()).filter(t => t.status === "running").map(t => ({ id: t.id, action: t.action, startedAt: t.startedAt }));
           result = {
             success: true,
-            activeTask: this.activeTask,
+            activeTask: current ? { id: current.id, action: current.action, status: current.status, startedAt: current.startedAt } : null,
+            runningTasks: running,
+            runningCount: running.length,
             history: this.executionHistory.slice(0, 10),
             isEmergencyStopped: this.computerControl.isEmergencyStopped()
           };
@@ -286,32 +312,68 @@ export class WindowsDesktopAgent {
         }
 
         case "stop_task": {
-          const stoppedTask = this.activeTask;
-          this.activeTask = null;
-          result = { success: true, stoppedTask, status: "stopped" };
+          const targetId = payload.taskId || this.activeTask;
+          const taskToStop = this.activeTasks.get(targetId);
+          if (taskToStop && taskToStop.status === "running") {
+            taskToStop.abortController.abort();
+            if (taskToStop.childProcess && typeof taskToStop.childProcess.kill === "function") {
+              try { taskToStop.childProcess.kill("SIGTERM"); } catch {}
+            }
+            taskToStop.status = "aborted";
+            taskToStop.stoppedAt = new Date().toISOString();
+            if (this.activeTask === targetId) this.activeTask = null;
+            result = { success: true, stoppedTaskId: targetId, status: "aborted", stoppedAt: taskToStop.stoppedAt };
+          } else if (taskToStop) {
+            result = { success: true, stoppedTaskId: targetId, status: taskToStop.status, message: "Task was already stopped." };
+          } else {
+            result = { success: false, error: "TASK_NOT_FOUND", taskId: targetId, message: "No active task found matching ID." };
+          }
           break;
         }
 
         case "get_task_output": {
-          const taskId = payload.taskId;
-          const matched = this.executionHistory.find(h => h.result?.taskId === taskId || h.action === taskId);
+          const queryId = payload.taskId || this.activeTask;
+          const task = this.activeTasks.get(queryId);
+          const matched = this.executionHistory.find(h => h.result?.taskId === queryId || h.action === queryId);
           result = {
             success: true,
-            output: matched ? matched.result : (this.activeTask ? "Task in progress" : "No task output found")
+            taskId: queryId,
+            status: task?.status || (matched ? "completed" : "not_found"),
+            output: task?.output || matched?.result || (this.activeTask ? "Task in progress" : "No task output found")
           };
           break;
         }
 
         case "emergency_stop": {
           this.computerControl.setEmergencyStop(true);
+          await this.lockScreen();
+          const abortedIds = [];
+          for (const [id, t] of this.activeTasks.entries()) {
+            if (t.status === "running") {
+              t.abortController.abort();
+              if (t.childProcess && typeof t.childProcess.kill === "function") {
+                try { t.childProcess.kill("SIGKILL"); } catch {}
+              }
+              t.status = "emergency_stopped";
+              t.stoppedAt = new Date().toISOString();
+              abortedIds.push(id);
+            }
+          }
           this.activeTask = null;
-          result = { success: true, status: "EMERGENCY_STOP_ENGAGED", timestamp: new Date().toISOString() };
+          result = { success: true, status: "EMERGENCY_STOP_ENGAGED", abortedTasks: abortedIds, timestamp: new Date().toISOString() };
           break;
         }
 
         default: {
           throw new Error(`Command '${action}' is not authorized on Windows Desktop Companion.`);
         }
+      }
+
+      if (managedTask && managedTask.status === "running") {
+        managedTask.status = "completed";
+      }
+      if (this.activeTask === taskId) {
+        this.activeTask = null;
       }
 
       const outcome = {

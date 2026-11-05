@@ -1,9 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  remoteTaskOrchestrator,
-  RemoteTaskOrchestrator
-} from "../system/remote-task-orchestrator.js";
+import { RemoteTaskOrchestrator } from "../system/remote-task-orchestrator.js";
 
 test("RemoteTaskOrchestrator: Rejects unauthorized callers from executing remote tasks", async () => {
   const orchestrator = new RemoteTaskOrchestrator();
@@ -47,7 +44,12 @@ test("RemoteTaskOrchestrator: Executes storage diagnostics and checks project ru
 });
 
 test("RemoteTaskOrchestrator: Suppresses duplicate commands within idempotency window", async () => {
-  const orchestrator = new RemoteTaskOrchestrator();
+  const mockAgent = {
+    unlockScreen: async () => ({ success: true, message: "PC unlocked." })
+  };
+  const orchestrator = new RemoteTaskOrchestrator({
+    windowsDesktopAgent: mockAgent
+  });
 
   const firstCall = await orchestrator.executeRemoteTask({
     callerId: "owner-call-01",
@@ -68,4 +70,35 @@ test("RemoteTaskOrchestrator: Suppresses duplicate commands within idempotency w
   assert.equal(secondCall.success, true);
   assert.equal(secondCall.duplicateSuppressed, true);
   assert.match(secondCall.message, /suppressed/);
+});
+
+test("RemoteTaskOrchestrator: Fails closed with WINDOWS_AGENT_UNAVAILABLE when companion is missing (no fake success)", async () => {
+  const orchestrator = new RemoteTaskOrchestrator(); // No windowsDesktopAgent provided
+
+  const res = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-01",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN"
+  });
+
+  assert.equal(res.success, false);
+  assert.equal(res.error, "WINDOWS_AGENT_UNAVAILABLE");
+  assert.match(res.message, /not connected or registered/);
+
+  const resApp = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-01",
+    isOwner: true,
+    action: "LAUNCH_PC_APP",
+    payload: { app: "code" }
+  });
+  assert.equal(resApp.success, false);
+  assert.equal(resApp.error, "WINDOWS_AGENT_UNAVAILABLE");
+
+  const resStop = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-01",
+    isOwner: true,
+    action: "EMERGENCY_STOP"
+  });
+  assert.equal(resStop.success, false);
+  assert.equal(resStop.error, "WINDOWS_AGENT_UNAVAILABLE");
 });

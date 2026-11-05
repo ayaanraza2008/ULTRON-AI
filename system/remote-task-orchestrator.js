@@ -87,9 +87,13 @@ export class RemoteTaskOrchestrator {
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.unlockScreen();
           } else {
-            executionResult = { success: true, message: "PC unlocked." };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
           }
-          reportStep("Step 3: Workstation screen unlocked. Energy Core activated.");
+          if (executionResult && executionResult.success !== false) {
+            reportStep("Step 3: Workstation screen unlocked. Energy Core activated.");
+          } else {
+            reportStep("Step 3: Failed to unlock workstation: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
@@ -98,9 +102,13 @@ export class RemoteTaskOrchestrator {
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.lockScreen();
           } else {
-            executionResult = { success: true, message: "PC locked." };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
           }
-          reportStep("Step 3: Workstation locked.");
+          if (executionResult && executionResult.success !== false) {
+            reportStep("Step 3: Workstation locked.");
+          } else {
+            reportStep("Step 3: Failed to lock workstation: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
@@ -109,9 +117,13 @@ export class RemoteTaskOrchestrator {
           if (this.multiDeviceManager) {
             executionResult = await this.multiDeviceManager.unlockMobileDevices();
           } else {
-            executionResult = { success: true, unlockedCount: 3 };
+            executionResult = { success: false, error: "MULTI_DEVICE_MANAGER_UNAVAILABLE", message: "Multi-device manager is not configured." };
           }
-          reportStep(`Step 3: Unlocked ${executionResult.unlockedCount || 3} mobile devices.`);
+          if (executionResult && executionResult.success !== false) {
+            reportStep(`Step 3: Unlocked ${executionResult.unlockedCount || 0} mobile devices.`);
+          } else {
+            reportStep("Step 3: Failed to unlock mobile devices: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
@@ -120,28 +132,35 @@ export class RemoteTaskOrchestrator {
           if (this.multiDeviceManager) {
             executionResult = await this.multiDeviceManager.playMediaAcrossDevices(payload);
           } else {
-            executionResult = { success: true, playingDevices: 3 };
+            executionResult = { success: false, error: "MULTI_DEVICE_MANAGER_UNAVAILABLE", message: "Multi-device manager is not configured." };
           }
-          reportStep("Step 3: Favorite song launched across all devices.");
+          if (executionResult && executionResult.success !== false) {
+            reportStep("Step 3: Favorite song launched across all devices.");
+          } else {
+            reportStep("Step 3: Failed to launch media: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
         case "CHECK_STORAGE_AND_RUNNABILITY": {
           reportStep("Step 2: Querying Windows PC storage and hardware headroom...");
-          let vitals = { storageAvailableGb: 184, ramUsedPercent: 36 };
           if (this.windowsDesktopAgent) {
-            vitals = await this.windowsDesktopAgent.getSystemVitals();
+            const vitals = await this.windowsDesktopAgent.getSystemVitals();
+            const canRun = (vitals?.storageAvailableGb || 0) > 10;
+            executionResult = {
+              success: true,
+              storageAvailableGb: vitals?.storageAvailableGb,
+              ramUsedPercent: vitals?.ramUsedPercent,
+              canRun,
+              verdict: canRun
+                ? `You have ${vitals?.storageAvailableGb} GB of free storage. Your project has ample space and is ready to run.`
+                : `Storage is critically low (${vitals?.storageAvailableGb} GB). Free up disk space before execution.`
+            };
+            reportStep("Step 3: Vitals received. Storage verified.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Storage check failed: Windows companion unavailable.");
           }
-          const canRun = vitals.storageAvailableGb > 10;
-          executionResult = {
-            storageAvailableGb: vitals.storageAvailableGb,
-            ramUsedPercent: vitals.ramUsedPercent,
-            canRun,
-            verdict: canRun
-              ? `You have ${vitals.storageAvailableGb} GB of free storage. Your project has ample space and is ready to run.`
-              : `Storage is critically low (${vitals.storageAvailableGb} GB). Free up disk space before execution.`
-          };
-          reportStep("Step 3: Vitals received. Storage verified.");
           break;
         }
 
@@ -149,10 +168,11 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Inspecting ULTRON AI repository and running test diagnostics...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.checkProjectStatus();
+            reportStep("Step 3: Test diagnostics complete. All systems healthy.");
           } else {
-            executionResult = { success: true, testsTotal: 800, testsPassing: 799, testsFailed: 0 };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Project test inspection failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: Test diagnostics complete. All systems healthy.");
           break;
         }
 
@@ -160,10 +180,11 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Launching application on Windows PC...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("launch_app", payload);
+            reportStep("Step 3: Application launched on PC.");
           } else {
-            executionResult = { success: true, app: payload.app || "application", status: "launched" };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: App launch failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: Application launched on PC.");
           break;
         }
 
@@ -171,10 +192,11 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Accessing PC directory...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("open_folder", payload);
+            reportStep("Step 3: PC directory queried.");
           } else {
-            executionResult = { success: true, folder: payload.folder || "workspace", files: [] };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Directory query failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: PC directory queried.");
           break;
         }
 
@@ -182,10 +204,11 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Searching PC filesystem for file...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("find_file", payload);
+            reportStep("Step 3: PC filesystem search complete.");
           } else {
-            executionResult = { success: true, query: payload.query, matches: [] };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: File search failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: PC filesystem search complete.");
           break;
         }
 
@@ -193,10 +216,11 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Gathering PC hardware vitals...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.getSystemVitals();
+            reportStep("Step 3: PC hardware vitals collected.");
           } else {
-            executionResult = { success: true, storageAvailableGb: 150, ramUsedPercent: 42 };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Vitals query failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: PC hardware vitals collected.");
           break;
         }
 
@@ -204,10 +228,11 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Inspecting active task on Windows PC...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("inspect_task", payload);
+            reportStep("Step 3: PC task inspected.");
           } else {
-            executionResult = { success: true, activeTask: null };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Task inspection failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: PC task inspected.");
           break;
         }
 
@@ -215,34 +240,40 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Transmitting EMERGENCY STOP directive to Windows PC and fleet...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("emergency_stop", payload);
+            reportStep("Step 3: Emergency stop engaged. All active worker operations halted.");
           } else {
-            executionResult = { success: true, status: "EMERGENCY_STOP_ENGAGED" };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered. Emergency stop could not be delivered to PC." };
+            reportStep("Step 3: Emergency stop failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: Emergency stop engaged. All active worker operations halted.");
           break;
         }
 
         default: {
-          executionResult = { success: true, message: `Action ${action} completed.` };
-          reportStep(`Step 2: Action ${action} executed.`);
+          executionResult = { success: false, error: "UNKNOWN_ACTION", message: `Action '${action}' is not supported.` };
+          reportStep(`Step 2: Action '${action}' rejected as unsupported.`);
           break;
         }
       }
 
-      taskRecord.status = "COMPLETED";
+      const isSuccess = Boolean(executionResult && executionResult.success !== false);
+      taskRecord.status = isSuccess ? "COMPLETED" : "FAILED";
       taskRecord.completedAt = new Date().toISOString();
       taskRecord.result = executionResult;
+      if (!isSuccess) {
+        taskRecord.error = executionResult?.error || "TASK_FAILED";
+      }
 
       this.taskHistory.unshift(taskRecord);
       if (this.taskHistory.length > this.maxHistory) this.taskHistory.pop();
       this.taskQueue.delete(taskId);
 
       return {
-        success: true,
+        success: isSuccess,
         taskId,
         action,
         progressSteps: taskRecord.progressSteps,
-        result: executionResult
+        result: executionResult,
+        ...(isSuccess ? {} : { error: executionResult?.error || "TASK_FAILED", message: executionResult?.message || "Task failed" })
       };
     } catch (err) {
       taskRecord.status = "FAILED";

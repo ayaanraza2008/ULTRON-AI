@@ -11,6 +11,8 @@
  */
 
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 export const DEVICE_TYPES = {
   WINDOWS_PC: "windows_pc",
@@ -30,7 +32,127 @@ export class MultiDeviceManager {
     this.deviceHub = options.deviceHub || null;
     this.commandHistory = [];
     this.sharedState = new Map();
+    this.subscribers = new Map();
+    this.pendingDeliveries = new Map();
+    this.revokedDevices = new Set();
+    this.storagePath = options.storagePath || path.resolve(process.cwd(), "data", "multidevice-state.json");
+    this.isPersistent = Boolean(options.persist !== false);
     this.initializeDefaultFleet();
+    if (this.isPersistent) {
+      this.loadFromDisk();
+    }
+  }
+
+  saveToDisk() {
+    if (!this.isPersistent) return false;
+    try {
+      const dir = path.dirname(this.storagePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const serialized = {
+        savedAt: new Date().toISOString(),
+        devices: Array.from(this.devices.entries()),
+        sharedState: Array.from(this.sharedState.entries()),
+        pendingDeliveries: Array.from(this.pendingDeliveries.entries()),
+        revokedDevices: Array.from(this.revokedDevices)
+      };
+      fs.writeFileSync(this.storagePath, JSON.stringify(serialized, null, 2), "utf8");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  loadFromDisk() {
+    try {
+      if (!fs.existsSync(this.storagePath)) return false;
+      const raw = fs.readFileSync(this.storagePath, "utf8");
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.devices)) {
+        for (const [id, entry] of data.devices) {
+          if (id && entry) this.devices.set(id, entry);
+        }
+      }
+      if (Array.isArray(data.sharedState)) {
+        for (const [key, state] of data.sharedState) {
+          if (key && state) this.sharedState.set(key, state);
+        }
+      }
+      if (Array.isArray(data.pendingDeliveries)) {
+        for (const [id, queue] of data.pendingDeliveries) {
+          if (id && Array.isArray(queue)) this.pendingDeliveries.set(id, queue);
+        }
+      }
+      if (Array.isArray(data.revokedDevices)) {
+        this.revokedDevices = new Set(data.revokedDevices);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  subscribeDevice(deviceId, callback) {
+    if (!deviceId || typeof callback !== "function") return false;
+    if (this.revokedDevices.has(deviceId)) return false;
+    if (!this.subscribers.has(deviceId)) {
+      this.subscribers.set(deviceId, new Set());
+    }
+    this.subscribers.get(deviceId).add(callback);
+    const pending = this.pendingDeliveries.get(deviceId) || [];
+    for (const evt of pending) {
+      try { callback(evt); } catch {}
+    }
+    return true;
+  }
+
+  unsubscribeDevice(deviceId, callback = null) {
+    if (!deviceId) return false;
+    const subs = this.subscribers.get(deviceId);
+    if (!subs) return false;
+    if (callback) {
+      subs.delete(callback);
+    } else {
+      subs.clear();
+    }
+    return true;
+  }
+
+  pollPendingEvents(deviceId) {
+    if (!deviceId || this.revokedDevices.has(deviceId)) return [];
+    const queue = this.pendingDeliveries.get(deviceId) || [];
+    return [...queue];
+  }
+
+  acknowledgeDelivery(deviceId, deliveryId) {
+    if (!deviceId || !deliveryId) return { success: false, error: "PARAMS_REQUIRED" };
+    const queue = this.pendingDeliveries.get(deviceId);
+    if (!queue) return { success: false, error: "NO_PENDING_QUEUE" };
+    const initialLen = queue.length;
+    const updated = queue.filter(item => item.deliveryId !== deliveryId);
+    this.pendingDeliveries.set(deviceId, updated);
+    this.saveToDisk();
+    return {
+      success: true,
+      deviceId,
+      acknowledgedDeliveryId: deliveryId,
+      acknowledged: initialLen > updated.length,
+      remainingCount: updated.length
+    };
+  }
+
+  revokeDevice(deviceId, reason = "owner_revoked") {
+    if (!this.devices.has(deviceId)) {
+      return { success: false, error: "DEVICE_NOT_FOUND" };
+    }
+    const dev = this.devices.get(deviceId);
+    dev.status = "revoked";
+    dev.online = false;
+    dev.revokedAt = new Date().toISOString();
+    this.revokedDevices.add(deviceId);
+    this.pendingDeliveries.delete(deviceId);
+    this.unsubscribeDevice(deviceId);
+    this.saveToDisk();
+    return { success: true, deviceId, status: "revoked", reason, revokedAt: dev.revokedAt };
   }
 
   /**
@@ -317,16 +439,41 @@ export class MultiDeviceManager {
   /**
    * Synchronizes shared ecosystem state across devices with conflict resolution.
    */
-  syncStateAcrossDevices({ stateKey, payload, originDeviceId = null, targetDevices = null } = {}) {
+  syncStateAcrossDevices({ stateKey, payload, originDeviceId = null, expectedVersion = null, targetDevices = null } = {}) {
     if (!stateKey || typeof stateKey !== "string") {
       return { success: false, error: "STATE_KEY_REQUIRED" };
     }
     const cleanKey = stateKey.trim();
-    const existing = this.sharedState.get(cleanKey);
-    const now = Date.now();
-    const timestamp = new Date(now).toISOString();
 
-    // Conflict resolution: prevent overwriting newer state with stale timestamps
+    // Sensitive data guard: credentials must not be synced as broadcast state
+    const payloadStr = JSON.stringify(payload || {});
+    if (/(?:api_key|authToken|password|tokenHash|bearer\s+[a-z0-9])/i.test(payloadStr)) {
+      return {
+        success: false,
+        error: "SENSITIVE_DATA_BLOCKED",
+        message: "Private authentication credentials must not be broadcast as shared ecosystem state."
+      };
+    }
+
+    const existing = this.sharedState.get(cleanKey);
+    const currentVersion = existing ? (Number(existing.version) || 1) : 0;
+
+    // Server-authoritative monotonic version check
+    if (expectedVersion !== null && expectedVersion !== undefined) {
+      if (Number(expectedVersion) !== currentVersion) {
+        return {
+          success: false,
+          error: "VERSION_CONFLICT",
+          currentVersion,
+          expectedVersion: Number(expectedVersion),
+          message: `State update rejected: expected version ${expectedVersion} does not match authoritative version ${currentVersion}.`,
+          currentState: existing
+        };
+      }
+    }
+
+    const now = Date.now();
+    // Stale timestamp conflict guard
     if (existing && existing.updatedAtMs && existing.updatedAtMs > now) {
       return {
         success: false,
@@ -336,24 +483,81 @@ export class MultiDeviceManager {
       };
     }
 
+    const nextVersion = currentVersion + 1;
+    const timestamp = new Date(now).toISOString();
+
     const stateEntry = {
       key: cleanKey,
       payload,
       originDeviceId,
       updatedAt: timestamp,
       updatedAtMs: now,
-      version: (existing?.version || 0) + 1
+      version: nextVersion
     };
     this.sharedState.set(cleanKey, stateEntry);
 
     const targetList = targetDevices || Array.from(this.devices.keys()).filter(id => id !== originDeviceId);
+    const deliveredTo = [];
+    const queuedFor = [];
+
+    for (const targetId of targetList) {
+      if (this.revokedDevices.has(targetId)) continue;
+      const deliveryEvent = {
+        deliveryId: "del_" + crypto.randomUUID(),
+        eventId: "evt_" + crypto.randomUUID(),
+        type: "STATE_SYNC",
+        stateKey: cleanKey,
+        version: nextVersion,
+        payload,
+        timestamp
+      };
+
+      const subs = this.subscribers.get(targetId);
+      if (subs && subs.size > 0) {
+        for (const cb of subs) {
+          try { cb(deliveryEvent); } catch {}
+        }
+        deliveredTo.push(targetId);
+      }
+
+      const queue = this.pendingDeliveries.get(targetId) || [];
+      queue.push(deliveryEvent);
+      if (queue.length > 100) queue.shift();
+      this.pendingDeliveries.set(targetId, queue);
+      queuedFor.push(targetId);
+    }
+
+    this.saveToDisk();
+
     return {
       success: true,
       syncedKey: cleanKey,
-      version: stateEntry.version,
+      version: nextVersion,
       updatedAt: timestamp,
-      synchronizedDevices: targetList
+      synchronizedDevices: targetList,
+      deliveredDevices: deliveredTo,
+      queuedDevices: queuedFor,
+      deliveredCount: deliveredTo.length,
+      queuedCount: queuedFor.length
     };
+  }
+
+  syncSharedMemory({ memoryKey, memoryData, originDeviceId = null, expectedVersion = null } = {}) {
+    if (!memoryKey || typeof memoryKey !== "string") {
+      return { success: false, error: "MEMORY_KEY_REQUIRED" };
+    }
+    return this.syncStateAcrossDevices({
+      stateKey: "memory:" + memoryKey.trim(),
+      payload: memoryData,
+      originDeviceId,
+      expectedVersion
+    });
+  }
+
+  getSharedMemory(memoryKey) {
+    if (!memoryKey) return null;
+    const entry = this.sharedState.get("memory:" + String(memoryKey).trim());
+    return entry?.payload || null;
   }
 
   /**
