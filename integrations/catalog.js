@@ -9,6 +9,7 @@ import { getStrataReadiness } from "./strata.js";
 import { getOpenVikingReadiness } from "./openviking.js";
 import { agentMemoryReadiness } from "../agentmemory-integration.js";
 import { getAppFlowyReadiness } from "./appflowy.js";
+import { getImmichReadiness } from "./immich.js";
 import { getHexStrikeReadiness } from "./hexstrike-ai.js";
 
 const safeBaseUrl = (value) => safeServiceBase(value) !== null;
@@ -41,6 +42,7 @@ export function buildIntegrationCatalog(env = process.env) {
   const openvikingReadiness = getOpenVikingReadiness({ env });
   const agentMemReadiness = agentMemoryReadiness(env);
   const appflowyReadiness = getAppFlowyReadiness({ env });
+  const immichReadiness = getImmichReadiness(env);
   const hexstrikeReadiness = getHexStrikeReadiness(env);
 
   return [
@@ -320,13 +322,24 @@ export function buildIntegrationCatalog(env = process.env) {
     {
       id: "appflowy",
       name: "AppFlowy Workspace",
-      capability: "Owner-scoped read-only workspace notes, documents, and database schema inspection",
+      capability: "Owner-scoped read-only workspace listing and document retrieval; private reads require explicit approval",
       state: appflowyReadiness.state,
       configured: Boolean(appflowyReadiness.configured),
       mode: "owner_scoped_external_api",
       requiredEnv: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"],
       apiRoutes: ["agent tool: appflowy_list_workspaces", "agent tool: appflowy_get_document"],
       note: appflowyReadiness.note
+    },
+    {
+      id: "immich",
+      name: "Immich Personal Media Library",
+      capability: "Owner-scoped read-only media-library status, album listing, and metadata search",
+      state: immichReadiness.state,
+      configured: Boolean(immichReadiness.configured),
+      mode: "owner_scoped_external_api",
+      requiredEnv: ["IMMICH_BASE_URL", "IMMICH_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"],
+      apiRoutes: ["agent tools: immich_check_status, immich_list_albums, immich_search_assets"],
+      note: immichReadiness.note
     },
     {
       id: "hexstrike-ai",
