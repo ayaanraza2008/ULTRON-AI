@@ -239,3 +239,13 @@ test("AgentMemory durable capture includes only bounded safe tags", async () => 
   });
   assert.deepEqual(requestBody.concepts, ["ultron-agent", "durable-context", "worker", "safe_tag"]);
 });
+
+
+test("AgentMemory capture reports not_configured instead of claiming a durable write", async () => {
+  const result = await captureAgentMemory("We decided: this project uses an isolated worker.", {
+    env: {},
+    userId: "user-123",
+    fetchImpl: async () => { throw new Error("unconfigured AgentMemory must not be contacted"); }
+  });
+  assert.deepEqual(result, { state: "not_configured" });
+});
