@@ -95,3 +95,13 @@ This addendum supersedes any older observation above where the live audit differ
 - **Release percentage:** no new weighted completion score is issued by this addendum. The historical 85.10% remains historical only and must not be presented as a fresh current score.
 
 No production schema, secrets, accounts, Render configuration, or deployments were changed.
+
+
+## 2026-11-05 12:55 IST continuation addendum
+
+- **Mobile owner authorization:** PR #447 exact head `7059cbf1eb57811145a5e07ad169de5a19e0eaea` passed run [41986683543](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41986683543): 1,619 total, 1,616 passed, 0 failed, 3 skipped. The mobile approval serializer now has sparse-array regression coverage. Its branch is six commits behind current main; rebase and exact-head verification are still required before merge. No physical Android acceptance was performed.
+- **Companion Bearer auth:** PR #458 corrects the paired-device router's standard `Authorization: Bearer` parser and adds an end-to-end test. Exact-head CI is pending; the dedicated `x-device-token` path remains unchanged.
+- **Persistent data snapshot:** live counts were conversations=1, messages=8, memory_items=0, agent_tasks=0, employee_schedules=0, documents=0. Schema and RLS exist, but no live memory write/retrieval or task lifecycle is evidenced by those rows.
+- **Live Supabase isolation:** the two-account E2E test is intentionally skipped unless an explicit write-confirmation flag, expected project reference, publishable key, and two dedicated test accounts are provided. It was not run against production because it creates and cleans up test records.
+- **PR backlog:** GitHub returned 100 open pull requests on the first page (at least 100). No bulk merge or closure was attempted; stacked dependencies, stale bases, and production auto-deploy make that unsafe.
+
