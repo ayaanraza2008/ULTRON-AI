@@ -547,7 +547,7 @@ test("agent can inspect task-matched repository readiness without exposing crede
     assert.equal(body.toolsUsed[0].name, "check_repository_capabilities");
     assert.equal(body.toolsUsed[0].ok, true);
     const result = body.toolResults[0].result;
-    assert.equal(result.repositoryCount, 43);
+    assert.equal(result.repositoryCount, 44);
     assert.ok(result.taskMatches.some(item => item.id === "chatwoot"));
     assert.ok(result.taskMatches.some(item => item.id === "openproject"));
     assert.ok(result.taskMatches.every(item => item.state === "configured_unverified"));
@@ -980,7 +980,7 @@ test("agent autonomously runs multiple safe tools when model function calling is
     const body = await response.json();
     assert.deepEqual(body.toolsUsed.map(x => x.name), ["check_integrations", "research_web"]);
     assert.equal(body.toolResults[1].result.provider, "tavily");
-    assert.match(body.content, /research_web/);
+    assert.equal(body.toolResults[1].result.answer, "Found public research.");
     assert.equal(modelCalls.length, 0, "missing provider credentials should fall back before making network calls");
   });
 });
@@ -2264,7 +2264,9 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.equal(compoundBody.routing.toolSchemasFiltered, false);
     assert.ok(compoundTools.includes("research_web"));
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
-    assert.equal(compoundTools.length, 60, "the compound route should expose the current complete allowlist, including HexStrike and OpenSEO");
+    assert.ok(compoundTools.includes("appflowy_get_document"));
+    assert.ok(compoundTools.includes("immich_search_assets"));
+    assert.equal(compoundTools.length, 66, "the compound route should expose the current complete allowlist, including AppFlowy and Immich");
   });
 });
 
