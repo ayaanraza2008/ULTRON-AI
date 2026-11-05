@@ -750,7 +750,8 @@ export class AutonomousOrchestrator {
           actorId: approval.userId,
           toolId: tool.id,
           permissionLevel: tool.permissionLevel,
-          approvalId: approval.id
+          approvalId: approval.id,
+          params: step.params
         });
         approvalsToConsume.set(step.id, approval);
       }
