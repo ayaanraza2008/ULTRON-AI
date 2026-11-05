@@ -117,9 +117,12 @@ test("private-data approval is bound to the exact document ID or media query in 
   const appflowyMessage = "I approve reading my AppFlowy workspace and documents for this request. Read document doc-99."; 
   assert.equal(privateDataReadApprovalMatchesAction(appflowyMessage, "appflowy_get_document", { documentId: "doc-99" }), true);
   assert.equal(privateDataReadApprovalMatchesAction(appflowyMessage, "appflowy_get_document", { documentId: "doc-100" }), false);
+  assert.equal(privateDataReadApprovalMatchesAction(appflowyMessage, "appflowy_get_document", { documentId: "doc-9" }), false);
   const immichMessage = "I approve reading my Immich photo and video metadata for this request. Search for beach photos."; 
   assert.equal(privateDataReadApprovalMatchesAction(immichMessage, "immich_search_assets", { query: "beach" }), true);
   assert.equal(privateDataReadApprovalMatchesAction(immichMessage, "immich_search_assets", { query: "vacation" }), false);
+  const beachfrontMessage = "I approve reading my Immich photo and video metadata for this request. Search for beachfront photos.";
+  assert.equal(privateDataReadApprovalMatchesAction(beachfrontMessage, "immich_search_assets", { query: "beach" }), false);
   assert.equal(privateDataReadApprovalMatchesAction(immichMessage, "immich_list_albums", {}), true);
 });
 
