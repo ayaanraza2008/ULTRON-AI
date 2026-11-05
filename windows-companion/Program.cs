@@ -56,6 +56,7 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly object _wakeLock = new();
     private readonly FloatingCoreOverlayForm _floatingCore;
     private static readonly HttpClient s_httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly SemaphoreSlim s_sharedStateLock = new(1, 1);
 
     public CompanionContext(bool backgroundLaunch = false)
     {
@@ -1065,6 +1066,10 @@ internal sealed class CompanionContext : ApplicationContext
 
                 ShowStatus("ULTRON remote task: " + commandId + " processed.");
             }
+
+            // Shared ecosystem state is stored locally before the delivery is ACKed.
+            // If local persistence or the ACK fails, the server retains the event for retry.
+            await PollPendingStateEventsAsync(backendUri, identity);
         }
         catch (TaskCanceledException) { }
         catch (Exception ex)
@@ -1074,6 +1079,119 @@ internal sealed class CompanionContext : ApplicationContext
         finally
         {
             Interlocked.Exchange(ref _commandPollInProgress, 0);
+        }
+    }
+
+    private async Task PollPendingStateEventsAsync(Uri backendUri, (string DeviceId, string Token) identity)
+    {
+        var route = "/api/jarvis/devices/my/state/events";
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(backendUri, route));
+        request.Headers.Add("x-device-token", identity.Token);
+        using var response = await s_httpClient.SendAsync(request);
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            ShowStatus("Windows companion state sync authentication expired. Re-pair this device.");
+            return;
+        }
+        if (!response.IsSuccessStatusCode) return;
+        if (response.Content.Headers.ContentLength is long length && length > 512 * 1024) return;
+        var json = await response.Content.ReadAsStringAsync();
+        if (json.Length > 512 * 1024) return;
+
+        using var document = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        if (!document.RootElement.TryGetProperty("events", out var events) ||
+            events.ValueKind != System.Text.Json.JsonValueKind.Array)
+            return;
+
+        foreach (var stateEvent in events.EnumerateArray())
+        {
+            if (!stateEvent.TryGetProperty("deliveryId", out var deliveryNode) ||
+                deliveryNode.ValueKind != System.Text.Json.JsonValueKind.String)
+                continue;
+            var deliveryId = deliveryNode.GetString() ?? "";
+            if (!Regex.IsMatch(deliveryId, @"^[A-Za-z0-9_-]{1,128}$")) continue;
+            if (!TryApplySharedStateEvent(stateEvent)) continue;
+
+            var ackRoute = $"/api/jarvis/devices/my/state/events/{Uri.EscapeDataString(deliveryId)}/ack";
+            using var ack = new HttpRequestMessage(HttpMethod.Post, new Uri(backendUri, ackRoute))
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+            ack.Headers.Add("x-device-token", identity.Token);
+            using var ackResponse = await s_httpClient.SendAsync(ack);
+            if (!ackResponse.IsSuccessStatusCode) continue;
+        }
+    }
+
+    private static bool TryApplySharedStateEvent(System.Text.Json.JsonElement stateEvent)
+    {
+        try
+        {
+            if (!stateEvent.TryGetProperty("stateKey", out var keyNode) ||
+                keyNode.ValueKind != System.Text.Json.JsonValueKind.String ||
+                !stateEvent.TryGetProperty("version", out var versionNode) ||
+                !versionNode.TryGetInt64(out var incomingVersion) || incomingVersion < 1 ||
+                !stateEvent.TryGetProperty("payload", out var payload))
+                return false;
+
+            var stateKey = keyNode.GetString() ?? "";
+            if (string.IsNullOrWhiteSpace(stateKey) || stateKey.Length > 160) return false;
+
+            var localRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ULTRON");
+            Directory.CreateDirectory(localRoot);
+            var statePath = Path.Combine(localRoot, "shared-state.json");
+            s_sharedStateLock.Wait();
+            try
+            {
+                var states = new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal);
+                if (File.Exists(statePath))
+                {
+                    using var existingDocument = System.Text.Json.JsonDocument.Parse(File.ReadAllText(statePath));
+                    if (existingDocument.RootElement.TryGetProperty("states", out var existingStates) &&
+                        existingStates.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        foreach (var property in existingStates.EnumerateObject())
+                            states[property.Name] = property.Value.Clone();
+                    }
+                }
+
+                if (states.TryGetValue(stateKey, out var currentState))
+                {
+                    var currentVersion = currentState.TryGetProperty("version", out var currentVersionNode)
+                        ? currentVersionNode.GetInt64() : 0L;
+                    if (incomingVersion <= currentVersion) return true; // duplicate or stale: safe to ACK
+                }
+
+                var entryJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    version = incomingVersion,
+                    payload = payload.Clone(),
+                    timestamp = stateEvent.TryGetProperty("timestamp", out var ts) ? ts.GetString() : null
+                });
+                using var entryDocument = System.Text.Json.JsonDocument.Parse(entryJson);
+                states[stateKey] = entryDocument.RootElement.Clone();
+
+                var envelope = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    schemaVersion = 1,
+                    updatedAt = DateTime.UtcNow,
+                    states
+                });
+                var tempPath = statePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.WriteAllText(tempPath, envelope, new UTF8Encoding(false));
+                File.Move(tempPath, statePath, true);
+                return true;
+            }
+            finally
+            {
+                s_sharedStateLock.Release();
+            }
+        }
+        catch
+        {
+            return false;
         }
     }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -12,6 +13,7 @@ namespace Ultron.Companion;
 internal static class RemoteCommandExecutor
 {
     private const int MaxSharedFileBytes = 64 * 1024;
+    private static readonly ConcurrentDictionary<string, Process> TrackedProcesses = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, (string Executable, string ProcessName)> ApprovedApps =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -97,8 +99,11 @@ internal static class RemoteCommandExecutor
 
             return action.ToLowerInvariant() switch
             {
-                "launch_app" => LaunchApp(payload),
+                "launch_app" => LaunchApp(payload, FirstString(command, "id")),
                 "close_app" => CloseApp(payload),
+                "inspect_task" => InspectTrackedTasks(),
+                "stop_task" => StopTrackedTask(payload),
+                "emergency_stop" => EmergencyStop(),
                 "lock_workstation" => LockWorkstation(),
                 "set_volume" => SetVolume(payload),
                 "get_system_vitals" => GetSystemVitals(),
@@ -118,7 +123,7 @@ internal static class RemoteCommandExecutor
         }
     }
 
-    private static object LaunchApp(JsonElement payload)
+    private static object LaunchApp(JsonElement payload, string commandId)
     {
         var app = FirstString(payload, "app", "appKey", "name");
         if (!ApprovedApps.TryGetValue(app, out var target))
@@ -129,9 +134,115 @@ internal static class RemoteCommandExecutor
             FileName = target.Executable,
             UseShellExecute = true
         });
-        return process is null
-            ? Failure("APP_LAUNCH_FAILED", "Windows did not start the requested application.")
-            : new { success = true, output = "Launched " + app };
+        if (process is null)
+            return Failure("APP_LAUNCH_FAILED", "Windows did not start the requested application.");
+
+        var taskId = string.IsNullOrWhiteSpace(commandId) ? Guid.NewGuid().ToString("N") : commandId;
+        if (!TrackedProcesses.TryAdd(taskId, process))
+        {
+            try { process.Dispose(); } catch { }
+            return Failure("TASK_ID_CONFLICT", "A tracked Windows task already uses this command ID.");
+        }
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) =>
+        {
+            if (TrackedProcesses.TryRemove(taskId, out var exited))
+                exited.Dispose();
+        };
+        if (process.HasExited && TrackedProcesses.TryRemove(taskId, out var completed))
+            completed.Dispose();
+
+        return new { success = true, output = "Launched " + app, taskId, processId = process.Id };
+    }
+
+    private static object InspectTrackedTasks()
+    {
+        var tasks = TrackedProcesses.Select(pair => new
+        {
+            taskId = pair.Key,
+            processId = SafeProcessId(pair.Value),
+            processName = SafeProcessName(pair.Value)
+        }).ToArray();
+        return new { success = true, count = tasks.Length, tasks };
+    }
+
+    private static object StopTrackedTask(JsonElement payload)
+    {
+        var taskId = FirstString(payload, "taskId", "id");
+        if (string.IsNullOrWhiteSpace(taskId))
+            return Failure("TASK_ID_REQUIRED", "Provide the ULTRON command task ID to stop.");
+        if (!TrackedProcesses.TryRemove(taskId, out var process))
+            return Failure("TASK_NOT_FOUND", "The requested task is not a process launched by this companion.");
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                try { process.CloseMainWindow(); } catch { }
+                if (!process.WaitForExit(1500))
+                    process.Kill(entireProcessTree: true);
+                process.WaitForExit(1500);
+            }
+            return new { success = true, output = "Tracked task stopped.", taskId, stopped = process.HasExited };
+        }
+        catch (Exception ex)
+        {
+            return Failure("TASK_STOP_FAILED", ex.GetType().Name);
+        }
+        finally
+        {
+            process.Dispose();
+        }
+    }
+
+    private static object EmergencyStop()
+    {
+        var stopped = new List<string>();
+        var failed = new List<string>();
+        foreach (var pair in TrackedProcesses.ToArray())
+        {
+            if (!TrackedProcesses.TryRemove(pair.Key, out var process)) continue;
+            try
+            {
+                if (!process.HasExited)
+                {
+                    try { process.CloseMainWindow(); } catch { }
+                    if (!process.WaitForExit(1000))
+                        process.Kill(entireProcessTree: true);
+                    process.WaitForExit(1500);
+                }
+                if (process.HasExited) stopped.Add(pair.Key);
+                else failed.Add(pair.Key);
+            }
+            catch
+            {
+                failed.Add(pair.Key);
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        var workstationLocked = NativeMethods.LockWorkStation();
+        return new
+        {
+            success = failed.Count == 0 && workstationLocked,
+            status = failed.Count == 0 && workstationLocked ? "EMERGENCY_STOP_ENGAGED" : "EMERGENCY_STOP_PARTIAL",
+            stoppedTaskIds = stopped,
+            failedTaskIds = failed,
+            workstationLocked
+        };
+    }
+
+    private static int? SafeProcessId(Process process)
+    {
+        try { return process.HasExited ? null : process.Id; } catch { return null; }
+    }
+
+    private static string SafeProcessName(Process process)
+    {
+        try { return process.ProcessName; } catch { return "unknown"; }
     }
 
     private static object CloseApp(JsonElement payload)
