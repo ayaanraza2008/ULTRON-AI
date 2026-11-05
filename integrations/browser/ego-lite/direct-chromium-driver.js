@@ -142,9 +142,7 @@ export class DirectChromiumCdpDriver {
       const cleanup = () => {
         clearTimeout(timer);
         child.stderr.removeListener("data", onData);
-        child.stdout.removeListener("data", onStdout);
         child.removeListener("error", onError);
-        child.removeListener("exit", onExit);
       };
       const finish = (value) => {
         if (settled) return;
@@ -152,28 +150,18 @@ export class DirectChromiumCdpDriver {
         cleanup();
         resolve(value);
       };
-      const launchTimeoutMs = process.env.CI === "true" ? 20000 : 12000;
-      const timer = setTimeout(() => finish(null), launchTimeoutMs);
+      const timer = setTimeout(() => finish(null), 12000);
       const onData = (chunk) => {
-        stderrBuffer += String(chunk);
+        stderrBuffer += chunk;
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
         if (match) finish(match[1]);
       };
-      // Chromium builds differ in whether the DevTools banner is written to
-      // stderr or stdout. Observe both streams or a healthy browser can time out.
-      const onStdout = (chunk) => onData("[stdout] " + chunk);
       const onError = (error) => {
         stderrBuffer += String(error?.message || error).slice(0, 300);
         finish(null);
       };
-      const onExit = (code, signal) => {
-        stderrBuffer += "Browser process exited before DevTools became ready (code=" + code + ", signal=" + signal + ").";
-        finish(null);
-      };
       child.once("error", onError);
-      child.once("exit", onExit);
       child.stderr.on("data", onData);
-      child.stdout.on("data", onStdout);
     });
     if (!devtoolsLine || !this.process.pid) {
       await this._killProcess();
@@ -317,29 +305,64 @@ export class DirectChromiumCdpDriver {
     }
 
     if (record && record.cdp) {
+      const documentResponseStatuses = new Map();
+      const onNetworkResponse = (event) => {
+        let message;
+        try { message = JSON.parse(typeof event.data === "string" ? event.data : String(event.data)); } catch { return; }
+        const params = message?.params;
+        if (message?.method !== "Network.responseReceived" || params?.type !== "Document" || !params?.frameId) return;
+        const status = Number(params.response?.status);
+        if (Number.isInteger(status) && status >= 100 && status <= 599) {
+          documentResponseStatuses.set(params.frameId, status);
+        }
+      };
+      record.cdp.addEventListener?.("message", onNetworkResponse);
       try {
-        // Attach the load-state waiter BEFORE navigating to avoid missing a fast load event.
+        // Capture the main-frame HTTP response from CDP itself. Performance
+        // Timing's responseStatus may be 0 for cross-origin documents, which
+        // must not be misreported as an actual HTTP status.
         const loadWaiter = this._waitForLoadState(record.cdp, options.timeout || 20000);
         const navResult = await this._cdpSend(record.cdp, "Page.navigate", { url });
         await loadWaiter;
-        const [title, status, info] = await Promise.all([
+        const [title, performanceStatus, info] = await Promise.all([
           this._evaluate(pageId, "document.title"),
           this._evaluate(
             pageId,
-            `(performance.getEntriesByType('navigation')[0]||{}).responseStatus ?? (lastNavFailed?500:200)`
+            `(performance.getEntriesByType('navigation')[0]||{}).responseStatus`
           ),
           this._evaluate(
             pageId,
             `JSON.stringify({url: location.href, readyState: document.readyState})`
           )
         ]);
+        const cdpStatus = documentResponseStatuses.get(navResult?.frameId);
+        const status = Number.isInteger(cdpStatus) && cdpStatus > 0
+          ? cdpStatus
+          : Number.isInteger(performanceStatus) && performanceStatus > 0
+            ? performanceStatus
+            : null;
+        // Runtime.evaluate returns the value of JSON.stringify as a string.
+        // Parse it before reading the final URL and readyState.
+        let pageInfo = info;
+        if (typeof pageInfo === "string") {
+          try { pageInfo = JSON.parse(pageInfo); } catch { pageInfo = null; }
+        }
+        const finalUrl = typeof pageInfo?.url === "string" ? pageInfo.url : url;
+        const readyState = typeof pageInfo?.readyState === "string" ? pageInfo.readyState : undefined;
+        const isHttpNavigation = /^https?:/i.test(finalUrl);
+        if (status === null && isHttpNavigation) {
+          throw new Error("Could not observe the main-frame HTTP response status through CDP.");
+        }
+        // about:blank and other browser-internal schemes have no HTTP response.
+        // Preserve REAL_CDP control and report status 0 rather than inventing 200.
+        const reportedStatus = status ?? 0;
         const snapshotResult = await this._extractRealElements(pageId);
 
         const pageData = {
           pageId,
-          url: info?.url || url,
+          url: finalUrl,
           title: title || "",
-          status: Number.isInteger(status) ? status : 200,
+          status: reportedStatus,
           html: "",
           extractedElements: snapshotResult,
           navigatedAt: new Date().toISOString()
@@ -355,11 +378,13 @@ export class DirectChromiumCdpDriver {
           executionDriver: this.driverType,
           executionMechanism: "REAL_CDP",
           driverVerified: true,
-          readyState: info?.readyState
+          readyState
         };
       } catch (err) {
         if (options.throwOnError) throw err;
         // fall through to honest preview fallback
+      } finally {
+        record.cdp.removeEventListener?.("message", onNetworkResponse);
       }
     }
 
