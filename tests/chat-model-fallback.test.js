@@ -180,6 +180,9 @@ test("chat memory retrieval explicitly scopes its query to the authenticated Sup
     if (url === supabaseUrl + "/auth/v1/user") {
       return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
+    if (url === supabaseUrl + "/rest/v1/rpc/ultron_is_current_session_active") {
+      return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
+    }
     if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
       return new Response(JSON.stringify([{ memory_enabled: true }]), { status: 200, headers: { "Content-Type": "application/json" } });
     }
@@ -228,6 +231,9 @@ test("chat does not use the integration owner's Hermes provider for another auth
   await withApp(async (url, options = {}) => {
     if (url === supabaseUrl + "/auth/v1/user") {
       return new Response(JSON.stringify({ id: "00000000-0000-4000-8000-000000000002" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url === supabaseUrl + "/rest/v1/rpc/ultron_is_current_session_active") {
+      return new Response("true", { status: 200, headers: { "Content-Type": "application/json" } });
     }
     if (url.startsWith(supabaseUrl + "/rest/v1/user_preferences")) {
       return new Response(JSON.stringify([{ memory_enabled: false }]), { status: 200, headers: { "Content-Type": "application/json" } });
