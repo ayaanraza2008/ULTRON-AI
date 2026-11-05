@@ -2280,7 +2280,7 @@
             method: "POST",
             body: { goal: goal.value.trim(), role: role.value, mode: modeSelect.value }
           });
-          submitStatus.textContent = result?.execution?.notice || "Task accepted by the ULTRON worker queue.";
+          submitStatus.textContent = result?.notice || result?.execution?.notice || "Task accepted by the ULTRON worker queue.";
           goal.value = "";
           await refreshQueue();
         } catch (error) {

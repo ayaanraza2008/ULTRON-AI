@@ -396,6 +396,7 @@ test("spoken prompts skip unnecessary pre-search and use a smaller conversationa
 
 
 test("JARVIS task activity exposes a bounded account-scoped employee task form and persisted status/result paths", () => {
+  assert.ok(app.includes('result?.notice || result?.execution?.notice'));
   assert.ok(app.includes('apiRequest("/api/agent/tasks")'));
   assert.ok(app.includes('apiRequest("/api/agent/tasks"'));
   assert.ok(app.includes('apiRequest("/api/agent/tasks/" + encodeURIComponent(taskId))'));
