@@ -16,7 +16,7 @@
 | 3 | `AbuZar-Ansarii/Ultron` | Do not merge wholesale | PR #443 contains unique code with unsafe defaults (shared `default_user` memory, permissive Python/device actions, fake biometric success, and simulated IoT). Review individual ideas only. |
 | 4 | `citrolabs/ego-lite` | Keep browser adapter | `integrations/browser/ego-lite/`; validate live CDP/browser actions separately. |
 | 5 | `3dlg-hcvc/diorama` | Keep as optional spatial adapter | `spatial/diorama-adapter.js`; research/optional workload, not a default background process. |
-| 6 | `mobile-next/mobile-mcp` | Keep; harden authorization | `mobile-mcp-client.js`, `mobile/`, and mobile tests. Draft security remediation is PR #447; do not treat it as merged until CI and review pass. |
+| 6 | `mobile-next/mobile-mcp` | Keep; authorization hardening is implemented on a review branch | `mobile-mcp-client.js`, `mobile/`, and mobile tests. PR #447 was merged only into non-production staging branch `integration/mobile-security-core-approval-20261105`; the integrated implementation is PR #469, whose latest exact-head CI passed. PR #469 remains open and unmerged to `main`; real paired-device acceptance is still blocked by missing production pairing migrations. |
 | 7 | `garagehq/nightcrawler` | Defer | No dedicated adapter identified. Security reconnaissance must remain opt-in, target-scoped, and authorized. |
 | 8 | `crackerghost/DSH-GOD` | Keep local-answer adapter | `integrations/dsh-god/local-answers.js`; verify answer quality and source provenance. |
 | 9 | `tashfeenahmed/freellmapi` | Do not depend on it as a provider | No dedicated production adapter identified. Keep ULTRON's own provider abstraction; verify each free endpoint independently. |
@@ -70,4 +70,4 @@
 3. Keep optional services disabled until configured. Do not auto-download large models or start GPU-heavy services.
 4. External actions (messages, calls, purchases, uploads, destructive device operations, security scans) remain permission-gated and owner-scoped.
 5. Prefer existing code in ULTRON over copying upstream code. For third-party code, verify exact license and pin an actual upstream commit before importing.
-6. The immediate priorities are mobile authorization hardening (PR #447), provider connectivity, browser real-world acceptance, worker lifecycle, voice/vision device tests, and accurate capability status—not maximizing repository count.
+6. The immediate priorities are to review and safely integrate PRs #469 (mobile/core authorization), #470 (paired-device regressions), and #471 (worker-smoke key compatibility); then complete provider connectivity, Browser Use real-world acceptance, live worker lifecycle verification, voice/vision device tests, and accurate capability status—not maximize repository count.
