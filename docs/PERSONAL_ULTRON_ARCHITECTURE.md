@@ -162,18 +162,18 @@ The owner explicitly wants the same personal ULTRON identity available on both t
 
 ### Samsung-first compatibility plan (model and Android version not yet known)
 
-The owner's current phone is a **Samsung Galaxy S24 running Android 17 and One UI 9 (owner-reported); exact S24 variant/model number and software build remain unverified**. Treat Android 17 / One UI 9 as owner-reported device details until verified on-device. Do not assume a specific API level, Samsung firmware behavior, carrier feature or call-control capability. Implement a compatibility-first Android companion and defer any default-dialer takeover until the handset model and software build are identified and tested.
+The owner's current phone is a **standard Samsung Galaxy S24 (not S24+ or S24 Ultra), running Android 17 and One UI 9 (owner-reported); exact model number and software build remain unverified**. Treat Android 17 / One UI 9 as owner-reported device details until verified on-device. Do not assume a specific API level, Samsung firmware behavior, carrier feature or call-control capability. Implement a compatibility-first Android companion and defer any default-dialer takeover until the handset model and software build are identified and tested.
 
 #### Compatibility tiers
 
 - **Tier A — baseline companion:** authenticated app voice/text, push notifications, shared tasks, device pairing/revocation and user-visible permission controls. This is the first deliverable and must not depend on call interception.
 - **Tier B — app-based voice calling:** owner calls ULTRON inside the app using a supported real-time voice transport. Test microphone, Bluetooth/headset routing, audio focus, lock-screen behavior, background/foreground transitions and reconnect behavior on the actual Samsung handset.
 - **Tier C — outbound carrier calls:** optional provider-backed calls to the owner's verified number. Require explicit provider selection, pricing disclosure, opt-in, caller-ID verification, rate limits, quiet hours and kill switch. No paid provider until approved.
-- **Tier D — incoming SIM call handling:** experimental device-specific milestone. Verify the reported Galaxy S24 / Android 17 / One UI 9 software build, exact S24 variant, carrier and current default Phone app. Only then decide whether a complete user-selected default dialer using Android Telecom `ROLE_DIALER` + `InCallService` is appropriate. A call-screening role is a narrower alternative and must not be represented as full conversational call answering.
+- **Tier D — incoming SIM call handling:** experimental device-specific milestone. Verify the reported standard Galaxy S24 / Android 17 / One UI 9 software build, model number, carrier and current default Phone app. Only then decide whether a complete user-selected default dialer using Android Telecom `ROLE_DIALER` + `InCallService` is appropriate. A call-screening role is a narrower alternative and must not be represented as full conversational call answering.
 
 #### Samsung device discovery checklist
 
-Owner-reported device profile: **Samsung Galaxy S24, Android 17, One UI 9** (not yet independently verified). The remaining details are the exact S24 variant/model number, carrier and software build. Ask the owner to open **Settings → About phone** and record the model name and model number. Then open **Settings → About phone → Software information** to confirm Android version, One UI version and (optionally) build number.
+Owner-reported device profile: **standard Samsung Galaxy S24 (not S24+ or S24 Ultra), Android 17, One UI 9** (not yet independently verified). The remaining details are the exact model number, carrier and software build. Ask the owner to open **Settings → About phone** and record the model name and model number. Then open **Settings → About phone → Software information** to confirm Android version, One UI version and (optionally) build number.
 
 If menus differ, use Settings search for **Software information**. Do not request IMEI, serial number, phone number, SIM identifiers or other unnecessary device secrets. A screenshot may be shared only after those identifiers are hidden.
 
@@ -187,4 +187,4 @@ If menus differ, use Settings search for **Software information**. Do not reques
 - Preserve the preloaded/system dialer for emergency calls. If the handset or carrier blocks a capability, report it and use a safe fallback rather than promising unsupported behavior.
 - Record a device acceptance report with exact model, Android/One UI build, granted roles/permissions, tested call flows, failures and fallback behavior before marking incoming-call support production-ready.
 
-**Current device profile:** Samsung Galaxy S24; owner reports Android 17 and One UI 9; exact S24 variant/model number, carrier and software build are not yet independently verified. **Current decision:** proceed with Tier A and Tier B design without waiting for the model number. Keep Tier C opt-in and Tier D blocked pending model identification and on-device acceptance testing.
+**Current device profile:** standard Samsung Galaxy S24 (not S24+ or S24 Ultra); owner reports Android 17 and One UI 9; exact model number, carrier and software build are not yet independently verified. **Current decision:** proceed with Tier A and Tier B design without waiting for the model number. Keep Tier C opt-in and Tier D blocked pending model identification and on-device acceptance testing.
