@@ -109,11 +109,20 @@ export class DeviceWebSocketGateway {
     this.clients = new Map(); // deviceId -> ClientSession
     this.sseClients = new Map(); // deviceId -> Set(res)
     this.pingIntervalMs = options.pingIntervalMs || 30_000;
+    this.stateSyncAckHandler = null;
     this.attachedServer = null;
     this.upgradeHandler = null;
 
     // Listen to DeviceHub events for instant dispatch
     this.unsubscribeHub = this.deviceHub.registerEventListener(event => this.handleDeviceHubEvent(event));
+  }
+
+  /**
+   * Registers the owner-scoped handler used after an authenticated device
+   * acknowledges a queued state-sync delivery.
+   */
+  setStateSyncAckHandler(handler) {
+    this.stateSyncAckHandler = typeof handler === "function" ? handler : null;
   }
 
   /**
@@ -424,7 +433,32 @@ export class DeviceWebSocketGateway {
       return;
     }
 
-    // 3. Command Completion
+    // 3. Acknowledge owner-scoped state-sync delivery. The paired session
+    // supplies device and owner identity; clients cannot ACK another device.
+    if (msg.type === "STATE_SYNC_ACK" && msg.deliveryId) {
+      const ownerUserId = clientSession.device?.ownerUserId;
+      let outcome = { success: false, error: "STATE_SYNC_ACK_NOT_CONFIGURED" };
+      if (ownerUserId && typeof this.stateSyncAckHandler === "function") {
+        try {
+          outcome = await this.stateSyncAckHandler({
+            deviceId,
+            ownerUserId,
+            deliveryId: String(msg.deliveryId)
+          });
+        } catch {
+          outcome = { success: false, error: "STATE_SYNC_ACK_FAILED" };
+        }
+      }
+      this.sendFrame(clientSession.socket, {
+        type: "STATE_SYNC_ACK_RESULT",
+        deliveryId: msg.deliveryId,
+        success: Boolean(outcome?.success && outcome?.acknowledged),
+        ...(outcome?.error ? { error: outcome.error } : {})
+      });
+      return;
+    }
+
+    // 4. Command Completion
     if (msg.type === "COMMAND_COMPLETE" && msg.commandId) {
       const outcome = this.deviceHub.completeCommand(deviceId, msg.commandId, token, msg.result || {});
       this.sendFrame(clientSession.socket, { type: "COMMAND_COMPLETE_ACK", commandId: msg.commandId, success: outcome.success });
@@ -499,7 +533,7 @@ export class DeviceWebSocketGateway {
       return { success: false, error: "STATE_SYNC_ARGUMENTS_INVALID", deliveredDeviceIds: [] };
     }
 
-    const deliveredDeviceIds = [];
+    const sentDeviceIds = [];
     const uniqueIds = [...new Set(deviceIds.map(id => String(id || "").trim()).filter(Boolean))];
     for (const deviceId of uniqueIds) {
       const paired = this.deviceHub.pairedDevices.get(deviceId);
@@ -508,7 +542,7 @@ export class DeviceWebSocketGateway {
       const client = this.clients.get(deviceId);
       if (client?.authenticated && client.device?.ownerUserId === ownerUserId && client.socket) {
         if (this.sendFrame(client.socket, { type: "STATE_SYNC", event })) {
-          deliveredDeviceIds.push(deviceId);
+          sentDeviceIds.push(deviceId);
           continue;
         }
       }
@@ -522,11 +556,11 @@ export class DeviceWebSocketGateway {
             sent = true;
           } catch {}
         }
-        if (sent) deliveredDeviceIds.push(deviceId);
+        if (sent) sentDeviceIds.push(deviceId);
       }
     }
 
-    return { success: true, deliveredDeviceIds };
+    return { success: true, sentDeviceIds };
   }
 
   /**

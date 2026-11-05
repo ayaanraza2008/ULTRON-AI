@@ -221,7 +221,8 @@ test("4. Real message delivery: active subscriber, offline queueing, and deliver
 
   assert.equal(syncRes.success, true);
   assert.equal(syncRes.locallyNotifiedDevices.length, 1); // in-process callback notification
-  assert.equal(syncRes.deliveredCount, 0); // no authenticated WebSocket/SSE session in this unit test
+  assert.equal(syncRes.deliveredCount, 0); // no application ACK has arrived
+  assert.equal(syncRes.sentCount, 0);      // no authenticated WebSocket/SSE session in this unit test
   assert.equal(syncRes.queuedCount, 2);    // queued for both devices
 
   // Verify Phone Alpha received the live event

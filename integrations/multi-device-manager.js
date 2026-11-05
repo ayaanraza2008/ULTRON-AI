@@ -50,6 +50,15 @@ export class MultiDeviceManager {
     if (this.isPersistent) {
       this.loadFromDisk();
     }
+    if (options.registerDeliveryAckHandler === true && typeof this.deviceGateway?.setStateSyncAckHandler === "function") {
+      this.deviceGateway.setStateSyncAckHandler(({ deviceId, ownerUserId, deliveryId }) => {
+        const paired = this.deviceHub?.pairedDevices?.get(deviceId);
+        if (!paired || paired.status === "revoked" || paired.ownerUserId !== ownerUserId) {
+          return { success: false, error: "DEVICE_OWNER_MISMATCH" };
+        }
+        return this.acknowledgeDelivery(deviceId, deliveryId);
+      });
+    }
   }
 
   saveToDisk() {
@@ -606,7 +615,7 @@ export class MultiDeviceManager {
           deviceIds: [targetId],
           event: eventsByTarget.get(targetId)
         });
-        if (result?.success && result.deliveredDeviceIds?.includes(targetId)) websocketSent.push(targetId);
+        if (result?.success && result.sentDeviceIds?.includes(targetId)) websocketSent.push(targetId);
       }
     }
 
@@ -617,10 +626,12 @@ export class MultiDeviceManager {
       version: nextVersion,
       updatedAt: timestamp,
       synchronizedDevices: targetList,
-      deliveredDevices: websocketSent,
+      sentToDevices: websocketSent,
       locallyNotifiedDevices: locallyNotified,
       queuedDevices: queuedFor,
-      deliveredCount: websocketSent.length,
+      pendingAcknowledgementDevices: queuedFor,
+      deliveredCount: 0,
+      sentCount: websocketSent.length,
       queuedCount: queuedFor.length,
       transport: resolvedOwnerUserId ? "authenticated_websocket_sse_with_ack_queue" : "in_process_test_callbacks",
       ownerUserId: resolvedOwnerUserId
@@ -704,4 +715,4 @@ export class MultiDeviceManager {
 
 // Real runtime starts with no fabricated online devices. Actual devices must pair
 // and heartbeat before they can be selected for remote operations.
-export const multiDeviceManager = new MultiDeviceManager({ seedDefaultFleet: false, persist: true });
+export const multiDeviceManager = new MultiDeviceManager({ seedDefaultFleet: false, persist: true, registerDeliveryAckHandler: true });
