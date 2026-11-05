@@ -144,7 +144,7 @@ export async function captureAgentMemory(task, options = {}) {
   const env = options.env || process.env;
   if (env.ULTRON_AGENTMEMORY_CAPTURE === "false") return { state: "disabled" };
   const project = scopedProject(env, options.userId);
-  await requestMemory("/agentmemory/remember", {
+  const result = await requestMemory("/agentmemory/remember", {
     content: text,
     type: "decision",
     concepts: [
@@ -157,5 +157,9 @@ export async function captureAgentMemory(task, options = {}) {
     project,
     agentId: "ultron-ai"
   }, options);
+  if (result?.state === "not_configured") return { state: "not_configured" };
+  if (result?.success === false || result?.ok === false || ["failed", "error"].includes(result?.state)) {
+    return { state: "failed" };
+  }
   return { state: "captured" };
 }
