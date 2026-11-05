@@ -26,8 +26,9 @@ The intended architecture is one owner identity, one central intelligence and as
 - PR #477 is merged into `main`; the reported release merge commit is `25b66fd783f48d5b67755636e99567d03988a8f4`.
 - Main documentation commit `9c72bb6fef0339fbe86dc091d2e4837d28317eeb` exists on GitHub.
 - PR #478 is a separate development change and must be reviewed before merge.
-- An earlier PR #478 head (`6bbb11076b2ce870b43fc297fc718b2bae9f1a97`) completed CI with **1,745 Node tests passed, 0 failed, 3 skipped**, 26 Python tests passed, syntax check passed and the repository security quality gate reported 0 confirmed findings and 0 potential risks.
-- Subsequent changes added state-sync ACK handling, queue-persistence failure handling, additional test coverage and this report correction. Those later commits require their own exact-head CI result. Do not reuse the earlier green result as proof for a newer SHA.
+- An earlier PR #478 head (`6bbb11076b2ce870b43fc297fc718b2bae9f1a97`) completed CI with **1,745 Node tests passed, 0 failed, 3 skipped**, 26 Python tests passed, syntax check passed and the repository security quality gate reported 0 confirmed findings and 0 potential risks. These counts apply only to that earlier SHA.
+- PR head `171b7abb1422fbbae2b2220576ab0cf39fd85663` was subsequently observed with `ULTRON Windows Companion`, `ULTRON Android Companion`, and `ULTRON CI` all completed successfully. Exact test totals were not independently retrieved for that head.
+- Any commit after `171b7abb1422fbbae2b2220576ab0cf39fd85663`, including this documentation correction, requires its own exact-head CI result. Never transfer earlier test counts or green checks to a newer SHA.
 - Current PR state and current check conclusions must be read from GitHub at the time of release; this document does not freeze a future CI result.
 
 ## 3. Implemented in the candidate branch
@@ -51,8 +52,9 @@ The intended architecture is one owner identity, one central intelligence and as
 - Revoked devices are filtered out of active fleet lookups.
 
 ### Windows task lifecycle
-- The candidate tracks tasks with IDs and AbortController metadata and exposes stop/inspect/emergency-stop commands.
-- **This is not yet proof that every underlying OS process can be cancelled.** For example, the existing application launcher uses a promise wrapper around `execFile`; the candidate does not consistently retain a child-process handle or propagate an AbortSignal through every operation. Real process-level cancellation must remain unverified until the executor is wired and exercised end-to-end.
+- The native Windows companion tracks processes for allowlisted applications launched by the companion, keyed by command/task ID, and exposes inspect/stop/emergency-stop operations over that tracked set.
+- The server-side task orchestrator also has task IDs and AbortController metadata, but that metadata alone does not prove cancellation of every underlying OS process.
+- **Scope limitation:** this is not arbitrary process management. Processes not launched and tracked by the companion are outside the supported stop scope. Real process exit outcomes and emergency-stop behavior still require paired Windows-device acceptance.
 
 ## 4. Remaining acceptance gates
 
@@ -63,7 +65,7 @@ The intended architecture is one owner identity, one central intelligence and as
 | Device registration/pairing | Existing pairing/auth code and owner scoping exist | Verify live pairing, reconnect, revoke and multi-device isolation with real paired clients. |
 | Owner-only production enforcement | Code has fail-closed branches; Render Blueprint lists an owner-ID environment variable as dashboard-managed | Confirm the actual production owner ID and personal-mode/signup flags are correctly configured without exposing secret values. Test owner and non-owner accounts. |
 | Live AI inference | Public provider endpoints/model catalog reachability was observed earlier | Prove one authenticated generative completion through a configured provider; model-list HTTP 200 or local embeddings alone are not inference acceptance. |
-| Windows remote control | Allowlisted command handlers and fail-closed orchestration exist | Connect a real Windows companion, verify real command acknowledgements, and test process-level cancellation/emergency stop. |
+| Windows remote control | Allowlisted command handlers; native companion tracks processes it launches and exposes scoped inspect/stop/emergency-stop operations | Connect a real Windows companion, verify command acknowledgements and actual process exit outcomes. Do not claim control over arbitrary/untracked processes. |
 | Android operation | APK build and software tests were reported earlier; no ADB device was connected in the earlier audit | Install and test on an actual personal Android device when available. An APK build is not physical acceptance. |
 | Voice and vision | Software modules and tests exist | Verify real microphone, speaker and camera workflows on the chosen clients; maintain permission indicators and report unsupported platform restrictions. |
 | Production | Previous health probe reported HTTP 200 on an earlier revision | Recheck current deployed revision and application workflows after an explicitly authorized release. Health 200 alone is not full operational readiness. |
