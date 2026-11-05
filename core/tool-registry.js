@@ -397,8 +397,19 @@ export class ToolRegistry {
           } catch {}
         }
         if (zeroCostAiEngine?.completeWithFallback) {
-          const res = await zeroCostAiEngine.completeWithFallback(params.prompt || "Hello");
-          return { success: true, text: res.text || "", model: res.model || "zero_cost_fallback", provider: res.provider, tier: res.tier };
+          const res = await zeroCostAiEngine.completeWithFallback({ prompt: params.prompt || "Hello" });
+          if (!res?.success || res.tier === 4 || typeof res.text !== "string" || !res.text.trim()) {
+            return {
+              success: false,
+              status: "MODEL_UNAVAILABLE",
+              text: typeof res?.text === "string" ? res.text : "",
+              error: { code: "AI_MODEL_UNAVAILABLE", message: "Only deterministic offline rules were available; no language-model inference was completed." },
+              provider: res?.provider || "none",
+              tier: res?.tier ?? null,
+              proposedAction: res?.action || null
+            };
+          }
+          return { success: true, text: res.text, model: res.model || "zero_cost_fallback", provider: res.provider, tier: res.tier };
         }
         return { success: false, status: "UNAVAILABLE", error: { code: "AI_PROVIDER_UNAVAILABLE", message: "No configured AI provider completed inference. Configure a valid provider and retry." }, provider: "none" };
       }
