@@ -34,3 +34,19 @@ test("memory store tool does not invent a memory ID when persistence is unavaila
   assert.equal(result.error.code, "MEMORY_STORE_UNAVAILABLE");
   assert.equal("memoryId" in result, false);
 });
+
+
+test("memory store does not claim durability for process-local memory records", async () => {
+  const registry = new ToolRegistry({
+    ultronCore: {
+      storeMemory: async () => ({ id: "mem-process-local-1" })
+    }
+  });
+
+  const result = await registry.execute("memory_store", { content: "This is only process-local" });
+  assert.equal(result.success, false);
+  assert.equal(result.status, "NON_DURABLE");
+  assert.equal(result.durable, false);
+  assert.equal(result.error.code, "MEMORY_STORE_NOT_DURABLE");
+  assert.equal(result.memoryId, "mem-process-local-1");
+});
