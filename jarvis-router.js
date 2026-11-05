@@ -89,6 +89,7 @@ export function createJarvisRouter({
   privilegedSupabaseRest = supabaseRest,
   logger = console,
   deviceHub: deviceHubInstance = deviceHub,
+  multiDeviceManager: multiDeviceManagerInstance = multiDeviceManager,
   authenticateDeviceToken = null,
   fetchImpl = safePinnedFetch
 } = {}) {
@@ -217,10 +218,10 @@ export function createJarvisRouter({
   const productivity = new ProductivitySuite();
   // Wire Telephony and Multi-Device Ecosystem
   telephonyBrain.windowsDesktopAgent = windowsDesktopAgent;
-  telephonyBrain.multiDeviceManager = multiDeviceManager;
+  telephonyBrain.multiDeviceManager = multiDeviceManagerInstance;
   telephonyBrain.remoteTaskOrchestrator = remoteTaskOrchestrator;
   remoteTaskOrchestrator.windowsDesktopAgent = windowsDesktopAgent;
-  remoteTaskOrchestrator.multiDeviceManager = multiDeviceManager;
+  remoteTaskOrchestrator.multiDeviceManager = multiDeviceManagerInstance;
   remoteTaskOrchestrator.telephonyGateway = telephonyGateway;
 
 
@@ -1845,24 +1846,24 @@ export function createJarvisRouter({
   // --- Multi-Device Remote Control & Synchronizer ---
   router.get("/jarvis/devices/fleet", requireOwner, (_req, res) => {
     res.json({
-      devices: multiDeviceManager.listDevices(),
-      commandHistory: multiDeviceManager.commandHistory
+      devices: multiDeviceManagerInstance.listDevices(),
+      commandHistory: multiDeviceManagerInstance.commandHistory
     });
   });
 
   router.post("/jarvis/devices/unlock-mobile", requireOwner, async (_req, res) => {
-    const result = await multiDeviceManager.unlockMobileDevices();
+    const result = await multiDeviceManagerInstance.unlockMobileDevices();
     res.json(result);
   });
 
   router.post("/jarvis/devices/lock-mobile", requireOwner, async (_req, res) => {
-    const result = await multiDeviceManager.lockMobileDevices();
+    const result = await multiDeviceManagerInstance.lockMobileDevices();
     res.json(result);
   });
 
   router.post("/jarvis/devices/play-media", requireOwner, express.json(), async (req, res) => {
     const { mediaUrl, query } = req.body || {};
-    const result = await multiDeviceManager.playMediaAcrossDevices({ mediaUrl, query });
+    const result = await multiDeviceManagerInstance.playMediaAcrossDevices({ mediaUrl, query });
     res.json(result);
   });
 
@@ -1915,7 +1916,7 @@ export function createJarvisRouter({
       type: "CORE_STATE_CHANGE",
       state: windowsDesktopAgent.screenState === "SYSTEM_LOCKED" ? "STANDBY" : "CALL_ACTIVE",
       detail: "HUD Connected",
-      devices: multiDeviceManager.listDevices().length
+      devices: multiDeviceManagerInstance.listDevices().length
     });
 
     const timer = setInterval(() => {

@@ -251,11 +251,15 @@ export class MultiDeviceManager {
   }
 
   getDevice(deviceId) {
-    return this.devices.get(deviceId) || null;
+    const device = this.devices.get(deviceId);
+    if (!device || this.revokedDevices.has(deviceId) || device.status === "revoked") return null;
+    return device;
   }
 
   listDevices(filter = {}) {
-    let list = Array.from(this.devices.values());
+    let list = Array.from(this.devices.values()).filter(device =>
+      !this.revokedDevices.has(device.id) && device.status !== "revoked"
+    );
     if (filter.type) {
       list = list.filter(d => d.type === filter.type);
     }
@@ -272,123 +276,128 @@ export class MultiDeviceManager {
    * Simultaneously unlocks all registered mobile devices (Phone 1, 2, 3).
    */
   async unlockMobileDevices() {
-    const mobileDevices = this.listDevices({ platform: "android" });
-    const results = [];
-
-    for (const dev of mobileDevices) {
-      dev.screenLocked = false;
-      dev.lastSeenAt = new Date().toISOString();
-
-      let bridgeResult = { success: true };
-      if (this.androidBridge) {
-        bridgeResult = await this.androidBridge.unlockDevice(dev.id);
-      }
-
-      results.push({
-        deviceId: dev.id,
-        name: dev.name,
-        screenLocked: false,
-        bridgeResult
-      });
+    const mobileDevices = this.listDevices({ platform: "android", online: true });
+    if (!mobileDevices.length) {
+      return { success: false, error: "NO_ONLINE_ANDROID_DEVICES", targetedCount: 0, unlockedCount: 0, devices: [] };
     }
-
-    const eventRecord = {
-      action: "UNLOCK_MOBILE_DEVICES",
-      timestamp: new Date().toISOString(),
-      targetedCount: mobileDevices.length,
-      unlockedCount: results.length,
-      results
-    };
-    this.commandHistory.unshift(eventRecord);
+    if (!this.androidBridge || typeof this.androidBridge.unlockDevice !== "function") {
+      return {
+        success: false, error: "ANDROID_BRIDGE_UNAVAILABLE",
+        targetedCount: mobileDevices.length, unlockedCount: 0,
+        devices: mobileDevices.map(dev => ({ deviceId: dev.id, name: dev.name, success: false, error: "ANDROID_BRIDGE_UNAVAILABLE" }))
+      };
+    }
+    const results = [];
+    for (const dev of mobileDevices) {
+      try {
+        const bridgeResult = await this.androidBridge.unlockDevice(dev.id);
+        const acknowledged = bridgeResult === true || bridgeResult?.success === true;
+        if (acknowledged) {
+          dev.screenLocked = false;
+          dev.lastSeenAt = new Date().toISOString();
+        }
+        results.push({ deviceId: dev.id, name: dev.name, success: acknowledged, screenLocked: acknowledged ? false : dev.screenLocked, bridgeResult });
+      } catch (error) {
+        results.push({ deviceId: dev.id, name: dev.name, success: false, error: "ANDROID_UNLOCK_FAILED", message: String(error?.message || "Android unlock failed").slice(0, 200) });
+      }
+    }
+    const unlockedCount = results.filter(result => result.success).length;
+    const failedCount = results.length - unlockedCount;
+    this.commandHistory.unshift({ action: "UNLOCK_MOBILE_DEVICES", timestamp: new Date().toISOString(), targetedCount: mobileDevices.length, unlockedCount, failedCount, results });
     if (this.commandHistory.length > 50) this.commandHistory.pop();
-
-    return {
-      success: true,
-      targetedCount: mobileDevices.length,
-      unlockedCount: results.length,
-      devices: results
-    };
-  }
-
-  /**
-   * Simultaneously locks all registered mobile devices.
-   */
-  async lockMobileDevices() {
-    const mobileDevices = this.listDevices({ platform: "android" });
-    const results = [];
-
-    for (const dev of mobileDevices) {
-      dev.screenLocked = true;
-      dev.lastSeenAt = new Date().toISOString();
-
-      let bridgeResult = { success: true };
-      if (this.androidBridge) {
-        bridgeResult = await this.androidBridge.lockDevice(dev.id);
-      }
-
-      results.push({
-        deviceId: dev.id,
-        name: dev.name,
-        screenLocked: true,
-        bridgeResult
-      });
+    if (this.isPersistent && unlockedCount > 0 && !this.saveToDisk()) {
+      return { success: false, error: "DEVICE_PERSISTENCE_FAILED", targetedCount: mobileDevices.length, unlockedCount: 0, failedCount: mobileDevices.length, devices: results };
     }
-
     return {
-      success: true,
-      targetedCount: mobileDevices.length,
-      lockedCount: results.length,
-      devices: results
+      success: failedCount === 0 && unlockedCount > 0,
+      targetedCount: mobileDevices.length, unlockedCount, failedCount, devices: results,
+      ...(failedCount > 0 ? { error: "ANDROID_UNLOCK_PARTIAL_FAILURE" } : {})
     };
   }
 
-  /**
-   * Simultaneously launches media playback (e.g. YouTube favorite song) across all target devices.
-   */
-  async playMediaAcrossDevices({ mediaUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ", query = "favorite song" } = {}) {
-    const capableDevices = Array.from(this.devices.values()).filter(d =>
-      d.capabilities.includes("media_playback") || d.capabilities.includes("youtube_launch")
-    );
+  async lockMobileDevices() {
+    const mobileDevices = this.listDevices({ platform: "android", online: true });
+    if (!mobileDevices.length) {
+      return { success: false, error: "NO_ONLINE_ANDROID_DEVICES", targetedCount: 0, lockedCount: 0, devices: [] };
+    }
+    if (!this.androidBridge || typeof this.androidBridge.lockDevice !== "function") {
+      return {
+        success: false, error: "ANDROID_BRIDGE_UNAVAILABLE",
+        targetedCount: mobileDevices.length, lockedCount: 0,
+        devices: mobileDevices.map(dev => ({ deviceId: dev.id, name: dev.name, success: false, error: "ANDROID_BRIDGE_UNAVAILABLE" }))
+      };
+    }
+    const results = [];
+    for (const dev of mobileDevices) {
+      try {
+        const bridgeResult = await this.androidBridge.lockDevice(dev.id);
+        const acknowledged = bridgeResult === true || bridgeResult?.success === true;
+        if (acknowledged) {
+          dev.screenLocked = true;
+          dev.lastSeenAt = new Date().toISOString();
+        }
+        results.push({ deviceId: dev.id, name: dev.name, success: acknowledged, screenLocked: acknowledged ? true : dev.screenLocked, bridgeResult });
+      } catch (error) {
+        results.push({ deviceId: dev.id, name: dev.name, success: false, error: "ANDROID_LOCK_FAILED", message: String(error?.message || "Android lock failed").slice(0, 200) });
+      }
+    }
+    const lockedCount = results.filter(result => result.success).length;
+    const failedCount = results.length - lockedCount;
+    if (this.isPersistent && lockedCount > 0 && !this.saveToDisk()) {
+      return { success: false, error: "DEVICE_PERSISTENCE_FAILED", targetedCount: mobileDevices.length, lockedCount: 0, failedCount: mobileDevices.length, devices: results };
+    }
+    return {
+      success: failedCount === 0 && lockedCount > 0,
+      targetedCount: mobileDevices.length, lockedCount, failedCount, devices: results,
+      ...(failedCount > 0 ? { error: "ANDROID_LOCK_PARTIAL_FAILURE" } : {})
+    };
+  }
 
+  async playMediaAcrossDevices({ mediaUrl = "", query = "favorite song" } = {}) {
+    const capableDevices = this.listDevices({ platform: "android", online: true }).filter(dev =>
+      Array.isArray(dev.capabilities) &&
+      (dev.capabilities.includes("media_playback") || dev.capabilities.includes("youtube_launch"))
+    );
+    if (!capableDevices.length) {
+      return { success: false, error: "NO_ONLINE_MEDIA_CAPABLE_DEVICES", playingDevices: 0, devices: [] };
+    }
+    if (mediaUrl && (typeof mediaUrl !== "string" || !/^https:\/\//i.test(mediaUrl))) {
+      return { success: false, error: "MEDIA_URL_INVALID", playingDevices: 0, devices: [] };
+    }
+    if (!mediaUrl && (typeof query !== "string" || !query.trim())) {
+      return { success: false, error: "MEDIA_QUERY_REQUIRED", playingDevices: 0, devices: [] };
+    }
+    if (!this.androidBridge || typeof this.androidBridge.playMedia !== "function") {
+      return {
+        success: false, error: "ANDROID_BRIDGE_UNAVAILABLE", playingDevices: 0, targetedCount: capableDevices.length,
+        devices: capableDevices.map(dev => ({ deviceId: dev.id, name: dev.name, success: false, playing: false, error: "ANDROID_BRIDGE_UNAVAILABLE" }))
+      };
+    }
     const results = [];
     for (const dev of capableDevices) {
-      dev.currentMedia = {
-        url: mediaUrl,
-        query,
-        startedAt: new Date().toISOString(),
-        playing: true
-      };
-      dev.lastSeenAt = new Date().toISOString();
-
-      let bridgeResult = { success: true };
-      if (this.androidBridge && dev.platform === "android") {
-        bridgeResult = await this.androidBridge.playMedia(dev.id, mediaUrl);
+      try {
+        const bridgeResult = await this.androidBridge.playMedia(dev.id, mediaUrl || null, query);
+        const acknowledged = bridgeResult === true || bridgeResult?.success === true;
+        if (acknowledged) {
+          dev.currentMedia = { url: mediaUrl || null, query, startedAt: new Date().toISOString(), playing: true };
+          dev.lastSeenAt = new Date().toISOString();
+        }
+        results.push({ deviceId: dev.id, name: dev.name, mediaUrl: mediaUrl || null, success: acknowledged, playing: acknowledged, bridgeResult });
+      } catch (error) {
+        results.push({ deviceId: dev.id, name: dev.name, mediaUrl: mediaUrl || null, success: false, playing: false, error: "ANDROID_MEDIA_FAILED", message: String(error?.message || "Android media command failed").slice(0, 200) });
       }
-
-      results.push({
-        deviceId: dev.id,
-        name: dev.name,
-        mediaUrl,
-        playing: true,
-        bridgeResult
-      });
     }
-
-    const eventRecord = {
-      action: "PLAY_MEDIA_ACROSS_DEVICES",
-      timestamp: new Date().toISOString(),
-      targetedCount: capableDevices.length,
-      mediaUrl,
-      results
-    };
+    const playingDevices = results.filter(result => result.success).length;
+    const failedCount = results.length - playingDevices;
+    if (this.isPersistent && playingDevices > 0 && !this.saveToDisk()) {
+      return { success: false, error: "DEVICE_PERSISTENCE_FAILED", playingDevices: 0, failedCount: results.length, devices: results };
+    }
+    const eventRecord = { action: "PLAY_MEDIA_ACROSS_DEVICES", timestamp: new Date().toISOString(), targetedCount: capableDevices.length, mediaUrl: mediaUrl || null, results };
     this.commandHistory.unshift(eventRecord);
     if (this.commandHistory.length > 50) this.commandHistory.pop();
-
     return {
-      success: true,
-      playingDevices: results.length,
-      mediaUrl,
-      devices: results
+      success: failedCount === 0 && playingDevices > 0, playingDevices, failedCount, mediaUrl: mediaUrl || null, devices: results,
+      ...(failedCount > 0 ? { error: "ANDROID_MEDIA_PARTIAL_FAILURE" } : {})
     };
   }
 
@@ -465,7 +474,7 @@ export class MultiDeviceManager {
    * Returns capabilities list for a device.
    */
   getDeviceCapabilities(deviceId) {
-    const dev = this.devices.get(deviceId);
+    const dev = this.getDevice(deviceId);
     if (!dev) return null;
     return Array.isArray(dev.capabilities) ? [...dev.capabilities] : [];
   }
@@ -517,16 +526,6 @@ export class MultiDeviceManager {
     }
 
     const now = Date.now();
-    // Stale timestamp conflict guard
-    if (existing && existing.updatedAtMs && existing.updatedAtMs > now) {
-      return {
-        success: false,
-        error: "CONFLICT_STALE_UPDATE",
-        message: "State update rejected: an existing update with a later timestamp exists.",
-        currentState: existing
-      };
-    }
-
     const nextVersion = currentVersion + 1;
     const timestamp = new Date(now).toISOString();
 

@@ -4,7 +4,7 @@ import express from "express";
 import { createServer } from "node:http";
 import { createJarvisRouter } from "../jarvis-router.js";
 import { telephonyGateway } from "../telephony/telephony-gateway.js";
-import { multiDeviceManager } from "../integrations/multi-device-manager.js";
+import { multiDeviceManager, MultiDeviceManager } from "../integrations/multi-device-manager.js";
 import { windowsDesktopAgent } from "../system/windows-desktop-agent.js";
 
 const WEBHOOK_SECRET = "unit-test-webhook-secret-32-characters-minimum"; 
@@ -19,7 +19,7 @@ const telephonyFetch = (url, init = {}) => fetch(url, {
 async function withRouter({ env = {
   ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
   ULTRON_TELEPHONY_WEBHOOK_SECRET: WEBHOOK_SECRET
-}, userId = "owner-user" } = {}, run) {
+}, userId = "owner-user", multiDeviceManager: manager = multiDeviceManager } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, _res, next) => {
     req.supabaseUser = { id: userId };
@@ -27,7 +27,7 @@ async function withRouter({ env = {
   };
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser }));
+  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, multiDeviceManager: manager }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -116,7 +116,15 @@ test("E2E Test 4, 5, 6, 7: Telephone instruction checks PC and executes screen u
 });
 
 test("E2E Test 8 & 9: Multi-Device ecosystem simultaneous mobile unlock, media play, and reconnect", async () => {
-  await withRouter({}, async base => {
+  const manager = new MultiDeviceManager({
+    persist: false,
+    androidBridge: {
+      async unlockDevice(deviceId) { return { success: true, deviceId }; },
+      async lockDevice(deviceId) { return { success: true, deviceId }; },
+      async playMedia(deviceId, mediaUrl, query) { return { success: true, deviceId, mediaUrl, query }; }
+    }
+  });
+  await withRouter({ multiDeviceManager: manager }, async base => {
     // 1. Check fleet status
     const fleetRes = await fetch(base + "/api/jarvis/devices/fleet");
     const fleet = await fleetRes.json();
@@ -141,10 +149,10 @@ test("E2E Test 8 & 9: Multi-Device ecosystem simultaneous mobile unlock, media p
 
     // 4. Disconnect and reconnect a device
     const phoneId = "phone-android-alpha";
-    multiDeviceManager.disconnectDevice(phoneId);
-    assert.equal(multiDeviceManager.getDevice(phoneId).online, false);
-    multiDeviceManager.reconnectDevice(phoneId);
-    assert.equal(multiDeviceManager.getDevice(phoneId).online, true);
+    manager.disconnectDevice(phoneId);
+    assert.equal(manager.getDevice(phoneId).online, false);
+    manager.reconnectDevice(phoneId);
+    assert.equal(manager.getDevice(phoneId).online, true);
   });
 });
 

@@ -174,10 +174,12 @@ test("3. Durable persistence & restart recovery across MultiDeviceManager instan
       capabilities: ["heavy_inference", "game_mode"],
       online: true
     });
-    mdm1.syncStateAcrossDevices({
+    const persistedSync = mdm1.syncStateAcrossDevices({
       stateKey: "persisted_key_1",
-      payload: { mode: "autonomous", activeProject: "ULTRON" }
+      payload: { mode: "autonomous", activeProject: "ULTRON" },
+      ownerUserId: "owner-test-user"
     });
+    assert.equal(persistedSync.success, true);
 
     assert.equal(fs.existsSync(tempFile), true);
 
@@ -218,7 +220,8 @@ test("4. Real message delivery: active subscriber, offline queueing, and deliver
   });
 
   assert.equal(syncRes.success, true);
-  assert.equal(syncRes.deliveredCount, 1); // delivered immediately to active phone-alpha
+  assert.equal(syncRes.locallyNotifiedDevices.length, 1); // in-process callback notification
+  assert.equal(syncRes.deliveredCount, 0); // no authenticated WebSocket/SSE session in this unit test
   assert.equal(syncRes.queuedCount, 2);    // queued for both devices
 
   // Verify Phone Alpha received the live event
@@ -290,6 +293,8 @@ test("6. Device revocation isolates device and drops active delivery", () => {
   const revokeRes = mdm.revokeDevice("untrusted-phone", "lost_device");
   assert.equal(revokeRes.success, true);
   assert.equal(revokeRes.status, "revoked");
+  assert.equal(mdm.getDevice("untrusted-phone"), null);
+  assert.equal(mdm.listDevices().some(device => device.id === "untrusted-phone"), false);
 
   // Sync event targeting revoked device must skip it
   const syncRes = mdm.syncStateAcrossDevices({
