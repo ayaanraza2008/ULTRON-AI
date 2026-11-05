@@ -142,7 +142,9 @@ export class DirectChromiumCdpDriver {
       const cleanup = () => {
         clearTimeout(timer);
         child.stderr.removeListener("data", onData);
+        child.stdout.removeListener("data", onStdout);
         child.removeListener("error", onError);
+        child.removeListener("exit", onExit);
       };
       const finish = (value) => {
         if (settled) return;
@@ -152,16 +154,25 @@ export class DirectChromiumCdpDriver {
       };
       const timer = setTimeout(() => finish(null), 12000);
       const onData = (chunk) => {
-        stderrBuffer += chunk;
+        stderrBuffer += String(chunk);
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
         if (match) finish(match[1]);
       };
+      // Chromium builds differ in whether the DevTools banner is written to
+      // stderr or stdout. Observe both streams or a healthy browser can time out.
+      const onStdout = (chunk) => onData("[stdout] " + chunk);
       const onError = (error) => {
         stderrBuffer += String(error?.message || error).slice(0, 300);
         finish(null);
       };
+      const onExit = (code, signal) => {
+        stderrBuffer += "Browser process exited before DevTools became ready (code=" + code + ", signal=" + signal + ").";
+        finish(null);
+      };
       child.once("error", onError);
+      child.once("exit", onExit);
       child.stderr.on("data", onData);
+      child.stdout.on("data", onStdout);
     });
     if (!devtoolsLine || !this.process.pid) {
       await this._killProcess();

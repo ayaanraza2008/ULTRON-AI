@@ -73,10 +73,34 @@ export const SENSITIVE_PACKAGES = [
   "com.google.android.apps.authenticator2"
 ];
 
-function stableSerialize(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return "[" + value.map(stableSerialize).join(",") + "]";
-  return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + stableSerialize(value[key])).join(",") + "}";
+function stableSerialize(value, seen = new WeakSet(), depth = 0) {
+  if (depth > 24) throw new TypeError("Mobile approval parameters are too deeply nested.");
+  // Match JSON semantics: omit undefined object properties and normalize
+  // undefined array entries (including sparse slots) to null.
+  if (value === undefined || value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Mobile approval parameters contain a non-finite number.");
+    return JSON.stringify(value);
+  }
+  if (typeof value !== "object") throw new TypeError("Mobile approval parameters must be JSON-compatible.");
+  if (seen.has(value)) throw new TypeError("Mobile approval parameters contain a circular reference.");
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return "[" + Array.from(value, item => stableSerialize(item, seen, depth + 1)).join(",") + "]";
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("Mobile approval parameters must contain plain objects.");
+    }
+    const keys = Object.keys(value).filter(key => value[key] !== undefined).sort();
+    return "{" + keys.map(key =>
+      JSON.stringify(key) + ":" + stableSerialize(value[key], seen, depth + 1)
+    ).join(",") + "}";
+  } finally {
+    seen.delete(value);
+  }
 }
 
 const PRIVATE_SUBNETS = [
