@@ -305,29 +305,52 @@ export class DirectChromiumCdpDriver {
     }
 
     if (record && record.cdp) {
+      const documentResponseStatuses = new Map();
+      const onNetworkResponse = (event) => {
+        let message;
+        try { message = JSON.parse(typeof event.data === "string" ? event.data : String(event.data)); } catch { return; }
+        const params = message?.params;
+        if (message?.method !== "Network.responseReceived" || params?.type !== "Document" || !params?.frameId) return;
+        const status = Number(params.response?.status);
+        if (Number.isInteger(status) && status >= 100 && status <= 599) {
+          documentResponseStatuses.set(params.frameId, status);
+        }
+      };
+      record.cdp.addEventListener?.("message", onNetworkResponse);
       try {
-        // Attach the load-state waiter BEFORE navigating to avoid missing a fast load event.
+        // Capture the main-frame HTTP response from CDP itself. Performance
+        // Timing's responseStatus may be 0 for cross-origin documents, which
+        // must not be misreported as an actual HTTP status.
         const loadWaiter = this._waitForLoadState(record.cdp, options.timeout || 20000);
         const navResult = await this._cdpSend(record.cdp, "Page.navigate", { url });
         await loadWaiter;
-        const [title, status, info] = await Promise.all([
+        const [title, performanceStatus, info] = await Promise.all([
           this._evaluate(pageId, "document.title"),
           this._evaluate(
             pageId,
-            `(performance.getEntriesByType('navigation')[0]||{}).responseStatus ?? (lastNavFailed?500:200)`
+            `(performance.getEntriesByType('navigation')[0]||{}).responseStatus`
           ),
           this._evaluate(
             pageId,
             `JSON.stringify({url: location.href, readyState: document.readyState})`
           )
         ]);
+        const cdpStatus = documentResponseStatuses.get(navResult?.frameId);
+        const status = Number.isInteger(cdpStatus) && cdpStatus > 0
+          ? cdpStatus
+          : Number.isInteger(performanceStatus) && performanceStatus > 0
+            ? performanceStatus
+            : null;
+        if (status === null) {
+          throw new Error("Could not observe the main-frame HTTP response status through CDP.");
+        }
         const snapshotResult = await this._extractRealElements(pageId);
 
         const pageData = {
           pageId,
           url: info?.url || url,
           title: title || "",
-          status: Number.isInteger(status) ? status : 200,
+          status,
           html: "",
           extractedElements: snapshotResult,
           navigatedAt: new Date().toISOString()
@@ -348,6 +371,8 @@ export class DirectChromiumCdpDriver {
       } catch (err) {
         if (options.throwOnError) throw err;
         // fall through to honest preview fallback
+      } finally {
+        record.cdp.removeEventListener?.("message", onNetworkResponse);
       }
     }
 
