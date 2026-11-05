@@ -7,10 +7,10 @@ import {
   getRepositoryCapabilityStatus
 } from "../repository-capabilities.js";
 
-test("registry contains every requested repository exactly once", () => {
+test("registry contains each tracked repository capability exactly once", () => {
   const items = listRepositoryCapabilities();
-  assert.equal(items.length, 43);
-  assert.equal(new Set(items.map(item => item.id)).size, 43);
+  assert.equal(items.length, 44);
+  assert.equal(new Set(items.map(item => item.id)).size, 44);
   assert.ok(items.some(item => item.repo === "darkzOGx/youtube-automation-agent"));
   assert.ok(items.some(item => item.repo === "morluto/rea"));
   assert.ok(items.some(item => item.repo === "h4ckf0r0day/obscura"));
@@ -21,6 +21,7 @@ test("registry contains every requested repository exactly once", () => {
   assert.ok(items.some(item => item.repo === "affaan-m/ECC"));
   assert.ok(items.some(item => item.repo === "Niko1221/Strata"));
   assert.ok(items.some(item => item.id === "chrome-devtools"));
+  assert.ok(items.some(item => item.repo === "immich-app/immich"));
 });
 
 test("capability router matches distinct task domains automatically", () => {
@@ -82,13 +83,31 @@ test("readiness reports key names/states without returning credential values", (
   const godsEye = status.integrations.find(item => item.id === "gods-eye-view");
   const kaliGpt = status.integrations.find(item => item.id === "kaligpt");
   const openViking = status.integrations.find(item => item.id === "openviking");
+  const appflowy = status.integrations.find(item => item.id === "appflowy");
+  const openSeo = status.integrations.find(item => item.id === "open-seo");
+  const immich = status.integrations.find(item => item.id === "immich");
   assert.equal(openViking.state, "missing_configuration");
+  assert.equal(appflowy.state, "missing_configuration");
+  assert.equal(openSeo.state, "missing_configuration");
+  assert.equal(immich.state, "missing_configuration");
   const configuredOpenViking = getRepositoryCapabilityStatus({
     OPENVIKING_BASE_URL: "https://openviking.example.com",
     OPENVIKING_API_TOKEN: "openviking-synthetic-secret",
     ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
   }).integrations.find(item => item.id === "openviking");
   assert.equal(configuredOpenViking.state, "configured_unverified");
+  const configuredPrivateAdapters = getRepositoryCapabilityStatus({
+    APPFLOWY_BASE_URL: "https://appflowy.example.com",
+    APPFLOWY_API_TOKEN: "appflowy-synthetic-secret",
+    OPENSEO_BASE_URL: "https://openseo.example.com",
+    OPENSEO_API_TOKEN: "openseo-synthetic-secret",
+    IMMICH_BASE_URL: "https://immich.example.com",
+    IMMICH_API_KEY: "immich-synthetic-secret",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001"
+  });
+  for (const id of ["appflowy", "open-seo", "immich"]) {
+    assert.equal(configuredPrivateAdapters.integrations.find(item => item.id === id).state, "configured_unverified", id);
+  }
   assert.equal(godsEye.state, "adapter_present_unverified_live");
   assert.equal(kaliGpt.state, "bounded_security_routes_present");
   assert.equal(chatwoot.state, "configured_unverified");
@@ -98,6 +117,9 @@ test("readiness reports key names/states without returning credential values", (
   assert.equal(JSON.stringify(status).includes(secret), false);
   assert.equal(JSON.stringify(status).includes("configured-token"), false);
   assert.equal(JSON.stringify(status).includes("cal-secret"), false);
+  assert.equal(JSON.stringify(configuredPrivateAdapters).includes("appflowy-synthetic-secret"), false);
+  assert.equal(JSON.stringify(configuredPrivateAdapters).includes("openseo-synthetic-secret"), false);
+  assert.equal(JSON.stringify(configuredPrivateAdapters).includes("immich-synthetic-secret"), false);
   assert.equal(status.integrations.find(item => item.id === "hermes-agent").state, "disabled_by_config");
 });
 
