@@ -50,6 +50,17 @@
 - Browser diagnostics changes from source PRs #450/#453/#462 are present in #473; all three source PRs are closed **without merge** as superseded. Previous source PRs #457/#460/#461/#467/#470/#471 are likewise closed without merge.
 - #473's candidate changes are still not in `main`; therefore the current Render deployment and Supabase production state have not changed.
 
+## 0.5 Current exact-head verification — 2026-11-05 12:15 UTC (17:45 Asia/Kolkata)
+
+- Backend candidate PR #473 is open, mergeable and unmerged at `0fcca7f65b00d306e993eb307d0b00d20c8284bc`, based on `main` `573f31f953997cb0e546ef599f77e66cf8f7775b`. Exact-head Actions [42024635761](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42024635761) completed successfully: `test` and `world-intelligence-build` both passed. Chromium/CDP live launch, Browser Use checks, isolated PostgreSQL tests and repository security quality gate passed; syntax verification 386/386; dependency audit 0 vulnerabilities.
+- #473 now includes authenticated owner-scoped employee task list/create/detail APIs. Creation validates supported role/mode, requires the employee worker and server-side model provider, inserts an owner-bound queued task, and attempts an audit event. Draft/review/report only; no side-effect tools are exposed through the drawer API. Route tests cover account scoping, auth, bounds, not-found, feature/provider gates and audit behavior.
+- Manual-only live model/text+vision and two-account RLS acceptance workflows are included. They default to `NO`; neither was run. These require explicitly approved synthetic inputs / disposable test accounts.
+- UI PR #474 is open, mergeable and unmerged at `58c99c2b620e0437422c4740eb69f1655b679d43`, against the currently deployed interface branch at `32e19e563cd791bdd55db7b668b12101d7a13c6f`. Exact-head Actions [42025331336](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42025331336) passed both `test` and `world-intelligence-build`. It adds the account-scoped task drawer; it must not merge until #473 backend API is available and the owner separately authorizes the interface release, as its base branch auto-deploys on merge.
+- Source PRs #435/#438 (manual model/RLS workflows), #450/#453/#462 (browser diagnostics/CDP), #457 (Render Blueprint), #460 (Browser Use readiness), #461 (memory delete), #467 (worker readiness counters), #470 (pairing auth) and #471 (worker smoke key) are closed **without merge**; their changes are consolidated in #473. PR #439 is closed as superseded by #474.
+- PR #456 (migration ledger) and PR #466 (this evidence update) remain separate review branches. PR #456 is a database-history-only source change and must not be applied or synced to production without explicit owner review.
+- Live blockers remain: Supabase has 15 applied migrations and no paired-device tables; Leaked Password Protection disabled; authenticated persisted task acceptance not yet demonstrated against a live isolated account; live model inference and two-account RLS workflows not run; live Render service health-check paths remain blank and the Browser Use service's deployed build still needs Chromium; main has no branch protection.
+- No PR was merged, no Render Blueprint sync/deployment occurred, no production Supabase schema/data/secrets were changed, and no live acceptance workflow was triggered.
+
 ## 1. Historical evidence snapshot — 2026-11-05 10:40–10:54 UTC (superseded where conflicting by section 0.3)
 
 ### Repository and CI
