@@ -36,6 +36,7 @@ test("worker smoke inserts, polls to completion, cleans up, and redacts task res
     now: () => "fixed-time",
     sleepImpl: async () => {},
     fetchImpl: async (url, options = {}) => {
+      assert.equal(options.headers.apikey, serviceEnv.SUPABASE_SERVICE_ROLE_KEY);
       assert.equal(options.headers.Authorization, "Bearer " + serviceEnv.SUPABASE_SERVICE_ROLE_KEY);
       if (url.endsWith("/rest/v1/agent_tasks")) {
         assert.equal(options.method, "POST");
@@ -254,4 +255,23 @@ test("worker smoke never deletes a timed-out task when conditional cancellation 
   assert.equal(result.status, "timed_out");
   assert.equal(result.cleanup, "state_changed_manual_cleanup_needed");
   assert.equal(deleted, false, "a task that changed state concurrently must not be deleted");
+});
+
+
+test("worker smoke sends opaque Supabase secret keys only in the apikey header", async () => {
+  const secretKey = "sb_secret_test-only-value";
+  let calls = 0;
+  const result = await runWorkerSmoke({
+    env: { ...serviceEnv, SUPABASE_SERVICE_ROLE_KEY: secretKey },
+    fetchImpl: async (_url, options = {}) => {
+      calls += 1;
+      assert.equal(options.headers.apikey, secretKey);
+      assert.equal(options.headers.Authorization, undefined);
+      throw new Error("stop after checking the opaque-key authentication headers");
+    }
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.status, "failed");
+  assert.equal(JSON.stringify(result).includes(secretKey), false);
 });

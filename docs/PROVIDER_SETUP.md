@@ -1,45 +1,25 @@
-# ULTRON model provider registry and API keys
+# ULTRON model provider setup
 
-ULTRON can use its existing OpenRouter provider first and then sequentially fail over to additional OpenAI-compatible chat-completions providers. Failover is attempted on HTTP 429, HTTP 5xx, timeout, network errors, or malformed provider responses. Tool-calling requests skip providers explicitly configured with \`supportsTools: false\`.
+OpenRouter is the primary provider. Its configured free-model list is attempted first. Groq and Google Gemini are optional direct fallbacks.
 
-## Security rules
+## Configure optional providers
 
-- Put API key values only in the deployment's server-side environment/secrets settings. Never commit them, put them in frontend variables, or send them in agent request JSON.
-- \`ULTRON_MODEL_PROVIDERS_JSON\` contains provider metadata and environment-variable *names*, not secret values.
-- Custom providers must use HTTPS and an OpenAI-compatible \`/chat/completions\` endpoint.
-- The provider registry is capped at 12 configured entries and 8 active providers. Unknown/missing keys and invalid/insecure URLs are ignored.
-- This feature does not provision keys, create paid accounts, bypass provider rate limits, or make incompatible model APIs compatible. Each provider's terms, billing, quotas, and data policy still apply.
-- Provider fallback may send the same prompt/context to another provider. Only configure providers approved to receive that data.
+Set values only in the private backend environment:
 
-## Configure a provider
+| Variable | Default | Purpose |
+|---|---|---|
+| `GROQ_API_KEY` | unset | Groq credential |
+| `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` | HTTPS-compatible chat API base |
+| `GROQ_DEFAULT_MODEL` | `openai/gpt-oss-120b` in candidate template | Explicit model selection |
+| `GROQ_PAID_FALLBACK_ENABLED` | `false` | Must be explicitly set to `true` to allow Groq requests |
+| `GEMINI_API_KEY` | unset | Enables Gemini fallback |
+| `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini OpenAI-compatibility endpoint |
+| `GEMINI_DEFAULT_MODEL` | `gemini-3.8-flash` | Override with a model available to your account |
 
-In Render, add a secret environment variable for the provider, such as \`GROQ_API_KEY\`, and add \`ULTRON_MODEL_PROVIDERS_JSON\` as a non-secret JSON value. Example:
+A Groq API key and model are not enough to activate fallback. The separate paid-fallback flag must be deliberately enabled after you review the current model price and account quota. Keep the flag false to ensure Groq is never called. OpenRouter's free-model candidates stay ahead of Groq.
 
-\`\`\`json
-[
-  {
-    "name": "groq",
-    "baseUrl": "https://api.groq.com/openai/v1",
-    "apiKeyEnv": "GROQ_API_KEY",
-    "model": "YOUR_ENABLED_GROQ_MODEL_ID",
-    "priority": 1,
-    "supportsTools": true
-  },
-  {
-    "name": "together",
-    "baseUrl": "https://api.together.xyz/v1",
-    "apiKeyEnv": "TOGETHER_API_KEY",
-    "model": "YOUR_ENABLED_TOGETHER_MODEL_ID",
-    "priority": 2,
-    "supportsTools": true
-  }
-]
-\`\`\`
+Do not put keys in frontend variables or request JSON. ULTRON never reads provider keys from chat payloads. Gemini quota and availability depend on the Google account and region. Additional providers remain supported with `ULTRON_MODEL_PROVIDERS_JSON`, which stores metadata and the environment-variable name—not secret values.
 
-Use exact model IDs currently enabled for your accounts; the example intentionally does not guess which models your keys can access. Keep \`OPENROUTER_API_KEY\` and \`OPENROUTER_DEFAULT_MODEL\` configured as the primary provider.
+## Verification boundary
 
-## Current status and other integrations
-
-The existing integration catalog separately tracks ComfyUI, HeyGem, OmniVoice, Handy, Geo-Sleuth and AI Employee configuration. Those are not interchangeable generic model APIs: each needs a compatible service/bridge, credentials where applicable, valid endpoint paths, and runtime resources. A key alone does not install GPU models, provide a Windows desktop bridge, or grant access to third-party accounts.
-
-After changing configuration, inspect the authenticated integration status endpoint and test each provider with a harmless request. A "configured" state is not the same as a successful live integration test.
+Automated tests use mocked provider responses. They verify fallback ordering and backend-only credentials, but do not verify real account access. Live smoke testing is separate and may consume quota; it has not been run.

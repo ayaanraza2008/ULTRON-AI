@@ -156,6 +156,11 @@ export class MobileControlCenter {
             header.appendChild(strong);
             header.appendChild(badge);
 
+            const authStatus = document.createElement("span");
+            authStatus.className = dev.authorized ? "dev-badge badge-online" : "dev-badge badge-warn";
+            authStatus.textContent = dev.authorized ? "OWNER AUTHORIZED" : "NOT AUTHORIZED";
+            card.appendChild(authStatus);
+
             const meta = document.createElement("div");
             meta.className = "dev-meta";
             const sId = document.createElement("span");
@@ -170,6 +175,18 @@ export class MobileControlCenter {
 
             card.appendChild(header);
             card.appendChild(meta);
+
+            if (!dev.authorized) {
+              const authorizeBtn = document.createElement("button");
+              authorizeBtn.type = "button";
+              authorizeBtn.className = "mobile-authorize-device";
+              authorizeBtn.textContent = "Authorize this device";
+              authorizeBtn.addEventListener("click", event => {
+                event.stopPropagation();
+                this.authorizeDevice(dev.id);
+              });
+              card.appendChild(authorizeBtn);
+            }
 
             card.addEventListener("click", () => {
               document.querySelectorAll(".mobile-device-card").forEach(c => c.classList.remove("active"));
@@ -195,6 +212,26 @@ export class MobileControlCenter {
         errDiv.appendChild(p);
         listEl.appendChild(errDiv);
       }
+    }
+  }
+
+  async authorizeDevice(deviceId) {
+    try {
+      const res = await fetch(`${this.apiBase}/authorize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ deviceId, maxLevel: 2 })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error?.message || "Device authorization failed.");
+        return;
+      }
+      this.logActivity(`Device authorized for routine control: ${deviceId}`);
+      await this.refreshDevices();
+    } catch (err) {
+      alert("Error authorizing device: " + err.message);
     }
   }
 
@@ -438,6 +475,22 @@ export class MobileControlCenter {
       });
 
       const data = await res.json();
+
+      if (data.requiresConfirmation && data.confirmationToken && data.pendingAction) {
+        this.showConfirmationModal(
+          data.pendingAction,
+          data.pendingParams || { device: this.activeDevice },
+          data.confirmationToken,
+          data.message || "This mobile action requires your explicit confirmation."
+        );
+        if (logViewer) {
+          const approvalDiv = document.createElement("div");
+          approvalDiv.className = "log-item";
+          approvalDiv.textContent = "[APPROVAL REQUIRED] Review the pending mobile action in the confirmation dialog.";
+          logViewer.appendChild(approvalDiv);
+        }
+        return;
+      }
 
       if (logViewer) {
         if (!data.success) {

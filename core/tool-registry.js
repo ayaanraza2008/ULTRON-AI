@@ -40,6 +40,7 @@ import { AgentOrchestrator } from "../agents/orchestrator.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
 import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
 import { getHexStrikeReadiness, runHexStrikeScan } from "../integrations/hexstrike-ai.js";
+import { captureAgentMemory as defaultAgentMemoryCapture, recallAgentMemory as defaultAgentMemoryRecall, agentMemoryReadiness as defaultAgentMemoryReadiness } from "../agentmemory-integration.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -88,7 +89,8 @@ export class ToolRegistry {
       browserAutomationHelper: defaultBrowserAutomationHelper,
       agentOrchestrator: new AgentOrchestrator(),
       egoBrowserAdapter: defaultEgoBrowserAdapter,
-      hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan }
+      hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan },
+      agentMemoryStore: { capture: defaultAgentMemoryCapture, recall: defaultAgentMemoryRecall, readiness: defaultAgentMemoryReadiness }
     };
 
     const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
@@ -198,12 +200,16 @@ export class ToolRegistry {
         const requiresApproval =
           tool.requiresConfirmation === true ||
           Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+        let approvalVerified = false;
+        let approvalActorId = "";
         if (requiresApproval) {
           const actorId = typeof context?.actorId === "string" ? context.actorId.trim() : "";
+          approvalActorId = actorId;
           let verified = consumeToolApprovalProof(context?.toolApprovalProof, {
             actorId,
             toolId: tool.id,
-            permissionLevel: tool.permissionLevel
+            permissionLevel: tool.permissionLevel,
+            params
           });
 
           // Optional host verifiers can support API-issued approvals. They must
@@ -223,6 +229,7 @@ export class ToolRegistry {
                 actorId,
                 toolId: tool.id,
                 permissionLevel: tool.permissionLevel,
+                params,
                 confirmationToken,
                 requestId: typeof context.requestId === "string" ? context.requestId : null
               });
@@ -238,12 +245,22 @@ export class ToolRegistry {
               { code: "TOOL_APPROVAL_INVALID" }
             );
           }
+          approvalVerified = true;
         }
 
         const controller = new AbortController();
         const suppliedContext = context && typeof context === "object" && !Array.isArray(context)
           ? context
           : {};
+        const executionContext = { ...suppliedContext };
+        if (approvalVerified && tool.id.startsWith("mobile_")) {
+          // The mobile engine trusts this marker only on the server-side tool
+          // execution path after the outer single-use proof has been consumed.
+          executionContext.mobileApprovalVerified = true;
+          executionContext.mobileApprovalActorId = approvalActorId;
+          executionContext.mobileApprovalToolId = tool.id;
+          executionContext.mobileApprovalPermissionLevel = tool.permissionLevel;
+        }
         const callerSignal = suppliedContext.signal &&
           typeof suppliedContext.signal === "object" &&
           typeof suppliedContext.signal.addEventListener === "function" &&
@@ -265,7 +282,7 @@ export class ToolRegistry {
         });
         try {
           const execution = Promise.resolve().then(() =>
-            toolMeta.execute(params, { ...suppliedContext, signal })
+            toolMeta.execute(params, { ...executionContext, signal })
           );
           return await Promise.race([execution, timeoutPromise]);
         } finally {
@@ -395,10 +412,21 @@ export class ToolRegistry {
           } catch {}
         }
         if (zeroCostAiEngine?.completeWithFallback) {
-          const res = await zeroCostAiEngine.completeWithFallback(params.prompt || "Hello");
-          return { success: true, text: res.text || "", model: res.model || "zero_cost_fallback", provider: res.provider, tier: res.tier };
+          const res = await zeroCostAiEngine.completeWithFallback({ prompt: params.prompt || "Hello" });
+          if (!res?.success || res.tier === 4 || typeof res.text !== "string" || !res.text.trim()) {
+            return {
+              success: false,
+              status: "MODEL_UNAVAILABLE",
+              text: typeof res?.text === "string" ? res.text : "",
+              error: { code: "AI_MODEL_UNAVAILABLE", message: "Only deterministic offline rules were available; no language-model inference was completed." },
+              provider: res?.provider || "none",
+              tier: res?.tier ?? null,
+              proposedAction: res?.action || null
+            };
+          }
+          return { success: true, text: res.text, model: res.model || "zero_cost_fallback", provider: res.provider, tier: res.tier };
         }
-        return { success: true, text: "Inference completed via ULTRON Core.", provider: "local_heuristic" };
+        return { success: false, status: "UNAVAILABLE", error: { code: "AI_PROVIDER_UNAVAILABLE", message: "No configured AI provider completed inference. Configure a valid provider and retry." }, provider: "none" };
       }
     });
 
@@ -406,17 +434,37 @@ export class ToolRegistry {
       id: "memory_recall",
       name: "Associative Memory Recall",
       category: TOOL_CATEGORIES.INTELLIGENCE,
-      description: "Recalls user preferences, historical decisions, and semantic memory tags.",
-      capabilities: ["semantic_search", "preference_lookup", "context_injection"],
+      description: "Recalls owner-scoped durable preferences, historical decisions, and semantic memory tags.",
+      capabilities: ["semantic_search", "preference_lookup", "context_injection", "owner_isolation"],
       permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
       requiresConfirmation: false,
-      timeoutMs: 5000,
+      timeoutMs: 8000,
       inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" }, limit: { type: "number" } } },
-      checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params) => {
-        const query = String(params.query || "");
-        const memories = ultronCore?.recallMemories ? ultronCore.recallMemories(query, { limit: params.limit || 5 }) : [];
-        return { success: true, memoriesCount: memories.length, memories };
+      checkHealth: () => {
+        try {
+          return this.adapters.agentMemoryStore?.readiness?.().automaticRecall === true
+            ? TOOL_STATUS.OPERATIONAL
+            : TOOL_STATUS.REQUIRES_CONFIG;
+        } catch {
+          return TOOL_STATUS.ERROR;
+        }
+      },
+      execute: async (params, context = {}) => {
+        const ownerId = String(context.userId || context.actorId || "").trim();
+        if (!ownerId) {
+          return { success: false, status: "UNAUTHORIZED", error: { code: "MEMORY_OWNER_REQUIRED", message: "An authenticated owner identity is required for memory recall." } };
+        }
+        if (typeof this.adapters.agentMemoryStore?.recall !== "function") {
+          return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_RECALL_UNAVAILABLE", message: "Owner-scoped durable memory recall is not configured." } };
+        }
+        const result = await this.adapters.agentMemoryStore.recall(
+          "Recall memory: " + String(params.query || ""),
+          { userId: ownerId, limit: params.limit }
+        );
+        if (result?.state !== "completed") {
+          return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_RECALL_UNAVAILABLE", message: "Owner-scoped durable memory recall did not complete." } };
+        }
+        return { success: true, durable: true, storage: "agentmemory", memoriesCount: result.memories.length, memories: result.memories };
       }
     });
 
@@ -424,17 +472,47 @@ export class ToolRegistry {
       id: "memory_store",
       name: "Long-Term Memory Storage",
       category: TOOL_CATEGORIES.INTELLIGENCE,
-      description: "Stores important facts, user preferences, and instructions in long-term memory.",
-      capabilities: ["persistence", "tagging", "knowledge_synthesis"],
+      description: "Stores important facts and preferences in the authenticated owner's durable memory.",
+      capabilities: ["persistence", "tagging", "knowledge_synthesis", "owner_isolation"],
       permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
       requiresConfirmation: false,
-      timeoutMs: 5000,
+      timeoutMs: 8000,
       inputSchema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tags: { type: "array" } } },
-      checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params) => {
-        const record = ultronCore?.storeMemory ? ultronCore.storeMemory(params.content, params.tags || ["user_noted"]) : { id: "mem-" + Date.now() };
-        const id = record?.id || record || "mem-" + Date.now();
-        return { success: true, memoryId: id, content: params.content };
+      checkHealth: () => {
+        try {
+          return this.adapters.agentMemoryStore?.readiness?.().automaticCapture === true
+            ? TOOL_STATUS.OPERATIONAL
+            : TOOL_STATUS.REQUIRES_CONFIG;
+        } catch {
+          return TOOL_STATUS.ERROR;
+        }
+      },
+      execute: async (params, context = {}) => {
+        const ownerId = String(context.userId || context.actorId || "").trim();
+        if (!ownerId) {
+          return { success: false, status: "UNAUTHORIZED", error: { code: "MEMORY_OWNER_REQUIRED", message: "An authenticated owner identity is required for memory storage." } };
+        }
+        if (typeof this.adapters.agentMemoryStore?.capture === "function") {
+          const durableResult = await this.adapters.agentMemoryStore.capture(
+            "Remember this: " + String(params.content || ""),
+            { userId: ownerId, tags: params.tags }
+          );
+          if (durableResult?.state === "captured") {
+            return { success: true, durable: true, storage: "agentmemory", content: params.content };
+          }
+        }
+        if (typeof ultronCore?.storeMemory === "function") {
+          return {
+            success: false,
+            status: "NON_DURABLE",
+            durable: false,
+            error: {
+              code: "MEMORY_STORE_NOT_DURABLE",
+              message: "Only process-local memory is available. Nothing was saved because it is not durable or owner-isolated."
+            }
+          };
+        }
+        return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_STORE_UNAVAILABLE", message: "Owner-scoped durable memory storage is not configured; no memory was saved." } };
       }
     });
 
@@ -979,19 +1057,20 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, message: "Screen inspection dry-run validated." };
         }
         if (this.adapters.mobileControlEngine) {
-          const screen = await this.adapters.mobileControlEngine.captureScreen(params.deviceId);
+          const ownerContext = { userId: context.actorId };
+          const screen = await this.adapters.mobileControlEngine.captureScreen(params.deviceId, {}, ownerContext);
           let hierarchy = null;
           if (params.includeHierarchy) {
-            hierarchy = await this.adapters.mobileControlEngine.getHierarchy(params.deviceId);
+            hierarchy = await this.adapters.mobileControlEngine.getHierarchy(params.deviceId, ownerContext);
           }
-          return { success: true, screen, hierarchy };
+          return { success: Boolean(screen.success), screen, hierarchy };
         }
-        return { success: true, captured: false, note: "Mobile engine standby" };
+        return { success: false, captured: false, note: "Mobile engine standby" };
       }
     });
 
@@ -1022,19 +1101,26 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, action: params.action };
         }
         if (this.adapters.mobileControlEngine?.executeAction) {
+          const actionName = String(params.action || "");
           const res = await this.adapters.mobileControlEngine.executeAction(
-            params.deviceId,
-            params.action,
-            params
+            actionName,
+            { ...params, device: params.deviceId },
+            {
+              userId: context.actorId,
+              mobileApprovalVerified: context.mobileApprovalVerified,
+              mobileApprovalActorId: context.mobileApprovalActorId,
+              mobileApprovalToolId: context.mobileApprovalToolId,
+              mobileApprovalPermissionLevel: context.mobileApprovalPermissionLevel
+            }
           );
-          return { success: true, result: res };
+          return { success: Boolean(res.success), result: res };
         }
-        return { success: true, dispatched: false };
+        return { success: false, dispatched: false };
       }
     });
 
@@ -1059,31 +1145,31 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, operation: params.operation, packageName: params.packageName };
         }
         if (this.adapters.mobileControlEngine) {
-          let outcome;
-          if (params.operation === "launch") {
-            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "launch_app", {
-              package: params.packageName,
-              activity: params.activity
-            });
-          } else if (params.operation === "terminate") {
-            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "terminate_app", {
-              package: params.packageName
-            });
-          } else if (params.operation === "clear_data") {
-            outcome = await this.adapters.mobileControlEngine.executeAction(params.deviceId, "clear_app_data", {
-              package: params.packageName
-            });
-          } else {
-            throw new Error(`Unsupported mobile app lifecycle operation: '${params.operation}'`);
-          }
-          return { success: true, outcome };
+          let actionName;
+          if (params.operation === "launch") actionName = "mobile_launch_app";
+          else if (params.operation === "terminate") actionName = "mobile_terminate_app";
+          else if (params.operation === "clear_data") actionName = "mobile_clear_app_data";
+          else throw new Error(`Unsupported mobile app lifecycle operation: '${params.operation}'`);
+
+          const outcome = await this.adapters.mobileControlEngine.executeAction(
+            actionName,
+            { device: params.deviceId, package: params.packageName, packageName: params.packageName, activity: params.activity },
+            {
+              userId: context.actorId,
+              mobileApprovalVerified: context.mobileApprovalVerified,
+              mobileApprovalActorId: context.mobileApprovalActorId,
+              mobileApprovalToolId: context.mobileApprovalToolId,
+              mobileApprovalPermissionLevel: context.mobileApprovalPermissionLevel
+            }
+          );
+          return { success: Boolean(outcome.success), outcome };
         }
-        return { success: true, managed: false };
+        return { success: false, managed: false };
       }
     });
 
@@ -1106,7 +1192,7 @@ export class ToolRegistry {
         }
       },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params = {}) => {
+      execute: async (params = {}, context = {}) => {
         if (params.dryRun) {
           return { success: true, dryRun: true, message: "Autonomous mobile workflow dry-run passed." };
         }
@@ -1118,10 +1204,17 @@ export class ToolRegistry {
           if (!plan) {
             throw new Error("Missing workflow plan or natural language goal for mobile autonomous task.");
           }
-          const res = await this.adapters.mobileControlEngine.executeWorkflow(plan, { deviceId: params.deviceId });
+          const res = await this.adapters.mobileControlEngine.executeWorkflow(plan, {
+            deviceId: params.deviceId,
+            userId: context.actorId,
+            mobileApprovalVerified: context.mobileApprovalVerified,
+            mobileApprovalActorId: context.mobileApprovalActorId,
+            mobileApprovalToolId: context.mobileApprovalToolId,
+            mobileApprovalPermissionLevel: context.mobileApprovalPermissionLevel
+          });
           return { success: res.success, workflow: res };
         }
-        return { success: true, executed: false };
+        return { success: false, executed: false };
       }
     });
 

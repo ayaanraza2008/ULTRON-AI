@@ -39,9 +39,17 @@ test("AppFlowy: readiness enforces owner matching", () => {
   assert.equal(ownerReadiness.ownerAuthorized, true);
 });
 
-test("AppFlowy: listWorkspaces fails closed if caller is not the owner", async () => {
+test("AppFlowy: listWorkspaces fails closed if caller is not the owner or has no authenticated identity", async () => {
   await assert.rejects(
     () => appflowyListWorkspaces({ env: VALID_ENV, userId: "intruder-user" }),
+    { code: "APPFLOWY_OWNER_MISMATCH" }
+  );
+  await assert.rejects(
+    () => appflowyListWorkspaces({ env: VALID_ENV }),
+    { code: "APPFLOWY_OWNER_MISMATCH" }
+  );
+  await assert.rejects(
+    () => appflowyGetDocument({ documentId: "doc-99", env: VALID_ENV }),
     { code: "APPFLOWY_OWNER_MISMATCH" }
   );
 });
@@ -54,6 +62,8 @@ test("AppFlowy: listWorkspaces successfully parses server payload", async () => 
 
   const mockFetch = async (url, options) => {
     assert.equal(url, "https://appflowy.example.com/api/v1/workspace/list");
+    assert.equal(options.redirect, "error");
+    assert.ok(options.signal instanceof AbortSignal);
     assert.equal(options.headers.Authorization, "Bearer appflowy-secret-token-12345");
     return new Response(JSON.stringify({ workspaces: mockWorkspaces }), {
       status: 200,
@@ -79,8 +89,10 @@ test("AppFlowy: getDocument rejects invalid documentId and retrieves valid docum
   );
 
   const mockDoc = { id: "doc-99", title: "Architecture Spec", blocks: [] };
-  const mockFetch = async (url) => {
+  const mockFetch = async (url, options) => {
     assert.equal(url, "https://appflowy.example.com/api/v1/document/doc-99");
+    assert.equal(options.redirect, "error");
+    assert.ok(options.signal instanceof AbortSignal);
     return new Response(JSON.stringify(mockDoc), {
       status: 200,
       headers: { "Content-Type": "application/json" }

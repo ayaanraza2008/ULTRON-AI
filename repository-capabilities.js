@@ -6,7 +6,7 @@ import { getChromeDevToolsReadiness } from "./integrations/chrome-devtools.js";
 import { getStrataReadiness } from "./integrations/strata.js";
 
 /**
- * Task-matched capability catalog for 43 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
+ * Task-matched capability catalog for 44 tracked repository capabilities, including the screenshot inventory and local Chrome DevTools bridge.
  *
  * This is a routing/readiness manifest, not an installer or claim that the upstream
  * applications are embedded in ULTRON. It never executes repository scripts.
@@ -63,18 +63,26 @@ const REPOSITORIES = [
   {
     id: "appflowy", repo: "AppFlowy-IO/AppFlowy", domain: "workspace_docs",
     match: /\b(appflowy|notion alternative|workspace page|knowledge base page|workspace document|team wiki|project knowledge base)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["workspace documents", "knowledge-base content", "task boards", "databases and structured notes"],
+    integration: "owner_scoped_agent_tools", status: "adapter_present_unverified_live",
+    abilities: ["owner-scoped workspace listing", "bounded read-only document retrieval"],
     limits: ["Requires an authorized AppFlowy workspace/API or local connector; workspace data must remain user-scoped."],
-    envKeys: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN"], license: "AGPL-3.0 shown in upstream README; review network/distribution obligations", source: "https://github.com/AppFlowy-IO/AppFlowy"
+    envKeys: ["APPFLOWY_BASE_URL", "APPFLOWY_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "AGPL-3.0 shown in upstream README; review network/distribution obligations", source: "https://github.com/AppFlowy-IO/AppFlowy"
   },
   {
     id: "open-seo", repo: "every-app/open-seo", domain: "seo",
     match: /\b(openseo|open seo|keyword research|seo audit|search ranking|rank tracking|backlink analysis|competitor seo|ai visibility|search engine optimization)\b/i,
-    integration: "external_service", status: "adapter_not_implemented",
-    abilities: ["keyword research", "rank tracking", "competitor and backlink insights", "site audits", "AI answer visibility"],
+    integration: "owner_scoped_agent_tool", status: "adapter_present_unverified_live",
+    abilities: ["owner-scoped SEO research tool dispatch", "bounded keyword and site-audit operations subject to provider credits"],
     limits: ["The upstream README requires a DataForSEO key for SEO data; costs may apply. Do not make paid calls unless configured and within an approved budget."],
-    envKeys: ["OPENSEO_BASE_URL", "OPENSEO_API_TOKEN"], optionalEnv: ["DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"], license: "Review repository LICENSE; data provider usage is separate", source: "https://github.com/every-app/open-seo"
+    envKeys: ["OPENSEO_BASE_URL", "OPENSEO_API_TOKEN", "ULTRON_INTEGRATION_OWNER_USER_ID"], optionalEnv: ["DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"], license: "Review repository LICENSE; data provider usage is separate", source: "https://github.com/every-app/open-seo"
+  },
+  {
+    id: "immich", repo: "immich-app/immich", domain: "personal_media",
+    match: /\b(immich|personal photo library|personal media library|search my photos|photo albums|video albums)\b/i,
+    integration: "owner_scoped_private_media_adapter", status: "adapter_present_unverified_live",
+    abilities: ["owner-scoped server health check", "bounded read-only album listing", "bounded photo/video metadata search"],
+    limits: ["Requires explicit approval for private media reads. Returns bounded metadata only; no original media downloads, uploads, deletes, or sharing actions are exposed."],
+    envKeys: ["IMMICH_BASE_URL", "IMMICH_API_KEY", "ULTRON_INTEGRATION_OWNER_USER_ID"], license: "Review exact upstream LICENSE before copying code", source: "https://github.com/immich-app/immich"
   },
   {
     id: "open-higgsfield", repo: "wide-trace/open-higgsfield", domain: "media_generation",

@@ -121,6 +121,7 @@ test("memory expiry rejects normalized invalid calendar dates and invalid timezo
 
 test("memory list, update, and delete queries are scoped to the authenticated user", async () => {
   const requests = [];
+  let deleteReturnsRow = false;
   const app = createApp({
     env: {
       SUPABASE_URL: "https://example.supabase.co",
@@ -134,7 +135,9 @@ test("memory list, update, and delete queries are scoped to the authenticated us
         return new Response(JSON.stringify({ id: "user-123" }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (parsed.pathname === "/rest/v1/memory_items" && options.method === "DELETE") {
-        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify(deleteReturnsRow ? [{ id: "123e4567-e89b-12d3-a456-426614174000" }] : []), {
+          status: 200, headers: { "Content-Type": "application/json" }
+        });
       }
       if (parsed.pathname === "/rest/v1/memory_items") {
         return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -156,16 +159,25 @@ test("memory list, update, and delete queries are scoped to the authenticated us
       method: "PATCH", headers, body: JSON.stringify({ is_active: false })
     });
     assert.equal(update.status, 404);
-    const remove = await fetch(`${base}/api/memory/${id}`, { method: "DELETE", headers });
-    assert.equal(remove.status, 200);
+    const removeMissing = await fetch(`${base}/api/memory/${id}`, { method: "DELETE", headers });
+    assert.equal(removeMissing.status, 404);
+    assert.equal((await removeMissing.json()).error.code, "MEMORY_NOT_FOUND");
+
+    deleteReturnsRow = true;
+    const removeOwned = await fetch(`${base}/api/memory/${id}`, { method: "DELETE", headers });
+    assert.equal(removeOwned.status, 200);
+    assert.deepEqual(await removeOwned.json(), { ok: true });
 
     const memoryRequests = requests.filter(item => new URL(item.url).pathname === "/rest/v1/memory_items");
-    assert.equal(memoryRequests.length, 3);
+    assert.equal(memoryRequests.length, 4);
     for (const item of memoryRequests) {
       assert.equal(new URL(item.url).searchParams.get("user_id"), "eq.user-123");
     }
     assert.equal(new URL(memoryRequests[1].url).searchParams.get("id"), `eq.${id}`);
     assert.equal(new URL(memoryRequests[2].url).searchParams.get("id"), `eq.${id}`);
+    assert.equal(new URL(memoryRequests[3].url).searchParams.get("id"), `eq.${id}`);
+    assert.equal(new URL(memoryRequests[2].url).searchParams.get("select"), "id");
+    assert.equal(new URL(memoryRequests[3].url).searchParams.get("select"), "id");
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }

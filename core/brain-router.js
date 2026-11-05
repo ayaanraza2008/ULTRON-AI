@@ -1,4 +1,5 @@
 import { ultronHEI } from "../intelligence/hei/index.js";
+import { ByoxTensorReasoner } from "./byox-tensor-reasoner.js";
 /**
  * ULTRON AI — Advanced Brain Router & Intelligence Engine
  *
@@ -37,6 +38,7 @@ export class BrainRouter {
     this.offlineMode = false;
     this.circuitBreakers = new Map();
     this.hei = options.hei || ultronHEI;
+    this.tensorReasoner = options.tensorReasoner || new ByoxTensorReasoner({ dimensions: 128 });
   }
 
   /**
@@ -239,13 +241,22 @@ if (this.env.CEREBRAS_API_KEY) {
     return chain.length > 0 ? chain : [primaryCloud];
   }
 
-  recordAttempt(providerName, success, latencyMs = 0) {
+  recordAttempt(providerName, success, latencyMs = 0, usage = null) {
     const stats = this.providerStats.get(providerName) || { attempts: 0, successes: 0, failures: 0, avgLatencyMs: 0 };
     stats.attempts += 1;
     if (success) {
       stats.successes += 1;
       stats.consecutiveFailures = 0;
       stats.avgLatencyMs = stats.avgLatencyMs === 0 ? latencyMs : Math.round((stats.avgLatencyMs * 0.8) + (latencyMs * 0.2));
+      // Bounded token telemetry: prefer provider-reported usage; fall back to a
+      // clearly labeled estimate (chars/4 heuristic) so dashboards never present
+      // invented numbers as measured ones.
+      const tokens = this.captureProviderUsage(usage ?? null);
+      if (tokens) {
+        stats.totalPromptTokens = (stats.totalPromptTokens || 0) + tokens.promptTokens;
+        stats.totalCompletionTokens = (stats.totalCompletionTokens || 0) + tokens.completionTokens;
+        stats.lastUsageSource = tokens.source;
+      }
     } else {
       stats.failures += 1;
       stats.consecutiveFailures = (stats.consecutiveFailures || 0) + 1;
@@ -258,6 +269,31 @@ if (this.env.CEREBRAS_API_KEY) {
 
   tripCircuit(providerName, cooldownMs = 60_000) {
     this.circuitBreakers.set(providerName, { resetAt: Date.now() + cooldownMs });
+  }
+
+  /**
+   * Extract token accounting from an OpenAI-compatible response body.
+   * Bounded to finite integers; content-length estimate is explicitly labeled
+   * "estimated" so monitoring never reports fabricated precision.
+   */
+  captureProviderUsage(data) {
+    const cap = 10_000_000;
+    const positiveInt = value => (Number.isInteger(value) && value >= 0 ? Math.min(value, cap) : null);
+    const promptTokens = positiveInt(data?.usage?.prompt_tokens);
+    const completionTokens = positiveInt(data?.usage?.completion_tokens);
+    if (promptTokens !== null && completionTokens !== null) {
+      return { promptTokens, completionTokens, source: "provider_usage" };
+    }
+    const text = data?.choices?.[0]?.message?.content;
+    const promptText = Array.isArray(data?.messages)
+      ? data.messages.map(m => (typeof m?.content === "string" ? m.content : "")).join(" ")
+      : "";
+    if (typeof text === "string" && text) {
+      const completion = Math.min(Math.ceil(text.length / 4), cap);
+      const prompt = promptText ? Math.min(Math.ceil(promptText.length / 4), cap) : 0;
+      return { promptTokens: prompt, completionTokens: completion, source: "estimated" };
+    }
+    return null;
   }
 
   isCircuitOpen(providerName) {
@@ -277,7 +313,10 @@ if (this.env.CEREBRAS_API_KEY) {
         attempts: stats.attempts,
         successRate: stats.attempts ? Number(((stats.successes / stats.attempts) * 100).toFixed(1)) : 100,
         avgLatencyMs: stats.avgLatencyMs,
-        circuitOpen: this.isCircuitOpen(name)
+        circuitOpen: this.isCircuitOpen(name),
+        totalPromptTokens: stats.totalPromptTokens || 0,
+        totalCompletionTokens: stats.totalCompletionTokens || 0,
+        tokenUsageSource: stats.lastUsageSource || null
       };
     }
     return summary;
@@ -320,7 +359,7 @@ if (this.env.CEREBRAS_API_KEY) {
           });
           const content = res.choices?.[0]?.message?.content || "";
           const latencyMs = Date.now() - startTime;
-          this.recordAttempt(provider.name, true, latencyMs);
+          this.recordAttempt(provider.name, true, latencyMs, res);
           const confidence = this.evaluateConfidence(content);
           return {
             success: true,
@@ -381,12 +420,13 @@ if (this.env.CEREBRAS_API_KEY) {
         }
         const content = rawContent.trim();
         const latencyMs = Date.now() - startTime;
-        this.recordAttempt(provider.name, true, latencyMs);
+        this.recordAttempt(provider.name, true, latencyMs, { ...data, messages: conversation });
 
         const confidence = this.evaluateConfidence(content);
 
         return {
           success: true,
+          tokenUsage: this.captureProviderUsage({ ...data, messages: conversation }),
           content,
           provider: provider.name,
           model: provider.model,
@@ -403,6 +443,7 @@ if (this.env.CEREBRAS_API_KEY) {
       }
     }
 
+
     return {
       success: false,
       content: null,
@@ -411,5 +452,19 @@ if (this.env.CEREBRAS_API_KEY) {
       complexityTier: complexity.tier,
       chainAttempted: chain.map(p => p.name)
     };
+  }
+
+  /**
+   * Local zero-shot semantic intent classification via pure-CPU tensor reasoner.
+   */
+  classifySemanticIntent(prompt, candidateIntents) {
+    return this.tensorReasoner.classifyIntent(prompt, candidateIntents);
+  }
+
+  /**
+   * Generate pure-CPU deterministic dense embedding.
+   */
+  getSemanticEmbedding(text) {
+    return this.tensorReasoner.embed(text);
   }
 }

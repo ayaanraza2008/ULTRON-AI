@@ -33,6 +33,47 @@ import os from "node:os";
 
 const CDP_COMMAND_TIMEOUT_MS = 15000;
 
+const BROWSER_EXECUTABLE_NAMES = ["chrome", "headless_shell", "chromium", "chromium-browser"];
+
+function findChromiumBinaryInMsPlaywright() {
+  const home = os.homedir();
+  const bases = [
+    path.join(home, ".cache", "ms-playwright"),
+    path.join(home, "Library", "Caches", "ms-playwright"),
+    path.join(home, "AppData", "Local", "ms-playwright")
+  ];
+  for (const base of bases) {
+    let browserDirs = [];
+    try {
+      browserDirs = fs.readdirSync(base, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => path.join(base, e.name));
+    } catch { continue; }
+    for (const browserDir of browserDirs) {
+      let platformDirs = [];
+      try {
+        platformDirs = fs.readdirSync(browserDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => path.join(browserDir, e.name));
+      } catch { continue; }
+      for (const platformDir of platformDirs) {
+        const candidates = [
+          path.join(platformDir, "chrome"),
+          path.join(platformDir, "headless_shell"),
+          path.join(platformDir, "chromium"),
+          path.join(platformDir, "chrome.exe"),
+          path.join(platformDir, "headless_shell.exe"),
+          path.join(platformDir, "chromium.exe")
+        ].filter((p) => fs.existsSync(p));
+        if (candidates.length > 0) {
+          return { installed: true, found: true, path: candidates[0], name: path.basename(candidates[0]) };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export class DirectChromiumCdpDriver {
   /**
    * @param {Object} [options={}]
@@ -72,6 +113,10 @@ export class DirectChromiumCdpDriver {
   detectBrowserBinary() {
     if (this.executablePath && fs.existsSync(this.executablePath)) {
       return { installed: true, found: true, path: this.executablePath, name: "Custom (executablePath)" };
+    }
+    const playwrightHit = findChromiumBinaryInMsPlaywright();
+    if (playwrightHit) {
+      return { installed: true, found: true, path: playwrightHit.path, name: playwrightHit.name };
     }
     const candidates = this.candidatePaths || (process.platform === "win32" ? [
       path.join(process.env.ProgramFiles || "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
@@ -126,23 +171,47 @@ export class DirectChromiumCdpDriver {
       "--disable-gpu",
       `--user-data-dir=${this.userDataDir}`
     ];
-    // GitHub-hosted CI runners may not provide the user-namespace sandbox
-    // required by Chromium. Disable the sandbox only inside ephemeral CI jobs;
-    // normal ULTRON hosts retain Chromium's default sandbox protections.
-    if (process.env.CI === "true") {
-      args.push("--no-sandbox", "--disable-dev-shm-usage");
+    const launchEnv = { ...process.env };
+    const inCi = process.env.CI === "true";
+    if (inCi) {
+      // CI runners can inherit desktop-session variables from unrelated setup
+      // steps. A malformed DBus address can prevent headless Chrome from
+      // starting even though no desktop session is needed.
+      for (const key of [
+        "DBUS_SESSION_BUS_ADDRESS",
+        "DBUS_SYSTEM_BUS_ADDRESS",
+        "SESSION_MANAGER",
+        "WAYLAND_DISPLAY",
+        "XDG_SESSION_TYPE"
+      ]) delete launchEnv[key];
+      args.push(
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-background-networking",
+        "--disable-extensions",
+        "--disable-breakpad",
+        "--disable-crash-reporter",
+        "--password-store=basic"
+      );
     }
 
     let stderrBuffer = "";
-    const child = spawn(detection.path, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let exitDetails = null;
+    const child = spawn(detection.path, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: launchEnv
+    });
     this.process = child;
     child.stderr.setEncoding?.("utf8");
     const devtoolsLine = await new Promise((resolve) => {
       let settled = false;
+      const childRef = child;
       const cleanup = () => {
         clearTimeout(timer);
-        child.stderr.removeListener("data", onData);
-        child.removeListener("error", onError);
+        child.stderr?.removeListener?.("data", onData);
+        child.removeListener?.("error", onError);
+        child.removeListener?.("exit", onExit);
       };
       const finish = (value) => {
         if (settled) return;
@@ -150,22 +219,35 @@ export class DirectChromiumCdpDriver {
         cleanup();
         resolve(value);
       };
-      const timer = setTimeout(() => finish(null), 12000);
+      const timeoutMs = inCi ? 20000 : 12000;
+      const timer = setTimeout(() => finish(null), timeoutMs);
       const onData = (chunk) => {
-        stderrBuffer += chunk;
+        stderrBuffer = (stderrBuffer + String(chunk)).slice(-6000);
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
         if (match) finish(match[1]);
       };
       const onError = (error) => {
-        stderrBuffer += String(error?.message || error).slice(0, 300);
+        exitDetails = { error: String(error?.message || error).slice(0, 240) };
+        finish(null);
+      };
+      const onExit = (code, signal) => {
+        exitDetails = { code, signal };
         finish(null);
       };
       child.once("error", onError);
+      child.once("exit", onExit);
       child.stderr.on("data", onData);
     });
-    if (!devtoolsLine || !this.process.pid) {
+
+    if (!devtoolsLine || !this.process?.pid) {
       await this._killProcess();
-      return { launched: false, reason: "Browser launch failed or DevTools endpoint not observed", stderrPreview: stderrBuffer.slice(0, 300) };
+      return {
+        launched: false,
+        reason: "Browser launch failed or DevTools endpoint not observed",
+        stderrPreview: stderrBuffer.slice(-1200),
+        exit: exitDetails,
+        timeoutMs: inCi ? 20000 : 12000
+      };
     }
 
     this.browserWsUrl = devtoolsLine;
@@ -305,29 +387,64 @@ export class DirectChromiumCdpDriver {
     }
 
     if (record && record.cdp) {
+      const documentResponseStatuses = new Map();
+      const onNetworkResponse = (event) => {
+        let message;
+        try { message = JSON.parse(typeof event.data === "string" ? event.data : String(event.data)); } catch { return; }
+        const params = message?.params;
+        if (message?.method !== "Network.responseReceived" || params?.type !== "Document" || !params?.frameId) return;
+        const status = Number(params.response?.status);
+        if (Number.isInteger(status) && status >= 100 && status <= 599) {
+          documentResponseStatuses.set(params.frameId, status);
+        }
+      };
+      record.cdp.addEventListener?.("message", onNetworkResponse);
       try {
-        // Attach the load-state waiter BEFORE navigating to avoid missing a fast load event.
+        // Capture the main-frame HTTP response from CDP itself. Performance
+        // Timing's responseStatus may be 0 for cross-origin documents, which
+        // must not be misreported as an actual HTTP status.
         const loadWaiter = this._waitForLoadState(record.cdp, options.timeout || 20000);
         const navResult = await this._cdpSend(record.cdp, "Page.navigate", { url });
         await loadWaiter;
-        const [title, status, info] = await Promise.all([
+        const [title, performanceStatus, info] = await Promise.all([
           this._evaluate(pageId, "document.title"),
           this._evaluate(
             pageId,
-            `(performance.getEntriesByType('navigation')[0]||{}).responseStatus ?? (lastNavFailed?500:200)`
+            `(performance.getEntriesByType('navigation')[0]||{}).responseStatus`
           ),
           this._evaluate(
             pageId,
             `JSON.stringify({url: location.href, readyState: document.readyState})`
           )
         ]);
+        const cdpStatus = documentResponseStatuses.get(navResult?.frameId);
+        const status = Number.isInteger(cdpStatus) && cdpStatus > 0
+          ? cdpStatus
+          : Number.isInteger(performanceStatus) && performanceStatus > 0
+            ? performanceStatus
+            : null;
+        // Runtime.evaluate returns the value of JSON.stringify as a string.
+        // Parse it before reading the final URL and readyState.
+        let pageInfo = info;
+        if (typeof pageInfo === "string") {
+          try { pageInfo = JSON.parse(pageInfo); } catch { pageInfo = null; }
+        }
+        const finalUrl = typeof pageInfo?.url === "string" ? pageInfo.url : url;
+        const readyState = typeof pageInfo?.readyState === "string" ? pageInfo.readyState : undefined;
+        const isHttpNavigation = /^https?:/i.test(finalUrl);
+        if (status === null && isHttpNavigation) {
+          throw new Error("Could not observe the main-frame HTTP response status through CDP.");
+        }
+        // about:blank and other browser-internal schemes have no HTTP response.
+        // Preserve REAL_CDP control and report status 0 rather than inventing 200.
+        const reportedStatus = status ?? 0;
         const snapshotResult = await this._extractRealElements(pageId);
 
         const pageData = {
           pageId,
-          url: info?.url || url,
+          url: finalUrl,
           title: title || "",
-          status: Number.isInteger(status) ? status : 200,
+          status: reportedStatus,
           html: "",
           extractedElements: snapshotResult,
           navigatedAt: new Date().toISOString()
@@ -343,11 +460,13 @@ export class DirectChromiumCdpDriver {
           executionDriver: this.driverType,
           executionMechanism: "REAL_CDP",
           driverVerified: true,
-          readyState: info?.readyState
+          readyState
         };
       } catch (err) {
         if (options.throwOnError) throw err;
         // fall through to honest preview fallback
+      } finally {
+        record.cdp.removeEventListener?.("message", onNetworkResponse);
       }
     }
 

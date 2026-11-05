@@ -13,7 +13,8 @@ import {
 const OWNER = "00000000-0000-4000-8000-000000000001";
 
 async function makeWorkspace() {
-  return fs.mkdtemp(path.join(os.tmpdir(), "ultron-hexstrike-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultron-hexstrike-"));
+  return fs.realpath(dir);
 }
 
 async function withServer(env, fetchImpl, run, { userId = OWNER, authGateway } = {}) {
@@ -86,7 +87,7 @@ test("scan targets must remain within the real shared workspace and reject trave
   await assert.rejects(() => resolveHexStrikeScanTarget("a".repeat(241), root), { code: "INVALID_SCAN_TARGET" });
   await assert.rejects(() => resolveHexStrikeScanTarget(path.resolve(root, "project"), root), { code: "INVALID_SCAN_TARGET" });
   const outside = await makeWorkspace();
-  await fs.symlink(outside, path.join(root, "escape"), "dir");
+  await fs.symlink(outside, path.join(root, "escape"), process.platform === "win32" ? "junction" : "dir");
   await assert.rejects(() => resolveHexStrikeScanTarget("escape", root), { code: "INVALID_SCAN_TARGET" });
 });
 
