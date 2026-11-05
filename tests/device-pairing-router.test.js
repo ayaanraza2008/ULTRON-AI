@@ -375,3 +375,34 @@ test("paired-device middleware accepts standard Authorization Bearer tokens", as
     assert.equal(status.deviceId, claimed.deviceId);
   });
 });
+
+test("device pairing endpoints fail closed with a clear 503 while durable storage migrations are absent", async () => {
+  const unavailableStorage = async () => response({
+    code: "PGRST205",
+    message: "The requested device storage relation is not installed."
+  }, 404);
+
+  await withRouter(unavailableStorage, async base => {
+    const list = await fetch(base + "/devices", {
+      headers: { "x-test-owner": OWNER_A }
+    });
+    assert.equal(list.status, 503);
+    assert.equal((await list.json()).error.code, "DEVICE_STORAGE_NOT_READY");
+
+    const create = await fetch(base + "/devices/pairings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
+      body: JSON.stringify({ deviceName: "Owner PC", platform: "windows" })
+    });
+    assert.equal(create.status, 503);
+    assert.equal((await create.json()).error.code, "DEVICE_STORAGE_NOT_READY");
+
+    const claim = await fetch(base + "/devices/pairings/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "123456" })
+    });
+    assert.equal(claim.status, 503);
+    assert.equal((await claim.json()).error.code, "DEVICE_STORAGE_NOT_READY");
+  }, ENV);
+});
