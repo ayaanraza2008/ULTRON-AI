@@ -53,10 +53,15 @@ jobs:
               direct: item.isDirect,
               range: item.range,
               fixAvailable: item.fixAvailable,
-              advisories: (item.via || []).filter(v => typeof v === 'object').map(v => ({
+              effects: item.effects || [],
+              nodes: item.nodes || [],
+              via: (item.via || []).map(v => typeof v === 'string' ? v : ({
                 title: v.title,
                 url: v.url,
-                range: v.range
+                range: v.range,
+                severity: v.severity,
+                cwe: v.cwe,
+                cvss: v.cvss
               }))
             }));
           }
