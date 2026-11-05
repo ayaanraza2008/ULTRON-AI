@@ -628,7 +628,7 @@ export class MultiDeviceManager {
     };
   }
 
-  syncSharedMemory({ memoryKey, memoryData, originDeviceId = null, expectedVersion = null } = {}) {
+  syncSharedMemory({ memoryKey, memoryData, originDeviceId = null, ownerUserId = null, expectedVersion = null } = {}) {
     if (!memoryKey || typeof memoryKey !== "string") {
       return { success: false, error: "MEMORY_KEY_REQUIRED" };
     }
@@ -636,6 +636,7 @@ export class MultiDeviceManager {
       stateKey: "memory:" + memoryKey.trim(),
       payload: memoryData,
       originDeviceId,
+      ownerUserId,
       expectedVersion
     });
   }
