@@ -1781,7 +1781,9 @@ test("client-facing agent tool results redact secrets but retain valid media pay
       connectionString: "postgres://admin:database-secret@db.example",
       refresh_token: "private-refresh-token"
     },
-    message: "Authorization: Bearer abc.def.ghi api_key=some-key-value " + slackToken + " " + jwt,
+    message: "Authorization: Bearer abc.def.ghi api_key=some-key-value " +
+      "postgres://admin:database-url-password@db.example https://operator:web-basic-auth-password@service.example " +
+      slackToken + " " + jwt,
     audioBase64: "A".repeat(1201)
   });
   assert.equal(safe.service_role_key, "[redacted]");
@@ -1791,7 +1793,7 @@ test("client-facing agent tool results redact secrets but retain valid media pay
   assert.equal(safe.audioBase64, "A".repeat(1201));
   assert.equal(JSON.stringify(safe).includes(slackToken), false);
   assert.equal(JSON.stringify(safe).includes(jwt), false);
-  assert.doesNotMatch(JSON.stringify(safe), /supabase-service-role-secret|oauth-client-secret|database-secret|private-refresh-token|abc\.def\.ghi|some-key-value/);
+  assert.doesNotMatch(JSON.stringify(safe), /supabase-service-role-secret|oauth-client-secret|database-secret|private-refresh-token|database-url-password|web-basic-auth-password|abc\.def\.ghi|some-key-value/);
 });
 
 test("model tool results redact credentials before model context", () => {
@@ -1804,7 +1806,9 @@ test("model tool results redact credentials before model context", () => {
     refresh_token: "private-refresh-token",
     connection_string: "postgres://admin:database-secret@db.example",
     nested: { access_token: "private-value", title: "safe output" },
-    message: "Authorization: Bearer abc.def.ghi and api_key=some-key-value; Slack " + slackToken + "; JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signaturepayload123"
+    message: "Authorization: Bearer abc.def.ghi and api_key=some-key-value; " +
+      "DB postgres://admin:database-url-password@db.example; HTTPS https://operator:web-basic-auth-password@service.example; " +
+      "Slack " + slackToken + "; JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signaturepayload123"
   });
   assert.equal(safe.apiKey, "[redacted]");
   assert.equal(safe.service_role_key, "[redacted]");
@@ -1814,7 +1818,7 @@ test("model tool results redact credentials before model context", () => {
   assert.equal(safe.nested.access_token, "[redacted]");
   assert.equal(safe.nested.title, "safe output");
   assert.equal(JSON.stringify(safe).includes(slackToken), false);
-  assert.doesNotMatch(JSON.stringify(safe), /credential-value|supabase-service-role-secret|oauth-client-secret|private-refresh-token|database-secret|private-value|abc\.def\.ghi|some-key-value|eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTYifQ\.signaturepayload123/);
+  assert.doesNotMatch(JSON.stringify(safe), /credential-value|supabase-service-role-secret|oauth-client-secret|private-refresh-token|database-secret|database-url-password|web-basic-auth-password|private-value|abc\.def\.ghi|some-key-value|eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTYifQ\.signaturepayload123/);
 });
 
 
