@@ -865,7 +865,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         name: "groq",
         baseUrl: groqBaseUrl,
         apiKey: groqKey,
-        model: bounded(env.GROQ_DEFAULT_MODEL, 120) || "llama-3.3-70b-versatile",
+        model: bounded(env.GROQ_DEFAULT_MODEL, 120) || "openai/gpt-oss-120b",
         priority: 20,
         supportsTools: true
       });
