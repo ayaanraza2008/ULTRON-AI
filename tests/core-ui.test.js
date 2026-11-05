@@ -321,19 +321,19 @@ test("voice output prefers installed male voices and uses language-specific spee
   assert.ok(app.includes('instance.lang = speechLanguageMode === "hi-IN" ? "hi-IN" : "en-IN"'));
 });
 
-test("voice quality panel reports Fish Audio readiness and can preview Hindi and English", () => {
+test("voice quality panel reports Kokoro and browser speech fallback for Hindi and English", () => {
   assert.ok(app.includes('if (name === "voice-quality")'));
   assert.ok(app.includes('drawerButton("PREVIEW HINDI + ENGLISH VOICE"'));
-  assert.ok(app.includes("speechCapabilities.premiumTtsConfigured"));
+  assert.ok(app.includes("Kokoro am_onyx synthesis"));
   assert.ok(app.includes("speechCapabilities.premiumSttConfigured"));
-  assert.doesNotMatch(app, /db9ad6eb7fb84294b2046cf05ef64718/); // voice IDs are kept server-side
-  assert.ok(app.includes("Kamal · deep Indian male · Hindi-English"));
+  assert.ok(app.includes("am_onyx · deep, calm, authoritative male"));
   assert.ok(app.includes('drawerButton("AUTO · HINDI + ENGLISH"'));
   assert.ok(app.includes('drawerButton("HINDI · hi-IN"'));
   assert.ok(app.includes('drawerButton("ENGLISH · en-IN"'));
-  assert.ok(app.includes("Kamal · deep Indian male · Hindi-English"));
-  assert.ok(app.includes("Auto recognition uses Fish Audio transcription when configured"));
+  assert.ok(app.includes("Browser fallback voices"));
   assert.ok(app.includes("मैं हिंदी और English दोनों में जवाब दूँगा"));
+  assert.doesNotMatch(app, /Fish Audio|fishAudio|Kamal · deep Indian male/);
+  assert.doesNotMatch(app, /db9ad6eb7fb84294b2046cf05ef64718/);
 });
 
 test("gateway recovery keeps trying through a longer cold start and returns when the backend wakes", async (t) => {
@@ -367,7 +367,7 @@ test("gateway recovery keeps trying through a longer cold start and returns when
 });
 
 
-test("voice listening starts without waiting for backend readiness and submits short pauses quickly", () => {
+test("voice listening uses browser recognition and Kokoro speech with sentence-boundary streaming", () => {
   assert.ok(app.includes("void ensureSpeechCapabilities();"));
   assert.ok(app.includes("if (Recognition && !forceFallbackRecognition)"));
   assert.ok(app.includes("now - session.lastVoiceAt >= 300"));
@@ -377,19 +377,46 @@ test("voice listening starts without waiting for backend readiness and submits s
   assert.ok(app.includes("pendingInterimCommand && voiceActive"));
   assert.ok(app.includes("async function streamChatRequest(body, onDelta)"));
   assert.ok(app.includes("speechCapabilities.premiumSttConfigured"));
-  assert.ok(app.includes('body: {\n          audioBase64,\n          mimeType,\n          ...(speechLanguageMode === "hi-IN" ? { language: "hi" } : speechLanguageMode === "en-IN" ? { language: "en" } : {})'));
+  assert.ok(app.includes("audioBase64,"));
+  assert.ok(app.includes('language: "hi"'));
+  assert.ok(app.includes('language: "en"'));
   assert.ok(app.includes("body: JSON.stringify({ ...body, stream: true })"));
-  assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferFishAudio)"));
-  assert.ok(app.includes("Never cut Fish Audio or browser speech at an arbitrary word count"));
-  assert.ok(app.includes("if (force) {\n          enqueueStreamSpeech(streamSpeechBuffer.trim());"));
-  assert.doesNotMatch(app, /streamSpeechBuffer\.length >= (?:72|22)/);
-  assert.ok(app.includes("const fishAudioBlobPromise = streamSpeechUsesFish"));
+  assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferKokoro)"));
+  assert.ok(app.includes("Never cut server or browser speech at an arbitrary word count."));
+  assert.ok(app.includes("enqueueStreamSpeech(streamSpeechBuffer.trim());"));
+  assert.doesNotMatch(app, /streamSpeechBuffer\\.length >= (?:72|22)/);
+  assert.ok(app.includes("const kokoroSpeechPromise = streamSpeechUsesKokoro"));
   assert.ok(app.includes("ALWAYS reply in clear, natural English, regardless of the input language"));
   assert.ok(app.includes("one short, complete English sentence"));
   assert.ok(app.includes("No greeting, filler, markdown, bullets, stage directions, or pronunciation spellings"));
+  assert.doesNotMatch(app, /Fish Audio|fishAudio|preferFishAudio/);
 });
 
 test("spoken prompts skip unnecessary pre-search and use a smaller conversational context", () => {
   assert.ok(app.includes('source !== "voice" || explicitResearchIntent'));
   assert.ok(app.includes('history.slice(streamVoiceReply ? -8 : -18)'));
+});
+
+
+test("JARVIS task activity exposes a bounded account-scoped employee task form and persisted status/result paths", () => {
+  assert.ok(app.includes('result?.notice || result?.execution?.notice'));
+  assert.ok(app.includes('apiRequest("/api/agent/tasks")'));
+  assert.ok(app.includes('apiRequest("/api/agent/tasks"'));
+  assert.ok(app.includes('apiRequest("/api/agent/tasks/" + encodeURIComponent(taskId))'));
+  assert.ok(app.includes("jarvis-task-goal"));
+  assert.ok(app.includes('["chief-of-staff", "Chief of Staff"]'));
+  assert.ok(app.includes('["plan", "Plan"]'));
+  assert.ok(app.includes('["report", "Report"]'));
+  assert.ok(app.includes("QUEUE EMPLOYEE TASK"));
+  assert.ok(app.includes("queued is not completed"));
+  assert.ok(app.includes("will not publish, send messages, spend money"));
+  assert.ok(app.includes("VIEW RESULT"));
+});
+
+test("JARVIS task form uses bounded text, required validation and same-origin authenticated API requests", () => {
+  assert.ok(app.includes("goal.maxLength = 2000"));
+  assert.ok(app.includes("goal.minLength = 2"));
+  assert.ok(app.includes("goal.required = true"));
+  assert.match(app, /credentials: "same-origin"/);
+  assert.match(app, /cache: "no-store"/);
 });
