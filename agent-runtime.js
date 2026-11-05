@@ -596,6 +596,13 @@ export function parsePrivateDataReadApproval(value, integration) {
  * user message. A generic approval phrase must not let a model substitute a
  * different document ID or media-search query in its generated tool call.
  */
+function containsExactPrivateTarget(text, target) {
+  const value = bounded(target, 128).toLowerCase();
+  if (!value) return false;
+  const escaped = value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\export function privateDataReadApprovalMatchesAction(value, toolName, args = {}) {").replace(/\\s+/g, "\\\\s+");
+  const boundary = /^[a-zA-Z0-9_-]+$/.test(value) ? "[^a-zA-Z0-9_-]" : "[^a-zA-Z0-9]";
+  return new RegExp("(?:^|" + boundary + ")" + escaped + "(?:$|" + boundary + ")", "i").test(text);
+}
 export function privateDataReadApprovalMatchesAction(value, toolName, args = {}) {
   if (!PRIVATE_DATA_READ_TOOLS.has(toolName)) return false;
   const integration = toolName.startsWith("appflowy_") ? "appflowy" : "immich";
@@ -603,11 +610,11 @@ export function privateDataReadApprovalMatchesAction(value, toolName, args = {})
   const text = typeof value === "string" ? value.slice(0, 6000).toLowerCase() : "";
   if (toolName === "appflowy_get_document") {
     const documentId = bounded(args?.documentId, 128).toLowerCase();
-    return Boolean(documentId && text.includes(documentId));
+    return containsExactPrivateTarget(text, documentId);
   }
   if (toolName === "immich_search_assets") {
     const query = bounded(args?.query, 80).toLowerCase();
-    return Boolean(query && text.includes(query));
+    return containsExactPrivateTarget(text, query);
   }
   return true;
 }
