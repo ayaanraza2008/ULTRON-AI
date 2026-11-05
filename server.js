@@ -700,7 +700,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         apikey: config.key,
         Authorization: "Bearer " + token,
         Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: prefer })
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(body !== undefined || method === "DELETE" ? { Prefer: prefer } : {})
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: "error", signal: AbortSignal.timeout(15_000)
@@ -1190,7 +1191,17 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.delete("/api/memory/:id", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_MEMORY_ID", message: "Memory item ID is invalid." } });
     try {
-      await supabaseRest(req, "memory_items", "DELETE", "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id));
+      const rows = await supabaseRest(
+        req,
+        "memory_items",
+        "DELETE",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id",
+        undefined,
+        "return=representation"
+      );
+      if (!Array.isArray(rows) || !rows.length) {
+        return res.status(404).json({ error: { code: "MEMORY_NOT_FOUND", message: "Memory item was not found or is not accessible." } });
+      }
       res.json({ ok: true });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_DELETE_FAILED", message: error.message } }); }
   });
