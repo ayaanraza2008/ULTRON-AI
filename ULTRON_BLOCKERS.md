@@ -45,3 +45,12 @@
 - Do not create paid subscriptions, spend API credits, or download large local models without explicit approval.
 - Keep messages, bookings, publishing, purchases, destructive actions, security scans and device control behind action-specific owner approval.
 - A blocker closes only when its exact acceptance evidence is recorded; estimates and percentages must not substitute for that evidence.
+
+
+## Fresh Render observation — 2026-11-05 06:20 UTC
+
+Read-only inspection of the confirmed Ultron core workspace found four existing Free-plan services. ultron-ai-core, ultron-browser-use-core, and ultron-rea-gateway track main; ultron-core-interface still tracks feature/ultron-live-core-interface-20261029. All four live service records have an empty healthCheckPath, while candidate render.yaml defines /api/health, /health, /healthz, and / respectively. The Blueprint has not been reconciled to the active service settings.
+
+The three backend services have recent successful deploy events from 81dd9b9e81bf35c5e49e152113e0991fe7362010 (2026-11-04 around 21:41 UTC). The queried 24.5-hour Render metrics returned no HTTP request or latency samples; the final-hour app/request log query returned no entries. Three services showed some memory samples. Empty metrics/logs are not proof of an outage, but do not establish live usage or end-to-end acceptance either.
+
+Required closure: review the candidate Blueprint diff and secrets, then obtain explicit owner authorization before syncing Render settings. After authorized sync, verify each health endpoint and run authenticated synthetic tests for sign-in, chat/inference, persistence, browser read-only navigation, and gateway authentication. No Render settings or deployments were changed in this audit.
