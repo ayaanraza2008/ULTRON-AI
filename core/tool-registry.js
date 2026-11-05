@@ -452,7 +452,22 @@ export class ToolRegistry {
         if (!record || typeof record !== "object" || !(record.id || record.memoryId)) {
           return { success: false, status: "FAILED", error: { code: "MEMORY_STORE_NOT_CONFIRMED", message: "Memory adapter did not confirm a persisted record." } };
         }
-        return { success: true, memoryId: record.id || record.memoryId, content: params.content };
+        // The default UltronCore implementation is process-local. An ID alone
+        // proves only that an in-memory object was created, not durable storage.
+        if (record.durable !== true && record.persisted !== true &&
+            !["supabase", "agentmemory", "persistent"].includes(String(record.storage || "").toLowerCase())) {
+          return {
+            success: false,
+            status: "NON_DURABLE",
+            durable: false,
+            memoryId: record.id || record.memoryId,
+            error: {
+              code: "MEMORY_STORE_NOT_DURABLE",
+              message: "The memory adapter only confirmed a process-local record; it may be lost on restart."
+            }
+          };
+        }
+        return { success: true, durable: true, memoryId: record.id || record.memoryId, content: params.content };
       }
     });
 
