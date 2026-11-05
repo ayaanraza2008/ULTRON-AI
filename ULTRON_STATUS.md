@@ -61,6 +61,16 @@
 - Live blockers remain: Supabase has 15 applied migrations and no paired-device tables; Leaked Password Protection disabled; authenticated persisted task acceptance not yet demonstrated against a live isolated account; live model inference and two-account RLS workflows not run; live Render service health-check paths remain blank and the Browser Use service's deployed build still needs Chromium; main has no branch protection.
 - No PR was merged, no Render Blueprint sync/deployment occurred, no production Supabase schema/data/secrets were changed, and no live acceptance workflow was triggered.
 
+## 0.6 Latest exact-head verification — 2026-11-05 12:36 UTC (18:06 Asia/Kolkata)
+
+- Consolidated backend [PR #473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) is open, mergeable, unmerged at `7118b7e3e6de97eaf4c46a77e7e6fd96b0559874`, based on main `573f31f953997cb0e546ef599f77e66cf8f7775b`. Exact-head GitHub Actions [42027892320](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42027892320) passed both `test` and `world-intelligence-build`. The run included the browser/CDP smoke, isolated PostgreSQL tests, security quality gate and dependency audit (0 confirmed vulnerabilities).
+- Backend changes in #473 include account-scoped mobile and employee-task APIs, fail-closed device pairing, `sb_secret_` worker-smoke support, truthful memory-delete behavior, Browser Use/CDP diagnostics, bounded worker readiness, Render Blueprint corrections, manual-only live acceptance workflows, and configurable Groq/Gemini fallback.
+- Cost safety: Groq remains behind a separate `GROQ_PAID_FALLBACK_ENABLED` flag; the candidate defaults it to `false`. An API key/model alone will not enable Groq. OpenRouter free candidates remain ahead. The previous provider-only PR #366 was closed **without merge** as superseded by #473.
+- Living Core task drawer [PR #474](https://github.com/ayaanraza2008/ULTRON-AI/pull/474) remains open, mergeable and unmerged at `58c99c2b620e0437422c4740eb69f1655b679d43`; exact-head Actions [42025331336](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42025331336) passed both `test` and `world-intelligence-build`. Its base is the separately deployed UI branch, so merging it requires explicit interface release authorization and backend #473 availability.
+- Migration-ledger PR #456 and evidence-documentation PR #466 remain separate open reviews. No SQL was applied and no document change was merged.
+- Live gates are unchanged: Supabase still has 15 applied migrations and no paired-device tables; leaked-password protection is disabled; persisted live task lifecycle, live model inference, two-account RLS and actual paired-device acceptance are not verified. Render still reports blank live health-check paths and its deployed Browser Use build still needs Chromium because the corrected Blueprint is not synced. Main remains unprotected.
+- No PR was merged. No Render sync/deployment, production Supabase migration, production secret/configuration write, production data mutation, or manual live acceptance workflow was performed.
+
 ## 1. Historical evidence snapshot — 2026-11-05 10:40–10:54 UTC (superseded where conflicting by section 0.3)
 
 ### Repository and CI
