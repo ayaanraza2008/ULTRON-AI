@@ -9,6 +9,16 @@
 
 > **Release verdict: NOT RELEASE-COMPLETE.** The software contains substantial implemented and CI-tested subsystems, but current live acceptance is incomplete. A green source CI run, service process, or configuration flag is not proof of end-to-end capability. No current overall completion percentage is asserted: the previous 85.10% used a prior candidate and operational evidence and must not be carried forward as today's score.
 
+## 0. Fresh mainline reconciliation — 2026-11-05 10:40 UTC
+
+- **Correction:** PR [#441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) is not open; it merged on 2026-11-04 20:39:39 UTC as `ad3e6a4326ccbfc1a898855827e937b8b89a4847`. The old 2026-11-04 blocker register incorrectly continued to list it as pending. Current main remains `573f31f953997cb0e546ef599f77e66cf8f7775b`.
+- **Current consolidated integration candidate:** PR [#473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473), head `708ea44f4f2556ea39190a5b412aca49f12441b0`, base current main, reported mergeable, 78 commits ahead / 0 behind at creation. It combines mobile/core authorization with owner-scoped AppFlowy and Immich read-only adapters and agent routing. Exact-head workflow [42012707211](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42012707211): `world-intelligence-build` passed; `test` was still running at 10:40 UTC. Treat the PR as **pending verification**, not green. Upstream AppFlowy/Immich calls are mocked in tests; no private live data was read.
+- **Mobile authorization security:** PR [#469](https://github.com/ayaanraza2008/ULTRON-AI/pull/469), head `8e7c593ceebfa4ab66796fbf52ac811057f6fb73`, passed exact-head CI [42010670983](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42010670983): **1,630 passed, 0 failed, 3 skipped**, syntax 386/386, dependency audit 0 vulnerabilities, World Intelligence build passed. It includes confirmation-token redaction and owner-scoped mobile audit history. It remains unmerged; if #473 is selected, do not merge #469 separately.
+- **Migration history:** PR [#456](https://github.com/ayaanraza2008/ULTRON-AI/pull/456) remains open/mergeable and aligns active migration filenames with the 15-version live ledger while moving destructive rollback SQL outside active migrations. It does not apply production SQL.
+- **Other exact-head review evidence:** #466 documentation CI passed (1,607/0/3, syntax 386/386, 0 dependency vulnerabilities); #471 worker-smoke CI passed (1,608/0/3, syntax 386/386, 0 dependency vulnerabilities); #460 Browser Use diagnostics, #467 worker readiness, and #470 device pairing regression checks were reported green. These remain unmerged.
+- **Governance:** current main is reported unprotected, with no rulesets observed. Require branch protection and review gates before production release.
+- The full corrected owner-dependency and software blocker register is in `ULTRON_BLOCKERS.md`. It replaces the stale #441-open / old-main claims.
+
 ## 1. Current evidence
 
 ### Repository and CI
