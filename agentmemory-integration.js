@@ -146,7 +146,7 @@ export async function captureAgentMemory(task, options = {}) {
   const project = scopedProject(env, options.userId);
   const result = await requestMemory("/agentmemory/remember", {
     content: text,
-    type: "decision",
+    type: "workflow",
     concepts: [
       "ultron-agent",
       "durable-context",
