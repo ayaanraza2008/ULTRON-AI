@@ -1639,6 +1639,149 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
     res.json({ ...readiness, taskRelevant: Boolean(task), recallState, memoriesReturned });
   });
 
+  // Explicit account-scoped task API used by the Living Core task drawer.
+  // These endpoints create/read draft-only employee work; they never execute
+  // external actions or expose task records belonging to another user.
+  router.get("/agent/tasks", requireSupabaseUser, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const userId = bounded(req.supabaseUser?.id, 100);
+    if (!userId || typeof supabaseRest !== "function") {
+      return res.status(503).json({ error: { code: "TASK_STORAGE_UNAVAILABLE", message: "Authenticated task storage is unavailable." } });
+    }
+    const parsedLimit = Number(req.query?.limit ?? 12);
+    const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(25, Math.trunc(parsedLimit))) : 12;
+    const query = "?select=id,title,status,error_code,created_at,updated_at,finished_at&user_id=eq." +
+      encodeURIComponent(userId) + "&order=created_at.desc&limit=" + limit;
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "GET", query);
+      const tasks = (Array.isArray(rows) ? rows : []).slice(0, limit).map(row => ({
+        id: bounded(row.id, 80),
+        title: bounded(row.title, 240),
+        status: bounded(row.status, 40),
+        error_code: bounded(row.error_code, 100) || null,
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || null,
+        finished_at: row.finished_at || null
+      }));
+      return res.json({ tasks });
+    } catch (error) {
+      logger.warn?.("Account-scoped employee task list failed", { code: bounded(error?.code, 80) || "TASK_LIST_FAILED" });
+      return res.status(503).json({ error: { code: "TASK_LIST_UNAVAILABLE", message: "The saved task list is temporarily unavailable." } });
+    }
+  });
+
+  router.get("/agent/tasks/:taskId", requireSupabaseUser, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const userId = bounded(req.supabaseUser?.id, 100);
+    const taskId = bounded(req.params?.taskId, 80);
+    if (!userId || typeof supabaseRest !== "function") {
+      return res.status(503).json({ error: { code: "TASK_STORAGE_UNAVAILABLE", message: "Authenticated task storage is unavailable." } });
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId)) {
+      return res.status(404).json({ error: { code: "TASK_NOT_FOUND", message: "The requested task was not found for this account." } });
+    }
+    const query = "?select=id,title,status,result,error_code,created_at,updated_at,finished_at&id=eq." +
+      encodeURIComponent(taskId) + "&user_id=eq." + encodeURIComponent(userId) + "&limit=1";
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "GET", query);
+      if (!Array.isArray(rows) || !rows[0]?.id) {
+        return res.status(404).json({ error: { code: "TASK_NOT_FOUND", message: "The requested task was not found for this account." } });
+      }
+      const row = rows[0];
+      let result = row.result ?? null;
+      if (result !== null) {
+        let serialized = "";
+        try { serialized = typeof result === "string" ? result : JSON.stringify(result); } catch { result = null; }
+        if (serialized.length > 12000) result = { summary: serialized.slice(0, 12000), truncated: true };
+        else if (typeof result === "string") result = result.slice(0, 12000);
+      }
+      return res.json({ task: {
+        id: bounded(row.id, 80),
+        title: bounded(row.title, 240),
+        status: bounded(row.status, 40),
+        result,
+        error_code: bounded(row.error_code, 100) || null,
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || null,
+        finished_at: row.finished_at || null
+      } });
+    } catch (error) {
+      logger.warn?.("Account-scoped employee task detail failed", { code: bounded(error?.code, 80) || "TASK_DETAIL_FAILED" });
+      return res.status(503).json({ error: { code: "TASK_DETAIL_UNAVAILABLE", message: "The task result is temporarily unavailable." } });
+    }
+  });
+
+  router.post("/agent/tasks", requireSupabaseUser, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const userId = bounded(req.supabaseUser?.id, 100);
+    if (!userId) return res.status(401).json({ error: { code: "AUTHENTICATED_USER_REQUIRED", message: "Sign in before creating an employee task." } });
+    const goal = typeof req.body?.goal === "string" ? req.body.goal.trim() : "";
+    const role = bounded(req.body?.role, 80);
+    const mode = bounded(req.body?.mode, 40);
+    const context = bounded(req.body?.context, 4000);
+    if (goal.length < 2 || goal.length > 2000 || !ROLES.has(role) || !MODES.has(mode)) {
+      return res.status(400).json({ error: { code: "INVALID_EMPLOYEE_TASK", message: "Provide a 2–2000 character goal, a supported employee role, and a supported output mode." } });
+    }
+    if (typeof supabaseRest !== "function" || env.ULTRON_EMPLOYEES_ENABLED !== "true" ||
+      !env.SUPABASE_SERVICE_ROLE_KEY || !hasEmployeeModelProvider(env)) {
+      return res.status(503).json({ error: { code: "EMPLOYEE_WORKER_NOT_CONFIGURED", message: "The employee worker, durable task storage, and a server-side model provider must be configured before tasks can be queued." } });
+    }
+    const autonomousWorkflow = /\\b(research|investigate|look into|find sources)\\b/i.test(goal) &&
+      /\\b(report|summary|recommendations|brief)\\b/i.test(goal);
+    const input = {
+      taskType: autonomousWorkflow ? "autonomous" : "employee",
+      executionMode: "employee_worker",
+      role,
+      goal,
+      context,
+      mode: autonomousWorkflow ? "report" : mode,
+      requiresApproval: false,
+      approved: true,
+      createdBy: "ultron_core_task_drawer"
+    };
+    try {
+      const rows = await supabaseRest(req, "agent_tasks", "POST", "?select=id,title,status,created_at", {
+        user_id: userId,
+        title: goal.slice(0, 240),
+        input,
+        status: "QUEUED"
+      });
+      if (!Array.isArray(rows) || !rows[0]?.id) {
+        throw Object.assign(new Error("Task queue did not return a task ID."), { code: "TASK_CREATE_FAILED" });
+      }
+      let auditRecorded = true;
+      if (typeof privilegedSupabaseRest === "function") {
+        try {
+          await privilegedSupabaseRest(req, "audit_events", "POST", "", {
+            user_id: userId,
+            action: "task.created_from_core_drawer",
+            target_type: "agent_task",
+            target_id: rows[0].id,
+            outcome: "allowed",
+            metadata: { role, mode: autonomousWorkflow ? "autonomous_report" : mode, taskType: input.taskType, executionMode: "employee_worker" }
+          }, "return=minimal");
+        } catch (error) {
+          auditRecorded = false;
+          logger.warn?.("Core task drawer audit write failed", { code: bounded(error?.code, 80) || "AUDIT_WRITE_FAILED" });
+        }
+      } else {
+        auditRecorded = false;
+      }
+      return res.status(202).json({
+        state: "queued",
+        task: rows[0],
+        auditRecorded,
+        execution: autonomousWorkflow ? "background_autonomous_research_and_report" : "background_draft_only",
+        notice: autonomousWorkflow
+          ? "ULTRON queued a bounded research-to-report workflow. It will disclose unavailable stages and will not publish, spend, contact people, or change external systems."
+          : "ULTRON queued a draft-only AI Employee task. The worker must complete it before a result is available; no external action will be performed."
+      });
+    } catch (error) {
+      logger.warn?.("Account-scoped employee task creation failed", { code: bounded(error?.code, 80) || "TASK_CREATE_FAILED" });
+      return res.status(503).json({ error: { code: "TASK_CREATE_FAILED", message: "The employee task could not be saved to the account queue." } });
+    }
+  });
+
   router.post("/agent/run", requireSupabaseUser, async (req, res) => {
     const prompt = bounded(req.body?.prompt, 6000);
     const history = Array.isArray(req.body?.messages) ? req.body.messages.slice(-12) : [];
