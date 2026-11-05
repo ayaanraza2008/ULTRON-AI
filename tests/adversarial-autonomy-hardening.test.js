@@ -551,7 +551,13 @@ test("Real Tool Execution Audit: all 45 tool schemas validate and privileged too
     } else {
       const outcome = await toolRegistry.execute(tool.id, payload);
       assert.ok(outcome, `Tool '${tool.id}' returned null or undefined`);
-      assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: ${JSON.stringify(outcome)}`);
+      if (tool.id === "ai_chat_inference" && outcome.success !== true) {
+        // Offline deterministic rules are not language-model inference.
+        assert.equal(outcome.error?.code, "AI_MODEL_UNAVAILABLE");
+        assert.equal(outcome.status, "MODEL_UNAVAILABLE");
+      } else {
+        assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: ${JSON.stringify(outcome)}`);
+      }
     }
   }
 });
