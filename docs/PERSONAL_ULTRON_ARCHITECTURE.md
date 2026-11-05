@@ -158,3 +158,35 @@ The owner explicitly wants the same personal ULTRON identity available on both t
 - Incoming-call behavior is tested on the actual Android model and OS version; unsupported states fall back safely.
 - AI answering is off by default, limited to explicitly approved contacts/rules, identifies itself as AI and never impersonates the owner.
 - No call recordings or transcripts are retained unless separately enabled with appropriate notice, consent and retention controls.
+
+
+### Samsung-first compatibility plan (model and Android version not yet known)
+
+The owner's current phone is a **Samsung Galaxy device; exact model, Android version and One UI version are unknown**. Do not assume a specific API level, Samsung firmware behavior, carrier feature or call-control capability. Implement a compatibility-first Android companion and defer any default-dialer takeover until the handset is identified and tested.
+
+#### Compatibility tiers
+
+- **Tier A — baseline companion:** authenticated app voice/text, push notifications, shared tasks, device pairing/revocation and user-visible permission controls. This is the first deliverable and must not depend on call interception.
+- **Tier B — app-based voice calling:** owner calls ULTRON inside the app using a supported real-time voice transport. Test microphone, Bluetooth/headset routing, audio focus, lock-screen behavior, background/foreground transitions and reconnect behavior on the actual Samsung handset.
+- **Tier C — outbound carrier calls:** optional provider-backed calls to the owner's verified number. Require explicit provider selection, pricing disclosure, opt-in, caller-ID verification, rate limits, quiet hours and kill switch. No paid provider until approved.
+- **Tier D — incoming SIM call handling:** experimental device-specific milestone. First inspect Android version, One UI version, model identifier, carrier and current default Phone app. Only then decide whether a complete user-selected default dialer using Android Telecom `ROLE_DIALER` + `InCallService` is appropriate. A call-screening role is a narrower alternative and must not be represented as full conversational call answering.
+
+#### Samsung device discovery checklist
+
+Ask the owner to open **Settings → About phone** and record:
+- Model name and model number.
+- Then open **Settings → About phone → Software information** and record Android version, One UI version and (optionally) build number.
+
+If menus differ, use Settings search for **Software information**. Do not request IMEI, serial number, phone number, SIM identifiers or other unnecessary device secrets. A screenshot may be shared only after those identifiers are hidden.
+
+#### Implementation and testing rules
+
+- Detect the OS/API level at runtime and gate optional features by capability, not by a guessed model family.
+- Keep Samsung-specific behavior behind a small compatibility adapter; the core app must remain usable on standard Android and must not rely on undocumented Samsung APIs.
+- Test battery/background restrictions, notification permission, microphone permission, Bluetooth routing, app standby and reboot/reconnect behavior on the actual handset.
+- Request the default-dialer role only after ULTRON has a complete dial pad, incoming-call UI, ongoing-call UI and a fully implemented `InCallService`; never request it merely to gain access to call audio.
+- Never bypass Android role/permission prompts, accessibility protections, lock-screen safeguards or carrier restrictions.
+- Preserve the preloaded/system dialer for emergency calls. If the handset or carrier blocks a capability, report it and use a safe fallback rather than promising unsupported behavior.
+- Record a device acceptance report with exact model, Android/One UI build, granted roles/permissions, tested call flows, failures and fallback behavior before marking incoming-call support production-ready.
+
+**Current decision:** proceed with Tier A and Tier B design without waiting for the model number. Keep Tier C opt-in and Tier D blocked pending device identification and on-device acceptance testing.
