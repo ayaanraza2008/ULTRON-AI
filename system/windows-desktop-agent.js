@@ -262,6 +262,53 @@ export class WindowsDesktopAgent {
           break;
         }
 
+        case "open_folder": {
+          result = await this.computerControl.listFiles(payload.folder || payload.subDir || "");
+          break;
+        }
+
+        case "find_file": {
+          const query = String(payload.query || payload.fileName || payload.name || "").trim().toLowerCase();
+          const listing = await this.computerControl.listFiles(payload.subDir || "");
+          const matches = (listing?.files || []).filter(f => f.toLowerCase().includes(query));
+          result = { success: true, query, matches, totalMatches: matches.length };
+          break;
+        }
+
+        case "inspect_task": {
+          result = {
+            success: true,
+            activeTask: this.activeTask,
+            history: this.executionHistory.slice(0, 10),
+            isEmergencyStopped: this.computerControl.isEmergencyStopped()
+          };
+          break;
+        }
+
+        case "stop_task": {
+          const stoppedTask = this.activeTask;
+          this.activeTask = null;
+          result = { success: true, stoppedTask, status: "stopped" };
+          break;
+        }
+
+        case "get_task_output": {
+          const taskId = payload.taskId;
+          const matched = this.executionHistory.find(h => h.result?.taskId === taskId || h.action === taskId);
+          result = {
+            success: true,
+            output: matched ? matched.result : (this.activeTask ? "Task in progress" : "No task output found")
+          };
+          break;
+        }
+
+        case "emergency_stop": {
+          this.computerControl.setEmergencyStop(true);
+          this.activeTask = null;
+          result = { success: true, status: "EMERGENCY_STOP_ENGAGED", timestamp: new Date().toISOString() };
+          break;
+        }
+
         default: {
           throw new Error(`Command '${action}' is not authorized on Windows Desktop Companion.`);
         }

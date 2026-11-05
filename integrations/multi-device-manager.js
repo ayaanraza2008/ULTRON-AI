@@ -17,14 +17,19 @@ export const DEVICE_TYPES = {
   WINDOWS_LAPTOP: "windows_laptop",
   ANDROID_SMARTPHONE: "android_smartphone",
   ANDROID_TABLET: "android_tablet",
-  ROBOT_NODE: "robot_node"
+  WEB_BROWSER: "web_browser",
+  CLIENT_ADAPTER: "client_adapter",
+  GENERIC_COMPANION: "generic_companion",
+  ROBOT_NODE: "robot_node" // Deprecated legacy constant; robotics excluded from active personal AI scope
 };
 
 export class MultiDeviceManager {
   constructor(options = {}) {
     this.devices = new Map();
     this.androidBridge = options.androidBridge || null;
+    this.deviceHub = options.deviceHub || null;
     this.commandHistory = [];
+    this.sharedState = new Map();
     this.initializeDefaultFleet();
   }
 
@@ -252,6 +257,158 @@ export class MultiDeviceManager {
     dev.online = true;
     dev.lastSeenAt = new Date().toISOString();
     return { success: true, deviceId, online: true };
+  }
+
+  /**
+   * Unregisters / removes a device from the active fleet.
+   */
+  unregisterDevice(deviceId) {
+    const exists = this.devices.has(deviceId);
+    if (!exists) return { success: false, error: "DEVICE_NOT_FOUND" };
+    this.devices.delete(deviceId);
+    return { success: true, deviceId, unregistered: true };
+  }
+
+  /**
+   * Updates presence, battery, vitals and last seen timestamp for a device.
+   */
+  updateDevicePresence(deviceId, telemetry = {}) {
+    const dev = this.devices.get(deviceId);
+    if (!dev) return { success: false, error: "DEVICE_NOT_FOUND" };
+    if (typeof telemetry.online === "boolean") dev.online = telemetry.online;
+    if (telemetry.battery && typeof telemetry.battery.percent === "number") {
+      dev.battery = {
+        percent: Math.max(0, Math.min(100, telemetry.battery.percent)),
+        isCharging: Boolean(telemetry.battery.isCharging)
+      };
+    }
+    if (telemetry.vitals) dev.vitals = telemetry.vitals;
+    dev.lastSeenAt = new Date().toISOString();
+    return { success: true, deviceId, online: dev.online, lastSeenAt: dev.lastSeenAt };
+  }
+
+  /**
+   * Finds all devices matching a specific capability (e.g. screen_unlock, run_script, camera).
+   */
+  findEligibleDevices(capability, { onlineOnly = true, type = null } = {}) {
+    const cleanCap = String(capability || "").toLowerCase().trim();
+    let matches = Array.from(this.devices.values());
+    if (onlineOnly) {
+      matches = matches.filter(d => d.online === true);
+    }
+    if (type) {
+      matches = matches.filter(d => d.type === type);
+    }
+    if (cleanCap) {
+      matches = matches.filter(d => Array.isArray(d.capabilities) && d.capabilities.includes(cleanCap));
+    }
+    return matches;
+  }
+
+  /**
+   * Returns capabilities list for a device.
+   */
+  getDeviceCapabilities(deviceId) {
+    const dev = this.devices.get(deviceId);
+    if (!dev) return null;
+    return Array.isArray(dev.capabilities) ? [...dev.capabilities] : [];
+  }
+
+  /**
+   * Synchronizes shared ecosystem state across devices with conflict resolution.
+   */
+  syncStateAcrossDevices({ stateKey, payload, originDeviceId = null, targetDevices = null } = {}) {
+    if (!stateKey || typeof stateKey !== "string") {
+      return { success: false, error: "STATE_KEY_REQUIRED" };
+    }
+    const cleanKey = stateKey.trim();
+    const existing = this.sharedState.get(cleanKey);
+    const now = Date.now();
+    const timestamp = new Date(now).toISOString();
+
+    // Conflict resolution: prevent overwriting newer state with stale timestamps
+    if (existing && existing.updatedAtMs && existing.updatedAtMs > now) {
+      return {
+        success: false,
+        error: "CONFLICT_STALE_UPDATE",
+        message: "State update rejected: an existing update with a later timestamp exists.",
+        currentState: existing
+      };
+    }
+
+    const stateEntry = {
+      key: cleanKey,
+      payload,
+      originDeviceId,
+      updatedAt: timestamp,
+      updatedAtMs: now,
+      version: (existing?.version || 0) + 1
+    };
+    this.sharedState.set(cleanKey, stateEntry);
+
+    const targetList = targetDevices || Array.from(this.devices.keys()).filter(id => id !== originDeviceId);
+    return {
+      success: true,
+      syncedKey: cleanKey,
+      version: stateEntry.version,
+      updatedAt: timestamp,
+      synchronizedDevices: targetList
+    };
+  }
+
+  /**
+   * Retrieves shared ecosystem state.
+   */
+  getSharedEcosystemState(stateKey = null) {
+    if (stateKey) {
+      return this.sharedState.get(String(stateKey).trim()) || null;
+    }
+    const result = {};
+    for (const [k, v] of this.sharedState.entries()) {
+      result[k] = v;
+    }
+    return result;
+  }
+
+  /**
+   * Clears shared ecosystem state.
+   */
+  clearSharedState(stateKey = null) {
+    if (stateKey) {
+      const deleted = this.sharedState.delete(String(stateKey).trim());
+      return { success: deleted, stateKey };
+    }
+    this.sharedState.clear();
+    return { success: true, clearedAll: true };
+  }
+
+  /**
+   * Binds this manager with a DeviceHub instance to auto-import paired devices.
+   */
+  bindWithDeviceHub(deviceHub) {
+    this.deviceHub = deviceHub;
+    if (!deviceHub) return;
+    if (typeof deviceHub.listPairedDevices === "function") {
+      const paired = deviceHub.listPairedDevices();
+      for (const dev of paired) {
+        if (!this.devices.has(dev.id)) {
+          let type = DEVICE_TYPES.GENERIC_COMPANION;
+          if (dev.platform === "windows") type = DEVICE_TYPES.WINDOWS_PC;
+          else if (dev.platform === "android") type = DEVICE_TYPES.ANDROID_SMARTPHONE;
+          else if (dev.platform === "browser") type = DEVICE_TYPES.WEB_BROWSER;
+
+          this.registerDevice({
+            id: dev.id,
+            name: dev.name,
+            type,
+            platform: dev.platform,
+            capabilities: dev.capabilities ? Object.keys(dev.capabilities) : ["notifications", "telemetry"],
+            online: dev.online ?? true,
+            battery: dev.battery || { percent: 100, isCharging: false }
+          });
+        }
+      }
+    }
   }
 }
 

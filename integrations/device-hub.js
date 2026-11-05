@@ -78,7 +78,13 @@ export const APPROVED_REMOTE_ACTIONS = new Set([
   "sandboxed_file_read",
   "media_playback",
   "wake_device",
-  "notify"
+  "notify",
+  "open_folder",
+  "find_file",
+  "inspect_task",
+  "stop_task",
+  "get_task_output",
+  "emergency_stop"
 ]);
 
 export const APPROVED_REMOTE_APPS = new Set([

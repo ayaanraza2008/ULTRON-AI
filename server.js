@@ -716,6 +716,9 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   async function requireSupabaseUser(req, res, next) {
     const user = await getSupabaseUser(req, res);
     if (!user) return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Sign in to your ULTRON account to use saved data." } });
+    if (env.ULTRON_OWNER_USER_ID && user.id !== env.ULTRON_OWNER_USER_ID) {
+      return res.status(403).json({ error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } });
+    }
     req.supabaseUser = user;
     next();
   }
@@ -891,6 +894,18 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   const authRateLimiter = createAuthRateLimiter();
 
   app.post("/api/auth/signup", authRateLimiter, async (req, res) => {
+    if (env.ULTRON_DISABLE_PUBLIC_SIGNUP === "true" || env.ULTRON_DISABLE_PUBLIC_SIGNUP === "1") {
+      const bootstrapToken = String(req.headers["x-ultron-bootstrap-token"] || req.body?.bootstrapToken || "").trim();
+      const expectedToken = String(env.ULTRON_OWNER_BOOTSTRAP_TOKEN || "").trim();
+      if (!expectedToken || !bootstrapToken || bootstrapToken !== expectedToken) {
+        return res.status(403).json({
+          error: {
+            code: "SIGNUP_DISABLED",
+            message: "Public signup is disabled. ULTRON is an exclusive personal AI system reserved for its single owner."
+          }
+        });
+      }
+    }
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 256) {
