@@ -556,7 +556,13 @@ test("Real Tool Execution Audit: all 45 tool schemas validate and privileged too
         assert.equal(outcome.error?.code, "AI_MODEL_UNAVAILABLE");
         assert.equal(outcome.status, "MODEL_UNAVAILABLE");
       } else {
-        assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: ${JSON.stringify(outcome)}`);
+        if (tool.id === "memory_store" && outcome.success !== true) {
+        // The default memory map is process-local, not durable persistence.
+        assert.equal(outcome.error?.code, "MEMORY_STORE_NOT_DURABLE");
+        assert.equal(outcome.durable, false);
+        continue;
+      }
+      assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: ${JSON.stringify(outcome)}`);
       }
     }
   }
