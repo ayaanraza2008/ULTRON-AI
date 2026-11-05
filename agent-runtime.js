@@ -603,10 +603,7 @@ function containsExactPrivateTarget(text, target) {
   const boundary = /^[a-zA-Z0-9_-]+$/.test(value) ? "[^a-zA-Z0-9_-]" : "[^a-zA-Z0-9]";
   return new RegExp("(?:^|" + boundary + ")" + escaped + "(?:$|" + boundary + ")", "i").test(text);
 }
-export function privateDataReadApprovalMatchesAction(value, toolName, args = {}) {").replace(/\\s+/g, "\\\\s+");").replace(/\s+/g, "\\s+");
-  const boundary = /^[a-zA-Z0-9_-]+$/.test(value) ? "[^a-zA-Z0-9_-]" : "[^a-zA-Z0-9]";
-  return new RegExp("(?:^|" + boundary + ")" + escaped + "(?:$|" + boundary + ")", "i").test(text);
-}
+
 export function privateDataReadApprovalMatchesAction(value, toolName, args = {}) {
   if (!PRIVATE_DATA_READ_TOOLS.has(toolName)) return false;
   const integration = toolName.startsWith("appflowy_") ? "appflowy" : "immich";
