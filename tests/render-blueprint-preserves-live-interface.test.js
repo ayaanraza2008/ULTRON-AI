@@ -23,3 +23,10 @@ test("Render Blueprint keeps the backend on main while preserving the UI branch"
   const backend = serviceBlock("ultron-ai-core");
   assert.match(backend, /branch:\s*main\b/);
 });
+
+test("Render Blueprint installs Chromium and gates Browser Use readiness on its health endpoint", () => {
+  const browser = serviceBlock("ultron-browser-use-core");
+  assert.match(browser, /buildCommand:[^\n]*python -m playwright install --with-deps chromium/);
+  assert.match(browser, /healthCheckPath:\s*\/health\b/);
+  assert.match(browser, /startCommand:[^\n]*uvicorn main:app/);
+});
