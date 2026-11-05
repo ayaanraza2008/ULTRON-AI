@@ -34,6 +34,26 @@ jobs:
         working-directory: rea-gateway
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
+      - name: Capture vulnerable package versions and dependency paths
+        working-directory: rea-gateway
+        shell: bash
+        run: |
+          npm ls --omit=dev --all --json > npm-tree.json || true
+          npm explain glob minimatch zod @electron/asar frida || true
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const tree = JSON.parse(fs.readFileSync('npm-tree.json', 'utf8'));
+          const wanted = new Set(['rea-agents', '@electron/asar', 'frida', 'glob', 'minimatch', 'zod']);
+          const visit = (deps, prefix = []) => {
+            for (const [name, item] of Object.entries(deps || {})) {
+              const path = [...prefix, name];
+              if (wanted.has(name)) console.log(JSON.stringify({ path: path.join(' > '), version: item.version || null, invalid: item.invalid || false, problems: item.problems || [] }));
+              visit(item.dependencies, path);
+            }
+          };
+          visit(tree.dependencies);
+          NODE
+
       - name: Audit production dependencies and print advisory identities
         working-directory: rea-gateway
         shell: bash
@@ -73,6 +93,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rea-gateway-npm-audit
-          path: rea-gateway/npm-audit.json
+          path: |
+            rea-gateway/npm-audit.json
+            rea-gateway/npm-tree.json
           if-no-files-found: ignore
           retention-days: 14
