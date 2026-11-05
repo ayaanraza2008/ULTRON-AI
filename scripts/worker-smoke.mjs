@@ -105,7 +105,8 @@ export async function runWorkerSmoke({
 
   const headers = {
     apikey: serviceKey,
-    Authorization: "Bearer " + serviceKey,
+    // Match worker.js: Supabase opaque secret keys are API keys, not JWTs.
+    ...(serviceKey.startsWith("sb_secret_") ? {} : { Authorization: "Bearer " + serviceKey }),
     Accept: "application/json",
     "Content-Type": "application/json"
   };
